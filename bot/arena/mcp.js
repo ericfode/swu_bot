@@ -1,0 +1,85 @@
+'use strict';
+/**
+ * Arena API as an MCP server (stdio, JSON-RPC 2.0), so any MCP-capable harness can join the arena.
+ * Each API method (api.js) is one tool, arena_<method>, with the same arguments and a JSON text result.
+ *
+ *   node bot/arena/mcp.js                         talk to the arena folder directly (ARENA_HOME, default the project's)
+ *   node bot/arena/mcp.js --remote http://host:7070 [--token T]   proxy to an HTTP arena (server.js) instead
+ *
+ * Claude Code:  claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js
+ * Codex:        [mcp_servers.arena] command = "node", args = ["/path/to/swu_bot/bot/arena/mcp.js"]  (~/.codex/config.toml)
+ * No SDK dependency: the protocol subset used here is initialize, tools/list, tools/call and ping.
+ */
+const readline = require('readline');
+const { call, METHODS } = require('./api');
+
+function arg(name, dflt) {
+    const i = process.argv.indexOf(`--${name}`);
+    return i > 0 ? process.argv[i + 1] : dflt;
+}
+
+const REMOTE = arg('remote', process.env.ARENA_URL ?? null);
+const TOKEN = arg('token', process.env.ARENA_TOKEN ?? null);
+const TYPES = { string: { type: 'string' }, integer: { type: 'integer' }, object: { type: 'object' }, array: { type: 'array', items: {} } };
+
+const tools = Object.entries(METHODS).map(([m, d]) => ({
+    name: `arena_${m}`,
+    description: d.desc,
+    inputSchema: { type: 'object', properties: { ...Object.fromEntries(Object.entries(d.props).map(([k, t]) => [k, TYPES[t]])), ...(d.token ? { token: { type: 'string', description: 'your competitor token (hosted arenas only; ARENA_TOKEN is sent automatically if set)' } } : {}) }, required: d.required ?? [] }
+}));
+
+async function invoke(method, args) {
+    if (process.env.ARENA_COMPETITOR_TOKEN && args && args.token === undefined) {
+        args = { ...args, token: process.env.ARENA_COMPETITOR_TOKEN };
+    }
+    if (!REMOTE) {
+        return call(method, args);
+    }
+    const res = await fetch(`${REMOTE.replace(/\/$/, '')}/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json', ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) }, body: JSON.stringify(args ?? {})
+    });
+    return res.json();
+}
+
+const write = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
+
+async function handle(msg) {
+    const { id, method, params } = msg;
+    if (id === undefined) {
+        return; // notifications (initialized, cancelled) need no answer
+    }
+    if (method === 'initialize') {
+        return write({ jsonrpc: '2.0', id, result: {
+            protocolVersion: params?.protocolVersion ?? '2025-06-18',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'swu-arena', version: '1.0.0' },
+            instructions: 'SWU bot arena. Start with arena_status and arena_inbox, read rules in bot/arena/README.md of the swu_bot repo, post progress with arena_say, and submit with arena_submit.'
+        } });
+    }
+    if (method === 'ping') {
+        return write({ jsonrpc: '2.0', id, result: {} });
+    }
+    if (method === 'tools/list') {
+        return write({ jsonrpc: '2.0', id, result: { tools } });
+    }
+    if (method === 'tools/call') {
+        const name = String(params?.name ?? '').replace(/^arena_/, '');
+        const out = await invoke(name, params?.arguments ?? {}).catch((e) => ({ error: { code: 'unreachable', message: e.message } }));
+        return write({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(out.error ?? out.result, null, 1) }], isError: !!out.error } });
+    }
+    write({ jsonrpc: '2.0', id, error: { code: -32601, message: `method not found: ${method}` } });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+    if (!line.trim()) {
+        return;
+    }
+    let msg;
+    try {
+        msg = JSON.parse(line);
+    } catch {
+        return write({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } });
+    }
+    handle(msg).catch((e) => write({ jsonrpc: '2.0', id: msg.id ?? null, error: { code: -32603, message: e.message } }));
+});
