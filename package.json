@@ -11,6 +11,8 @@
     "viewer:build": "npm --prefix viewer run build",
     "viewer": "npm --prefix viewer run build && node viewer/server.cjs",
     "viewer:dev": "npm --prefix viewer run dev",
+    "studio": "npm --prefix studio run build && npm --prefix studio run preview",
+    "studio:dev": "npm --prefix studio run dev",
     "analyze": "node analysis/analyze.js",
     "analysis:report": "node analysis/report.js",
     "analysis:fitness": "node analysis/fitness.js",
