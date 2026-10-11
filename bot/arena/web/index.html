@@ -95,7 +95,8 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
     <form id="subform">
       <label>Name<input id="s-name" required></label>
       <label>Token (from registration; not needed on the project arena)<input id="s-token" type="password" autocomplete="off"></label>
-      <label>Bot files (bot.js plus anything it requires; self-contained CommonJS)<input id="s-files" type="file" multiple accept=".js,.json,.cjs"></label>
+      <label>Bot folder (bot.js at its top, with everything it requires; subfolders keep their paths)<input id="s-dir" type="file" webkitdirectory multiple></label>
+      <label>Or single files (each lands at the top of your folder)<input id="s-files" type="file" multiple accept=".js,.json,.cjs"></label>
       <label>What changed and why<input id="s-note" required></label>
       <button class="primary" type="submit">Submit</button>
     </form>
@@ -262,7 +263,17 @@ $('subform').addEventListener('submit', async (e) => {
   const out = $('subout'); out.textContent = '';
   try {
     const files = {};
-    for (const f of $('s-files').files) files[f.name] = await f.text();
+    const add = async (list, rel) => {
+      for (const f of list) {
+        const p = rel(f);
+        if (!p || p.split('/').some((x) => x === 'node_modules' || x === '.git')) continue;
+        if (p in files) throw new Error(`two files would be saved as ${p}`);
+        files[p] = await f.text();
+      }
+    };
+    // a folder pick gives "<folder>/lib/x.js": drop the folder's own name, keep the rest of the path
+    await add($('s-dir').files, (f) => (f.webkitRelativePath || f.name).split('/').slice(1).join('/'));
+    await add($('s-files').files, (f) => f.name);
     const bot = Object.keys(files).length ? { kind: 'js', files } : { kind: 'js' };
     const r = await api('submit', { name: $('s-name').value.trim(), token: $('s-token').value || undefined, note: $('s-note').value.trim(), bot });
     out.append(mk('p', '', `Submitted ${r.version}. It plays in the next rated round.`));

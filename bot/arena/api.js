@@ -313,14 +313,16 @@ const api = {
         return { ok: true };
     },
 
-    send({ to, text, from = 'eric', token } = {}) {
+    send({ to, text, from, token } = {}) {
         need(typeof text === 'string' && text.trim(), 'bad_request', 'text is required');
         need(typeof to === 'string' && to, 'bad_request', 'to: a competitor name or "all"');
-        if (AUTH) {
-            const admin = process.env.ARENA_ADMIN_TOKEN && token === process.env.ARENA_ADMIN_TOKEN;
-            need(admin || (to !== 'all' && from !== 'eric' && (owned(from, token), true)), 'unauthorized', 'messages need the admin token, or your own token with from = your name');
+        if (AUTH && !(process.env.ARENA_ADMIN_TOKEN && token === process.env.ARENA_ADMIN_TOKEN)) {
+            // a competitor's token sends as that competitor (from may be left out), to one competitor
+            from ??= home.roster().agents.find((a) => a.tokenHash && token && hash(token) === a.tokenHash)?.name;
+            need(from && from !== 'eric' && to !== 'all', 'unauthorized', 'messages need the admin token, or your own token (they are sent as you, to one competitor)');
+            owned(from, token);
         }
-        return notify({ to, from, text });
+        return notify({ to, from: from ?? 'eric', text });
     },
 
     eval({ name, vs = ['rush', 'heuristic'], seeds = 2, version, token } = {}) {

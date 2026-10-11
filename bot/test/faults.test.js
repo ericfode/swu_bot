@@ -144,3 +144,13 @@ test('guard: reading the returned object is part of the bot\'s call, and a throw
     assert.doesNotThrow(() => closer.close());
     assert.strictEqual(closer.fault, null);
 });
+
+test('guard: name and needsUndo are read once, and a throwing stats getter reads as no stats', () => {
+    let reads = 0;
+    const bot = guard({ get name() { reads++; return 'g'; }, needsUndo: true, get stats() { throw new Error('stats'); }, choose: (c) => c.actions[0] });
+    assert.strictEqual(bot.name, 'g');
+    assert.strictEqual(bot.name, 'g');
+    assert.strictEqual(reads, 1);
+    assert.strictEqual(bot.needsUndo, true);
+    assert.strictEqual(bot.stats, null);
+});

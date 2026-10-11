@@ -96,6 +96,9 @@ function narrowed(live, a) {
 
 function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnter = null, onExit = null } = {}) {
     const inner = bot.choose.bind(bot);
+    // read once, now (while the bot loads): these may be getters, and the game runner reads them outside any bot call
+    const name = String(bot.name);
+    const needsUndo = bot.needsUndo === true;
     const external = bot.external === true || bot.stdio === true;
     const clock = external ? wallClock : cpuClock;
     let thinkMs = external ? 0 : loadMs;
@@ -133,22 +136,27 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnt
             legal = legal && narrowed(legal, p);
         }
         if (!legal) {
-            fail({ kind: 'error', message: `choose() returned ${what}, not one of the legal actions` }, `${bot.name}: choose() returned ${what}, not one of the legal actions`);
+            fail({ kind: 'error', message: `choose() returned ${what}, not one of the legal actions` }, `${name}: choose() returned ${what}, not one of the legal actions`);
         }
         if (thinkMs > capMs || wallMs > wallCapMs) {
-            fail({ kind: 'time', ms: Math.round(thinkMs), wallMs: Math.round(wallMs) }, `TIME_FORFEIT ${bot.name} thought ${Math.round(thinkMs)} ms CPU, ${Math.round(wallMs)} ms wall (caps ${capMs} / ${wallCapMs})`);
+            fail({ kind: 'time', ms: Math.round(thinkMs), wallMs: Math.round(wallMs) }, `TIME_FORFEIT ${name} thought ${Math.round(thinkMs)} ms CPU, ${Math.round(wallMs)} ms wall (caps ${capMs} / ${wallCapMs})`);
         }
         return legal;
     };
     return {
         get name() {
-            return bot.name;
+            return name;
         },
         get needsUndo() {
-            return bot.needsUndo === true;
+            return needsUndo;
         },
         get stats() {
-            return bot.stats ?? null;
+            // optional numbers for the record: a getter that throws must not cost the finished game its result
+            try {
+                return bot.stats ?? null;
+            } catch {
+                return null;
+            }
         },
         get thinkMs() {
             return thinkMs;
