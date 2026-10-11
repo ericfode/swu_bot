@@ -235,8 +235,12 @@ const cmpFixture = () => {
     assert.strictEqual(r2.bots.find((b) => b.bot === 'heuristic').agreement.withReference, null);
 
     // warnings: a part pass, a gauntlet without decks, and bots whose left-out decks differ
-    const part = sk.skillVsAgreement([{ ...gl, gamesPerPair: 10 }], cmpFixture());
-    assert.match(part.warnings.join('\n'), /gl: 5 seeds per challenger is not a whole number of passes over the 10 deck pairs/);
+    const part = sk.skillVsAgreement([{ ...gl, decks: 6, status: 'running' }], cmpFixture());
+    assert.match(part.warnings.join('\n'), /heuristic \(gl, still running\): 10 seeds with both games finished is not a whole number of passes over the 15 deck pairs/);
+    assert.strictEqual(part.warnings.length, 3, 'one per challenger');
+    const oneGame = sk.skillVsAgreement([{ ...gl, games: games.filter((x) => !(x.seed === 3 && x.p1 === 'c-clock' && x.p2 === 'random')) }], cmpFixture());
+    assert.deepStrictEqual(oneGame.warnings.map((w) => w.split(':')[0]), ['random (gl)'], 'a seed with one game left unbalances only that bot');
+    assert.match(oneGame.warnings[0], /9 seeds with both games finished and 1 with one/);
     const plain = sk.skillVsAgreement([{ ...gl, decks: null }], cmpFixture());
     assert.match(plain.warnings.join('\n'), /gl: no deck list in ladder.json/);
     const left = cmpFixture();

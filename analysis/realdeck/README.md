@@ -94,7 +94,8 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
 ```
 
 - **Whole passes**: `--games` should be a multiple of 2P (P = 351 deck pairs for 27 decks, so 702). Then every deck
-  sits on the challenger's side as often as on the reference's, and deck luck cancels. A part pass gets a warning.
+  sits on the challenger's side as often as on the reference's, and deck luck cancels. A challenger whose finished
+  seeds (both games done) are not a whole number of passes gets a warning, so a run read while it is going is flagged.
 - **Skill**: the challenger's score against the reference in decided games (draws half), a Wilson 95% CI and an Elo
   difference. An ERROR game a bot caused (`by` set: it threw, made an illegal move or timed out) is a loss for that bot,
   as in `bot/ladder-report.js`. Engine errors, STEP_CAP and STUCK games are counted by outcome and left out. The

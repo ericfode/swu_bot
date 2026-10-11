@@ -12,7 +12,8 @@
  * game for game. All runs must share the reference bot, and each challenger plays in one run only (one copy: no
  * `bot#1`, `bot#2`). Play whole passes (--games a multiple of 2P, P = n(n−1)/2 deck pairs: 702 for 27 decks), so every
  * deck sits on the challenger's side as often as on the reference's; otherwise deck luck is left in the skill and the
- * reference's 50% is not on the same deals (a warning says so).
+ * reference's 50% is not on the same deals. A warning says so for each challenger whose finished seeds (both games
+ * done) are not a whole number of passes, which includes a run read while it is still going.
  *
  * Skill: the challenger's score against the reference in decided games (a draw counts half), a Wilson 95% CI, and the
  * same as an Elo difference. An ERROR game a bot caused (`by` set: it threw, made an illegal move or timed out) is a
@@ -376,13 +377,23 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
     if (tallies.has(reference)) {
         warnings.push(`the reference bot ${reference} also plays as a challenger; its row is the reference`);
     }
+    const rate = (t) => (t.decided ? t.score / t.decided : -1);
+    const challengers = [...tallies.values()].filter((t) => t.bot !== reference).sort((p, q) => rate(q) - rate(p) || p.bot.localeCompare(q.bot));
+    // coverage from the games that finished, not the games asked for: a run read while it is going is a part pass
+    const runOf = new Map(gauntlets.map((g) => [g.id, { P: g.decks ? (g.decks * (g.decks - 1)) / 2 : null, status: g.status ?? null }]));
     for (const g of gauntlets) {
-        const P = g.decks ? (g.decks * (g.decks - 1)) / 2 : null;
-        if (!P) {
+        if (!runOf.get(g.id).P) {
             warnings.push(`${g.id}: no deck list in ladder.json, so not a real-deck gauntlet`);
-        } else if (g.gamesPerPair && (g.gamesPerPair / 2) % P !== 0) {
-            warnings.push(`${g.id}: ${g.gamesPerPair / 2} seeds per challenger is not a whole number of passes over the ${P} deck pairs, ` +
-                `so decks do not sit on both sides equally often and the reference's 50% is not on the same deals (--games ${2 * P} plays one pass)`);
+        }
+    }
+    for (const t of challengers) {
+        const { P, status } = runOf.get(t.run) ?? {};
+        const full = [...t.seeds.values()].filter((x) => x.p1 && x.p2).length;
+        const half = t.seeds.size - full;
+        if (P && (full % P !== 0 || half)) {
+            warnings.push(`${t.bot} (${t.run}${status === 'running' ? ', still running' : ''}): ${full} seeds with both games finished` +
+                `${half ? ` and ${half} with one` : ''} is not a whole number of passes over the ${P} deck pairs, so decks do not sit on ` +
+                `both sides equally often and its rate is not on the reference's 50% deals (--games ${2 * P} plays one pass)`);
         }
     }
     const withAgreement = bots.filter((b) => b.agreement);
@@ -396,8 +407,6 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
         warnings.push(`deck files differ (sha256 ${files.map(([w, h]) => `${w} ${h.slice(0, 12)}`).join(', ')}): skill and agreement may not be on the same card lists, and gauntlets from different files do not pair`);
     }
     bots.sort((p, q) => (q.skill?.winRate ?? -1) - (p.skill?.winRate ?? -1) || p.bot.localeCompare(q.bot));
-    const rate = (t) => (t.decided ? t.score / t.decided : -1);
-    const challengers = [...tallies.values()].filter((t) => t.bot !== reference).sort((p, q) => rate(q) - rate(p) || p.bot.localeCompare(q.bot));
     const paired = [];
     for (let i = 0; i < challengers.length; i++) {
         for (let j = i + 1; j < challengers.length; j++) {
