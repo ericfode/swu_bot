@@ -26,7 +26,7 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
     const players = bots.map((b, i) => ({ id: `p${i + 1}`, name: `p${i + 1}`, bot: b.name }));
     const seats = bots.map((b, i) => {
         const seat = `p${i + 1}`;
-        return seatFor(b, seat, { players, decks, botSeed: streams.botSeed(seat), simRng: streams.sim(seat), limits });
+        return seatFor(b, seat, { players, decks, botSeed: streams.botSeed(seat), deals: (deal) => streams.sim(seat, deal), limits });
     });
     const res = { seed, steps: 0, outcome: '?', winner: null, round: 0, ms: 0, events: [] };
     // every recorded event is also handed to onEvent as it happens, so a viewer can follow the game live

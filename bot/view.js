@@ -63,6 +63,12 @@ function playerView(player, seen, own) {
         ground: cards(ZONE.ground).filter((c) => c.isUnit()).map((c) => unitRef(c, player)),
         space: cards(ZONE.space).filter((c) => c.isUnit()).map((c) => unitRef(c, player))
     };
+    if (player.hasTheForce) {
+        out.force = 1;
+    }
+    if (player.creditTokenCount > 0) {
+        out.credits = player.creditTokenCount;
+    }
     if (seen) {
         out.hand = hand.map(cardRef);
     }

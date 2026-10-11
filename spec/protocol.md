@@ -120,6 +120,7 @@ such as an opponent's hand shown by a "look at" effect.
 | `leader` | `{ id, n, s, dep, x }` (`dep` 1 = deployed, then also listed as a unit; `x` 1 = exhausted), or `null`. |
 | `res` | `{ ready, total }` resources. |
 | `handCount`, `deck` | Cards in hand and left in the deck. |
+| `force`, `credits` | `force: 1` when the player has the Force token; `credits`: credit tokens. Absent when zero. |
 | `hand`, `resources` | Your own player only: `[{ id, n, s }]`, resources with `x: 1` when exhausted (you can play from them with Smuggle). |
 | `discard` | `[{ id, n, s }]`. |
 | `ground`, `space` | Units the player controls: `{ id, n, s, p, h, d, x?, sn?, u?, cap? }`: power, max HP, damage, exhausted, Sentinel, upgrades `[{ id, n, s, t }]` (`t` 1 = token) and captured cards `[{ id, n, s }]`. |
@@ -149,7 +150,7 @@ During a decision whose `sim` is `true`, a bot can play ahead on a private copy 
 
 | Request | Effect | Reply |
 |---|---|---|
-| `{"t":"sim","op":"begin"}` | Starts a simulation from the real position, ending any open one first, and deals the hidden cards again (below). | a position |
+| `{"t":"sim","op":"begin","deal":3}` | Starts a simulation from the real position, ending any open one first, and deals the hidden cards again (below). `deal` is optional. | a position |
 | `{"t":"sim","op":"act","i":3}` (`split` allowed) | Plays action `i` of the last position for whichever seat had to act. | the next position |
 | `{"t":"sim","op":"end"}` | Ends the simulation; does nothing when none is open. Never fails. | `{"t":"simulated","op":"end"}` |
 
@@ -166,9 +167,11 @@ refers to the real `decide` and ends an open simulation first.
 **What a simulation hides.** At `begin` every card hidden from you is dealt again at random: your deck order, and the
 opponent's hand, face-down resources and deck, from one shuffle of all three. Zone sizes and the number of exhausted
 resources stay. The randomness comes from a stream private to your seat, so a simulation never changes the real game,
-and it cannot be predicted from anything you are sent. Simulations leave one trace: the engine numbers new cards
-(tokens) from a counter that a rollback does not rewind, so cards created later in the real game get different ids
-than in the same game played without simulations. Play is otherwise identical.
+and it cannot be predicted from anything you are sent. Within one decision, the same `deal` number gives the same
+cards and the same random outcomes for the same moves, so a search can compare actions on one deal; a `begin` without
+`deal` gets a deal not used before. Simulations leave one trace: the engine numbers new cards (tokens) from a counter
+that a rollback does not rewind, so cards created later in the real game get different ids than in the same game
+played without simulations. Play is otherwise identical.
 
 ### `over` → `ok`
 

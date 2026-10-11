@@ -124,6 +124,7 @@ It is the bot's board view (protocol.md, `state`) with both hands shown and no `
 | `leader.dep`, `leader.x` | `1` if deployed (it then also appears as a unit in `ground`/`space`), `1` if exhausted. `leader` may be `null`. |
 | `res.ready`, `res.total` | Ready resources, total resources. |
 | `handCount` *(added)* | Cards in hand. |
+| `force`, `credits` *(added)* | `force: 1` when the player has the Force token; `credits`: credit tokens. Both absent when zero. |
 | `hand` | Cards in hand (both players). |
 | `deck` | Cards left in the draw deck. |
 | `discard` | Discard pile, in engine order. |

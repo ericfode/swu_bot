@@ -110,6 +110,29 @@ async function check(name, fn) {
         return searched.timing.p1.n < 50 ? 'too few decisions' : !sameUpToIds(searched.events, replayed.events) && 'different events';
     });
 
+    await check('a numbered deal repeats its cards and outcomes, a new deal does not', async () => {
+        let runs = null;
+        const dealer = {
+            name: 'dealer', hello: () => ({ t: 'ready', v: 2, sim: true }),
+            async decide(m, sim) {
+                const run = async (deal) => {
+                    const states = [];
+                    // pass to the next round: its draws show the dealt deck order
+                    for (let r = await sim({ t: 'sim', op: 'begin', deal }), k = 0; r.actions && k < 80; k++) {
+                        states.push(r.state);
+                        r = await sim({ t: 'sim', op: 'act', i: (r.actions.find((a) => /^pass$/i.test(a.label)) ?? r.actions[0]).i });
+                    }
+                    return canon(states).join('\n');
+                };
+                runs ??= m.sim ? [await run(3), await run(3), await run(), await run()] : null;
+                return { t: 'act', i: 0 };
+            }
+        };
+        await play(6, [dealer, createRandomBot('r')], { maxSteps: 40 });
+        const [a, b, c, d] = runs ?? [];
+        return !runs ? 'no simulation ran' : a !== b ? 'deal 3 differs from itself' : (c === d || c === a) && 'new deals repeat';
+    });
+
     await check('a replay re-simulates from its header and steps', async () => {
         const [header, ...steps] = searched.events;
         const eg = env.newGame({ seed: header.seed, deck1: header.decks.p1, deck2: header.decks.p2 });
@@ -177,8 +200,8 @@ async function check(name, fn) {
         const client = {
             name: 'clumsy', hello: () => ({ t: 'ready', v: 2, sim: true }),
             async decide(m, sim) {
-                if (m.sim && errors.length < 4) {
-                    for (const req of [{ op: 'act', i: 0 }, { op: 'begin' }, { op: 'begin' }, { op: 'begin' }, { op: 'act', i: 1e6 }, { op: 'end' }, { op: 'nope' }]) {
+                if (m.sim && errors.length < 5) {
+                    for (const req of [{ op: 'act', i: 0 }, { op: 'begin' }, { op: 'begin', deal: -1 }, { op: 'begin' }, { op: 'act', i: 1e6 }, { op: 'end' }, { op: 'nope' }]) {
                         const r = await sim({ t: 'sim', ...req });
                         if (r.error) {
                             errors.push(r.error);
@@ -189,7 +212,7 @@ async function check(name, fn) {
             }
         };
         const r = await play(7, [client, createRandomBot('r')]);
-        return r.outcome !== 'won' ? `${r.outcome} ${r.error}` : errors.length < 4 && `only ${errors.length} errors`;
+        return r.outcome !== 'won' ? `${r.outcome} ${r.error}` : errors.length < 5 && `only ${errors.length} errors`;
     });
 
     await check('bot failures end the game, name the bot, and spare the opponent', async () => {

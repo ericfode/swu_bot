@@ -18,11 +18,12 @@ What v2 gives a bot ([protocol.md](protocol.md)):
 |---|---|
 | `over` | The result of every game: train, log, reset state. |
 | `hello.deck`, `hello.opponent` | Both deck lists, before the first decision. A known-decklist bot no longer needs to guess. |
-| `sim` / `simulated` | Play ahead on a private copy of the game. Each `begin` deals your hidden cards again (your deck order, the opponent's hand, face-down resources and deck), so a search over `begin`s is a determinized search, as ISMCTS needs. |
+| `sim` / `simulated` | Play ahead on a private copy of the game. Each `begin` deals your hidden cards again (your deck order, the opponent's hand, face-down resources and deck), so a search over `begin`s is a determinized search, as ISMCTS needs. A numbered `deal` repeats the same cards, for comparing actions on one deal. |
 | `ms` on `hello`, `decide`, `over` | The time you have. For `decide` it covers all simulations. |
 | `decide.revealed` | Cards revealed to both players since your last decision. |
 | `prompt.cards` | The cards a prompt shows, with their state (`selectable`, `viewOnly`, ...), e.g. an opponent's hand shown by a "look at" effect. |
 | unit `cap` | Cards a unit has captured (open information). |
+| player `force`, `credits` | The Force token and credit tokens. |
 
 Two things changed for every bot, v1 included:
 
@@ -56,7 +57,7 @@ Every addition is optional and `header.v` stays `1` ([replay-format.md](replay-f
 |---|---|
 | every card ref | `id`: engine card id, stable for the game, the same id the protocol uses. |
 | unit | `cap`: captured cards. |
-| player | `handCount`. Both hands are still listed. |
+| player | `handCount`, `force`, `credits`. Both hands are still listed. |
 | `header` | `decks` (both full deck lists), `players[].lang`. |
 | `step.action` | `i` (index of the action among the legal ones, a training label), `id` (the card clicked or picked), `split`. |
 | `end` | `by`: the seat that caused an `ERROR`, or `null`. |

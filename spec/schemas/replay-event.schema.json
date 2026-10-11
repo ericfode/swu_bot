@@ -91,6 +91,8 @@
           "properties": { "ready": { "type": "integer", "minimum": 0 }, "total": { "type": "integer", "minimum": 0 } }
         },
         "handCount": { "type": "integer", "minimum": 0, "description": "Cards in hand (added)." },
+        "force": { "const": 1, "description": "The player has the Force token (added)." },
+        "credits": { "type": "integer", "minimum": 1, "description": "Credit tokens, when any (added)." },
         "hand": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
         "deck": { "type": "integer", "minimum": 0, "description": "Cards left in the draw deck." },
         "discard": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },

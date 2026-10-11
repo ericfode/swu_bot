@@ -103,7 +103,8 @@
         "t": { "const": "sim" },
         "op": { "enum": ["begin", "act", "end"] },
         "i": { "type": "integer", "minimum": 0, "description": "act: index into the last position's actions." },
-        "split": { "$ref": "#/$defs/Split" }
+        "split": { "$ref": "#/$defs/Split" },
+        "deal": { "type": "integer", "minimum": 0, "description": "begin: deal number; the same number in one decision deals the same cards and random outcomes. Omitted: a new deal." }
       },
       "if": { "properties": { "op": { "const": "act" } } },
       "then": { "required": ["i"] }
@@ -263,6 +264,8 @@
         },
         "res": { "type": "object", "required": ["ready", "total"], "properties": { "ready": { "type": "integer" }, "total": { "type": "integer" } } },
         "handCount": { "type": "integer", "minimum": 0 },
+        "force": { "const": 1, "description": "The player has the Force token." },
+        "credits": { "type": "integer", "minimum": 1, "description": "Credit tokens, when any." },
         "hand": { "type": "array", "items": { "$ref": "#/$defs/CardRef" }, "description": "Only on your own player." },
         "resources": {
           "type": "array",

@@ -13,6 +13,8 @@ export interface PlayerSnap {
     leader: LeaderRef | null;
     res: { ready: number; total: number };
     handCount?: number;
+    force?: 1;
+    credits?: number;
     hand: CardRef[];
     deck: number;
     discard: CardRef[];

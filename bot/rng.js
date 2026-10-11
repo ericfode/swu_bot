@@ -32,20 +32,20 @@ function keyedRng(key, label) {
  *   match    decks, actor order, native bots' choices, random splits
  *   engine   the engine RNG seed (deck order, shuffles)
  *   botSeed  the `seed` a seat gets in hello
- *   sim      the private stream of a seat's simulations
+ *   sim      the private stream of one deal of a seat's simulations, by label (decision and deal number)
  */
 function gameStreams(seed, key = null) {
     if (key == null) {
         return {
             match: seededRng('bot' + seed), engine: String(seed),
             botSeed: (seat) => Math.floor(seededRng(`${seed}:${seat}`)() * 4294967296),
-            sim: (seat) => seededRng(`sim:${seed}:${seat}`)
+            sim: (seat, deal) => seededRng(`sim:${seed}:${seat}:${deal}`)
         };
     }
     return {
         match: keyedRng(key, `match:${seed}`), engine: hmac(key, `engine:${seed}`),
         botSeed: (seat) => parseInt(hmac(key, `bot:${seed}:${seat}`).slice(0, 8), 16),
-        sim: (seat) => keyedRng(key, `sim:${seed}:${seat}`)
+        sim: (seat, deal) => keyedRng(key, `sim:${seed}:${seat}:${deal}`)
     };
 }
 

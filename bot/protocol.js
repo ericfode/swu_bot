@@ -55,7 +55,7 @@ class NativeSeat {
 }
 
 class ClientSeat {
-    /** game: { players, decks: { p1, p2 }, botSeed, simRng, limits } */
+    /** game: { players, decks: { p1, p2 }, botSeed, deals(label) -> rng, limits } */
     constructor(client, seat, game) {
         this.client = client;
         this.seat = seat;
@@ -128,9 +128,10 @@ class ClientSeat {
 
     async decide(eg, pid, actions) {
         const ms = this.limits.decide;
-        const sim = this.needsUndo && eg.isActionWindow(pid) ? simulator(eg, pid, this.game.simRng, Date.now() + ms) : null;
+        const seq = ++this.seq;
+        const sim = this.needsUndo && eg.isActionWindow(pid) ? simulator(eg, pid, (deal) => this.game.deals(`${seq}:${deal}`), Date.now() + ms) : null;
         const msg = {
-            t: 'decide', seq: ++this.seq, you: this.seat, sim: !!sim, ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
+            t: 'decide', seq, you: this.seat, sim: !!sim, ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
             actions: actions.map((a, i) => actionView(eg, a, i)), revealed: this.revealed.splice(0)
         };
         const t = now();
@@ -203,8 +204,9 @@ function determinize(eg, pid, rng) {
  * The `sim` requests of one decision (spec/protocol.md#sim). Two states: idle and open. The first `begin` bookmarks
  * the real position; `end`, every error and the decision's end return to it. Only `begin` and `act` can fail, and an
  * error reply always leaves the simulation idle. A failed rollback is the referee's fault, so finish() throws it.
+ * `deals(label)` is the random stream of one deal: the same `deal` number replays the same cards and random outcomes.
  */
-function simulator(eg, pid, rng, deadline) {
+function simulator(eg, pid, deals, deadline) {
     const you = eg.seatOf(pid);
     const opp = eg.player(pid).opponent.id;
     let mark = null,
@@ -212,6 +214,8 @@ function simulator(eg, pid, rng, deadline) {
         done = false,
         actor = null,
         acts = null,
+        rng = null,
+        fresh = 0,
         broken = null;
 
     const close = () => {
@@ -255,9 +259,14 @@ function simulator(eg, pid, rng, deadline) {
             throw new Error('out of time for this decision');
         }
         if (req.op === 'begin') {
+            if (req.deal !== undefined && !(Number.isSafeInteger(req.deal) && req.deal >= 0)) {
+                throw new Error(`bad deal ${short(req.deal)}`);
+            }
             close();
             mark ??= eg.mark(pid);
             open = true;
+            // a deal without a number is one never used before in this decision
+            rng = deals(req.deal ?? `new${fresh++}`);
             determinize(eg, pid, rng);
             return position('begin');
         }

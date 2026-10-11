@@ -1,7 +1,7 @@
 'use strict';
 // One-ply search through simulations (spec/protocol.md#sim): at each action window, try every action on a private
-// copy of the game, play on until my next action window (the opponent passes when it can), score the board, keep the
-// best. Runs in process or as a program, like random-bot.js:  node bot/examples/search-bot.js
+// copy of the game, all on the same deal of the hidden cards, play on until my next action window (the opponent
+// passes when it can), score the board, keep the best. Runs in process or as a program, like random-bot.js:  node bot/examples/search-bot.js
 const { seededRng } = require('../rng');
 const { serve } = require('../stdio');
 
@@ -32,7 +32,7 @@ function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
             }
             let best = null;
             for (const a of msg.actions.slice(0, width)) {
-                await sim({ t: 'sim', op: 'begin' });
+                await sim({ t: 'sim', op: 'begin', deal: 0 });
                 let r = await sim({ t: 'sim', op: 'act', i: a.i });
                 for (let k = 0; k < horizon && !r.error && !r.over && !(r.actor === msg.you && r.prompt.actionWindow); k++) {
                     r = await sim({ t: 'sim', op: 'act', i: pick(r, msg.you) });
