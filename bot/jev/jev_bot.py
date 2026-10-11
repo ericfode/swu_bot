@@ -12,12 +12,19 @@ Standard library only. stdout carries protocol lines; logs go to stderr.
 
     node bot/tournament.js --bots jev,heuristic --games 4 --out replays/jev-test
 
+With --look (registered as `jev-look`, adapter bot/jev/look.js) it can imagine before acting: at an action window where
+Jev's favourite move has less than JEV_LOOK_CONFIDENT probability, it asks Jev which situation to imagine from a small
+vocabulary (the board right after one of its top moves, the opponent's board reply to it, or the rest of the round),
+the adapter simulates it on the engine and rolls back, the outcome is added to the state as `imagined`, and Jev is
+asked again, until it picks "decide" or runs out of imaginations.
+
 Environment:
   TYPESAFE_API_KEY      sent as a Bearer token when set
   TYPESAFE_BASE_URL     default https://api.typesafe.ai
   JEV_MODEL             default jev-latest
   JEV_TIMEOUT           seconds per API attempt, default 20
-  JEV_PANEL             if set, path of a dashboard strategy panel to keep updated (dashboard/README.md section 5)
+  JEV_PANEL             if set, path of a dashboard strategy panel to keep updated (dashboard/README.md section 5);
+                        "{name}" in the path becomes the bot name (jev or jev-look)
   JEV_LOG               if set, append one JSON line per decision (what Jev saw and answered) to this file;
                         "{pid}" in the path is replaced by the process id, so parallel games don't share a file
   SWU_CARD_JSON         card data folder, default forceteki/test/json next to this repo
@@ -35,7 +42,10 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 BASE_URL = os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai").rstrip("/")
 MODEL = os.environ.get("JEV_MODEL", "jev-latest")
 TIMEOUT = float(os.environ.get("JEV_TIMEOUT", "20"))
-NAME = "jev"
+LOOK = "--look" in sys.argv[1:]
+NAME = "jev-look" if LOOK else "jev"
+LOOK_CONFIDENT = float(os.environ.get("JEV_LOOK_CONFIDENT", "0.8"))  # skip imagining when the top action is this likely
+LOOK_TOP = 3  # imagine only among the top actions
 
 RULES = (
     "Star Wars: Unlimited. Each player has a base; you win when the enemy base has 0 HP left. "
@@ -236,6 +246,60 @@ def describe_action(a, msg, units):
     return label
 
 
+# ---------- imagined situations (lookahead) ----------
+
+SITUATION_WORDS = {
+    "after": "the board right after you: {a}",
+    "reply": "the opponent's most aggressive board reply after you: {a}",
+    "round": "how the rest of this round plays out (board actions only) after you: {a}",
+}
+
+
+def brief_side(p):
+    units = []
+    for zone in ("ground", "space"):
+        for u in p.get(zone) or []:
+            units.append(f"{card_name(u)} {u.get('p')}/{(u.get('h') or 0) - (u.get('d') or 0)}" + (" exhausted" if u.get("x") else ""))
+    return {"base_hp_left": p["base"]["hp"] - p["base"]["d"], "ready_resources": p["res"]["ready"],
+            "cards_in_hand": p.get("handCount"), "units": units}
+
+
+def changes(before, after, you):
+    opp = "p2" if you == "p1" else "p1"
+    out = []
+    for seat, who in ((you, "your"), (opp, "the opponent's")):
+        b, a = before["players"][seat], after["players"][seat]
+        dmg = a["base"]["d"] - b["base"]["d"]
+        if dmg:
+            out.append(f"{who} base {'takes' if dmg > 0 else 'heals'} {abs(dmg)}")
+        bu = {u["id"]: u for z in ("ground", "space") for u in b.get(z) or []}
+        au = {u["id"]: u for z in ("ground", "space") for u in a.get(z) or []}
+        for i in bu.keys() - au.keys():
+            out.append(f"{who} {card_name(bu[i])} is gone")
+        for i in au.keys() - bu.keys():
+            out.append(f"{who} {card_name(au[i])} enters play")
+        for i in bu.keys() & au.keys():
+            d = (au[i].get("d") or 0) - (bu[i].get("d") or 0)
+            if d > 0:
+                out.append(f"{who} {card_name(au[i])} takes {d} damage")
+    return out
+
+
+def describe_imagined(sit_text, res, msg):
+    you = msg["you"]
+    if not res.get("ok"):
+        return {"situation": sit_text, "result": f"could not simulate ({res.get('error')})"}
+    after = res["state"]
+    opp = "p2" if you == "p1" else "p1"
+    steps = [("you" if s["who"] == you else "opponent") + (" choose " if s.get("at") == "choice" else ": ") + str(s["what"])
+             for s in res.get("steps") or []]
+    out = {"situation": sit_text, "what_happened": steps[:12], "changes": changes(msg["state"], after, you) or ["nothing visible"],
+           "board_after": {"you": brief_side(after["players"][you]), "opponent": brief_side(after["players"][opp])}}
+    if res.get("over"):
+        out["game_over"] = "you win" if res.get("winner") == you else ("opponent wins" if res.get("winner") else "draw")
+    return out
+
+
 # ---------- code-owned parts ----------
 
 def split(action, msg):
@@ -305,28 +369,42 @@ class Guard:
 
 # ---------- Jev ----------
 
-def ask_jev(state, actions_text):
-    criteria = {f"a{i}": t for i, t in enumerate(actions_text)}
-    body = {
-        "model": MODEL,
-        "state": state,
-        "questions": {
-            "action": {
-                "type": "choice",
-                "instructions": {
-                    "game_rules": RULES,
-                    "task": "You are 'you' in this Star Wars: Unlimited game. The prompt says what is being decided. "
-                            "Pick the legal option that most raises your chance to win the game.",
-                },
-                "criteria": criteria,
-            },
-            "win": {
-                "type": "score",
-                "instructions": {"game_rules": RULES, "task": "How likely is 'you' to win this game from this position?"},
-                "criteria": ["you almost certainly lose", "you are behind", "even game", "you are ahead", "you almost certainly win"],
-            },
+WIN_QUESTION = {
+    "type": "score",
+    "instructions": {"game_rules": RULES, "task": "How likely is 'you' to win this game from this position?"},
+    "criteria": ["you almost certainly lose", "you are behind", "even game", "you are ahead", "you almost certainly win"],
+}
+
+
+def action_question(actions_text):
+    return {
+        "type": "choice",
+        "instructions": {
+            "game_rules": RULES,
+            "task": "You are 'you' in this Star Wars: Unlimited game. The prompt says what is being decided. "
+                    "If `imagined` is present, it shows simulated outcomes of some options; use them. "
+                    "Pick the legal option that most raises your chance to win the game.",
         },
+        "criteria": {f"a{i}": t for i, t in enumerate(actions_text)},
     }
+
+
+def look_question(options):
+    return {
+        "type": "choice",
+        "instructions": {
+            "game_rules": RULES,
+            "task": "Before you act, you may imagine one situation: the game engine simulates it and shows you the board "
+                    "it leads to (the opponent only uses units already on the board in these simulations). "
+                    "Pick the situation whose outcome would best help you choose your action. "
+                    "Pick 'decide' if you are already sure, or if `imagined` already answers your doubts.",
+        },
+        "criteria": options,
+    }
+
+
+def ask_jev(state, questions):
+    body = {"model": MODEL, "state": state, "questions": questions}
     headers = {"content-type": "application/json", "user-agent": "swu-bot-jev/1"}
     key = os.environ.get("TYPESAFE_API_KEY", "").strip()
     if key:
@@ -360,24 +438,29 @@ class Panel:
         self.thoughts = []
         self.win_curve = []
         self.last_probs = []
+        self.last_imagined = []
         self.now = ""
-        self.stats = {"decisions": 0, "jev_calls": 0, "fallbacks": 0, "api_ms": [], "tokens": 0, "games": 0}
+        self.stats = {"decisions": 0, "jev_calls": 0, "fallbacks": 0, "api_ms": [], "tokens": 0, "games": 0, "imagined": 0}
 
     def game(self, you):
         self.stats["games"] += 1
         self.win_curve = []
         self.now = f"Game {self.stats['games']} started, playing {you}"
 
-    def decision(self, msg, texts, probs, chosen, win, ms):
+    def decision(self, msg, texts, probs, chosen, win, ms, imagined=None):
         self.stats["decisions"] += 1
         self.now = f"Round {msg['state'].get('round')}: {texts[chosen]} (p={probs[chosen]:.2f})"
         if win is not None:
             self.win_curve.append([msg["seq"], round(win, 3)])
         order = sorted(range(len(texts)), key=lambda i: -probs[i])[:8]
         self.last_probs = [{"label": texts[i][:60], "value": round(probs[i], 3)} for i in order]
+        if imagined:
+            self.last_imagined = [[x["situation"][:70], ", ".join((x.get("changes") or [x.get("result", "")])[:4])] for x in imagined]
         if msg["prompt"].get("actionWindow") or len(self.thoughts) == 0:
             alt = order[1] if len(order) > 1 and order[0] == chosen else order[0]
             w = f", thinks it wins with {win:.0%}" if win is not None else ""
+            if imagined:
+                w += "; imagined " + "; ".join(f"{x['situation'][:60]} -> {', '.join((x.get('changes') or [x.get('result', '')])[:3])}" for x in imagined)
             self.thoughts.append({
                 "t": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "text": f"R{msg['state'].get('round')}: {texts[chosen]} ({probs[chosen]:.0%}; next best: {texts[alt][:50]} {probs[alt]:.0%}){w}",
@@ -392,8 +475,8 @@ class Panel:
         api = sorted(self.stats["api_ms"][-500:])
         p50 = api[len(api) // 2] if api else None
         doc = {
-            "schema": 1, "id": "jev", "title": "Jev (TypeSafe System One) bot", "thread": "Jev decision bot",
-            "bots": ["jev"], "status": "running",
+            "schema": 1, "id": NAME, "title": "Jev + lookahead" if LOOK else "Jev (TypeSafe System One) bot", "thread": "Jev decision bot",
+            "bots": [NAME], "status": "running",
             "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "now": self.now,
             "goal": "Play SWU by asking TypeSafe's Jev model to pick among the legal moves, with code owning the rules it can compute.",
@@ -415,9 +498,12 @@ class Panel:
                     {"label": "Jev calls", "value": self.stats["jev_calls"]},
                     {"label": "API p50 ms", "value": p50},
                     {"label": "fallbacks", "value": self.stats["fallbacks"]},
+                    {"label": "situations imagined", "value": self.stats["imagined"]},
                     {"label": "tokens used", "value": self.stats["tokens"]},
                 ]},
                 {"type": "bars", "title": "Jev's probabilities at the last decision", "items": self.last_probs},
+                *([{"type": "table", "title": "What it imagined last time it was unsure", "columns": ["situation", "what changed"],
+                    "rows": self.last_imagined}] if LOOK else []),
                 {"type": "line", "title": "Jev's own win estimate this game", "x": "decision", "yFormat": "pct",
                  "series": [{"name": "P(win)", "points": self.win_curve[-300:]}]},
             ],
@@ -433,7 +519,22 @@ class Panel:
 
 # ---------- main loop ----------
 
-def decide(msg, rng, guard, panel, logf):
+def call_jev(panel, state, questions):
+    t0 = time.time()
+    res = ask_jev(state, questions)
+    ms = (time.time() - t0) * 1000
+    panel.stats["jev_calls"] += 1
+    panel.stats["api_ms"].append(ms)
+    panel.stats["tokens"] += sum((res.get("usage") or {}).values())
+    return res, ms
+
+
+def probs_of(ans, n):
+    return [float(ans["probabilities"].get(f"a{i}", 0.0)) for i in range(n)]
+
+
+def decide(msg, rng, guard, panel, logf, io=None):
+    """io: (send, recv) for imagine requests, or None when lookahead is off."""
     actions = msg["actions"]
     allowed = [a for a in actions if not guard.blocked(msg, a)] or actions
     if len(allowed) == 1:
@@ -445,18 +546,51 @@ def decide(msg, rng, guard, panel, logf):
     state = describe_state(msg)
     t0 = time.time()
     win = None
+    imagined, looked = [], set()
     try:
-        res = ask_jev(state, texts)
-        ms = (time.time() - t0) * 1000
-        panel.stats["jev_calls"] += 1
-        panel.stats["api_ms"].append(ms)
-        panel.stats["tokens"] += sum((res.get("usage") or {}).values())
-        ans = res["answers"]["action"]
-        probs = [float(ans["probabilities"].get(f"a{i}", 0.0)) for i in range(len(allowed))]
-        k = max(range(len(allowed)), key=lambda i: probs[i])
+        res, _ = call_jev(panel, state, {"action": action_question(texts), "win": WIN_QUESTION})
+        probs = probs_of(res["answers"]["action"], len(allowed))
         w = res["answers"].get("win")
         if w and w.get("score") is not None:
             win = float(w["score"]) / 4.0
+        look = msg.get("imagine") or {}
+        left = look.get("left", 0) if io else 0
+        kinds = set(look.get("kinds") or [])
+        # imagine only when Jev is unsure: one clear favourite needs no lookahead
+        while left > 0 and max(probs) < LOOK_CONFIDENT:
+            top = sorted(range(len(allowed)), key=lambda i: -probs[i])[:LOOK_TOP]
+            options = {"decide": "Decide now without imagining anything more"}
+            for i in top:
+                for kind in ("after", "reply", "round"):
+                    if kind in kinds and (kind, i) not in looked:
+                        options[f"{kind}{i}"] = "Imagine " + SITUATION_WORDS[kind].format(a=texts[i])
+            if len(options) == 1:
+                break
+            if imagined:
+                state["imagined"] = imagined
+            res, _ = call_jev(panel, state, {"look": look_question(options)})
+            pick = res["answers"]["look"]["choice"]
+            if pick == "decide" or pick not in options:
+                break
+            kind, i = pick.rstrip("0123456789"), int(pick[len(pick.rstrip("0123456789")):])
+            looked.add((kind, i))
+            send, recv = io
+            send({"t": "imagine", "situation": {"kind": kind, "i": allowed[i]["i"]}})
+            got = recv()
+            if got.get("t") != "imagined":
+                raise RuntimeError(f"expected imagined, got {got.get('t')}")
+            left = got.get("left", 0)
+            imagined.append(describe_imagined(SITUATION_WORDS[kind].format(a=texts[i]), got, msg))
+            panel.stats["imagined"] += 1
+            # re-ask the action with what it has imagined so far
+            state["imagined"] = imagined
+            res, _ = call_jev(panel, state, {"action": action_question(texts)})
+            probs = probs_of(res["answers"]["action"], len(allowed))
+        k = max(range(len(allowed)), key=lambda i: probs[i])
+        ms = (time.time() - t0) * 1000
+        fallback = False
+    except EOFError:
+        raise
     except Exception as e:  # noqa: BLE001 - any API failure falls back to a legal move
         ms = (time.time() - t0) * 1000
         panel.stats["fallbacks"] += 1
@@ -464,15 +598,15 @@ def decide(msg, rng, guard, panel, logf):
         non_pass = [i for i, a in enumerate(allowed) if str(a.get("arg")) != "pass"]
         k = rng.choice(non_pass or list(range(len(allowed))))
         probs = [1.0 if i == k else 0.0 for i in range(len(allowed))]
-        res = None
+        fallback = True
     a = allowed[k]
     guard.note(msg, a)
-    panel.decision(msg, texts, probs, k, win, ms)
+    panel.decision(msg, texts, probs, k, win, ms, imagined)
     if logf:
         logf.write(json.dumps({"seq": msg["seq"], "you": msg["you"], "round": msg["state"].get("round"),
                                "prompt": msg["prompt"].get("signature"), "title": msg["prompt"].get("title"),
                                "options": texts, "probs": [round(p, 4) for p in probs], "chosen": k,
-                               "win": win, "ms": round(ms, 1), "fallback": res is None}) + "\n")
+                               "win": win, "ms": round(ms, 1), "fallback": fallback, "imagined": imagined}) + "\n")
         logf.flush()
     return a, win
 
@@ -482,14 +616,27 @@ def main():
     CARDS = load_cards()
     rng = random.Random(0)
     guard = Guard()
-    panel = Panel(os.environ.get("JEV_PANEL"))
+    panel = Panel(os.environ.get("JEV_PANEL", "").replace("{name}", NAME) or None)
     logp = os.environ.get("JEV_LOG", "").replace("{pid}", str(os.getpid()))
     logf = open(logp, "a", encoding="utf8") if logp else None
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        msg = json.loads(line)
+    def send(obj):
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    def recv():
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                raise EOFError
+            if line.strip():
+                return json.loads(line)
+
+    io = (send, recv) if LOOK else None
+    while True:
+        try:
+            msg = recv()
+        except EOFError:
+            break
         if msg["t"] == "hello":
             rng = random.Random(msg["seed"])
             guard = Guard()
@@ -497,19 +644,20 @@ def main():
             reply = {"t": "ready", "v": 1, "name": NAME}
         elif msg["t"] == "decide":
             try:
-                a, _ = decide(msg, rng, guard, panel, logf)
+                a, _ = decide(msg, rng, guard, panel, logf, io)
                 reply = {"t": "act", "i": a["i"]}
                 if a["kind"] == "distribute":
                     d = split(a, msg)
                     if d is not None:
                         reply["distribution"] = d
+            except EOFError:
+                break
             except Exception as e:  # noqa: BLE001 - never crash the game on a bug of ours
                 log("decide failed:", repr(e))
                 reply = {"t": "act", "i": rng.randrange(len(msg["actions"]))}
         else:
             reply = {"t": "error", "error": f"unknown message {msg['t']}"}
-        sys.stdout.write(json.dumps(reply) + "\n")
-        sys.stdout.flush()
+        send(reply)
     panel.maybe_write(force=True)
 
 
