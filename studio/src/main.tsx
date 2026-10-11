@@ -8,6 +8,8 @@ import { TournamentPage } from './pages/TournamentPage';
 import { IconsPage } from './pages/IconsPage';
 import { useRoute } from './lib/route';
 import { loadArtPack } from './lib/cards';
+import { loadCardText } from './lib/cardText';
+import { dataSource } from './data/source';
 import { createSettingsStore, SettingsProvider } from './lib/settings';
 import './styles.css';
 
@@ -15,6 +17,8 @@ import './styles.css';
 if (import.meta.env.MODE === 'static') {
     loadArtPack('./art-pack.json').catch(() => undefined);
 }
+// printed card data, when the server or preview has it: text faces in the inspector and aspect colours on tiles
+dataSource().then((s) => s.loadCardText()).then((f) => (f ? loadCardText(f) : 0)).catch(() => undefined);
 
 const settings = createSettingsStore('holotable.settings');
 

@@ -7,9 +7,10 @@
 // --data    the shared project folder to read (default $SWU_DATA, else /mnt/project-files)
 // --out     output file (default app/dist/app.html, or app/dist/public.html with --public)
 // --public  the friends build (Eric's pick 6): no Lab, no thread names, no live mode
+// --shell   no data: the page loads it from the arena window's API (bot/arena/window.js); used for the window's image
 //
-// Parts reused read-only from their owners: the research console's loader and board glyphs (dashboard/site, in the
-// data folder), the Strategy Atlas kit (meta/atlas-kit.js), the viewer kit (studio, or its copy in the data folder)
+// Parts reused read-only from their owners: the research console's loader and board glyphs (dashboard/site, in this
+// repo once committed, else in the data folder), the Strategy Atlas kit (meta/atlas-kit.js), the viewer kit (studio, or its copy in the data folder)
 // and the arena strategy renderer (arena/strategy, in the data folder).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,10 +23,11 @@ const src = p => path.join(here, 'src', p);
 const req = createRequire(import.meta.url);
 
 function parseArgs(argv) {
-    const o = { data: process.env.SWU_DATA || '/mnt/project-files', out: null, public: false };
+    const o = { data: process.env.SWU_DATA || '/mnt/project-files', out: null, public: false, shell: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--public') o.public = true;
+        else if (a === '--shell') o.shell = true;
         else if (a === '--data' || a === '--out') { if (argv[i + 1] == null) throw new Error(`${a} needs a value`); o[a.slice(2)] = argv[++i]; }
         else if (a === '-h' || a === '--help') o.help = true;
         else throw new Error(`unknown argument: ${a}`);
@@ -36,18 +38,19 @@ function parseArgs(argv) {
 }
 
 const opts = (() => { try { return parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); } })();
-if (opts.help) { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(3, 9).map(l => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
-const root = opts.data;
-if (!fs.existsSync(root)) { console.error(`data folder not found: ${root} (pass --data or set SWU_DATA)`); process.exit(2); }
+if (opts.help) { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(3, 10).map(l => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
+// a shell build reads an empty folder, so the page carries code and an empty model
+const root = opts.shell ? fs.mkdtempSync(path.join((await import('node:os')).tmpdir(), 'app-shell-')) : opts.data;
+if (!opts.shell && !fs.existsSync(root)) { console.error(`data folder not found: ${root} (pass --data or set SWU_DATA)`); process.exit(2); }
 
 // the first file that exists, else null
 const first = (...ps) => ps.find(p => p && fs.existsSync(p)) || null;
 const parts = {
-    core: first(path.join(root, 'dashboard/site/core.cjs')),
-    glyph: first(path.join(root, 'dashboard/site/glyph.cjs')),
-    atlasKit: first(path.join(repo, 'meta/atlas-kit.js'), path.join(root, 'meta/kit/atlas-kit.js')),
-    viewerKit: first(path.join(repo, 'studio/dist-kit/swu-viewer-kit.js'), path.join(root, 'viewer-kit/swu-viewer-kit.js')),
-    strategy: first(path.join(root, 'arena/strategy/strategy-diagram.js')),
+    core: first(path.join(repo, 'dashboard/site/core.cjs'), path.join(opts.data, 'dashboard/site/core.cjs')),
+    glyph: first(path.join(repo, 'dashboard/site/glyph.cjs'), path.join(opts.data, 'dashboard/site/glyph.cjs')),
+    atlasKit: first(path.join(repo, 'meta/atlas-kit.js'), path.join(opts.data, 'meta/kit/atlas-kit.js')),
+    viewerKit: first(path.join(repo, 'studio/dist-kit/swu-viewer-kit.js'), path.join(opts.data, 'viewer-kit/swu-viewer-kit.js')),
+    strategy: first(path.join(opts.data, 'arena/strategy/strategy-diagram.js'), path.join(repo, 'bot/arena/web/strategy-diagram.js')),
 };
 for (const k of ['core', 'atlasKit']) if (!parts[k]) { console.error(`missing ${k}: the app needs it to load the data (see app/README.md)`); process.exit(2); }
 
@@ -125,6 +128,7 @@ if (fs.existsSync(t0dir)) for (const f of fs.readdirSync(t0dir).filter(f => /^ar
 const DATA = { audience: opts.public ? 'public' : 'project', model: opts.public ? model.publicModel(M) : M, bundle, picks, evals, lens, art, t0panels: opts.public ? t0panels.map(model.publicPanel) : t0panels, traces };
 const read = p => (p && fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
 const html = read(src('page.html'))
+    .replace('/*__ATLASCSS__*/', () => globalThis.AtlasKit.css()) // the Atlas colours, from the kit (the app's own tokens follow and win)
     .replace('/*__CSS__*/', () => read(src('style.css')))
     .replace('/*__KIT__*/', () => read(parts.viewerKit))
     .replace('/*__CORE__*/', () => read(parts.core))
@@ -137,5 +141,6 @@ const html = read(src('page.html'))
     .replace('/*__DATA__*/null', () => JSON.stringify(DATA).replace(/</g, '\\u003c'));
 fs.mkdirSync(path.dirname(opts.out), { recursive: true });
 fs.writeFileSync(opts.out, html);
+if (opts.shell) fs.rmSync(root, { recursive: true, force: true });
 const missing = Object.entries(parts).filter(([, p]) => !p).map(([k]) => k);
 console.log(JSON.stringify({ out: opts.out, audience: DATA.audience, bytes: html.length, bots: M.order.length, games: M.games.length, ratings: M.ratings.from, bundled: Object.keys(bundle).length, traces: Object.keys(traces).length, art: Object.keys(art).length, missing, warnings: loaded.warnings }));

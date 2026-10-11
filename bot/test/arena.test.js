@@ -409,3 +409,224 @@ test('server: a queued eval\'s lost-game replay is served, and eval_result names
         srv.close();
     }
 });
+
+test('server: / is the app when its build exists, /arena is always the arena UI', async () => {
+    const http = require('http');
+    const { handler } = require('../arena/server');
+    const app = path.join(HOME, 'public.html');
+    fs.writeFileSync(app, '<!doctype html><title>SWU Arena app</title>');
+    const before = process.env.ARENA_APP;
+    const srv = http.createServer(handler).listen(0, '127.0.0.1');
+    await new Promise((r) => srv.once('listening', r));
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const ui = fs.readFileSync(path.join(__dirname, '..', 'arena', 'web', 'index.html'), 'utf8');
+    try {
+        process.env.ARENA_APP = app;
+        assert.match(await (await fetch(`${base}/`)).text(), /SWU Arena app/);
+        assert.strictEqual(await (await fetch(`${base}/arena`)).text(), ui);
+        assert.ok((await (await fetch(`${base}/api/status`)).json()).result, '/api is unchanged');
+        process.env.ARENA_APP = '';
+        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui, 'no app build: / stays the arena UI');
+        process.env.ARENA_APP = path.join(HOME, 'missing.html');
+        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui);
+    } finally {
+        srv.close();
+        if (before === undefined) {
+            delete process.env.ARENA_APP;
+        } else {
+            process.env.ARENA_APP = before;
+        }
+    }
+});
+
+test('server: gzip only when Accept-Encoding allows it', () => {
+    const { acceptsGzip } = require('../arena/server');
+    for (const h of ['gzip', 'deflate, gzip', 'GZIP;Q=0.5', 'br, *', 'gzip;q=1, *;q=0']) {
+        assert.strictEqual(acceptsGzip(h), true, h);
+    }
+    for (const h of [undefined, '', 'identity', 'gzip;q=0', 'deflate, gzip;q=0', '*;q=0', 'gzip;q=0, *', 'gzip;q=0.000']) {
+        assert.strictEqual(acceptsGzip(h), false, String(h));
+    }
+});
+
+test('tournament rounds get ladder ids scoped to the tournament; games and the server follow them', async () => {
+    const { ladderIdOf } = require('../arena/referee');
+    assert.strictEqual(ladderIdOf(3), 'arena-r3', 'outside a tournament');
+    assert.strictEqual(ladderIdOf(1, { id: 'arena-t202610130610' }), 'arena-t202610130610-r1');
+    assert.strictEqual(ladderIdOf(2, { id: 'holdout' }), 'arena-holdout-r2', 'every arena run keeps the arena- prefix');
+    const { RESULTS } = require('../arena/home');
+    const { call, TOURNAMENT } = require('../arena/api');
+    const index = (id) => {
+        fs.mkdirSync(path.join(RESULTS, id, 'games'), { recursive: true });
+        writeJson(path.join(RESULTS, id, 'index.json'), { games: [{ id: `${id}-g1` }] });
+        fs.writeFileSync(path.join(RESULTS, id, 'games', `${id}-g1.jsonl`), `{"id":"${id}"}\n`);
+    };
+    index('arena-r41');
+    index('arena-tx-r41');
+    index('arena-tx-r42');
+    const before = readJson(path.join(HOME, 'standings.json'), null);
+    writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: 'arena-tx-r41', bots: [] }], global: {} });
+    writeJson(TOURNAMENT(), { id: 'arena-tx', state: 'running', rounds: [{ n: 41, ladder: 'arena-tx-r41' }, { n: 42, ladder: 'arena-tx-r42' }] });
+    const http = require('http');
+    const { handler } = require('../arena/server');
+    const srv = http.createServer(handler).listen(0, '127.0.0.1');
+    await new Promise((r) => srv.once('listening', r));
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    try {
+        const g41 = (await call('games', { round: 41 })).result;
+        assert.strictEqual(g41.replayBase, 'replays/arena-tx-r41/games/', 'published rounds: standings name the ladder');
+        const g42 = (await call('games', { round: 42 })).result;
+        assert.strictEqual(g42.replayBase, 'replays/arena-tx-r42/games/', 'a round not published yet: tournament.json names it');
+        assert.strictEqual(await (await fetch(`${base}/${g42.replayBase}${g42.games[0].id}.jsonl`)).text(), '{"id":"arena-tx-r42"}\n');
+        assert.strictEqual((await fetch(`${base}/replays/arena-r41/index.json`)).status, 200, 'arena-r<K> is still served');
+        // a ladder id that is not an arena folder name is ignored
+        writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: '../arena-tx-r41', bots: [] }], global: {} });
+        writeJson(TOURNAMENT(), { id: 'arena-tx', state: 'running', rounds: [] });
+        assert.strictEqual((await call('games', { round: 41 })).result.replayBase, 'replays/arena-r41/games/');
+        assert.strictEqual((await fetch(`${base}/replays/..%2Fsecret-r1/index.json`)).status, 404);
+    } finally {
+        srv.close();
+        fs.rmSync(TOURNAMENT(), { force: true });
+        if (before) {
+            writeJson(path.join(HOME, 'standings.json'), before);
+        } else {
+            fs.rmSync(path.join(HOME, 'standings.json'), { force: true });
+        }
+    }
+});
+
+test('holdout split: seeded, per stratum, disjoint, every base in both pools', () => {
+    const { splitPool, writePools, loadPool } = require('../cardpool');
+    const card = (setCode, types, aspects, unique = false) => ({ id: `id-${setCode}`, setCode, internalName: `c-${setCode}`, types, aspects, unique });
+    const index = { leaders: [], bases: [], pool: [] };
+    for (let i = 0; i < 10; i++) {
+        index.leaders.push(card(`L${i}`, ['leader'], i % 2 ? ['aggression', 'villainy'] : ['vigilance', 'heroism'], true));
+        index.pool.push(card(`U${i}`, ['unit'], ['aggression']), card(`E${i}`, ['event'], ['vigilance']), card(`N${i}`, ['upgrade'], []));
+    }
+    index.bases.push(card('B1', ['base'], ['aggression']), card('B2', ['base'], ['vigilance']));
+    const a = splitPool(index, { fraction: 0.3, seed: 's1' });
+    assert.deepStrictEqual(splitPool(index, { fraction: 0.3, seed: 's1' }), a, 'the same seed gives the same split');
+    assert.notDeepStrictEqual(splitPool(index, { fraction: 0.3, seed: 's2' }).holdout, a.holdout, 'another seed gives another split');
+    const codes = (cards, pred = () => true) => cards.filter(pred).map((c) => c.setCode);
+    const notBase = (c) => !c.types.includes('base');
+    const held = new Set(codes(a.holdout, notBase));
+    assert.ok(codes(a.train, notBase).every((c) => !held.has(c)), 'leaders and main cards are in one pool only');
+    assert.strictEqual(codes(a.train, notBase).length + held.size, 40, 'and every one is in a pool');
+    assert.deepStrictEqual(codes(a.holdout, (c) => !notBase(c)), ['B1', 'B2']);
+    assert.deepStrictEqual(codes(a.train, (c) => !notBase(c)), ['B1', 'B2']);
+    // each stratum (5 leaders or 10 main cards of one type and aspect set) loses round(0.3 x size)
+    for (const prefix of ['U', 'E', 'N']) {
+        assert.strictEqual([...held].filter((c) => c.startsWith(prefix)).length, 3, prefix);
+    }
+    assert.strictEqual([...held].filter((c) => c.startsWith('L')).length, 4, 'two leader strata of 5: 2 each');
+    assert.throws(() => splitPool(index, { fraction: 1, seed: 's' }), /between 0 and 1/);
+    assert.throws(() => splitPool(index, { fraction: 0.3 }), /seed/);
+    const dir = path.join(tmp, 'pools');
+    const files = writePools(dir, a, { fraction: 0.3 });
+    const train = loadPool(files.train.path);
+    assert.strictEqual(train.kind, 'train');
+    assert.strictEqual(train.provenance.sha256, files.train.sha256);
+    assert.deepStrictEqual(files.holdout.counts, { leaders: 4, bases: 2, main: 9 });
+    fs.writeFileSync(path.join(dir, 'bad.json'), JSON.stringify({ schema: 'swu-arena-pool/1', kind: 'train', cards: [a.train[0], a.train[0]] }));
+    assert.throws(() => loadPool(path.join(dir, 'bad.json')), /repeated/);
+    fs.writeFileSync(path.join(dir, 'other.json'), JSON.stringify({ schema: 'omni-rs-pool-v1', cards: [] }));
+    assert.throws(() => loadPool(path.join(dir, 'other.json')), /not an arena card pool/);
+});
+
+test('a held-out round is compared with the last training round and stays out of the all-round Elo', () => {
+    const { rankCorrelation, report } = require('../arena/referee');
+    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3 }, { a: 1, b: 2, c: 3 }), 1);
+    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3 }, { a: 3, b: 2, c: 1 }), -1);
+    assert.strictEqual(rankCorrelation({ a: 1, b: 2 }, { a: 2, b: 1 }), null, 'fewer than 3 bots');
+    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3, d: 4 }, { a: 1, b: 2, c: 3 }), 1, 'only the bots both rounds rated');
+    setRoster(['x']);
+    const game = (id, p1, p2, winner) => ({ id, p1, p2, outcome: 'won', winner, winnerSeat: winner === p1 ? 'p1' : 'p2', by: null, timing: t(5, 5) });
+    const ladder = (id, kind, games) => ({ ...ladderOf(['x-v1', 'rush', 'heuristic'], games, 'done'), id, config: { bots: ['x-v1', 'rush', 'heuristic'], firstSeed: 9, gamesPerPair: 2, pool: { kind, cards: kind === 'holdout' ? 600 : 1400 } } });
+    const train = scoreRound(3, ladder('arena-tx-r3', 'train', [game('g1', 'x-v1', 'rush', 'x-v1'), game('g2', 'x-v1', 'heuristic', 'x-v1'), game('g3', 'rush', 'heuristic', 'heuristic')]));
+    const held = scoreRound(4, ladder('arena-tx-r4', 'holdout', [game('h1', 'x-v1', 'rush', 'rush'), game('h2', 'x-v1', 'heuristic', 'heuristic'), game('h3', 'rush', 'heuristic', 'rush')]));
+    assert.strictEqual(train.pool, 'train');
+    assert.strictEqual(held.pool, 'holdout');
+    assert.deepStrictEqual(globalElo([train, held]), globalElo([train]), 'held-out games are not in the all-round Elo');
+    const md = report(held, globalElo([train]), train);
+    assert.match(md, /results \(held-out cards\)/);
+    assert.match(md, /dealt only from the held-out pool \(600 cards/);
+    assert.match(md, /## Held-out cards vs training cards/);
+    assert.match(md, /Spearman rank correlation: -1/, 'x-v1 went from first to last');
+    assert.match(report(train, globalElo([train])), /this tournament's training pool \(1400 cards/);
+    const { rulesText } = require('../arena/runner');
+    assert.strictEqual(rulesText(null), '');
+    assert.match(rulesText({ holdout: { fraction: 0.3, trainPool: '/a/train.json', trainCards: 1400, holdoutCards: 600 } }), /30% of the leaders and main-deck cards are held out.*1400 training cards.*600 held-out cards/s);
+});
+
+test('a holdout tournament\'s extra ladder does not count as a planned round', () => {
+    const { clock, TOURNAMENT } = require('../arena/api');
+    const now = new Date().toISOString();
+    const work = (n) => ({ n, ladder: `arena-tz-r${n}`, workStart: now, workEnd: now, ladderStart: now, ladderEnd: now, bots: ['rush'] });
+    writeJson(TOURNAMENT(), { id: 'arena-tz', state: 'running', plannedRounds: 3, rounds: [work(1), work(2), work(3), { ...work(4), kind: 'holdout', ladderEnd: undefined }],
+                              rules: { holdout: { fraction: 0.3, train: 'rules/arena-tz/train.json', holdout: 'rules/arena-tz/holdout.json', counts: { train: 1400, holdout: 599 } } } });
+    try {
+        const c = clock();
+        assert.strictEqual(c.roundIndex, 3, 'three of three work rounds');
+        assert.strictEqual(c.plannedRounds, 3);
+        assert.strictEqual(c.holdout, true);
+        assert.strictEqual(c.phase, 'ladder');
+        assert.strictEqual(c.tournament.rules.holdout.holdoutCards, 599);
+        assert.strictEqual(c.tournament.rules.holdout.trainPool, path.join(HOME, 'rules/arena-tz/train.json'));
+    } finally {
+        fs.rmSync(TOURNAMENT(), { force: true });
+    }
+});
+
+test('readers get every panel, a round\'s ladder and archived tournaments from the API, not from the arena\'s files', async () => {
+    const { RESULTS } = require('../arena/home');
+    const { call } = require('../arena/api');
+    setRoster(['pa', 'pb']);
+    const win = (id, w, l) => ({ id, p1: w, p2: l, outcome: 'won', winner: w, winnerSeat: 'p1', timing: t(5, 5), rounds: 5 });
+    const rd = { ...scoreRound(7, ladderOf(['pa-v0', 'pb-v0', 'rush'], [win('g1', 'pa-v0', 'pb-v0'), win('g2', 'pa-v0', 'rush')], 'done')), ladderId: 'arena-tp-r7' };
+    const before = readJson(path.join(HOME, 'standings.json'), null);
+    writeJson(path.join(HOME, 'standings.json'), { status: 'running', rounds: [rd], global: globalElo([rd]) });
+    try {
+        dash.publishStandings({ status: 'running', rounds: [rd], global: globalElo([rd]) });
+        dash.updatePanel('pa', { now: 'thinking' });
+        const p = (await call('panels')).result;
+        assert.deepStrictEqual(p.leaderboard, dashFile('panels', 'arena-leaderboard.json'), 'the dashboard file is a copy of what the API serves');
+        assert.deepStrictEqual(p.experiment, dashFile('experiments', 'arena.json'));
+        assert.deepStrictEqual(p.panels.map((x) => x.id), ['arena-pa', 'arena-pb']);
+        assert.deepStrictEqual(p.panels[0], dashFile('panels', 'arena-pa.json'));
+        assert.strictEqual(p.panels[0].now, 'thinking');
+        assert.ok(fs.existsSync(path.join(HOME, 'panels', 'leaderboard.json')) && fs.existsSync(path.join(HOME, 'panels', 'experiment.json')));
+
+        // a round's ladder: found through the ladder id the standings name
+        assert.strictEqual((await call('ladder', { round: 7 })).error.code, 'not_found');
+        writeJson(path.join(RESULTS, 'arena-tp-r7', 'ladder.json'), { schema: 'swu-ladder/1', id: 'arena-tp-r7', games: [{ id: 'g1' }] });
+        const l = (await call('ladder')).result;
+        assert.deepStrictEqual([l.round, l.ladderId, l.ladder.schema, l.ladder.games.length], [7, 'arena-tp-r7', 'swu-ladder/1', 1]);
+        assert.strictEqual((await call('ladder', { round: -1 })).error.code, 'bad_request');
+
+        // archives: hand-made copies of the dashboard files, in panels/ (t0) or dash/ (later)
+        const arch = (...p) => path.join(HOME, 'archive', ...p);
+        assert.deepStrictEqual((await call('archive')).result, { tournaments: [] });
+        writeJson(arch('t0', 'README.json'), { note: 'smoke round' });
+        writeJson(arch('t0', 'standings.json'), { rounds: [{ round: 0 }] });
+        writeJson(arch('t0', 'panels', 'arena-coach.json'), { id: 'arena-coach' });
+        writeJson(arch('t0', 'panels', 'arena-leaderboard.json'), { id: 'arena-leaderboard' });
+        writeJson(arch('t0', 'experiment-arena.json'), { id: 'arena', old: true });
+        writeJson(arch('s1', 'dash', 'arena-x.json'), { id: 'arena-x' });
+        writeJson(arch('s1', 'dash', 'arena.json'), { id: 'arena' });
+        writeJson(arch('s1', 'panels', 'x.rated.json'), { bots: [] });
+        assert.deepStrictEqual((await call('archive')).result.tournaments, [{ id: 's1', note: null, rounds: 0 }, { id: 't0', note: 'smoke round', rounds: 1 }]);
+        const t0 = (await call('archive', { id: 't0' })).result;
+        assert.deepStrictEqual([t0.note, t0.standings.rounds.length, t0.leaderboard.id, t0.experiment.old, t0.panels.map((x) => x.id)], ['smoke round', 1, 'arena-leaderboard', true, ['arena-coach']]);
+        const s1 = (await call('archive', { id: 's1' })).result;
+        assert.deepStrictEqual([s1.leaderboard, s1.experiment.id, s1.panels.map((x) => x.id)], [null, 'arena', ['arena-x']]);
+        assert.strictEqual((await call('archive', { id: '..' })).error.code, 'bad_request');
+        assert.strictEqual((await call('archive', { id: 'none' })).error.code, 'not_found');
+    } finally {
+        fs.rmSync(path.join(HOME, 'archive'), { recursive: true, force: true });
+        if (before) {
+            writeJson(path.join(HOME, 'standings.json'), before);
+        } else {
+            fs.rmSync(path.join(HOME, 'standings.json'), { force: true });
+        }
+    }
+});

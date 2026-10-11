@@ -2,7 +2,7 @@
 # images (published artifacts). Holotable's static build fetches it next to the page as art-pack.json.
 #   python3 scripts/art-pack.py <card-art dir> <out.json> <replays dir>[:<dir>...] [width=160] [quality=62] [part MB=12]
 # A pack bigger than the part size is split: <out.json> becomes {"parts": [...]} naming <out>-1.json, <out>-2.json...
-import base64, io, json, os, re, sys
+import base64, glob, io, json, os, re, sys
 from PIL import Image
 
 art_dir, out, replays = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -40,6 +40,11 @@ for k, v in pack.items():
     size += len(v) + len(k) + 6
 parts.append(cur)
 stem = os.path.splitext(out)[0]
+# parts left over from an earlier, bigger run would sit beside the pack looking current: remove them
+for old in glob.glob(f'{glob.escape(stem)}-*.json'):
+    tail = old[len(stem) + 1:-5]
+    if tail.isdigit() and (len(parts) == 1 or int(tail) > len(parts)):
+        os.remove(old)
 if len(parts) == 1:
     with open(out, 'w') as fh:
         json.dump(pack, fh, separators=(',', ':'))

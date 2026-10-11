@@ -4,10 +4,17 @@
 #
 #   bot/arena/ops/launch.sh start <commit>     set up and start a new tournament on <commit> (TITLE, TASK, ROUNDS,
 #                                              MINUTES, GAMES, BUDGET_USD, BRAKE_5H (0.8), BRAKE_7D (0.85) from the
-#                                              environment)
+#                                              environment; HOLDOUT=0.3 makes it a card-pool holdout tournament, see
+#                                              referee.js)
 #   bot/arena/ops/launch.sh resume             set up whatever is missing and resume the tournament in tournament.json
 #                                              (the commit comes from <ARENA_HOME>/launch.json)
-#   bot/arena/ops/launch.sh referee|runner     restart only that process, on the existing setup (keeper.sh uses these)
+#   bot/arena/ops/launch.sh referee|runner|uplink   restart only that process, on the existing setup (keeper.sh uses these)
+#   bot/arena/ops/launch.sh uplink-stop        one last push to the window, then stop the uplink (keeper.sh, at the end)
+#
+# With SWU_WINDOW set at start (e.g. https://swu-arena.fly.dev; kept in launch.json as "window"), a third process, the
+# uplink (push.js arena), sends the arena's state and its round ladders to the arena window's API every 20 s (WINDOW.md).
+# It is the only process that gets the egress proxy, which adds the window's push token, and it runs only our own code
+# (push.js and api.js's read methods). The referee and the bots never get the proxy: a bot could push as the project.
 #
 # Layout under $BASE (default /root/arena-run, local disk):
 #   referee/        frozen git worktree of the commit; forceteki/ and node_modules/ link to $SRC's built engine
@@ -27,6 +34,7 @@ SHARED_RESULTS=${SHARED_RESULTS:-/mnt/project-files/results}
 BACKUP=${BACKUP:-/mnt/project-files/arena-runner}
 MEMO_SRC=${MEMO_SRC:-$ARENA_HOME/tools/memo}
 LAUNCH=$ARENA_HOME/launch.json
+LAUNCH_TOURNAMENT=$ARENA_HOME/tournament.json
 
 # a minimal environment for the referee and the runner (the runner passes even less on to competitors)
 CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
@@ -35,6 +43,7 @@ CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PRO
 # a rehearsal points these elsewhere too (defaults: the project's dashboard folder and ~/.arena-secret)
 [ -n "${ARENA_DASH:-}" ] && CLEAN+=("ARENA_DASH=$ARENA_DASH")
 [ -n "${ARENA_SECRET_FILE:-}" ] && CLEAN+=("ARENA_SECRET_FILE=$ARENA_SECRET_FILE")
+UPLINK_LOOP='bot/arena/push.js arena --every'
 
 say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
 # a launch setting from launch.json, or $2 when it has none
@@ -105,9 +114,21 @@ setup() {
     if [ ! -x "$BASE/tools/memo" ]; then
         install -m 755 "$MEMO_SRC" "$BASE/tools/memo"
     fi
-    # after a new container: what the mirror and the backup kept
-    for r in "$SHARED_RESULTS"/arena-r*; do
-        [ -d "$r" ] && [ ! -e "$BASE/results/$(basename "$r")" ] && cp -a "$r" "$BASE/results/" && say "restored $(basename "$r") from $SHARED_RESULTS"
+    # after a new container: every round ladder the mirror kept that standings.json or tournament.json names (games and the
+    # replay server read them here; a running round resumes from its copy), and the backup of the logs
+    local id ids
+    ids=$(node -e "
+const fs = require('fs');
+const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+const ids = new Set();
+for (const rd of read(process.argv[1])?.rounds ?? []) ids.add(rd.ladderId ?? 'arena-r' + rd.round);
+for (const r of read(process.argv[2])?.rounds ?? []) ids.add(r.ladder ?? 'arena-r' + r.n);
+console.log([...ids].join('\n'));" "$ARENA_HOME/standings.json" "$LAUNCH_TOURNAMENT" 2>/dev/null || true)
+    for id in $ids; do
+        [[ "$id" =~ ^arena-[A-Za-z0-9_-]+$ ]] || continue
+        if [ -d "$SHARED_RESULTS/$id" ] && [ ! -e "$BASE/results/$id" ]; then
+            cp -a "$SHARED_RESULTS/$id" "$BASE/results/" && say "restored $id from $SHARED_RESULTS"
+        fi
     done
     if [ -d "$BACKUP" ] && [ -z "$(ls -A "$BASE/logs" 2>/dev/null)" ]; then
         cp -a "$BACKUP/." "$BASE/logs/" && say "restored the runner's logs backup from $BACKUP"
@@ -121,7 +142,7 @@ start_referee() {
         "${CLEAN[@]}" setsid nohup node bot/arena/referee.js --tournament --resume --workers 3 --eval-workers 1 >> "$BASE/referee.log" 2>&1 < /dev/null &
     else
         "${CLEAN[@]}" setsid nohup node bot/arena/referee.js --tournament --rounds "${ROUNDS:-3}" --minutes "${MINUTES:-60}" --games "${GAMES:-2}" \
-            --workers 3 --eval-workers 1 --title "${TITLE:?TITLE}" --task "${TASK:-}" >> "$BASE/referee.log" 2>&1 < /dev/null &
+            --workers 3 --eval-workers 1 --title "${TITLE:?TITLE}" --task "${TASK:-}" ${HOLDOUT:+--holdout "$HOLDOUT"} >> "$BASE/referee.log" 2>&1 < /dev/null &
     fi
     say "referee started (pid $!)"
 }
@@ -133,27 +154,70 @@ start_runner() {
     say "runner started (pid $!)"
 }
 
+# the window's address: from the environment, else the one the tournament started with
+window_url() { printf '%s' "${SWU_WINDOW:-$(setting window)}"; }
+
+# the uplink's environment: CLEAN plus the egress proxy, and its ladders read from the local results (the freshest copy)
+uplink_env() {
+    UPLINK=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
+            "HTTPS_PROXY=${HTTPS_PROXY:-}" "https_proxy=${https_proxy:-}" "NODE_USE_ENV_PROXY=1" "NODE_OPTIONS=--disable-warning=UNDICI-EHPA"
+            "NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}" "SSL_CERT_FILE=${SSL_CERT_FILE:-}" "ARENA_HOME=$ARENA_HOME"
+            "ARENA_RESULTS=$BASE/results" "ARENA_PUBLIC_RESULTS=$BASE/results" "SWU_WINDOW=$1")
+    [ -n "${ARENA_DASH:-}" ] && UPLINK+=("ARENA_DASH=$ARENA_DASH")
+    [ -n "${SWU_WINDOW_TOKEN:-}" ] && UPLINK+=("SWU_WINDOW_TOKEN=$SWU_WINDOW_TOKEN")
+    return 0
+}
+
+start_uplink() {
+    local window
+    window=$(window_url)
+    if [ -z "$window" ]; then
+        say "no SWU_WINDOW: the window uplink is off"
+        return 0
+    fi
+    uplink_env "$window"
+    cd "$BASE/referee"
+    "${UPLINK[@]}" setsid nohup node bot/arena/push.js arena --every 20 >> "$BASE/uplink.log" 2>&1 < /dev/null &
+    say "uplink to $window started (pid $!)"
+}
+
+stop_uplink() {
+    local window pids
+    window=$(window_url)
+    pids=$(pgrep -f "$UPLINK_LOOP" || true)
+    if [ -n "$window" ]; then
+        uplink_env "$window"
+        (cd "$BASE/referee" && "${UPLINK[@]}" node bot/arena/push.js arena --once >> "$BASE/uplink.log" 2>&1) || say "the last push to $window failed (see $BASE/uplink.log)"
+    fi
+    [ -n "$pids" ] && kill $pids && say "uplink stopped"
+    return 0
+}
+
 case "$MODE" in
     start)
         COMMIT=${2:?usage: launch.sh start <commit>}
         COMMIT=$(git -C "$SRC" rev-parse "$COMMIT")
         mkdir -p "$ARENA_HOME/tools"
         [ -e "$ARENA_HOME/tools/memo" ] || cp "${MEMO_FROM:?MEMO_FROM: path to OptMem memo}" "$ARENA_HOME/tools/memo"
-        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), startedAt: new Date().toISOString()}, null, 1))" \
-            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}"
+        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), window: process.argv[5] || null, startedAt: new Date().toISOString()}, null, 1))" \
+            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}" "${SWU_WINDOW:-}"
         setup "$COMMIT"
         (cd "$BASE/referee" && "${CLEAN[@]}" npm run -s gate)
         start_referee 0
         sleep 5
         start_runner
+        start_uplink
         ;;
     resume)
         setup "$(setting commit)"
         pgrep -f 'bot/arena/referee.js --tournament' > /dev/null || start_referee 1
         sleep 5
         pgrep -f 'bot/arena/runner.js --repo' > /dev/null || start_runner
+        pgrep -f "$UPLINK_LOOP" > /dev/null || start_uplink
         ;;
     referee) start_referee 1 ;;
     runner) start_runner ;;
+    uplink) start_uplink ;;
+    uplink-stop) stop_uplink ;;
     *) echo "unknown mode $MODE" >&2; exit 1 ;;
 esac

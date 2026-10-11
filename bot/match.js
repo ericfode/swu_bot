@@ -12,20 +12,22 @@ const { seatFor, Shadow, BotError } = require('./protocol');
  * The match rng is used in a fixed order (two decks, then per step: actor order, a native bot's choice, a native
  * bot's random split), so a seed plays out identically with and without recording. Protocol clients never draw from it.
  * `decks` ({p1, p2} deck lists) replaces the two random decks; the rng then starts at the first step.
+ * `pool` ({cards}, an arena card pool: cardpool.js) deals the two random decks from those cards only.
  * `key` (a secret string) makes every random stream unpredictable from the seed (rng.js gameStreams); without it a
  * bot that knows the seed could rebuild the hidden cards. `limits` overrides the reply budgets of protocol.js LIMITS.
  * playGame closes no bot: whoever started a bot program closes it.
  *
  * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, events, botStats, timing}}
  */
-async function playGame(env, { seed, bots, decks: given = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {} }) {
+async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {} }) {
     if (bots[0] === bots[1] && typeof bots[0]?.decide === 'function') {
         throw new Error(`${bots[0].name}: one protocol client cannot play both seats`);
     }
     const streams = gameStreams(seed, key);
     const rng = streams.match;
     const t0 = Date.now();
-    const decks = given ?? { p1: env.randomDeck(rng), p2: env.randomDeck(rng) };
+    const deal = pool ? { pool } : {};
+    const decks = given ?? { p1: env.randomDeck(rng, deal), p2: env.randomDeck(rng, deal) };
     const players = bots.map((b, i) => ({ id: `p${i + 1}`, name: `p${i + 1}`, bot: b.name }));
     const seats = bots.map((b, i) => {
         const seat = `p${i + 1}`;

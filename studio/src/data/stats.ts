@@ -1,4 +1,5 @@
 import type { IndexGame } from './types';
+import { failedSeat, ratedSeat, ratedWinner } from './result';
 
 export interface BotRow {
     bot: string;
@@ -7,18 +8,24 @@ export interface BotRow {
     losses: number;
     draws: number;
     errors: number;
+    /** losses because this bot broke the game (v2: an ERROR with `by` set); counted in losses too */
+    failed: number;
     elo: number;
     /** Last results, oldest first: W, L, D. */
     form: ('W' | 'L' | 'D')[];
     avgRounds: number;
 }
 
-const finished = (g: IndexGame) => g.outcome === 'won' && !!g.winner;
+// rated: won, or an ERROR a bot caused (that bot loses); an ERROR with by null, STEP_CAP and STUCK have no result
+const finished = (g: IndexGame) => ratedWinner(g) != null;
 
-/** Win/loss table and sequential Elo (K=24) in play order, the same rules as the original viewer's stats.ts. */
+/**
+ * Win/loss table and sequential Elo (K=24) in play order, the same rules as the original viewer's stats.ts, plus the
+ * v2 rule: an ERROR with `by` set is a loss for that bot and a win for the other.
+ */
 export function standings(bots: string[], games: IndexGame[]): { rows: BotRow[]; history: Record<string, number>[] } {
     const rows = new Map<string, BotRow & { roundSum: number }>(
-        bots.map((b) => [b, { bot: b, games: 0, wins: 0, losses: 0, draws: 0, errors: 0, elo: 1000, form: [], avgRounds: 0, roundSum: 0 }])
+        bots.map((b) => [b, { bot: b, games: 0, wins: 0, losses: 0, draws: 0, errors: 0, failed: 0, elo: 1000, form: [], avgRounds: 0, roundSum: 0 }])
     );
     const history: Record<string, number>[] = [Object.fromEntries(bots.map((b) => [b, 1000]))];
     for (const g of games) {
@@ -36,7 +43,12 @@ export function standings(bots: string[], games: IndexGame[]): { rows: BotRow[];
         b.games++;
         a.roundSum += g.rounds;
         b.roundSum += g.rounds;
-        const sa = g.winner === 'draw' ? 0.5 : g.winner === g.p1 ? 1 : 0;
+        const won = ratedWinner(g);
+        const sa = won === 'draw' ? 0.5 : won === g.p1 ? 1 : 0;
+        const by = failedSeat(g);
+        if (by) {
+            (by === 'p1' ? a : b).failed++;
+        }
         const ra = sa === 1 ? 'W' : sa === 0 ? 'L' : 'D';
         const rb = sa === 1 ? 'L' : sa === 0 ? 'W' : 'D';
         a.form.push(ra);
@@ -70,7 +82,7 @@ export function headToHead(games: IndexGame[], row: string, col: string): { wins
             continue;
         }
         n++;
-        if (g.winner === row) {
+        if (ratedWinner(g) === row) {
             wins++;
         }
     }
@@ -80,5 +92,5 @@ export function headToHead(games: IndexGame[], row: string, col: string): { wins
 /** How often the first seat (p1) wins, over finished games. */
 export function seatEdge(games: IndexGame[]): { p1: number; n: number } {
     const done = games.filter(finished);
-    return { p1: done.filter((g) => g.winnerSeat === 'p1').length, n: done.length };
+    return { p1: done.filter((g) => ratedSeat(g) === 'p1').length, n: done.length };
 }

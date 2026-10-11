@@ -4,7 +4,8 @@ import { Activity, Radio, Swords, Trophy } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useIndex } from '../data/hooks';
 import { headToHead, seatEdge, standings } from '../data/stats';
-import type { IndexGame, TournamentIndex } from '../data/types';
+import type { IndexGame, Seat, TournamentIndex } from '../data/types';
+import { failedSeat, fmtMs, ratedSeat, timingText } from '../data/result';
 import { botColor } from '../lib/cards';
 import { hrefGame } from '../lib/route';
 
@@ -68,7 +69,9 @@ function Tournament({ idx }: { idx: TournamentIndex }) {
                                 </div>
                                 <span className="num text-right"><b className="text-fg">{Math.round(r.elo)}</b></span>
                                 <span className="hidden md:flex items-center gap-2">
-                                    <span className="num text-dim text-xs w-16 text-right">{r.wins}–{r.losses}{r.draws ? `–${r.draws}` : ''}</span>
+                                    <span className="num text-dim text-xs w-16 text-right" title={r.failed ? `${r.failed} of the ${r.losses} losses: ${r.bot} broke the game (error)` : undefined}>
+                                        {r.wins}–{r.losses}{r.draws ? `–${r.draws}` : ''}{r.failed > 0 && <span className="text-p2"> ({r.failed}✕)</span>}
+                                    </span>
                                     <span className="flex gap-0.5" aria-label="Recent form">
                                         {r.form.slice(-6).map((f, k) => <i key={k} className={`w-1.5 h-4 rounded-sm ${f === 'W' ? 'bg-good' : f === 'L' ? 'bg-p2/70' : 'bg-dim'}`} title={f} />)}
                                     </span>
@@ -162,11 +165,18 @@ function Matches({ idx, color }: { idx: TournamentIndex; color: (b: string) => s
 
 function GameRow({ tid, g, color }: { tid: string; g: IndexGame; color: (b: string) => string }) {
     const live = g.outcome === 'running';
-    const name = (b: string, seat: 'p1' | 'p2') => (
-        <span className={`truncate ${g.winnerSeat && g.winnerSeat !== seat && !live ? 'opacity-45' : ''}`} style={{ color: color(b) }}>
-            {g.winnerSeat === seat && <Trophy size={11} className="inline mr-1 text-gold -mt-0.5" />}{b}
-        </span>
-    );
+    // a bot that broke the game (v2 `by`) loses it
+    const by = failedSeat(g);
+    const ws = by ? ratedSeat(g) : g.winnerSeat;
+    const name = (b: string, seat: Seat) => {
+        const t = g.timing?.[seat];
+        return (
+            <span className={`truncate ${ws && ws !== seat && !live ? 'opacity-45' : ''}`} style={{ color: color(b) }}>
+                {ws === seat && <Trophy size={11} className="inline mr-1 text-gold -mt-0.5" />}{b}
+                {t && t.n > 0 && <span className="num text-[10px] text-faint ml-1.5" title={`${timingText(b, t)} (timed by the referee)`}>{fmtMs(t.ms / t.n)}</span>}
+            </span>
+        );
+    };
     return (
         <li>
             <a href={hrefGame(tid, g.id)} className="grid grid-cols-[minmax(0,1fr)_1.5rem_minmax(0,1fr)_5.5rem] items-center gap-2 px-3 py-2 rounded-lg hover:bg-raise transition-colors">
@@ -175,6 +185,7 @@ function GameRow({ tid, g, color }: { tid: string; g: IndexGame; color: (b: stri
                 {name(g.p2, 'p2')}
                 <span className="num text-xs text-dim text-right whitespace-nowrap">
                     {live ? <span className="text-p2 inline-flex items-center gap-1"><Radio size={11} className="animate-pulse" />live</span>
+                        : by ? <span className="text-p2" title={`${g[by]} failed (error); ${g[by === 'p1' ? 'p2' : 'p1']} wins${g.error ? `\n${g.error}` : ''}`}>{by} failed</span>
                         : g.outcome !== 'won' ? <span className="text-gold">{g.outcome}</span>
                             : <>R{g.rounds} · {g.steps}</>}
                 </span>

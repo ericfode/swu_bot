@@ -1,5 +1,6 @@
-import type { Game, PlayerSnap, Seat, Snapshot } from './types';
-import { estimateLens, LENS_SCALE, OMNI_WEIGHTS, type LensStep, type TermKey } from './lens';
+import type { CardRef, Game, PlayerSnap, Seat, Snapshot } from './types';
+import type { LensStep } from './lensFile';
+import { rowFacts, rowValue, scoreOfBoard } from './score';
 
 export const SEATS: Seat[] = ['p1', 'p2'];
 export const other = (s: Seat): Seat => (s === 'p1' ? 'p2' : 'p1');
@@ -7,8 +8,8 @@ type Arena = 'ground' | 'space';
 const ARENAS: Arena[] = ['ground', 'space'];
 
 /**
- * Snapshots carry no card ids, so units are matched from one step to the next by name (keeping order), which gives
- * each unit on the board a stable key for enter/exit animation and damage pop-ups.
+ * A stable key per unit on the board, for enter/exit animation and damage pop-ups: the card's id when the replay has
+ * one (v2), else units are matched from one step to the next by name (keeping order).
  * ids[step][seat][arena][i] is the id of state.players[seat][arena][i].
  */
 export type UnitIds = Record<Seat, Record<Arena, string[]>>[];
@@ -24,8 +25,8 @@ export function trackUnits(game: Game): UnitIds {
             for (const arena of ARENAS) {
                 const pool = prev ? [...prev[seat][arena]] : [];
                 for (const u of step.state.players[seat][arena]) {
-                    const i = pool.findIndex((p) => p.n === u.n);
-                    const id = i >= 0 ? pool.splice(i, 1)[0].id : `u${next++}`;
+                    const i = u.id ? -1 : pool.findIndex((p) => p.n === u.n);
+                    const id = u.id ? `#${u.id}` : i >= 0 ? pool.splice(i, 1)[0].id : `u${next++}`;
                     cur[seat][arena].push(id);
                     keep[seat][arena].push({ n: u.n, id });
                 }
@@ -37,9 +38,24 @@ export function trackUnits(game: Game): UnitIds {
     return out;
 }
 
+/** The card with this id (v2) anywhere on a board: bases, leaders, units, upgrades, captured cards, hands, discards. */
+export function cardById(s: Snapshot, id: string): CardRef | null {
+    for (const seat of SEATS) {
+        const p = s.players[seat];
+        const units = [...p.ground, ...p.space];
+        const all: (CardRef | null)[] = [p.base, p.leader, ...units, ...units.flatMap((u) => [...(u.u ?? []), ...(u.cap ?? [])]), ...p.hand, ...p.discard];
+        const c = all.find((x) => x?.id === id);
+        if (c) {
+            return c;
+        }
+    }
+    return null;
+}
+
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 const units = (p: PlayerSnap) => [...p.ground, ...p.space];
 
+/** Board facts per step, for the curves. The score is not here: it comes from the resolved series (score.ts). */
 export interface Metrics {
     step: number;
     round: number;
@@ -51,19 +67,19 @@ export interface Metrics {
     hand2: number;
     res1: number;
     res2: number;
-    /** p1's edge in the omni bot's board score, squashed to -1..1 (see edgeTerms). */
-    edge: number;
 }
 
+/** @deprecated one row of a score's breakdown; read rows from the series (score.ts rowsAt / rowValue) */
 export interface EdgeTerm {
-    key: TermKey;
+    /** the row: 'base', 'ground', 'space', 'hand', 'resources', 'initiative', or a row id of another source */
+    key: string;
     label: string;
-    /** each side's points for this term (good for that side) */
+    /** each side's value for this row (good for that side), to 1 decimal */
     p1: number;
     p2: number;
-    /** p1 - p2: points toward p1 (negative = toward p2) */
+    /** p1 - p2: toward p1 (negative = toward p2) */
     points: number;
-    /** what each side's points are made of, e.g. "3 units" */
+    /** what each side's value is made of, e.g. "3 units" */
     what: Record<Seat, string>;
     /** the rule in a few words, shown under the row */
     rule: string;
@@ -71,39 +87,37 @@ export interface EdgeTerm {
     how: string;
 }
 
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
 /**
- * The board read the way the omniscient bot scores it at its search leaves (bot/omni, same weights as the heuristic
- * bot): each side's base, units, hand, resources and initiative in points, and p1's edge = p1 total - p2 total,
- * squashed to -1..1 with tanh(edge / 25) for the curves. With the game's lens file the values are the bot's own;
- * without it they are computed here and leave out card cost, which replays don't record.
+ * @deprecated The Omni v1 breakdown of one board, from a lens step or (without one) the estimate: the rows, the edge
+ * in points (`sum`), the edge as 2·chance − 1 with the rough map (`edge`, -1..1) and whether the values came from a
+ * file. Use the series (score.ts) instead.
  */
 export function edgeTerms(s: Snapshot, lens?: LensStep | null): { terms: EdgeTerm[]; sum: number; edge: number; exact: boolean } {
-    const v = lens ?? estimateLens(s);
-    const w = OMNI_WEIGHTS;
-    const { p1, p2 } = s.players;
-    const hp = (p: PlayerSnap) => Math.max(0, p.base.hp - p.base.d);
-    const t = (key: EdgeTerm['key'], label: string, a: number, b: number, what: Record<Seat, string>, rule: string, how: string): EdgeTerm =>
-        ({ key, label, p1: Math.round(a * 10) / 10, p2: Math.round(b * 10) / 10, points: a - b, what, rule, how });
-    const unitRule = `power × ${w.power} + HP × ${w.hp} + cost × ${w.cost} + upgrades, × ${w.exhaustedMult} if exhausted`;
-    const unitHow = `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per other upgrade + ${w.sentinel} if Sentinel, all × ${w.exhaustedMult} if exhausted`;
-    const terms: EdgeTerm[] = [
-        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left − (12 − HP)² / 6 under 12)`, `${w.baseMult} × (${w.baseHp} per HP left, minus (12 − HP)² / 6 when 12 HP or less, so a base near 0 HP falls fast)`),
-        t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, unitRule, unitHow),
-        t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, unitRule, unitHow),
-        t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`, `${w.hand} per card in hand`),
-        t('resources', 'Resources', v.p1.resources, v.p2.resources, { p1: count(p1.res.total, 'resource'), p2: count(p2.res.total, 'resource') }, `${w.resource} per resource`, `${w.resource} per resource, ready or not`),
-        t('initiative', 'Initiative', v.p1.initiative, v.p2.initiative, { p1: s.initiative === 'p1' ? 'has it' : 'no', p2: s.initiative === 'p2' ? 'has it' : 'no' }, `${w.initiative} for whoever holds it`, `${w.initiative} for the player holding the initiative`)
-    ];
-    const total = v.p1.total - v.p2.total;
-    return { terms, sum: total, edge: Math.tanh(total / LENS_SCALE), exact: !!lens };
+    let v = lens ? scoreOfBoard(s, lens, { bareAs: 'omni-v1' }) : null;
+    // no step, or one that doesn't fit this board: the estimate, not exact (as lensAt does)
+    const exact = !!v?.step.seats;
+    if (!exact) {
+        v = scoreOfBoard(s, true);
+    }
+    const seats = v?.step.seats;
+    if (!v || !seats) {
+        return { terms: [], sum: 0, edge: 0, exact: false };
+    }
+    const { source, step } = v;
+    const terms = source.rows.filter((r) => r.group !== 'joint').map((r): EdgeTerm => {
+        const val = rowValue(r, step);
+        return {
+            key: r.group === 'side' ? r.key : r.id, label: r.label,
+            p1: Math.round((val.p1 ?? 0) * 10) / 10, p2: Math.round((val.p2 ?? 0) * 10) / 10, points: val.edge,
+            what: rowFacts(r, s) ?? { p1: '', p2: '' }, rule: r.rule(step.weights), how: r.how(step.weights)
+        };
+    });
+    const total = (seats.p1.total ?? 0) - (seats.p2.total ?? 0);
+    return { terms, sum: total, edge: 2 * (step.p1Win ?? 0.5) - 1, exact };
 }
 
-export const materialEdge = (s: Snapshot) => edgeTerms(s).edge;
-
-/** Per-step series for the curves; `lensSteps` (lensByIndex) makes the edge the omni bot's own where the game has a lens file. */
-export function metrics(game: Game, lensSteps?: Map<number, LensStep>): Metrics[] {
+/** Per-step board facts for the curves. */
+export function metrics(game: Game): Metrics[] {
     return game.steps.map((st, i) => {
         const { p1, p2 } = st.state.players;
         return {
@@ -116,8 +130,7 @@ export function metrics(game: Game, lensSteps?: Map<number, LensStep>): Metrics[
             hand1: p1.hand.length,
             hand2: p2.hand.length,
             res1: p1.res.total,
-            res2: p2.res.total,
-            edge: edgeTerms(st.state, lensSteps?.get(i) ?? null).edge
+            res2: p2.res.total
         };
     });
 }
@@ -161,6 +174,8 @@ export function deltas(a: Snapshot, b: Snapshot): Delta[] {
         });
     }
     const inHands = (s: Snapshot, n: string) => SEATS.reduce((k, seat) => k + s.players[seat].hand.filter((c) => c.n === n).length, 0);
+    // v2: cards held captured under units
+    const captured = (s: Snapshot, n: string) => SEATS.reduce((k, seat) => k + units(s.players[seat]).reduce((j, u) => j + (u.cap ?? []).filter((c) => c.n === n).length, 0), 0);
     for (const seat of SEATS) {
         const pa = a.players[seat];
         const pb = b.players[seat];
@@ -185,7 +200,8 @@ export function deltas(a: Snapshot, b: Snapshot): Delta[] {
         for (const n of gone[seat]) {
             // more copies of it in the hands than before (and than bounces already counted): it went back to a hand
             const back = inHands(b, n) - inHands(a, n) - out.filter((d) => d.kind === 'bounce' && d.text === `${n} returns to hand`).length;
-            out.push(back > 0 ? { seat, kind: 'bounce', text: `${n} returns to hand` } : { seat, kind: 'defeat', text: `${n} defeated` });
+            const taken = captured(b, n) - captured(a, n) - out.filter((d) => d.kind === 'defeat' && d.text === `${n} captured`).length;
+            out.push(back > 0 ? { seat, kind: 'bounce', text: `${n} returns to hand` } : { seat, kind: 'defeat', text: taken > 0 ? `${n} captured` : `${n} defeated` });
         }
         out.push(...stolen.filter((d) => d.seat === seat));
         for (const n of came[seat]) {

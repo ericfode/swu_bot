@@ -2,7 +2,7 @@
 /**
  * Quick self-evaluation for an arena competitor.
  *
- *   node bot/arena/eval.js <bot> [--vs rush,tempo] [--seeds 3] [--seed 20001] [--workers 1] [--record] [--json]
+ *   node bot/arena/eval.js <bot> [--vs rush,tempo] [--seeds 3] [--seed 20001] [--workers 1] [--record] [--json] [--pool <file>|none]
  *   node bot/arena/eval.js --job <queue file> [--workers 1]        (the referee) play a queued eval, see below
  *
  * <bot> vs each opponent on `--seeds` seeds, each seed played from both seats (decks follow the seat, so deck luck
@@ -12,6 +12,8 @@
  * Opponents can be any registry name: rush, heuristic, aggro, tempo, control, random, another agent, or <agent>-v<N>.
  * Every bot plays under the arena's time cap (roster.thinkCapMs of thinking per game, players/guard.js): a bot that
  * goes over it, throws, hangs or fails to load forfeits that game, which counts as a loss for it (`forfeit` in the row).
+ * While a tournament with a card-pool rule runs (tournament.json rules.holdout), evals deal decks from its training cards
+ * only, like its rated rounds; --pool <file> deals from another pool (cardpool.js), --pool none from every card.
  *
  * --job is how the referee plays an eval queued through the API (api.js `eval`) in its own process, so it can stop the
  * eval when the work window ends: the job file ({id, bot, vs, seeds, state: 'running', ...}) gets state 'done' with the
@@ -22,7 +24,8 @@ const { describeBot } = require('../players');
 const { resolveArena } = require('./registry');
 const { runJobs } = require('./pool');
 const { killChildren } = require('../game-pool');
-const { RESULTS, readJson, writeJson, roster } = require('./home');
+const { HOME, RESULTS, readJson, writeJson, roster } = require('./home');
+const { loadPool } = require('../cardpool');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -41,8 +44,15 @@ function resultFor(r, mySeat) {
     return seat === 'draw' ? 'draw' : seat === mySeat ? 'win' : 'loss';
 }
 
+/** The card pool evals deal from: the running tournament's training cards (rules.holdout.train), else null (every card). */
+function tournamentPool() {
+    const t = readJson(path.join(HOME, 'tournament.json'), null);
+    const file = t?.state === 'running' ? t.rules?.holdout?.train : null;
+    return typeof file === 'string' ? loadPool(path.resolve(HOME, file)) : null;
+}
+
 /** Plays `me` against each opponent, `seeds` seeds from both seats; resolves a summary (W-L per opponent, timing, losses). */
-async function runEval({ me, opps, seeds = 3, first = 20001, workers = 1, recDir = null, onRow = null, capMs = roster().thinkCapMs ?? Infinity }) {
+async function runEval({ me, opps, seeds = 3, first = 20001, workers = 1, recDir = null, onRow = null, capMs = roster().thinkCapMs ?? Infinity, pool = tournamentPool() }) {
     const jobs = [];
     for (const o of opps) {
         for (let s = first; s < first + seeds; s++) {
@@ -57,7 +67,7 @@ async function runEval({ me, opps, seeds = 3, first = 20001, workers = 1, recDir
     const rows = [];
     // same rules as a rated round (referee.js): the cap, and the watchdog 30 s past the 2x wall cap
     await runJobs(jobs, {
-        workers, capMs, hangMs: Number.isFinite(capMs) ? 2 * capMs + 30000 : 600000,
+        workers, capMs, hangMs: Number.isFinite(capMs) ? 2 * capMs + 30000 : 600000, pool,
         onResult: ({ job, result: r }) => {
             const mySeat = `p${job.seat}`;
             const t = r.timing?.[mySeat] ?? { n: 0, ms: 0 };
@@ -68,7 +78,8 @@ async function runEval({ me, opps, seeds = 3, first = 20001, workers = 1, recDir
             onRow?.(row);
         }
     });
-    const summary = { bot: me, games: rows.length, wallSec: Math.round((Date.now() - t0) / 1000), capMs: Number.isFinite(capMs) ? capMs : null, byOpp: {}, timing: null, losses: [] };
+    const summary = { bot: me, games: rows.length, wallSec: Math.round((Date.now() - t0) / 1000), capMs: Number.isFinite(capMs) ? capMs : null,
+                      pool: pool ? { kind: pool.kind, cards: pool.cards.length, sha256: pool.provenance.sha256 } : null, byOpp: {}, timing: null, losses: [] };
     for (const o of opps) {
         const mine = rows.filter((r) => r.opp === o);
         summary.byOpp[o] = { win: mine.filter((r) => r.result === 'win').length, loss: mine.filter((r) => r.result === 'loss').length, other: mine.filter((r) => !['win', 'loss'].includes(r.result)).length,
@@ -125,8 +136,13 @@ async function main() {
     const arena = resolveArena(me);
     // replays stay in this container (replays/ is gitignored), not in the shared folder
     const recDir = process.argv.includes('--record') ? path.join(__dirname, '..', '..', 'replays', 'arena-eval', arena ? arena.agent : me) : null;
+    const poolArg = arg('pool', null);
+    const pool = poolArg === 'none' ? null : poolArg ? loadPool(poolArg) : tournamentPool();
+    if (pool && !json) {
+        console.log(`decks dealt from the ${pool.kind} card pool only (${pool.cards.length} cards${poolArg ? '' : ', the running tournament\'s rule'})`);
+    }
     const summary = await runEval({
-        me, opps, seeds: Number(arg('seeds', 3)), first: Number(arg('seed', 20001)), workers: Number(arg('workers', 1)), recDir,
+        me, opps, seeds: Number(arg('seeds', 3)), first: Number(arg('seed', 20001)), workers: Number(arg('workers', 1)), recDir, pool,
         onRow: json ? null : (r) => console.log(rowLine(r))
     });
     if (json) {
@@ -153,4 +169,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runEval, resultFor };
+module.exports = { runEval, resultFor, tournamentPool };

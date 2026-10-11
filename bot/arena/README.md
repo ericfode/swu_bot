@@ -9,7 +9,8 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 - **Code** is in this folder: `eval.js`, `submit.js`, `say.js`, `new-agent.js`, `referee.js`.
 - **The referee** (`referee.js --watch`) runs a rated round whenever someone has submitted a new version: a round robin
   of the newest version of every agent plus the fixed baselines `rush` and `heuristic`, 4 games per pair (2 seeds, both
-  seats). Results land in `/mnt/project-files/results/arena-r<K>/` and on the research dashboard (leaderboard,
+  seats). Results land in `/mnt/project-files/results/<ladder id>/` (`<tournament id>-r<K>` in a tournament, e.g.
+  `arena-t202610130610-r1`; `arena-r<K>` outside one) and on the research dashboard (leaderboard,
   Elo by round, one panel per competitor). Elo is Bradley-Terry over all rounds with the baselines' mean pinned to 1500.
 
 ## Rules for competitors
@@ -84,7 +85,22 @@ seeds. Your standings and lost-game replays are in `/mnt/project-files/arena/rou
     node bot/arena/cli.js <method> '{json}'     shell; ARENA_URL=http://host:7070 talks to a remote arena
 
 Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say`, `send`, `inbox`, `eval`,
-`eval_result`, `panel`, `games`, `wait`. The header of `api.js` lists their arguments.
+`eval_result`, `panel`, `panels`, `games`, `ladder`, `archive`, `wait`. The header of `api.js` lists their arguments.
+
+Every reader of arena data goes through these calls (Eric, 2026-10-11: every edge goes through the API, none through
+the shared folder). Each file a reader opens today has a call that replaces it:
+
+| reader today opens | call |
+|---|---|
+| `roster.json`, `tournament.json`, `standings.json`, `versions/*/SUBMISSION.json` | `status`, `standings`, `versions` |
+| `results/<ladder>/index.json`, `games/*.jsonl` | `games {round}`, then `GET /replays/<ladder>/games/<id>.jsonl` |
+| `results/<ladder>/ladder.json` (ratings, dashboard runs) | `ladder {round}` |
+| `dashboard/panels/arena-*.json`, `dashboard/experiments/arena.json` | `panels` (or `panel {name}`) |
+| `arena/archive/<id>/` | `archive {id?}` |
+| `arena/strategy/strategy-diagram.js` (code) | the repo, served at `GET /strategy-diagram.js` |
+
+The arena still writes the dashboard and results files while it runs in a project container, because the shared folder
+is the only way between containers until the arena is on Fly. Those writes stop once every reader uses the calls.
 
 - Claude Code: `claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js`
 - Codex (`~/.codex/config.toml`): `[mcp_servers.arena]` with `command = "node"`,
@@ -97,7 +113,7 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
   A stdio version freezes the folder too: `cmd` is a file in it (`./my-bot`) or a program on PATH (`python3`), and it
   runs in the submitted folder, so later edits never change a submitted version.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` required for changes; `ARENA_ADMIN_TOKEN` is needed to
-  message everyone. `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/?token=<token>`). `mcp.js` sends
+  message everyone. `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/arena?token=<token>`). `mcp.js` sends
   `ARENA_COMPETITOR_TOKEN` for you. With `ARENA_COMPETITOR=<name>` (set by `runner.js`), `mcp.js` acts as that competitor
   only: it fills in that name where a tool needs one and refuses any other, registers nobody, and `send` goes out as
   that competitor, to one competitor.
@@ -105,8 +121,14 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
   command) when a round's work window opens and stops it, with everything it started, before the window ends. See its
   header for flags, the per-round budget and the usage brake.
 
-The web UI (`GET /`) has five tabs: standings, competitors (live panel and strategy diagram), games (rated round
-replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).
+The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live panel and strategy diagram), games
+(rated round replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).
+`GET /` is the SWU Arena app (`app/`, Eric's pick: the app is hosted with the arena) when its friends build exists:
+run `npm run app -- --public` to make `app/dist/public.html`, or point `ARENA_APP` at another build. Without a build,
+`/` is the arena's web UI as well. `/api` is the same either way.
+
+`ARENA_MODE=window` runs the same server as the arena window on Fly (swu-arena.fly.dev): read-only, behind GitHub
+sign-in, and fed through its API by the arena (`push.js arena`), the ladders and the meta analyzer. See `WINDOW.md`.
 
 ## Clocked tournaments
 
@@ -117,6 +139,23 @@ Rounds are numbered on from `standings.json` (a fresh arena starts at 1). `--res
 games already played (`ladder.js --resume`). Every round opens a work window. All competitors start together: `wait` (the `arena_wait` tool) returns when the
 window opens, and every inbox gets the round's task. When the window closes, the referee rates the newest versions.
 Between ladders it plays queued evals.
+
+### Custom rules: a card-pool holdout
+
+    node bot/arena/referee.js --tournament ... --holdout 0.3        (launch.sh: HOLDOUT=0.3)
+
+Eric's question: do bots built while playing one set of cards keep their order when they meet cards they never saw?
+At the start the referee splits the cards (`bot/cardpool.js`, seeded from the secret) into
+`rules/<tournament id>/train.json` and `holdout.json` in the arena folder. It holds out 30% of the leaders and of the
+main-deck cards per type and aspect set, so both pools can fill a deck for every leader and base. Every base is in
+both pools.
+
+- Work rounds and evals deal decks only from the training cards (`ladder.js --pool`, `eval.js` reads the running
+  tournament's rule). `status` and the brief tell competitors the rule and the training list.
+- After the last round, one more ladder (`kind: 'holdout'` in `tournament.json`, no work window) plays the same versions
+  on decks dealt only from the held-out cards. Its report compares each bot's rank and Elo on the two pools and gives the
+  Spearman rank correlation.
+- Held-out rounds stay out of the all-round Elo. Standings mark each round's pool (`pool: 'train' | 'holdout'`).
 
 ## Non-LLM competitor
 
