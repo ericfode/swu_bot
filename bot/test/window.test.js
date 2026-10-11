@@ -87,6 +87,10 @@ test('auth: bearer tokens give roles, a wrong one is refused, and a session cook
     assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer push-secret' })), { role: 'project', via: 'bearer' });
     assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer admin-secret' })), { role: 'admin', via: 'bearer' });
     assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer guess' })), { role: 'bad', via: 'bearer' });
+    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer feed-secret' })), { role: 'feed', feed: 'karabast', via: 'bearer' });
+    const two = createAuth({ dir: path.join(tmp, 'auth1b'), env: { ARENA_FEED_TOKEN_FOO: 'foo-secret', ARENA_FEED_TOKEN_FOO_BAR: 'foo-bar-secret' } });
+    assert.deepStrictEqual(two.who(req({ authorization: 'Bearer foo-secret' })), { role: 'feed', feed: 'foo', via: 'bearer' });
+    assert.deepStrictEqual(two.who(req({ authorization: 'Bearer foo-bar-secret' })), { role: 'bad', via: 'bearer' }, 'a feed name is letters and digits, so FOO_BAR never owns foo-<id> names');
     assert.deepStrictEqual(auth.who(req({})), { role: 'anon', via: 'cookie' });
     const pal = auth.sign({ l: 'pal', exp: now + 60000 });
     assert.deepStrictEqual(auth.who(req({ cookie: `swu_session=${pal}` })), { role: 'friend', login: 'pal', via: 'cookie' });

@@ -6,8 +6,8 @@
  *   a bearer token     a program: ARENA_PUSH_TOKEN is 'project' (the project's threads push and read; the cloud proxy
  *                      adds it to their requests, so no thread holds it), ARENA_ADMIN_TOKEN is 'admin' (the same admin
  *                      token api.js accepts); ARENA_FEED_TOKEN_<NAME> is 'feed' for one outside machine (a Sprite
- *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST): it reads like a friend and writes only
- *                      what carries its name (window.js); any other bearer token is refused
+ *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST; NAME is letters and digits): it reads like
+ *                      a friend and writes only what carries its name (window.js); any other bearer token is refused
  *   nothing            'anon': the sign-in page and /healthz only
  * The role is worked out on every request, so removing an invite takes effect at once. Cookies only ever grant reading;
  * every write needs a bearer token, so a page elsewhere cannot make a signed-in browser push anything.
@@ -130,9 +130,10 @@ function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchIm
                 return { role: 'project', via: 'bearer' };
             }
             for (const [k, v] of Object.entries(env)) {
-                const m = /^ARENA_FEED_TOKEN_([A-Z0-9_]+)$/.exec(k);
+                // letters and digits only, so no feed's name starts another's `<name>-` (FOO_BAR is no feed token)
+                const m = /^ARENA_FEED_TOKEN_([A-Z0-9]+)$/.exec(k);
                 if (m && v && same(t, v)) {
-                    return { role: 'feed', feed: m[1].toLowerCase().replace(/_/g, '-'), via: 'bearer' };
+                    return { role: 'feed', feed: m[1].toLowerCase(), via: 'bearer' };
                 }
             }
             return { role: 'bad', via: 'bearer' };

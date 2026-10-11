@@ -53,7 +53,8 @@ Writes need a bearer token (the project token, or the admin token); a session co
 
 A machine outside the project, such as the Karabast Sprite that streams c-clock's games against people, gets its own
 token: the Fly secret `ARENA_FEED_TOKEN_<NAME>` (for example `ARENA_FEED_TOKEN_KARABAST`), stored on that machine and
-never in a thread. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
+never in a thread. `<NAME>` is letters and digits only, so one feed's names never start with another feed's name and a
+hyphen. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
 
 - `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
   viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
