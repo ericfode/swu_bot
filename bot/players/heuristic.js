@@ -398,4 +398,4 @@ class HeuristicBot {
     }
 }
 
-module.exports = { HeuristicBot, evaluate, defaultChoose, unitValue, keepScore, targetScore, W, SIDE };
+module.exports = { HeuristicBot, evaluate, defaultChoose, fingerprint, unitValue, keepScore, targetScore, W, SIDE };
