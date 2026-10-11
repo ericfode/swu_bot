@@ -285,6 +285,8 @@ pub fn validate_state_with_catalogue(
                         "hp",
                         "upgrades",
                         "phaseStats",
+                        "phaseKeywords",
+                        "phaseLostKeywords",
                     ]
                 } else if zone == "resources" {
                     &["id", "setCode", "name", "exhausted"]
@@ -371,6 +373,23 @@ pub fn validate_state_with_catalogue(
                             ));
                         }
                     }
+                    if let Some(keywords) = c.get("phaseKeywords") {
+                        let object = keywords.as_object().ok_or_else(|| format!("{at}: phaseKeywords must be object"))?;
+                        for (keyword, amount) in object {
+                            let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or_else(|| format!("{at}: unknown phase keyword {keyword}"))?;
+                            let amount = amount.as_u64().filter(|n| *n <= 65535).ok_or_else(|| format!("{at}: invalid phase keyword amount"))?;
+                            if index < 6 && amount != 1 { return Err(format!("{at}: boolean phase keyword amount must be one")); }
+                            if keyword == "restore" && amount == 0 { return Err(format!("{at}: zero phase Restore requires verified nullable trigger titles")); }
+                        }
+                    }
+                    if let Some(keywords) = c.get("phaseLostKeywords") {
+                        let array = keywords.as_array().ok_or_else(|| format!("{at}: phaseLostKeywords must be array"))?;
+                        let mut seen = HashSet::new();
+                        for keyword in array {
+                            let name = keyword.as_str().filter(|k| crate::ability_ir::CORE_KEYWORDS.contains(k)).ok_or_else(|| format!("{at}: unknown lost phase keyword"))?;
+                            if !seen.insert(name) { return Err(format!("{at}: duplicate lost phase keyword")); }
+                        }
+                    }
                     let phase = if let Some(stats) = c.get("phaseStats") {
                         fields(stats, &["power", "hp"], &format!("{at}.phaseStats"))?;
                         let power = stats["power"]
@@ -392,12 +411,12 @@ pub fn validate_state_with_catalogue(
                         .iter()
                         .filter(|u| u["setCode"] == "TOKEN_EXPERIENCE")
                         .count() as u64;
-                    let grit = info["keywords"]
-                        .as_array()
-                        .is_some_and(|ks| ks.iter().any(|k| k == "grit"));
+                    let printed_grit = info["keywords"].as_array().is_some_and(|ks| ks.iter().any(|k| k == "grit"))
+                        && [info["text"].as_str(), has_type(info, "leader").then(|| info["deployBox"].as_str()).flatten()].into_iter().flatten().any(|text| text.lines().any(|line| line.starts_with("Grit")));
+                    let grit = c["phaseKeywords"]["grit"] == 1 || printed_grit;
                     let power = info["power"].as_i64().unwrap_or(0)
                         + experience as i64
-                        + if grit { damage as i64 } else { 0 }
+                        + if grit && !c["phaseLostKeywords"].as_array().is_some_and(|ks| ks.iter().any(|k| k == "grit")) { damage as i64 } else { 0 }
                         + phase.0;
                     let hp = info["hp"].as_i64().unwrap_or(0) + experience as i64 + phase.1;
                     if power > u16::MAX as i64 {
@@ -558,6 +577,27 @@ mod tests {
         assert!(validate_state_with_catalogue(&state, &cards)
             .unwrap_err()
             .contains("only Shield and Experience tokens"));
+    }
+
+    #[test]
+    fn conditional_grit_metadata_does_not_add_damage_to_capacity() {
+        let mut cards = catalogue().clone();
+        let code = "LOF_254";
+        let info = cards.get_mut(code).unwrap();
+        info["keywords"] = json!(["grit"]);
+        info["text"] = json!("While you have the initiative, this unit gains Grit.");
+        let info = info.clone();
+        let mut state = initial_state();
+        let next = state["nextCardId"].as_u64().unwrap();
+        state["players"]["p1"][info["arena"].as_str().unwrap()] = json!([{
+            "id":format!("c{next}"),"setCode":code,"name":info["internalName"],"damage":65535,"power":info["power"],"hp":info["hp"],"exhausted":false,"upgrades":[]
+        }]);
+        state["nextCardId"] = json!(next+1);
+        state["players"]["p2"]["base"]["damage"] = json!(30);
+        state["winner"] = json!("p1");
+        validate_state_with_catalogue(&state, &cards).unwrap();
+        cards.get_mut(code).unwrap()["text"] = json!("Grit");
+        assert!(validate_state_with_catalogue(&state, &cards).unwrap_err().contains("computed power"));
     }
 
     #[test]

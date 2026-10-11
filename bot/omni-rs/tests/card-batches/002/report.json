@@ -1,0 +1,1044 @@
+{
+  "schema": "swu-card-batch-report/v1",
+  "beforeRevision": "d47e428795ce96e55c18407ca82a7bc4c9f917d8",
+  "afterRevision": "d47e428795ce96e55c18407ca82a7bc4c9f917d8",
+  "beforeHashes": {
+    "catalog.json": "c99e8f9421d683e91bc9af553a8688b99ed07acc008e50227f8ff3ed34181b8b",
+    "coverage.json": "601cd6d541851715a0df0b9a795d03a1bd239bc1114f8e63b747d98d6a982493",
+    "runtime-admission.json": "b0203bd79bb12b1dc22cfa0e620d2aa42cfc244cbeacceb2e8e337fafa8fbee3",
+    "runtime-pool.json": "bf38b2fe681d716a93c0704ae217643fac1cac9915d90f7198998a081a6156a4"
+  },
+  "afterHashes": {
+    "catalog.json": "acfd4d819063572bdf99af696aa03f55fa2430484b31c7ec4b6a77701e910603",
+    "coverage.json": "6ef5125687814716ce4a39e20d0b1d3587f8858827f3358dd3b2716703b95c6d",
+    "runtime-admission.json": "fe5e4dc70b420ce478ff82ee95e7975f12c07ddb7dc3de460f605d858a9aa9df",
+    "runtime-pool.json": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369"
+  },
+  "requestedExecutableCount": 100,
+  "queued": 100,
+  "targetMetByAdmission": true,
+  "newlyAdmittedInBatch": 100,
+  "blockedInBatch": 0,
+  "sourceConverted": {
+    "before": 723,
+    "after": 809
+  },
+  "sourceAstConverted": {
+    "before": 384,
+    "after": 470
+  },
+  "dataOnlyConverted": {
+    "before": 339,
+    "after": 339
+  },
+  "selectionTiming": "Retrospective selection after keyword and event-group prototypes, source review, printed-name predicate support, and measured admission of 100 new cards. Fresh final native/Wasm comparisons remain a separate requirement. The original prospective queue is preserved as exploratory-queue.json and explicitly retired in exploratory-queue-context.json.",
+  "runtimeAdmitted": {
+    "before": 564,
+    "after": 664
+  },
+  "newlyAdmittedOutsideBatch": [],
+  "admissionRegressions": [],
+  "conformance": "Requires separate family witnesses and passing native/Wasm trace checks",
+  "outcomes": [
+    {
+      "id": "ASH_003",
+      "internalName": "baylan-skoll#power-beyond-dream",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_030",
+      "internalName": "marrok#mysterious-warrior",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_040",
+      "internalName": "poe-dameron#ill-come-back-for-you",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_057",
+      "internalName": "lothal-ewing",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_071",
+      "internalName": "battered-haulcraft",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_078",
+      "internalName": "bwing-rearguard",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_089",
+      "internalName": "perseverance",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_105",
+      "internalName": "bokatan-kryze#for-all-of-mandalore",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_120",
+      "internalName": "warrior-of-clan-kryze",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_142",
+      "internalName": "mortar-trooper",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_233",
+      "internalName": "keep-them-talking",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "ASH_243",
+      "internalName": "darth-vader#meet-your-destiny",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_039",
+      "internalName": "mother-talzin#pledged-to-the-sisterhood",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_074",
+      "internalName": "yord-fandar#devoutly-disciplined",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_084",
+      "internalName": "gunga-city-guard",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_090",
+      "internalName": "opee-sea-killer",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_091",
+      "internalName": "pelta-relief-frigate",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_117",
+      "internalName": "chewbacca#resourceful-wookiee",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_118",
+      "internalName": "ryyk-blademaster",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_131",
+      "internalName": "soaring-cancell",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_137",
+      "internalName": "v19-skirmisher",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_142",
+      "internalName": "wookiee-rangers",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_186",
+      "internalName": "mining-guild-trespasser",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_210",
+      "internalName": "sol#compassionate-guardian",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_243",
+      "internalName": "sun-fac#poggles-second",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_246",
+      "internalName": "pyke-sarisa",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "HMW_259",
+      "internalName": "pack-guardian",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "IBH_068",
+      "internalName": "general-veers#leading-the-assault",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "IBH_104",
+      "internalName": "the-desolation-of-hoth",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_072",
+      "internalName": "wing-guard-security-team",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_107",
+      "internalName": "bunker-defender",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_113",
+      "internalName": "homestead-militia",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_140",
+      "internalName": "ig2000#assassins-aggressor",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_161",
+      "internalName": "captain-tarkin#full-forward-assault",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_229",
+      "internalName": "diversion",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "JTL_257",
+      "internalName": "flanking-fang-fighter",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LAW_043",
+      "internalName": "shadow-cloaking",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LAW_069",
+      "internalName": "the-ghost#home-of-the-spectres",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LAW_104",
+      "internalName": "bodhi-rook#creating-a-diversion",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LAW_105",
+      "internalName": "cinta-kaz#stone-cold-and-fearless",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LAW_182",
+      "internalName": "weazel#fighting-back",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LAW_183",
+      "internalName": "bwing-skirmisher",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_099",
+      "internalName": "paladin-training-corvette",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_114",
+      "internalName": "kaadu",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_118",
+      "internalName": "terentatek",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_126",
+      "internalName": "overpower",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_162",
+      "internalName": "hunting-nexu",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_167",
+      "internalName": "saesee-tiin#courageous-warrior",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_169",
+      "internalName": "invasion-control-ship",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_212",
+      "internalName": "life-wind-sage",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "LOF_223",
+      "internalName": "force-illusion",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_029",
+      "internalName": "zam-wesell#inconspicuous-assassin",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_045",
+      "internalName": "senator-chuchi#voice-for-the-voiceless",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_047",
+      "internalName": "coronet#stately-vessel",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_063",
+      "internalName": "rotunda-senate-guards",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_079",
+      "internalName": "corrupt-politician",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_116",
+      "internalName": "nubian-star-skiff",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_124",
+      "internalName": "budget-scheming",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_134",
+      "internalName": "hunting-assassin-droid",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_155",
+      "internalName": "alexsandr-kallus#with-new-purpose",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_165",
+      "internalName": "academy-disciplinarian",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_249",
+      "internalName": "high-command-councilor",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SEC_258",
+      "internalName": "grassroots-resistance",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_034",
+      "internalName": "supercommando-squad",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_047",
+      "internalName": "the-armorer#survival-is-strength",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_049",
+      "internalName": "the-mandalorian#wherever-i-go-he-goes",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_081",
+      "internalName": "general-tagge#concerned-commander",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_112",
+      "internalName": "gamorrean-retainer",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_159",
+      "internalName": "the-chaos-of-war",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_169",
+      "internalName": "clan-challengers",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_188",
+      "internalName": "4lom#bounty-hunter-for-hire",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_190",
+      "internalName": "zuckuss#bounty-hunter-for-hire",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_212",
+      "internalName": "privateer-scyk",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SHD_247",
+      "internalName": "protector-of-the-throne",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_048",
+      "internalName": "vigilant-honor-guards",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_065",
+      "internalName": "baze-malbus#temple-guardian",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_076",
+      "internalName": "make-an-opening",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_079",
+      "internalName": "admiral-piett#captain-of-the-executor",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_086",
+      "internalName": "gladiator-star-destroyer",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_100",
+      "internalName": "wedge-antilles#star-of-the-rebellion",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_112",
+      "internalName": "consortium-starviper",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_114",
+      "internalName": "escort-skiff",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_131",
+      "internalName": "fifth-brother#fear-hunter",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_140",
+      "internalName": "specforce-soldier",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_144",
+      "internalName": "red-three#unstoppable",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_156",
+      "internalName": "benthic-two-tubes#partisan-lieutenant",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_159",
+      "internalName": "partisan-insurgent",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_211",
+      "internalName": "gamorrean-guards",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "SOR_249",
+      "internalName": "frontier-atrt",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TS26_020",
+      "internalName": "501st-veteran",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TS26_040",
+      "internalName": "obiwan-kenobi#steadfast-knight",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TS26_053",
+      "internalName": "coruscanti-spy",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TS26_069",
+      "internalName": "remove-the-chip",
+      "sourceConvertedBefore": true,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_015",
+      "internalName": "general-grievous#general-of-the-droid-armies",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_054",
+      "internalName": "duchesss-champion",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_062",
+      "internalName": "daughter-of-dathomir",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_074",
+      "internalName": "guarding-the-way",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_081",
+      "internalName": "droid-commando",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_130",
+      "internalName": "bokatan-kryze#death-watch-lieutenant",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    },
+    {
+      "id": "TWI_180",
+      "internalName": "separatist-commando",
+      "sourceConvertedBefore": false,
+      "sourceConvertedAfter": true,
+      "runtimeAdmitted": true,
+      "outcome": "newly-admitted",
+      "blocker": null,
+      "conformance": "unassessed"
+    }
+  ]
+}

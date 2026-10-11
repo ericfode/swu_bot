@@ -70,17 +70,70 @@ function literal(node, ctx) {
     if (ts.isIdentifier(node) && ctx.constants?.has(node.text)) return literal(readConstant(node.text, ctx), ctx);
     fail(ctx, node, 'nonconstant-value', node.getText(ctx.source));
 }
+function titleHelper(node, ctx) {
+    node=unwrap(node);
+    const text=node.getText(ctx.source);
+    if(ts.isPropertyAccessExpression(node)&&text.startsWith('TextHelper.')) {
+        const trait=/^TextHelper\.Trait\.([A-Za-z]+)$/.exec(text);
+        if(trait) {
+            const value=ctx.enums['Trait.'+trait[1]];
+            if(typeof value!=='string')fail(ctx,node,'unsupported-title-helper');
+            // Pinned Helpers.titleCase: capitalize each space-separated enum word.
+            return value.split(' ').map(word=>word.charAt(0).toUpperCase()+word.slice(1)).join(' ');
+        }
+        const name=node.name.text;
+        if(!/^TextHelper\.[A-Za-z]+$/.test(text)||!['Vigilance','Command','Aggression','Cunning','Villainy','Heroism','Keyword','Keywords','Ambush','Grit','Overwhelm','Saboteur','Sentinel','Shielded','Bounty','Smuggle','Coordinate','Piloting','Hidden','Plot','Support','Fortify'].includes(name))fail(ctx,node,'unsupported-title-helper');
+        return name;
+    }
+    if(ts.isCallExpression(node)&&node.expression.getText(ctx.source).startsWith('TextHelper.')) {
+        if(node.expression.getText(ctx.source)==='TextHelper.aspectList') {
+            if(node.arguments.length<1||node.arguments.length>2)fail(ctx,node,'unsupported-title-helper');
+            const values=literal(node.arguments[0],ctx), conjunction=node.arguments.length===2?literal(node.arguments[1],ctx):null;
+            if(!Array.isArray(values)||values.length>8||values.some(v=>!['vigilance','command','aggression','cunning','villainy','heroism'].includes(v))||![null,'and','or'].includes(conjunction))fail(ctx,node,'unsupported-title-helper');
+            const labels=values.map(v=>v.charAt(0).toUpperCase()+v.slice(1));
+            if(!conjunction)return labels.join(', ');
+            return labels.map((v,i)=>labels.length>1&&i===labels.length-1?conjunction+' '+v:v).join(labels.length>2?', ':' ');
+        }
+        const numeric=/^TextHelper\.(Raid|Restore|Exploit)$/.exec(node.expression.getText(ctx.source));
+        if(!numeric||node.arguments.length!==1)fail(ctx,node,'unsupported-title-helper');
+        const amount=literal(node.arguments[0],ctx);
+        if(!Number.isSafeInteger(amount)||amount<0)fail(ctx,node,'title-helper-amount');
+        return numeric[1]+' '+amount;
+    }
+    return null;
+}
 // Titles are display text, never executable rules. Dynamic title fragments are
 // rendered as placeholders; their expressions are deliberately never evaluated.
 function displayText(node, ctx) {
     node = unwrap(node);
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
     if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => {
-        const text = span.expression.getText(ctx.source);
-        const helper = /^TextHelper\.(?:Trait\.)?([A-Za-z]+)$/.exec(text);
-        return (helper ? helper[1] : '[value]') + span.literal.text;
+        const helper=titleHelper(span.expression,ctx);
+        return (helper ?? '[value]')+span.literal.text;
     }).join('');
     return 'Resolve ability';
+}
+// Unlike cosmetic effect text, contextTitle is part of the legal action protocol.
+// Its expressions remain pure IR and are evaluated in the current ability context.
+function contextTitle(input, context) {
+    const {node,ctx}=lambda(input,context);
+    const part=(n)=>{
+        n=unwrap(n);
+        if(ts.isPropertyAccessExpression(n)&&n.questionDotToken) {
+            // Only nullable attached-card title access is supported here.
+            const receiver=expr(n.expression,ctx);
+            if(n.name.text!=='title'||receiver.kind!=='ref'||receiver.path.join('.')!=='source.parentUnit')fail(ctx,n,'unsupported-context-title-optional');
+            return reference(...receiver.path,'title');
+        }
+        if(ts.isBinaryExpression(n)&&n.operatorToken.kind===ts.SyntaxKind.QuestionQuestionToken)return {kind:'binary',op:'??',left:part(n.left),right:part(n.right)};
+        const helper=titleHelper(n,ctx);
+        if(helper!==null)return constant(helper);
+        return expr(n,ctx);
+    };
+    const fragments=ts.isTemplateExpression(node)?[constant(node.head.text),...node.templateSpans.flatMap(span=>[part(span.expression),constant(span.literal.text)])]:[part(node)];
+    let literalBytes=0; const count=(v)=>{if(!v||typeof v!=='object')return;if(v.kind==='const'&&typeof v.value==='string')literalBytes+=Buffer.byteLength(v.value);Object.values(v).forEach(count);};count(fragments);
+    if(fragments.length>32||literalBytes>1024)fail(ctx,node,'context-title-bound');
+    return fragments;
 }
 function lambda(node, ctx, names = ['context']) {
     node = unwrap(node);
@@ -246,6 +299,57 @@ function target(node, ctx, fallback = 'self') {
     }
     return e;
 }
+const MODIFIER_KEYWORDS = new Set(['sentinel','saboteur','overwhelm','grit','raid','restore','ambush','shielded']);
+function modifierEffects(input, ctx, duration, targetValue) {
+    let raw = unwrap(input);
+    while (ts.isIdentifier(raw) && ctx.constants.has(raw.text)) raw = unwrap(readConstant(raw.text, ctx));
+    const nodes = ts.isArrayLiteralExpression(raw) ? raw.elements : [raw];
+    if (!nodes.length || nodes.length > 8) fail(ctx, raw, 'modifier-list-bound');
+    const effects = nodes.flatMap((input) => {
+        const call = unwrap(input);
+        if (!ts.isCallExpression(call)) fail(ctx, call, 'modifier-is-not-helper');
+        const parts = access(call.expression, ctx), kind = parts[2];
+        if (parts.length !== 3 || !['AbilityHelper','abilityHelper','StaticAbilityHelper'].includes(parts[0]) || parts[1] !== 'ongoingEffects' || !['modifyStats','gainKeyword','loseKeyword'].includes(kind)) fail(ctx, call, 'unsupported-modifier:' + parts.join('.'));
+        if (call.arguments.length !== 1) fail(ctx, call, 'modifier-arity');
+        let value = unwrap(call.arguments[0]);
+        while (ts.isIdentifier(value) && ctx.constants.has(value.text)) value = unwrap(readConstant(value.text, ctx));
+        const dynamic = ts.isArrowFunction(value) || ts.isFunctionExpression(value);
+        if (kind === 'modifyStats') {
+            if (dynamic) fail(ctx,value,duration === 'phase' ? 'dynamic-ongoing-stat-modifier' : 'dynamic-constant-stat-modifier');
+            const obj = object(value,ctx); knownProperties(obj,['power','hp']);
+            const out={kind,target:targetValue,duration};
+            for (const stat of ['power','hp']) {
+                if (!obj.props.has(stat)) fail(ctx,value,'incomplete-stat-modifier');
+                let v=unwrap(obj.props.get(stat));
+                while(ts.isIdentifier(v)&&obj.ctx.constants.has(v.text))v=unwrap(readConstant(v.text,obj.ctx));
+                if(ts.isArrowFunction(v)||ts.isFunctionExpression(v))fail(ctx,v,'function-valued-stat-modifier');
+                if(duration === 'persistent') { const n=literal(v,obj.ctx); if(!Number.isSafeInteger(n))fail(ctx,v,'noninteger-stat-modifier'); out[stat]=constant(n); }
+                else out[stat]=expr(v,obj.ctx);
+            }
+            return [out];
+        }
+        if (kind === 'loseKeyword') {
+            const names=literal(value,ctx), list=Array.isArray(names)?names:[names];
+            if(!list.length||list.length>8||list.some(k=>!MODIFIER_KEYWORDS.has(k)))fail(ctx,value,'unsupported-modifier-keyword');
+            return list.map(keyword=>({kind,target:targetValue,duration,keyword}));
+        }
+        if(dynamic&&duration==='phase')fail(ctx,value,'dynamic-ongoing-keyword-modifier');
+        const lowered=dynamic?lambda(value,ctx,['card','context']):{node:value,ctx};
+        let keyword,amount=constant(1);
+        if(ts.isObjectLiteralExpression(lowered.node)) {
+            const obj=object(lowered.node,lowered.ctx);knownProperties(obj,['keyword','amount']);
+            if(!obj.props.has('keyword'))fail(ctx,value,'missing-modifier-keyword');
+            keyword=literal(obj.props.get('keyword'),obj.ctx);
+            if(obj.props.has('amount'))amount=expr(obj.props.get('amount'),obj.ctx);
+            if(['raid','restore'].includes(keyword)!==obj.props.has('amount'))fail(ctx,value,'invalid-keyword-amount');
+        } else {keyword=literal(lowered.node,lowered.ctx);if(['raid','restore'].includes(keyword))fail(ctx,value,'missing-numeric-keyword-amount');}
+        if(!MODIFIER_KEYWORDS.has(keyword))fail(ctx,value,'unsupported-modifier-keyword');
+        return [{kind,target:targetValue,duration,keyword,amount}];
+    });
+    if(effects.length>8)fail(ctx,raw,'modifier-list-bound');
+    if(duration==='phase'&&ts.isArrayLiteralExpression(raw))return {kind:'phaseModifiers',effects};
+    return effects.length===1?effects[0]:{kind:'simultaneous',effects};
+}
 function effect(input, context, defaultTarget = 'self') {
     let { node, ctx } = lambda(input, context);
     node = unwrap(node);
@@ -267,23 +371,7 @@ function effect(input, context, defaultTarget = 'self') {
         const allowed = ['target', 'effect', 'title', 'ongoingEffectTargetDescription'];
         for (const [key, value] of obj.props) if (!allowed.includes(key) && !DISPLAY_FIELDS.has(key)) fail(obj.ctx, value, 'unsupported-field:' + key);
         if (!obj.props.has('effect')) fail(ctx, node, 'phase-effect-without-modifier');
-        const modifierCall = unwrap(obj.props.get('effect'));
-        if (!ts.isCallExpression(modifierCall)) fail(obj.ctx, modifierCall, 'phase-modifier-is-not-helper');
-        const modifierPath = access(modifierCall.expression, obj.ctx);
-        if (modifierPath.length !== 3 || !['AbilityHelper', 'abilityHelper', 'StaticAbilityHelper'].includes(modifierPath[0]) || modifierPath[1] !== 'ongoingEffects' || modifierPath[2] !== 'modifyStats') fail(obj.ctx, modifierCall, 'phase-modifier:' + modifierPath.join('.'));
-        if (modifierCall.arguments.length !== 1) fail(obj.ctx, modifierCall, 'stat-modifier-arity');
-        let modifierNode = unwrap(modifierCall.arguments[0]);
-        while (ts.isIdentifier(modifierNode) && obj.ctx.constants.has(modifierNode.text)) modifierNode = unwrap(readConstant(modifierNode.text, obj.ctx));
-        if (ts.isArrowFunction(modifierNode) || ts.isFunctionExpression(modifierNode)) fail(obj.ctx, modifierNode, 'dynamic-ongoing-stat-modifier');
-        const modifier = object(modifierNode, obj.ctx);
-        knownProperties(modifier, ['power', 'hp']);
-        if (!modifier.props.has('power') || !modifier.props.has('hp')) fail(modifier.ctx, modifier.node, 'incomplete-stat-modifier');
-        for (const stat of ['power', 'hp']) {
-            let value = unwrap(modifier.props.get(stat));
-            while (ts.isIdentifier(value) && modifier.ctx.constants.has(value.text)) value = unwrap(readConstant(value.text, modifier.ctx));
-            if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) fail(modifier.ctx, value, 'function-valued-stat-modifier');
-        }
-        return { kind: 'modifyStats', target: target(obj.props.get('target'), obj.ctx, defaultTarget), duration: 'phase', power: expr(modifier.props.get('power'), modifier.ctx), hp: expr(modifier.props.get('hp'), modifier.ctx) };
+        return modifierEffects(obj.props.get('effect'), obj.ctx, 'phase', target(obj.props.get('target'), obj.ctx, defaultTarget));
     }
     if (kind === 'conditional') {
         knownProperties(obj, ['condition', 'onTrue', 'onFalse']);
@@ -325,10 +413,28 @@ function targetResolverProperties(obj) {
     const result = { owner, type, zone: zones[zoneRaw] };
     if (zoneRaw === 'groundArena' || zoneRaw === 'spaceArena') result.arena = zoneRaw === 'groundArena' ? 'ground' : 'space';
     if (props.has('optional')) result.optional = literal(props.get('optional'), ctx);
-    if (props.has('cardCondition')) result.predicate = expr(props.get('cardCondition'), ctx, ['card', 'context']);
+    if (props.has('cardCondition')) {
+        const capturedTarget=(n,bound=new Set(),seen=new Set())=>{
+            if(ts.isArrowFunction(n)||ts.isFunctionExpression(n)) {const local=new Set(bound);for(const p of n.parameters)if(ts.isIdentifier(p.name))local.add(p.name.text);return capturedTarget(n.body,local,seen);}
+            if(ts.isPropertyAccessExpression(n)||ts.isElementAccessExpression(n)) {
+                let root=n;while(ts.isPropertyAccessExpression(root)||ts.isElementAccessExpression(root))root=root.expression;
+                if(ts.isIdentifier(root)&&!bound.has(root.text)&&ctx.scope.has(root.text)) {
+                    const binding=ctx.scope.get(root.text);
+                    if(binding.kind==='ref') {const parts=normalizeRef([...binding.path,...access(n,ctx).slice(1)]);if(['target','targets'].includes(parts[0]))fail(ctx,n,'target-resolver-outer-target-capture');}
+                }
+            }
+            if(ts.isIdentifier(n)&&!bound.has(n.text)&&ctx.constants.has(n.text)&&!(ts.isPropertyAccessExpression(n.parent)&&n.parent.name===n)) {
+                if(seen.has(n.text))fail(ctx,n,'cyclic-target-resolver-binding');const next=new Set(seen);next.add(n.text);capturedTarget(readConstant(n.text,ctx),bound,next);
+            }
+            ts.forEachChild(n,child=>capturedTarget(child,bound,seen));
+        };
+        capturedTarget(props.get('cardCondition'));
+        result.predicate = expr(props.get('cardCondition'), ctx, ['card', 'context']);
+    }
     if (props.has('mode')) result.mode = literal(props.get('mode'), ctx);
     if (props.has('numCards')) result.count = expr(props.get('numCards'), ctx);
     if (props.has('canChooseNoCards')) result.optional = !!result.optional || literal(props.get('canChooseNoCards'), ctx);
+    else if (['upTo','upToVariable'].includes(result.mode)) result.optional = true;
     if (props.has('choosingPlayer') && literal(props.get('choosingPlayer'), ctx) !== 'self') fail(ctx, node, 'opponent-choice-resolver');
     return result;
 }
@@ -351,26 +457,7 @@ function constantAbility(input, context) {
     knownProperties(obj, ['title', 'condition', 'ongoingEffect', 'matchTarget', 'targetController', 'targetCardTypeFilter', 'targetZoneFilter']);
     const { props, ctx, node } = obj;
     if (!props.has('ongoingEffect')) fail(ctx, node, 'constant-without-effect');
-    const raw = unwrap(props.get('ongoingEffect'));
-    const modifiers = ts.isArrayLiteralExpression(raw) ? raw.elements : [raw];
-    if (modifiers.length !== 1) fail(ctx, raw, 'constant-modifier-count');
-    const call = unwrap(modifiers[0]);
-    if (!ts.isCallExpression(call)) fail(ctx, call, 'constant-modifier-is-not-helper');
-    const parts = access(call.expression, ctx);
-    if (parts.length !== 3 || !['AbilityHelper', 'abilityHelper', 'StaticAbilityHelper'].includes(parts[0]) || parts[1] !== 'ongoingEffects' || parts[2] !== 'modifyStats') fail(ctx, call, 'constant-modifier:' + parts.join('.'));
-    if (call.arguments.length !== 1) fail(ctx, call, 'stat-modifier-arity');
-    let modifierNode = unwrap(call.arguments[0]);
-    while (ts.isIdentifier(modifierNode) && ctx.constants.has(modifierNode.text)) modifierNode = unwrap(readConstant(modifierNode.text, ctx));
-    if (ts.isArrowFunction(modifierNode) || ts.isFunctionExpression(modifierNode)) fail(ctx, modifierNode, 'dynamic-constant-stat-modifier');
-    const modifier = object(modifierNode, ctx);
-    knownProperties(modifier, ['power', 'hp']);
-    const values = {};
-    for (const stat of ['power', 'hp']) {
-        if (!modifier.props.has(stat)) fail(ctx, modifier.node, 'incomplete-stat-modifier');
-        values[stat] = literal(modifier.props.get(stat), modifier.ctx);
-        if (!Number.isSafeInteger(values[stat])) fail(ctx, modifier.props.get(stat), 'noninteger-stat-modifier');
-    }
-    const result = { trigger: 'constant', title: props.has('title') ? displayText(props.get('title'), ctx) : '', costs: [], effect: { kind: 'modifyStats', target: 'self', duration: 'persistent', power: constant(values.power), hp: constant(values.hp) } };
+    const result = { trigger:'constant', title:props.has('title')?displayText(props.get('title'),ctx):'', costs:[], effect:modifierEffects(props.get('ongoingEffect'),ctx,'persistent','self') };
     if (props.has('condition')) result.condition = expr(props.get('condition'), ctx);
     // OngoingCardEffect defaults to source-only when no targeting filters exist.
     // Any targeting field switches to friendly arena units, including matchTarget.
@@ -382,14 +469,16 @@ function constantAbility(input, context) {
         if (props.has('matchTarget')) resolverProps.set('cardCondition', props.get('matchTarget'));
         result.targetResolver = targetResolverProperties({ props: resolverProps, ctx, node });
         if (result.targetResolver.zone !== 'arena') fail(ctx, node, 'constant-target-zone');
-        result.effect.target = 'chosen';
+        const assignTarget = (e) => { if(e.effects)e.effects.forEach(assignTarget);else e.target='chosen'; }; assignTarget(result.effect);
     }
+    const keywordModifier = (e) => e.effects ? e.effects.some(keywordModifier) : ['gainKeyword','loseKeyword'].includes(e.kind);
+    const modifiesKeywords = keywordModifier(result.effect);
     const check = (value) => {
         if (!value || typeof value !== 'object') return;
-        if ((value.kind === 'query' && ['getPower', 'getHp'].includes(value.name)) || (value.kind === 'ref' && value.path.some((p) => ['power', 'hp', 'remainingHp'].includes(p)))) fail(ctx, node, 'constant-stat-dependency');
+        if ((value.kind === 'query' && (['getPower','getHp'].includes(value.name) || (modifiesKeywords && ['hasSomeKeyword','hasEveryKeyword','getNumericKeywordTotal'].includes(value.name)))) || (value.kind === 'ref' && value.path.some((p) => ['power', 'hp', 'remainingHp'].includes(p)))) fail(ctx, node, 'constant-stat-dependency');
         Object.values(value).forEach(check);
     };
-    check(result.condition); check(result.targetResolver);
+    check(result.condition); check(result.targetResolver); check(result.effect);
     return result;
 }
 function ability(input, context, trigger = null) {
@@ -397,6 +486,7 @@ function ability(input, context, trigger = null) {
     const { props, ctx, node } = obj;
     knownProperties(obj, ['title', 'optional', 'cost', 'condition', 'immediateEffect', 'targetResolver', 'ifYouDo', 'ifYouDoCondition', 'then', 'thenCondition', 'limit', 'optionalMakesAbilityNonCancelable']);
     const result = { ...(trigger ? { trigger } : {}), title: props.has('title') ? displayText(props.get('title'), ctx) : '', costs: costs(props.get('cost'), ctx) };
+    if(props.has('contextTitle'))result.contextTitle=contextTitle(props.get('contextTitle'),ctx);
     if (props.has('optional')) result.optional = literal(props.get('optional'), ctx);
     if (props.has('condition')) result.condition = expr(props.get('condition'), ctx);
     if (props.has('optionalMakesAbilityNonCancelable')) result.optionalMakesAbilityNonCancelable = literal(props.get('optionalMakesAbilityNonCancelable'), ctx);

@@ -100,6 +100,9 @@ pub struct Card {
     pub damage: u16,
     pub phase_power: i32,
     pub phase_hp: i32,
+    pub phase_keyword_values: [u16; 2],
+    pub phase_keyword_presence: u8,
+    pub phase_lost_keywords: u8,
     pub exhausted: bool,
     pub deployed: bool,
     pub epic_used: bool,
@@ -141,9 +144,41 @@ pub enum Decision {
     AbilityOptional,
     AbilityNoEffect,
     AbilityDistribute,
+    AbilityGroupShield,
     Terminal,
 }
 
+/// Ordered target context retained across suspended event generation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Selection { pub ids: [CardId; 3], pub len: u8 }
+impl Selection {
+    pub fn one(id: CardId) -> Self { Self { ids: [id, 0, 0], len: u8::from(id != 0) } }
+    pub fn toggle(&mut self, id: CardId) {
+        if let Some(i) = self.ids[..self.len as usize].iter().position(|v| *v == id) {
+            for j in i..self.len as usize - 1 { self.ids[j] = self.ids[j+1]; }
+            self.len -= 1; self.ids[self.len as usize] = 0;
+        } else { self.ids[self.len as usize] = id; self.len += 1; }
+    }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PreparedEvent {
+    pub op: u16, pub target: CardId, pub amount: u16,
+    pub power: i32, pub hp: i32, pub token: CardId,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventGroupState {
+    pub active: bool, pub resolving: bool, pub replacement_done: bool, pub pc: u16, pub count: u8,
+    pub shield_mask:u8, pub shield_count:u8, pub shield_priority:u8, pub initiator:Seat,
+    pub shield_stash:[CardId;MAX_CARDS], pub shield_stash_len:u8,
+    pub context: Selection, pub picks: Selection,
+    pub stack: [Selection; 8], pub depth: u8,
+    pub records: [PreparedEvent; 32],
+}
+impl Default for EventGroupState {
+    fn default() -> Self { Self { active:false, resolving:false, replacement_done:false, pc:0, count:0, shield_mask:0, shield_count:0, shield_priority:0, initiator:Seat::P1, shield_stash:[0;MAX_CARDS], shield_stash_len:0,
+        context:Selection::default(), picks:Selection::default(), stack:[Selection::default();8], depth:0,
+        records:[PreparedEvent::default();32] } }
+}
 /// All mutable game data is inline. Copying a position neither allocates nor shares mutable data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
@@ -163,6 +198,8 @@ pub struct State {
     pub target: CardId,
     pub ambush: bool,
     pub after_attack_triggers: u8,
+    pub attack_restore: u16,
+    pub attack_shield_opponent_first: bool,
     pub pending_triggers: u8,
     pub trigger_context: u8,
     pub pending_programs: u16,
@@ -171,6 +208,8 @@ pub struct State {
     pub ability_program: u16,
     pub ability_pc: u8,
     pub ability_target: CardId,
+    pub ability_selection: Selection,
+    pub event_group: EventGroupState,
     pub ability_result: u16,
     pub ability_succeeded: bool,
     pub ability_return: u8,
@@ -198,6 +237,8 @@ impl Default for State {
             target: 0,
             ambush: false,
             after_attack_triggers: 0,
+            attack_restore: 0,
+            attack_shield_opponent_first: false,
             pending_triggers: 0,
             trigger_context: 0,
             pending_programs: 0,
@@ -205,6 +246,8 @@ impl Default for State {
             ability_program: 0,
             ability_pc: 0,
             ability_target: 0,
+            ability_selection: Selection::default(),
+            event_group: EventGroupState::default(),
             ability_result: 0,
             ability_succeeded: false,
             ability_return: 0,
@@ -271,6 +314,8 @@ impl State {
         put(self.target as u64);
         put(self.ambush as u64);
         put(self.after_attack_triggers as u64);
+        put(self.attack_restore as u64);
+        put(self.attack_shield_opponent_first as u64);
         put(self.pending_triggers as u64);
         put(self.disabled_ongoing_source as u64);
         put(self.trigger_context as u64);
@@ -280,6 +325,16 @@ impl State {
         put(self.ability_program as u64);
         put(self.ability_pc as u64);
         put(self.ability_target as u64);
+        put(self.ability_selection.len as u64);
+        for id in self.ability_selection.ids { put(id as u64); }
+        let g = &self.event_group;
+        put(g.active as u64); put(g.resolving as u64); put(g.replacement_done as u64); put(g.shield_mask as u64); put(g.shield_count as u64); put(g.shield_priority as u64); put(g.shield_stash_len as u64); for id in g.shield_stash { put(id as u64); } put(g.initiator.index() as u64); put(g.pc as u64); put(g.count as u64); put(g.depth as u64);
+        for selection in [g.context, g.picks].into_iter().chain(g.stack) {
+            put(selection.len as u64); for id in selection.ids { put(id as u64); }
+        }
+        for event in g.records { put(event.op as u64); put(event.target as u64); put(event.amount as u64);
+            put(event.power as u64); put(event.hp as u64); put(event.token as u64);  }
+
         put(self.ability_result as u64);
         put(self.ability_succeeded as u64);
         put(self.ability_return as u64);
@@ -299,6 +354,9 @@ impl State {
             put(c.experience as u64);
             put(c.phase_power as u64);
             put(c.phase_hp as u64);
+            for amount in c.phase_keyword_values { put(amount as u64); }
+            put(c.phase_lost_keywords as u64);
+            put(c.phase_keyword_presence as u64);
             put(c.next_token as u64);
             put(c.def as u64
                 | ((c.present as u64) << 16)
@@ -368,5 +426,11 @@ impl Action {
             .parse::<CardId>()
             .ok()?
             .checked_add(1)
+    }
+}
+
+impl Card {
+    pub fn phase_keyword_amount(&self, index: usize) -> u16 {
+        if index >= 6 { self.phase_keyword_values[index - 6] } else { u16::from(self.phase_keyword_presence & (1 << index) != 0) }
     }
 }

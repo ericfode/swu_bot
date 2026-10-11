@@ -833,3 +833,313 @@ fn lethal_entry_resolves_deaths_before_self_tokens_but_retains_draw_trigger() {
         assert_eq!(s.disabled_ongoing_source, 0);
     }
 }
+
+fn register_keyword_program(e: &mut Engine, s: &State, source: CardId, value: Value) {
+    let ability: crate::ability_ir::Ability = serde_json::from_value(value).unwrap();
+    let program = crate::ability_ir::Program::compile(&ability).unwrap();
+    let index = e.catalogue.as_ref().unwrap().programs.len() as u16;
+    e.catalogue.as_mut().unwrap().programs.push(program);
+    e.definitions[s.card(source).def as usize].programs.card.push(index);
+}
+#[test]
+fn continuous_keywords_are_live_deduped_and_losses_suppress_all_sources() {
+    let mut e = engine(); let mut s = board(&e);
+    let source = unit(&e, &mut s, Seat::P1, "LOF_254");
+    let target = unit(&e, &mut s, Seat::P1, "LOF_256");
+    let enemy = unit(&e, &mut s, Seat::P2, "LOF_256");
+    register_keyword_program(&mut e, &s, source, json!({"trigger":"constant","title":"Live keywords","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"simultaneous","effects":[{"kind":"gainKeyword","target":"chosen","keyword":"sentinel","duration":"persistent"},{"kind":"gainKeyword","target":"chosen","keyword":"raid","amount":{"kind":"ref","path":["card","damage"]},"duration":"persistent"}]}}));
+    assert!(e.has_keyword(&s,target,"sentinel")); assert!(!e.has_keyword(&s,enemy,"sentinel"));
+    assert!(e.has_keyword(&s,target,"raid")); assert_eq!(e.keyword_amount(&s,target,"raid"),0);
+    s.card_mut(target).damage=1; assert_eq!(e.keyword_amount(&s,target,"raid"),1);
+    s.source=source;s.ability_target=target;
+    let loss:crate::ability_ir::Effect=serde_json::from_value(json!({"kind":"loseKeyword","target":"chosen","keyword":"sentinel","duration":"phase"})).unwrap();
+    e.apply_effect(&mut s,&loss).unwrap(); assert!(!e.has_keyword(&s,target,"sentinel"));
+    let gain:crate::ability_ir::Effect=serde_json::from_value(json!({"kind":"gainKeyword","target":"chosen","keyword":"sentinel","duration":"phase"})).unwrap();
+    e.apply_effect(&mut s,&gain).unwrap();assert!(!e.has_keyword(&s,target,"sentinel"));
+    e.leave_play(&mut s,source).unwrap();assert_eq!(e.keyword_amount(&s,target,"raid"),0);
+    s.card_mut(target).phase_lost_keywords=0;assert!(e.has_keyword(&s,target,"sentinel"));
+    e.leave_play(&mut s,target).unwrap();assert_eq!(s.card(target).phase_keyword_presence,0);
+}
+#[test]
+fn phase_keywords_stack_numeric_dedupe_boolean_roundtrip_and_expire() {
+    let e=engine();let mut s=board(&e);let target=unit(&e,&mut s,Seat::P1,"LOF_256");s.source=target;s.ability_target=target;
+    for (keyword,amount) in [("raid",2),("raid",3),("sentinel",1),("sentinel",1),("raid",0)] {
+        let effect:crate::ability_ir::Effect=serde_json::from_value(json!({"kind":"gainKeyword","target":"self","keyword":keyword,"amount":{"kind":"const","value":amount},"duration":"phase"})).unwrap();
+        e.apply_effect(&mut s,&effect).unwrap();
+    }
+    assert_eq!(e.keyword_amount(&s,target,"raid"),5);assert_eq!(e.keyword_amount(&s,target,"sentinel"),1);assert!(e.has_keyword(&s,target,"raid"));
+    let snapshot=e.snapshot(&s);let restored=e.load_state(&snapshot).unwrap();assert_eq!(e.keyword_amount(&restored,target,"raid"),5);assert!(e.has_keyword(&restored,target,"raid"));
+    s.players[0].out=true;s.players[1].out=true;
+    e.advance(&mut s).unwrap();assert_eq!(s.card(target).phase_keyword_presence,0);assert_eq!(e.keyword_amount(&s,target,"raid"),0);
+    for bad in [json!({"sentinel":2}),json!({"raid":65536}),json!({"hidden":1}),json!({"restore":-1}),json!({"restore":0})] {
+        let mut v=snapshot.clone();v["players"]["p1"]["ground"][0]["phaseKeywords"]=bad;assert!(e.load_state(&v).is_err());
+    }
+}
+#[test]
+fn restore_amount_is_captured_before_its_aura_source_leaves() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");let attacker=unit(&e,&mut s,Seat::P1,"LOF_256");
+    register_keyword_program(&mut e,&s,source,json!({"trigger":"constant","title":"Restore aura","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"gainKeyword","target":"chosen","keyword":"restore","amount":{"kind":"const","value":3},"duration":"persistent"}}));
+    s.card_mut(s.players[0].base).damage=5;s.source=attacker;s.target=s.players[1].base;s.trigger_context=2;s.pending_triggers=T_RESTORE;s.attack_restore=e.keyword_amount(&s,attacker,"restore");
+    e.leave_play(&mut s,source).unwrap();assert_eq!(e.keyword_amount(&s,attacker,"restore"),0);assert_eq!(e.trigger_title(&s,T_RESTORE),"Restore 3");
+    e.resolve_trigger(&mut s,T_RESTORE).unwrap();assert_eq!(s.card(s.players[0].base).damage,2);
+}
+#[test]
+fn keyword_admission_rejects_cycles_unknowns_and_unbounded_values() {
+    for effect in [json!({"kind":"gainKeyword","target":"self","keyword":"hidden","duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"raid","amount":{"kind":"query","name":"getPower","receiver":{"kind":"ref","path":["source"]}},"duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"grit","amount":{"kind":"const","value":2},"duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"restore","amount":{"kind":"const","value":-1},"duration":"persistent"})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"constant","title":"Rejected","effect":effect})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+    let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"constant","title":"Cycle","condition":{"kind":"query","name":"hasSomeKeyword","receiver":{"kind":"ref","path":["source"]},"args":[{"kind":"const","value":"sentinel"}]},"effect":{"kind":"gainKeyword","target":"self","keyword":"sentinel","duration":"persistent"}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+}
+#[test]
+fn sentinel_filtered_stat_aura_tracks_granted_and_lost_keyword_without_cycles() {
+    let e=engine();let mut s=board(&e);let shuttle=unit(&e,&mut s,Seat::P1,"SEC_032");let target=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let baseline=e.hp(&s,target);s.source=shuttle;s.ability_target=target;
+    let gain:crate::ability_ir::Effect=serde_json::from_value(json!({"kind":"gainKeyword","target":"chosen","keyword":"sentinel","duration":"phase"})).unwrap();e.apply_effect(&mut s,&gain).unwrap();assert_eq!(e.hp(&s,target),baseline+2);
+    let loss:crate::ability_ir::Effect=serde_json::from_value(json!({"kind":"loseKeyword","target":"chosen","keyword":"sentinel","duration":"phase"})).unwrap();e.apply_effect(&mut s,&loss).unwrap();assert_eq!(e.hp(&s,target),baseline);
+}
+#[test]
+fn numeric_keyword_overflow_fails_even_with_negative_power_modifier() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");let target=unit(&e,&mut s,Seat::P1,"LOF_256");
+    s.card_mut(target).phase_power=-65535;
+    register_keyword_program(&mut e,&s,source,json!({"trigger":"constant","title":"Huge keywords","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"simultaneous","effects":[{"kind":"gainKeyword","target":"chosen","keyword":"restore","amount":{"kind":"const","value":65535},"duration":"persistent"},{"kind":"gainKeyword","target":"chosen","keyword":"restore","amount":{"kind":"const","value":1},"duration":"persistent"}]}}));
+    assert!(e.check_stat_capacity(&s).unwrap_err().contains("restore"));
+}
+#[test]
+fn metadata_keyword_mentions_are_not_intrinsic_keywords() {
+    let e=engine();let mut s=board(&e);
+    for code in ["LOF_242","SEC_032"] {
+        let id=unit(&e,&mut s,Seat::P1,code);assert!(!e.has_keyword(&s,id,"sentinel"),"{code} only mentions Sentinel on other units");assert_eq!(e.def(&s,id).flags & SENTINEL,0);
+    }
+}
+#[test]
+fn phase_keyword_arithmetic_and_live_unverified_amounts_fail_admission() {
+    for (duration, amount) in [("phase",json!({"kind":"ref","path":["card","damage"]})),("phase",json!({"kind":"binary","op":"-","left":{"kind":"const","value":1},"right":{"kind":"const","value":2}})),("persistent",json!({"kind":"binary","op":"-","left":{"kind":"const","value":1},"right":{"kind":"ref","path":["card","damage"]}}))] {
+        let ability:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":if duration=="phase" {"event"} else {"constant"},"title":"Unsafe amount","effect":{"kind":"gainKeyword","target":"self","duration":duration,"keyword":"raid","amount":amount}})).unwrap();assert!(crate::ability_ir::Program::compile(&ability).is_err());
+    }
+}
+#[test]
+fn context_menu_titles_render_live_damage_and_preserve_no_effect_prefix() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");
+    register_keyword_program(&mut e,&s,source,json!({"trigger":"onAttack","title":"Static title","contextTitle":[{"kind":"const","value":"Deal "},{"kind":"ref","path":["source","damage"]},{"kind":"const","value":" damage from "},{"kind":"ref","path":["source","title"]}],"effect":{"kind":"damage","target":"enemyBase","amount":{"kind":"ref","path":["source","damage"]}}}));
+    let p=*e.def(&s,source).programs.card.last().unwrap();
+    assert_eq!(e.program_menu_title(&s,source,p),format!("(No effect) Deal 0 damage from {}",e.def(&s,source).info.title));
+    s.card_mut(source).damage=2;
+    assert_eq!(e.program_menu_title(&s,source,p),format!("Deal 2 damage from {}",e.def(&s,source).info.title));
+    s.card_mut(source).damage=3;
+    assert_eq!(e.program_menu_title(&s,source,p),format!("Deal 3 damage from {}",e.def(&s,source).info.title));
+}
+#[test]
+fn context_menu_titles_reject_unmodelled_parent_refs_and_object_fragments() {
+    for fragment in [json!({"kind":"ref","path":["source","parentCard","title"]}),json!({"kind":"ref","path":["source"]}),json!({"kind":"array","items":[]})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Static","contextTitle":[fragment],"effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+}
+
+#[test]
+fn context_titles_bound_recursive_aggregate_literals() {
+    let chunk="a".repeat(600);
+    for fragments in [json!([{"kind":"const","value":chunk},{"kind":"const","value":chunk}]),json!([{"kind":"conditional","condition":{"kind":"const","value":true},"then":{"kind":"const","value":chunk},"else":{"kind":"const","value":chunk}}])] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Static","contextTitle":fragments,"effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}})).unwrap();
+        assert!(crate::ability_ir::Program::compile(&a).unwrap_err().contains("aggregate literal bytes"));
+    }
+    let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Static","contextTitle":[{"kind":"const","value":"a".repeat(512)},{"kind":"conditional","condition":{"kind":"const","value":true},"then":{"kind":"const","value":"b".repeat(256)},"else":{"kind":"const","value":"c".repeat(256)}}],"effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}})).unwrap();
+    crate::ability_ir::Program::compile(&a).unwrap();
+}
+#[test]
+fn live_raid_and_overwhelm_do_not_redirect_replaced_shield_damage() {
+    let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P1,"LOF_254");let defender=unit(&e,&mut s,Seat::P2,"LOF_256");
+    register_keyword_program(&mut e,&s,attacker,json!({"trigger":"constant","title":"Live raid","effect":{"kind":"gainKeyword","target":"self","duration":"persistent","keyword":"raid","amount":{"kind":"ref","path":["player","exhaustedResourceCount"]}}}));
+    register_keyword_program(&mut e,&s,attacker,json!({"trigger":"constant","title":"Conditional overwhelm","condition":{"kind":"binary","op":"===","left":{"kind":"ref","path":["player","readyResourceCount"]},"right":{"kind":"const","value":0}},"effect":{"kind":"gainKeyword","target":"self","duration":"persistent","keyword":"overwhelm"}}));
+    for _ in 0..14 { let resource=add(&e,&mut s,Seat::P1,"LOF_256");s.players[0].resources.push(resource).unwrap();s.card_mut(resource).exhausted=true; }
+    s.card_mut(s.players[1].base).damage=24;
+    s.source=attacker;s.target=defender;s.trigger_context=2;
+    e.create_token(&mut s,defender,false).unwrap();
+    let mut unshielded=s;unshielded.card_mut(defender).shield=0;
+    assert!(e.power(&s,attacker,true)>e.hp(&s,defender)+6);
+    e.combat(&mut s).unwrap();assert!(s.is_action_window());assert!(!s.is_terminal());assert_eq!(s.card(s.players[1].base).damage,24);assert_eq!(s.card(defender).damage,0);assert_eq!(s.card(defender).shield,0);
+    e.combat(&mut unshielded).unwrap();assert!(unshielded.is_terminal());assert_eq!(unshielded.winner(),Some(Seat::P1));
+}
+
+fn begin_group_test(e:&mut Engine,s:&mut State,source:CardId,value:Value) {
+    register_keyword_program(e,s,source,value);
+    let p=*e.def(s,source).programs.card.last().unwrap(); s.source=source;
+    e.begin_program(s,p,0).unwrap();
+}
+#[test]
+fn event_group_defers_damage_deaths_and_checks_both_lethal_bases_together() {
+    let mut e=engine(); let mut s=board(&e);
+    let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    s.card_mut(source).damage=e.hp(&s,source)-1;
+    let damage=s.card(source).damage;
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Damage then heal","effect":{"kind":"simultaneous","effects":[{"kind":"damage","target":"self","amount":{"kind":"const","value":2}},{"kind":"heal","target":"self","amount":{"kind":"const","value":2}}]}}));
+    assert!(e.in_arena(&s,source)); assert_eq!(s.card(source).damage,damage.saturating_sub(1));
+    s.active=Seat::P1;
+    for seat in [Seat::P1,Seat::P2] { let base=s.player(seat).base; s.card_mut(base).damage=29; }
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Both lethal","effect":{"kind":"simultaneous","effects":[{"kind":"damage","target":"ownBase","amount":{"kind":"const","value":4}},{"kind":"damage","target":"enemyBase","amount":{"kind":"const","value":4}}]}}));
+    assert_eq!(s.outcome,3);
+    assert_eq!(s.card(s.players[0].base).damage,30); assert_eq!(s.card(s.players[1].base).damage,30);
+}
+#[test]
+fn event_generation_allocates_tokens_before_nested_selection_and_preserves_outer_binding() {
+    let mut e=engine(); let mut s=board(&e);
+    let source=unit(&e,&mut s,Seat::P1,"LOF_256"); let target=unit(&e,&mut s,Seat::P2,"LOF_254"); let next=s.next_id;
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Allocate then choose","effect":{"kind":"simultaneous","effects":[{"kind":"giveExperience","target":"self"},{"kind":"select","targetResolver":{"owner":"opponent","type":"unit","zone":"arena"},"effect":{"kind":"giveShield","target":"chosen"}}]}}));
+    assert_eq!(s.decision,Decision::AbilityTarget); assert_eq!(s.next_id,next+1); assert_eq!(s.card(source).experience,0);
+    assert!(s.card(next).present); assert!(!e.legal_actions(&s).iter().any(|a| a.label=="Cancel"));
+    s=e.apply(&s,&e.card_action(&s,target)).unwrap();
+    assert_eq!(s.card(source).experience,next); assert_eq!(s.card(target).shield,next+1);
+    assert_eq!(s.event_group,EventGroupState::default());
+}
+#[test]
+fn ordered_multi_selection_toggles_at_cap_and_allocates_all_experience_before_shields() {
+    let mut e=engine(); let mut s=board(&e);
+    let source=unit(&e,&mut s,Seat::P1,"LOF_256"); let target=unit(&e,&mut s,Seat::P1,"LOF_254"); let other=unit(&e,&mut s,Seat::P1,"LOF_254"); let next=s.next_id;
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Ordered tokens","targetResolver":{"owner":"self","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":2},"optional":true},"effect":{"kind":"simultaneous","effects":[{"kind":"giveExperience","target":"chosen"},{"kind":"giveShield","target":"chosen"}]}}));
+    let initial=s;
+    assert!(e.legal_actions(&s).iter().any(|a| a.label=="Choose nothing"));
+    s=e.apply(&s,&e.card_action(&s,target)).unwrap(); s=e.apply(&s,&e.card_action(&s,source)).unwrap();
+    let order=s.zobrist(); let mut reversed=s; reversed.ability_selection.ids.swap(0,1); assert_ne!(order,reversed.zobrist());
+    assert!(!e.legal_actions(&s).iter().any(|a| a.id()==Some(other))); assert!(e.legal_actions(&s).iter().any(|a| a.id()==Some(target)));
+    s=e.apply(&s,&e.card_action(&s,target)).unwrap(); s=e.apply(&s,&e.card_action(&s,target)).unwrap();
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap(); s=e.apply(&s,&done).unwrap();
+    assert_eq!(s.card(source).experience,next); assert_eq!(s.card(target).experience,next+1);
+    assert_eq!(s.card(source).shield,next+2); assert_eq!(s.card(target).shield,next+3);
+    let cancel=e.legal_actions(&initial).into_iter().find(|a|a.label=="Cancel").unwrap(); let canceled=e.apply(&initial,&cancel).unwrap();
+    assert_eq!(canceled.next_id,next); assert_eq!(canceled.ability_selection,Selection::default());
+    let mut captured=initial; captured.event_group.records[0].amount=3; assert_ne!(initial.zobrist(),captured.zobrist());
+}
+#[test]
+fn group_same_owner_shields_offer_resolution_menu_to_their_controller() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let a=unit(&e,&mut s,Seat::P2,"LOF_254"); let b=unit(&e,&mut s,Seat::P2,"LOF_254");
+    for id in [a,b] { e.create_token(&mut s,id,false).unwrap(); e.create_token(&mut s,id,false).unwrap(); }
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Two shields","targetResolver":{"owner":"opponent","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":2},"optional":true},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":2}}}));
+    s=e.apply(&s,&e.card_action(&s,a)).unwrap(); s=e.apply(&s,&e.card_action(&s,b)).unwrap();
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap(); s=e.apply(&s,&done).unwrap();
+    assert_eq!(s.active,Seat::P2); assert_eq!(s.decision,Decision::AbilityGroupShield);
+    assert_eq!(e.legal_actions(&s).iter().map(|a|a.label.as_str()).collect::<Vec<_>>(),vec!["Resolve next","Resolve all (2)"]);
+    let next=e.legal_actions(&s)[0].clone(); s=e.apply(&s,&next).unwrap();
+    for id in [a,b] { assert_eq!(s.card(id).damage,0); assert_eq!(e.token_count(&s,s.card(id).shield),1); }
+    assert_eq!(s.active,Seat::P2); assert!(s.is_action_window());
+}
+#[test]
+fn group_captures_live_amounts_before_any_handler_changes_damage() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Captured heal","effect":{"kind":"simultaneous","effects":[{"kind":"damage","target":"self","amount":{"kind":"const","value":1}},{"kind":"heal","target":"self","amount":{"kind":"ref","path":["source","damage"]}}]}}));
+    assert_eq!(s.card(source).damage,1,"heal captured zero before the damage handler");
+}
+#[test]
+fn accepting_optional_group_trigger_does_not_offer_pass_again_at_nested_selectors() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let target=unit(&e,&mut s,Seat::P2,"LOF_254");
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"onAttack","optional":true,"title":"Optional damage group","effect":{"kind":"simultaneous","effects":[{"kind":"select","targetResolver":{"owner":"any","type":"base","zone":"base"},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}},{"kind":"select","targetResolver":{"owner":"opponent","type":"unit","zone":"arena"},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}}]}}));
+    assert_eq!(s.decision,Decision::AbilityOptional);
+    let trigger=e.legal_actions(&s).into_iter().find(|a|a.label=="Trigger").unwrap(); s=e.apply(&s,&trigger).unwrap();
+    assert_eq!(s.decision,Decision::AbilityTarget);
+    assert_eq!(e.legal_actions(&s).iter().filter_map(Action::id).collect::<Vec<_>>(),vec![s.players[0].base,s.players[1].base]);
+    assert!(e.legal_actions(&s).iter().all(|a|a.kind=="card"));
+    s=e.apply(&s,&e.card_action(&s,s.players[1].base)).unwrap();
+    assert_eq!(e.legal_actions(&s).iter().filter_map(Action::id).collect::<Vec<_>>(),vec![target]);
+    assert!(e.legal_actions(&s).iter().all(|a|a.kind=="card"));
+}
+#[test]
+fn shield_group_cleanup_rotates_retained_token_identity_between_units() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let a=unit(&e,&mut s,Seat::P2,"LOF_254"); let b=unit(&e,&mut s,Seat::P2,"LOF_254");
+    let next=s.next_id;
+    for id in [a,b] { e.create_token(&mut s,id,false).unwrap(); e.create_token(&mut s,id,false).unwrap(); }
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Ordered shield replacements","targetResolver":{"owner":"opponent","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":2},"optional":true},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}}));
+    // Select the second arena unit first, reproducing the independent engine trace.
+    s=e.apply(&s,&e.card_action(&s,b)).unwrap(); s=e.apply(&s,&e.card_action(&s,a)).unwrap();
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap(); s=e.apply(&s,&done).unwrap();
+    let next_action=e.legal_actions(&s).into_iter().find(|a|a.label=="Resolve next").unwrap(); s=e.apply(&s,&next_action).unwrap();
+    assert_eq!(s.card(b).shield,next+3,"first replacement removes oldest token");
+    assert_eq!(s.card(a).shield,next,"cleanup makes second replacement remove newest token");
+    assert_eq!(s.card(a).damage,0); assert_eq!(s.card(b).damage,0);
+}
+#[test]
+fn group_shield_consolidation_preserves_stashed_context_order_for_three_units() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let targets=[unit(&e,&mut s,Seat::P2,"LOF_254"),unit(&e,&mut s,Seat::P2,"LOF_254"),unit(&e,&mut s,Seat::P2,"LOF_254")];
+    let start=s.next_id;
+    for id in targets { for _ in 0..3 { e.create_token(&mut s,id,false).unwrap(); } }
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Three shield contexts","targetResolver":{"owner":"opponent","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":3},"optional":true},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}}));
+    for id in targets { s=e.apply(&s,&e.card_action(&s,id)).unwrap(); }
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap(); s=e.apply(&s,&done).unwrap();
+    let all=e.legal_actions(&s).into_iter().find(|a|a.label=="Resolve all (3)").unwrap(); s=e.apply(&s,&all).unwrap();
+    for (i,id) in targets.into_iter().enumerate() {
+        let mut attached=vec![]; let mut token=s.card(id).shield;
+        while token!=0 { attached.push(token); token=s.card(token).next_token; }
+        let removed=start+(3*i+i) as u16;
+        assert!(!attached.contains(&removed)); assert_eq!(attached.len(),2); assert_eq!(s.card(id).damage,0);
+    }
+}
+#[test]
+fn damage_callback_defeats_follow_selected_order_before_arena_stat_sweep() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let first=unit(&e,&mut s,Seat::P2,"LOF_254"); let second=unit(&e,&mut s,Seat::P2,"LOF_254");
+    for id in [first,second] { s.card_mut(id).damage=e.hp(&s,id)-1; }
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Selected deaths","targetResolver":{"owner":"opponent","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":2},"optional":true},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":2}}}));
+    s=e.apply(&s,&e.card_action(&s,second)).unwrap(); s=e.apply(&s,&e.card_action(&s,first)).unwrap();
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap(); s=e.apply(&s,&done).unwrap();
+    assert_eq!(s.players[1].discard.as_slice(),&[second,first]);
+}
+#[test]
+fn printed_title_references_use_exact_title_across_roots_and_controllers() {
+    let e=engine(); let mut s=board(&e); let own=unit(&e,&mut s,Seat::P1,"LOF_256"); let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");
+    for root in ["source","card","target"] {
+        let expr=Expr::Ref{path:vec![root.into(),"title".into()]};
+        assert_eq!(e.eval(&s,own,enemy,&expr),Eval::Text("Gifted Urchin".into()));
+    }
+    let source=s.players[0].leader;
+    let title=Expr::Ref{path:vec!["source".into(),"title".into()]};
+    assert_eq!(e.eval(&s,source,own,&title),Eval::Text("Sabine Wren".into()));
+    for expected in ["Gifted Urchin","gifted urchin","gifted-urchin"] {
+        let predicate=Expr::Binary{op:"===".into(),left:Box::new(Expr::Ref{path:vec!["card".into(),"title".into()]}),right:Box::new(Expr::Const{value:json!(expected)})};
+        let mut resolver:TargetResolver=serde_json::from_value(json!({"owner":"any","type":"unit","zone":"arena"})).unwrap(); resolver.predicate=Some(predicate);
+        assert_eq!(e.matching_targets(&s,own,&resolver),if expected=="Gifted Urchin" { vec![own,enemy] } else { vec![] });
+    }
+}
+#[test]
+fn printed_title_admission_rejects_numeric_and_query_coercion() {
+    for root in ["card","source","target"] {
+        let title=Expr::Ref{path:vec![root.into(),"title".into()]}; title.validate().unwrap();
+        for op in ["+","-","*","%","<",">=","=="] {
+            let e=Expr::Binary{op:op.into(),left:Box::new(title.clone()),right:Box::new(Expr::number(1))}; assert!(e.validate().is_err(),"{root}.{op}");
+        }
+        for op in ["===","!==","&&","||"] {
+            Expr::Binary{op:op.into(),left:Box::new(title.clone()),right:Box::new(Expr::Const{value:json!("Zuckuss")})}.validate().unwrap();
+        }
+        assert!(Expr::Unary{op:"-".into(),value:Box::new(title.clone())}.validate().is_err());
+        assert!(Expr::Query{name:"getPower".into(),receiver:Box::new(title),args:vec![]}.validate().is_err());
+    }
+}
+#[test]
+fn damage_pending_negative_aura_does_not_rescue_framework_dead_unit() {
+    let mut e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let aura=unit(&e,&mut s,Seat::P2,"LOF_256"); let protected=unit(&e,&mut s,Seat::P1,"LOF_254");
+    register_keyword_program(&mut e,&s,aura,json!({"trigger":"constant","title":"Negative enemy HP","targetResolver":{"owner":"opponent","type":"unit","zone":"arena"},"effect":{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"const","value":0},"hp":{"kind":"const","value":-1}}}));
+    register_keyword_program(&mut e,&s,protected,json!({"trigger":"constant","title":"Upgraded HP","condition":{"kind":"query","name":"isUpgraded","receiver":{"kind":"ref","path":["source"]}},"effect":{"kind":"modifyStats","target":"self","duration":"persistent","power":{"kind":"const","value":0},"hp":{"kind":"const","value":1}}}));
+    e.create_token(&mut s,protected,false).unwrap(); s.card_mut(protected).damage=e.hp(&s,protected)-1;
+    s.card_mut(aura).damage=e.hp(&s,aura)-1;
+    begin_group_test(&mut e,&mut s,source,json!({"trigger":"action","title":"Combined defeat batch","targetResolver":{"owner":"any","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":2},"optional":true},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}}));
+    s=e.apply(&s,&e.card_action(&s,aura)).unwrap(); s=e.apply(&s,&e.card_action(&s,protected)).unwrap();
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap(); s=e.apply(&s,&done).unwrap();
+    assert!(s.players[1].discard.contains(aura)); assert!(s.players[0].discard.contains(protected));
+}
+#[test]
+fn ordinary_combat_reuses_shield_consolidation_in_chosen_player_order() {
+    for opponent_first in [false,true] {
+        let e=engine(); let mut s=board(&e); let source=unit(&e,&mut s,Seat::P1,"LOF_256"); let target=unit(&e,&mut s,Seat::P2,"LOF_254");
+        let next=s.next_id;
+        for id in [source,target] { for _ in 0..3 { e.create_token(&mut s,id,false).unwrap(); } }
+        s.source=source; s.target=target; e.combat(&mut s).unwrap(); assert_eq!(s.decision,Decision::ShieldOrder);
+        let key=if opponent_first {"Opponent"} else {"You"};
+        let action=e.legal_actions(&s).into_iter().find(|a|a.label==key).unwrap(); s=e.apply(&s,&action).unwrap();
+        let removed_source=next+u16::from(opponent_first); let removed_target=next+3+u16::from(!opponent_first);
+        for (id,removed) in [(source,removed_source),(target,removed_target)] {
+            assert!(!e.shield_attached(&s,id,removed)); assert_eq!(e.token_count(&s,s.card(id).shield),2); assert_eq!(s.card(id).damage,0);
+        }
+        assert!(!s.attack_shield_opponent_first);
+    }
+}

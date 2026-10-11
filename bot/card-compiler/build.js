@@ -37,13 +37,27 @@ function requiredCapabilities(abilities, card) {
 }
 function keywordValues(card) {
     const values = {};
-    for (const text of [card.text, card.deployBox].filter(Boolean)) {
-        for (const m of text.matchAll(/(?:^|\n)\s*(Sentinel|Raid|Overwhelm|Saboteur|Restore|Ambush|Grit|Shielded)(?:\s+(\d+))?(?=\s|\(|$)/gi)) {
-            values[m[1].toLowerCase()] = m[2] ? Number(m[2]) : 1;
+    const core = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded'].map(name => [name.toLowerCase(), name]));
+    // Card's constructor parses text for units; leaders parse deployBox and
+    // text separately. Metadata supplies expected names, including mentions
+    // that do not become intrinsic keywords without an own-line text match.
+    const texts = card.types?.includes('leader') ? [card.deployBox, card.text] : [card.text];
+    for (const keyword of new Set(card.keywords ?? [])) {
+        const name = core.get(keyword);
+        if (!name) continue; // Unsupported printed kinds still fail runtime admission.
+        const numeric = keyword === 'raid' || keyword === 'restore';
+        for (const text of texts) {
+            const regex = new RegExp(`(?:^|\\n)${name}${numeric ? ' ([0-9]+)' : ''}`, 'g');
+            const matches = [...String(text ?? '').matchAll(regex)];
+            if (matches.length > 1) throw new Error(`Multiple printed ${keyword} instances in one side of ${card.internalName ?? 'card'}`);
+            if (!matches.length) continue;
+            const amount = numeric ? Number(matches[0][1]) : 1;
+            values[keyword] = numeric ? (values[keyword] ?? 0) + amount : 1;
         }
     }
     return values;
 }
+
 function compileCatalog({ source = path.join(repository, 'forceteki/server'), cards = path.join(repository, 'forceteki/test/json') } = {}) {
     const sourceDir = path.join(source, 'game/cards');
     const cardDir = path.join(cards, 'Card');

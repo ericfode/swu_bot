@@ -1,0 +1,1258 @@
+{
+  "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+  "requested": 67,
+  "outcomes": [
+    {
+      "id": "ASH_030",
+      "outcome": "engine-play-witness",
+      "file": "ASH_030.jsonl.gz",
+      "sha256": "8676705759aae21f11a01bdc132e1dd9f41a36331138cc4357b3b2b177a380d6",
+      "decisions": 97,
+      "playedCodes": [
+        "ASH_030",
+        "ASH_061",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "ASH_040",
+      "outcome": "engine-play-witness",
+      "file": "ASH_040.jsonl.gz",
+      "sha256": "6cf2ea6d624a8a2692cbdf522c6cda003b3c1323f0e0030b4845b5b08056786d",
+      "decisions": 43,
+      "playedCodes": [
+        "ASH_040",
+        "ASH_190",
+        "ASH_261",
+        "SEC_206",
+        "SOR_073",
+        "TWI_124"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "ASH_057",
+      "outcome": "engine-play-witness",
+      "file": "ASH_057.jsonl.gz",
+      "sha256": "3b3e587716f9c916bd3cf6db924d9fc246325ea4e160a66bd376ab0c07791969",
+      "decisions": 125,
+      "playedCodes": [
+        "ASH_057",
+        "ASH_131",
+        "ASH_190",
+        "ASH_261",
+        "JTL_042",
+        "SOR_101",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "ASH_078",
+      "outcome": "engine-play-witness",
+      "file": "ASH_078.jsonl.gz",
+      "sha256": "a248ae050b61dc5287ecab00dffa64cda75ee19d698a38da3bd91e5d1d4614ef",
+      "decisions": 77,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_078",
+        "ASH_131",
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "SOR_073",
+        "TWI_124",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "ASH_105",
+      "outcome": "engine-play-witness",
+      "file": "ASH_105.jsonl.gz",
+      "sha256": "39c381a85012d2c1b7157d8206858fef8096b7d10357fc50520cdf5df2fecf39",
+      "decisions": 64,
+      "playedCodes": [
+        "ASH_105",
+        "ASH_131",
+        "JTL_042",
+        "SOR_101",
+        "SOR_216",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "ASH_120",
+      "outcome": "engine-play-witness",
+      "file": "ASH_120.jsonl.gz",
+      "sha256": "b2d3aaf2f089b85a9f3b9d7392ffae6e0641f9ccfc1039c8837dab0548656d0b",
+      "decisions": 89,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_120",
+        "ASH_131",
+        "JTL_042",
+        "SOR_101",
+        "SOR_216",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "ASH_243",
+      "outcome": "engine-play-witness",
+      "file": "ASH_243.jsonl.gz",
+      "sha256": "289028929cff693ba1a35d6474702df6f37e302beb71481d38407a6a9ff9d46b",
+      "decisions": 85,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_201",
+        "ASH_243",
+        "JTL_042",
+        "SOR_073",
+        "SOR_216",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_039",
+      "outcome": "engine-play-witness",
+      "file": "HMW_039.jsonl.gz",
+      "sha256": "2e8b759fadeab07b81bace9ac273492d9af70f94c6206625fc9217b7ef9084fd",
+      "decisions": 83,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_261",
+        "HMW_039",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_074",
+      "outcome": "engine-play-witness",
+      "file": "HMW_074.jsonl.gz",
+      "sha256": "ca25d463cc01f9c34d2add1db27a98c016815e6090641fe1fb64b95cdd798af7",
+      "decisions": 69,
+      "playedCodes": [
+        "ASH_131",
+        "HMW_074",
+        "SOR_216",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_084",
+      "outcome": "engine-play-witness",
+      "file": "HMW_084.jsonl.gz",
+      "sha256": "c613f0c3b84ad65c4443a8bb00a7f1a07a8b29404897b54aab85fa1b525ff7cc",
+      "decisions": 72,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_201",
+        "HMW_084",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_090",
+      "outcome": "engine-play-witness",
+      "file": "HMW_090.jsonl.gz",
+      "sha256": "72f4be077e88e9c7c31cd086ac44e98c666e31602aba4a98d509763abf103506",
+      "decisions": 158,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "ASH_261",
+        "HMW_090",
+        "LAW_131",
+        "SOR_073",
+        "SOR_101",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_117",
+      "outcome": "engine-play-witness",
+      "file": "HMW_117.jsonl.gz",
+      "sha256": "660a7a9e2d7748c626429aac4b8ba5575e216b4309e2c2f4a4ecf476c007d8e8",
+      "decisions": 165,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_261",
+        "HMW_117",
+        "JTL_042",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_118",
+      "outcome": "engine-play-witness",
+      "file": "HMW_118.jsonl.gz",
+      "sha256": "4646a30a7f0594ba9fd9843192e0553094b71a25340c866ab242d527eeea0ea8",
+      "decisions": 71,
+      "playedCodes": [
+        "ASH_261",
+        "HMW_118",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SOR_101",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_131",
+      "outcome": "engine-play-witness",
+      "file": "HMW_131.jsonl.gz",
+      "sha256": "f27cb52c668075fbbe4fedd1fe5224c5ec0594a43f2c306c1514ecc6f7d609c7",
+      "decisions": 91,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_201",
+        "HMW_131",
+        "LAW_131",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_137",
+      "outcome": "engine-play-witness",
+      "file": "HMW_137.jsonl.gz",
+      "sha256": "7912a1c07014f254f0c0288146d37ba3f745835235ecfb272db4ffaa6d8e22eb",
+      "decisions": 59,
+      "playedCodes": [
+        "HMW_137",
+        "SOR_073",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_142",
+      "outcome": "engine-play-witness",
+      "file": "HMW_142.jsonl.gz",
+      "sha256": "1739e8d4fb2f787f912278b0204ada1e4252a0d26f3b655e55034d221c447ed7",
+      "decisions": 43,
+      "playedCodes": [
+        "HMW_142",
+        "SEC_206",
+        "TWI_124",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_210",
+      "outcome": "engine-play-witness",
+      "file": "HMW_210.jsonl.gz",
+      "sha256": "eef313bc0e8f212e95b0def03465f45d51255821b72640fd1c85415f1e0d042f",
+      "decisions": 79,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "HMW_210",
+        "IBH_031",
+        "SEC_206",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_243",
+      "outcome": "engine-play-witness",
+      "file": "HMW_243.jsonl.gz",
+      "sha256": "22d51dcbbfed91a8dfb710c954b9eb52c8a56a13124eb48726516ceb432493fd",
+      "decisions": 67,
+      "playedCodes": [
+        "ASH_201",
+        "ASH_261",
+        "HMW_243",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "TWI_124"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_246",
+      "outcome": "engine-play-witness",
+      "file": "HMW_246.jsonl.gz",
+      "sha256": "5ed42a69d916273e15f7d8e10455746981f3c513f96ffee3c31e66f911cc6eb2",
+      "decisions": 80,
+      "playedCodes": [
+        "ASH_190",
+        "HMW_246",
+        "JTL_042",
+        "SEC_206",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "HMW_259",
+      "outcome": "engine-play-witness",
+      "file": "HMW_259.jsonl.gz",
+      "sha256": "12ef0f4f394c4b3034b501461082505f703f7ff0a8d4eae6fcb27be29c4524b5",
+      "decisions": 77,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "HMW_259",
+        "JTL_042",
+        "SOR_073",
+        "SOR_101",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "JTL_107",
+      "outcome": "engine-play-witness",
+      "file": "JTL_107.jsonl.gz",
+      "sha256": "e4b10bd28ca7aeca1d89720d4bfd7898a7562dfd8734b05882467c00d3717973",
+      "decisions": 90,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_261",
+        "IBH_031",
+        "JTL_107",
+        "SEC_206",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "JTL_113",
+      "outcome": "engine-play-witness",
+      "file": "JTL_113.jsonl.gz",
+      "sha256": "216e7acd05e7e6621ce9cfdd1fd983d8adeeabce0150b16c94453cddc5c105e6",
+      "decisions": 108,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "JTL_042",
+        "JTL_113",
+        "LAW_131",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "JTL_161",
+      "outcome": "engine-play-witness",
+      "file": "JTL_161.jsonl.gz",
+      "sha256": "62506fb0e180b70a60e05de6e8e22fccdc97a092e3592d54b2334e3297f3bece",
+      "decisions": 86,
+      "playedCodes": [
+        "ASH_061",
+        "JTL_161",
+        "SEC_206",
+        "SOR_216",
+        "TWI_124"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "JTL_229",
+      "outcome": "engine-play-witness",
+      "file": "JTL_229.jsonl.gz",
+      "sha256": "be3dabbd2f0558f946f9ace371c59fcc5521629b99ab009b4423b0f189473f27",
+      "decisions": 80,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "JTL_229",
+        "LAW_131",
+        "SEC_206",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "JTL_257",
+      "outcome": "engine-play-witness",
+      "file": "JTL_257.jsonl.gz",
+      "sha256": "a0139c84ee099559369a9e994a4ef2b64cc12a79be2e3f27289685167c818bed",
+      "decisions": 32,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_201",
+        "JTL_257",
+        "LAW_131",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LAW_104",
+      "outcome": "engine-play-witness",
+      "file": "LAW_104.jsonl.gz",
+      "sha256": "115c48ecb1ba07ee7bce1750a5db9a85ff5414b1f44d83fd62427365ae59ee42",
+      "decisions": 63,
+      "playedCodes": [
+        "JTL_042",
+        "LAW_104",
+        "SOR_101",
+        "SOR_216"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LAW_105",
+      "outcome": "engine-play-witness",
+      "file": "LAW_105.jsonl.gz",
+      "sha256": "231aa46868ff8712630e600125bc3de974dd86933c7aa64f80ffbc461e04f259",
+      "decisions": 114,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_261",
+        "IBH_031",
+        "JTL_042",
+        "LAW_105",
+        "LAW_131",
+        "SOR_101",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LAW_182",
+      "outcome": "engine-play-witness",
+      "file": "LAW_182.jsonl.gz",
+      "sha256": "5758b752eacd76b2e91a66b4a3fa802b74bb0f57cd5f439364115e9c6cd8ad7c",
+      "decisions": 189,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "IBH_031",
+        "JTL_042",
+        "LAW_182",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LOF_114",
+      "outcome": "engine-play-witness",
+      "file": "LOF_114.jsonl.gz",
+      "sha256": "d5bd2d3dff05655b4368585f6ef4c3bbf9a2bc7d25677718d6f47ea6337c593a",
+      "decisions": 74,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_201",
+        "LAW_131",
+        "LOF_114",
+        "SEC_206",
+        "SOR_101",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LOF_118",
+      "outcome": "engine-play-witness",
+      "file": "LOF_118.jsonl.gz",
+      "sha256": "433e9441379839539fac394f66742b5969c6606777e425072eabd5d7f9a91098",
+      "decisions": 71,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "LOF_118",
+        "SOR_073",
+        "SOR_216",
+        "TWI_124"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LOF_162",
+      "outcome": "engine-play-witness",
+      "file": "LOF_162.jsonl.gz",
+      "sha256": "3d7732f91bbab10a8f281d72cd108c1ba189c66727a625b29ec1fde2e8bfdb3f",
+      "decisions": 74,
+      "playedCodes": [
+        "ASH_261",
+        "JTL_042",
+        "LOF_162",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LOF_169",
+      "outcome": "engine-play-witness",
+      "file": "LOF_169.jsonl.gz",
+      "sha256": "95f978f97d466614c68c00b0e902fb810edfa5837c8d4a1e66be91eeae361226",
+      "decisions": 91,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "JTL_042",
+        "LOF_169",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LOF_212",
+      "outcome": "engine-play-witness",
+      "file": "LOF_212.jsonl.gz",
+      "sha256": "7af7ed9baa42ef9ffb7293dd2aeb0f668d3345939daa810b867450ee84903e28",
+      "decisions": 97,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "ASH_201",
+        "LOF_212",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "LOF_223",
+      "outcome": "engine-play-witness",
+      "file": "LOF_223.jsonl.gz",
+      "sha256": "4e84527b299fb57e464e545e3b35b91f65ec8287775736dd93c1590721ca870f",
+      "decisions": 102,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "ASH_261",
+        "JTL_042",
+        "LAW_131",
+        "LOF_223",
+        "SOR_101",
+        "SOR_216",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_029",
+      "outcome": "engine-play-witness",
+      "file": "SEC_029.jsonl.gz",
+      "sha256": "abb7b1c385f60a83b8a082aaeb5a32fc869a678928c889199af2554b07c97479",
+      "decisions": 109,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "SEC_029",
+        "SOR_073",
+        "SOR_101",
+        "TWI_124"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_045",
+      "outcome": "engine-play-witness",
+      "file": "SEC_045.jsonl.gz",
+      "sha256": "ccb5e467fcc15f83905d61d22830727786eb33ced0dc330da6dd4a239cce86ee",
+      "decisions": 53,
+      "playedCodes": [
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "SEC_045",
+        "SEC_206",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_047",
+      "outcome": "engine-play-witness",
+      "file": "SEC_047.jsonl.gz",
+      "sha256": "3242311c5e34fedeff69f4cb36c5c9a2ef7fa2c8fa926921107d91f5ced1f92b",
+      "decisions": 59,
+      "playedCodes": [
+        "ASH_061",
+        "SEC_047"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_063",
+      "outcome": "engine-play-witness",
+      "file": "SEC_063.jsonl.gz",
+      "sha256": "3acf96cad4284e2e6d1e8594aed590aa83d8cbd1b5f636a7f89147ca850d5626",
+      "decisions": 145,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_201",
+        "LAW_131",
+        "SEC_063",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_079",
+      "outcome": "engine-play-witness",
+      "file": "SEC_079.jsonl.gz",
+      "sha256": "f6f0aea82f9298921cca4b198ae12e01dd0e023d8572994eb57d2173fb2c8c89",
+      "decisions": 84,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "ASH_201",
+        "JTL_042",
+        "LAW_131",
+        "SEC_079",
+        "SEC_206",
+        "SOR_216",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_116",
+      "outcome": "engine-play-witness",
+      "file": "SEC_116.jsonl.gz",
+      "sha256": "ebc71e4850875216bdad97f66c2ada5d66aa4ab10c2c9c2faedde6eff814f1bb",
+      "decisions": 49,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_201",
+        "ASH_261",
+        "SEC_116",
+        "SOR_216"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_134",
+      "outcome": "engine-play-witness",
+      "file": "SEC_134.jsonl.gz",
+      "sha256": "77b563e29d126ecd6f8e01815bd404a36d55e84bb159f5bbc95b3b18def2bfa4",
+      "decisions": 73,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "LAW_131",
+        "SEC_134",
+        "SOR_073",
+        "SOR_101",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SEC_249",
+      "outcome": "engine-play-witness",
+      "file": "SEC_249.jsonl.gz",
+      "sha256": "d66810025aa95e3af60802c67d7a71be23ce7ecb33adac1c9475cf17f6fbfb9d",
+      "decisions": 61,
+      "playedCodes": [
+        "SEC_206",
+        "SEC_249",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SHD_034",
+      "outcome": "engine-play-witness",
+      "file": "SHD_034.jsonl.gz",
+      "sha256": "2f7c9ffe39b0d704a9ac0e081ddb5896b2904fb6a0ba14d487d7b566d1abc02b",
+      "decisions": 93,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_261",
+        "LAW_131",
+        "SHD_034",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SHD_112",
+      "outcome": "engine-play-witness",
+      "file": "SHD_112.jsonl.gz",
+      "sha256": "fbd11276292f0ca28fb35fad6e3786c43db39fd46fe4df04e65282ea7db6e5d3",
+      "decisions": 53,
+      "playedCodes": [
+        "ASH_261",
+        "IBH_031",
+        "SHD_112",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SHD_169",
+      "outcome": "engine-play-witness",
+      "file": "SHD_169.jsonl.gz",
+      "sha256": "711a20f9a76fc0edfb0768abb667da3085faba7aa49094d3ad3029cbfbc86f8d",
+      "decisions": 66,
+      "playedCodes": [
+        "ASH_201",
+        "SEC_206",
+        "SHD_169",
+        "SOR_073",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SHD_212",
+      "outcome": "engine-play-witness",
+      "file": "SHD_212.jsonl.gz",
+      "sha256": "ad4e544f8489fce67d66e4792579d6f75b66490e2615781ea00104980f312070",
+      "decisions": 101,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SHD_212",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SHD_247",
+      "outcome": "engine-play-witness",
+      "file": "SHD_247.jsonl.gz",
+      "sha256": "c289c8495c19c80af617499eb7a97a7e0f78c931e53825be59f091dae3c64ad3",
+      "decisions": 83,
+      "playedCodes": [
+        "ASH_190",
+        "LAW_131",
+        "SEC_206",
+        "SHD_247",
+        "SOR_073",
+        "SOR_101",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_048",
+      "outcome": "engine-play-witness",
+      "file": "SOR_048.jsonl.gz",
+      "sha256": "a248d23a7d68bc0942dccede0d386a5dcdc88a537774b241a007d5bdbe414c1e",
+      "decisions": 103,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_201",
+        "ASH_261",
+        "SEC_206",
+        "SOR_048",
+        "TWI_124",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_065",
+      "outcome": "engine-play-witness",
+      "file": "SOR_065.jsonl.gz",
+      "sha256": "86175184cfb914ae2161998794c0fd4e453cbdf67414e34e9ca27423956cb46c",
+      "decisions": 110,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "SOR_065",
+        "SOR_073",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_079",
+      "outcome": "engine-play-witness",
+      "file": "SOR_079.jsonl.gz",
+      "sha256": "ff971cda0b1404b79d4a3c926ac2451f09751a20c2a5b1216aba6657cd41668f",
+      "decisions": 111,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_201",
+        "ASH_261",
+        "SEC_206",
+        "SOR_079",
+        "TWI_124",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_086",
+      "outcome": "engine-play-witness",
+      "file": "SOR_086.jsonl.gz",
+      "sha256": "f4bc226452b37bb2b968c6927cc94cac4b1fc53446d05a34807b999d518592c9",
+      "decisions": 67,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "IBH_031",
+        "LAW_131",
+        "SOR_086",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_100",
+      "outcome": "engine-play-witness",
+      "file": "SOR_100.jsonl.gz",
+      "sha256": "ee31fd5f95cc358f1d9bc88bbd2cd519ed8a5ef548d89fe55138be3109b03a8c",
+      "decisions": 64,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "IBH_031",
+        "LAW_131",
+        "SOR_100",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_112",
+      "outcome": "engine-play-witness",
+      "file": "SOR_112.jsonl.gz",
+      "sha256": "bc781c2c08a3831aa8b912bea9849b2bf819af0bbb1cab97358f0c876b225ce9",
+      "decisions": 79,
+      "playedCodes": [
+        "ASH_261",
+        "JTL_042",
+        "LAW_131",
+        "SOR_073",
+        "SOR_101",
+        "SOR_112",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_114",
+      "outcome": "engine-play-witness",
+      "file": "SOR_114.jsonl.gz",
+      "sha256": "6bc299097c390959c50459d11607ef25b46fcca5e1e98ec79ec6e7a40b7a292b",
+      "decisions": 66,
+      "playedCodes": [
+        "ASH_261",
+        "IBH_031",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "SOR_114",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_140",
+      "outcome": "engine-play-witness",
+      "file": "SOR_140.jsonl.gz",
+      "sha256": "e015b10e64aaa116db3f29d7158fa1fef339d03c0931bb05eed6d58cc52cdf19",
+      "decisions": 40,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_261",
+        "JTL_042",
+        "LAW_131",
+        "SOR_073",
+        "SOR_140",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_144",
+      "outcome": "engine-play-witness",
+      "file": "SOR_144.jsonl.gz",
+      "sha256": "f35be0bfa06b959395ba8c0d7c1dce2b6b7c8c2e82f7588d26e169ec70c84a95",
+      "decisions": 107,
+      "playedCodes": [
+        "ASH_061",
+        "LAW_131",
+        "SOR_073",
+        "SOR_101",
+        "SOR_144",
+        "SOR_216"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_156",
+      "outcome": "engine-play-witness",
+      "file": "SOR_156.jsonl.gz",
+      "sha256": "9f41df5db3a693ffb44c446b2b4b002f98a25a0e6b31724646febe0bc53cbdb4",
+      "decisions": 28,
+      "playedCodes": [
+        "ASH_061",
+        "SOR_156"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_159",
+      "outcome": "engine-play-witness",
+      "file": "SOR_159.jsonl.gz",
+      "sha256": "a63d1c20ca23e729fca986c62ac2d8f7f9599068f906c81062d8e50926ee0e2d",
+      "decisions": 80,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "JTL_042",
+        "SOR_073",
+        "SOR_159",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_211",
+      "outcome": "engine-play-witness",
+      "file": "SOR_211.jsonl.gz",
+      "sha256": "76cc532fc8da0bf91f5c50293805f2b34786a30b1f5883c9216d7eaad21cd1f9",
+      "decisions": 132,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_201",
+        "SOR_073",
+        "SOR_211",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SOR_249",
+      "outcome": "engine-play-witness",
+      "file": "SOR_249.jsonl.gz",
+      "sha256": "4370af5c6eeed98a1dee133b6154abee779744421ca1b87f25325fa130ff39e6",
+      "decisions": 78,
+      "playedCodes": [
+        "ASH_190",
+        "SEC_206",
+        "SOR_216",
+        "SOR_249",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TS26_020",
+      "outcome": "engine-play-witness",
+      "file": "TS26_020.jsonl.gz",
+      "sha256": "a008947b258b1872511864aa36c96f1c2e32e1b97177122940f49a8863136ebb",
+      "decisions": 135,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_201",
+        "ASH_261",
+        "JTL_042",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TS26_020",
+        "TWI_124",
+        "TWI_170"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TS26_040",
+      "outcome": "engine-play-witness",
+      "file": "TS26_040.jsonl.gz",
+      "sha256": "ca8831d81f7ed6be472707107d98d5d196f8010d60b4393163b537ff958c331d",
+      "decisions": 120,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_261",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "TS26_040",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TWI_054",
+      "outcome": "engine-play-witness",
+      "file": "TWI_054.jsonl.gz",
+      "sha256": "a329cd8bad97022ab76c5b87a5f41d407ca63a42090a112e89f74abc80c63798",
+      "decisions": 50,
+      "playedCodes": [
+        "SOR_101",
+        "SOR_216",
+        "TWI_054",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TWI_062",
+      "outcome": "engine-play-witness",
+      "file": "TWI_062.jsonl.gz",
+      "sha256": "36525b2d57622fc9110fbe85132b5a4885fde29c872efebf5c89fbb90bce9a36",
+      "decisions": 48,
+      "playedCodes": [
+        "ASH_190",
+        "SOR_216",
+        "TWI_062",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TWI_081",
+      "outcome": "engine-play-witness",
+      "file": "TWI_081.jsonl.gz",
+      "sha256": "7079e8f8c24ba1164e3439b7e8aba2f7f884cceb2cf3df727ebf1ee261562a79",
+      "decisions": 102,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_201",
+        "IBH_031",
+        "TWI_081",
+        "TWI_124",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TWI_130",
+      "outcome": "engine-play-witness",
+      "file": "TWI_130.jsonl.gz",
+      "sha256": "46388bbef19e270b459ed986500f1f6829dde13e911665254ba46512e28c93ef",
+      "decisions": 93,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_201",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_130",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "TWI_180",
+      "outcome": "engine-play-witness",
+      "file": "TWI_180.jsonl.gz",
+      "sha256": "a8b157d42dd15f544750f345c5f4db63a289413b12c12e7fce9f24e14235fe40",
+      "decisions": 67,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_201",
+        "ASH_261",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_180",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    }
+  ]
+}

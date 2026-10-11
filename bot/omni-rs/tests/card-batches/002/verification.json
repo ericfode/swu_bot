@@ -1,0 +1,321 @@
+{
+  "schema": "swu-card-batch-verification/v1",
+  "baseRevision": "d47e428795ce96e55c18407ca82a7bc4c9f917d8",
+  "testedState": "Uncommitted implementation identified by exact file hashes; final tested commit and remote readback are recorded in the PR handoff.",
+  "engineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+  "engineSourceTreeHash": "5f0ca3885bb5d079266e33259dd31d0cea84b65568a49c365b2bd38ed85ab661",
+  "engineIsolation": "Pinned source exported and built in an isolated checkout; shared original engine source/build were not used or edited.",
+  "engineBuildTreeSha256": "f15296176e4b144aea87db86691fe8edbd09f5c13d879e8e84c833f6224e07c6",
+  "engineBuildModuleCount": 2489,
+  "engineBuildTreeHashRecipe": "SHA-256 of sorted relative POSIX JS paths, NUL, exact file bytes, NUL under forceteki/build/server.",
+  "compilerHash": "cc6cea1bcbe411dcb283d61af3b7ff226ede28cf27f7e9b8138a388de6279c00",
+  "receiptIndexSha256": "9aa8929aeeee6ce11cef19434f3526d946b7b504ba6967920aaa3490eb0a888d",
+  "familyWitnessLedgerSha256": "e71dc2758c936112eddac0bccfb5787cf304beb9022c15ff278abefa45b285ed",
+  "testedFileSha256": {
+    ".agents/skills/swu-card-conversion/SKILL.md": "7dbb363078699b43828d70bdf57bf35ebde238c4212a81f4c922c2bbd13adc4b",
+    "bot/card-compiler/README.md": "f6b5a055b2b94b3502a291ca6a2e72177c86bea3a1b4dd5b4e97de16d9934c5c",
+    "bot/card-compiler/build.js": "cca323c4932519b4bc9d187f20adb00382865e677549c83ff10839856f821d49",
+    "bot/card-compiler/compiler.js": "d6d7b4137808df5c9e4918f931a1d938a7f84b7aafaef617a22513c51d59cd0e",
+    "bot/card-compiler/test/compiler.test.js": "5922a66ed4a6e9085e5123c767acc24583e7074e235c0780b7ee501295ba5f72",
+    "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+    "bot/omni-rs/src/ability_ir.rs": "f429463136e3856b114b38c57c8757298c7d152c2522f96d11ca6005153f9ca8",
+    "bot/omni-rs/src/generic_runtime.rs": "ad91d10dbe7eb3ae492262fda0317472064de51430f21b9909db8faeacdb9f2d",
+    "bot/omni-rs/src/generic_runtime_tests.rs": "7d3e1bdcbfca51fe0ffc000e7613a7756c61836a93806fb910e7e3dfa3499e4e",
+    "bot/omni-rs/src/model.rs": "4535cbc695a7c84710a735459c820befbe31848c105aa6e0dfedfb4de064bcf4",
+    "bot/omni-rs/src/simulator.rs": "4c5522cb1703b86c3a341f52a9c0ff45df0bc200930bc453fa3fcdd64f778e53",
+    "bot/omni-rs/src/simulator_tests.rs": "802d2392cafa386367a064d63a45c059ef653211d25a663b0d11a7d2e5e965a0",
+    "bot/omni-rs/src/validation.rs": "f4d420fd99e584f1f7dabf03eb0bac8714eb4a1dd07e5f29912d7bf13688ab9d",
+    "bot/omni-rs/tests/card_batch_conformance.rs": "a6efb6ded68a89a149443d8137d43dbcaa5f11970ea6ebd906f20dc3c11d1212",
+    "bot/omni/rs/make-batch-play-fixtures.js": "89728ebe465f09a146d45c9a3301cdb7c549434b03fb26b530bb023a37a69cd0",
+    "bot/omni/rs/make-group-fixtures.js": "2f85ff6c827ac832820ff1d1e181f28b8b4493000a44ad1b9b5182beba554a13",
+    "bot/omni/rs/make-keyword-fixtures.js": "ed051e4ee80da593f048d1e3ed48f8deffd51570d0d45d435c268ca1e8975372",
+    "bot/omni/rs/make-phase-fixtures.js": "cb03b4241d33d06e8e0b6a654c635ff4592cbe6622f8b6bae4c2c22f4cf63a67",
+    "bot/omni/rs/state.js": "df3516c04e88dc30c4a1a6542edaf9a6f8723e0e0c3fc2b8904c20bbffd37a50",
+    "bot/omni/wasm/test/card-batches.test.js": "cdfb9515658c26e6aba58015711af663e5f8603c5c5383231dd0d79f47724dd7",
+    "bot/test/env-selection-actions.test.js": "1c97b9358f352522fbac75eae7cc0b643c0234d3f24b4ed0372a5c2bcb158752",
+    "bot/test/phase-stats-export.test.js": "417e4f4f9302fd15b262be41cb65c2efe2600876c1b742a631e296acaeaa7109",
+    "tools/card-batch.js": "312765b5231a681e8efa0e5f86983c1b4744d89eb4a0baf73097bc358738e838"
+  },
+  "nativeReleaseBinarySha256": "1765466aa48e58a715500e86f78dfb13850d82213c6de358bfd579289a6398b4",
+  "wasmBuild": {
+    "schema": "omni-wasm-build-v1",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "wasmBindgen": "0.2.129",
+    "profile": "release",
+    "stackBytes": 16777216,
+    "artifacts": [
+      {
+        "target": "node",
+        "bytes": 1188609,
+        "sha256": "108dca854936a7106a00301f75fc1a20c3667531654231f08cc8a0815d8df283"
+      },
+      {
+        "target": "web",
+        "bytes": 1188609,
+        "sha256": "108dca854936a7106a00301f75fc1a20c3667531654231f08cc8a0815d8df283"
+      }
+    ]
+  },
+  "artifactSha256": {
+    "catalog.json": "acfd4d819063572bdf99af696aa03f55fa2430484b31c7ec4b6a77701e910603",
+    "coverage.json": "6ef5125687814716ce4a39e20d0b1d3587f8858827f3358dd3b2716703b95c6d",
+    "runtime-admission.json": "fe5e4dc70b420ce478ff82ee95e7975f12c07ddb7dc3de460f605d858a9aa9df",
+    "runtime-pool.json": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369"
+  },
+  "commands": [
+    {
+      "command": "cargo build --locked -p omni-rs --release",
+      "log": "verification-logs/swu-batch-002-final3-native-build.log",
+      "exitCode": 0,
+      "logSha256": "7763115d134bbf99711c5c72b5edd1b1b100455634a5afd3efcc880d7a3c5545"
+    },
+    {
+      "command": "npm run wasm:build",
+      "log": "verification-logs/swu-batch-002-final3-wasm-build.log",
+      "exitCode": 0,
+      "logSha256": "9629e4f2797d6a67a3474112e1930cf011df66f42cfc0ff7a4a3ab119cd052fc"
+    },
+    {
+      "command": "npm test",
+      "log": "verification-logs/swu-batch-002-final-js-tests.log",
+      "exitCode": 0,
+      "logSha256": "058b4bdb0af01bf6343aae9d0a42f3378a5fd014ca8252582ee6c10f38b516f4"
+    },
+    {
+      "command": "npm run cards:test",
+      "log": "verification-logs/swu-batch-002-final-card-tests.log",
+      "exitCode": 0,
+      "logSha256": "6cbb0fbfc1895c7b90548ce0cd224c4094d8f9dda29902a06c780143b7f50c72"
+    },
+    {
+      "command": "cargo test --locked --workspace",
+      "log": "verification-logs/swu-batch-002-final4-rust-tests.log",
+      "exitCode": 0,
+      "logSha256": "06e89e58d7ca288ffd61250e5a20c826082d40a495a169e685369a26e9621398"
+    },
+    {
+      "command": "npm run wasm:test",
+      "log": "verification-logs/swu-batch-002-final4-wasm-tests.log",
+      "exitCode": 0,
+      "logSha256": "fbcf850f2caa707e99b847723b8c71d0a3476ba464a91f62c5ac6fed3293dd54"
+    },
+    {
+      "command": "npm run cards:check",
+      "log": "verification-logs/swu-batch-002-final4-cards-check.log",
+      "exitCode": 0,
+      "logSha256": "14d96ddbf0f14efcd0964c123586ec6de3a5687657f115e778c02331e18e25c6"
+    },
+    {
+      "command": "target/release/omni-rs check replays/omni-rs-corpus/*.jsonl.gz",
+      "log": "verification-logs/swu-batch-002-final3-original300-native.log",
+      "exitCode": 0,
+      "logSha256": "e7919f5b752f5244f00f29a3e84ff467c17511bdda8294a74f22a6a1cb603990"
+    },
+    {
+      "command": "node bot/omni/wasm/check.js replays/omni-rs-corpus/*.jsonl.gz",
+      "log": "verification-logs/swu-batch-002-final3-original300-wasm.log",
+      "exitCode": 0,
+      "logSha256": "ab1011905b4252a103ca2df5da4799cab8d9f31236c9cd683c82528062aee275"
+    },
+    {
+      "command": "python3 /private/tmp/swu-check-batch.py native bot/card-compiler/generated/catalog.json 002 /private/tmp/swu-batch-002-final4-002-native.log",
+      "log": "verification-logs/swu-batch-002-final4-002-native.log",
+      "exitCode": 0,
+      "logSha256": "2f848a629b7ea406880ed1faf0db7ff8ddcb59bc5d5fe33f4cfc6d27311d730a"
+    },
+    {
+      "command": "npm run wasm:pack",
+      "log": "verification-logs/swu-batch-002-final3-pack.log",
+      "exitCode": 0,
+      "logSha256": "8fa1d15b9027f789760d37c40bb65b3d997d5726f442ae78a22be289e09ca6fd"
+    },
+    {
+      "command": "npm run wasm:pack:check",
+      "log": "verification-logs/swu-batch-002-final3-pack-check.log",
+      "exitCode": 0,
+      "logSha256": "848c98f54746935616d6e8e39b56d2f359bfbd81dd6866336b1fb8e7757e5975"
+    },
+    {
+      "command": "PYTHONPATH=/private/tmp/swu-skill-validator-deps python3 /Users/ericfode/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/swu-card-conversion",
+      "log": "verification-logs/swu-batch-002-final4-skill-check.log",
+      "exitCode": 0,
+      "logSha256": "db349825903d66adffea3ecf1bd8e1803043e8a71cf1a051235dabc5371f5bb0"
+    }
+  ],
+  "unitTests": {
+    "javascriptRepository": 177,
+    "compilerAccountingExporter": 38,
+    "rustWorkspace": 152,
+    "rustCore": 122,
+    "wasmNodeBrowserAdapter": 11
+  },
+  "batchCorpora": [
+    {
+      "directory": "keyword",
+      "games": 24,
+      "decisions": 1796,
+      "windows": 588,
+      "terminalResults": 24,
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "play",
+      "games": 67,
+      "decisions": 5674,
+      "windows": 1954,
+      "terminalResults": 67,
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "keyword-review",
+      "games": 8,
+      "decisions": 527,
+      "windows": 218,
+      "terminalResults": 8,
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group",
+      "games": 28,
+      "decisions": 2957,
+      "windows": 1147,
+      "terminalResults": 28,
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group-play",
+      "games": 29,
+      "decisions": 1853,
+      "windows": 915,
+      "terminalResults": 29,
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group-leaders",
+      "games": 4,
+      "decisions": 807,
+      "windows": 272,
+      "terminalResults": 4,
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group-order",
+      "games": 1,
+      "decisions": 102,
+      "windows": 32,
+      "terminalResults": 1,
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group-shields",
+      "games": 2,
+      "decisions": 250,
+      "windows": 93,
+      "terminalResults": 2,
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "title",
+      "games": 7,
+      "decisions": 645,
+      "windows": 228,
+      "terminalResults": 7,
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "title-play",
+      "games": 2,
+      "decisions": 115,
+      "windows": 54,
+      "terminalResults": 2,
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group-hp",
+      "games": 3,
+      "decisions": 251,
+      "windows": 85,
+      "terminalResults": 3,
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "group-completion",
+      "games": 10,
+      "decisions": 828,
+      "windows": 358,
+      "terminalResults": 10,
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    }
+  ],
+  "batchTotals": {
+    "games": 185,
+    "decisions": 15805,
+    "windows": 5944,
+    "terminalResults": 185
+  },
+  "original300Regression": {
+    "native": {
+      "games": 300,
+      "decisions": 57604,
+      "windows": 25949
+    },
+    "wasm": {
+      "games": 300,
+      "decisions": 57604,
+      "windows": 25949
+    }
+  },
+  "earlierCommittedCorpora": {
+    "batch001Games": 146,
+    "originalGames": 6,
+    "expandedGames": 16,
+    "native": "passed",
+    "wasm": "passed"
+  },
+  "limitations": [
+    "Source conversion, runtime admission, observed engine use, and finite differential agreement are separate measures. These traces do not prove every possible interaction.",
+    "The final 100-card manifest is retrospective. The original 100-card prospect queue is preserved and explicitly retired; three prospects remain blocked by Plot or Smuggle.",
+    "Four invalid constructed leader traces are preserved byte-for-byte under retired-fixtures with replacements and reasons; they are not counted.",
+    "The initial last-Shield timeout was a harness assertion-formatting failure on cyclic Card objects, not an engine hang. Corrected scalar assertions and three complete HP-death traces replace that hypothesis.",
+    "Generator witness files preserve their generation-time unassessed labels; this verification records the subsequent native/Wasm results.",
+    "The LOW skill negative-readiness trial detects a known error class; it is not a statistical reliability estimate."
+  ],
+  "review": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "implementationWorkersEffort": "low",
+    "allNewCardSourcesReviewed": 100,
+    "status": "Approved for authorized publication of exact reviewed state; see final-review.json",
+    "implementationSetDigest": "838eb42be2b532406a6fe2f0eb8d163db30de56a07acc6de76c64b61f4b02e08",
+    "implementationSetDigestRecipe": "SHA-256 of compact UTF-8 JSON of testedFileSha256 with keys sorted alphabetically.",
+    "approvalFile": "final-review.json",
+    "approvalSha256": "402e80917efb22ae38d063bfd651c21007a236eba0fa0911014603585b40ece0",
+    "lowReadinessFile": "skill-readiness-review.json",
+    "lowReadinessSha256": "5b3dbd7f3cdd648e3ffd76acce78cbe75de5734dd590a394975b317925c7964a",
+    "approvalProjectionSha256": "4f46481927a1b67899a6e0c567c51db7e098456681a5acd118b11732fdf755d4"
+  }
+}

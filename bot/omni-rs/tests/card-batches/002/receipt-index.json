@@ -1,0 +1,831 @@
+{
+  "schema": "swu-card-batch-receipts/v1",
+  "generationCatalogueSha256": "a1153517b32c4613be1f1dd40ab259acaa7c2c1cf3883331b41389f747e3ded2",
+  "corpora": [
+    {
+      "directory": "keyword",
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "fixtures": [
+        {
+          "file": "conditional-grit-negative-combat.jsonl.gz",
+          "sha256": "77f5a26d6f1e9e80fd4bd53d320f1fb25abd48f1df2bbda20a59b7e4ffa31643"
+        },
+        {
+          "file": "conditional-grit-positive-combat.jsonl.gz",
+          "sha256": "9e2c07ba53f2773cb7c5d1f9220f439cb83fd8cd664936ddbcb3ff2efe161314"
+        },
+        {
+          "file": "conditional-saboteur-overwhelm-positive.jsonl.gz",
+          "sha256": "be092bfaec7fc7aba2911eb1d196c17f1a1e7be50efe7c17df7c5f76f2e559c2"
+        },
+        {
+          "file": "conditional-saboteur-shield-overwhelm-spill.jsonl.gz",
+          "sha256": "0a4935ae6487af9b83aa48838302730a9347d29279c5a9eb9e1fedffebc53e27"
+        },
+        {
+          "file": "conditional-shielded-negative-entry.jsonl.gz",
+          "sha256": "227c279eb2ae685680daf77b1637ccdb70115f204188b047a613cf498f191b44"
+        },
+        {
+          "file": "conditional-shielded-positive-entry.jsonl.gz",
+          "sha256": "834248270f467e17cb51b227c6313f3f5b2a03985d79b7489017f464a7b9f480"
+        },
+        {
+          "file": "constant-ambush-entry-attack.jsonl.gz",
+          "sha256": "b6ba99096263442a0cd817651ef508271735bf39e7f81581f0ea7d85ee18e6ba"
+        },
+        {
+          "file": "constant-ambush-entry-decline.jsonl.gz",
+          "sha256": "d33c4cdf6a1d65b56a210d6a4d4b0943fbc3bbb90f4c719ef94e4d35e26419d5"
+        },
+        {
+          "file": "constant-ambush-entry-no-target.jsonl.gz",
+          "sha256": "8a83282fcf6367b371073b8601597624143e75496755e1bbf784aadbd0eaa8fd"
+        },
+        {
+          "file": "constant-ambush-source-unique-keep-new.jsonl.gz",
+          "sha256": "2965d052d56554e25df793b9b66b9452965de0bd44483e649eee79cff064443c"
+        },
+        {
+          "file": "constant-ambush-source-unique-keep-old.jsonl.gz",
+          "sha256": "a60ddd80d3f561b07ecf47c051e0cc66a45f9ce62a5073edb204db2e5c1d0da9"
+        },
+        {
+          "file": "constant-ambush-stat-aura-bounce.jsonl.gz",
+          "sha256": "eccd2c9bcb4947b8b6dbef486e413320645618cb7f6e670e661d8c9668ef94a9"
+        },
+        {
+          "file": "continuous-raid-attack-numeric.jsonl.gz",
+          "sha256": "30ad283a9cb9b356de55010b866c8b0ae37608ad880d34eba0c03b1fdd04fa26"
+        },
+        {
+          "file": "continuous-raid-source-bounce-before-attack.jsonl.gz",
+          "sha256": "88e2079eae5442af45a83af1a9435499e1db7a10aa582ba9b236038bb5ce724c"
+        },
+        {
+          "file": "continuous-restore-captured-before-source-defeat.jsonl.gz",
+          "sha256": "b31e2179be5f4ac6e721a3b24cff72d816002c796c414809ebeffd9bc9b67726"
+        },
+        {
+          "file": "continuous-restore-source-bounce-before-attack.jsonl.gz",
+          "sha256": "ceaeceef6b87868b51cf15c791633c04536e0a062ceb04c47976ea5adbaaa961"
+        },
+        {
+          "file": "keyword-predicate-hp-aura-phase-expiry-lethal.jsonl.gz",
+          "sha256": "7be5032b4a99d0909eba2b0cfafd90a3574267e624b0be8372b814d61e6d3679"
+        },
+        {
+          "file": "mentioned-sentinel-is-not-printed-refugee.jsonl.gz",
+          "sha256": "da92b7191a83fdc50653dc1710e3d060c96aa0fb9b8f3f2b1b97f1fdaf2ae933"
+        },
+        {
+          "file": "mentioned-sentinel-is-not-printed-shuttle.jsonl.gz",
+          "sha256": "ef57bd7450dbc4c77feead28147377ffa52ed2300e7eab148c21526cbdd63a83"
+        },
+        {
+          "file": "phase-raid-printed-aggregation-combat-expiry.jsonl.gz",
+          "sha256": "fbabba3ae9eb68c729e10afcd159b066770fd5f39acc7608c23fe443e6deab6f"
+        },
+        {
+          "file": "phase-restore-printed-aggregation.jsonl.gz",
+          "sha256": "8e7417bffe825028d29fc032f67c1ea6a812bcc2023668f407e101f76e35aa97"
+        },
+        {
+          "file": "phase-sentinel-bounce-cleanup.jsonl.gz",
+          "sha256": "99c754305eb3764894d35b7660a0b452bde5fcdd1ba5aec7ae1834b24d700643"
+        },
+        {
+          "file": "phase-sentinel-expiry.jsonl.gz",
+          "sha256": "0277e0e4c2b586329f9cb48424311aa953225fc12cba4de8153996d3dab29f37"
+        },
+        {
+          "file": "sentinel-restricts-nonsaboteur-attack.jsonl.gz",
+          "sha256": "43aebdacf6db2c3c014951c74c27a98b3671e219de437972946a3d1ee7ae5298"
+        }
+      ]
+    },
+    {
+      "directory": "play",
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "fixtures": [
+        {
+          "file": "ASH_030.jsonl.gz",
+          "sha256": "8676705759aae21f11a01bdc132e1dd9f41a36331138cc4357b3b2b177a380d6"
+        },
+        {
+          "file": "ASH_040.jsonl.gz",
+          "sha256": "6cf2ea6d624a8a2692cbdf522c6cda003b3c1323f0e0030b4845b5b08056786d"
+        },
+        {
+          "file": "ASH_057.jsonl.gz",
+          "sha256": "3b3e587716f9c916bd3cf6db924d9fc246325ea4e160a66bd376ab0c07791969"
+        },
+        {
+          "file": "ASH_078.jsonl.gz",
+          "sha256": "a248ae050b61dc5287ecab00dffa64cda75ee19d698a38da3bd91e5d1d4614ef"
+        },
+        {
+          "file": "ASH_105.jsonl.gz",
+          "sha256": "39c381a85012d2c1b7157d8206858fef8096b7d10357fc50520cdf5df2fecf39"
+        },
+        {
+          "file": "ASH_120.jsonl.gz",
+          "sha256": "b2d3aaf2f089b85a9f3b9d7392ffae6e0641f9ccfc1039c8837dab0548656d0b"
+        },
+        {
+          "file": "ASH_243.jsonl.gz",
+          "sha256": "289028929cff693ba1a35d6474702df6f37e302beb71481d38407a6a9ff9d46b"
+        },
+        {
+          "file": "HMW_039.jsonl.gz",
+          "sha256": "2e8b759fadeab07b81bace9ac273492d9af70f94c6206625fc9217b7ef9084fd"
+        },
+        {
+          "file": "HMW_074.jsonl.gz",
+          "sha256": "ca25d463cc01f9c34d2add1db27a98c016815e6090641fe1fb64b95cdd798af7"
+        },
+        {
+          "file": "HMW_084.jsonl.gz",
+          "sha256": "c613f0c3b84ad65c4443a8bb00a7f1a07a8b29404897b54aab85fa1b525ff7cc"
+        },
+        {
+          "file": "HMW_090.jsonl.gz",
+          "sha256": "72f4be077e88e9c7c31cd086ac44e98c666e31602aba4a98d509763abf103506"
+        },
+        {
+          "file": "HMW_117.jsonl.gz",
+          "sha256": "660a7a9e2d7748c626429aac4b8ba5575e216b4309e2c2f4a4ecf476c007d8e8"
+        },
+        {
+          "file": "HMW_118.jsonl.gz",
+          "sha256": "4646a30a7f0594ba9fd9843192e0553094b71a25340c866ab242d527eeea0ea8"
+        },
+        {
+          "file": "HMW_131.jsonl.gz",
+          "sha256": "f27cb52c668075fbbe4fedd1fe5224c5ec0594a43f2c306c1514ecc6f7d609c7"
+        },
+        {
+          "file": "HMW_137.jsonl.gz",
+          "sha256": "7912a1c07014f254f0c0288146d37ba3f745835235ecfb272db4ffaa6d8e22eb"
+        },
+        {
+          "file": "HMW_142.jsonl.gz",
+          "sha256": "1739e8d4fb2f787f912278b0204ada1e4252a0d26f3b655e55034d221c447ed7"
+        },
+        {
+          "file": "HMW_210.jsonl.gz",
+          "sha256": "eef313bc0e8f212e95b0def03465f45d51255821b72640fd1c85415f1e0d042f"
+        },
+        {
+          "file": "HMW_243.jsonl.gz",
+          "sha256": "22d51dcbbfed91a8dfb710c954b9eb52c8a56a13124eb48726516ceb432493fd"
+        },
+        {
+          "file": "HMW_246.jsonl.gz",
+          "sha256": "5ed42a69d916273e15f7d8e10455746981f3c513f96ffee3c31e66f911cc6eb2"
+        },
+        {
+          "file": "HMW_259.jsonl.gz",
+          "sha256": "12ef0f4f394c4b3034b501461082505f703f7ff0a8d4eae6fcb27be29c4524b5"
+        },
+        {
+          "file": "JTL_107.jsonl.gz",
+          "sha256": "e4b10bd28ca7aeca1d89720d4bfd7898a7562dfd8734b05882467c00d3717973"
+        },
+        {
+          "file": "JTL_113.jsonl.gz",
+          "sha256": "216e7acd05e7e6621ce9cfdd1fd983d8adeeabce0150b16c94453cddc5c105e6"
+        },
+        {
+          "file": "JTL_161.jsonl.gz",
+          "sha256": "62506fb0e180b70a60e05de6e8e22fccdc97a092e3592d54b2334e3297f3bece"
+        },
+        {
+          "file": "JTL_229.jsonl.gz",
+          "sha256": "be3dabbd2f0558f946f9ace371c59fcc5521629b99ab009b4423b0f189473f27"
+        },
+        {
+          "file": "JTL_257.jsonl.gz",
+          "sha256": "a0139c84ee099559369a9e994a4ef2b64cc12a79be2e3f27289685167c818bed"
+        },
+        {
+          "file": "LAW_104.jsonl.gz",
+          "sha256": "115c48ecb1ba07ee7bce1750a5db9a85ff5414b1f44d83fd62427365ae59ee42"
+        },
+        {
+          "file": "LAW_105.jsonl.gz",
+          "sha256": "231aa46868ff8712630e600125bc3de974dd86933c7aa64f80ffbc461e04f259"
+        },
+        {
+          "file": "LAW_182.jsonl.gz",
+          "sha256": "5758b752eacd76b2e91a66b4a3fa802b74bb0f57cd5f439364115e9c6cd8ad7c"
+        },
+        {
+          "file": "LOF_114.jsonl.gz",
+          "sha256": "d5bd2d3dff05655b4368585f6ef4c3bbf9a2bc7d25677718d6f47ea6337c593a"
+        },
+        {
+          "file": "LOF_118.jsonl.gz",
+          "sha256": "433e9441379839539fac394f66742b5969c6606777e425072eabd5d7f9a91098"
+        },
+        {
+          "file": "LOF_162.jsonl.gz",
+          "sha256": "3d7732f91bbab10a8f281d72cd108c1ba189c66727a625b29ec1fde2e8bfdb3f"
+        },
+        {
+          "file": "LOF_169.jsonl.gz",
+          "sha256": "95f978f97d466614c68c00b0e902fb810edfa5837c8d4a1e66be91eeae361226"
+        },
+        {
+          "file": "LOF_212.jsonl.gz",
+          "sha256": "7af7ed9baa42ef9ffb7293dd2aeb0f668d3345939daa810b867450ee84903e28"
+        },
+        {
+          "file": "LOF_223.jsonl.gz",
+          "sha256": "4e84527b299fb57e464e545e3b35b91f65ec8287775736dd93c1590721ca870f"
+        },
+        {
+          "file": "SEC_029.jsonl.gz",
+          "sha256": "abb7b1c385f60a83b8a082aaeb5a32fc869a678928c889199af2554b07c97479"
+        },
+        {
+          "file": "SEC_045.jsonl.gz",
+          "sha256": "ccb5e467fcc15f83905d61d22830727786eb33ced0dc330da6dd4a239cce86ee"
+        },
+        {
+          "file": "SEC_047.jsonl.gz",
+          "sha256": "3242311c5e34fedeff69f4cb36c5c9a2ef7fa2c8fa926921107d91f5ced1f92b"
+        },
+        {
+          "file": "SEC_063.jsonl.gz",
+          "sha256": "3acf96cad4284e2e6d1e8594aed590aa83d8cbd1b5f636a7f89147ca850d5626"
+        },
+        {
+          "file": "SEC_079.jsonl.gz",
+          "sha256": "f6f0aea82f9298921cca4b198ae12e01dd0e023d8572994eb57d2173fb2c8c89"
+        },
+        {
+          "file": "SEC_116.jsonl.gz",
+          "sha256": "ebc71e4850875216bdad97f66c2ada5d66aa4ab10c2c9c2faedde6eff814f1bb"
+        },
+        {
+          "file": "SEC_134.jsonl.gz",
+          "sha256": "77b563e29d126ecd6f8e01815bd404a36d55e84bb159f5bbc95b3b18def2bfa4"
+        },
+        {
+          "file": "SEC_249.jsonl.gz",
+          "sha256": "d66810025aa95e3af60802c67d7a71be23ce7ecb33adac1c9475cf17f6fbfb9d"
+        },
+        {
+          "file": "SHD_034.jsonl.gz",
+          "sha256": "2f7c9ffe39b0d704a9ac0e081ddb5896b2904fb6a0ba14d487d7b566d1abc02b"
+        },
+        {
+          "file": "SHD_112.jsonl.gz",
+          "sha256": "fbd11276292f0ca28fb35fad6e3786c43db39fd46fe4df04e65282ea7db6e5d3"
+        },
+        {
+          "file": "SHD_169.jsonl.gz",
+          "sha256": "711a20f9a76fc0edfb0768abb667da3085faba7aa49094d3ad3029cbfbc86f8d"
+        },
+        {
+          "file": "SHD_212.jsonl.gz",
+          "sha256": "ad4e544f8489fce67d66e4792579d6f75b66490e2615781ea00104980f312070"
+        },
+        {
+          "file": "SHD_247.jsonl.gz",
+          "sha256": "c289c8495c19c80af617499eb7a97a7e0f78c931e53825be59f091dae3c64ad3"
+        },
+        {
+          "file": "SOR_048.jsonl.gz",
+          "sha256": "a248d23a7d68bc0942dccede0d386a5dcdc88a537774b241a007d5bdbe414c1e"
+        },
+        {
+          "file": "SOR_065.jsonl.gz",
+          "sha256": "86175184cfb914ae2161998794c0fd4e453cbdf67414e34e9ca27423956cb46c"
+        },
+        {
+          "file": "SOR_079.jsonl.gz",
+          "sha256": "ff971cda0b1404b79d4a3c926ac2451f09751a20c2a5b1216aba6657cd41668f"
+        },
+        {
+          "file": "SOR_086.jsonl.gz",
+          "sha256": "f4bc226452b37bb2b968c6927cc94cac4b1fc53446d05a34807b999d518592c9"
+        },
+        {
+          "file": "SOR_100.jsonl.gz",
+          "sha256": "ee31fd5f95cc358f1d9bc88bbd2cd519ed8a5ef548d89fe55138be3109b03a8c"
+        },
+        {
+          "file": "SOR_112.jsonl.gz",
+          "sha256": "bc781c2c08a3831aa8b912bea9849b2bf819af0bbb1cab97358f0c876b225ce9"
+        },
+        {
+          "file": "SOR_114.jsonl.gz",
+          "sha256": "6bc299097c390959c50459d11607ef25b46fcca5e1e98ec79ec6e7a40b7a292b"
+        },
+        {
+          "file": "SOR_140.jsonl.gz",
+          "sha256": "e015b10e64aaa116db3f29d7158fa1fef339d03c0931bb05eed6d58cc52cdf19"
+        },
+        {
+          "file": "SOR_144.jsonl.gz",
+          "sha256": "f35be0bfa06b959395ba8c0d7c1dce2b6b7c8c2e82f7588d26e169ec70c84a95"
+        },
+        {
+          "file": "SOR_156.jsonl.gz",
+          "sha256": "9f41df5db3a693ffb44c446b2b4b002f98a25a0e6b31724646febe0bc53cbdb4"
+        },
+        {
+          "file": "SOR_159.jsonl.gz",
+          "sha256": "a63d1c20ca23e729fca986c62ac2d8f7f9599068f906c81062d8e50926ee0e2d"
+        },
+        {
+          "file": "SOR_211.jsonl.gz",
+          "sha256": "76cc532fc8da0bf91f5c50293805f2b34786a30b1f5883c9216d7eaad21cd1f9"
+        },
+        {
+          "file": "SOR_249.jsonl.gz",
+          "sha256": "4370af5c6eeed98a1dee133b6154abee779744421ca1b87f25325fa130ff39e6"
+        },
+        {
+          "file": "TS26_020.jsonl.gz",
+          "sha256": "a008947b258b1872511864aa36c96f1c2e32e1b97177122940f49a8863136ebb"
+        },
+        {
+          "file": "TS26_040.jsonl.gz",
+          "sha256": "ca8831d81f7ed6be472707107d98d5d196f8010d60b4393163b537ff958c331d"
+        },
+        {
+          "file": "TWI_054.jsonl.gz",
+          "sha256": "a329cd8bad97022ab76c5b87a5f41d407ca63a42090a112e89f74abc80c63798"
+        },
+        {
+          "file": "TWI_062.jsonl.gz",
+          "sha256": "36525b2d57622fc9110fbe85132b5a4885fde29c872efebf5c89fbb90bce9a36"
+        },
+        {
+          "file": "TWI_081.jsonl.gz",
+          "sha256": "7079e8f8c24ba1164e3439b7e8aba2f7f884cceb2cf3df727ebf1ee261562a79"
+        },
+        {
+          "file": "TWI_130.jsonl.gz",
+          "sha256": "46388bbef19e270b459ed986500f1f6829dde13e911665254ba46512e28c93ef"
+        },
+        {
+          "file": "TWI_180.jsonl.gz",
+          "sha256": "a8b157d42dd15f544750f345c5f4db63a289413b12c12e7fce9f24e14235fe40"
+        }
+      ]
+    },
+    {
+      "directory": "keyword-review",
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "fixtures": [
+        {
+          "file": "constant-loss-marrok-shield-defeat-restores-sentinel.jsonl.gz",
+          "sha256": "c482d94c0359ca3e6fabae5ce2986220302e8d9b0f1b0485ab60f671e5a77483"
+        },
+        {
+          "file": "constant-loss-marrok-shield-enables-saboteur.jsonl.gz",
+          "sha256": "c71f018857c26223bdb17956b3cf8101f91ddb434b4bf6b986f86fcec7e956f5"
+        },
+        {
+          "file": "live-raid-all-resources-enables-overwhelm-shield-blocks.jsonl.gz",
+          "sha256": "c413b75531edd9bc2e7a5796352bd1c0b277510aab873699289c225e895f9b16"
+        },
+        {
+          "file": "live-raid-zero-to-three-combat.jsonl.gz",
+          "sha256": "6c961b8e423cc1cc669236374132bf094c9abfe6b61f8ced89d7e524390a02ac"
+        },
+        {
+          "file": "phase-grit-combat-expiry.jsonl.gz",
+          "sha256": "64885926f46a995e7b9c1761f6969960483ec0f724d5078d59a70d92b5477e5b"
+        },
+        {
+          "file": "phase-raid-double-grant-stack-and-expiry.jsonl.gz",
+          "sha256": "1c08bd6493ca14b7585a6d2a8200b4bb38e27bd95d371cdef20780a630509edd"
+        },
+        {
+          "file": "phase-sentinel-loss-removes-hp-lethal.jsonl.gz",
+          "sha256": "98f7b1ba8990536f16bc8774b890c0cea8323baed67a0e14e31a9ccbb9110aa4"
+        },
+        {
+          "file": "phase-sentinel-loss-survivor-expiry-reacquires.jsonl.gz",
+          "sha256": "ea440a1e4c92608700ebe456464b24ee63cb171dbf5025ad0e082b063119dbdc"
+        }
+      ]
+    },
+    {
+      "directory": "group",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "generationCatalogueSha256": "fcf34bb16de777eb01b6566d32f11475620f035ec64abe142d1060ab12e8861a",
+      "conformance": "engine only; fresh native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "aura-source-and-target-simultaneous-lethal.jsonl.gz",
+          "sha256": "9d2c0f6c4b6cd4f2d2661666387bb38eeefdb097bbbb1ccb81b6e8ab6bb2599a"
+        },
+        {
+          "file": "baylan-leader-action-condition-false.jsonl.gz",
+          "sha256": "c9897aa8c518a427f853f038bd4db7bfa7206017e6b428476d9c4befbcb21406"
+        },
+        {
+          "file": "baylan-leader-action-condition-true.jsonl.gz",
+          "sha256": "043474124d9a6f42912dca8cd1ad746d6c9716cabbc222d58a397fe5488cbe04"
+        },
+        {
+          "file": "both-players-multiple-shields-replacement.jsonl.gz",
+          "sha256": "0027d7f5d69ed24df15709a9433de02e4e34a59eed844e21d627b9fd7653a9b4"
+        },
+        {
+          "file": "chaos-both-lethal-bases-draw.jsonl.gz",
+          "sha256": "660f8e093524e48195314dc3a54c597086c0d5deaf8db3fa10ebc03c17c7e8b5"
+        },
+        {
+          "file": "chaos-different-hand-amounts-captured.jsonl.gz",
+          "sha256": "64f4d6fbf1a188d3e2b23d2630b1b9e118ae62fe2ebd3cd94f138e34be010e2d"
+        },
+        {
+          "file": "fifth-brother-group-damage-before-live-raid-combat.jsonl.gz",
+          "sha256": "a6257111f8c3c089881400093dc9ea5a943cc6d22eb0a4d066ba98a45658d193"
+        },
+        {
+          "file": "ghost-array-token-generation-order.jsonl.gz",
+          "sha256": "b6d7101cda1dae098e79bd34c3e304a4f3ab1b18df2e2440ee144777f0bd8751"
+        },
+        {
+          "file": "grievous-leader-action-enemy-droid-positive.jsonl.gz",
+          "sha256": "81e4fe0ab29894d56eae0dba0a9cf9ed01590784d6c5cfa43c702d9ecbb81340"
+        },
+        {
+          "file": "grievous-leader-action-negative-target-filter.jsonl.gz",
+          "sha256": "ccf7014c406a12e99fb15ef748ec3b26d35819102a9325017bbda93d65348fec"
+        },
+        {
+          "file": "heal-shield-group-damaged.jsonl.gz",
+          "sha256": "67a83cc3b51aa5864d5fb5d8abbb95cca9a08c4b55013ca86b27a0762a6e0bb5"
+        },
+        {
+          "file": "mandalorian-heal-all-two-shields.jsonl.gz",
+          "sha256": "6f0a2ec85b891330ddaf19591027f764d4036f36f58ef80f1910b4035e7e1325"
+        },
+        {
+          "file": "nested-independent-base-then-unit-captured.jsonl.gz",
+          "sha256": "fcb1f3ca357d40916caaf3f7374e1b2cba96fd8f1a44af3d63a7d9830e3973e9"
+        },
+        {
+          "file": "nested-none-damage-still-heals-base.jsonl.gz",
+          "sha256": "31aff07b9565c16165c4609f73aa9b09bf2820eb75f1a6bc46d00776294ea968"
+        },
+        {
+          "file": "nested-none-unit-still-heals-base.jsonl.gz",
+          "sha256": "3a19a8556e76d4e4aa671b0fea627411539b547a9d487c7ce20fc3705febddee"
+        },
+        {
+          "file": "nested-optional-entire-group-decline.jsonl.gz",
+          "sha256": "e102cc72cdd062a5d5ee4a8b0a3e644be66693f8905473781260a4eb5c2e0425"
+        },
+        {
+          "file": "same-player-two-shielded-units-replacement.jsonl.gz",
+          "sha256": "c6d6b9d0d6cfad39db1cb38f834fb7cc1d25e9fdcc20dfc5c24d9883a78ad112"
+        },
+        {
+          "file": "unlimited-bases-0-selection.jsonl.gz",
+          "sha256": "c5622e0fc70b041e3d8039d9bf44c27dac69cb34956a2c41bb501f43395eb95f"
+        },
+        {
+          "file": "unlimited-bases-1-selection.jsonl.gz",
+          "sha256": "19266fc8a51724da45d6a12c81fd14d924781d4b8134370d6b9a63ee6e84df15"
+        },
+        {
+          "file": "unlimited-bases-2-selection.jsonl.gz",
+          "sha256": "ad8efa69eead595e2c54fb8d21f444ea37a40b19209160576c1c5faf57887876"
+        },
+        {
+          "file": "unlimited-bases-toggle-ordered.jsonl.gz",
+          "sha256": "5f469b71bba6b025e9f8b884870e28e167c158c1087cc7ed7a675f58448084cb"
+        },
+        {
+          "file": "unlimited-bases-undamaged-selectable-zero-heal.jsonl.gz",
+          "sha256": "1c0b2d913c6244ca0db75e1529ab9b82e235adfe72e0883c05a34006cecc5ce9"
+        },
+        {
+          "file": "up-to-event-outer-cancel-no-cost.jsonl.gz",
+          "sha256": "a16722e8d39b389f3a90d0881d1dd82be2c3944ccef4fa9647538c2cfc34e8c0"
+        },
+        {
+          "file": "up-to-three-damage-0-selection.jsonl.gz",
+          "sha256": "6bd0df294aba5666dd3790100fff563345de0d49f3c84033b5351139579ab6f8"
+        },
+        {
+          "file": "up-to-three-damage-1-selection.jsonl.gz",
+          "sha256": "08bf35cf788edcb24e010674aaa526c0394222278e403acbbbd6c54c3f30722c"
+        },
+        {
+          "file": "up-to-three-damage-2-selection.jsonl.gz",
+          "sha256": "e6e9e8b156ec7e1f7dad29b284909434ecef7191163d6e21beb586c4bb262a59"
+        },
+        {
+          "file": "up-to-three-damage-3-selection.jsonl.gz",
+          "sha256": "3628e62e4062eb66a3798e68040d73b4e404990bfde3556a7155dd0185f172df"
+        },
+        {
+          "file": "up-to-three-toggle-at-limit-ordered.jsonl.gz",
+          "sha256": "9edb11da86fc0f46b47d9eab85669c7ff302feb1c4e563abe5956a87c13ff581"
+        }
+      ]
+    },
+    {
+      "directory": "group-play",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "generationCatalogueSha256": "fcf34bb16de777eb01b6566d32f11475620f035ec64abe142d1060ab12e8861a",
+      "conformance": "engine only; fresh native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "ASH_071.jsonl.gz",
+          "sha256": "37c3b658e579acdf806bf120681b7664157c35f20980e4f62695ee5fb7ca7dd1"
+        },
+        {
+          "file": "ASH_089.jsonl.gz",
+          "sha256": "6196ec86ba40d24062dd6ba2c5bdadf18f4fb923ce1fae006e9275dea54bde0e"
+        },
+        {
+          "file": "ASH_142.jsonl.gz",
+          "sha256": "2b10fac0248c89a3d5c9ce46d6a8db8636207433c3cc4bb720ed52a052a776c4"
+        },
+        {
+          "file": "ASH_233.jsonl.gz",
+          "sha256": "d6c7aad2cc12e75e61757a000c918454b01453b661ab6386be2de2ff7f4b265c"
+        },
+        {
+          "file": "HMW_091.jsonl.gz",
+          "sha256": "61eff3f59bb56b69d7aa99b9f6de10bc15d108121b994456d15882bbcbdd0fe5"
+        },
+        {
+          "file": "HMW_186.jsonl.gz",
+          "sha256": "10953fd5b6a684635ac15aa9da17f6c7b0f4ffc513a3bdd7831d8337c883d5b5"
+        },
+        {
+          "file": "IBH_068.jsonl.gz",
+          "sha256": "66b32ec52caf90fc6ed2448f631895b80d6dbf4a3d00c4e8304e93199253446b"
+        },
+        {
+          "file": "IBH_104.jsonl.gz",
+          "sha256": "f6c0a61cbcdf2b2dabde6e6cb08fec437ec6a29faa2032e1b31249c6aad72c2c"
+        },
+        {
+          "file": "JTL_072.jsonl.gz",
+          "sha256": "fc1682bb5992e3e241c2c055926b5c704f255a86eb4914b5140b77ee15623ab9"
+        },
+        {
+          "file": "JTL_140.jsonl.gz",
+          "sha256": "da2d36ccf90d3e93de007c3c4cad07f62b129346fce0b5f72735899a7ea029d1"
+        },
+        {
+          "file": "LAW_043.jsonl.gz",
+          "sha256": "42b9ff17eb181aec2a32c67019135cb6cc81739171b9c16e80075dff5ee17d06"
+        },
+        {
+          "file": "LAW_069.jsonl.gz",
+          "sha256": "074425b27993c3b034d43ed845f5e29d86b20dd5e01dff48dacdb4eb287026bf"
+        },
+        {
+          "file": "LAW_183.jsonl.gz",
+          "sha256": "2e9d414828614edf081764203e0857d7f238e3fce52a1109bc420d869a9267b7"
+        },
+        {
+          "file": "LOF_099.jsonl.gz",
+          "sha256": "ed57767375d85f3d9282fa0dabcc193a8b30a73a8d9e460e10c891186ddfb5fc"
+        },
+        {
+          "file": "LOF_126.jsonl.gz",
+          "sha256": "14d96141a44019260d08b7514b92f640e5febaf4a1e404dd8c5d99c10b13770a"
+        },
+        {
+          "file": "LOF_167.jsonl.gz",
+          "sha256": "5f61fbe57ad374981cc5c32eccd4b256efce69cbe6117052a06be0ae81ad0624"
+        },
+        {
+          "file": "SEC_124.jsonl.gz",
+          "sha256": "1386e2806f6a4629c7893772b1d6ab8b2d7b8770f6fbb179ff7b22b44c772780"
+        },
+        {
+          "file": "SEC_155.jsonl.gz",
+          "sha256": "cd5faf144593d01e23f6a91deca0e531563877448bfd802b90d6521c0c381a90"
+        },
+        {
+          "file": "SEC_165.jsonl.gz",
+          "sha256": "1ee260e1cfd00878f76ca2fae1bb73091bf95d80909b654d465a3dc2b8385285"
+        },
+        {
+          "file": "SEC_258.jsonl.gz",
+          "sha256": "310f6f1c4fcaa027f730673ad05aae87e43393d022b5b6eaad83d8bb0bacce0b"
+        },
+        {
+          "file": "SHD_047.jsonl.gz",
+          "sha256": "0dbcfc410ef11c74a17519322d6ec181864c5c78eaed511a03b212926a3eafe4"
+        },
+        {
+          "file": "SHD_049.jsonl.gz",
+          "sha256": "b0885fb9212411307cccf02907fb9a73132e21860b35a405a51ab39d1ea3a993"
+        },
+        {
+          "file": "SHD_081.jsonl.gz",
+          "sha256": "e0e78887d2de3cb3a527b5ce9547193ee801f5b1d61eedfca320fb13c93626c7"
+        },
+        {
+          "file": "SHD_159.jsonl.gz",
+          "sha256": "d44c1b994933e76e7fe71045278c79575394ac7065fe078e94c024d038e5f84a"
+        },
+        {
+          "file": "SOR_076.jsonl.gz",
+          "sha256": "0523ece17b224d9fa1643d551e1e0126bc0a0dfd306d97626acb9f471b9ec75e"
+        },
+        {
+          "file": "SOR_131.jsonl.gz",
+          "sha256": "143eb285011f97c1d9a202176daaa02c8f2d412f6feb1830dfea61d1507cfd54"
+        },
+        {
+          "file": "TS26_053.jsonl.gz",
+          "sha256": "c70cce2eca21a841e02903e4b6d9e5a593a18252c43e819fcccc7e268e666552"
+        },
+        {
+          "file": "TS26_069.jsonl.gz",
+          "sha256": "f57b9cadb91f1261535d2c395709348b75ad37d9fa2ea21166affaa8b6da8122"
+        },
+        {
+          "file": "TWI_074.jsonl.gz",
+          "sha256": "2420ae36b23e7324182f3a83c46db499ae0c768c91411ff9f38665c9e3864cb8"
+        }
+      ]
+    },
+    {
+      "directory": "group-leaders",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "conformance": "engine only; native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "baylan-deployed-attack-condition-false.jsonl.gz",
+          "sha256": "22e8a860172dde785f7613747b5e562ef1d0443f78c7b453fb82c5e93a7bfafb"
+        },
+        {
+          "file": "baylan-deployed-attack-condition-true.jsonl.gz",
+          "sha256": "f2f514f1c35074c44e2bac0fd332565baec6b7d9f4d3b94be9bb030863cecef4"
+        },
+        {
+          "file": "grievous-deployed-attack-enemy-droid-positive.jsonl.gz",
+          "sha256": "4526ffb1c9878e43f4cdd3fb0dd066dc1115758a8f7f34060d2aafd6d3ab5852"
+        },
+        {
+          "file": "grievous-deployed-attack-negative-target-filter.jsonl.gz",
+          "sha256": "5e871a9b4c7e2b6dc575bd728f2499122cf39e661eda6e4c27bbf51b7a7050b2"
+        }
+      ]
+    },
+    {
+      "directory": "group-order",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "conformance": "engine only; native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "reverse-target-lethal-damage-discard-order.jsonl.gz",
+          "sha256": "9bd129dba4bb4a0b5dc2bfb776ad6fca374f60681a441b3ec4cdf6deee8c3974"
+        }
+      ]
+    },
+    {
+      "directory": "group-shields",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "conformance": "engine only; fresh native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "three-targets-three-shields-both-owners-opponent-first.jsonl.gz",
+          "sha256": "5d243eb3fff9402b11294e5e5b4209d9ef68d9e82fad4b092f4e77daada63310"
+        },
+        {
+          "file": "three-targets-three-shields-both-owners-you-first.jsonl.gz",
+          "sha256": "2016106da4a233b623297302ef0051e7aa2230e82c42f752a2a0c993808b4b31"
+        }
+      ]
+    },
+    {
+      "directory": "title",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "conformance": "engine only; fresh native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "title-derived-ambush-entry-attack.jsonl.gz",
+          "sha256": "6321714b7e5f31d811ef4ab0c6e3a524fa78af6bb65043e839d160402e36105e"
+        },
+        {
+          "file": "title-derived-ambush-entry-decline.jsonl.gz",
+          "sha256": "39f6185e0e345c3d53356ddd1b3e6a914e1c956a6b23f103710efa12a7e28cf2"
+        },
+        {
+          "file": "title-derived-saboteur-ambush-removes-shields.jsonl.gz",
+          "sha256": "07b45308ef1fe613bc5adcbec975a8bd55fbecd1197816338c3c6302f37208ca"
+        },
+        {
+          "file": "title-grants-friendly-only-printed-and-derived.jsonl.gz",
+          "sha256": "279081ff93181dcc65bb06c53462dcd19869113fc5091a4f6fa214d8c1b3db4e"
+        },
+        {
+          "file": "title-grants-opponent-excluded.jsonl.gz",
+          "sha256": "c599024175426e8e79dd9ce66d65a016cef9bf7ccacadf724919a83919421ec7"
+        },
+        {
+          "file": "title-source-leaves-hp-loss-lethal.jsonl.gz",
+          "sha256": "b7b9b53fc6a4c197ca0159ed80a3143aab4897c28e1c90ada3bccfd87cafa667"
+        },
+        {
+          "file": "title-source-leaves-saboteur-and-stats-expire.jsonl.gz",
+          "sha256": "cda6211ff63fcd64ae7f664666781b894a0cc4a77b5840a42ab8a6fa9ab90ba8"
+        }
+      ]
+    },
+    {
+      "directory": "title-play",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "conformance": "engine only; fresh native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "SHD_188.jsonl.gz",
+          "sha256": "3aeafac0ed900547c428743a43128047fdeb7d0271b398b359e46641e386ad8e"
+        },
+        {
+          "file": "SHD_190.jsonl.gz",
+          "sha256": "2b2639a952c4b67aa4e2c7e776e8e5da3141f18be9590c3fe5eb04b7f74984ca"
+        }
+      ]
+    },
+    {
+      "directory": "group-hp",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "conformance": "engine only; native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "last-shield-hp-loss-damage-before-stat-defeat.jsonl.gz",
+          "sha256": "1a995eb03f9a10de44a7847b6424bccf927a4882e1d8223f27adf9443f3d7ed7"
+        },
+        {
+          "file": "snoke-last-shield-preselected-dead-set-follower-first.jsonl.gz",
+          "sha256": "0e68267076fb9ada740898d9b8100d6f77d4b7b2a8a4dda5cebe96ca7f79fd03"
+        },
+        {
+          "file": "snoke-last-shield-preselected-dead-set-snoke-first.jsonl.gz",
+          "sha256": "22e9869f46bd4f2c7eac4162c19e46f75b92c8afd6e8bbfd5fdb276a786b5e52"
+        }
+      ]
+    },
+    {
+      "directory": "group-completion",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "generationCatalogueSha256": "acfd4d819063572bdf99af696aa03f55fa2430484b31c7ec4b6a77701e910603",
+      "conformance": "engine only; native and Wasm unassessed",
+      "fixtures": [
+        {
+          "file": "completion-up-to-defeat-0-selected.jsonl.gz",
+          "sha256": "b81576477b0ae0a9dff7d84ffcf2e4071607a3be375041fd65ae264dc1b54288"
+        },
+        {
+          "file": "completion-up-to-defeat-2-selected.jsonl.gz",
+          "sha256": "5c2bd1f13121a37ffef69b44564b68d8bc0345fcd437b632a9e851d47e4793ac"
+        },
+        {
+          "file": "completion-ready-shield-already-ready.jsonl.gz",
+          "sha256": "152bf85b1719189739b87e0dc0aabbcb3311c4fc03d94a2556e51fdedf0a470c"
+        },
+        {
+          "file": "completion-ready-shield-exhausted.jsonl.gz",
+          "sha256": "1d24c9dbbd782d4e90412a8abc428d3614683b9e8bf8cedf265c589b59a1aeb4"
+        },
+        {
+          "file": "completion-damage-ready-friendly-low-power.jsonl.gz",
+          "sha256": "372803327b183ec3771034864b20b291f317659279f6a2d9abf017299f8adcc6"
+        },
+        {
+          "file": "completion-damage-ready-clone-false.jsonl.gz",
+          "sha256": "4c595b68ca48af71df29698139fdfb2082ce3955aa49d822f2f9a25381f2c39a"
+        },
+        {
+          "file": "completion-damage-ready-clone-true.jsonl.gz",
+          "sha256": "3eeb1914c29cf50c4f8dba24c823155af23417ebca3615c44ed3b7bbfdc00675"
+        },
+        {
+          "file": "completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+          "sha256": "c619b36b7b9a93b547af1abfac69b2fb1e83570892c9e1b26bfb2eba9b4e5610"
+        },
+        {
+          "file": "completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+          "sha256": "1e2e0b44302c33274fe89a452b1b7d8e6de71d5e3349760c7b64a2656a110743"
+        },
+        {
+          "file": "completion-phase-overwhelm-and-stats-expire.jsonl.gz",
+          "sha256": "77f179d3b122801ddf3ae7affe6967687a9540d7aee99229cb3f1ccb6d089b9f"
+        }
+      ]
+    }
+  ],
+  "retiredFixtures": "retired-fixtures/rejections.json"
+}

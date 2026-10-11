@@ -63,8 +63,10 @@ The compiler lowers declarative action, event, when-played, on-attack,
 when-defeated, and related registrations. It preserves costs, conditions,
 targeting, continuations, dynamic amounts, and distinct sequential/simultaneous
 effects. It understands bounded expression trees, enum values, readonly callback
-locals, and an explicit query vocabulary. Display-only titles are rendered as
-plain text; dynamic title values become placeholders and are not executed.
+locals, and an explicit query vocabulary. Supported trigger-menu `contextTitle`
+expressions retain live scalar values in a bounded fragment list. Static text
+helpers preserve engine formatting, including numeric keywords and multiword
+traits; unknown helpers and unsupported dynamic expressions are rejected.
 
 Phase stat modifiers capture bounded signed power/HP values when applied and
 expire together at phase end. Constant stat modifiers support static self and
@@ -72,13 +74,28 @@ aura bonuses with bounded conditions and target filters. Arena count/existence
 queries preserve their outer target separately from each queried card. Live
 stat calculations and stat-dependent constant conditions remain rejected.
 
+Constant and phase effects can grant or remove the supported core keywords.
+Numeric Raid and Restore stack, while boolean keywords track presence. Live
+numeric conditions are restricted to supported queries; keyword dependency
+cycles and unsupported duration/value shapes remain rejected. Intrinsic
+keywords require the engine's printed-text match: a keyword in the downloaded
+metadata may only be mentioned or granted to another card.
+
+Bounded simultaneous groups preserve separate event preparation and resolution.
+The runtime supports selected combinations of damage, healing, tokens, readiness,
+and phase modifiers, with independent nested selections. Up-to selections retain
+click order, toggles, and zero selections; unlimited selection is currently
+restricted to the two bases. A single phase-effect call with several modifiers
+remains one lasting effect. Group admission rejects unsupported continuations,
+ambiguous repeated damage, and reference scopes the runtime cannot preserve.
+
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or
 side-effecting callbacks. Other constant abilities, arbitrary event watchers,
 other lasting effects, custom inheritance, many zones, and many other rule families remain
 work items in the coverage report. The Rust operation set is narrower still.
-In particular, source conversion of a simultaneous effect does not imply that
-Rust implements an event batch.
+Source conversion of a simultaneous effect does not imply runtime support for
+every operation or interaction in that group.
 
 Continuation factories that capture a target across new targeting, or dynamic
 values across multiple effects, are rejected until the IR has explicit capture

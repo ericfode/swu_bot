@@ -51,7 +51,8 @@ fn resources(e: &Engine, s: &mut State, seat: Seat, count: u8) {
 fn state_is_inline_copy_and_hash_covers_prompts_and_deck_order() {
     fn copy<T: Copy>() {}
     copy::<State>();
-    assert!(std::mem::size_of::<State>() < 8192);
+    assert!(std::mem::size_of::<State>() < 11008, "inline state bytes: {}", std::mem::size_of::<State>());
+    eprintln!("inline state bytes: {}; card bytes: {}", std::mem::size_of::<State>(), std::mem::size_of::<Card>());
     let e = engine();
     let mut s = board(&e);
     let a = add(&e, &mut s, Seat::P1, "LOF_254");
@@ -112,7 +113,7 @@ fn raid_and_grit_are_dynamic_and_only_raid_needs_attacking() {
     assert_eq!(e.power(&s, grit, false), 2);
 }
 #[test]
-fn overwhelm_hits_base_even_when_shield_prevents_unit_damage() {
+fn shield_replacement_prevents_overwhelm_contingent_damage() {
     let e = engine();
     let mut s = board(&e);
     let a = unit(&e, &mut s, Seat::P1, "ASH_029");
@@ -121,7 +122,7 @@ fn overwhelm_hits_base_even_when_shield_prevents_unit_damage() {
     s.card_mut(d).shield = shield;
     let s = click(&e, click(&e, s, a), d);
     assert!(s.is_action_window());
-    assert_eq!(s.card(s.players[1].base).damage, 3);
+    assert_eq!(s.card(s.players[1].base).damage, 0);
     assert_eq!(s.card(d).damage, 0);
     assert_eq!(s.card(d).shield, 0);
     assert_eq!(s.card(a).damage, 1);

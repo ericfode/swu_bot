@@ -11,7 +11,7 @@ test('phase stats preserve signed stacked modifiers independently of visible sta
 });
 test('unknown durations, mechanics and out-of-bound values cannot silently lose state', () => {
     assert.throws(() => phaseStats(card([effect(1, 1, 'untilEndOfRound')])), /duration/);
-    assert.throws(() => phaseStats(card([effect(0, 0, 'untilEndOfPhase', 'gainKeyword')])), /phase effect/);
+    assert.throws(() => phaseStats(card([effect(0, 0, 'untilEndOfPhase', 'gainKeyword')])), /phase keyword/);
     assert.throws(() => phaseStats(card([effect(65535, 0), effect(1, 0)])), /bounds/);
     assert.throws(() => phaseStats(card([effect(1.5, 0)])), /value/);
 });
@@ -20,4 +20,22 @@ test('registered constant stats are derived while persistent lasting effects rem
     constant.source = { getConstantAbilities: () => [{ registeredEffects: [constant] }] };
     assert.deepEqual(phaseStats(card([constant, effect(-1, 0)])), { phaseStats: { power: -1, hp: 0 } });
     assert.throws(() => phaseStats(card([effect(2, 2, 'persistent')])), /duration/);
+});
+
+const keywordEffect = (value, type = 'gainKeyword', duration = 'untilEndOfPhase') => ({ type, duration, getValue: () => value });
+test('phase keyword ledger preserves gains under loss and aggregates numeric stacks', () => {
+    assert.deepEqual(phaseStats(card([keywordEffect({ keyword: 'sentinel' }), keywordEffect([{ keyword: 'sentinel' }, { keyword: 'raid', amount: 2 }]), keywordEffect({ keyword: 'raid', amount: 3 }), keywordEffect(['raid', 'sentinel'], 'loseKeyword') ])), {
+        phaseKeywords: { raid: 5, sentinel: 1 }, phaseLostKeywords: ['sentinel', 'raid']
+    });
+    assert.deepEqual(phaseStats(card([keywordEffect({ keyword: 'restore', amount: 0 })])), { phaseKeywords: { restore: 0 } });
+});
+test('phase keyword export rejects unsupported mechanics, malformed values and lasting effects', () => {
+    for (const value of ['hidden', { keyword: 'raid', amount: -1 }, { keyword: 'raid', amount: 1.5 }, { keyword: 'sentinel', amount: 1 }, { keyword: 'restore', amount: 1, extra: true }]) {
+        assert.throws(() => phaseStats(card([keywordEffect(value)])), /keyword/);
+    }
+    assert.throws(() => phaseStats(card([keywordEffect('sentinel', 'gainKeyword', 'untilEndOfRound')])), /duration/);
+    const constant = keywordEffect('sentinel', 'gainKeyword', 'persistent');
+    constant.source = { getConstantAbilities: () => [{ registeredEffects: [constant] }] };
+    assert.deepEqual(phaseStats(card([constant])), {});
+    assert.throws(() => phaseStats(card([keywordEffect('sentinel', 'gainKeyword', 'persistent')])), /duration/);
 });

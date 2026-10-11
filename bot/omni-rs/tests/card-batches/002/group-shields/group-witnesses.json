@@ -1,0 +1,113 @@
+{
+  "evidenceStatus": "engine observations",
+  "conformance": "unassessed; fresh native and Wasm comparison required",
+  "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+  "witnesses": [
+    {
+      "file": "three-targets-three-shields-both-owners-opponent-first.jsonl.gz",
+      "sha256": "5d243eb3fff9402b11294e5e5b4209d9ef68d9e82fad4b092f4e77daada63310",
+      "scenario": "three-targets-three-shields-both-owners-opponent-first",
+      "family": "group-shield-identity",
+      "observed": {
+        "acceptedSelectionClicks": 3,
+        "atLimitExactActions": true,
+        "selectionDone": true,
+        "playerOrder": "Opponent",
+        "replacementMenus": [
+          {
+            "actor": "p1",
+            "title": "Resolve \"Defeat Shield to prevent attached unit from taking damage\"",
+            "actions": [
+              {
+                "key": "[\"button\",null,\"next\",null,\"Resolve next\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "next",
+                "method": null,
+                "label": "Resolve next"
+              },
+              {
+                "key": "[\"button\",null,\"all\",null,\"Resolve all (2)\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "all",
+                "method": null,
+                "label": "Resolve all (2)"
+              }
+            ]
+          }
+        ],
+        "survivingShieldIds": {
+          "own": [
+            "c106",
+            "c107"
+          ],
+          "enemy": [
+            "c110",
+            "c111"
+          ],
+          "third": [
+            "c112",
+            "c114"
+          ]
+        },
+        "postAction": true
+      },
+      "decisions": 118,
+      "winner": "p1"
+    },
+    {
+      "file": "three-targets-three-shields-both-owners-you-first.jsonl.gz",
+      "sha256": "2016106da4a233b623297302ef0051e7aa2230e82c42f752a2a0c993808b4b31",
+      "scenario": "three-targets-three-shields-both-owners-you-first",
+      "family": "group-shield-identity",
+      "observed": {
+        "acceptedSelectionClicks": 3,
+        "atLimitExactActions": true,
+        "selectionDone": true,
+        "playerOrder": "You",
+        "replacementMenus": [
+          {
+            "actor": "p1",
+            "title": "Resolve \"Defeat Shield to prevent attached unit from taking damage\"",
+            "actions": [
+              {
+                "key": "[\"button\",null,\"next\",null,\"Resolve next\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "next",
+                "method": null,
+                "label": "Resolve next"
+              },
+              {
+                "key": "[\"button\",null,\"all\",null,\"Resolve all (2)\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "all",
+                "method": null,
+                "label": "Resolve all (2)"
+              }
+            ]
+          }
+        ],
+        "survivingShieldIds": {
+          "own": [
+            "c107",
+            "c108"
+          ],
+          "enemy": [
+            "c109",
+            "c110"
+          ],
+          "third": [
+            "c112",
+            "c114"
+          ]
+        },
+        "postAction": true
+      },
+      "decisions": 132,
+      "winner": "p2"
+    }
+  ]
+}

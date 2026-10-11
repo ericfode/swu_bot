@@ -1,0 +1,64 @@
+{
+  "evidenceStatus": "engine observations",
+  "conformance": "unassessed; fresh native and Wasm comparison required",
+  "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+  "skippedScenarios": [],
+  "witnesses": [
+    {
+      "file": "last-shield-hp-loss-damage-before-stat-defeat.jsonl.gz",
+      "sha256": "1a995eb03f9a10de44a7847b6424bccf927a4882e1d8223f27adf9443f3d7ed7",
+      "scenario": "last-shield-hp-loss-damage-before-stat-defeat",
+      "family": "group-shield-hp-defeat-order",
+      "observed": {
+        "acceptedSelectionClicks": 2,
+        "selectionDone": true,
+        "discardOrder": [
+          "c2",
+          "c4"
+        ],
+        "shieldedDefeatedThroughHpLoss": true,
+        "postAction": true
+      },
+      "decisions": 115,
+      "winner": "p2"
+    },
+    {
+      "file": "snoke-last-shield-preselected-dead-set-follower-first.jsonl.gz",
+      "sha256": "0e68267076fb9ada740898d9b8100d6f77d4b7b2a8a4dda5cebe96ca7f79fd03",
+      "scenario": "snoke-last-shield-preselected-dead-set-follower-first",
+      "family": "group-shield-aura-preselected-defeat",
+      "observed": {
+        "validInitialEffectiveHp": true,
+        "acceptedSelectionClicks": 2,
+        "selectionDone": true,
+        "defeatedIds": {
+          "snoke": "c58",
+          "shielded": "c1"
+        },
+        "snokeRemovalDidNotRescueFollower": true,
+        "postAction": true
+      },
+      "decisions": 84,
+      "winner": "p1"
+    },
+    {
+      "file": "snoke-last-shield-preselected-dead-set-snoke-first.jsonl.gz",
+      "sha256": "22e9869f46bd4f2c7eac4162c19e46f75b92c8afd6e8bbfd5fdb276a786b5e52",
+      "scenario": "snoke-last-shield-preselected-dead-set-snoke-first",
+      "family": "group-shield-aura-preselected-defeat",
+      "observed": {
+        "validInitialEffectiveHp": true,
+        "acceptedSelectionClicks": 2,
+        "selectionDone": true,
+        "defeatedIds": {
+          "snoke": "c56",
+          "shielded": "c1"
+        },
+        "snokeRemovalDidNotRescueFollower": true,
+        "postAction": true
+      },
+      "decisions": 52,
+      "winner": "p1"
+    }
+  ]
+}

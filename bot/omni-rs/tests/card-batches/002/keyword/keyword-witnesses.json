@@ -1,0 +1,1177 @@
+{
+  "conformance": "unassessed; run native and Wasm check",
+  "witnesses": [
+    {
+      "family": "phase-sentinel",
+      "file": "phase-sentinel-expiry.jsonl.gz",
+      "sha256": "0277e0e4c2b586329f9cb48424311aa953225fc12cba4de8153996d3dab29f37",
+      "scenario": "phase-sentinel-expiry",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "JTL_229",
+          "target": "c19"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": true,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_201",
+        "JTL_229",
+        "SEC_206",
+        "TWI_170",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "phase-sentinel",
+      "file": "phase-sentinel-bounce-cleanup.jsonl.gz",
+      "sha256": "99c754305eb3764894d35b7660a0b452bde5fcdd1ba5aec7ae1834b24d700643",
+      "scenario": "phase-sentinel-bounce-cleanup",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "JTL_229",
+          "target": "c19"
+        },
+        {
+          "step": 3,
+          "played": "TWI_226",
+          "target": "c19"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "JTL_229",
+        "SEC_206",
+        "SOR_101",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "phase-raid",
+      "file": "phase-raid-printed-aggregation-combat-expiry.jsonl.gz",
+      "sha256": "fbabba3ae9eb68c729e10afcd159b066770fd5f39acc7608c23fe443e6deab6f",
+      "scenario": "phase-raid-printed-aggregation-combat-expiry",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "LAW_182",
+          "target": "c46"
+        },
+        {
+          "step": 4,
+          "played": "HMW_052",
+          "target": "c102"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": true,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "HMW_052",
+        "LAW_182",
+        "SEC_206",
+        "SOR_073",
+        "TWI_124"
+      ]
+    },
+    {
+      "family": "phase-restore",
+      "file": "phase-restore-printed-aggregation.jsonl.gz",
+      "sha256": "8e7417bffe825028d29fc032f67c1ea6a812bcc2023668f407e101f76e35aa97",
+      "scenario": "phase-restore-printed-aggregation",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "SEC_045",
+          "target": "c46"
+        },
+        {
+          "step": 6,
+          "played": "ASH_076",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "LAW_131",
+        "SEC_045",
+        "SEC_206",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-ambush-mixed-stats",
+      "file": "constant-ambush-stat-aura-bounce.jsonl.gz",
+      "sha256": "eccd2c9bcb4947b8b6dbef486e413320645618cb7f6e670e661d8c9668ef94a9",
+      "scenario": "constant-ambush-stat-aura-bounce",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "TWI_226",
+          "target": "c42"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "ASH_201",
+        "SEC_206",
+        "SOR_100",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-ambush-entry",
+      "file": "constant-ambush-entry-decline.jsonl.gz",
+      "sha256": "d33c4cdf6a1d65b56a210d6a4d4b0943fbc3bbb90f4c719ef94e4d35e26419d5",
+      "scenario": "constant-ambush-entry-decline",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "ASH_261",
+          "target": "c74"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": true,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "ASH_201",
+        "ASH_261",
+        "JTL_042",
+        "SEC_206",
+        "SOR_073",
+        "SOR_100",
+        "SOR_101",
+        "SOR_216",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-ambush-entry",
+      "file": "constant-ambush-entry-attack.jsonl.gz",
+      "sha256": "b6ba99096263442a0cd817651ef508271735bf39e7f81581f0ea7d85ee18e6ba",
+      "scenario": "constant-ambush-entry-attack",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "ASH_261",
+          "target": "c76"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124"
+      ]
+    },
+    {
+      "family": "constant-shielded-entry",
+      "file": "conditional-shielded-positive-entry.jsonl.gz",
+      "sha256": "834248270f467e17cb51b227c6313f3f5b2a03985d79b7489017f464a7b9f480",
+      "scenario": "conditional-shielded-positive-entry",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "HMW_084",
+          "target": "c20"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_190",
+        "HMW_084",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-shielded-entry",
+      "file": "conditional-shielded-negative-entry.jsonl.gz",
+      "sha256": "227c279eb2ae685680daf77b1637ccdb70115f204188b047a613cf498f191b44",
+      "scenario": "conditional-shielded-negative-entry",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "HMW_084",
+          "target": "c19"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "HMW_084",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-grit",
+      "file": "conditional-grit-positive-combat.jsonl.gz",
+      "sha256": "9e2c07ba53f2773cb7c5d1f9220f439cb83fd8cd664936ddbcb3ff2efe161314",
+      "scenario": "conditional-grit-positive-combat",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "HMW_090",
+          "target": "c98"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "SOR_101"
+      ]
+    },
+    {
+      "family": "constant-grit",
+      "file": "conditional-grit-negative-combat.jsonl.gz",
+      "sha256": "77f5a26d6f1e9e80fd4bd53d320f1fb25abd48f1df2bbda20a59b7e4ffa31643",
+      "scenario": "conditional-grit-negative-combat",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "HMW_090",
+          "target": "c100"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_190",
+        "ASH_261",
+        "HMW_090",
+        "JTL_042",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170"
+      ]
+    },
+    {
+      "family": "constant-saboteur-overwhelm",
+      "file": "conditional-saboteur-overwhelm-positive.jsonl.gz",
+      "sha256": "be092bfaec7fc7aba2911eb1d196c17f1a1e7be50efe7c17df7c5f76f2e559c2",
+      "scenario": "conditional-saboteur-overwhelm-positive",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "JTL_229",
+          "target": "c73"
+        },
+        {
+          "step": 4,
+          "played": "TWI_130",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "JTL_229",
+        "LAW_131",
+        "SOR_073",
+        "TWI_170",
+        "TWI_174"
+      ],
+      "attackTargetSet": [
+        {
+          "key": "[\"card\",\"c73\",null,null,\"noti-mobile-pod\"]",
+          "kind": "card",
+          "card": "c73",
+          "arg": null,
+          "method": null,
+          "label": "noti-mobile-pod"
+        },
+        {
+          "key": "[\"card\",\"c103\",null,null,\"command-center\"]",
+          "kind": "card",
+          "card": "c103",
+          "arg": null,
+          "method": null,
+          "label": "command-center"
+        }
+      ]
+    },
+    {
+      "family": "keyword-predicate-stat-aura",
+      "file": "keyword-predicate-hp-aura-phase-expiry-lethal.jsonl.gz",
+      "sha256": "7be5032b4a99d0909eba2b0cfafd90a3574267e624b0be8372b814d61e6d3679",
+      "scenario": "keyword-predicate-hp-aura-phase-expiry-lethal",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "JTL_229",
+          "target": "c18"
+        },
+        {
+          "step": 4,
+          "played": "TWI_170",
+          "target": "c18"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": true,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_131",
+        "ASH_261",
+        "JTL_229",
+        "LAW_131",
+        "SEC_032",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-saboteur-overwhelm",
+      "file": "conditional-saboteur-shield-overwhelm-spill.jsonl.gz",
+      "sha256": "0a4935ae6487af9b83aa48838302730a9347d29279c5a9eb9e1fedffebc53e27",
+      "scenario": "conditional-saboteur-shield-overwhelm-spill",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_124",
+          "target": "c43"
+        },
+        {
+          "step": 4,
+          "played": "SOR_073",
+          "target": "c91"
+        },
+        {
+          "step": 7,
+          "played": "TWI_130",
+          "target": "c91"
+        }
+      ],
+      "positivePower": true,
+      "positiveHp": true,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_190",
+        "ASH_261",
+        "SHD_056",
+        "SOR_073",
+        "TWI_124"
+      ],
+      "shieldBeforeAttack": true
+    },
+    {
+      "family": "phase-sentinel-target-set",
+      "file": "sentinel-restricts-nonsaboteur-attack.jsonl.gz",
+      "sha256": "43aebdacf6db2c3c014951c74c27a98b3671e219de437972946a3d1ee7ae5298",
+      "scenario": "sentinel-restricts-nonsaboteur-attack",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "JTL_229",
+          "target": "c74"
+        },
+        {
+          "step": 3,
+          "played": "ASH_261",
+          "target": "c74"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_190",
+        "ASH_261",
+        "JTL_042",
+        "JTL_229",
+        "SOR_073",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "attackTargetSet": [
+        {
+          "key": "[\"card\",\"c74\",null,null,\"strike-team-vanguard\"]",
+          "kind": "card",
+          "card": "c74",
+          "arg": null,
+          "method": null,
+          "label": "strike-team-vanguard"
+        }
+      ]
+    },
+    {
+      "family": "constant-source-unique",
+      "file": "constant-ambush-source-unique-keep-old.jsonl.gz",
+      "sha256": "a60ddd80d3f561b07ecf47c051e0cc66a45f9ce62a5073edb204db2e5c1d0da9",
+      "scenario": "constant-ambush-source-unique-keep-old",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "SOR_100",
+          "target": "c42"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [
+        {
+          "step": 2,
+          "enemyPrintedHp": 5,
+          "enemyHpDuringChoice": 5,
+          "existingId": "c42",
+          "incomingId": "c44",
+          "defeatedId": "c44",
+          "keep": "old",
+          "bothCopiesOffered": true
+        }
+      ],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "JTL_042",
+        "SOR_073",
+        "SOR_100",
+        "SOR_101",
+        "SOR_216",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-source-unique",
+      "file": "constant-ambush-source-unique-keep-new.jsonl.gz",
+      "sha256": "2965d052d56554e25df793b9b66b9452965de0bd44483e649eee79cff064443c",
+      "scenario": "constant-ambush-source-unique-keep-new",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "SOR_100",
+          "target": "c42"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [
+        {
+          "step": 1,
+          "enemyPrintedHp": 5,
+          "enemyHpDuringChoice": 5,
+          "existingId": "c42",
+          "incomingId": "c43",
+          "defeatedId": "c42",
+          "keep": "new",
+          "bothCopiesOffered": true
+        }
+      ],
+      "playedCodes": [
+        "ASH_131",
+        "ASH_201",
+        "SOR_073",
+        "SOR_100",
+        "TWI_124"
+      ]
+    },
+    {
+      "family": "constant-restore-trigger-capture",
+      "file": "continuous-restore-captured-before-source-defeat.jsonl.gz",
+      "sha256": "b31e2179be5f4ac6e721a3b24cff72d816002c796c414809ebeffd9bc9b67726",
+      "scenario": "continuous-restore-captured-before-source-defeat",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "JTL_037",
+          "target": "c43"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_190",
+        "JTL_042",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ],
+      "sourceDefeatChosenBeforeCapturedRestore": true
+    },
+    {
+      "family": "constant-raid",
+      "file": "continuous-raid-attack-numeric.jsonl.gz",
+      "sha256": "30ad283a9cb9b356de55010b866c8b0ae37608ad880d34eba0c03b1fdd04fa26",
+      "scenario": "continuous-raid-attack-numeric",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "ASH_061",
+          "target": "c100"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "HMW_082",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_101",
+        "SOR_144",
+        "SOR_216",
+        "TWI_124",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "printed-keyword-metadata",
+      "file": "mentioned-sentinel-is-not-printed-refugee.jsonl.gz",
+      "sha256": "da92b7191a83fdc50653dc1710e3d060c96aa0fb9b8f3f2b1b97f1fdaf2ae933",
+      "scenario": "mentioned-sentinel-is-not-printed-refugee",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "ASH_061",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [],
+      "attackTargetSet": [
+        {
+          "key": "[\"card\",\"c97\",null,null,\"refugee-of-the-path\"]",
+          "kind": "card",
+          "card": "c97",
+          "arg": null,
+          "method": null,
+          "label": "refugee-of-the-path"
+        },
+        {
+          "key": "[\"card\",\"c103\",null,null,\"command-center\"]",
+          "kind": "card",
+          "card": "c103",
+          "arg": null,
+          "method": null,
+          "label": "command-center"
+        }
+      ]
+    },
+    {
+      "family": "printed-keyword-metadata",
+      "file": "mentioned-sentinel-is-not-printed-shuttle.jsonl.gz",
+      "sha256": "ef57bd7450dbc4c77feead28147377ffa52ed2300e7eab148c21526cbdd63a83",
+      "scenario": "mentioned-sentinel-is-not-printed-shuttle",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "SEC_032",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "LAW_131",
+        "SEC_032"
+      ]
+    },
+    {
+      "family": "constant-ambush-entry",
+      "file": "constant-ambush-entry-no-target.jsonl.gz",
+      "sha256": "8a83282fcf6367b371073b8601597624143e75496755e1bbf784aadbd0eaa8fd",
+      "scenario": "constant-ambush-entry-no-target",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "ASH_261",
+          "target": "c18"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_261",
+        "SEC_206",
+        "SOR_073",
+        "TWI_170",
+        "TWI_174"
+      ]
+    },
+    {
+      "family": "constant-raid",
+      "file": "continuous-raid-source-bounce-before-attack.jsonl.gz",
+      "sha256": "88e2079eae5442af45a83af1a9435499e1db7a10aa582ba9b236038bb5ce724c",
+      "scenario": "continuous-raid-source-bounce-before-attack",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "TWI_226",
+          "target": "c19"
+        },
+        {
+          "step": 3,
+          "played": "ASH_061",
+          "target": "c98"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "ASH_061",
+        "ASH_261",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "SOR_144",
+        "SOR_216",
+        "TWI_226"
+      ]
+    },
+    {
+      "family": "constant-restore-trigger-capture",
+      "file": "continuous-restore-source-bounce-before-attack.jsonl.gz",
+      "sha256": "ceaeceef6b87868b51cf15c791633c04536e0a062ceb04c47976ea5adbaaa961",
+      "scenario": "continuous-restore-source-bounce-before-attack",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "TWI_226",
+          "target": "c18"
+        },
+        {
+          "step": 3,
+          "played": "ASH_256",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": true,
+      "constantLater": false,
+      "uniqueWindows": [],
+      "playedCodes": [
+        "TWI_226"
+      ]
+    }
+  ]
+}

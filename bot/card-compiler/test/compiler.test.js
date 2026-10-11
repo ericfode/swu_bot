@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { compileSource, loadEnums } = require('../compiler');
-const { compileCatalog, coverage } = require('../build');
+const { compileCatalog, coverage, keywordValues } = require('../build');
 
 function source(body, { id = 'new-card', name = 'new-card', extra = '', base = 'NonLeaderUnitCard' } = {}) {
     return `export default class NewCard extends ${base} {
@@ -57,13 +57,11 @@ test('phase stat modifiers preserve signed values, targeting and captured contex
 test('phase modifier lowering rejects live calculations and unsupported lasting semantics', () => {
     for (const modifier of [
         'effect:AbilityHelper.ongoingEffects.modifyStats((card,ctx)=>({power:ctx.player.readyResourceCount,hp:0}))',
-        'effect:AbilityHelper.ongoingEffects.gainKeyword("sentinel")',
         'effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1}),condition:ctx=>true',
         'effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1}),duration:"round"',
         'effect:AbilityHelper.ongoingEffects.modifyStats({power:1})',
         'effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1,extra:1})',
         'effect:AbilityHelper.ongoingEffects.modifyStats({power:ctx=>ctx.source.damage,hp:0})',
-        'effect:[AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1})]',
     ]) assert.equal(compile(action(`forThisPhaseCardEffect({${modifier}})`)).status,'unsupported',modifier);
     const local=compile('const modifier=(card,ctx)=>({power:1,hp:1});'+action('forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.modifyStats(modifier)})'));
     assert.equal(local.status,'unsupported');
@@ -267,4 +265,86 @@ test('pinned leaders are lowered from source into the same generic IR', () => {
     assert.equal(cards[0].abilities.leader[0].effect.target,'bothBases');
     assert.equal(cards[1].abilities.unit[0].effect.amount.value,2);
     assert.equal(cards[2].abilities.leader[0].effect.kind,'distributeHealing');
+});
+
+test('keyword modifier lists retain gain loss, live numeric and shared targets', () => {
+    const c=compile(`registrar.addConstantAbility({matchTarget:card=>card.isUnit(),ongoingEffect:[AbilityHelper.ongoingEffects.loseKeyword('sentinel'),AbilityHelper.ongoingEffects.gainKeyword('saboteur'),AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0})]});`);
+    assert.equal(c.status,'supported');
+    assert.deepEqual(c.abilities.card[0].effect.effects.map(e=>[e.kind,e.target]),[['loseKeyword','chosen'],['gainKeyword','chosen'],['modifyStats','chosen']]);
+    const live=compile(`registrar.addConstantAbility({ongoingEffect:AbilityHelper.ongoingEffects.gainKeyword((unit)=>({keyword:'raid',amount:unit.damage}))});`);
+    assert.equal(live.status,'supported');assert.deepEqual(live.abilities.card[0].effect.amount,{kind:'ref',path:['card','damage']});
+    const phase=compile(action(`forThisPhaseCardEffect(ctx=>({target:ctx.source,effect:[AbilityHelper.ongoingEffects.gainKeyword({keyword:'restore',amount:ctx.player.readyResourceCount}),AbilityHelper.ongoingEffects.loseKeyword('sentinel')]}))`));
+    assert.equal(phase.status,'supported');assert.equal(phase.abilities.card[0].effect.effects[0].duration,'phase');assert.equal(phase.abilities.card[0].effect.effects[0].amount.path[0],'player');
+});
+test('keyword lowering rejects unsupported keywords, helper fields, cycles and live phase callbacks', () => {
+    for(const modifier of ["gainKeyword('hidden')","gainKeyword({keyword:'raid'})","gainKeyword({keyword:'sentinel',amount:2})","gainKeyword({keyword:'raid',amount:1,extra:true})","gainKeyword(unit=>({keyword:'raid',amount:unit.getPower()}))","loseKeyword(['sentinel','hidden'])"]) assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:AbilityHelper.ongoingEffects.${modifier}});`).status,'unsupported',modifier);
+    assert.equal(compile(`registrar.addConstantAbility({condition:ctx=>ctx.source.hasSomeKeyword('sentinel'),ongoingEffect:AbilityHelper.ongoingEffects.gainKeyword('saboteur')});`).status,'unsupported');
+    assert.equal(compile(action(`forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.gainKeyword(unit=>({keyword:'raid',amount:unit.damage}))})`)).status,'unsupported');
+    assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:[]});`).status,'unsupported');
+    assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:[${Array(9).fill("AbilityHelper.ongoingEffects.gainKeyword('sentinel')").join(',')}]});`).status,'unsupported');
+});
+
+test('printed core keyword parsing follows engine case, own-line, expected-name and side rules', () => {
+    const keywords = ['sentinel', 'raid', 'restore', 'ambush'];
+    assert.deepEqual(keywordValues({ types:['unit'], keywords, text:'Sentinel reminder\nRaid 2\nRestore 0\nAmbush', deployBox:'Raid 99' }), {sentinel:1,raid:2,restore:0,ambush:1});
+    assert.deepEqual(keywordValues({ types:['unit'], keywords, text:'While attacking, this unit gains Sentinel\n sentinel\nRaid\nraid 4\n Raid 3\nRestore  5' }), {});
+    assert.deepEqual(keywordValues({ types:['unit'], keywords:[], text:'Sentinel\nRaid 2' }), {});
+    assert.deepEqual(keywordValues({ types:['leader'], keywords, deployBox:'Raid 2\nSentinel', text:'Raid 3\nSentinel' }), {sentinel:1,raid:5});
+    assert.throws(() => keywordValues({ types:['unit'], keywords, text:'Raid 2\nRaid 3' }), /Multiple printed raid/);
+    // The pinned engine's boolean regex deliberately has no suffix boundary.
+    assert.deepEqual(keywordValues({ types:['unit'], keywords:['sentinel'], text:'Sentinel-like text' }), {sentinel:1});
+});
+test('context menu titles preserve typed live fragments and exact numeric keyword text',()=>{
+    const c=compile("registrar.addOnAttackAbility({title:'Deal damage',contextTitle:ctx=>`Deal ${ctx.source.damage} damage to a unit`,immediateEffect:AbilityHelper.immediateEffects.draw()});");
+    assert.equal(c.status,'supported');assert.deepEqual(c.abilities.card[0].contextTitle,[{kind:'const',value:'Deal '},{kind:'ref',path:['source','damage']},{kind:'const',value:' damage to a unit'}]);
+    const text=compile("registrar.addOnAttackAbility({title:`Give ${TextHelper.Restore(2)}`,contextTitle:ctx=>`Give ${TextHelper.Raid(3)} to ${ctx.source.title}`,immediateEffect:AbilityHelper.immediateEffects.draw()});");
+    assert.equal(text.status,'supported');assert.equal(text.abilities.card[0].title,'Give Restore 2');assert.equal(text.abilities.card[0].contextTitle[1].value,'Raid 3');
+    const nullable=compile("registrar.addOnAttackAbility({title:'Shield',contextTitle:ctx=>`Shield ${ctx.source.parentUnit?.title ?? 'the attached unit'}`,immediateEffect:AbilityHelper.immediateEffects.draw()});");
+    assert.equal(nullable.status,'supported');assert.equal(nullable.abilities.card[0].contextTitle[1].op,'??');
+});
+test('context menu title callbacks cannot hide side effects or unsupported helpers',()=>{
+    for(const title of ['ctx=>{ctx.source.damage++;return "Draw";}','ctx=>ctx.source.damage++','ctx=>`Draw ${ctx.source.destroy()}`','ctx=>`Gain ${TextHelper.Unknown(2)}`','ctx=>`Gain ${TextHelper.Unknown}`','ctx=>`Gain ${TextHelper.Restore(ctx.source.damage)}`'])assert.equal(compile(`registrar.addOnAttackAbility({title:'Draw',contextTitle:${title},immediateEffect:AbilityHelper.immediateEffects.draw()});`).status,'unsupported',title);
+});
+
+test('context titles bound fragment and literal byte capacities',()=>{
+    assert.equal(compile(`registrar.addOnAttackAbility({title:'Draw',contextTitle:ctx=>'${'x'.repeat(1025)}',immediateEffect:AbilityHelper.immediateEffects.draw()});`).diagnostics[0].pattern,'context-title-bound');
+    const fragments=Array(17).fill('${ctx.source.damage}').join('');
+    assert.equal(compile("registrar.addOnAttackAbility({title:'Draw',contextTitle:ctx=>`"+fragments+"`,immediateEffect:AbilityHelper.immediateEffects.draw()});").diagnostics[0].pattern,'context-title-bound');
+});
+
+test('trait display labels use pinned enum title case in static and live menus',()=>{
+    const body="registrar.addOnAttackAbility({title:`Help ${TextHelper.Trait.BountyHunter}`,contextTitle:ctx=>`Help ${TextHelper.Trait.FirstOrder} and ${TextHelper.Trait.BountyHunter}`,immediateEffect:AbilityHelper.immediateEffects.draw()});";
+    const c=compileSource(source(body),'trait-title.ts',{'Trait.BountyHunter':'bounty hunter','Trait.FirstOrder':'first order'});
+    assert.equal(c.status,'supported');assert.equal(c.abilities.card[0].title,'Help Bounty Hunter');
+    assert.deepEqual(c.abilities.card[0].contextTitle.filter(e=>e.value==='First Order'||e.value==='Bounty Hunter').map(e=>e.value),['First Order','Bounty Hunter']);
+    for(const title of ['`Help ${TextHelper.Trait.Unknown}`','`Help ${TextHelper.Unknown}`','`Help ${TextHelper.Unknown(2)}`'])assert.equal(compile(`registrar.addOnAttackAbility({title:${title},immediateEffect:AbilityHelper.immediateEffects.draw()});`).status,'unsupported');
+});
+
+test('bounded aspect list labels match pinned conjunction rendering',()=>{
+    const c=compileSource(source("registrar.addOnAttackAbility({title:`Control ${TextHelper.aspectList([Aspect.Aggression,Aspect.Cunning],Conjunction.Or)}`,immediateEffect:AbilityHelper.immediateEffects.draw()});"),'aspects.ts',{'Aspect.Aggression':'aggression','Aspect.Cunning':'cunning','Conjunction.Or':'or'});
+    assert.equal(c.status,'supported');assert.equal(c.abilities.card[0].title,'Control Aggression or Cunning');
+});
+
+test('one lasting modifier list retains event identity separately from immediate groups',()=>{
+    const list=compile(action("forThisPhaseCardEffect({effect:[AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0}),AbilityHelper.ongoingEffects.gainKeyword('sentinel')]})"));
+    assert.equal(list.status,'supported');assert.equal(list.abilities.card[0].effect.kind,'phaseModifiers');
+    const separate=compile(action("simultaneous([AbilityHelper.immediateEffects.forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0})}),AbilityHelper.immediateEffects.forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.gainKeyword('sentinel')})])"));
+    assert.equal(separate.status,'supported');assert.equal(separate.abilities.card[0].effect.kind,'simultaneous');
+    assert.deepEqual(separate.abilities.card[0].effect.effects,list.abilities.card[0].effect.effects);
+});
+test('UpTo selectors retain engine zero-choice default and explicit override',()=>{
+    for(const [fields,optional]of [['',true],['canChooseNoCards:false,',false],['canChooseNoCards:false,optional:true,',true],['canChooseNoCards:true,',true]]){
+        const c=compile(`registrar.addWhenPlayedAbility({title:'Damage',targetResolver:{mode:'upTo',numCards:2,${fields}cardTypeFilter:'unit',immediateEffect:AbilityHelper.immediateEffects.damage({amount:1})}});`);
+        assert.equal(c.status,'supported');assert.equal(c.abilities.card[0].targetResolver.optional,optional);
+        const nested=compile(action(`selectCard({mode:'upTo',numCards:2,${fields}cardTypeFilter:'unit',immediateEffect:AbilityHelper.immediateEffects.damage({amount:1})})`));
+        assert.equal(nested.abilities.card[0].effect.targetResolver.optional,optional);
+    }
+});
+
+test('selection predicates reject lexical outer target captures rather than rebinding them',()=>{
+    const captured=compile(action("selectCard(ctx=>({cardTypeFilter:'unit',cardCondition:card=>card!==ctx.target,immediateEffect:AbilityHelper.immediateEffects.heal({amount:1})}))"));
+    assert.equal(captured.status,'unsupported');assert.equal(captured.diagnostics[0].pattern,'target-resolver-outer-target-capture');
+    const rebound=compile(action("selectCard({cardTypeFilter:'unit',cardCondition:(card,ctx)=>card!==ctx.target,immediateEffect:AbilityHelper.immediateEffects.heal({amount:1})})"));
+    assert.equal(rebound.status,'supported');
+    const safe=compile(action("selectCard(ctx=>({cardTypeFilter:'unit',cardCondition:card=>card!==ctx.source,immediateEffect:AbilityHelper.immediateEffects.heal({amount:1})}))"));assert.equal(safe.status,'supported');
 });

@@ -1,0 +1,43 @@
+{
+  "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+  "requested": 2,
+  "outcomes": [
+    {
+      "id": "SHD_188",
+      "outcome": "engine-play-witness",
+      "file": "SHD_188.jsonl.gz",
+      "sha256": "3aeafac0ed900547c428743a43128047fdeb7d0271b398b359e46641e386ad8e",
+      "decisions": 69,
+      "playedCodes": [
+        "ASH_190",
+        "LAW_131",
+        "SHD_188",
+        "SOR_073",
+        "SOR_101",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    },
+    {
+      "id": "SHD_190",
+      "outcome": "engine-play-witness",
+      "file": "SHD_190.jsonl.gz",
+      "sha256": "2b2639a952c4b67aa4e2c7e776e8e5da3141f18be9590c3fe5eb04b7f74984ca",
+      "decisions": 46,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_261",
+        "SHD_190",
+        "SOR_216",
+        "TWI_124",
+        "TWI_226"
+      ],
+      "conformance": "unassessed; requires native and Wasm check",
+      "semanticCoverage": "Play witnessed; family semantics require separate targeted assertions"
+    }
+  ]
+}

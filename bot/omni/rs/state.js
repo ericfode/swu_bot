@@ -2,13 +2,38 @@
 
 function phaseStats(card) {
     let power = 0, hp = 0;
+    const phaseKeywords = {}, phaseLostKeywords = new Set();
+    const keywordOrder = ['sentinel', 'overwhelm', 'saboteur', 'ambush', 'grit', 'shielded', 'raid', 'restore'];
+    const supported = new Set(keywordOrder);
     for (const effect of card.getOngoingEffects()) {
         // Constant stat programs are derived from arena sources by Rust; they are
         // not stored as phase deltas. Persistent lasting effects are a different rule.
-        if (effect.duration === 'persistent' && effect.type === 'modifyStats' &&
+        if (effect.duration === 'persistent' && ['modifyStats', 'gainKeyword', 'loseKeyword'].includes(effect.type) &&
             effect.source?.getConstantAbilities?.().some((ability) => ability.registeredEffects.includes(effect))) continue;
         if (effect.duration !== 'untilEndOfPhase') {
-            if (effect.type === 'modifyStats') throw new Error(`Unsupported stat effect duration ${effect.duration} on ${card.internalName}`);
+            if (['modifyStats', 'gainKeyword', 'loseKeyword'].includes(effect.type)) throw new Error(`Unsupported stat effect duration ${effect.duration} on ${card.internalName}`);
+            continue;
+        }
+        if (['gainKeyword', 'loseKeyword'].includes(effect.type)) {
+            const values = effect.getValue(card);
+            for (const value of Array.isArray(values) ? values : [values]) {
+                const name = typeof value === 'string' ? value : value?.keyword;
+                if (!supported.has(name)) throw new Error(`Unsupported phase keyword on ${card.internalName}`);
+                if (effect.type === 'loseKeyword') {
+                    if (typeof value !== 'string') throw new Error(`Unsupported phase keyword loss on ${card.internalName}`);
+                    phaseLostKeywords.add(name);
+                    continue;
+                }
+                const numeric = name === 'raid' || name === 'restore';
+                if (numeric ? !value || typeof value !== 'object' || Object.keys(value).some((key) => !['keyword', 'amount'].includes(key)) : typeof value !== 'string' && (!value || typeof value !== 'object' || Object.keys(value).some((key) => key !== 'keyword'))) {
+                    throw new Error(`Unsupported phase keyword value on ${card.internalName}`);
+                }
+                const amount = numeric ? value.amount : 1;
+                if (!Number.isSafeInteger(amount) || amount < 0 || amount > 65535) throw new Error(`Phase keyword outside simulator bounds on ${card.internalName}`);
+                const total = numeric ? (phaseKeywords[name] ?? 0) + amount : 1;
+                if (total > 65535) throw new Error(`Phase keyword total outside simulator bounds on ${card.internalName}`);
+                phaseKeywords[name] = total;
+            }
             continue;
         }
         if (effect.type !== 'modifyStats') throw new Error(`Unsupported phase effect ${effect.type} on ${card.internalName}`);
@@ -23,7 +48,10 @@ function phaseStats(card) {
             throw new Error(`Phase stat total outside simulator bounds on ${card.internalName}`);
         }
     }
-    return power === 0 && hp === 0 ? {} : { phaseStats: { power, hp } };
+    return { ...(power === 0 && hp === 0 ? {} : { phaseStats: { power, hp } }),
+        ...(Object.keys(phaseKeywords).length ? { phaseKeywords: Object.fromEntries(Object.entries(phaseKeywords).sort()) } : {}),
+        ...(phaseLostKeywords.size ? { phaseLostKeywords: keywordOrder.filter((name) => phaseLostKeywords.has(name)) } : {}) };
+
 }
 
 function ref(eg, c) {

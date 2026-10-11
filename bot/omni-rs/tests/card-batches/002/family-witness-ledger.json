@@ -1,0 +1,4397 @@
+{
+  "schema": "swu-card-family-witness-ledger/v1",
+  "engineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+  "catalogueSha256": "acfd4d819063572bdf99af696aa03f55fa2430484b31c7ec4b6a77701e910603",
+  "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+  "conformance": "All indexed complete games matched final native and rebuilt Wasm. Per-fixture generation pools remain immutable; final catalogue is bound here. See verification.json for commands, source/binary hashes and limits.",
+  "requested": 100,
+  "newAdmittedInFrozenInput": 100,
+  "perCardEnginePlays": 98,
+  "completedTargetedGames": 87,
+  "families": [
+    {
+      "family": "phase-sentinel",
+      "keywords": [
+        "sentinel"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_210",
+        "HMW_246",
+        "JTL_229",
+        "LAW_104",
+        "LOF_114",
+        "LOF_223",
+        "SOR_086"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/phase-sentinel-expiry.jsonl.gz",
+          "sha256": "0277e0e4c2b586329f9cb48424311aa953225fc12cba4de8153996d3dab29f37",
+          "scenario": "phase-sentinel-expiry",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true
+        },
+        {
+          "fixture": "keyword/phase-sentinel-bounce-cleanup.jsonl.gz",
+          "sha256": "99c754305eb3764894d35b7660a0b452bde5fcdd1ba5aec7ae1834b24d700643",
+          "scenario": "phase-sentinel-bounce-cleanup",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "phase-raid",
+      "keywords": [
+        "raid"
+      ],
+      "relatedNewCandidateIds": [
+        "LAW_182",
+        "SOR_156"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/phase-raid-printed-aggregation-combat-expiry.jsonl.gz",
+          "sha256": "fbabba3ae9eb68c729e10afcd159b066770fd5f39acc7608c23fe443e6deab6f",
+          "scenario": "phase-raid-printed-aggregation-combat-expiry",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true
+        },
+        {
+          "fixture": "keyword-review/phase-raid-double-grant-stack-and-expiry.jsonl.gz",
+          "sha256": "1c08bd6493ca14b7585a6d2a8200b4bb38e27bd95d371cdef20780a630509edd",
+          "scenario": "phase-raid-double-grant-stack-and-expiry",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true,
+          "observedEffect": "two separateRaid2 grants plusprintedRaid1 aggregate5; expiry removesbothgrants leavingprinted1"
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "phase-restore",
+      "keywords": [
+        "restore"
+      ],
+      "relatedNewCandidateIds": [
+        "SEC_045"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/phase-restore-printed-aggregation.jsonl.gz",
+          "sha256": "8e7417bffe825028d29fc032f67c1ea6a812bcc2023668f407e101f76e35aa97",
+          "scenario": "phase-restore-printed-aggregation",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-ambush-mixed-stats",
+      "keywords": [
+        "ambush"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_118",
+        "HMW_131",
+        "LOF_118",
+        "SOR_079",
+        "SOR_100",
+        "SOR_114",
+        "SOR_249",
+        "TWI_081"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/constant-ambush-stat-aura-bounce.jsonl.gz",
+          "sha256": "eccd2c9bcb4947b8b6dbef486e413320645618cb7f6e670e661d8c9668ef94a9",
+          "scenario": "constant-ambush-stat-aura-bounce",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-ambush-entry",
+      "keywords": [
+        "ambush"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_118",
+        "HMW_131",
+        "LOF_118",
+        "SOR_079",
+        "SOR_100",
+        "SOR_114",
+        "SOR_249",
+        "TWI_081"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/constant-ambush-entry-decline.jsonl.gz",
+          "sha256": "d33c4cdf6a1d65b56a210d6a4d4b0943fbc3bbb90f4c719ef94e4d35e26419d5",
+          "scenario": "constant-ambush-entry-decline",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        },
+        {
+          "fixture": "keyword/constant-ambush-entry-attack.jsonl.gz",
+          "sha256": "b6ba99096263442a0cd817651ef508271735bf39e7f81581f0ea7d85ee18e6ba",
+          "scenario": "constant-ambush-entry-attack",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        },
+        {
+          "fixture": "keyword/constant-ambush-entry-no-target.jsonl.gz",
+          "sha256": "8a83282fcf6367b371073b8601597624143e75496755e1bbf784aadbd0eaa8fd",
+          "scenario": "constant-ambush-entry-no-target",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-shielded-entry",
+      "keywords": [
+        "shielded"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_084",
+        "SHD_212"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/conditional-shielded-positive-entry.jsonl.gz",
+          "sha256": "834248270f467e17cb51b227c6313f3f5b2a03985d79b7489017f464a7b9f480",
+          "scenario": "conditional-shielded-positive-entry",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        },
+        {
+          "fixture": "keyword/conditional-shielded-negative-entry.jsonl.gz",
+          "sha256": "227c279eb2ae685680daf77b1637ccdb70115f204188b047a613cf498f191b44",
+          "scenario": "conditional-shielded-negative-entry",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-grit",
+      "keywords": [
+        "grit"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_090",
+        "SEC_029"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/conditional-grit-positive-combat.jsonl.gz",
+          "sha256": "9e2c07ba53f2773cb7c5d1f9220f439cb83fd8cd664936ddbcb3ff2efe161314",
+          "scenario": "conditional-grit-positive-combat",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        },
+        {
+          "fixture": "keyword/conditional-grit-negative-combat.jsonl.gz",
+          "sha256": "77f5a26d6f1e9e80fd4bd53d320f1fb25abd48f1df2bbda20a59b7e4ffa31643",
+          "scenario": "conditional-grit-negative-combat",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-saboteur-overwhelm",
+      "keywords": [
+        "saboteur",
+        "overwhelm"
+      ],
+      "relatedNewCandidateIds": [
+        "ASH_030",
+        "HMW_117",
+        "HMW_118",
+        "JTL_161",
+        "LOF_114",
+        "SHD_169",
+        "TWI_130"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/conditional-saboteur-overwhelm-positive.jsonl.gz",
+          "sha256": "be092bfaec7fc7aba2911eb1d196c17f1a1e7be50efe7c17df7c5f76f2e559c2",
+          "scenario": "conditional-saboteur-overwhelm-positive",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedAttackTargetSet": [
+            {
+              "key": "[\"card\",\"c73\",null,null,\"noti-mobile-pod\"]",
+              "kind": "card",
+              "card": "c73",
+              "arg": null,
+              "method": null,
+              "label": "noti-mobile-pod"
+            },
+            {
+              "key": "[\"card\",\"c103\",null,null,\"command-center\"]",
+              "kind": "card",
+              "card": "c103",
+              "arg": null,
+              "method": null,
+              "label": "command-center"
+            }
+          ]
+        },
+        {
+          "fixture": "keyword/conditional-saboteur-shield-overwhelm-spill.jsonl.gz",
+          "sha256": "0a4935ae6487af9b83aa48838302730a9347d29279c5a9eb9e1fedffebc53e27",
+          "scenario": "conditional-saboteur-shield-overwhelm-spill",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "shieldPresentBeforeSaboteurAttack": true
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "keyword-predicate-stat-aura",
+      "keywords": [
+        "sentinel"
+      ],
+      "relatedNewCandidateIds": [
+        "ASH_078",
+        "ASH_120",
+        "ASH_243",
+        "HMW_074",
+        "HMW_137",
+        "HMW_142",
+        "HMW_210",
+        "HMW_246",
+        "HMW_259",
+        "JTL_107",
+        "JTL_113",
+        "JTL_229",
+        "LAW_104",
+        "LAW_105",
+        "LOF_223",
+        "SEC_063",
+        "SEC_079",
+        "SHD_034",
+        "SHD_112",
+        "SHD_247",
+        "SOR_048",
+        "SOR_065",
+        "SOR_086",
+        "SOR_211",
+        "TS26_020",
+        "TWI_054"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/keyword-predicate-hp-aura-phase-expiry-lethal.jsonl.gz",
+          "sha256": "7be5032b4a99d0909eba2b0cfafd90a3574267e624b0be8372b814d61e6d3679",
+          "scenario": "keyword-predicate-hp-aura-phase-expiry-lethal",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "phase-sentinel-target-set",
+      "keywords": [
+        "sentinel"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_210",
+        "HMW_246",
+        "JTL_229",
+        "LAW_104",
+        "LOF_223",
+        "SOR_086"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/sentinel-restricts-nonsaboteur-attack.jsonl.gz",
+          "sha256": "43aebdacf6db2c3c014951c74c27a98b3671e219de437972946a3d1ee7ae5298",
+          "scenario": "sentinel-restricts-nonsaboteur-attack",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedAttackTargetSet": [
+            {
+              "key": "[\"card\",\"c74\",null,null,\"strike-team-vanguard\"]",
+              "kind": "card",
+              "card": "c74",
+              "arg": null,
+              "method": null,
+              "label": "strike-team-vanguard"
+            }
+          ]
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-source-unique",
+      "keywords": [
+        "ambush"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_118",
+        "HMW_131",
+        "LOF_118",
+        "SOR_079",
+        "SOR_100",
+        "SOR_114",
+        "SOR_249",
+        "TWI_081"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/constant-ambush-source-unique-keep-old.jsonl.gz",
+          "sha256": "a60ddd80d3f561b07ecf47c051e0cc66a45f9ce62a5073edb204db2e5c1d0da9",
+          "scenario": "constant-ambush-source-unique-keep-old",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        },
+        {
+          "fixture": "keyword/constant-ambush-source-unique-keep-new.jsonl.gz",
+          "sha256": "2965d052d56554e25df793b9b66b9452965de0bd44483e649eee79cff064443c",
+          "scenario": "constant-ambush-source-unique-keep-new",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-restore-trigger-capture",
+      "keywords": [
+        "restore"
+      ],
+      "relatedNewCandidateIds": [
+        "ASH_057",
+        "HMW_039",
+        "SEC_047",
+        "SEC_116",
+        "SOR_112",
+        "TS26_040",
+        "TWI_062"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/continuous-restore-captured-before-source-defeat.jsonl.gz",
+          "sha256": "b31e2179be5f4ac6e721a3b24cff72d816002c796c414809ebeffd9bc9b67726",
+          "scenario": "continuous-restore-captured-before-source-defeat",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "sourceDefeatChosenBeforeCapturedRestore": true
+        },
+        {
+          "fixture": "keyword/continuous-restore-source-bounce-before-attack.jsonl.gz",
+          "sha256": "ceaeceef6b87868b51cf15c791633c04536e0a062ceb04c47976ea5adbaaa961",
+          "scenario": "continuous-restore-source-bounce-before-attack",
+          "completeGame": true,
+          "initialAssertion": false,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-raid",
+      "keywords": [
+        "raid"
+      ],
+      "relatedNewCandidateIds": [
+        "ASH_105",
+        "HMW_117",
+        "JTL_257",
+        "LOF_162",
+        "LOF_169",
+        "LOF_212",
+        "SEC_134",
+        "SEC_249",
+        "SOR_144",
+        "SOR_159",
+        "TWI_180"
+      ],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/continuous-raid-attack-numeric.jsonl.gz",
+          "sha256": "30ad283a9cb9b356de55010b866c8b0ae37608ad880d34eba0c03b1fdd04fa26",
+          "scenario": "continuous-raid-attack-numeric",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        },
+        {
+          "fixture": "keyword/continuous-raid-source-bounce-before-attack.jsonl.gz",
+          "sha256": "88e2079eae5442af45a83af1a9435499e1db7a10aa582ba9b236038bb5ce724c",
+          "scenario": "continuous-raid-source-bounce-before-attack",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "printed-keyword-metadata",
+      "keywords": [],
+      "relatedNewCandidateIds": [],
+      "candidateRelationship": "Shared keyword mechanism; finite family cases do not assess each candidate condition or full interaction space",
+      "witnesses": [
+        {
+          "fixture": "keyword/mentioned-sentinel-is-not-printed-refugee.jsonl.gz",
+          "sha256": "da92b7191a83fdc50653dc1710e3d060c96aa0fb9b8f3f2b1b97f1fdaf2ae933",
+          "scenario": "mentioned-sentinel-is-not-printed-refugee",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedAttackTargetSet": [
+            {
+              "key": "[\"card\",\"c97\",null,null,\"refugee-of-the-path\"]",
+              "kind": "card",
+              "card": "c97",
+              "arg": null,
+              "method": null,
+              "label": "refugee-of-the-path"
+            },
+            {
+              "key": "[\"card\",\"c103\",null,null,\"command-center\"]",
+              "kind": "card",
+              "card": "c103",
+              "arg": null,
+              "method": null,
+              "label": "command-center"
+            }
+          ]
+        },
+        {
+          "fixture": "keyword/mentioned-sentinel-is-not-printed-shuttle.jsonl.gz",
+          "sha256": "ef57bd7450dbc4c77feead28147377ffa52ed2300e7eab148c21526cbdd63a83",
+          "scenario": "mentioned-sentinel-is-not-printed-shuttle",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "phase-keyword-loss",
+      "keywords": [
+        "sentinel"
+      ],
+      "relatedNewCandidateIds": [
+        "ASH_040",
+        "SOR_140"
+      ],
+      "candidateRelationship": "Concrete representative cards listed; finite interaction witnesses",
+      "witnesses": [
+        {
+          "fixture": "keyword-review/phase-sentinel-loss-removes-hp-lethal.jsonl.gz",
+          "sha256": "98f7b1ba8990536f16bc8774b890c0cea8323baed67a0e14e31a9ccbb9110aa4",
+          "scenario": "phase-sentinel-loss-removes-hp-lethal",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedEffect": "Sentinel printed HP6 + ShuttleHP2 survives damage7; phase loss removesHP2 and defeats unit"
+        },
+        {
+          "fixture": "keyword-review/phase-sentinel-loss-survivor-expiry-reacquires.jsonl.gz",
+          "sha256": "ea440a1e4c92608700ebe456464b24ee63cb171dbf5025ad0e082b063119dbdc",
+          "scenario": "phase-sentinel-loss-survivor-expiry-reacquires",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true,
+          "observedEffect": "damage5 unit survives loss withHP6 and gains Sentinel/HP8 back after phase expiry"
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "phase-grit",
+      "keywords": [
+        "grit"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_243"
+      ],
+      "candidateRelationship": "Concrete representative cards listed; finite interaction witnesses",
+      "witnesses": [
+        {
+          "fixture": "keyword-review/phase-grit-combat-expiry.jsonl.gz",
+          "sha256": "64885926f46a995e7b9c1761f6969960483ec0f724d5078d59a70d92b5477e5b",
+          "scenario": "phase-grit-combat-expiry",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true,
+          "observedEffect": "phase Grit makes power5+damage1=6 attack damage; retaliation addsdamage1 andpower7; expiry returnspower5"
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-keyword-loss",
+      "keywords": [
+        "sentinel",
+        "saboteur"
+      ],
+      "relatedNewCandidateIds": [
+        "ASH_030",
+        "ASH_040"
+      ],
+      "candidateRelationship": "Concrete representative cards listed; finite interaction witnesses",
+      "witnesses": [
+        {
+          "fixture": "keyword-review/constant-loss-marrok-shield-enables-saboteur.jsonl.gz",
+          "sha256": "c71f018857c26223bdb17956b3cf8101f91ddb434b4bf6b986f86fcec7e956f5",
+          "scenario": "constant-loss-marrok-shield-enables-saboteur",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedEffect": "Shield token upgrade disables intrinsic Sentinel and enables Saboteur"
+        },
+        {
+          "fixture": "keyword-review/constant-loss-marrok-shield-defeat-restores-sentinel.jsonl.gz",
+          "sha256": "c482d94c0359ca3e6fabae5ce2986220302e8d9b0f1b0485ab60f671e5a77483",
+          "scenario": "constant-loss-marrok-shield-defeat-restores-sentinel",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedEffect": "damage defeats Shield, deals0 damage, removes Saboteur and restores Sentinel"
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "constant-live-numeric-raid",
+      "keywords": [
+        "raid",
+        "overwhelm"
+      ],
+      "relatedNewCandidateIds": [
+        "HMW_117"
+      ],
+      "candidateRelationship": "Concrete representative cards listed; finite interaction witnesses",
+      "witnesses": [
+        {
+          "fixture": "keyword-review/live-raid-zero-to-three-combat.jsonl.gz",
+          "sha256": "6c961b8e423cc1cc669236374132bf094c9abfe6b61f8ced89d7e524390a02ac",
+          "scenario": "live-raid-zero-to-three-combat",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedEffect": "Raid0 instance initially present; three exhausted resources produceRaid3 and three combatdamage with no Overwhelm"
+        },
+        {
+          "fixture": "keyword-review/live-raid-all-resources-enables-overwhelm-shield-blocks.jsonl.gz",
+          "sha256": "c413b75531edd9bc2e7a5796352bd1c0b277510aab873699289c225e895f9b16",
+          "scenario": "live-raid-all-resources-enables-overwhelm-shield-blocks",
+          "completeGame": true,
+          "initialAssertion": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observedEffect": "all14 resources exhausted produceRaid14+Overwhelm; opposing Shield preventsdamage andspill"
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-nested-selection",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_071",
+        "HMW_091",
+        "HMW_186"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/nested-independent-base-then-unit-captured.jsonl.gz",
+          "sha256": "fcb1f3ca357d40916caaf3f7374e1b2cba96fd8f1a44af3d63a7d9830e3973e9",
+          "scenario": "nested-independent-base-then-unit-captured",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "baseSelected": true,
+            "noMutationBeforeSecondSelection": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/nested-optional-entire-group-decline.jsonl.gz",
+          "sha256": "e102cc72cdd062a5d5ee4a8b0a3e644be66693f8905473781260a4eb5c2e0425",
+          "scenario": "nested-optional-entire-group-decline",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-heal-tokens",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_089",
+        "HMW_091",
+        "JTL_072",
+        "SHD_047",
+        "SHD_049"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/heal-shield-group-damaged.jsonl.gz",
+          "sha256": "67a83cc3b51aa5864d5fb5d8abbb95cca9a08c4b55013ca86b27a0762a6e0bb5",
+          "scenario": "heal-shield-group-damaged",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/mandalorian-heal-all-two-shields.jsonl.gz",
+          "sha256": "6f0a2ec85b891330ddaf19591027f764d4036f36f58ef80f1910b4035e7e1325",
+          "scenario": "mandalorian-heal-all-two-shields",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "shieldIds": [
+              "c106",
+              "c107"
+            ],
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-base-damage",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "IBH_068",
+        "SHD_159"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/chaos-different-hand-amounts-captured.jsonl.gz",
+          "sha256": "64f4d6fbf1a188d3e2b23d2630b1b9e118ae62fe2ebd3cd94f138e34be010e2d",
+          "scenario": "chaos-different-hand-amounts-captured",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/chaos-both-lethal-bases-draw.jsonl.gz",
+          "sha256": "660f8e093524e48195314dc3a54c597086c0d5deaf8db3fa10ebc03c17c7e8b5",
+          "scenario": "chaos-both-lethal-bases-draw",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "up-to-selection",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_233",
+        "JTL_072",
+        "JTL_140",
+        "LAW_183",
+        "LOF_099",
+        "LOF_167",
+        "SEC_124",
+        "SHD_047",
+        "SHD_081"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/up-to-three-damage-0-selection.jsonl.gz",
+          "sha256": "6bd0df294aba5666dd3790100fff563345de0d49f3c84033b5351139579ab6f8",
+          "scenario": "up-to-three-damage-0-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/up-to-three-damage-1-selection.jsonl.gz",
+          "sha256": "08bf35cf788edcb24e010674aaa526c0394222278e403acbbbd6c54c3f30722c",
+          "scenario": "up-to-three-damage-1-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 1,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/up-to-three-damage-2-selection.jsonl.gz",
+          "sha256": "e6e9e8b156ec7e1f7dad29b284909434ecef7191163d6e21beb586c4bb262a59",
+          "scenario": "up-to-three-damage-2-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/up-to-three-damage-3-selection.jsonl.gz",
+          "sha256": "3628e62e4062eb66a3798e68040d73b4e404990bfde3556a7155dd0185f172df",
+          "scenario": "up-to-three-damage-3-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 3,
+            "atLimitExactActions": true,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+          "sha256": "9edb11da86fc0f46b47d9eab85669c7ff302feb1c4e563abe5956a87c13ff581",
+          "scenario": "up-to-three-toggle-at-limit-ordered",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 5,
+            "atLimitExactActions": true,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+          "sha256": "a16722e8d39b389f3a90d0881d1dd82be2c3944ccef4fa9647538c2cfc34e8c0",
+          "scenario": "up-to-event-outer-cancel-no-cost",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "cancelled": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-no-target-sibling",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_071",
+        "HMW_091",
+        "IBH_068",
+        "SEC_258",
+        "SOR_076"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/nested-none-unit-still-heals-base.jsonl.gz",
+          "sha256": "3a19a8556e76d4e4aa671b0fea627411539b547a9d487c7ce20fc3705febddee",
+          "scenario": "nested-none-unit-still-heals-base",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/nested-none-damage-still-heals-base.jsonl.gz",
+          "sha256": "31aff07b9565c16165c4609f73aa9b09bf2820eb75f1a6bc46d00776294ea968",
+          "scenario": "nested-none-damage-still-heals-base",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-token-identities",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "JTL_072",
+        "LAW_069",
+        "LOF_099",
+        "SEC_124",
+        "SHD_047",
+        "SHD_081"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/ghost-array-token-generation-order.jsonl.gz",
+          "sha256": "b6d7101cda1dae098e79bd34c3e304a4f3ab1b18df2e2440ee144777f0bd8751",
+          "scenario": "ghost-array-token-generation-order",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "exactTokenIds": {
+              "enemy": [
+                "c106",
+                "c108"
+              ],
+              "own": [
+                "c107",
+                "c109"
+              ]
+            },
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-shield-replacement",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_089",
+        "ASH_142"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/both-players-multiple-shields-replacement.jsonl.gz",
+          "sha256": "0027d7f5d69ed24df15709a9433de02e4e34a59eed844e21d627b9fd7653a9b4",
+          "scenario": "both-players-multiple-shields-replacement",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "bothPlayerReplacementOrderActions": [
+              {
+                "label": "You",
+                "arg": 0
+              },
+              {
+                "label": "Opponent",
+                "arg": 1
+              }
+            ],
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/same-player-two-shielded-units-replacement.jsonl.gz",
+          "sha256": "c6d6b9d0d6cfad39db1cb38f834fb7cc1d25e9fdcc20dfc5c24d9883a78ad112",
+          "scenario": "same-player-two-shielded-units-replacement",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "replacementMenus": [
+              {
+                "actor": "p2",
+                "title": "Resolve \"Defeat Shield to prevent attached unit from taking damage\"",
+                "actions": [
+                  {
+                    "key": "[\"button\",null,\"next\",null,\"Resolve next\"]",
+                    "kind": "button",
+                    "card": null,
+                    "arg": "next",
+                    "method": null,
+                    "label": "Resolve next"
+                  },
+                  {
+                    "key": "[\"button\",null,\"all\",null,\"Resolve all (2)\"]",
+                    "kind": "button",
+                    "card": null,
+                    "arg": "all",
+                    "method": null,
+                    "label": "Resolve all (2)"
+                  }
+                ]
+              }
+            ],
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-aura-defeat",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_142"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/aura-source-and-target-simultaneous-lethal.jsonl.gz",
+          "sha256": "9d2c0f6c4b6cd4f2d2661666387bb38eeefdb097bbbb1ccb81b6e8ab6bb2599a",
+          "scenario": "aura-source-and-target-simultaneous-lethal",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-leader-conditional",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_003"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/baylan-leader-action-condition-true.jsonl.gz",
+          "sha256": "043474124d9a6f42912dca8cd1ad746d6c9716cabbc222d58a397fe5488cbe04",
+          "scenario": "baylan-leader-action-condition-true",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/baylan-leader-action-condition-false.jsonl.gz",
+          "sha256": "c9897aa8c518a427f853f038bd4db7bfa7206017e6b428476d9c4befbcb21406",
+          "scenario": "baylan-leader-action-condition-false",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "confirmedNoEffect": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-leaders/baylan-deployed-attack-condition-true.jsonl.gz",
+          "sha256": "f2f514f1c35074c44e2bac0fd332565baec6b7d9f4d3b94be9bb030863cecef4",
+          "scenario": "baylan-deployed-attack-condition-true",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "selectedTriggeredTarget": true,
+            "postAction": true
+          },
+          "constructedDeployEpicUsed": true
+        },
+        {
+          "fixture": "group-leaders/baylan-deployed-attack-condition-false.jsonl.gz",
+          "sha256": "22e8a860172dde785f7613747b5e562ef1d0443f78c7b453fb82c5e93a7bfafb",
+          "scenario": "baylan-deployed-attack-condition-false",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          },
+          "constructedDeployEpicUsed": true
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-leader-keywords",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "TWI_015"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/grievous-leader-action-enemy-droid-positive.jsonl.gz",
+          "sha256": "81e4fe0ab29894d56eae0dba0a9cf9ed01590784d6c5cfa43c702d9ecbb81340",
+          "scenario": "grievous-leader-action-enemy-droid-positive",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "nonDroidExcluded": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/grievous-leader-action-negative-target-filter.jsonl.gz",
+          "sha256": "ccf7014c406a12e99fb15ef748ec3b26d35819102a9325017bbda93d65348fec",
+          "scenario": "grievous-leader-action-negative-target-filter",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "nonDroidExcluded": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-leaders/grievous-deployed-attack-enemy-droid-positive.jsonl.gz",
+          "sha256": "4526ffb1c9878e43f4cdd3fb0dd066dc1115758a8f7f34060d2aafd6d3ab5852",
+          "scenario": "grievous-deployed-attack-enemy-droid-positive",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "nonDroidExcluded": true,
+            "postAction": true
+          },
+          "constructedDeployEpicUsed": true
+        },
+        {
+          "fixture": "group-leaders/grievous-deployed-attack-negative-target-filter.jsonl.gz",
+          "sha256": "5e871a9b4c7e2b6dc575bd728f2499122cf39e661eda6e4c27bbf51b7a7050b2",
+          "scenario": "grievous-deployed-attack-negative-target-filter",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "declined": true,
+            "postAction": true
+          },
+          "constructedDeployEpicUsed": true
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-damage-live-keyword",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "ASH_071",
+        "SOR_131"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/fifth-brother-group-damage-before-live-raid-combat.jsonl.gz",
+          "sha256": "a6257111f8c3c089881400093dc9ea5a943cc6d22eb0a4d066ba98a45658d193",
+          "scenario": "fifth-brother-group-damage-before-live-raid-combat",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "beforeSelectionDamage": 0,
+            "combatDamage": 3,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "unlimited-base-selection",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "TS26_053"
+      ],
+      "candidateRelationship": "Named cards are direct sources in the listed scenarios; shared mechanisms do not imply every candidate condition is covered",
+      "witnesses": [
+        {
+          "fixture": "group/unlimited-bases-0-selection.jsonl.gz",
+          "sha256": "c5622e0fc70b041e3d8039d9bf44c27dac69cb34956a2c41bb501f43395eb95f",
+          "scenario": "unlimited-bases-0-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/unlimited-bases-1-selection.jsonl.gz",
+          "sha256": "19266fc8a51724da45d6a12c81fd14d924781d4b8134370d6b9a63ee6e84df15",
+          "scenario": "unlimited-bases-1-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 1,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/unlimited-bases-2-selection.jsonl.gz",
+          "sha256": "ad8efa69eead595e2c54fb8d21f444ea37a40b19209160576c1c5faf57887876",
+          "scenario": "unlimited-bases-2-selection",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/unlimited-bases-toggle-ordered.jsonl.gz",
+          "sha256": "5f469b71bba6b025e9f8b884870e28e167c158c1087cc7ed7a675f58448084cb",
+          "scenario": "unlimited-bases-toggle-ordered",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 4,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group/unlimited-bases-undamaged-selectable-zero-heal.jsonl.gz",
+          "sha256": "1c0b2d913c6244ca0db75e1529ab9b82e235adfe72e0883c05a34006cecc5ce9",
+          "scenario": "unlimited-bases-undamaged-selectable-zero-heal",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "undamagedBaseSelectable": true,
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-damage-defeat-order",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [
+        "LAW_183"
+      ],
+      "candidateRelationship": "Only listed finite mechanisms directly witnessed; broader combinations remain unassessed",
+      "witnesses": [
+        {
+          "fixture": "group-order/reverse-target-lethal-damage-discard-order.jsonl.gz",
+          "sha256": "9bd129dba4bb4a0b5dc2bfb776ad6fca374f60681a441b3ec4cdf6deee8c3974",
+          "scenario": "reverse-target-lethal-damage-discard-order",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "discardOrder": [
+              "c5",
+              "c2"
+            ],
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-shield-identity",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "relatedNewCandidateIds": [],
+      "candidateRelationship": "Only listed finite mechanisms directly witnessed; broader combinations remain unassessed",
+      "witnesses": [
+        {
+          "fixture": "group-shields/three-targets-three-shields-both-owners-opponent-first.jsonl.gz",
+          "sha256": "5d243eb3fff9402b11294e5e5b4209d9ef68d9e82fad4b092f4e77daada63310",
+          "scenario": "three-targets-three-shields-both-owners-opponent-first",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 3,
+            "atLimitExactActions": true,
+            "selectionDone": true,
+            "playerOrder": "Opponent",
+            "replacementMenus": [
+              {
+                "actor": "p1",
+                "title": "Resolve \"Defeat Shield to prevent attached unit from taking damage\"",
+                "actions": [
+                  {
+                    "key": "[\"button\",null,\"next\",null,\"Resolve next\"]",
+                    "kind": "button",
+                    "card": null,
+                    "arg": "next",
+                    "method": null,
+                    "label": "Resolve next"
+                  },
+                  {
+                    "key": "[\"button\",null,\"all\",null,\"Resolve all (2)\"]",
+                    "kind": "button",
+                    "card": null,
+                    "arg": "all",
+                    "method": null,
+                    "label": "Resolve all (2)"
+                  }
+                ]
+              }
+            ],
+            "survivingShieldIds": {
+              "own": [
+                "c106",
+                "c107"
+              ],
+              "enemy": [
+                "c110",
+                "c111"
+              ],
+              "third": [
+                "c112",
+                "c114"
+              ]
+            },
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-shields/three-targets-three-shields-both-owners-you-first.jsonl.gz",
+          "sha256": "2016106da4a233b623297302ef0051e7aa2230e82c42f752a2a0c993808b4b31",
+          "scenario": "three-targets-three-shields-both-owners-you-first",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 3,
+            "atLimitExactActions": true,
+            "selectionDone": true,
+            "playerOrder": "You",
+            "replacementMenus": [
+              {
+                "actor": "p1",
+                "title": "Resolve \"Defeat Shield to prevent attached unit from taking damage\"",
+                "actions": [
+                  {
+                    "key": "[\"button\",null,\"next\",null,\"Resolve next\"]",
+                    "kind": "button",
+                    "card": null,
+                    "arg": "next",
+                    "method": null,
+                    "label": "Resolve next"
+                  },
+                  {
+                    "key": "[\"button\",null,\"all\",null,\"Resolve all (2)\"]",
+                    "kind": "button",
+                    "card": null,
+                    "arg": "all",
+                    "method": null,
+                    "label": "Resolve all (2)"
+                  }
+                ]
+              }
+            ],
+            "survivingShieldIds": {
+              "own": [
+                "c107",
+                "c108"
+              ],
+              "enemy": [
+                "c109",
+                "c110"
+              ],
+              "third": [
+                "c112",
+                "c114"
+              ]
+            },
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "title-constant-keywords",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SHD_188",
+        "SHD_190"
+      ],
+      "candidateRelationship": "Only listed finite mechanisms directly witnessed; broader combinations remain unassessed",
+      "witnesses": [
+        {
+          "fixture": "title/title-grants-friendly-only-printed-and-derived.jsonl.gz",
+          "sha256": "279081ff93181dcc65bb06c53462dcd19869113fc5091a4f6fa214d8c1b3db4e",
+          "scenario": "title-grants-friendly-only-printed-and-derived",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "eachOwnerOwnSourcesGrant": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "title/title-grants-opponent-excluded.jsonl.gz",
+          "sha256": "c599024175426e8e79dd9ce66d65a016cef9bf7ccacadf724919a83919421ec7",
+          "scenario": "title-grants-opponent-excluded",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "opponentTitlesExcluded": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "title-source-leave",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SHD_188",
+        "SHD_190"
+      ],
+      "candidateRelationship": "Only listed finite mechanisms directly witnessed; broader combinations remain unassessed",
+      "witnesses": [
+        {
+          "fixture": "title/title-source-leaves-saboteur-and-stats-expire.jsonl.gz",
+          "sha256": "cda6211ff63fcd64ae7f664666781b894a0cc4a77b5840a42ab8a6fa9ab90ba8",
+          "scenario": "title-source-leaves-saboteur-and-stats-expire",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "title/title-source-leaves-hp-loss-lethal.jsonl.gz",
+          "sha256": "b7b9b53fc6a4c197ca0159ed80a3143aab4897c28e1c90ada3bccfd87cafa667",
+          "scenario": "title-source-leaves-hp-loss-lethal",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "title-ambush-entry",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SHD_188",
+        "SHD_190"
+      ],
+      "candidateRelationship": "Only listed finite mechanisms directly witnessed; broader combinations remain unassessed",
+      "witnesses": [
+        {
+          "fixture": "title/title-derived-ambush-entry-attack.jsonl.gz",
+          "sha256": "6321714b7e5f31d811ef4ab0c6e3a524fa78af6bb65043e839d160402e36105e",
+          "scenario": "title-derived-ambush-entry-attack",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "title/title-derived-ambush-entry-decline.jsonl.gz",
+          "sha256": "39f6185e0e345c3d53356ddd1b3e6a914e1c956a6b23f103710efa12a7e28cf2",
+          "scenario": "title-derived-ambush-entry-decline",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "ambushDeclined": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "title-saboteur-combat",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SHD_188",
+        "SHD_190"
+      ],
+      "candidateRelationship": "Only listed finite mechanisms directly witnessed; broader combinations remain unassessed",
+      "witnesses": [
+        {
+          "fixture": "title/title-derived-saboteur-ambush-removes-shields.jsonl.gz",
+          "sha256": "07b45308ef1fe613bc5adcbec975a8bd55fbecd1197816338c3c6302f37208ca",
+          "scenario": "title-derived-saboteur-ambush-removes-shields",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-shield-hp-defeat-order",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SEC_155"
+      ],
+      "candidateRelationship": "Exact source and cross-family negative aura/Shield mechanisms directly asserted",
+      "witnesses": [
+        {
+          "fixture": "group-hp/last-shield-hp-loss-damage-before-stat-defeat.jsonl.gz",
+          "sha256": "1a995eb03f9a10de44a7847b6424bccf927a4882e1d8223f27adf9443f3d7ed7",
+          "scenario": "last-shield-hp-loss-damage-before-stat-defeat",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "discardOrder": [
+              "c2",
+              "c4"
+            ],
+            "shieldedDefeatedThroughHpLoss": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-shield-aura-preselected-defeat",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SEC_155"
+      ],
+      "candidateRelationship": "Exact source and cross-family negative aura/Shield mechanisms directly asserted",
+      "witnesses": [
+        {
+          "fixture": "group-hp/snoke-last-shield-preselected-dead-set-follower-first.jsonl.gz",
+          "sha256": "0e68267076fb9ada740898d9b8100d6f77d4b7b2a8a4dda5cebe96ca7f79fd03",
+          "scenario": "snoke-last-shield-preselected-dead-set-follower-first",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "validInitialEffectiveHp": true,
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "defeatedIds": {
+              "snoke": "c58",
+              "shielded": "c1"
+            },
+            "snokeRemovalDidNotRescueFollower": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-hp/snoke-last-shield-preselected-dead-set-snoke-first.jsonl.gz",
+          "sha256": "22e9869f46bd4f2c7eac4162c19e46f75b92c8afd6e8bbfd5fdb276a786b5e52",
+          "scenario": "snoke-last-shield-preselected-dead-set-snoke-first",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "observed": {
+            "validInitialEffectiveHp": true,
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "defeatedIds": {
+              "snoke": "c56",
+              "shielded": "c1"
+            },
+            "snokeRemovalDidNotRescueFollower": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-completion-up-to-defeat",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "IBH_104"
+      ],
+      "candidateRelationship": "Witnesses assert effects for their actual scripted cards. relatedNewCandidateIds may also include source-reviewed shared-mechanism aliases; see cardCoverageMappings for the explicit dedicated/shared split.",
+      "witnesses": [
+        {
+          "fixture": "group-completion/completion-up-to-defeat-0-selected.jsonl.gz",
+          "sha256": "b81576477b0ae0a9dff7d84ffcf2e4071607a3be375041fd65ae264dc1b54288",
+          "scenario": "completion-up-to-defeat-0-selected",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "ownerCostFilters": true,
+            "selectionDone": true,
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-completion/completion-up-to-defeat-2-selected.jsonl.gz",
+          "sha256": "5c2bd1f13121a37ffef69b44564b68d8bc0345fcd437b632a9e851d47e4793ac",
+          "scenario": "completion-up-to-defeat-2-selected",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "ownerCostFilters": true,
+            "acceptedSelectionClicks": 2,
+            "selectionDone": true,
+            "discardOrder": [
+              "c54",
+              "c57"
+            ],
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-completion-ready-shield",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "LAW_043"
+      ],
+      "candidateRelationship": "Witnesses assert effects for their actual scripted cards. relatedNewCandidateIds may also include source-reviewed shared-mechanism aliases; see cardCoverageMappings for the explicit dedicated/shared split.",
+      "witnesses": [
+        {
+          "fixture": "group-completion/completion-ready-shield-already-ready.jsonl.gz",
+          "sha256": "152bf85b1719189739b87e0dc0aabbcb3311c4fc03d94a2556e51fdedf0a470c",
+          "scenario": "completion-ready-shield-already-ready",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-completion/completion-ready-shield-exhausted.jsonl.gz",
+          "sha256": "1d24c9dbbd782d4e90412a8abc428d3614683b9e8bf8cedf265c589b59a1aeb4",
+          "scenario": "completion-ready-shield-exhausted",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-completion-damage-ready",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "SEC_165"
+      ],
+      "candidateRelationship": "Witnesses assert effects for their actual scripted cards. relatedNewCandidateIds may also include source-reviewed shared-mechanism aliases; see cardCoverageMappings for the explicit dedicated/shared split.",
+      "witnesses": [
+        {
+          "fixture": "group-completion/completion-damage-ready-friendly-low-power.jsonl.gz",
+          "sha256": "372803327b183ec3771034864b20b291f317659279f6a2d9abf017299f8adcc6",
+          "scenario": "completion-damage-ready-friendly-low-power",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "friendlyPowerFilter": true,
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-completion-damage-ready-conditional",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "TS26_069"
+      ],
+      "candidateRelationship": "Witnesses assert effects for their actual scripted cards. relatedNewCandidateIds may also include source-reviewed shared-mechanism aliases; see cardCoverageMappings for the explicit dedicated/shared split.",
+      "witnesses": [
+        {
+          "fixture": "group-completion/completion-damage-ready-clone-false.jsonl.gz",
+          "sha256": "4c595b68ca48af71df29698139fdfb2082ce3955aa49d822f2f9a25381f2c39a",
+          "scenario": "completion-damage-ready-clone-false",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "postAction": true
+          }
+        },
+        {
+          "fixture": "group-completion/completion-damage-ready-clone-true.jsonl.gz",
+          "sha256": "3eeb1914c29cf50c4f8dba24c823155af23417ebca3615c44ed3b7bbfdc00675",
+          "scenario": "completion-damage-ready-clone-true",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": false,
+          "observed": {
+            "postAction": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    },
+    {
+      "family": "group-completion-phase-keyword-stats",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "relatedNewCandidateIds": [
+        "IBH_068",
+        "LOF_114",
+        "LOF_126",
+        "LOF_167",
+        "TWI_074"
+      ],
+      "candidateRelationship": "Witnesses assert effects for their actual scripted cards. relatedNewCandidateIds may also include source-reviewed shared-mechanism aliases; see cardCoverageMappings for the explicit dedicated/shared split.",
+      "witnesses": [
+        {
+          "fixture": "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+          "sha256": "c619b36b7b9a93b547af1abfac69b2fb1e83570892c9e1b26bfb2eba9b4e5610",
+          "scenario": "completion-phase-sentinel-stats-initiative-false",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true,
+          "observed": {
+            "initialInitiative": false,
+            "postAction": true,
+            "laterRoundAssertion": true
+          }
+        },
+        {
+          "fixture": "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+          "sha256": "1e2e0b44302c33274fe89a452b1b7d8e6de71d5e3349760c7b64a2656a110743",
+          "scenario": "completion-phase-sentinel-stats-initiative-true",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true,
+          "observed": {
+            "initialInitiative": true,
+            "postAction": true,
+            "laterRoundAssertion": true
+          }
+        },
+        {
+          "fixture": "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz",
+          "sha256": "77f179d3b122801ddf3ae7affe6967687a9540d7aee99229cb3f1ccb6d089b9f",
+          "scenario": "completion-phase-overwhelm-and-stats-expire",
+          "completeGame": true,
+          "postActionAssertion": true,
+          "laterRoundAssertion": true,
+          "observed": {
+            "postAction": true,
+            "laterRoundAssertion": true
+          }
+        }
+      ],
+      "native": {
+        "status": "matched",
+        "command": "cargo test --locked --workspace",
+        "evidence": "verification.json"
+      },
+      "wasm": {
+        "status": "matched",
+        "command": "npm run wasm:test",
+        "evidence": "verification.json"
+      }
+    }
+  ],
+  "frozenInputs": [
+    {
+      "family": "keywords",
+      "catalogueSha256": "a1153517b32c4613be1f1dd40ab259acaa7c2c1cf3883331b41389f747e3ded2",
+      "poolSha256": "c7f20fdc6e8579dc7f7e051a6a268f501a9bef4ee979917df4bc8649922d5a3e",
+      "admitted": 631,
+      "gains": 67
+    },
+    {
+      "family": "groups-and-selections",
+      "catalogueSha256": "fcf34bb16de777eb01b6566d32f11475620f035ec64abe142d1060ab12e8861a",
+      "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+      "admitted": 662,
+      "gainsBeyondKeyword": 31
+    },
+    {
+      "family": "title-dependent-constants",
+      "catalogueSha256": "acfd4d819063572bdf99af696aa03f55fa2430484b31c7ec4b6a77701e910603",
+      "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+      "admitted": 664,
+      "gainsBeyondGroups": 2
+    }
+  ],
+  "dedicatedLeaderCards": [
+    "ASH_003",
+    "TWI_015"
+  ],
+  "currentFrozenAdmittedPoolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+  "currentFrozenCatalogueSha256": "acfd4d819063572bdf99af696aa03f55fa2430484b31c7ec4b6a77701e910603",
+  "groupBlockedProspectiveIds": [
+    "SEC_084",
+    "SHD_075",
+    "SHD_160",
+    "TWI_178"
+  ],
+  "groupCoverageLimits": "SHD075 heal+Experience remains blocked/excluded. Explicit shared-mechanism mappings include untested card-specific predicates; play witnesses alone are not positive effect evidence. Completion corpus establishes missing multi-defeat, ready/token, damage/conditional-ready and joint phase keyword/stat expiry distinctions; all ten completion games match the final native and rebuilt Wasm runtimes, as recorded in verification.json.",
+  "retiredFixtures": "retired-fixtures/rejections.json",
+  "unresolvedEngineDiagnostics": [],
+  "resolvedHarnessDiagnostics": [
+    {
+      "diagnostic": "engine-diagnostics/last-shield-hp-loss-timeout.json",
+      "status": "resolved-harness-assertion-formatting-timeout",
+      "acceptedFixture": "group-hp/last-shield-hp-loss-damage-before-stat-defeat.jsonl.gz"
+    }
+  ],
+  "reconciledSharedMechanisms": [
+    {
+      "id": "ASH_040",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Persistent loseKeyword Sentinel suppression shares loss layering already witnessed; global owner-any/match-true target scope is source/IR reviewed, not a dedicated Poe aura toggle case.",
+      "sourcePath": "game/cards/08_ASH/units/PoeDameronIllComeBackForYou.ts",
+      "sourceHash": "ebab2e6423f107e11542118a196d7726655851d978ba1155f47092c244529aa8",
+      "compiledSourceHash": "ebab2e6423f107e11542118a196d7726655851d978ba1155f47092c244529aa8",
+      "runtimeRelevantIrSha256": "a2c765b0f441edbf832bbf9e44190b34e015a3d5009793d0fa21e23482f90e22",
+      "fullIrReviewed": true,
+      "families": [
+        "constant-keyword-loss",
+        "phase-keyword-loss"
+      ],
+      "witnessReferences": [
+        "keyword-review/constant-loss-marrok-shield-enables-saboteur.jsonl.gz",
+        "keyword-review/constant-loss-marrok-shield-defeat-restores-sentinel.jsonl.gz",
+        "keyword-review/phase-sentinel-loss-removes-hp-lethal.jsonl.gz",
+        "keyword-review/phase-sentinel-loss-survivor-expiry-reacquires.jsonl.gz"
+      ]
+    },
+    {
+      "id": "ASH_071",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Self damage plus nested opponent-space damage uses the witnessed deferred nested-selection-before-handlers mechanism; owner/arena scope source reviewed.",
+      "sourcePath": "game/cards/08_ASH/units/BatteredHaulcraft.ts",
+      "sourceHash": "456128a27da7476608caa9aa5344abee3395e1d6262939f9fe721577793e61a9",
+      "compiledSourceHash": "456128a27da7476608caa9aa5344abee3395e1d6262939f9fe721577793e61a9",
+      "runtimeRelevantIrSha256": "c41466e807ca5118fd090c7d4bc0dd21076cb00fab4a0b9558abe7ba7341966a",
+      "fullIrReviewed": true,
+      "families": [
+        "group-damage-live-keyword",
+        "group-nested-selection",
+        "group-no-target-sibling"
+      ],
+      "witnessReferences": [
+        "group/fifth-brother-group-damage-before-live-raid-combat.jsonl.gz",
+        "group/nested-independent-base-then-unit-captured.jsonl.gz",
+        "group/nested-optional-entire-group-decline.jsonl.gz",
+        "group/nested-none-unit-still-heals-base.jsonl.gz",
+        "group/nested-none-damage-still-heals-base.jsonl.gz"
+      ]
+    },
+    {
+      "id": "HMW_091",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Nested friendly-unit heal plus own-base heal shares independent binding, deferred handlers, and no-target sibling healing; heal amounts and friendly scope source reviewed.",
+      "sourcePath": "game/cards/09_HMW/units/PeltaReliefFrigate.ts",
+      "sourceHash": "bf1b73aaafa1d514473decfff6a86dd95723b238a5f8deeae431ecaa9faeda59",
+      "compiledSourceHash": "bf1b73aaafa1d514473decfff6a86dd95723b238a5f8deeae431ecaa9faeda59",
+      "runtimeRelevantIrSha256": "c3ee59119133be2cbd6dbb56d9c17079645e547eee297d0e6fb86fc379a1a418",
+      "fullIrReviewed": true,
+      "families": [
+        "group-nested-selection",
+        "group-no-target-sibling",
+        "group-heal-tokens"
+      ],
+      "witnessReferences": [
+        "group/nested-independent-base-then-unit-captured.jsonl.gz",
+        "group/nested-optional-entire-group-decline.jsonl.gz",
+        "group/nested-none-unit-still-heals-base.jsonl.gz",
+        "group/nested-none-damage-still-heals-base.jsonl.gz",
+        "group/heal-shield-group-damaged.jsonl.gz",
+        "group/mandalorian-heal-all-two-shields.jsonl.gz"
+      ]
+    },
+    {
+      "id": "IBH_068",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Vigilance condition wrapping fixed enemy-base damage/own-base heal shares captured condition and independent base handlers; Vigilance predicate source reviewed, no dedicated Veers true/false effect case.",
+      "sourcePath": "game/cards/06_IBH/units/GeneralVeersLeadingTheAssault.ts",
+      "sourceHash": "ef7dad00cd4d4709d09efce3da1d8fc49d2aae077cd002f810f913e9c45a9cc3",
+      "compiledSourceHash": "ef7dad00cd4d4709d09efce3da1d8fc49d2aae077cd002f810f913e9c45a9cc3",
+      "runtimeRelevantIrSha256": "d8f5c0e7ec211741e60602e4608596e5a9dea354b9a830b5d73438057037ace8",
+      "fullIrReviewed": true,
+      "families": [
+        "group-base-damage",
+        "group-no-target-sibling",
+        "group-completion-phase-keyword-stats"
+      ],
+      "witnessReferences": [
+        "group/chaos-different-hand-amounts-captured.jsonl.gz",
+        "group/chaos-both-lethal-bases-draw.jsonl.gz",
+        "group/nested-none-unit-still-heals-base.jsonl.gz",
+        "group/nested-none-damage-still-heals-base.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ]
+    },
+    {
+      "id": "JTL_072",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "UpTo2 Shield allocation over trait-filtered ordered targets shares witnessed selector and batched token generation; Fringe query source reviewed.",
+      "sourcePath": "game/cards/04_JTL/units/WingGuardSecurityTeam.ts",
+      "sourceHash": "5880cdda74f6e1ea4772696a07561cacc957d2005684d19fc5a68bf3d28cf230",
+      "compiledSourceHash": "5880cdda74f6e1ea4772696a07561cacc957d2005684d19fc5a68bf3d28cf230",
+      "runtimeRelevantIrSha256": "2a0606f7b31787d9c76205a6784b0d39157670d0bfd6d034154c8fd62cb38fca",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-token-identities",
+        "group-heal-tokens"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group/ghost-array-token-generation-order.jsonl.gz",
+        "group/heal-shield-group-damaged.jsonl.gz",
+        "group/mandalorian-heal-all-two-shields.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LAW_183",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "UpTo2 space-unit damage shares ordered bounded multi-target damage and defeat callbacks; space filter/count2 source reviewed.",
+      "sourcePath": "game/cards/07_LAW/units/B-WingSkirmisher.ts",
+      "sourceHash": "60bdefaacdd49600a7fb7032ace1974b6766b97ced0b942b4f9215b4d92102b8",
+      "compiledSourceHash": "60bdefaacdd49600a7fb7032ace1974b6766b97ced0b942b4f9215b4d92102b8",
+      "runtimeRelevantIrSha256": "5885181f7d8f088996fdf7bb86adc146c15a41d427ec2e5ed32438d7eca36f0b",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-damage-defeat-order"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group-order/reverse-target-lethal-damage-discard-order.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LOF_099",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Optional UpTo3 Experience allocation uses witnessed zero/ordered selection and one token per target allocation; Force predicate source reviewed.",
+      "sourcePath": "game/cards/05_LOF/units/PaladinTrainingCorvette.ts",
+      "sourceHash": "6d974cf707465aef1b443172fbc71c4ec83dffeab7b86e7574de1c22460049f4",
+      "compiledSourceHash": "6d974cf707465aef1b443172fbc71c4ec83dffeab7b86e7574de1c22460049f4",
+      "runtimeRelevantIrSha256": "1b3c1c76a4b4ed10a010e519462909d97f4dd8ab44f826729f9dd6ce4fd54760",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group/ghost-array-token-generation-order.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LOF_114",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Phase Overwhelm grant/expiry is directly witnessed by LOF126; Overwhelm combat/spill and phase leave-play cleanup are separately witnessed. Friendly-other-than-source predicate and optional trigger source reviewed.",
+      "sourcePath": "game/cards/05_LOF/units/Kaadu.ts",
+      "sourceHash": "e3b95587b439db8b134c786b39e1061e6834bedba9a88f2c8dff912821a769a2",
+      "compiledSourceHash": "e3b95587b439db8b134c786b39e1061e6834bedba9a88f2c8dff912821a769a2",
+      "runtimeRelevantIrSha256": "3fbf79cd54c4f196f00efe1facd1d58eee1f5b05b047fd7abec838a45d6ccbc1",
+      "fullIrReviewed": true,
+      "families": [
+        "group-completion-phase-keyword-stats",
+        "constant-saboteur-overwhelm",
+        "phase-sentinel"
+      ],
+      "witnessReferences": [
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz",
+        "keyword/conditional-saboteur-overwhelm-positive.jsonl.gz",
+        "keyword/conditional-saboteur-shield-overwhelm-spill.jsonl.gz",
+        "keyword/phase-sentinel-expiry.jsonl.gz",
+        "keyword/phase-sentinel-bounce-cleanup.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LOF_167",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "Captured initiative true/false condition and ordered UpTo3 damage share witnessed pieces; wrapping an entire nested selector and noAction branch source reviewed.",
+      "sourcePath": "game/cards/05_LOF/units/SaeseeTiinCourageousWarrior.ts",
+      "sourceHash": "565d5ad8ad43535b0f44d5a6d57ad5b9b515932467a11ba28f6e4f043a34fb65",
+      "compiledSourceHash": "565d5ad8ad43535b0f44d5a6d57ad5b9b515932467a11ba28f6e4f043a34fb65",
+      "runtimeRelevantIrSha256": "3f89eff9d1aecd20ac28877edfe353eb6651dcb7e02e21180678da9bde4477a7",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-completion-phase-keyword-stats"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ]
+    },
+    {
+      "id": "SEC_124",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "UpTo3 Experience allocation over Official trait shares ordered selection/token generation; Official predicate source reviewed.",
+      "sourcePath": "game/cards/06_SEC/events/BudgetScheming.ts",
+      "sourceHash": "6b9577adc29e539f0b2633aba9604f996ad82b914beea5005a1f6fe8306f9001",
+      "compiledSourceHash": "6b9577adc29e539f0b2633aba9604f996ad82b914beea5005a1f6fe8306f9001",
+      "runtimeRelevantIrSha256": "5715c21e3109d89affa477d0a63cfb6d7487a00947038f6ce3a96e72ad835afd",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group/ghost-array-token-generation-order.jsonl.gz"
+      ]
+    },
+    {
+      "id": "SHD_047",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "UpTo3 Shield allocation shares ordered selection/token generation; Mandalorian isUnit/trait predicate source reviewed.",
+      "sourcePath": "game/cards/02_SHD/units/TheArmorerSurvivalIsStrength.ts",
+      "sourceHash": "b1a668474453a4964c50e04d36e04357e837f2224aa0351fe53a5af8f11e97d4",
+      "compiledSourceHash": "b1a668474453a4964c50e04d36e04357e837f2224aa0351fe53a5af8f11e97d4",
+      "runtimeRelevantIrSha256": "2ea1d87daf46038bebbb0f373eb3b44c5c642335a3a9fd0037225aa74d1ed500",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-token-identities",
+        "group-heal-tokens"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group/ghost-array-token-generation-order.jsonl.gz",
+        "group/heal-shield-group-damaged.jsonl.gz",
+        "group/mandalorian-heal-all-two-shields.jsonl.gz"
+      ]
+    },
+    {
+      "id": "SHD_081",
+      "coverageKind": "shared-mechanism/source-reviewed; no dedicated positive effect claim for this card",
+      "reason": "UpTo3 Experience allocation shares ordered selection/token generation; Trooper predicate source reviewed.",
+      "sourcePath": "game/cards/01_SOR/units/GeneralTaggeConcernedCommander.ts",
+      "sourceHash": "4201de9e845b5314daf04b5100dfeea584ea30aac5e935d9d61f04297b7780dd",
+      "compiledSourceHash": "4201de9e845b5314daf04b5100dfeea584ea30aac5e935d9d61f04297b7780dd",
+      "runtimeRelevantIrSha256": "f5f46d7af0f955c6cc6f2b332121d4144071d8d23d6e5c36441803316a7f7438",
+      "fullIrReviewed": true,
+      "families": [
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "witnessReferences": [
+        "group/up-to-three-damage-0-selection.jsonl.gz",
+        "group/up-to-three-damage-1-selection.jsonl.gz",
+        "group/up-to-three-damage-2-selection.jsonl.gz",
+        "group/up-to-three-damage-3-selection.jsonl.gz",
+        "group/up-to-three-toggle-at-limit-ordered.jsonl.gz",
+        "group/up-to-event-outer-cancel-no-cost.jsonl.gz",
+        "group/ghost-array-token-generation-order.jsonl.gz"
+      ]
+    }
+  ],
+  "cardCoverageMappings": [
+    {
+      "id": "ASH_003",
+      "sourcePath": "game/cards/08_ASH/leaders/BaylanSkollPowerBeyondDream.ts",
+      "compiledSourceHash": "2cc77d43537cc25914d610285fd4385dabc54e9c2a83d5003d6be4dd610fad7d",
+      "runtimeRelevantIrSha256": "58a4acc0d17c401492435066b7f72aabb40d53dcd09f5fb63e3ee2ee4b5ef568",
+      "mechanismFamilies": [
+        "group-leader-conditional"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": null,
+      "leaderSideWitnesses": [
+        "group/baylan-leader-action-condition-true.jsonl.gz",
+        "group/baylan-leader-action-condition-false.jsonl.gz",
+        "group-leaders/baylan-deployed-attack-condition-true.jsonl.gz",
+        "group-leaders/baylan-deployed-attack-condition-false.jsonl.gz"
+      ]
+    },
+    {
+      "id": "ASH_030",
+      "sourcePath": "game/cards/08_ASH/units/MarrokMysteriousWarrior.ts",
+      "compiledSourceHash": "589d89991c12ea50e432d1d62667b73b5ae94b7fd091187e51e594d1788f12a4",
+      "runtimeRelevantIrSha256": "7aae1f9b5ae2fd744c80ddccff528a922d6db53c6ddcae77b961f7b0860502ed",
+      "mechanismFamilies": [
+        "constant-saboteur-overwhelm",
+        "constant-keyword-loss"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_030.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_040",
+      "sourcePath": "game/cards/08_ASH/units/PoeDameronIllComeBackForYou.ts",
+      "compiledSourceHash": "ebab2e6423f107e11542118a196d7726655851d978ba1155f47092c244529aa8",
+      "runtimeRelevantIrSha256": "a2c765b0f441edbf832bbf9e44190b34e015a3d5009793d0fa21e23482f90e22",
+      "mechanismFamilies": [
+        "phase-keyword-loss",
+        "constant-keyword-loss"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_040.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_057",
+      "sourcePath": "game/cards/08_ASH/units/LothalEWing.ts",
+      "compiledSourceHash": "740705f10ed94cf272be4e24af656b6b2dab30d1cc7cc98f57957f9325d22f65",
+      "runtimeRelevantIrSha256": "e3413e82f9dfce93a21d80bbba7139e18f254917535baab3423a3cabd84375b8",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_057.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_071",
+      "sourcePath": "game/cards/08_ASH/units/BatteredHaulcraft.ts",
+      "compiledSourceHash": "456128a27da7476608caa9aa5344abee3395e1d6262939f9fe721577793e61a9",
+      "runtimeRelevantIrSha256": "c41466e807ca5118fd090c7d4bc0dd21076cb00fab4a0b9558abe7ba7341966a",
+      "mechanismFamilies": [
+        "group-nested-selection",
+        "group-no-target-sibling",
+        "group-damage-live-keyword"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/ASH_071.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_078",
+      "sourcePath": "game/cards/08_ASH/units/B-WingRearguard.ts",
+      "compiledSourceHash": "422da43280995d4d5938c9fffc7d02df22a5dfac254a7bbe658e6629ad11abda",
+      "runtimeRelevantIrSha256": "527510d33a1bec844b64d89842a1e85bfc4931df657b6a5feaee923a06725563",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_078.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_089",
+      "sourcePath": "game/cards/08_ASH/events/Perseverance.ts",
+      "compiledSourceHash": "172dc8e1ea2d047d7f1ef5c870ecab6bef1950ccbb2973762cd192abe4014fd7",
+      "runtimeRelevantIrSha256": "c8843fdf83e7819d64a39a2301f839ea6d8c525d3c6d136291f39b8603fdbc27",
+      "mechanismFamilies": [
+        "group-heal-tokens",
+        "group-shield-replacement"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/ASH_089.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_105",
+      "sourcePath": "game/cards/08_ASH/units/BoKatanKryzeForAllOfMandalore.ts",
+      "compiledSourceHash": "5766ed38ada0a5b983772889274867221f6f944215589be05f36e148d3e8ce65",
+      "runtimeRelevantIrSha256": "2957f3e0a65ff1d8cdac78668eef3fb1cd7e8325d3bcff95d5ea78aaf40054eb",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_105.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_120",
+      "sourcePath": "game/cards/08_ASH/units/WarriorOfClanKryze.ts",
+      "compiledSourceHash": "630a91717d3474faab71b267df1c0984a7214174812b863388d24c03e68d0653",
+      "runtimeRelevantIrSha256": "019ae7382415770950024b5d1cabf9088fffbd378480500b4a869d8cd29879b6",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_120.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_142",
+      "sourcePath": "game/cards/08_ASH/units/MortarTrooper.ts",
+      "compiledSourceHash": "c9139c3cb00fafba2e1a5030473951a0acbd5ea9fcb8e639cb00604f60608655",
+      "runtimeRelevantIrSha256": "816b319ea3ca3a7c03480eaecc7d9bc98056aed369c25a9e253f15e01cf299e4",
+      "mechanismFamilies": [
+        "group-shield-replacement",
+        "group-aura-defeat"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/ASH_142.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_233",
+      "sourcePath": "game/cards/08_ASH/events/KeepThemTalking.ts",
+      "compiledSourceHash": "3bb7c32ff584ba356d42f19f4f6e534288349860f132d05e500b8a1db4d90c2a",
+      "runtimeRelevantIrSha256": "6784f995d4b52545a1fd244ff0607d2be4394b2203eafbdf3281830fd1785a2d",
+      "mechanismFamilies": [
+        "up-to-selection"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/ASH_233.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "ASH_243",
+      "sourcePath": "game/cards/08_ASH/units/DarthVaderMeetYourDestiny.ts",
+      "compiledSourceHash": "10e00ed44adf2cd4aa9f46438c085bd0a5b0aceb8fc5a63f1a4369ba38a5e365",
+      "runtimeRelevantIrSha256": "bf4eeb2ca007a27fe00753bf4ecf4055d17ad128298286079c9a5e549b55a1b3",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/ASH_243.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_039",
+      "sourcePath": "game/cards/09_HMW/units/MotherTalzinPledgedToTheSisterhood.ts",
+      "compiledSourceHash": "84636d8c95f7e5705e1a7b137c1544941c9545c6c68f4d13ca732490ed8fc953",
+      "runtimeRelevantIrSha256": "fdca28e2d72007e1f25420084a65d519263e5091038c5dcf092b25e03e397174",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_039.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_074",
+      "sourcePath": "game/cards/09_HMW/units/YordFandarDevoutlyDisciplined.ts",
+      "compiledSourceHash": "36c3aa52328af6f4d2c1fc286b3494e3cd9b2612958c5a0240514c67af575497",
+      "runtimeRelevantIrSha256": "c50e8bff348887938c156cdabd2f58b566ddfcf207cd86efeda18ee802a89a46",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_074.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_084",
+      "sourcePath": "game/cards/09_HMW/units/GungaCityGuard.ts",
+      "compiledSourceHash": "65ca3a4e1993f6608f9d7cf65d44d6aef24df28c88da28635f650d6ddee8f603",
+      "runtimeRelevantIrSha256": "87fb05279c67c888a077a1c12c2710122051908adf36ca60f54350269d72b8dd",
+      "mechanismFamilies": [
+        "constant-shielded-entry"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_084.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_090",
+      "sourcePath": "game/cards/09_HMW/units/OpeeSeaKiller.ts",
+      "compiledSourceHash": "17a70527dfc72a4a2f9ad32356a2b31429766f1b65d0fa9993901f619166e8d9",
+      "runtimeRelevantIrSha256": "bd269adb172dd8db6c767b8630727156c953bb3801208587587d8e0b869909ce",
+      "mechanismFamilies": [
+        "constant-grit"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_090.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_091",
+      "sourcePath": "game/cards/09_HMW/units/PeltaReliefFrigate.ts",
+      "compiledSourceHash": "bf1b73aaafa1d514473decfff6a86dd95723b238a5f8deeae431ecaa9faeda59",
+      "runtimeRelevantIrSha256": "c3ee59119133be2cbd6dbb56d9c17079645e547eee297d0e6fb86fc379a1a418",
+      "mechanismFamilies": [
+        "group-nested-selection",
+        "group-heal-tokens",
+        "group-no-target-sibling"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/HMW_091.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_117",
+      "sourcePath": "game/cards/09_HMW/units/ChewbaccaResourcefulWookiee.ts",
+      "compiledSourceHash": "e5e68e5c2028216285af562c27946b74f6e3482f0db8f204c94d27c988a4fd46",
+      "runtimeRelevantIrSha256": "778be4326002d5cbb89d0683e772d17a3f83d90fbd7c3aba4bdce1a1beb0e404",
+      "mechanismFamilies": [
+        "constant-saboteur-overwhelm",
+        "constant-raid",
+        "constant-live-numeric-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_117.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_118",
+      "sourcePath": "game/cards/09_HMW/units/RyykBlademaster.ts",
+      "compiledSourceHash": "ebb02edb2464cca139e6b2189351139894a069a30a78fbacda881f1f68cf5ea3",
+      "runtimeRelevantIrSha256": "28a337abc6f466f9bfa67aca4169c6874d19a07df692b9245831c1d461f11eff",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-saboteur-overwhelm",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_118.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_131",
+      "sourcePath": "game/cards/09_HMW/units/SoaringCanCell.ts",
+      "compiledSourceHash": "8f8f754ddfb7aa789c82ba920a64987cb9341d8fea1f4a376fbb3b8d2845b3b7",
+      "runtimeRelevantIrSha256": "a5f1603a1c4e52f87afe5fc39056614018cb8566df6a6348558c90a570358690",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_131.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_137",
+      "sourcePath": "game/cards/09_HMW/units/V19Skirmisher.ts",
+      "compiledSourceHash": "90c75376a32900a4ad47be6cfda48eb85741af87cfbc95fa2ed54af2a5c3784c",
+      "runtimeRelevantIrSha256": "eaa4745c937acd1cabd0bd2bbfabb28043fd07d590ce77621493eff8d8c7de1e",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_137.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_142",
+      "sourcePath": "game/cards/09_HMW/units/WookieeRangers.ts",
+      "compiledSourceHash": "36e26841f89444961a0651143ec5d4b9c37e7de559d9d56006fccb2626801688",
+      "runtimeRelevantIrSha256": "42c743900c71d5dbcc146f043f344eda9a00760ec65f86f4ce81913d08abbe83",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_142.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_186",
+      "sourcePath": "game/cards/09_HMW/units/MiningGuildTrespasser.ts",
+      "compiledSourceHash": "12544fe0d48718d6e254ab2ee9f77de9a7ce1512f2c0cbb5927af1f8efe4bfad",
+      "runtimeRelevantIrSha256": "7eb9a6420943cf5e4cac2a1c6ce206099d21114c27d4e792be0242b45fefd6fd",
+      "mechanismFamilies": [
+        "group-nested-selection"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/HMW_186.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_210",
+      "sourcePath": "game/cards/09_HMW/units/SolCompassionateGuardian.ts",
+      "compiledSourceHash": "791f45943f35fef5defc70b13ea3c20892427ce738a03031fe13fe1dc6b8bd47",
+      "runtimeRelevantIrSha256": "9ff3e32dce9fe9ec64c445edc970065dac17a650ef04f45b39a6232210dad9e3",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "keyword-predicate-stat-aura",
+        "phase-sentinel-target-set"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_210.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_243",
+      "sourcePath": "game/cards/09_HMW/units/SunFacPogglesSecond.ts",
+      "compiledSourceHash": "68bb5bb0e715823b4c6e2db95ddfa42c4141ab3e9b0374c426469b34a1b2b6e3",
+      "runtimeRelevantIrSha256": "091ab2d84e2ca7bb6aa5625eebfd4092d728c9a01e5d1087624e64be50d6d19a",
+      "mechanismFamilies": [
+        "phase-grit"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_243.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_246",
+      "sourcePath": "game/cards/09_HMW/units/PykeSarisa.ts",
+      "compiledSourceHash": "35f7416e09bb0d249193dc525d496bd1707e8ebabb08c500e92f74efdeb99049",
+      "runtimeRelevantIrSha256": "344a1c5ab2d139c4ec30c7b9924b675a8af08f115187e222519e46a728359e72",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "keyword-predicate-stat-aura",
+        "phase-sentinel-target-set"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_246.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "HMW_259",
+      "sourcePath": "game/cards/09_HMW/units/PackGuardian.ts",
+      "compiledSourceHash": "75144076415759ed5fd56843a89df7795b775f34d79024e2516cc587bf6b8d02",
+      "runtimeRelevantIrSha256": "e1c104f9f5fb5b47ab87cd565b4a449aa63fe64f333fbe2ee3beb09012afcf42",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/HMW_259.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "IBH_068",
+      "sourcePath": "game/cards/06_IBH/units/GeneralVeersLeadingTheAssault.ts",
+      "compiledSourceHash": "ef7dad00cd4d4709d09efce3da1d8fc49d2aae077cd002f810f913e9c45a9cc3",
+      "runtimeRelevantIrSha256": "d8f5c0e7ec211741e60602e4608596e5a9dea354b9a830b5d73438057037ace8",
+      "mechanismFamilies": [
+        "group-base-damage",
+        "group-no-target-sibling",
+        "group-completion-phase-keyword-stats"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/IBH_068.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      },
+      "sharedMechanismWitnesses": [
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ]
+    },
+    {
+      "id": "IBH_104",
+      "sourcePath": "game/cards/06_IBH/events/TheDesolationOfHoth.ts",
+      "compiledSourceHash": "618f250ddd8f0059656e893070f76457591b1635f648041c675447c3fed664dd",
+      "runtimeRelevantIrSha256": "ae271ae8646adec4b038fb9fed6a15bc279322ec5b05bfa2b50b875c10c54a87",
+      "mechanismFamilies": [
+        "group-completion-up-to-defeat"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [
+        "group-completion/completion-up-to-defeat-0-selected.jsonl.gz",
+        "group-completion/completion-up-to-defeat-2-selected.jsonl.gz"
+      ],
+      "playWitness": {
+        "fixture": "group-play/IBH_104.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_072",
+      "sourcePath": "game/cards/04_JTL/units/WingGuardSecurityTeam.ts",
+      "compiledSourceHash": "5880cdda74f6e1ea4772696a07561cacc957d2005684d19fc5a68bf3d28cf230",
+      "runtimeRelevantIrSha256": "2a0606f7b31787d9c76205a6784b0d39157670d0bfd6d034154c8fd62cb38fca",
+      "mechanismFamilies": [
+        "group-heal-tokens",
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/JTL_072.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_107",
+      "sourcePath": "game/cards/04_JTL/units/BunkerDefender.ts",
+      "compiledSourceHash": "2d1701b05b9fd2808bbfcd0b4aa9d03cc9fd997c43220b0e6aca3049a1749bcb",
+      "runtimeRelevantIrSha256": "8ad51188050d0cc0a13a59f838773f243f36e5b1768a0261ba078b288fb2f0d8",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/JTL_107.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_113",
+      "sourcePath": "game/cards/01_SOR/units/HomesteadMilitia.ts",
+      "compiledSourceHash": "f56639dc0df5c8f306832f95e98cc10c5bbd0fc38823ba4842e1794d2ef4524f",
+      "runtimeRelevantIrSha256": "43e1fb67e35deb45e5a1104ce56ee6fc313ccbd87b9d886e30118f4efac22ae4",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/JTL_113.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_140",
+      "sourcePath": "game/cards/04_JTL/units/IG2000AssassinsAggressor.ts",
+      "compiledSourceHash": "c9ed096de80cbf614c52217b85ead1e93c439e96147a9f14c6d78227daa0e57c",
+      "runtimeRelevantIrSha256": "3327d4597f0b3d13823cfe35ea1a24f810c39304509c0b1d6ba61d4ec524e08b",
+      "mechanismFamilies": [
+        "up-to-selection"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/JTL_140.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_161",
+      "sourcePath": "game/cards/04_JTL/units/CaptainTarkinFullForwardAssault.ts",
+      "compiledSourceHash": "68503ad8843e80d4d6ed85c00d8acd1aeace33870c7b2c5051fc0ac53e0b70b9",
+      "runtimeRelevantIrSha256": "000c12c938e34245d0cdf3fb56b0cac15c741310c841f271df1c250a66fc0eec",
+      "mechanismFamilies": [
+        "constant-saboteur-overwhelm"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/JTL_161.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_229",
+      "sourcePath": "game/cards/04_JTL/events/Diversion.ts",
+      "compiledSourceHash": "a2051993a4612ee7002e5681b1534bd608cc7fedff5c83a1a8b7953c5413b5c4",
+      "runtimeRelevantIrSha256": "ab2a693ce7f45ca6a34305aee02ee9c7060651fd37c7175622b0312a6734973a",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "keyword-predicate-stat-aura",
+        "phase-sentinel-target-set"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/JTL_229.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "JTL_257",
+      "sourcePath": "game/cards/04_JTL/units/FlankingFangFighter.ts",
+      "compiledSourceHash": "0f2c202f763fb8edb748aa32a144c2d9268e7278538ff19d87e456a1d0effb7c",
+      "runtimeRelevantIrSha256": "ba9fcd14dc0e3a67866916e972215ba4054b8b55377b525286a8a7e82985db74",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/JTL_257.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LAW_043",
+      "sourcePath": "game/cards/07_LAW/events/ShadowCloaking.ts",
+      "compiledSourceHash": "5e8c4e3134886c781c698033dd5050287e0c55fca2ac1a1388e147a1e579ac66",
+      "runtimeRelevantIrSha256": "f8700264f3db7e7ed1d74d3bc712867dcfeda07d8615107bce50bc4432268574",
+      "mechanismFamilies": [
+        "group-completion-ready-shield"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [
+        "group-completion/completion-ready-shield-already-ready.jsonl.gz",
+        "group-completion/completion-ready-shield-exhausted.jsonl.gz"
+      ],
+      "playWitness": {
+        "fixture": "group-play/LAW_043.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LAW_069",
+      "sourcePath": "game/cards/07_LAW/units/TheGhostHomeOfTheSpectres.ts",
+      "compiledSourceHash": "875392df7862d47d5d5f48e5a9ea26d81acbc242a9b58a792456cf11f1218b65",
+      "runtimeRelevantIrSha256": "a5812564757f768d3ec364318f1e7f1692f7200a2b21ee7803d3ce4fe600aee1",
+      "mechanismFamilies": [
+        "group-token-identities"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/LAW_069.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LAW_104",
+      "sourcePath": "game/cards/07_LAW/units/BodhiRookCreatingADiversion.ts",
+      "compiledSourceHash": "c5e929693f951803a66d90bbe7e3393d5f68659a8568f57a4630ce5e42905f94",
+      "runtimeRelevantIrSha256": "65084c40034acdca1163be4f9337870b7e7a7694f062ba65afecac02b9230046",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "keyword-predicate-stat-aura",
+        "phase-sentinel-target-set"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LAW_104.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LAW_105",
+      "sourcePath": "game/cards/07_LAW/units/CintaKazStoneColdAndFearless.ts",
+      "compiledSourceHash": "78891d71e435f8633bcf1aa5d430f4dce2195fed4df212da517b4cbe940ce37e",
+      "runtimeRelevantIrSha256": "7c01405d2f310e0a2e6e661c44f77611555297edaeb2b3c3a0e45bdbd20ed5a2",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LAW_105.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LAW_182",
+      "sourcePath": "game/cards/07_LAW/units/WeazelFightingBack.ts",
+      "compiledSourceHash": "33387f43ec88adc289fe0dabcf3e0b353256334e4fcc8f6916cb595890503cb7",
+      "runtimeRelevantIrSha256": "53817ff38f9a537db1539d6a00958674fa9f1f70e2ed99172321bfd12b984074",
+      "mechanismFamilies": [
+        "phase-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LAW_182.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LAW_183",
+      "sourcePath": "game/cards/07_LAW/units/B-WingSkirmisher.ts",
+      "compiledSourceHash": "60bdefaacdd49600a7fb7032ace1974b6766b97ced0b942b4f9215b4d92102b8",
+      "runtimeRelevantIrSha256": "5885181f7d8f088996fdf7bb86adc146c15a41d427ec2e5ed32438d7eca36f0b",
+      "mechanismFamilies": [
+        "up-to-selection",
+        "group-damage-defeat-order"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/LAW_183.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LOF_099",
+      "sourcePath": "game/cards/05_LOF/units/PaladinTrainingCorvette.ts",
+      "compiledSourceHash": "6d974cf707465aef1b443172fbc71c4ec83dffeab7b86e7574de1c22460049f4",
+      "runtimeRelevantIrSha256": "1b3c1c76a4b4ed10a010e519462909d97f4dd8ab44f826729f9dd6ce4fd54760",
+      "mechanismFamilies": [
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/LOF_099.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LOF_114",
+      "sourcePath": "game/cards/05_LOF/units/Kaadu.ts",
+      "compiledSourceHash": "e3b95587b439db8b134c786b39e1061e6834bedba9a88f2c8dff912821a769a2",
+      "runtimeRelevantIrSha256": "3fbf79cd54c4f196f00efe1facd1d58eee1f5b05b047fd7abec838a45d6ccbc1",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "constant-saboteur-overwhelm",
+        "group-completion-phase-keyword-stats"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LOF_114.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      },
+      "sharedMechanismWitnesses": [
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LOF_118",
+      "sourcePath": "game/cards/05_LOF/units/Terentatek.ts",
+      "compiledSourceHash": "cd1e4a8502b24561ea62fe9286a3296174d11927c5edae210009cfdfa661cb0c",
+      "runtimeRelevantIrSha256": "1712cf84cfd3055238db438554165977d6254a11cd682a7b394c2d04b6ea7d3b",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LOF_118.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LOF_126",
+      "sourcePath": "game/cards/05_LOF/events/Overpower.ts",
+      "compiledSourceHash": "debfaf88642fe5ef7456e27c754d2787981a7585ab84443884ceadf80b364c0e",
+      "runtimeRelevantIrSha256": "489c8107535b725320cdd0e2f7cbef760853f89535c7b6b1b463b73377635ffe",
+      "mechanismFamilies": [
+        "group-completion-phase-keyword-stats"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ],
+      "playWitness": {
+        "fixture": "group-play/LOF_126.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      },
+      "sharedMechanismWitnesses": [
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LOF_162",
+      "sourcePath": "game/cards/02_SHD/units/HuntingNexu.ts",
+      "compiledSourceHash": "ec1771d41e182773fd98532b2d4d5c9bbd5aac145b1a3988833deed2ecaf4952",
+      "runtimeRelevantIrSha256": "43d76d4b960486ab98773c123cf6495609fbe5105cda397a9a16bac03c502c9f",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LOF_162.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LOF_167",
+      "sourcePath": "game/cards/05_LOF/units/SaeseeTiinCourageousWarrior.ts",
+      "compiledSourceHash": "565d5ad8ad43535b0f44d5a6d57ad5b9b515932467a11ba28f6e4f043a34fb65",
+      "runtimeRelevantIrSha256": "3f89eff9d1aecd20ac28877edfe353eb6651dcb7e02e21180678da9bde4477a7",
+      "mechanismFamilies": [
+        "up-to-selection",
+        "group-completion-phase-keyword-stats"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/LOF_167.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      },
+      "sharedMechanismWitnesses": [
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ]
+    },
+    {
+      "id": "LOF_169",
+      "sourcePath": "game/cards/05_LOF/units/InvasionControlShip.ts",
+      "compiledSourceHash": "6c171255b14cac02a11047d8b4faabf1402773cb9757db4f14a58e82acc1dfea",
+      "runtimeRelevantIrSha256": "8ed7a4478057cde8b7e257276b025142ee2b33aa2b16d4dfb56beb34649ace4c",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LOF_169.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LOF_212",
+      "sourcePath": "game/cards/05_LOF/units/LifeWindSage.ts",
+      "compiledSourceHash": "8b903931efcbe93b14740aedb82432764e62c871292fb2f78d9e9f1a0040e9e5",
+      "runtimeRelevantIrSha256": "f0b2b5667ff2bf2fb747740ac0ed05fea15f00d6cf65a968ed4890304cb1161a",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LOF_212.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "LOF_223",
+      "sourcePath": "game/cards/05_LOF/events/ForceIllusion.ts",
+      "compiledSourceHash": "55fce6119b8b83a4af8f133e5edf2f5eae26852c5a44c5fd8517cb88b943d88e",
+      "runtimeRelevantIrSha256": "83cbf67e95f85bb9189def456ca4450cc077d9a22f6a1e24f24f759728c9a098",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "keyword-predicate-stat-aura",
+        "phase-sentinel-target-set"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/LOF_223.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_029",
+      "sourcePath": "game/cards/06_SEC/units/ZamWesellInconspicuousAssassin.ts",
+      "compiledSourceHash": "0413e34256ecd36f84a6eaf1aace8a914c181436d6d5eba077909f62aa7049ba",
+      "runtimeRelevantIrSha256": "aea2e1535ba39785a71027ceef8c008ca67ede8cb754873f930151e0916c6931",
+      "mechanismFamilies": [
+        "constant-grit"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_029.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_045",
+      "sourcePath": "game/cards/06_SEC/units/SenatorChuchiVoiceForTheVoiceless.ts",
+      "compiledSourceHash": "4f52cf3a8128c314a5f4d8aede0d6fe37e0b4491a817e3a33ab83dda6b0be946",
+      "runtimeRelevantIrSha256": "c88bb3a27192c6bd6a9e44275f09472c5966d2ef4104a11abb0524cfeaded045",
+      "mechanismFamilies": [
+        "phase-restore"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_045.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_047",
+      "sourcePath": "game/cards/06_SEC/units/CoronetStatelyVessel.ts",
+      "compiledSourceHash": "4e96caa96c6012e9dcecc4499617802cd7682be02f1b227c548da83307287eb6",
+      "runtimeRelevantIrSha256": "70409204c95fafddd5bab4f61a888740b1dca91134c241025f9d34e3bb6066a3",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_047.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_063",
+      "sourcePath": "game/cards/06_SEC/units/RotundaSenateGuards.ts",
+      "compiledSourceHash": "22bc82428d197f4d9ae8d2d193f835c00704a76d28a8834fa2ea8a950af7045e",
+      "runtimeRelevantIrSha256": "1db64958d2b418aaa85ba7741d04148f67261cb66b60e78fbda81101ff85fe5f",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_063.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_079",
+      "sourcePath": "game/cards/06_SEC/units/CorruptPolitician.ts",
+      "compiledSourceHash": "df58a32b45522ae63acc0ba162fd6c1079728289a7ed45dc973a14a458ad4b0f",
+      "runtimeRelevantIrSha256": "157c77b08be7c07f50b3347939f8fe4d0a2e75b5576a8ecbbcc47b7cc465c38b",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_079.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_116",
+      "sourcePath": "game/cards/06_SEC/units/NubianStarSkiff.ts",
+      "compiledSourceHash": "287679d84ddb188dbe835e1405a70d7370332e41dab1b7a7a1113c5221172d8a",
+      "runtimeRelevantIrSha256": "14d1ad37edde88f4a2397ed8223a2e6b9e62fb3701a1cb6ddaa541319d79db80",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_116.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_124",
+      "sourcePath": "game/cards/06_SEC/events/BudgetScheming.ts",
+      "compiledSourceHash": "6b9577adc29e539f0b2633aba9604f996ad82b914beea5005a1f6fe8306f9001",
+      "runtimeRelevantIrSha256": "5715c21e3109d89affa477d0a63cfb6d7487a00947038f6ce3a96e72ad835afd",
+      "mechanismFamilies": [
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SEC_124.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_134",
+      "sourcePath": "game/cards/06_SEC/units/HuntingAssassinDroid.ts",
+      "compiledSourceHash": "2ed2e1021a394f756ed251f855e63d5ea901325dc2d5cf0ade54c21c263165df",
+      "runtimeRelevantIrSha256": "f47dbce3c3e4ed68f2c275db7a28652ca1ca7638423c2e08a7869b57cf658ec2",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_134.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_155",
+      "sourcePath": "game/cards/06_SEC/units/AlexsandrKallusWithNewPurpose.ts",
+      "compiledSourceHash": "c02943cef5ca4e90de6b9a6f029139fbeb78fed671f764b966bd42f4e294fc86",
+      "runtimeRelevantIrSha256": "6796c9e0d05b7c61aeef0d3827bf92873375edf893c446d99a902be41314d1ff",
+      "mechanismFamilies": [
+        "group-shield-hp-defeat-order",
+        "group-shield-aura-preselected-defeat"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SEC_155.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_165",
+      "sourcePath": "game/cards/06_SEC/units/AcademyDisciplinarian.ts",
+      "compiledSourceHash": "1e2f190c61bc5adb3113ff5aac10986358f5a25854df84ee411cedfc6e945729",
+      "runtimeRelevantIrSha256": "b21c111255cd4804c80c50df1833c92da23aa0219dd63ae120970856ec623d0b",
+      "mechanismFamilies": [
+        "group-completion-damage-ready"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [
+        "group-completion/completion-damage-ready-friendly-low-power.jsonl.gz"
+      ],
+      "playWitness": {
+        "fixture": "group-play/SEC_165.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_249",
+      "sourcePath": "game/cards/06_SEC/units/HighCommandCouncilor.ts",
+      "compiledSourceHash": "55a4dcd28d2cb5e37329a5ed5c97f288d348dee37ff5c0eaf24197d0195e6f6a",
+      "runtimeRelevantIrSha256": "04f399e842858dfa91bbbb1fc52b905577ee9a1437a63432bcaed412a3e2e15b",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SEC_249.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SEC_258",
+      "sourcePath": "game/cards/06_SEC/events/GrassrootsResistance.ts",
+      "compiledSourceHash": "fc7ca250c713820bb298c7e56453a3ddba4e863aa386dc676ed7fa6e809462b7",
+      "runtimeRelevantIrSha256": "c1de6df52607a92fa8b137e13be6c8f8fecce8c0c84b90329b4635696bcbdcf0",
+      "mechanismFamilies": [
+        "group-no-target-sibling"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SEC_258.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_034",
+      "sourcePath": "game/cards/02_SHD/units/SupercommandoSquad.ts",
+      "compiledSourceHash": "2cafa70a40ad1d210ada5af329707fa4108ac66af65d5e554b718c213d44fdc3",
+      "runtimeRelevantIrSha256": "955843790326711d68726c3470e209f89bc2c7a6e18625ede8e6a8bf042cc0ea",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SHD_034.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_047",
+      "sourcePath": "game/cards/02_SHD/units/TheArmorerSurvivalIsStrength.ts",
+      "compiledSourceHash": "b1a668474453a4964c50e04d36e04357e837f2224aa0351fe53a5af8f11e97d4",
+      "runtimeRelevantIrSha256": "2ea1d87daf46038bebbb0f373eb3b44c5c642335a3a9fd0037225aa74d1ed500",
+      "mechanismFamilies": [
+        "group-heal-tokens",
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SHD_047.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_049",
+      "sourcePath": "game/cards/02_SHD/units/TheMandalorianWhereverIGoHeGoes.ts",
+      "compiledSourceHash": "3c4df379bd6c7ea122f687a84316be0b14b10f523aa96d96da324618c5755d26",
+      "runtimeRelevantIrSha256": "4045818985166b1ad38d9399b1ee12bce2be7995a1fce27fc83216bb3e2f9836",
+      "mechanismFamilies": [
+        "group-heal-tokens"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SHD_049.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_081",
+      "sourcePath": "game/cards/01_SOR/units/GeneralTaggeConcernedCommander.ts",
+      "compiledSourceHash": "4201de9e845b5314daf04b5100dfeea584ea30aac5e935d9d61f04297b7780dd",
+      "runtimeRelevantIrSha256": "f5f46d7af0f955c6cc6f2b332121d4144071d8d23d6e5c36441803316a7f7438",
+      "mechanismFamilies": [
+        "up-to-selection",
+        "group-token-identities"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SHD_081.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_112",
+      "sourcePath": "game/cards/02_SHD/units/GamorreanRetainer.ts",
+      "compiledSourceHash": "35f33028e26e43012d63a904067e451e3b61a2ce954ce0377ee3e6d2ded6947d",
+      "runtimeRelevantIrSha256": "08561a8d945cf5345dc85353072768c31aa92c568e1e099d06d1955725957676",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SHD_112.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_159",
+      "sourcePath": "game/cards/02_SHD/events/TheChaosOfWar.ts",
+      "compiledSourceHash": "e5edc1bf0b2db96f82af3375ead5f338beee100208909c802578d08b4ad7faeb",
+      "runtimeRelevantIrSha256": "b67e3f524b846169b7cbdba7be63fef13f7cb0af66133b26c29b53a96fae8c2a",
+      "mechanismFamilies": [
+        "group-base-damage"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SHD_159.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_169",
+      "sourcePath": "game/cards/02_SHD/units/ClanChallengers.ts",
+      "compiledSourceHash": "6ef98acb63c98cf563552f7d99016116ae7e92b3f329f72a9a1213e53a129dd5",
+      "runtimeRelevantIrSha256": "bd6a0f44fa022180feeed3a600afe2bd6aba620fea0f5552019a35a3df122f02",
+      "mechanismFamilies": [
+        "constant-saboteur-overwhelm"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SHD_169.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_188",
+      "sourcePath": "game/cards/02_SHD/units/4-LOMBountyHunterForHire.ts",
+      "compiledSourceHash": "bf0367e5cea8fedd29c8044e6cfd41cff42ad4e1c072baf1558318e16a2a4dd6",
+      "runtimeRelevantIrSha256": "e8a32b9747f191072ecf6885c21f02a953bb04b5ad7d21b7784d6d20932e9d2c",
+      "mechanismFamilies": [
+        "title-constant-keywords",
+        "title-source-leave",
+        "title-ambush-entry",
+        "title-saboteur-combat"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "title-play/SHD_188.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_190",
+      "sourcePath": "game/cards/02_SHD/units/ZuckussBountyHunterForHire.ts",
+      "compiledSourceHash": "1c9f8eb2ccfa7a98b846c1406c1e2efd3119b8641c93a863bf83211ba4a986a4",
+      "runtimeRelevantIrSha256": "691ef907d1476924c7e9f14cca0285fca7866d079360b617638da05eff53cc46",
+      "mechanismFamilies": [
+        "title-constant-keywords",
+        "title-source-leave",
+        "title-ambush-entry",
+        "title-saboteur-combat"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "title-play/SHD_190.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_212",
+      "sourcePath": "game/cards/02_SHD/units/PrivateerScyk.ts",
+      "compiledSourceHash": "a4d0b5d104e0cc7a22526bed51972c053cfd0b8ee90668f3954bd15632868394",
+      "runtimeRelevantIrSha256": "807977246c3e6f5c57602123e9b451b81ec3ce58898708357877740d8189ce7c",
+      "mechanismFamilies": [
+        "constant-shielded-entry"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SHD_212.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SHD_247",
+      "sourcePath": "game/cards/02_SHD/units/ProtectorOfTheThrone.ts",
+      "compiledSourceHash": "44ae10c61a38f59f80433be29e791cdbd13381683e01c68d93880f10aaf793d3",
+      "runtimeRelevantIrSha256": "7c01405d2f310e0a2e6e661c44f77611555297edaeb2b3c3a0e45bdbd20ed5a2",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SHD_247.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_048",
+      "sourcePath": "game/cards/01_SOR/units/VigilantHonorGuards.ts",
+      "compiledSourceHash": "761345c3bdde75c7e4da842cf8f94ff16c031a8ff1e6588e6acfca4b9a990b76",
+      "runtimeRelevantIrSha256": "879feac6be14526f1a411bf756ec0833d3bbc0a32152ac12ff2d3be24160220a",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_048.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_065",
+      "sourcePath": "game/cards/01_SOR/units/BazeMalbusTempleGuardian.ts",
+      "compiledSourceHash": "d5da9b00b7bb7335d9f204106fb49cc3e5d32fbe44e6d7886b847be08b3621c5",
+      "runtimeRelevantIrSha256": "33c8175335f911f613fb1af02b3a790c04791d60120150d44085d6dd668e7a33",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_065.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_076",
+      "sourcePath": "game/cards/01_SOR/events/MakeAnOpening.ts",
+      "compiledSourceHash": "a9cdf34401f26f2880228b56d243bd134dbfb27f0830b6e4a71b50b8f011e722",
+      "runtimeRelevantIrSha256": "1261584a2f7175cd0f3f825642f8190533eaeca680d71a3b8bd787bab6419120",
+      "mechanismFamilies": [
+        "group-no-target-sibling"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SOR_076.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_079",
+      "sourcePath": "game/cards/01_SOR/units/AdmiralPiettCaptainOfTheExecutor.ts",
+      "compiledSourceHash": "d5e6cafd2d3c93239eed0225d10ae8933950ad27d4e3729d8874678e3feb4d5d",
+      "runtimeRelevantIrSha256": "48a4f9818552736a06959fa5c0a1f2c164513cdab90d17bdfed315bf42b2a018",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_079.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_086",
+      "sourcePath": "game/cards/01_SOR/units/GladiatorStarDestroyer.ts",
+      "compiledSourceHash": "e182afe70af87bb3656f70f5980fd5bca0e1ab7516511a89b2249dcae26b555a",
+      "runtimeRelevantIrSha256": "344a1c5ab2d139c4ec30c7b9924b675a8af08f115187e222519e46a728359e72",
+      "mechanismFamilies": [
+        "phase-sentinel",
+        "keyword-predicate-stat-aura",
+        "phase-sentinel-target-set"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_086.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_100",
+      "sourcePath": "game/cards/01_SOR/units/WedgeAntillesStarOfTheRebellion.ts",
+      "compiledSourceHash": "a53f68b9d62faa73c8fda1ebf9d4f7ec6c30727a2d9faca2bd67542e9e05eef7",
+      "runtimeRelevantIrSha256": "33e41aa6eb59593fe46707b841aa0fdca993f94ff331e1d9078fa08fb6e4ee77",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_100.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_112",
+      "sourcePath": "game/cards/01_SOR/units/ConsortiumStarViper.ts",
+      "compiledSourceHash": "c47570c908b71ca34aeb911662ca74279577530b5d4fd9f8e63c8a157c048d10",
+      "runtimeRelevantIrSha256": "2010258f2f2f4eea18610cfcf0f652bbc268903d9f39b08c692f833d31ed4792",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_112.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_114",
+      "sourcePath": "game/cards/01_SOR/units/EscortSkiff.ts",
+      "compiledSourceHash": "a265e17729e3f88d215529f816c85848a4c117772107a98227247d7cba5f6356",
+      "runtimeRelevantIrSha256": "632ac015ec774d4665bac32a228303dd977ee9df1c6c539530837536716996c6",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_114.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_131",
+      "sourcePath": "game/cards/01_SOR/units/FifthBrotherFearHunter.ts",
+      "compiledSourceHash": "1b742d3587725326633fbb436bb8a0d233a34240bf02f60c33e79794e19f2831",
+      "runtimeRelevantIrSha256": "34bdb0733f22c09a3675416bdca3b96d8c0109805bb92ab880919bab0bc9461d",
+      "mechanismFamilies": [
+        "group-damage-live-keyword"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/SOR_131.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_140",
+      "sourcePath": "game/cards/01_SOR/units/SpecForceSoldier.ts",
+      "compiledSourceHash": "350ffeab21999ecfde71ed93af56b699f65c9511a76c8a5f25669650b7a14f41",
+      "runtimeRelevantIrSha256": "baffd4537c9aabab74cc9a7ba70f7cc094099cddf9dd4183f3b5f5ac7de25ea9",
+      "mechanismFamilies": [
+        "phase-keyword-loss"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_140.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_144",
+      "sourcePath": "game/cards/01_SOR/units/RedThreeUnstoppable.ts",
+      "compiledSourceHash": "4379f0152db5c38fd25265861ec2e4717eb0e2e7c678d8373bdda7d30ec60282",
+      "runtimeRelevantIrSha256": "e01ea6686d27ca3f892a83cdf9ca6072c2ffafc33b622b05871436fcc73677e0",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_144.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_156",
+      "sourcePath": "game/cards/01_SOR/units/BenthicTwoTubes.ts",
+      "compiledSourceHash": "a86e92843a288552c8defbd927abefe7371ace672332a394c65e00c7e6da4e62",
+      "runtimeRelevantIrSha256": "5476d3142fff03fb40ca5e78d715920ee7432c0393f23ec054d8ebd797268da8",
+      "mechanismFamilies": [
+        "phase-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_156.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_159",
+      "sourcePath": "game/cards/01_SOR/units/PartisanInsurgent.ts",
+      "compiledSourceHash": "f590e5971673585a05cdea9603979c3601d609dbdfb9ac09168fd9d6270f3f78",
+      "runtimeRelevantIrSha256": "43d76d4b960486ab98773c123cf6495609fbe5105cda397a9a16bac03c502c9f",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_159.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_211",
+      "sourcePath": "game/cards/01_SOR/units/GamorreanGuards.ts",
+      "compiledSourceHash": "8f86552fa2c3ebd9961a4e1a33451be6a94cf4fe76931e6910fc2e2460c89dce",
+      "runtimeRelevantIrSha256": "e970670bb09d255dbfa21c7c21d6a4c6acb4119d0a0cb1ed682a2e798b652270",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_211.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "SOR_249",
+      "sourcePath": "game/cards/01_SOR/units/FrontierATRT.ts",
+      "compiledSourceHash": "ee66d9c22018cb31fc44e0804359c34aaec66aebd7e58af0584ebd70a5cb8986",
+      "runtimeRelevantIrSha256": "14d7b8780543e126c87445a2d6889e939eb1ae0a8a40174f874984bc2d3e3c9a",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/SOR_249.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TS26_020",
+      "sourcePath": "game/cards/07_TS26/units/501stVeteran.ts",
+      "compiledSourceHash": "0cdd2960871481d85d20ee391da356d2020ba62bb1a8393ce8c136ca0ec0a873",
+      "runtimeRelevantIrSha256": "7d018cb9141d4f8cfa037afcafc895f6e8c0ab73dbde3b39e654727f6ca3fc2f",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TS26_020.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TS26_040",
+      "sourcePath": "game/cards/07_TS26/units/ObiWanKenobiSteadfastKnight.ts",
+      "compiledSourceHash": "8ca2fd0eb07fd3c33e5e5ac21e713506ea15c3398451856c91c6c2331dcf8029",
+      "runtimeRelevantIrSha256": "ea7c4f25b50a657d8fe3917fbf704972899ec3fe08273cc1daa7f53e506b8f58",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TS26_040.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TS26_053",
+      "sourcePath": "game/cards/07_TS26/units/CoruscantiSpy.ts",
+      "compiledSourceHash": "c09a9bd6930d5c87287c5d05114a77280134cb11353c055dcc01ee7ef92746d3",
+      "runtimeRelevantIrSha256": "c8d0d107ed2d5e6431b5c714b759f27545c0109e6f63d050a5fc3c9969cebb7c",
+      "mechanismFamilies": [
+        "unlimited-base-selection"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "group-play/TS26_053.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TS26_069",
+      "sourcePath": "game/cards/07_TS26/events/RemoveTheChip.ts",
+      "compiledSourceHash": "63785df32391cbce1da5e7dec040e3909a69d5c12b9ad7ff55c1ccb6d7bfca31",
+      "runtimeRelevantIrSha256": "74d0c10e96f4768403205fd0f417c52edd915e82c13074da24a2aaab3af9a81e",
+      "mechanismFamilies": [
+        "group-completion-damage-ready-conditional"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [
+        "group-completion/completion-damage-ready-clone-false.jsonl.gz",
+        "group-completion/completion-damage-ready-clone-true.jsonl.gz"
+      ],
+      "playWitness": {
+        "fixture": "group-play/TS26_069.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TWI_015",
+      "sourcePath": "game/cards/03_TWI/leaders/GeneralGrievousGeneralOfTheDroidArmies.ts",
+      "compiledSourceHash": "0c17109855c9f90400090ac543b490fe7c465cea02901c47804a57c9ad34d88b",
+      "runtimeRelevantIrSha256": "a927d08c593ff43d14c4e06f663745ea78f1d3128b9f01cd64302c95d9d92f9c",
+      "mechanismFamilies": [
+        "group-leader-keywords"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": null,
+      "leaderSideWitnesses": [
+        "group/grievous-leader-action-enemy-droid-positive.jsonl.gz",
+        "group/grievous-leader-action-negative-target-filter.jsonl.gz",
+        "group-leaders/grievous-deployed-attack-enemy-droid-positive.jsonl.gz",
+        "group-leaders/grievous-deployed-attack-negative-target-filter.jsonl.gz"
+      ]
+    },
+    {
+      "id": "TWI_054",
+      "sourcePath": "game/cards/03_TWI/units/DuchesssChampion.ts",
+      "compiledSourceHash": "584ba5ccb605c31fd4f4868bb664383318a1c46613e4213f3e613106f6eb202f",
+      "runtimeRelevantIrSha256": "99720844ebff4be27ee015d5b64dfda4622d4a6cc3be184ad315755c7a9a9b4b",
+      "mechanismFamilies": [
+        "keyword-predicate-stat-aura"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TWI_054.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TWI_062",
+      "sourcePath": "game/cards/03_TWI/units/DaughterOfDathomir.ts",
+      "compiledSourceHash": "b418b5bc373716a1e73d1dd59dba2d84b4d96865475fc9cb121aa6fcd8412cca",
+      "runtimeRelevantIrSha256": "45f336994fed660ef750fcece2616a40ae0e35196b43d692508a814468a5d8ed",
+      "mechanismFamilies": [
+        "constant-restore-trigger-capture"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TWI_062.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TWI_074",
+      "sourcePath": "game/cards/03_TWI/events/GuardingTheWay.ts",
+      "compiledSourceHash": "51fb741014eb39913421762e75c582677c0bfd5be33ada1c2981f6d50fc148c9",
+      "runtimeRelevantIrSha256": "c3f3ccb509ef762722df6b7c5e60bb1ccfe76db55fb0652b051274168e902b5e",
+      "mechanismFamilies": [
+        "group-completion-phase-keyword-stats"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [
+        "group-completion/completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+        "group-completion/completion-phase-sentinel-stats-initiative-true.jsonl.gz"
+      ],
+      "playWitness": {
+        "fixture": "group-play/TWI_074.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      },
+      "sharedMechanismWitnesses": [
+        "group-completion/completion-phase-overwhelm-and-stats-expire.jsonl.gz"
+      ]
+    },
+    {
+      "id": "TWI_081",
+      "sourcePath": "game/cards/03_TWI/units/DroidCommando.ts",
+      "compiledSourceHash": "6ada22695bcd0e3f03070bd98080168f8a49db4277002003dca1d0896c6c6c99",
+      "runtimeRelevantIrSha256": "8e93b2a5ef6b6d43c9cc5b9370da8374fab21d7f19bb01a603906d8000332208",
+      "mechanismFamilies": [
+        "constant-ambush-mixed-stats",
+        "constant-ambush-entry",
+        "constant-source-unique"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TWI_081.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TWI_130",
+      "sourcePath": "game/cards/03_TWI/units/BoKatanKryzeDeathWatchLieutenant.ts",
+      "compiledSourceHash": "ffbe56233d1bfa282eec248e7ecffdee16d44a22205f8711e9cc93006f135ca6",
+      "runtimeRelevantIrSha256": "cd607f5193cd0ce1b900a53f275d01b8e41d78ad99b391ac75b50d767b700b5d",
+      "mechanismFamilies": [
+        "constant-saboteur-overwhelm"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TWI_130.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    },
+    {
+      "id": "TWI_180",
+      "sourcePath": "game/cards/03_TWI/units/SeparatistCommando.ts",
+      "compiledSourceHash": "ae54eee5cb79c1f4d5b5866dc60cced99d1879288ef6a3787f3839731de3ce44",
+      "runtimeRelevantIrSha256": "769c4e85a94e8f579cb5e66f17c0f56f00f4a50f7f9aec2ab071cf4450a85d21",
+      "mechanismFamilies": [
+        "constant-raid"
+      ],
+      "sharedMechanismCoverage": "Source-reviewed relation to listed bounded family witnesses; does not establish every condition or interaction for this card",
+      "dedicatedEffectWitnesses": [],
+      "playWitness": {
+        "fixture": "play/TWI_180.jsonl.gz",
+        "assertion": "onCardPlayed and complete game; does not imply the card-specific effect activated"
+      }
+    }
+  ],
+  "mechanismMapping": {
+    "newAdmittedIds": [
+      "ASH_003",
+      "ASH_030",
+      "ASH_040",
+      "ASH_057",
+      "ASH_071",
+      "ASH_078",
+      "ASH_089",
+      "ASH_105",
+      "ASH_120",
+      "ASH_142",
+      "ASH_233",
+      "ASH_243",
+      "HMW_039",
+      "HMW_074",
+      "HMW_084",
+      "HMW_090",
+      "HMW_091",
+      "HMW_117",
+      "HMW_118",
+      "HMW_131",
+      "HMW_137",
+      "HMW_142",
+      "HMW_186",
+      "HMW_210",
+      "HMW_243",
+      "HMW_246",
+      "HMW_259",
+      "IBH_068",
+      "IBH_104",
+      "JTL_072",
+      "JTL_107",
+      "JTL_113",
+      "JTL_140",
+      "JTL_161",
+      "JTL_229",
+      "JTL_257",
+      "LAW_043",
+      "LAW_069",
+      "LAW_104",
+      "LAW_105",
+      "LAW_182",
+      "LAW_183",
+      "LOF_099",
+      "LOF_114",
+      "LOF_118",
+      "LOF_126",
+      "LOF_162",
+      "LOF_167",
+      "LOF_169",
+      "LOF_212",
+      "LOF_223",
+      "SEC_029",
+      "SEC_045",
+      "SEC_047",
+      "SEC_063",
+      "SEC_079",
+      "SEC_116",
+      "SEC_124",
+      "SEC_134",
+      "SEC_155",
+      "SEC_165",
+      "SEC_249",
+      "SEC_258",
+      "SHD_034",
+      "SHD_047",
+      "SHD_049",
+      "SHD_081",
+      "SHD_112",
+      "SHD_159",
+      "SHD_169",
+      "SHD_188",
+      "SHD_190",
+      "SHD_212",
+      "SHD_247",
+      "SOR_048",
+      "SOR_065",
+      "SOR_076",
+      "SOR_079",
+      "SOR_086",
+      "SOR_100",
+      "SOR_112",
+      "SOR_114",
+      "SOR_131",
+      "SOR_140",
+      "SOR_144",
+      "SOR_156",
+      "SOR_159",
+      "SOR_211",
+      "SOR_249",
+      "TS26_020",
+      "TS26_040",
+      "TS26_053",
+      "TS26_069",
+      "TWI_015",
+      "TWI_054",
+      "TWI_062",
+      "TWI_074",
+      "TWI_081",
+      "TWI_130",
+      "TWI_180"
+    ],
+    "relatedNewCandidateUnion": [
+      "ASH_003",
+      "ASH_030",
+      "ASH_040",
+      "ASH_057",
+      "ASH_071",
+      "ASH_078",
+      "ASH_089",
+      "ASH_105",
+      "ASH_120",
+      "ASH_142",
+      "ASH_233",
+      "ASH_243",
+      "HMW_039",
+      "HMW_074",
+      "HMW_084",
+      "HMW_090",
+      "HMW_091",
+      "HMW_117",
+      "HMW_118",
+      "HMW_131",
+      "HMW_137",
+      "HMW_142",
+      "HMW_186",
+      "HMW_210",
+      "HMW_243",
+      "HMW_246",
+      "HMW_259",
+      "IBH_068",
+      "IBH_104",
+      "JTL_072",
+      "JTL_107",
+      "JTL_113",
+      "JTL_140",
+      "JTL_161",
+      "JTL_229",
+      "JTL_257",
+      "LAW_043",
+      "LAW_069",
+      "LAW_104",
+      "LAW_105",
+      "LAW_182",
+      "LAW_183",
+      "LOF_099",
+      "LOF_114",
+      "LOF_118",
+      "LOF_126",
+      "LOF_162",
+      "LOF_167",
+      "LOF_169",
+      "LOF_212",
+      "LOF_223",
+      "SEC_029",
+      "SEC_045",
+      "SEC_047",
+      "SEC_063",
+      "SEC_079",
+      "SEC_116",
+      "SEC_124",
+      "SEC_134",
+      "SEC_155",
+      "SEC_165",
+      "SEC_249",
+      "SEC_258",
+      "SHD_034",
+      "SHD_047",
+      "SHD_049",
+      "SHD_081",
+      "SHD_112",
+      "SHD_159",
+      "SHD_169",
+      "SHD_188",
+      "SHD_190",
+      "SHD_212",
+      "SHD_247",
+      "SOR_048",
+      "SOR_065",
+      "SOR_076",
+      "SOR_079",
+      "SOR_086",
+      "SOR_100",
+      "SOR_112",
+      "SOR_114",
+      "SOR_131",
+      "SOR_140",
+      "SOR_144",
+      "SOR_156",
+      "SOR_159",
+      "SOR_211",
+      "SOR_249",
+      "TS26_020",
+      "TS26_040",
+      "TS26_053",
+      "TS26_069",
+      "TWI_015",
+      "TWI_054",
+      "TWI_062",
+      "TWI_074",
+      "TWI_081",
+      "TWI_130",
+      "TWI_180"
+    ],
+    "mappedCount": 100,
+    "mappingMeaning": "Every newly admitted card has an explicit source-reviewed relationship to bounded mechanism witnesses. Dedicated card play is separate from dedicated positive effect assertions."
+  },
+  "coveredAddedIds": [
+    "ASH_003",
+    "ASH_030",
+    "ASH_040",
+    "ASH_057",
+    "ASH_071",
+    "ASH_078",
+    "ASH_089",
+    "ASH_105",
+    "ASH_120",
+    "ASH_142",
+    "ASH_233",
+    "ASH_243",
+    "HMW_039",
+    "HMW_074",
+    "HMW_084",
+    "HMW_090",
+    "HMW_091",
+    "HMW_117",
+    "HMW_118",
+    "HMW_131",
+    "HMW_137",
+    "HMW_142",
+    "HMW_186",
+    "HMW_210",
+    "HMW_243",
+    "HMW_246",
+    "HMW_259",
+    "IBH_068",
+    "IBH_104",
+    "JTL_072",
+    "JTL_107",
+    "JTL_113",
+    "JTL_140",
+    "JTL_161",
+    "JTL_229",
+    "JTL_257",
+    "LAW_043",
+    "LAW_069",
+    "LAW_104",
+    "LAW_105",
+    "LAW_182",
+    "LAW_183",
+    "LOF_099",
+    "LOF_114",
+    "LOF_118",
+    "LOF_126",
+    "LOF_162",
+    "LOF_167",
+    "LOF_169",
+    "LOF_212",
+    "LOF_223",
+    "SEC_029",
+    "SEC_045",
+    "SEC_047",
+    "SEC_063",
+    "SEC_079",
+    "SEC_116",
+    "SEC_124",
+    "SEC_134",
+    "SEC_155",
+    "SEC_165",
+    "SEC_249",
+    "SEC_258",
+    "SHD_034",
+    "SHD_047",
+    "SHD_049",
+    "SHD_081",
+    "SHD_112",
+    "SHD_159",
+    "SHD_169",
+    "SHD_188",
+    "SHD_190",
+    "SHD_212",
+    "SHD_247",
+    "SOR_048",
+    "SOR_065",
+    "SOR_076",
+    "SOR_079",
+    "SOR_086",
+    "SOR_100",
+    "SOR_112",
+    "SOR_114",
+    "SOR_131",
+    "SOR_140",
+    "SOR_144",
+    "SOR_156",
+    "SOR_159",
+    "SOR_211",
+    "SOR_249",
+    "TS26_020",
+    "TS26_040",
+    "TS26_053",
+    "TS26_069",
+    "TWI_015",
+    "TWI_054",
+    "TWI_062",
+    "TWI_074",
+    "TWI_081",
+    "TWI_130",
+    "TWI_180"
+  ],
+  "totalIndexedGames": 185,
+  "runtimeRelevantIrSha256Recipe": "SHA-256 of UTF-8 JSON.stringify({abilities: card.abilities, keywordValues: card.keywordValues}) in Node.js, using card parsed from the exact bound catalog.json. Preserve the two outer keys and nested catalogue property order; JSON.stringify omits undefined fields. No whitespace or trailing newline."
+}

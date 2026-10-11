@@ -27,7 +27,8 @@ async function main(args) {
             outcomes.push({ id, outcome: 'requires-dedicated-setup-witness', reason: 'Not a hand-play card' });
             continue;
         }
-        const scenario = { name: 'play-' + id, expectedPlayed: id, extraCodes: [id], plan: [[id, id === 'ASH_236' ? 'own' : 'enemy']] };
+        const scenario = { name: 'play-' + id, expectedPlayed: id, extraCodes: [id], plan: [[id, id === 'ASH_236' ? 'own' : 'enemy']],
+            chooseAction: ({ eg, pid, actions, atWindow }) => !atWindow && (eg.player(pid).promptState.selectedCards ?? []).length > 0 ? actions.find((a) => a.arg === 'done') : undefined };
         try {
             const { records, witness } = await fixture(env, pool, scenario, 10001 + i);
             const file = id + '.jsonl.gz', bytes = zlib.gzipSync(records.map((r) => JSON.stringify(r)).join('\n') + '\n');

@@ -1,0 +1,84 @@
+{
+  "schema": "swu-engine-diagnostic/v1",
+  "scenario": "last-shield-hp-loss-resolution-diagnostic",
+  "engineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+  "pool": "../group-shields/pool.json",
+  "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+  "construction": {
+    "at": "first natural action window",
+    "arenaOrder": [
+      "earlier",
+      "shielded"
+    ],
+    "units": [
+      {
+        "key": "earlier",
+        "code": "ASH_261",
+        "owner": "p1",
+        "zone": "groundArena",
+        "damage": 2,
+        "hp": 4
+      },
+      {
+        "key": "shielded",
+        "code": "SHD_056",
+        "owner": "p1",
+        "zone": "groundArena",
+        "printedHp": 3,
+        "upgradedHp": 4,
+        "damage": 3,
+        "shields": 1
+      }
+    ],
+    "shieldFactory": "game.generateToken(p1,'shield').attachTo(shielded)",
+    "setupOrdering": "Real deck cards moved to arenas; physical Shield generated/attached; engine state resolved; surviving disclosed damage assigned; prompts refreshed",
+    "plan": [
+      {
+        "code": "SEC_155",
+        "from": "hand"
+      }
+    ],
+    "selectionOrder": [
+      "shielded",
+      "earlier"
+    ],
+    "finalInput": "Done"
+  },
+  "observed": {
+    "timedOut": true,
+    "timeoutSeconds": 5,
+    "processTerminated": true,
+    "elapsedSeconds": 5.063,
+    "output": "{\"step\":0,\"actor\":\"p2\",\"title\":\"Choose an action\",\"selected\":[],\"chosen\":{\"key\":\"[\\\"button\\\",null,\\\"pass\\\",null,\\\"Pass\\\"]\",\"kind\":\"button\",\"card\":null,\"arg\":\"pass\",\"method\":null,\"label\":\"Pass\"}}\n{\"step\":1,\"actor\":\"p1\",\"title\":\"Choose an action\",\"selected\":[],\"chosen\":{\"key\":\"[\\\"card\\\",\\\"c8\\\",null,null,\\\"alexsandr-kallus#with-new-purpose\\\"]\",\"kind\":\"card\",\"card\":\"c8\",\"arg\":null,\"method\":null,\"label\":\"alexsandr-kallus#with-new-purpose\"}}\n{\"step\":2,\"actor\":\"p1\",\"title\":\"Deal 2 damage to each of up to 3 ground units\",\"selected\":[],\"chosen\":{\"key\":\"[\\\"card\\\",\\\"c4\\\",null,null,\\\"follower-of-the-way\\\"]\",\"kind\":\"card\",\"card\":\"c4\",\"arg\":null,\"method\":null,\"label\":\"follower-of-the-way\"}}\n{\"step\":3,\"actor\":\"p1\",\"title\":\"Deal 2 damage to each of up to 3 ground units\",\"selected\":[\"c4\"],\"chosen\":{\"key\":\"[\\\"card\\\",\\\"c2\\\",null,null,\\\"noti-mobile-pod\\\"]\",\"kind\":\"card\",\"card\":\"c2\",\"arg\":null,\"method\":null,\"label\":\"noti-mobile-pod\"}}\n{\"step\":4,\"actor\":\"p1\",\"title\":\"Deal 2 damage to each of up to 3 ground units\",\"selected\":[\"c4\",\"c2\"],\"chosen\":{\"key\":\"[\\\"button\\\",null,\\\"done\\\",null,\\\"Done\\\"]\",\"kind\":\"button\",\"card\":null,\"arg\":\"done\",\"method\":null,\"label\":\"Done\"}}\n",
+    "interpretation": "Historical harness timeout while formatting a failed assertion of cyclic Card-object arrays. Independent instrumentation confirmed Done apply and engine pipeline returned; this is not evidence of engine instability."
+  },
+  "countedReceipt": false,
+  "nativeWasmConformance": "not applicable: incomplete engine diagnostic",
+  "originalScenarioNameAtCapture": "last-shield-hp-loss-nested-defeat-before-parent-damage",
+  "status": "resolved-harness-assertion-formatting-timeout",
+  "historicalReproduction": {
+    "workingDirectory": "repository root",
+    "environment": {
+      "GROUP_FIXTURE_DEBUG": "1"
+    },
+    "command": [
+      "node",
+      "bot/omni/rs/make-group-fixtures.js",
+      "bot/omni-rs/tests/card-batches/002/group-shields/pool.json",
+      "<NEW_TEMP_DIRECTORY>",
+      "last-shield-hp-loss-resolution-diagnostic"
+    ],
+    "externalTimeoutSeconds": 5
+  },
+  "resolution": {
+    "cause": "Incorrect expected defeat order compared full cyclic engine Card objects, causing expensive Node assertion diff formatting",
+    "actualOrder": [
+      "c2 Pod direct damage callback defeat",
+      "c4 Follower HP-only framework defeat"
+    ],
+    "correction": "Compare stable scalar card IDs and assert Pod then Follower",
+    "acceptedFixture": "../group-hp/last-shield-hp-loss-damage-before-stat-defeat.jsonl.gz",
+    "completedDecisions": 115,
+    "conformance": "engine observation; native and Wasm comparison pending"
+  }
+}

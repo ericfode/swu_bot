@@ -1,0 +1,133 @@
+{
+  "evidenceStatus": "engine observations",
+  "conformance": "unassessed; fresh native and Wasm comparison required",
+  "poolSha256": "93ac3ed32f27bb69e2932c0a041f2910818f1ec191fb55bfc748cfdb2ac33369",
+  "skippedScenarios": [],
+  "witnesses": [
+    {
+      "file": "completion-up-to-defeat-0-selected.jsonl.gz",
+      "sha256": "b81576477b0ae0a9dff7d84ffcf2e4071607a3be375041fd65ae264dc1b54288",
+      "scenario": "completion-up-to-defeat-0-selected",
+      "family": "group-completion-up-to-defeat",
+      "observed": {
+        "ownerCostFilters": true,
+        "selectionDone": true,
+        "postAction": true
+      },
+      "decisions": 116,
+      "winner": "p1"
+    },
+    {
+      "file": "completion-up-to-defeat-2-selected.jsonl.gz",
+      "sha256": "5c2bd1f13121a37ffef69b44564b68d8bc0345fcd437b632a9e851d47e4793ac",
+      "scenario": "completion-up-to-defeat-2-selected",
+      "family": "group-completion-up-to-defeat",
+      "observed": {
+        "ownerCostFilters": true,
+        "acceptedSelectionClicks": 2,
+        "selectionDone": true,
+        "discardOrder": [
+          "c54",
+          "c57"
+        ],
+        "postAction": true
+      },
+      "decisions": 50,
+      "winner": "p2"
+    },
+    {
+      "file": "completion-ready-shield-already-ready.jsonl.gz",
+      "sha256": "152bf85b1719189739b87e0dc0aabbcb3311c4fc03d94a2556e51fdedf0a470c",
+      "scenario": "completion-ready-shield-already-ready",
+      "family": "group-completion-ready-shield",
+      "observed": {
+        "postAction": true
+      },
+      "decisions": 119,
+      "winner": "p1"
+    },
+    {
+      "file": "completion-ready-shield-exhausted.jsonl.gz",
+      "sha256": "1d24c9dbbd782d4e90412a8abc428d3614683b9e8bf8cedf265c589b59a1aeb4",
+      "scenario": "completion-ready-shield-exhausted",
+      "family": "group-completion-ready-shield",
+      "observed": {
+        "postAction": true
+      },
+      "decisions": 65,
+      "winner": "p1"
+    },
+    {
+      "file": "completion-damage-ready-friendly-low-power.jsonl.gz",
+      "sha256": "372803327b183ec3771034864b20b291f317659279f6a2d9abf017299f8adcc6",
+      "scenario": "completion-damage-ready-friendly-low-power",
+      "family": "group-completion-damage-ready",
+      "observed": {
+        "friendlyPowerFilter": true,
+        "postAction": true
+      },
+      "decisions": 76,
+      "winner": "p2"
+    },
+    {
+      "file": "completion-damage-ready-clone-false.jsonl.gz",
+      "sha256": "4c595b68ca48af71df29698139fdfb2082ce3955aa49d822f2f9a25381f2c39a",
+      "scenario": "completion-damage-ready-clone-false",
+      "family": "group-completion-damage-ready-conditional",
+      "observed": {
+        "postAction": true
+      },
+      "decisions": 123,
+      "winner": "p2"
+    },
+    {
+      "file": "completion-damage-ready-clone-true.jsonl.gz",
+      "sha256": "3eeb1914c29cf50c4f8dba24c823155af23417ebca3615c44ed3b7bbfdc00675",
+      "scenario": "completion-damage-ready-clone-true",
+      "family": "group-completion-damage-ready-conditional",
+      "observed": {
+        "postAction": true
+      },
+      "decisions": 126,
+      "winner": "p2"
+    },
+    {
+      "file": "completion-phase-sentinel-stats-initiative-false.jsonl.gz",
+      "sha256": "c619b36b7b9a93b547af1abfac69b2fb1e83570892c9e1b26bfb2eba9b4e5610",
+      "scenario": "completion-phase-sentinel-stats-initiative-false",
+      "family": "group-completion-phase-keyword-stats",
+      "observed": {
+        "initialInitiative": false,
+        "postAction": true,
+        "laterRoundAssertion": true
+      },
+      "decisions": 44,
+      "winner": "p2"
+    },
+    {
+      "file": "completion-phase-sentinel-stats-initiative-true.jsonl.gz",
+      "sha256": "1e2e0b44302c33274fe89a452b1b7d8e6de71d5e3349760c7b64a2656a110743",
+      "scenario": "completion-phase-sentinel-stats-initiative-true",
+      "family": "group-completion-phase-keyword-stats",
+      "observed": {
+        "initialInitiative": true,
+        "postAction": true,
+        "laterRoundAssertion": true
+      },
+      "decisions": 53,
+      "winner": "p1"
+    },
+    {
+      "file": "completion-phase-overwhelm-and-stats-expire.jsonl.gz",
+      "sha256": "77f179d3b122801ddf3ae7affe6967687a9540d7aee99229cb3f1ccb6d089b9f",
+      "scenario": "completion-phase-overwhelm-and-stats-expire",
+      "family": "group-completion-phase-keyword-stats",
+      "observed": {
+        "postAction": true,
+        "laterRoundAssertion": true
+      },
+      "decisions": 56,
+      "winner": "p2"
+    }
+  ]
+}

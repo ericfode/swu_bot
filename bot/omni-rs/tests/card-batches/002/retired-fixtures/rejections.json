@@ -1,0 +1,31 @@
+{
+  "schema": "swu-retired-fixtures/v1",
+  "reason": "Invalid constructed deployed leader state: deployEpicActionLimit had not been incremented, so epicUsed was false. Corrected games are in group-leaders.",
+  "originalGroupInventorySha256": "42e6bb6df4db4e39898bfa9659b9f2f7565a3b3e66925ed086c126ab61483764",
+  "fixtures": [
+    {
+      "original": "group/baylan-deployed-attack-condition-true.jsonl.gz",
+      "retired": "baylan-deployed-attack-condition-true.jsonl.gz",
+      "sha256": "12e7981cb161179eee00e7164859e393ed6e9794973406f5ec5c0eb1c60fd73b",
+      "replacement": "group-leaders/baylan-deployed-attack-condition-true.jsonl.gz"
+    },
+    {
+      "original": "group/baylan-deployed-attack-condition-false.jsonl.gz",
+      "retired": "baylan-deployed-attack-condition-false.jsonl.gz",
+      "sha256": "7adc6f8520f75dcdffdb4b2ebae92757f12e1909877460108df70804f96b7a2d",
+      "replacement": "group-leaders/baylan-deployed-attack-condition-false.jsonl.gz"
+    },
+    {
+      "original": "group/grievous-deployed-attack-enemy-droid-positive.jsonl.gz",
+      "retired": "grievous-deployed-attack-enemy-droid-positive.jsonl.gz",
+      "sha256": "290fc921846530a6f01a9ddc309ad9219a04352a9163ecb16b2c225780751805",
+      "replacement": "group-leaders/grievous-deployed-attack-enemy-droid-positive.jsonl.gz"
+    },
+    {
+      "original": "group/grievous-deployed-attack-negative-target-filter.jsonl.gz",
+      "retired": "grievous-deployed-attack-negative-target-filter.jsonl.gz",
+      "sha256": "528bf73374b59b0d348a8100615098819eac096079be08272ee048923204b7fd",
+      "replacement": "group-leaders/grievous-deployed-attack-negative-target-filter.jsonl.gz"
+    }
+  ]
+}

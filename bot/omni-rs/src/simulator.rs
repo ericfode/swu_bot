@@ -238,12 +238,12 @@ impl Engine {
     pub fn power(&self, s: &State, id: CardId, attacking: bool) -> u16 {
         let d = self.def(s, id);
         (d.info.power.unwrap_or(0) as i64
-            + if d.flags & GRIT != 0 {
+            + if self.keyword_amount(s, id, "grit") > 0 {
                 s.card(id).damage as i64
             } else {
                 0
             }
-            + if attacking { d.raid as i64 } else { 0 }
+            + if attacking { self.keyword_amount(s, id, "raid") as i64 } else { 0 }
             + self.token_count(s, s.card(id).experience) as i64
             + s.card(id).phase_power as i64
             + self.constant_stats(s, id).0)
@@ -289,16 +289,16 @@ impl Engine {
         } else {
             &opp.ground
         };
-        let sentinel = d.flags & SABOTEUR == 0
+        let sentinel = self.keyword_amount(s, source, "saboteur") == 0
             && zone
                 .as_slice()
                 .iter()
-                .any(|&c| self.def(s, c).flags & SENTINEL != 0);
+                .any(|&c| self.keyword_amount(s, c, "sentinel") > 0);
         let mut out: Vec<_> = zone
             .as_slice()
             .iter()
             .copied()
-            .filter(|&c| !sentinel || self.def(s, c).flags & SENTINEL != 0)
+            .filter(|&c| !sentinel || self.keyword_amount(s, c, "sentinel") > 0)
             .collect();
         if !ambush && !sentinel {
             out.push(opp.base);
@@ -452,7 +452,8 @@ impl Engine {
             | Decision::AbilityTarget
             | Decision::AbilityOptional
             | Decision::AbilityNoEffect
-            | Decision::AbilityDistribute => unreachable!(),
+            | Decision::AbilityDistribute
+            | Decision::AbilityGroupShield => unreachable!(),
             Decision::Terminal => {}
         }
         out
@@ -467,7 +468,7 @@ impl Engine {
     }
     fn trigger_title(&self, s: &State, bit: u8) -> String {
         match bit {
-            T_RESTORE => format!("Restore {}", self.def(s, s.source).restore),
+            T_RESTORE => format!("Restore {}", s.attack_restore),
             T_SABOTEUR => "Saboteur: defeat all shields".into(),
             T_LEADER => {
                 if self.def(s, s.source).code == "IBH_053" {
@@ -626,10 +627,11 @@ impl Engine {
                     t.trigger_context = 2;
                     t.pending_triggers = 0;
                     let d = self.def(&t, source);
-                    if d.restore > 0 {
+                    t.attack_restore = self.keyword_amount(&t, source, "restore");
+                    if self.has_keyword(&t, source, "restore") {
                         t.pending_triggers |= T_RESTORE;
                     }
-                    if d.flags & SABOTEUR != 0 && self.in_arena(&t, id) {
+                    if self.keyword_amount(&t, source, "saboteur") > 0 && self.in_arena(&t, id) {
                         t.pending_triggers |= T_SABOTEUR;
                     }
                     if self.catalogue.is_none() && (d.code == "SOR_014" || d.code == "IBH_053") {
@@ -720,6 +722,7 @@ impl Engine {
                 self.resolve_ordered_trigger(&mut t, index)?;
             }
             Decision::ShieldOrder => {
+                t.attack_shield_opponent_first=a.arg.as_ref().and_then(Value::as_u64)==Some(1);
                 t.trigger_context = 3;
                 self.combat(&mut t)?;
             }
@@ -727,7 +730,8 @@ impl Engine {
             | Decision::AbilityTarget
             | Decision::AbilityOptional
             | Decision::AbilityNoEffect
-            | Decision::AbilityDistribute => unreachable!(),
+            | Decision::AbilityDistribute
+            | Decision::AbilityGroupShield => unreachable!(),
             Decision::Terminal => return Err("game is over".into()),
         }
         self.sweep_stat_defeats(&mut t)?;
@@ -805,6 +809,9 @@ impl Engine {
         s.ability_program = 0;
         s.ability_pc = 0;
         s.ability_target = 0;
+        s.attack_shield_opponent_first=false;
+        s.ability_selection = Selection::default();
+        s.event_group = EventGroupState::default();
         s.ability_result = 0;
         s.ability_succeeded = false;
         s.ability_return = 0;
@@ -834,7 +841,7 @@ impl Engine {
         self.process_triggers(s)
     }
     fn capture_enter_triggers(&self, s: &mut State) {
-        let flags = self.def(s, s.source).flags;
+        let flags = self.effective_flags(s, s.source);
         s.pending_triggers = if flags & SHIELDED != 0 { T_SHIELD } else { 0 }
             | if flags & AMBUSH != 0 { T_AMBUSH } else { 0 };
         s.trigger_context = 1;
@@ -880,7 +887,7 @@ impl Engine {
                 s.card_mut(base).damage = s
                     .card(base)
                     .damage
-                    .saturating_sub(self.def(s, s.source).restore);
+                    .saturating_sub(s.attack_restore);
             }
             T_SABOTEUR => s.card_mut(s.target).shield = 0,
             T_LEADER => {
@@ -956,13 +963,19 @@ impl Engine {
         if target_unit {
             let defend = self.power(s, target, false);
             let remaining = self.hp(s, target).saturating_sub(s.card(target).damage);
-            let excess = if self.def(s, source).flags & OVERWHELM != 0 {
+            let excess = if self.keyword_amount(s, source, "overwhelm") > 0 && s.card(target).shield == 0 {
                 attack.saturating_sub(remaining)
             } else {
                 0
             };
-            self.damage(s, target, attack);
-            self.damage(s, source, defend);
+            if s.trigger_context==3 && s.card(source).shield!=0 && s.card(target).shield!=0 && attack>0 && defend>0 {
+                let (first,second)=if s.attack_shield_opponent_first { (target,source) } else { (source,target) };
+                let (first_token,second_token)=self.combat_shield_contexts(s,first,second);
+                self.remove_group_shield(s,first,first_token); self.remove_group_shield(s,second,second_token);
+            } else {
+                self.damage(s, target, attack);
+                self.damage(s, source, defend);
+            }
             if excess > 0 {
                 let base = s.player(s.active.other()).base;
                 s.card_mut(base).damage += excess;
@@ -1014,6 +1027,9 @@ impl Engine {
         c.damage = 0;
         c.phase_power = 0;
         c.phase_hp = 0;
+        c.phase_keyword_values = [0; 2];
+        c.phase_keyword_presence = 0;
+        c.phase_lost_keywords = 0;
         c.shield = 0;
         c.experience = 0;
         c.exhausted = leader;
@@ -1061,6 +1077,9 @@ impl Engine {
         s.ability_program = 0;
         s.ability_pc = 0;
         s.ability_target = 0;
+        s.attack_shield_opponent_first=false;
+        s.ability_selection = Selection::default();
+        s.event_group = EventGroupState::default();
         s.ability_result = 0;
         s.ability_succeeded = false;
         s.ability_return = 0;
@@ -1077,6 +1096,9 @@ impl Engine {
             for id in 1..s.next_id {
                 s.card_mut(id).phase_power = 0;
                 s.card_mut(id).phase_hp = 0;
+                s.card_mut(id).phase_keyword_values = [0; 2];
+                s.card_mut(id).phase_keyword_presence = 0;
+                s.card_mut(id).phase_lost_keywords = 0;
             }
             self.sweep_stat_defeats(s)?;
             s.regroup = true;
@@ -1176,6 +1198,21 @@ impl Engine {
             c.phase_hp = stats["hp"]
                 .as_i64()
                 .ok_or("phase HP must be signed integer")? as i32;
+        }
+        if let Some(keywords) = v.get("phaseKeywords") {
+            for (keyword, amount) in keywords.as_object().ok_or("phaseKeywords must be object")? {
+                let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or("unsupported phase keyword")?;
+                let amount = amount.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or("phase keyword amount must be bounded integer")?;
+                if index == 7 && amount == 0 { return Err("zero phase Restore requires verified nullable trigger titles".into()); }
+                if index >= 6 { c.phase_keyword_values[index - 6] = amount; } else if amount != 1 { return Err("boolean phase keyword amount must be one".into()); }
+                c.phase_keyword_presence |= 1 << index;
+            }
+        }
+        if let Some(keywords) = v.get("phaseLostKeywords") {
+            for keyword in keywords.as_array().ok_or("phaseLostKeywords must be array")? {
+                let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| Some(*k) == keyword.as_str()).ok_or("unsupported lost keyword")?;
+                c.phase_lost_keywords |= 1 << index;
+            }
         }
         s.next_id = s.next_id.max(id + 1);
         if let Some(upgrades) = v["upgrades"].as_array() {
@@ -1337,6 +1374,12 @@ impl Engine {
                             if c.phase_power != 0 || c.phase_hp != 0 {
                                 v["phaseStats"] = json!({"power":c.phase_power,"hp":c.phase_hp});
                             }
+                            if c.phase_keyword_presence != 0 {
+                                let mut keywords = serde_json::Map::new();
+                                for (i, name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() { if c.phase_keyword_presence & (1 << i) != 0 { keywords.insert((*name).into(), json!(c.phase_keyword_amount(i))); } }
+                                v["phaseKeywords"] = Value::Object(keywords);
+                            }
+                            if c.phase_lost_keywords != 0 { v["phaseLostKeywords"] = json!(crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter_map(|(i,k)| (c.phase_lost_keywords & (1 << i) != 0).then_some(*k)).collect::<Vec<_>>()); }
                             v["exhausted"] = json!(c.exhausted);
                             v["power"] = json!(self.power(s, id, false));
                             v["hp"] = json!(self.hp(s, id));

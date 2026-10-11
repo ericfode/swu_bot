@@ -1,0 +1,24 @@
+{
+  "evidenceStatus": "engine observations",
+  "conformance": "unassessed; fresh native and Wasm comparison required",
+  "poolSha256": "29b32f6c3c9672d3135f9f45e95db5d1e1a0f4c8be30fe37f427705054a8a558",
+  "witnesses": [
+    {
+      "file": "reverse-target-lethal-damage-discard-order.jsonl.gz",
+      "sha256": "9bd129dba4bb4a0b5dc2bfb776ad6fca374f60681a441b3ec4cdf6deee8c3974",
+      "scenario": "reverse-target-lethal-damage-discard-order",
+      "family": "group-damage-defeat-order",
+      "observed": {
+        "acceptedSelectionClicks": 2,
+        "selectionDone": true,
+        "discardOrder": [
+          "c5",
+          "c2"
+        ],
+        "postAction": true
+      },
+      "decisions": 102,
+      "winner": "p1"
+    }
+  ]
+}

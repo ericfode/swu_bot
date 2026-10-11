@@ -172,6 +172,7 @@ async function fixture(env, pool, scenario, seed) {
                     existingId: eg.cardId(existing.uuid), incomingId: eg.cardId(targets.incoming.uuid), defeatedId: eg.cardId(drop.uuid), keep: scenario.uniqueKeep,
                     bothCopiesOffered: actions.some((a) => a.cardUuid === existing.uuid || a.arg === existing.uuid) && actions.some((a) => a.cardUuid === targets.incoming.uuid || a.arg === targets.incoming.uuid) });
             }
+            chosen = scenario.chooseAction?.({ eg, pid, actions, targets, own, enemy, chosen, step, index, atWindow }) ?? chosen;
             chosen ??= bot.choose({ game: eg, pid, actions, rng });
             assert.ok(chosen);
             const prompt = eg.player(pid).currentPrompt();

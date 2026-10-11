@@ -30,6 +30,34 @@ impl Eval {
         }
     }
 }
+enum GroupOp<'a> {
+    Leaf(&'a Effect),
+    Select(&'a TargetResolver, &'a Effect, usize),
+    Pop,
+    Branch(&'a Expr, usize),
+    Jump(usize),
+}
+fn group_ops(effect: &Effect) -> Vec<GroupOp<'_>> {
+    fn add<'a>(e: &'a Effect, out: &mut Vec<GroupOp<'a>>) {
+        match e {
+            Effect::Simultaneous { effects } | Effect::PhaseModifiers { effects } => { for e in effects { add(e,out); } }
+            Effect::Select { target_resolver, effect } => {
+                let index=out.len(); out.push(GroupOp::Select(target_resolver,effect,0));
+                add(effect,out); out.push(GroupOp::Pop);
+                let end=out.len(); out[index]=GroupOp::Select(target_resolver,effect,end);
+            }
+            Effect::Conditional { condition,on_true,on_false } => {
+                let branch=out.len(); out.push(GroupOp::Branch(condition,0)); add(on_true,out);
+                let jump=out.len(); out.push(GroupOp::Jump(0));
+                let alternate=out.len(); if let Some(e)=on_false { add(e,out); }
+                let end=out.len(); out[branch]=GroupOp::Branch(condition,alternate); out[jump]=GroupOp::Jump(end);
+            }
+            Effect::NoAction => {},
+            _ => out.push(GroupOp::Leaf(e)),
+        }
+    }
+    let mut out=vec![]; add(effect,&mut out); out
+}
 #[derive(Clone, Copy)]
 enum Trigger {
     Keyword(u8),
@@ -109,6 +137,13 @@ impl Engine {
                 let mut restore = 0;
                 for keyword in entry["card"]["keywords"].as_array().into_iter().flatten() {
                     let name = keyword.as_str().ok_or("invalid keyword")?;
+                    if !crate::ability_ir::CORE_KEYWORDS.contains(&name) { return Err(format!("unimplemented runtime keyword {name}")); }
+                    // Provider metadata includes keyword mentions in abilities.
+                    // Only the compiler's engine-matching printed-text parse
+                    // establishes an intrinsic keyword instance.
+                    if entry["keywordValues"].get(name).is_none() { continue; }
+                    if !["raid", "restore"].contains(&name) && entry["keywordValues"][name].as_u64() != Some(1) { return Err(format!("invalid printed boolean keyword {name}")); }
+
                     match name {
                         "sentinel" => flags |= SENTINEL,
                         "overwhelm" => flags |= OVERWHELM,
@@ -122,9 +157,12 @@ impl Engine {
                                 .filter(|n| *n <= 1000)
                                 .ok_or_else(|| format!("missing bounded keyword amount {name}"))?
                                 as u16;
+                            if name == "restore" && amount == 0 { return Err("zero printed Restore requires verified nullable trigger titles".into()); }
                             if name == "raid" {
+                                flags |= 1 << 6;
                                 raid = amount;
                             } else {
+                                flags |= 1 << 7;
                                 restore = amount;
                             }
                         }
@@ -135,6 +173,9 @@ impl Engine {
                     if side.len() > 16 {
                         return Err("card has more than 16 abilities on one side".into());
                     }
+                }
+                if info.is("leader") && programs.leader.iter().any(|p| catalogue.programs[*p as usize].trigger == "constant") {
+                    return Err("leader-front constants require verified base-zone ongoing sources".into());
                 }
                 // A leader's deployment trigger requires a separate registration; never silently drop it.
                 if info.is("leader")
@@ -311,17 +352,20 @@ impl Engine {
                 continue;
             }
             let d = self.def(s, id);
+            for keyword in ["raid", "restore"] {
+                if !(0..=65535).contains(&self.raw_keyword_amount(s, id, keyword)) { return Err(format!("computed {keyword} exceeds bounded keyword capacity")); }
+            }
             let (constant_power, constant_hp) = self.constant_stats(s, id);
             let power = d.info.power.unwrap_or(0) as i64
                 + self.token_count(s, s.card(id).experience) as i64
                 + s.card(id).phase_power as i64
                 + constant_power
-                + if d.flags & GRIT != 0 {
+                + if self.keyword_amount(s, id, "grit") > 0 {
                     s.card(id).damage as i64
                 } else {
                     0
                 }
-                + d.raid as i64;
+                + self.keyword_amount(s, id, "raid") as i64;
             let hp = d.info.hp.unwrap_or(0) as i64
                 + self.token_count(s, s.card(id).experience) as i64
                 + s.card(id).phase_hp as i64
@@ -358,11 +402,9 @@ impl Engine {
             }
         }
     }
-    pub(super) fn constant_stats(&self, s: &State, target: CardId) -> (i64, i64) {
-        if self.catalogue.is_none() || !self.in_arena(s, target) {
-            return (0, 0);
-        }
-        let mut total = (0, 0);
+    fn constant_effects<'a>(&'a self, s: &State, target: CardId, keywords: bool) -> Vec<(CardId, &'a Effect)> {
+        if self.catalogue.is_none() || !self.in_arena(s, target) { return vec![]; }
+        let mut effects = vec![];
         for source in 1..s.next_id {
             // Incoming unique copies have not activated their ongoing abilities:
             // the engine resolves uniqueness before resolveGameState.
@@ -377,6 +419,7 @@ impl Engine {
                 .iter()
                 .map(|&id| self.program(id))
             {
+                if keywords && !program.instructions.iter().any(|i| matches!(i, Instruction::Apply(Effect::GainKeyword { .. } | Effect::LoseKeyword { .. }))) { continue; }
                 if program.trigger != "constant"
                     || program
                         .condition
@@ -398,14 +441,52 @@ impl Engine {
                     continue;
                 }
                 for instruction in &program.instructions {
-                    if let Instruction::Apply(Effect::ModifyStats { power, hp, .. }) = instruction {
-                        total.0 += self.eval(s, source, target, power).number();
-                        total.1 += self.eval(s, source, target, hp).number();
-                    }
+                    if let Instruction::Apply(effect) = instruction { effects.push((source, effect)); }
                 }
             }
         }
+        effects
+    }
+    pub(super) fn constant_stats(&self, s: &State, target: CardId) -> (i64, i64) {
+        let mut total = (0, 0);
+        for (source, effect) in self.constant_effects(s, target, false) {
+            if let Effect::ModifyStats { power, hp, .. } = effect {
+                total.0 += self.eval(s, source, target, power).number();
+                total.1 += self.eval(s, source, target, hp).number();
+            }
+        }
         total
+    }
+    fn raw_keyword_amount(&self, s: &State, target: CardId, keyword: &str) -> i64 {
+        let Some(index) = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| *k == keyword) else { return 0; };
+        if s.card(target).phase_lost_keywords & (1 << index) != 0 { return 0; }
+        let definition = self.def(s, target);
+        let mut total = match index {
+            6 => definition.raid as i64,
+            7 => definition.restore as i64,
+            _ => i64::from(definition.flags & (1 << index) != 0),
+        } + s.card(target).phase_keyword_amount(index) as i64;
+        for (source, effect) in self.constant_effects(s, target, true) {
+            match effect {
+                Effect::LoseKeyword { keyword: name, .. } if name == keyword => return 0,
+                Effect::GainKeyword { keyword: name, amount, .. } if name == keyword => total += self.eval(s, source, target, amount).number(),
+                _ => {}
+            }
+        }
+        if index < 6 { i64::from(total > 0) } else { total }
+    }
+    pub(super) fn keyword_amount(&self, s: &State, target: CardId, keyword: &str) -> u16 {
+        self.raw_keyword_amount(s, target, keyword).clamp(0, u16::MAX as i64) as u16
+    }
+    pub(super) fn has_keyword(&self, s: &State, target: CardId, keyword: &str) -> bool {
+        let Some(index) = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| *k == keyword) else { return false; };
+        if s.card(target).phase_lost_keywords & (1 << index) != 0 { return false; }
+        let effects = self.constant_effects(s, target, true);
+        if effects.iter().any(|(_,e)| matches!(e, Effect::LoseKeyword {keyword: name, ..} if name == keyword)) { return false; }
+        s.card(target).phase_keyword_presence & (1 << index) != 0 || (self.def(s, target).flags & (1 << index) != 0 || (index == 6 && self.def(s, target).raid > 0) || (index == 7 && self.def(s, target).restore > 0)) || effects.iter().any(|(_,e)| matches!(e, Effect::GainKeyword {keyword: name, ..} if name == keyword))
+    }
+    pub(super) fn effective_flags(&self, s: &State, target: CardId) -> u16 {
+        crate::ability_ir::CORE_KEYWORDS[..6].iter().enumerate().fold(0, |flags, (i, k)| flags | if self.keyword_amount(s, target, k) > 0 { 1 << i } else { 0 })
     }
     pub fn hp(&self, s: &State, id: CardId) -> u16 {
         (self.def(s, id).info.hp.unwrap_or(0) as i64
@@ -548,6 +629,7 @@ impl Engine {
                     Some("remainingHp") => {
                         Eval::Number(self.hp(s, id).saturating_sub(s.card(id).damage) as i64)
                     }
+                    Some("title") => Eval::Text(self.def(s, id).info.title.clone()),
                     Some("cost") => Eval::Number(self.def(s, id).info.cost() as i64),
                     Some("exhausted") => Eval::Bool(s.card(id).exhausted),
                     Some("zoneName") => {
@@ -691,7 +773,7 @@ impl Engine {
                                 match name.as_str() {
                                     "hasSomeTrait" => d.traits.contains(t),
                                     "hasSomeAspect" => d.info.aspects().contains(t),
-                                    _ => d.info.has_keyword(t),
+                                    _ => self.has_keyword(s, id, t),
                                 }
                             } else {
                                 false
@@ -765,21 +847,29 @@ impl Engine {
         e: &Effect,
         require_change: bool,
     ) -> bool {
+        match e {
+            Effect::Simultaneous { effects } | Effect::PhaseModifiers { effects } => return effects.iter().any(|e| self.effect_can_affect(s,source,target,e,require_change)),
+            Effect::Select { target_resolver,effect } => return self.matching_targets(s,source,target_resolver).into_iter().any(|id| self.effect_can_affect(s,source,id,effect,require_change)),
+            Effect::Conditional { condition,on_true,on_false } => return if self.eval(s,source,target,condition).truth() { self.effect_can_affect(s,source,target,on_true,require_change) } else { on_false.as_ref().is_some_and(|e| self.effect_can_affect(s,source,target,e,require_change)) },
+            _ => {},
+        }
         let mut context = *s;
         context.source = source;
         context.ability_target = target;
+        if context.event_group.active { context.event_group.context=Selection::one(target); }
         let (dest, amount) = match e {
             Effect::ReadyResources { target, amount }
             | Effect::Damage { target, amount }
             | Effect::Heal { target, amount }
             | Effect::Draw { target, amount }
             | Effect::GiveShield { target, amount }
-            | Effect::GiveExperience { target, amount } => (
+            | Effect::GiveExperience { target, amount }
+            | Effect::GainKeyword { target, amount, .. } => (
                 target,
                 self.eval(&context, source, context.ability_target, amount)
                     .number(),
             ),
-            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } => (target, 1),
+            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -818,7 +908,7 @@ impl Engine {
                             !self.def(s, id).info.is("leader")
                                 && (unit || s.player(s.card(id).owner).discard.contains(id))
                         }
-                        Effect::ModifyStats { .. } => unit,
+                        Effect::ModifyStats { .. } | Effect::GainKeyword { .. } | Effect::LoseKeyword { .. } => unit,
                         Effect::GiveShield { .. } | Effect::GiveExperience { .. } => {
                             unit && amount > 0
                         }
@@ -857,7 +947,7 @@ impl Engine {
                     );
                 }
                 Instruction::IfResult { .. } => break,
-                Instruction::Apply(effect) => {
+                Instruction::Apply(effect) | Instruction::Group(effect) => {
                     if self.effect_can_affect(s, source, target, effect, require_change) {
                         return true;
                     }
@@ -912,7 +1002,16 @@ impl Engine {
         }
     }
     pub(super) fn program_menu_title(&self, s: &State, source: CardId, p: u16) -> String {
-        let title = &self.program(p).title;
+        let program = self.program(p);
+        let title = if program.context_title.is_empty() { program.title.clone() } else {
+            program.context_title.iter().map(|fragment| match self.eval(s, source, s.ability_target, fragment) {
+                Eval::Text(value) => value,
+                Eval::Number(value) => value.to_string(),
+                Eval::Bool(value) => value.to_string(),
+                Eval::Null => "null".into(),
+                _ => "[object Object]".into(),
+            }).collect::<String>()
+        };
         if self.program_has_effect(s, source, p) {
             title.clone()
         } else {
@@ -927,12 +1026,17 @@ impl Engine {
                 | Decision::AbilityOptional
                 | Decision::AbilityNoEffect
                 | Decision::AbilityDistribute
+                | Decision::AbilityGroupShield
         )
     }
     pub(super) fn ability_actions(&self, s: &State) -> Vec<Action> {
         let mut out = Vec::new();
         let source = s.source;
         match s.decision {
+            Decision::AbilityGroupShield => {
+                if s.event_group.shield_count==0 { out.push(Action::button("You",0)); out.push(Action::button("Opponent",1)); }
+                else { out.push(Action::button("Resolve next","next")); out.push(Action::button(format!("Resolve all ({})",s.event_group.shield_count),"all")); }
+            }
             Decision::AbilityMenu => {
                 for p in self.available_programs(s, source, "action") {
                     out.push(Action::button(
@@ -961,37 +1065,26 @@ impl Engine {
                 out.push(Action::button("Pass", "pass"));
             }
             Decision::AbilityTarget => {
-                let p = self.program(s.ability_program - 1);
-                let Instruction::Select(r) = &p.instructions[s.ability_pc as usize] else {
-                    unreachable!()
+                let p=self.program(s.ability_program-1);
+                let (r,child)=if let Some((r,e))=self.current_group_resolver(s,p) { (r,Some(e)) } else {
+                    let Instruction::Select(r)=&p.instructions[s.ability_pc as usize] else { unreachable!() }; (r,None)
                 };
-                if !s.ability_committed && s.ability_return == 0 {
-                    out.push(Action::button("Cancel", "cancel"));
+                if !s.ability_committed && s.ability_return==0 { out.push(Action::button("Cancel","cancel")); }
+                if child.is_none() && p.optional && s.ability_pc==0 { out.push(Action::button("Pass","passAbility")); }
+                let picks=if child.is_some() { s.event_group.picks } else { s.ability_selection };
+                if r.is_multiple() {
+                    if picks.len>0 { out.push(Action::button("Done","done")); }
+                    else if r.optional { out.push(Action::button("Choose nothing","done")); }
+                } else if r.optional {
+                    if child.is_some() || s.ability_pc>0 && matches!(p.instructions[s.ability_pc as usize-1],Instruction::Commit) {
+                        out.push(Action::button("Choose nothing","done"));
+                    } else { out.push(Action::button("Choose no target","noTarget")); }
                 }
-                if p.optional && s.ability_pc == 0 {
-                    out.push(Action::button("Pass", "passAbility"));
-                }
-                if r.optional {
-                    if s.ability_pc > 0
-                        && matches!(
-                            p.instructions[s.ability_pc as usize - 1],
-                            Instruction::Commit
-                        )
-                    {
-                        out.push(Action::button("Choose nothing", "done"));
-                    } else {
-                        out.push(Action::button("Choose no target", "noTarget"));
-                    }
-                }
-                for id in self.program_targets(
-                    s,
-                    source,
-                    s.ability_program - 1,
-                    s.ability_pc as usize,
-                    r,
-                    false,
-                ) {
-                    out.push(self.card_action(s, id));
+                let candidates=if let Some(e)=child { self.group_candidates(s,r,e,false) } else {
+                    self.program_targets(s,source,s.ability_program-1,s.ability_pc as usize,r,false)
+                };
+                for id in candidates {
+                    if !r.is_multiple() || picks.len<r.max_targets().expect("validated selector") as u8 || picks.ids[..picks.len as usize].contains(&id) { out.push(self.card_action(s,id)); }
                 }
             }
             Decision::AbilityDistribute => {
@@ -1040,6 +1133,8 @@ impl Engine {
         s.ability_program = p + 1;
         s.ability_pc = 0;
         s.ability_target = 0;
+        s.ability_selection=Selection::default();
+        s.event_group=EventGroupState::default();
         s.ability_result = 0;
         s.ability_succeeded = false;
         s.ability_return = return_to;
@@ -1096,6 +1191,7 @@ impl Engine {
     fn end_program(&self, s: &mut State) -> Result<(), String> {
         let next = s.ability_return;
         s.ability_program = 0;
+        s.ability_selection=Selection::default(); s.event_group=EventGroupState::default();
         if next == 1 {
             self.process_triggers(s)
         } else {
@@ -1126,6 +1222,7 @@ impl Engine {
                         .is_empty()
                     {
                         s.ability_target = 0;
+                        s.ability_selection=Selection::default();
                         s.ability_pc += 1;
                         continue;
                     }
@@ -1151,6 +1248,18 @@ impl Engine {
                     s.decision = Decision::AbilityDistribute;
                     return Ok(());
                 }
+                Instruction::Group(effect) => {
+                    self.commit_program(s)?;
+                    if !s.event_group.active {
+                        s.event_group.active=true; s.event_group.initiator=s.active;
+                        s.event_group.context=if s.ability_selection.len>0 { s.ability_selection } else { Selection::one(s.ability_target) };
+                    }
+                    if !self.generate_group(s,effect)? { return Ok(()); }
+                    if !self.resolve_group(s,effect)? { return Ok(()); }
+                    s.event_group=EventGroupState::default();
+                    s.ability_selection=Selection::default();
+                    s.ability_pc+=1;
+                }
                 Instruction::Apply(effect) => {
                     self.commit_program(s)?;
                     let (amount, resolved) = self.apply_effect(s, effect)?;
@@ -1160,6 +1269,226 @@ impl Engine {
                 }
             }
         }
+    }
+    fn current_group_resolver<'a>(&self, s: &State, p: &'a Program) -> Option<(&'a TargetResolver,&'a Effect)> {
+        let Instruction::Group(effect)=&p.instructions[s.ability_pc as usize] else { return None; };
+        match group_ops(effect).get(s.event_group.pc as usize) {
+            Some(GroupOp::Select(r,e,_))=>Some((r,e)), _=>None,
+        }
+    }
+    fn group_candidates(&self,s:&State,r:&TargetResolver,e:&Effect,require_change:bool)->Vec<CardId> {
+        self.matching_targets(s,s.source,r).into_iter().filter(|id| self.effect_can_affect(s,s.source,*id,e,require_change)).collect()
+    }
+    fn capture_group_leaf(&self,s:&mut State,op:usize,e:&Effect)->Result<(),String> {
+        let (target,amount)=match e {
+            Effect::Damage{target,amount}|Effect::Heal{target,amount}|Effect::GiveShield{target,amount}|Effect::GiveExperience{target,amount}|Effect::GainKeyword{target,amount,..}=>(target,self.effect_amount(s,amount)?),
+            Effect::Ready{target}|Effect::Exhaust{target}|Effect::Defeat{target}|Effect::ModifyStats{target,..}|Effect::LoseKeyword{target,..}=>(target,1),
+            _=>return Err("unsupported group primitive".into()),
+        };
+        let (power,hp)=if let Effect::ModifyStats{power,hp,..}=e { (i32::try_from(self.eval(s,s.source,s.ability_target,power).number()).map_err(|_| "phase power delta exceeds capacity")?,i32::try_from(self.eval(s,s.source,s.ability_target,hp).number()).map_err(|_| "phase HP delta exceeds capacity")?) } else { (0,0) };
+        if !(-65535..=65535).contains(&power) || !(-65535..=65535).contains(&hp) { return Err("phase stat delta exceeds capacity".into()); }
+        for target in self.effect_targets(s,target) {
+            let Eval::Card(target)=target else { continue; };
+            if target==0 || !(self.in_arena(s,target)||self.def(s,target).info.is("base")) { continue; }
+            if !self.effect_can_affect(s,s.source,s.ability_target,e,false) { continue; }
+            if !self.in_arena(s,target) && !matches!(e,Effect::Damage{..}|Effect::Heal{..}) { continue; }
+            let tokens=matches!(e,Effect::GiveShield{..}|Effect::GiveExperience{..});
+            for _ in 0..if tokens { amount } else { 1 } {
+                let mut record=PreparedEvent{op:op as u16,target,amount,power,hp,token:0};
+                if tokens {
+                    if s.next_id as usize>=MAX_CARDS { return Err("card capacity exceeded generating token".into()); }
+                    record.token=s.next_id; s.next_id+=1;
+                    let def=if matches!(e,Effect::GiveExperience{..}) { self.experience_def.ok_or("catalogue needs Experience token")? } else { self.shield_def };
+                    *s.card_mut(record.token)=Card { present:true,def,owner:s.card(target).owner,..Card::default() };
+                }
+                if s.event_group.count>=32 { return Err("prepared event capacity exceeded".into()); }
+                s.event_group.records[s.event_group.count as usize]=record; s.event_group.count+=1;
+            }
+        }
+        Ok(())
+    }
+    fn generate_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        let ops=group_ops(e);
+        while let Some(op)=ops.get(s.event_group.pc as usize) {
+            s.ability_target=s.event_group.context.ids[0];
+            match op {
+                GroupOp::Branch(expr,to)=> { if !self.eval(s,s.source,s.ability_target,expr).truth() { s.event_group.pc=*to as u16; continue; } }
+                GroupOp::Jump(to)=> { s.event_group.pc=*to as u16; continue; }
+                GroupOp::Select(r,child,end)=> {
+                    if self.group_candidates(s,r,child,true).is_empty() { s.event_group.pc=*end as u16; continue; }
+                    s.decision=Decision::AbilityTarget; return Ok(false);
+                }
+                GroupOp::Pop=> {
+                    s.event_group.depth-=1;
+                    s.event_group.context=s.event_group.stack[s.event_group.depth as usize];
+                    s.event_group.stack[s.event_group.depth as usize]=Selection::default();
+                }
+                GroupOp::Leaf(effect)=>self.capture_group_leaf(s,s.event_group.pc as usize,effect)?,
+            }
+            s.event_group.pc+=1;
+        }
+        Ok(true)
+    }
+    fn group_shield_targets(&self,s:&State,e:&Effect,seat:Seat)->Vec<CardId> {
+        let ops=group_ops(e); let mut targets=vec![];
+        for r in &s.event_group.records[..s.event_group.count as usize] {
+            if matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) && r.amount>0 && s.card(r.target).shield!=0 && s.card(r.target).owner==seat && !targets.contains(&r.target) { targets.push(r.target); }
+        }
+        targets
+    }
+    fn shield_attached(&self,s:&State,target:CardId,shield:CardId)->bool {
+        let mut token=s.card(target).shield;
+        while token!=0 { if token==shield { return true; } token=s.card(token).next_token; }
+        false
+    }
+    fn consolidate_group_shields(&self,s:&mut State) {
+        // Mirror ReplacementEffectWindow: stashed alternate contexts precede
+        // the currently retained contexts; retain the first valid one per unit.
+        let mut contexts=s.event_group.shield_stash[..s.event_group.shield_stash_len as usize].to_vec();
+        for r in &s.event_group.records[..s.event_group.count as usize] {
+            if r.amount>0 && r.token!=0 { contexts.push(r.token); }
+        }
+        let pending=(0..s.event_group.count as usize).filter(|i|s.event_group.records[*i].amount>0 && s.event_group.records[*i].token!=0).collect::<Vec<_>>();
+        let mut selected=vec![];
+        for i in pending {
+            let target=s.event_group.records[i].target;
+            if let Some(token)=contexts.iter().find(|id|self.shield_attached(s,target,**id)) {
+                s.event_group.records[i].token=*token; selected.push(*token);
+            }
+        }
+        let retained=contexts.into_iter().filter(|id|!selected.contains(id) && s.event_group.records[..s.event_group.count as usize].iter().any(|r|r.amount>0 && r.token!=0 && self.shield_attached(s,r.target,*id))).collect::<Vec<_>>();
+        s.event_group.shield_stash=[0;MAX_CARDS]; s.event_group.shield_stash_len=retained.len() as u8;
+        s.event_group.shield_stash[..retained.len()].copy_from_slice(&retained);
+    }
+    fn replace_group_damage(&self,s:&mut State,e:&Effect,target:CardId) {
+        let ops=group_ops(e);
+        if let Some(index)=(0..s.event_group.count as usize).find(|i| {
+            let r=s.event_group.records[*i]; r.target==target && r.amount>0 && matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..}))
+        }) {
+            s.event_group.records[index].amount=0;
+            self.consolidate_group_shields(s);
+        }
+    }
+    pub(super) fn combat_shield_contexts(&self,s:&State,first:CardId,second:CardId)->(CardId,CardId) {
+        // Combat uses the same replacement-window consolidation as prepared
+        // effect groups. Capture both units' contexts before resolving either.
+        let mut contexts=*s; contexts.event_group=EventGroupState::default(); contexts.event_group.count=2;
+        for (index,target) in [first,second].into_iter().enumerate() {
+            let mut tokens=vec![]; let mut token=s.card(target).shield;
+            while token!=0 { tokens.push(token); token=s.card(token).next_token; }
+            tokens.reverse();
+            contexts.event_group.records[index]=PreparedEvent {target,amount:1,token:tokens[0],..PreparedEvent::default()};
+            for token in tokens.into_iter().skip(1) {
+                let len=contexts.event_group.shield_stash_len as usize;
+                contexts.event_group.shield_stash[len]=token; contexts.event_group.shield_stash_len+=1;
+            }
+        }
+        let first_token=contexts.event_group.records[0].token;
+        contexts.event_group.records[0].amount=0;
+        self.consolidate_group_shields(&mut contexts);
+        (first_token,contexts.event_group.records[1].token)
+    }
+    pub(super) fn remove_group_shield(&self,s:&mut State,target:CardId,selected:CardId) {
+        let mut token=s.card(target).shield; let mut previous=0;
+        while token!=0 && token!=selected { previous=token; token=s.card(token).next_token; }
+        if token==0 { return; }
+        if previous==0 { s.card_mut(target).shield=s.card(selected).next_token; }
+        else { s.card_mut(previous).next_token=s.card(selected).next_token; }
+    }
+    fn resolve_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        let ops=group_ops(e);
+        if !s.event_group.replacement_done {
+            s.event_group.initiator=s.active;
+            s.event_group.replacement_done=true;
+            for r in &s.event_group.records[..s.event_group.count as usize] {
+                if matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) && r.amount>0 && s.card(r.target).shield!=0 {
+                    s.event_group.shield_mask|=1<<s.card(r.target).owner.index();
+                }
+            }
+        }
+        if s.event_group.shield_mask!=0 && s.event_group.records[..s.event_group.count as usize].iter().all(|r|r.token==0) {
+            for i in 0..s.event_group.count as usize {
+                let r=s.event_group.records[i];
+                if !matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) || r.amount==0 { continue; }
+                let mut tokens=vec![]; let mut token=s.card(r.target).shield;
+                while token!=0 { tokens.push(token); token=s.card(token).next_token; }
+                tokens.reverse();
+                if let Some(first)=tokens.first() { s.event_group.records[i].token=*first; }
+                for token in tokens.into_iter().skip(1) {
+                    let len=s.event_group.shield_stash_len as usize;
+                    s.event_group.shield_stash[len]=token; s.event_group.shield_stash_len+=1;
+                }
+            }
+        }
+        while s.event_group.shield_mask!=0 {
+            if s.event_group.shield_mask==3 && s.event_group.shield_priority==0 {
+                s.active=s.event_group.initiator; s.event_group.shield_count=0;
+                s.decision=Decision::AbilityGroupShield; return Ok(false);
+            }
+            let seat=if s.event_group.shield_priority!=0 { if s.event_group.shield_priority==1 { Seat::P1 } else { Seat::P2 } }
+                else if s.event_group.shield_mask&1!=0 { Seat::P1 } else { Seat::P2 };
+            let targets=self.group_shield_targets(s,e,seat);
+            if targets.len()>1 {
+                s.active=seat; s.event_group.shield_count=targets.len() as u8;
+                s.decision=Decision::AbilityGroupShield; return Ok(false);
+            }
+            for target in targets { self.replace_group_damage(s,e,target); }
+            s.event_group.shield_mask&=!(1<<seat.index()); s.event_group.shield_priority=0;
+        }
+        s.active=s.event_group.initiator;
+        s.event_group.resolving=true;
+        // Token attachment contingents run after the primary handlers.
+        let is_attachment=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::GiveShield{..}|Effect::GiveExperience{..}));
+        let indices=(0..s.event_group.count as usize).filter(|i|!is_attachment(*i))
+            .chain((0..s.event_group.count as usize).filter(|i|is_attachment(*i))).collect::<Vec<_>>();
+        for index in indices {
+            let r=s.event_group.records[index];
+            let GroupOp::Leaf(effect)=&ops[r.op as usize] else { unreachable!() };
+            if !self.in_arena(s,r.target)&&!self.def(s,r.target).info.is("base") { continue; }
+            if r.token!=0 && matches!(effect,Effect::Damage{..}) {
+                self.remove_group_shield(s,r.target,r.token);
+                continue;
+            }
+            if r.token!=0 {
+                let experience=matches!(effect,Effect::GiveExperience{..});
+                let previous=if experience { s.card(r.target).experience } else { s.card(r.target).shield };
+                s.card_mut(r.token).next_token=previous;
+                if experience { s.card_mut(r.target).experience=r.token; } else { s.card_mut(r.target).shield=r.token; }
+                continue;
+            }
+            let mut effect=(*effect).clone();
+            let chosen=Target::Name("chosen".into());
+            match &mut effect {
+                Effect::Damage{target,amount}|Effect::Heal{target,amount}|Effect::GainKeyword{target,amount,..}=> { *target=chosen; *amount=Expr::number(r.amount as i64); }
+                Effect::Ready{target}|Effect::Exhaust{target}|Effect::Defeat{target}|Effect::LoseKeyword{target,..}=>*target=chosen,
+                Effect::ModifyStats{target,power,hp,..}=> { *target=chosen; *power=Expr::number(r.power as i64); *hp=Expr::number(r.hp as i64); }
+                _=>unreachable!(),
+            }
+            s.event_group.context=Selection::one(r.target); s.ability_target=r.target;
+            if matches!(effect,Effect::Damage{..}) {
+                let hp=if self.def(s,r.target).info.is("base") { self.def(s,r.target).info.hp.unwrap_or(30).max(0) as u16 } else { self.hp(s,r.target) };
+                let remaining=hp.saturating_sub(s.card(r.target).damage);
+                if let Effect::Damage{amount,..}=&mut effect { *amount=Expr::number(r.amount.min(remaining) as i64); }
+            }
+            let (amount,resolved)=self.apply_effect(s,&effect)?;
+            s.ability_result=s.ability_result.saturating_add(amount); s.ability_succeeded|=resolved;
+        }
+        s.event_group.resolving=false;
+        // Damage callbacks capture their lethal set in handler/selection order,
+        // before any queued source defeat can change another unit's HP aura.
+        let mut damage_defeats=vec![];
+        for r in &s.event_group.records[..s.event_group.count as usize] {
+            if r.amount>0 && matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) && self.in_arena(s,r.target) && s.card(r.target).damage>=self.hp(s,r.target) && !damage_defeats.contains(&r.target) { damage_defeats.push(r.target); }
+        }
+        self.check_stat_capacity(s)?; self.check_win(s);
+        // Framework HP checks queue their deaths before the defeat subwindow
+        // removes any pending source; a negative aura cannot rescue them mid-batch.
+        let framework_dead=s.players.iter().flat_map(|p|p.ground.as_slice().iter().chain(p.space.as_slice())).copied()
+            .filter(|id|s.card(*id).damage>=self.hp(s,*id)).collect::<Vec<_>>();
+        for id in framework_dead { if !damage_defeats.contains(&id) { damage_defeats.push(id); } }
+        for id in damage_defeats { self.defeat(s,id)?; }
+        self.sweep_stat_defeats(s)?;
+        Ok(true)
     }
     fn effect_targets(&self, s: &State, target: &Target) -> Vec<Eval> {
         let owner = s.card(s.source).owner;
@@ -1181,6 +1510,7 @@ impl Engine {
             }
             Target::Name(n) => match n.as_str() {
                 "self" => vec![Eval::Card(s.source)],
+                "chosen" if s.event_group.active => s.event_group.context.ids[..s.event_group.context.len as usize].iter().map(|id| Eval::Card(*id)).collect(),
                 "chosen" => vec![Eval::Card(s.ability_target)],
                 "ownBase" => vec![Eval::Card(s.player(owner).base)],
                 "enemyBase" => vec![Eval::Card(s.player(owner.other()).base)],
@@ -1244,6 +1574,13 @@ impl Engine {
         u16::try_from(n).map_err(|_| format!("effect amount {n} exceeds bounded runtime"))
     }
     fn apply_effect(&self, s: &mut State, e: &Effect) -> Result<(u16, bool), String> {
+        if matches!(e, Effect::PhaseModifiers { .. }) {
+            s.event_group.active=true;
+            s.event_group.context=Selection::one(s.ability_target);
+            self.generate_group(s,e)?; self.resolve_group(s,e)?;
+            s.event_group=EventGroupState::default();
+            return Ok((1,true));
+        }
         if matches!(e, Effect::NoAction) {
             return Ok((0, false));
         }
@@ -1253,8 +1590,9 @@ impl Engine {
             | Effect::Heal { target, amount }
             | Effect::Draw { target, amount }
             | Effect::GiveShield { target, amount }
-            | Effect::GiveExperience { target, amount } => (target, self.effect_amount(s, amount)?),
-            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } => (target, 1),
+            | Effect::GiveExperience { target, amount }
+            | Effect::GainKeyword { target, amount, .. } => (target, self.effect_amount(s, amount)?),
+            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -1340,6 +1678,17 @@ impl Engine {
                             }
                             result += 1;
                         }
+                        Effect::GainKeyword { keyword, .. } if in_arena => {
+                            let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).unwrap();
+                            if index >= 6 { s.card_mut(id).phase_keyword_values[index - 6] = s.card(id).phase_keyword_values[index - 6].checked_add(amount).ok_or("phase keyword capacity exceeded")?; }
+                            s.card_mut(id).phase_keyword_presence |= 1 << index;
+                            result += 1;
+                        }
+                        Effect::LoseKeyword { keyword, .. } if in_arena => {
+                            let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).unwrap();
+                            s.card_mut(id).phase_lost_keywords |= 1 << index;
+                            result += 1;
+                        }
                         Effect::ModifyStats { .. } if in_arena => {
                             let (power, hp) =
                                 modifier.expect("stat modifier captured before event batch");
@@ -1352,7 +1701,7 @@ impl Engine {
                             }
                             let composed_power = self.def(s, id).info.power.unwrap_or(0) as i64
                                 + self.token_count(s, s.card(id).experience) as i64
-                                + if self.def(s, id).flags & GRIT != 0 {
+                                + if self.keyword_amount(s, id, "grit") > 0 {
                                     s.card(id).damage as i64
                                 } else {
                                     0
@@ -1388,8 +1737,7 @@ impl Engine {
                 _ => {}
             }
         }
-        self.sweep_stat_defeats(s)?;
-        self.check_win(s);
+        if !s.event_group.resolving { self.sweep_stat_defeats(s)?; self.check_win(s); }
         Ok((
             result,
             if matches!(e, Effect::ReadyResources { .. }) {
@@ -1402,6 +1750,19 @@ impl Engine {
     pub(super) fn apply_ability_action(&self, s: &State, a: &Action) -> Result<State, String> {
         let mut t = *s;
         match s.decision {
+            Decision::AbilityGroupShield => {
+                if s.event_group.shield_count==0 {
+                    let seat=if a.arg.as_ref().and_then(Value::as_u64)==Some(0) { s.active } else { s.active.other() };
+                    t.event_group.shield_priority=seat.index() as u8+1;
+                } else {
+                    let Instruction::Group(effect)=&self.program(s.ability_program-1).instructions[s.ability_pc as usize] else { unreachable!() };
+                    let targets=self.group_shield_targets(s,effect,s.active);
+                    let count=if a.arg.as_ref().and_then(Value::as_str)==Some("all") { targets.len() } else { 1 };
+                    for target in targets.into_iter().take(count) { self.replace_group_damage(&mut t,effect,target); }
+                    t.event_group.shield_priority=s.active.index() as u8+1;
+                }
+                self.run_program(&mut t)?;
+            }
             Decision::AbilityMenu => {
                 if a.label == "Cancel" {
                     self.cancel(&mut t);
@@ -1436,13 +1797,26 @@ impl Engine {
                 }
             }
             Decision::AbilityTarget => {
-                if a.arg.as_ref().and_then(Value::as_str) == Some("passAbility") {
-                    self.end_program(&mut t)?;
-                } else if a.arg.as_ref().and_then(Value::as_str) == Some("cancel") {
-                    self.cancel(&mut t);
-                } else {
-                    t.ability_target = a.id().unwrap_or(0);
-                    t.ability_pc += 1;
+                let p=self.program(s.ability_program-1);
+                let nested=self.current_group_resolver(s,p);
+                let r=if let Some((r,_))=nested { r } else { let Instruction::Select(r)=&p.instructions[s.ability_pc as usize] else { unreachable!() }; r };
+                if a.arg.as_ref().and_then(Value::as_str)==Some("passAbility") { self.end_program(&mut t)?; }
+                else if a.arg.as_ref().and_then(Value::as_str)==Some("cancel") { self.cancel(&mut t); }
+                else {
+                    if r.is_multiple() && a.id().is_some() {
+                        if nested.is_some() { t.event_group.picks.toggle(a.id().unwrap()); }
+                        else { t.ability_selection.toggle(a.id().unwrap()); }
+                        return Ok(t);
+                    }
+                    let selected=if r.is_multiple() {
+                        if nested.is_some() { t.event_group.picks } else { t.ability_selection }
+                    } else { Selection::one(a.id().unwrap_or(0)) };
+                    t.ability_target=selected.ids[0];
+                    if nested.is_some() {
+                        let depth=t.event_group.depth as usize;
+                        t.event_group.stack[depth]=t.event_group.context; t.event_group.depth+=1;
+                        t.event_group.context=selected; t.event_group.picks=Selection::default(); t.event_group.pc+=1;
+                    } else { t.ability_selection=selected; t.ability_pc+=1; }
                     self.run_program(&mut t)?;
                 }
             }

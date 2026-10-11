@@ -8,6 +8,8 @@ use serde_json::Value;
 
 pub const SCHEMA: &str = "swu-card-ir/v1";
 pub const MAX_PROGRAM_INSTRUCTIONS: usize = 128;
+pub const MAX_GROUP_RECORDS: usize = 32;
+pub const MAX_GROUP_OPS: usize = 128;
 pub const MAX_ABILITY_NESTING: usize = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +50,12 @@ pub enum Expr {
     },
 }
 impl Expr {
+    fn references_title(&self) -> bool {
+        match self {
+            Self::Ref {path}=>path.last().is_some_and(|p|p=="title"),
+            Self::Array {items}=>items.iter().any(Self::references_title),Self::Math {args,..}=>args.iter().any(Self::references_title),Self::Unary {value,..}=>value.references_title(),Self::Binary {left,right,..}=>left.references_title()||right.references_title(),Self::Conditional {condition,then,r#else}=>condition.references_title()||then.references_title()||r#else.references_title(),Self::Query {receiver,args,..}=>receiver.references_title()||args.iter().any(Self::references_title),_=>false,
+        }
+    }
     fn depends_on_stats(&self) -> bool {
         match self {
             Self::Const { .. } => false,
@@ -73,6 +81,34 @@ impl Expr {
                 ["getPower", "getHp"].contains(&name.as_str())
                     || receiver.depends_on_stats()
                     || args.iter().any(Self::depends_on_stats)
+            }
+        }
+    }
+    fn depends_on_keywords(&self) -> bool {
+        match self {
+            Self::Const { .. } => false,
+            Self::Ref { path } => path
+                .iter()
+                .any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
+            Self::Array { items } => items.iter().any(Self::depends_on_keywords),
+            Self::Math { args, .. } => args.iter().any(Self::depends_on_keywords),
+            Self::Binary { left, right, .. } => left.depends_on_keywords() || right.depends_on_keywords(),
+            Self::Unary { value, .. } => value.depends_on_keywords(),
+            Self::Conditional {
+                condition,
+                then,
+                r#else,
+            } => {
+                condition.depends_on_keywords() || then.depends_on_keywords() || r#else.depends_on_keywords()
+            }
+            Self::Query {
+                name,
+                receiver,
+                args,
+            } => {
+                ["getPower", "getHp", "hasSomeKeyword"].contains(&name.as_str())
+                    || receiver.depends_on_keywords()
+                    || args.iter().any(Self::depends_on_keywords)
             }
         }
     }
@@ -165,6 +201,7 @@ impl Expr {
                     .as_slice()
                 {
                     ["source" | "target" | "card" | "player" | "opponent"] => true,
+                    ["source" | "target" | "card", "title"] => true,
                     ["source" | "target" | "card", "damage" | "power" | "hp" | "cost" | "remainingHp" | "exhausted"
                     | "controller" | "unique" | "zoneName"] => true,
                     ["player" | "opponent", "readyResourceCount" | "exhaustedResourceCount" | "base"] => {
@@ -184,6 +221,7 @@ impl Expr {
                 }
             }
             Self::Binary { op, left, right } => {
+                if (left.references_title() || right.references_title()) && !["===","!==","&&","||"].contains(&op.as_str()) { return Err("printed titles support strict equality and logical operators only".into()); }
                 if ![
                     "+", "-", "*", "%", "===", "!==", "<", "<=", ">", ">=", "&&", "||",
                 ]
@@ -195,6 +233,7 @@ impl Expr {
                 sub(right)
             }
             Self::Unary { op, value } => {
+                if value.references_title() && op!="!" { return Err("printed titles do not support numeric unary coercion".into()); }
                 if !["!", "-"].contains(&op.as_str()) {
                     return Err(format!("unsupported unary operator {op}"));
                 }
@@ -214,6 +253,7 @@ impl Expr {
                 receiver,
                 args,
             } => {
+                if receiver.references_title() || args.iter().any(Self::references_title) { return Err("printed title query coercion is unsupported".into()); }
                 let arity = match name.as_str() {
                     "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
                     | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
@@ -305,12 +345,29 @@ pub struct TargetResolver {
     pub optional: bool,
     #[serde(default)]
     pub predicate: Option<Expr>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub count: Option<Expr>,
 }
 fn any_owner() -> String {
     "any".into()
 }
 impl TargetResolver {
+    pub fn max_targets(&self) -> Result<usize, String> {
+        match self.mode.as_deref() {
+            None | Some("single") if self.count.is_none() => Ok(1),
+            Some("upTo") => match &self.count {
+                Some(Expr::Const { value }) if value.as_u64().is_some_and(|n| (1..=3).contains(&n)) => Ok(value.as_u64().unwrap() as usize),
+                _ => Err("UpTo selectors require literal counts from one to three".into()),
+            },
+            Some("unlimited") if self.card_type == "base" && self.arena.is_none() && self.count.is_none() && self.optional && matches!(self.zone.as_deref(), None | Some("base" | "anyAttackable")) => Ok(2),
+            _ => Err("unsupported target mode/count; unlimited selection is base-only".into()),
+        }
+    }
+    pub fn is_multiple(&self) -> bool { matches!(self.mode.as_deref(), Some("upTo" | "unlimited")) }
     pub fn validate(&self) -> Result<(), String> {
+        self.max_targets()?;
         if !["self", "opponent", "any"].contains(&self.owner.as_str()) {
             return Err(format!("unsupported target owner {}", self.owner));
         }
@@ -381,6 +438,8 @@ pub enum Effect {
         hp: Expr,
         duration: String,
     },
+    GainKeyword { target: Target, keyword: String, #[serde(default = "one")] amount: Expr, duration: String },
+    LoseKeyword { target: Target, keyword: String, duration: String },
     Ready {
         target: Target,
     },
@@ -404,6 +463,9 @@ pub enum Effect {
         effects: Vec<Effect>,
     },
     Simultaneous {
+        effects: Vec<Effect>,
+    },
+    PhaseModifiers {
         effects: Vec<Effect>,
     },
     Conditional {
@@ -435,6 +497,8 @@ pub struct Ability {
     #[serde(default)]
     pub trigger: String,
     pub title: String,
+    #[serde(default)]
+    pub context_title: Vec<Expr>,
     #[serde(default)]
     pub costs: Vec<Cost>,
     #[serde(default)]
@@ -471,11 +535,13 @@ pub enum Instruction {
     IfResult { skip: usize },
     Jump { to: usize },
     Apply(Effect),
+    Group(Effect),
 }
 
 #[derive(Debug, Clone)]
 pub struct Program {
     pub title: String,
+    pub context_title: Vec<Expr>,
     pub trigger: String,
     pub costs: Vec<Cost>,
     pub optional: bool,
@@ -485,6 +551,36 @@ pub struct Program {
 }
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
+        fn validate_title(e: &Expr) -> Result<(), String> {
+            match e {
+                Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>() == ["source", "title"] => Ok(()),
+                Expr::Conditional {condition, then, r#else} => { condition.validate()?; validate_title(then)?; validate_title(r#else) },
+                Expr::Array { .. } => Err("context titles require scalar fragments".into()),
+                Expr::Ref {path} if path.len() == 1 || matches!(path.last().map(String::as_str), Some("controller" | "base")) => Err("context titles require scalar reference values".into()),
+                Expr::Binary {op, ..} if op == "+" => e.validate_number(),
+                _ => e.validate(),
+            }
+        }
+        if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
+        fn title_literal_bytes(e: &Expr) -> usize {
+            match e {
+                Expr::Const {value} => value.as_str().map_or(0, str::len),
+                Expr::Array {items} => items.iter().map(title_literal_bytes).sum(),
+                Expr::Math {args, ..} => args.iter().map(title_literal_bytes).sum(),
+                Expr::Ref { .. } => 0,
+                Expr::Unary {value, ..} => title_literal_bytes(value),
+                Expr::Binary {left, right, ..} => title_literal_bytes(left) + title_literal_bytes(right),
+                Expr::Conditional {condition, then, r#else} => title_literal_bytes(condition) + title_literal_bytes(then) + title_literal_bytes(r#else),
+                Expr::Query {receiver, args, ..} => title_literal_bytes(receiver) + args.iter().map(title_literal_bytes).sum::<usize>(),
+            }
+        }
+        let mut literal_bytes = 0;
+        for fragment in &ability.context_title {
+            validate_title(fragment)?;
+            literal_bytes += title_literal_bytes(fragment);
+            if literal_bytes > 1024 { return Err("context title aggregate literal bytes exceed capacity".into()); }
+        }
+
         if !["action", "whenPlayed", "onAttack", "event", "constant"]
             .contains(&ability.trigger.as_str())
         {
@@ -500,27 +596,22 @@ impl Program {
                     "constant modifiers cannot have costs, choices, or continuations".into(),
                 );
             }
-            let Effect::ModifyStats {
-                power: Expr::Const { value: power },
-                hp: Expr::Const { value: hp },
-                duration,
-                target: Target::Name(target),
-            } = &ability.effect
-            else {
-                return Err("constant modifiers require literal stat deltas".into());
-            };
-            if duration != "persistent"
-                || target
-                    != if ability.target_resolver.is_some() {
-                        "chosen"
-                    } else {
-                        "self"
-                    }
-                || !power.as_i64().is_some_and(|n| (-1000..=1000).contains(&n))
-                || !hp.as_i64().is_some_and(|n| (-1000..=1000).contains(&n))
-            {
-                return Err("unsupported constant modifier".into());
+            fn validate_constant(effect: &Effect, selected: bool) -> Result<(), String> {
+                let expected = if selected { "chosen" } else { "self" };
+                let valid_target = |target: &Target, duration: &str| duration == "persistent" && matches!(target, Target::Name(n) if n == expected);
+                match effect {
+                    Effect::ModifyStats { power: Expr::Const { value: power }, hp: Expr::Const { value: hp }, duration, target }
+                        if valid_target(target, duration) && power.as_i64().is_some_and(|n| (-1000..=1000).contains(&n)) && hp.as_i64().is_some_and(|n| (-1000..=1000).contains(&n)) => Ok(()),
+                    Effect::GainKeyword { target, amount, duration, .. } if valid_target(target, duration) && !amount.depends_on_keywords() => Ok(()),
+                    Effect::LoseKeyword { target, duration, .. } if valid_target(target, duration) => Ok(()),
+                    Effect::Simultaneous { effects } if !effects.is_empty() => { for e in effects { validate_constant(e, selected)?; } Ok(()) }
+                    _ => Err("unsupported constant modifier or recursive effective-stat/keyword dependency".into()),
+                }
             }
+            validate_constant(&ability.effect, ability.target_resolver.is_some())?;
+            fn modifies_keywords(e: &Effect) -> bool { match e { Effect::GainKeyword { .. } | Effect::LoseKeyword { .. } => true, Effect::Simultaneous { effects } => effects.iter().any(modifies_keywords), _ => false } }
+            if modifies_keywords(&ability.effect) && (ability.condition.as_ref().is_some_and(Expr::depends_on_keywords) || ability.target_resolver.as_ref().and_then(|r| r.predicate.as_ref()).is_some_and(Expr::depends_on_keywords)) { return Err("constant keyword-dependent conditions would form evaluation cycles".into()); }
+
             if ability
                 .condition
                 .as_ref()
@@ -536,7 +627,7 @@ impl Program {
                 );
             }
             if ability.target_resolver.as_ref().is_some_and(|r| {
-                r.optional
+                r.optional || r.mode.is_some() || r.count.is_some()
                     || !matches!(
                         r.zone.as_deref(),
                         None | Some("arena") | Some("anyAttackable")
@@ -555,6 +646,7 @@ impl Program {
         }
         let mut p = Self {
             title: ability.title.clone(),
+            context_title: ability.context_title.clone(),
             trigger: ability.trigger.clone(),
             costs: ability.costs.clone(),
             optional: ability.optional,
@@ -600,7 +692,8 @@ impl Program {
             return Err("ability continuation nesting exceeds capacity".into());
         }
         if depth > 0
-            && (!ability.costs.is_empty()
+            && (!ability.context_title.is_empty()
+                || !ability.costs.is_empty()
                 || ability.optional
                 || !ability.trigger.is_empty()
                 || ability.condition.is_some()
@@ -611,11 +704,22 @@ impl Program {
                     .into(),
             );
         }
+        fn uses_group(effect: &Effect) -> bool {
+            match effect { Effect::Simultaneous { .. } | Effect::PhaseModifiers { .. } => true,
+                Effect::Select {target_resolver,effect} => target_resolver.is_multiple() || uses_group(effect),
+                Effect::Conditional {on_true,on_false,..} => uses_group(on_true) || on_false.as_deref().is_some_and(uses_group),
+                Effect::Sequence {effects} => effects.iter().any(uses_group), _ => false }
+        }
+        let multiple = ability.target_resolver.as_ref().is_some_and(TargetResolver::is_multiple);
+        if (multiple || uses_group(&ability.effect)) && (ability.then.is_some() || ability.if_you_do.is_some()) { return Err("event groups and array selections cannot have unverified continuations".into()); }
         if let Some(target) = &ability.target_resolver {
             target.validate()?;
             self.instructions.push(Instruction::Select(target.clone()));
         }
-        self.compile_effect(&ability.effect, depth)?;
+        if multiple {
+            self.validate_group(&ability.effect, ability.target_resolver.as_ref().unwrap().max_targets()?)?;
+            self.instructions.push(Instruction::Group(ability.effect.clone()));
+        } else { self.compile_effect(&ability.effect, depth)?; }
         if let Some(next) = &ability.then {
             self.compile_ability(next, depth + 1)?;
         }
@@ -627,6 +731,202 @@ impl Program {
                 skip: self.instructions.len(),
             };
         }
+        Ok(())
+    }
+    fn validate_phase_modifiers(&self, effects: &[Effect]) -> Result<(), String> {
+        if effects.is_empty() || effects.len() > 8 { return Err("phase modifier list exceeds bounded capacity".into()); }
+        let mut shared_target = None;
+        for effect in effects {
+            let (target, duration) = match effect {
+                Effect::ModifyStats {target, duration, ..} | Effect::GainKeyword {target, duration, ..} | Effect::LoseKeyword {target, duration, ..} => (target, duration),
+                _ => return Err("phase modifier lists contain only primitive lasting modifiers".into()),
+            };
+            if duration != "phase" { return Err("phase modifier list requires phase duration".into()); }
+            let encoded = serde_json::to_value(target).map_err(|e| e.to_string())?;
+            if shared_target.as_ref().is_some_and(|prior| prior != &encoded) { return Err("phase modifier list must share one target".into()); }
+            shared_target = Some(encoded);
+            let mut checker = self.clone(); checker.instructions.clear(); checker.compile_effect(effect, 0)?;
+        }
+        Ok(())
+    }
+    fn validate_group(&self, effect: &Effect, targets: usize) -> Result<(), String> {
+        fn dependent_in_scope(e: &Expr, card_bound: bool) -> bool {
+            match e {
+                Expr::Ref {path} => matches!(path.first().map(String::as_str), Some("target" | "targets")) || (!card_bound && path.first().is_some_and(|p|p=="card")),
+                Expr::Array {items} => items.iter().any(|e|dependent_in_scope(e,card_bound)),
+                Expr::Math {args, ..} => args.iter().any(|e|dependent_in_scope(e,card_bound)),
+                Expr::Unary {value, ..} => dependent_in_scope(value,card_bound),
+                Expr::Binary {left, right, ..} => dependent_in_scope(left,card_bound) || dependent_in_scope(right,card_bound),
+                Expr::Conditional {condition, then, r#else} => dependent_in_scope(condition,card_bound) || dependent_in_scope(then,card_bound) || dependent_in_scope(r#else,card_bound),
+                Expr::Query {name,receiver,args} => dependent_in_scope(receiver,card_bound) || args.iter().enumerate().any(|(i,e)|dependent_in_scope(e,card_bound || (i==0 && ["hasSomeArenaUnit","arenaUnitCount"].contains(&name.as_str())))),
+                Expr::Const { .. } => false,
+            }
+        }
+        fn target_dependent(e: &Expr) -> bool { dependent_in_scope(e,false) }
+        fn multiplicity(target: &Target, selected: usize, array: bool) -> Result<usize, String> {
+            fn card_expr(e: &Expr, array: bool) -> Result<(), String> {
+                match e {
+                    Expr::Ref {path} => match path.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+                        ["source"] | ["player" | "opponent", "base"] => Ok(()),
+                        ["target"] if !array => Ok(()),
+                        _ => Err("group expression targets require scalar card references; array target and player references are unverified".into()),
+                    },
+                    Expr::Conditional {condition,then,r#else} => { if array && target_dependent(condition) { return Err("array-dependent expression targets are unsupported".into()); } card_expr(then,array)?; card_expr(r#else,array) },
+                    _ => Err("unsupported group card expression target".into()),
+                }
+            }
+            match target {
+                Target::Name(name) => match name.as_str() {
+                    "chosen" => Ok(selected), "bothBases" => Ok(2), "self" | "ownBase" | "enemyBase" => Ok(1),
+                    _ => Err("card event groups do not support player targets".into()),
+                },
+                Target::Expression(e) => { card_expr(e,array)?; Ok(1) },
+            }
+        }
+        fn walk(p: &Program, effect: &Effect, targets: usize, array: bool, depth: usize) -> Result<(usize, bool, bool), String> {
+            if depth > MAX_ABILITY_NESTING { return Err("event group nesting exceeds capacity".into()); }
+            let (records, damage, newly_attached) = match effect {
+                Effect::Simultaneous {effects} => {
+                    if effects.is_empty() || effects.len() > 8 { return Err("simultaneous group requires one to eight children".into()); }
+                    let mut records = 0usize; let mut damage = false; let mut new = false;
+                    for child in effects { let (n,d,a) = walk(p, child, targets, array, depth + 1)?; records = records.checked_add(n).ok_or("event group capacity overflow")?; damage |= d; new |= a; }
+                    (records, damage, new)
+                },
+                Effect::Conditional {condition, on_true, on_false} => {
+                    condition.validate()?;
+                    if array && target_dependent(condition) { return Err("array-dependent group conditional is unsupported".into()); }
+                    let a = walk(p,on_true,targets,array,depth+1)?;
+                    let b = if let Some(other)=on_false { walk(p,other,targets,array,depth+1)? } else { (0,false,false) };
+                    (a.0.max(b.0),a.1||b.1,a.2||b.2)
+                },
+                Effect::Select {target_resolver, effect} => {
+                    target_resolver.validate()?;
+                    if array && target_resolver.predicate.as_ref().is_some_and(|e|dependent_in_scope(e,true)) { return Err("array-dependent nested selection is unsupported".into()); }
+                    // Nested selection replaces the outer selected value, not its multiplicity.
+                    walk(p,effect,target_resolver.max_targets()?,target_resolver.is_multiple(),depth+1)?
+                },
+                Effect::PhaseModifiers {effects} => {
+                    p.validate_phase_modifiers(effects)?;
+                    if array && effects.iter().any(|e| match e { Effect::ModifyStats {power,hp,..} => target_dependent(power)||target_dependent(hp), Effect::GainKeyword {amount,..} => target_dependent(amount), _ => false }) { return Err("array-dependent phase modifier values are unsupported".into()); }
+                    let mut records=0usize;
+                    for e in effects { let target=match e { Effect::ModifyStats {target,..}|Effect::GainKeyword {target,..}|Effect::LoseKeyword {target,..}=>target,_=>unreachable!() }; records+=multiplicity(target,targets,array)?; }
+                    (records,false,true)
+                },
+                Effect::Draw { .. } | Effect::Sequence { .. } | Effect::ReturnToHand { .. } | Effect::ReadyResources { .. } | Effect::DistributeHealing { .. } => return Err("event group contains an unverified operation".into()),
+                Effect::NoAction => (0,false,false),
+                primitive => {
+                    let mut checker=p.clone(); checker.instructions.clear(); checker.compile_effect(primitive,depth+1)?;
+                    let amount = match primitive { Effect::Damage {amount,..} | Effect::Heal {amount,..} | Effect::GiveShield {amount,..} | Effect::GiveExperience {amount,..} | Effect::GainKeyword {amount,..} => Some(amount), _ => None };
+                    if array && amount.is_some_and(target_dependent) { return Err("array-dependent group amount is unsupported".into()); }
+                    if array && matches!(primitive, Effect::ModifyStats {power,hp,..} if target_dependent(power)||target_dependent(hp)) { return Err("array-dependent phase modifier values are unsupported".into()); }
+                    let destination=match primitive { Effect::Damage {target,..}|Effect::Heal {target,..}|Effect::GiveShield {target,..}|Effect::GiveExperience {target,..}|Effect::Ready {target}|Effect::Exhaust {target}|Effect::Defeat {target}|Effect::ModifyStats {target,..}|Effect::GainKeyword {target,..}|Effect::LoseKeyword {target,..} => target, _ => unreachable!() };
+                    let expanded=multiplicity(destination,targets,array)?;
+                    match primitive {
+                        Effect::GiveShield {amount,..} | Effect::GiveExperience {amount,..} => {
+                            let Expr::Const {value} = amount else { return Err("group tokens require literal bounded amounts".into()); };
+                            let n=value.as_u64().filter(|n| (1..=2).contains(n)).ok_or("group tokens require one or two per target")? as usize;
+                            (expanded * n * 2,false,true)
+                        },
+                        Effect::Damage { .. } => (expanded,true,false),
+                        Effect::ModifyStats { .. } | Effect::GainKeyword { .. } | Effect::LoseKeyword { .. } => (expanded,false,true),
+                        _ => (expanded,false,false),
+                    }
+                }
+            };
+            if records > MAX_GROUP_RECORDS { return Err("event group record budget exceeds capacity".into()); }
+            if damage && newly_attached { return Err("mixed damage and newly attached tokens/lasting modifiers require dedicated engine witnesses".into()); }
+            Ok((records,damage,newly_attached))
+        }
+        fn operation_budget(e: &Effect, depth: usize) -> Result<usize,String> {
+            if depth > MAX_ABILITY_NESTING { return Err("event group nesting exceeds capacity".into()); }
+            let n=match e {
+                Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects} => { let mut sum=0usize;for e in effects {sum+=operation_budget(e,depth+1)?;if sum>MAX_GROUP_OPS {return Err("event group operation budget exceeds capacity".into());}}sum },
+                Effect::Conditional {on_true,on_false,..} => 2+operation_budget(on_true,depth+1)?+if let Some(e)=on_false {operation_budget(e,depth+1)?}else{0},
+                Effect::Select {effect,..} => 2+operation_budget(effect,depth+1)?,
+                Effect::NoAction=>0,_=>1,
+            };
+            if n>MAX_GROUP_OPS {return Err("event group operation budget exceeds capacity".into());}Ok(n)
+        }
+        fn contains_select(e: &Effect) -> bool { match e { Effect::Select {..}=>true,Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}|Effect::Sequence {effects}=>effects.iter().any(contains_select),Effect::Conditional {on_true,on_false,..}=>contains_select(on_true)||on_false.as_deref().is_some_and(contains_select),_=>false } }
+        fn primitive_captures_target(e: &Effect) -> bool {
+            fn target(t: &Target) -> bool { match t { Target::Name(n)=>n=="chosen",Target::Expression(e)=>target_dependent(e) } }
+            match e {
+                Effect::Damage {target:t,amount}|Effect::Heal {target:t,amount}|Effect::Draw {target:t,amount}|Effect::GiveShield {target:t,amount}|Effect::GiveExperience {target:t,amount}|Effect::ReadyResources {target:t,amount}|Effect::GainKeyword {target:t,amount,..}=>target(t)||target_dependent(amount),
+                Effect::ModifyStats {target:t,power,hp,..}=>target(t)||target_dependent(power)||target_dependent(hp),
+                Effect::Ready {target:t}|Effect::Exhaust {target:t}|Effect::Defeat {target:t}|Effect::ReturnToHand {target:t}|Effect::LoseKeyword {target:t,..}=>target(t),
+                _=>false,
+            }
+        }
+        fn validate_shared_target(e: &Effect, changed: bool) -> Result<(),String> {
+            match e {
+                // The new selection supplies a fresh target for its child; lexical factory captures are rejected by the compiler.
+                Effect::Select {effect,..}=>validate_shared_target(effect,false),
+                Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}=>{let mut changed=changed;for e in effects {validate_shared_target(e,changed)?;changed|=contains_select(e);}Ok(())},
+                Effect::Conditional {condition,on_true,on_false}=>{
+                    if changed&&target_dependent(condition) {return Err("target-dependent sibling after nested selection requires capture semantics".into());}
+                    validate_shared_target(on_true,changed)?;if let Some(e)=on_false {validate_shared_target(e,changed)?;}Ok(())
+                },
+                primitive=>{
+                    if changed {
+                        if primitive_captures_target(primitive) {return Err("target-dependent sibling after nested selection requires capture semantics".into());}
+                    }Ok(())
+                }
+            }
+        }
+        operation_budget(effect,0)?;
+        validate_shared_target(effect,false)?;
+        let array=self.instructions.iter().rev().find_map(|i|if let Instruction::Select(r)=i {Some(r.is_multiple())}else{None}).unwrap_or(false);
+        walk(self,effect,targets,array,0)?;
+        #[derive(Clone)]
+        enum Domain { Source, Base(Option<bool>), Unit(Option<bool>, bool), Unknown }
+        fn source_excluded(e: &Expr) -> bool {
+            fn path(e: &Expr, root: &str) -> bool { matches!(e,Expr::Ref {path} if path.len()==1 && path[0]==root) }
+            match e {
+                Expr::Binary {op,left,right} if op == "!==" => (path(left,"card")&&path(right,"source"))||(path(right,"card")&&path(left,"source")),
+                Expr::Binary {op,left,right} if op == "&&" => source_excluded(left)||source_excluded(right),
+                _ => false,
+            }
+        }
+        fn selected_domain(r: Option<&TargetResolver>) -> Domain {
+            let Some(r)=r else { return Domain::Unknown; };
+            let owner=match r.owner.as_str() { "self"=>Some(false),"opponent"=>Some(true),_=>None };
+            if r.card_type=="base" || r.zone.as_deref()==Some("base") { Domain::Base(owner) }
+            else if ["unit","nonLeaderUnit","leaderUnit"].contains(&r.card_type.as_str()) || r.zone.as_deref()==Some("arena") { Domain::Unit(owner,r.predicate.as_ref().is_some_and(source_excluded)) }
+            else { Domain::Unknown }
+        }
+        fn domains(t: &Target, selected: &Domain) -> Vec<Domain> {
+            match t {
+                Target::Name(n) => match n.as_str() { "self"=>vec![Domain::Source],"ownBase"=>vec![Domain::Base(Some(false))],"enemyBase"=>vec![Domain::Base(Some(true))],"bothBases"=>vec![Domain::Base(Some(false)),Domain::Base(Some(true))],"chosen"=>vec![selected.clone()],_=>vec![Domain::Unknown] },
+                Target::Expression(Expr::Ref {path}) => match path.iter().map(String::as_str).collect::<Vec<_>>().as_slice() { ["source"]=>vec![Domain::Source],["player","base"]=>vec![Domain::Base(Some(false))],["opponent","base"]=>vec![Domain::Base(Some(true))],["target"]=>vec![selected.clone()],_=>vec![Domain::Unknown] },
+                Target::Expression(Expr::Conditional {then,r#else,..}) => { let mut result=domains(&Target::Expression(*then.clone()),selected);result.extend(domains(&Target::Expression(*r#else.clone()),selected));result },
+                _=>vec![Domain::Unknown],
+            }
+        }
+        fn disjoint(a: &Domain,b: &Domain) -> bool {
+            match (a,b) {
+                (Domain::Base(_),Domain::Unit(..)) | (Domain::Unit(..),Domain::Base(_)) => true,
+                (Domain::Base(Some(a)),Domain::Base(Some(b))) | (Domain::Unit(Some(a),_),Domain::Unit(Some(b),_)) => a!=b,
+                (Domain::Source,Domain::Unit(owner,excluded)) | (Domain::Unit(owner,excluded),Domain::Source) => *excluded || *owner==Some(true),
+                (Domain::Source,Domain::Base(Some(true))) | (Domain::Base(Some(true)),Domain::Source) => true,
+                _=>false,
+            }
+        }
+        fn damage_sets(e: &Effect,selected:&Domain,out:&mut Vec<Vec<Domain>>,defeat:&mut bool) {
+            match e {
+                Effect::Damage {target,..}=>out.push(domains(target,selected)),
+                Effect::Defeat {..}=>*defeat=true,
+                Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}=>for e in effects {damage_sets(e,selected,out,defeat)},
+                Effect::Select {target_resolver,effect}=>damage_sets(effect,&selected_domain(Some(target_resolver)),out,defeat),
+                Effect::Conditional {on_true,on_false,..}=>{damage_sets(on_true,selected,out,defeat);if let Some(e)=on_false {damage_sets(e,selected,out,defeat)}},
+                _=>{},
+            }
+        }
+        let selected=self.instructions.iter().rev().find_map(|i|if let Instruction::Select(r)=i {Some(r)}else{None});
+        let mut sets=vec![];let mut defeat=false;damage_sets(effect,&selected_domain(selected),&mut sets,&mut defeat);
+        if !sets.is_empty()&&defeat { return Err("mixed damage and explicit defeat groups require dedicated witnesses".into()); }
+        for i in 0..sets.len() { for j in i+1..sets.len() {
+            if sets[i].iter().any(|a|sets[j].iter().any(|b|!disjoint(a,b))) { return Err("group damage destinations must be provably disjoint until repeated-damage replacement semantics are witnessed".into()); }
+        } }
         Ok(())
     }
     fn compile_effect(&mut self, effect: &Effect, depth: usize) -> Result<(), String> {
@@ -642,7 +942,9 @@ impl Program {
                 if let Some(other)=on_false{self.compile_effect(other,depth+1)?;}
                 self.instructions[jump]=Instruction::Jump{to:self.instructions.len()};
             }
-            Effect::Simultaneous { .. } => return Err("simultaneous arbitrary effects require the event-batch runtime; syntax is converted but this card cannot execute yet".into()),
+            Effect::Simultaneous { effects } if self.trigger == "constant" => { for effect in effects { self.compile_effect(effect, depth + 1)?; } }
+            Effect::Simultaneous { .. } => { self.validate_group(effect,1)?; self.instructions.push(Instruction::Group(effect.clone())); }
+            Effect::PhaseModifiers {effects:_} => { self.validate_group(effect,1)?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::DistributeHealing { amount, max_targets, target_resolver, .. } => {
                 amount.validate_number()?;target_resolver.validate()?;
                 if *max_targets != 1 { return Err("distribution runtime currently supports exactly one selected target".into()); }
@@ -654,14 +956,37 @@ impl Program {
                 if matches!(target,Target::Name(name) if name=="bothPlayers") {return Err("multi-player resource ready requires verified event batching".into());}
                 self.instructions.push(Instruction::Apply(effect.clone()));
             }
-            Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?;target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
-            Effect::Select { target_resolver, effect } => { target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone())); self.compile_effect(effect,depth+1)?; }
+            Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
+            Effect::Select { target_resolver, effect } => {
+                target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone()));
+                if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
+                else { self.compile_effect(effect,depth+1)?; }
+            }
             Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::ModifyStats { target, power, hp, duration } => {
                 if duration != "phase" && !(self.trigger=="constant" && duration=="persistent") { return Err("only phase stat modifications execute".into()); }
                 target.validate()?; power.validate_number()?; hp.validate_number()?;
                 self.instructions.push(Instruction::Apply(effect.clone()));
+            }
+            Effect::GainKeyword { target, keyword, amount, duration } => {
+                validate_keyword(keyword)?;
+                if duration != "phase" && !(self.trigger == "constant" && duration == "persistent") { return Err("only phase or constant keywords execute".into()); }
+                target.validate()?; amount.validate_number()?;
+                let bounded_shape = matches!(amount, Expr::Const {value} if value.as_u64().is_some_and(|n| n <= 65535))
+                    || (duration == "persistent" && matches!(amount, Expr::Ref {path} if matches!(path.last().map(String::as_str), Some("damage" | "readyResourceCount" | "exhaustedResourceCount"))));
+                if !bounded_shape { return Err("keyword amounts require nonnegative literals or verified live damage/resource counts".into()); }
+                if keyword == "restore" && !matches!(amount, Expr::Const {value} if value.as_u64().is_some_and(|n| n > 0 && n <= 65535)) { return Err("Restore grants require positive literals until nullable zero-trigger titles are verified".into()); }
+
+
+                if let Expr::Const { value } = amount { if !value.as_u64().is_some_and(|n| n <= 65535) { return Err("keyword amount must be bounded nonnegative integer".into()); } }
+                if !["raid", "restore"].contains(&keyword.as_str()) && !matches!(amount, Expr::Const {value} if value.as_u64() == Some(1)) { return Err("boolean keyword amount must be one".into()); }
+                self.instructions.push(Instruction::Apply(effect.clone()));
+            }
+            Effect::LoseKeyword { target, keyword, duration } => {
+                validate_keyword(keyword)?;
+                if duration != "phase" && !(self.trigger == "constant" && duration == "persistent") { return Err("only phase or constant keyword losses execute".into()); }
+                target.validate()?; self.instructions.push(Instruction::Apply(effect.clone()));
             }
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => { target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
         }
@@ -786,4 +1111,131 @@ mod tests {
             Instruction::IfResult { skip: 3 }
         ));
     }
+    fn compiled_group(value: Value) -> Result<Program, String> {
+        let a: Ability=serde_json::from_value(value).map_err(|e|e.to_string())?;
+        Program::compile(&a)
+    }
+    #[test]
+    fn groups_preserve_nested_selection_and_phase_event_identity() {
+        let primitive=json!({"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}});
+        let tree=json!({"kind":"simultaneous","effects":[{"kind":"damage","target":"self","amount":{"kind":"const","value":1}},{"kind":"select","targetResolver":{"type":"unit","owner":"opponent"},"effect":primitive}]});
+        let p=compiled_group(json!({"trigger":"whenPlayed","title":"group","effect":tree})).unwrap();
+        assert!(matches!(&p.instructions[0],Instruction::Group(Effect::Simultaneous {effects}) if matches!(effects[1],Effect::Select{..})));
+        let phase=json!({"kind":"phaseModifiers","effects":[{"kind":"modifyStats","target":"chosen","duration":"phase","power":{"kind":"const","value":1},"hp":{"kind":"const","value":0}},{"kind":"gainKeyword","target":"chosen","duration":"phase","keyword":"sentinel","amount":{"kind":"const","value":1}}]});
+        let p=compiled_group(json!({"trigger":"event","title":"phase","effect":phase})).unwrap();
+        assert!(matches!(p.instructions[0],Instruction::Apply(Effect::PhaseModifiers{..})));
+    }
+    #[test]
+    fn bounded_selectors_compile_to_group_even_for_one_selected_card() {
+        for mode in [json!({"mode":"upTo","count":{"kind":"const","value":1},"optional":true,"type":"unit"}),json!({"mode":"unlimited","optional":true,"type":"base"})] {
+            let p=compiled_group(json!({"trigger":"event","title":"multi","targetResolver":mode,"effect":{"kind":"heal","target":"chosen","amount":{"kind":"const","value":2}}})).unwrap();
+            assert!(matches!(p.instructions[0],Instruction::Select(_)));assert!(matches!(p.instructions[1],Instruction::Group(_)));
+        }
+        for resolver in [json!({"mode":"upTo","count":{"kind":"const","value":4}}),json!({"mode":"upTo","count":{"kind":"ref","path":["player","readyResourceCount"]}}),json!({"mode":"unlimited","optional":true,"type":"unit"})] {
+            assert!(compiled_group(json!({"trigger":"event","title":"bad","targetResolver":resolver,"effect":{"kind":"ready","target":"chosen"}})).is_err());
+        }
+    }
+    #[test]
+    fn unverified_group_shapes_and_array_captures_reject() {
+        let damage=json!({"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}});
+        let shield=json!({"kind":"giveShield","target":"chosen","amount":{"kind":"const","value":1}});
+        let draw=json!({"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}});
+        for children in [vec![damage.clone(),shield],vec![damage.clone(),draw]] {
+            assert!(compiled_group(json!({"trigger":"event","title":"bad","effect":{"kind":"simultaneous","effects":children}})).is_err());
+        }
+        assert!(compiled_group(json!({"trigger":"event","title":"array capture","targetResolver":{"mode":"upTo","count":{"kind":"const","value":2},"optional":true},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"ref","path":["target","damage"]}}})).is_err());
+        assert!(compiled_group(json!({"trigger":"event","title":"continuation","effect":{"kind":"simultaneous","effects":[damage]},"then":{"title":"later","effect":{"kind":"noAction"}}})).is_err());
+    }
+    #[test]
+    fn phase_modifier_lists_validate_shared_target_and_duration() {
+        for bad in [json!({"kind":"gainKeyword","target":"self","duration":"phase","keyword":"sentinel","amount":{"kind":"const","value":1}}),json!({"kind":"gainKeyword","target":"chosen","duration":"persistent","keyword":"sentinel","amount":{"kind":"const","value":1}})] {
+            assert!(compiled_group(json!({"trigger":"event","title":"bad phase","effect":{"kind":"phaseModifiers","effects":[{"kind":"modifyStats","target":"chosen","duration":"phase","power":{"kind":"const","value":1},"hp":{"kind":"const","value":0}},bad]}})).is_err());
+        }
+    }
+    #[test]
+    fn token_contingents_count_toward_group_capacity() {
+        let shields=vec![json!({"kind":"giveShield","target":"chosen","amount":{"kind":"const","value":2}});8];
+        assert!(compiled_group(json!({"trigger":"event","title":"oversized","targetResolver":{"mode":"upTo","count":{"kind":"const","value":3},"optional":true},"effect":{"kind":"simultaneous","effects":shields}})).is_err());
+    }
+
+    #[test]
+    fn expanded_named_targets_count_toward_physical_record_budget() {
+        let eight=vec![json!({"kind":"damage","target":"bothBases","amount":{"kind":"const","value":1}});8];
+        let four=vec![json!({"kind":"simultaneous","effects":eight});4];
+        let err=compiled_group(json!({"trigger":"event","title":"too many","effect":{"kind":"simultaneous","effects":four}})).unwrap_err();
+        assert!(err.contains("record budget"));
+        let phase=vec![json!({"kind":"gainKeyword","target":"chosen","duration":"phase","keyword":"sentinel","amount":{"kind":"const","value":1}});8];
+        assert!(compiled_group(json!({"trigger":"event","title":"too many phase leaves","targetResolver":{"mode":"upTo","count":{"kind":"const","value":3},"optional":true,"type":"unit"},"effect":{"kind":"simultaneous","effects":[{"kind":"phaseModifiers","effects":phase},{"kind":"phaseModifiers","effects":phase}]}})).unwrap_err().contains("record budget"));
+    }
+    #[test]
+    fn groups_reject_player_targets_and_scalar_target_expressions_under_arrays() {
+        for target in [json!("bothPlayers"),json!({"kind":"ref","path":["player"]}),json!({"kind":"ref","path":["target","controller"]})] {
+            assert!(compiled_group(json!({"trigger":"event","title":"player target","effect":{"kind":"simultaneous","effects":[{"kind":"heal","target":target,"amount":{"kind":"const","value":1}}]}})).is_err());
+        }
+        for count in [1,2] { for target in [json!({"kind":"ref","path":["target"]}),json!({"kind":"conditional","condition":{"kind":"const","value":true},"then":{"kind":"ref","path":["target"]},"else":{"kind":"ref","path":["source"]}})] {
+            assert!(compiled_group(json!({"trigger":"event","title":"array target","targetResolver":{"mode":"upTo","count":{"kind":"const","value":count},"optional":true,"type":"unit"},"effect":{"kind":"heal","target":target,"amount":{"kind":"const","value":1}}})).is_err());
+        } }
+    }
+    #[test]
+    fn damage_groups_require_disjoint_destinations_and_no_unverified_defeat_mix() {
+        let damage=json!({"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}});
+        assert!(compiled_group(json!({"trigger":"event","title":"repeat","effect":{"kind":"simultaneous","effects":[damage,damage]}})).is_err());
+        assert!(compiled_group(json!({"trigger":"event","title":"mixed","effect":{"kind":"simultaneous","effects":[{"kind":"damage","target":"self","amount":{"kind":"const","value":1}},{"kind":"defeat","target":"chosen"}]}})).is_err());
+        assert!(compiled_group(json!({"trigger":"event","title":"distinct bases","effect":{"kind":"simultaneous","effects":[{"kind":"damage","target":"ownBase","amount":{"kind":"const","value":1}},{"kind":"damage","target":"enemyBase","amount":{"kind":"const","value":1}}]}})).is_ok());
+        let p=compiled_group(json!({"trigger":"onAttack","title":"other unit","effect":{"kind":"simultaneous","effects":[{"kind":"damage","target":"self","amount":{"kind":"const","value":1}},{"kind":"select","targetResolver":{"type":"unit","predicate":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}}]}}));assert!(p.is_ok());
+    }
+
+    #[test]
+    fn standalone_phase_lists_reject_noncard_destinations() {
+        assert!(compiled_group(json!({"trigger":"event","title":"player phase","effect":{"kind":"phaseModifiers","effects":[{"kind":"gainKeyword","target":"ownPlayer","duration":"phase","keyword":"sentinel","amount":{"kind":"const","value":1}}]}})).is_err());
+    }
+    #[test]
+    fn zero_record_trees_still_require_bounded_group_operations() {
+        let leaf=json!({"kind":"conditional","condition":{"kind":"const","value":true},"onTrue":{"kind":"noAction"},"onFalse":{"kind":"noAction"}});
+        let mut tree=leaf;for _ in 0..5 {tree=json!({"kind":"simultaneous","effects":vec![tree;8]});}
+        let err=compiled_group(json!({"trigger":"event","title":"op overflow","effect":tree})).unwrap_err();assert!(err.contains("operation budget"));
+    }
+    #[test]
+    fn sibling_target_capture_after_select_rejects_but_fresh_selections_remain_legal() {
+        let select=json!({"kind":"select","targetResolver":{"type":"unit"},"effect":{"kind":"heal","target":"chosen","amount":{"kind":"const","value":1}}});
+        for next in [json!({"kind":"ready","target":"chosen"}),json!({"kind":"heal","target":"ownBase","amount":{"kind":"ref","path":["target","damage"]}}),json!({"kind":"conditional","condition":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["target"]},"args":[]},"onTrue":{"kind":"noAction"}})] {
+            assert!(compiled_group(json!({"trigger":"event","title":"shared target","effect":{"kind":"simultaneous","effects":[select,next]}})).is_err());
+        }
+        assert!(compiled_group(json!({"trigger":"event","title":"fresh target","effect":{"kind":"simultaneous","effects":[select,select]}})).is_ok());
+    }
+
+    #[test]
+    fn exact_card_title_predicates_support_named_friendly_auras() {
+        for (title,keyword) in [("Zuckuss","ambush"),("4-LOM","saboteur")] {
+            assert!(compiled_group(json!({"trigger":"constant","title":"named aura","targetResolver":{"owner":"self","type":"unit","zone":"arena","predicate":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","title"]},"right":{"kind":"const","value":title}}},"effect":{"kind":"simultaneous","effects":[{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"const","value":1},"hp":{"kind":"const","value":1}},{"kind":"gainKeyword","target":"chosen","duration":"persistent","keyword":keyword,"amount":{"kind":"const","value":1}}]}})).is_ok());
+        }
+        assert!(Expr::Ref {path:vec!["card".into(),"title".into()]}.validate().is_ok());
+        assert!(Expr::Ref {path:vec!["card".into(),"title".into()]}.validate_number().is_err());
+        assert!(Expr::Ref {path:vec!["source".into(),"parentCard".into(),"title".into()]}.validate().is_err());
+        assert!(compiled_group(json!({"trigger":"event","title":"text amount","effect":{"kind":"damage","target":"chosen","amount":{"kind":"ref","path":["card","title"]}}})).is_err());
+    }
+
+    #[test]
+    fn array_group_values_reject_unbound_card_alias_but_keep_local_arena_predicates() {
+        let resolver=json!({"mode":"upTo","count":{"kind":"const","value":2},"optional":true,"type":"unit"});
+        for amount in [json!({"kind":"ref","path":["card","damage"]}),json!({"kind":"query","name":"getPower","receiver":{"kind":"ref","path":["card"]},"args":[]})] {
+            assert!(compiled_group(json!({"trigger":"event","title":"first alias","targetResolver":resolver,"effect":{"kind":"heal","target":"chosen","amount":amount}})).is_err());
+        }
+        let count=json!({"kind":"query","name":"arenaUnitCount","receiver":{"kind":"ref","path":["player"]},"args":[{"kind":"binary","op":">","left":{"kind":"ref","path":["card","damage"]},"right":{"kind":"const","value":0}}]});
+        assert!(compiled_group(json!({"trigger":"event","title":"local predicate","targetResolver":resolver,"effect":{"kind":"heal","target":"chosen","amount":count}})).is_ok());
+    }
+
+    #[test]
+    fn changed_sibling_card_aliases_reject_without_rejecting_local_query_bindings() {
+        let select=json!({"kind":"select","targetResolver":{"type":"unit"},"effect":{"kind":"heal","target":"chosen","amount":{"kind":"const","value":1}}});
+        for amount in [json!({"kind":"ref","path":["card","damage"]}),json!({"kind":"query","name":"getPower","receiver":{"kind":"ref","path":["card"]},"args":[]})] {
+            let err=compiled_group(json!({"trigger":"event","title":"changed alias","effect":{"kind":"simultaneous","effects":[select,{"kind":"heal","target":"ownBase","amount":amount}]}})).unwrap_err();assert!(err.contains("target-dependent sibling"));
+        }
+        let amount=json!({"kind":"query","name":"arenaUnitCount","receiver":{"kind":"ref","path":["player"]},"args":[{"kind":"binary","op":">","left":{"kind":"ref","path":["card","damage"]},"right":{"kind":"const","value":0}}]});
+        assert!(compiled_group(json!({"trigger":"event","title":"local card binding","effect":{"kind":"simultaneous","effects":[select,{"kind":"heal","target":"ownBase","amount":amount}]}})).is_ok());
+    }
+
 }
+
+pub const CORE_KEYWORDS: [&str; 8] = ["sentinel", "overwhelm", "saboteur", "ambush", "grit", "shielded", "raid", "restore"];
+fn validate_keyword(keyword: &str) -> Result<(), String> { if CORE_KEYWORDS.contains(&keyword) { Ok(()) } else { Err(format!("unsupported keyword {keyword}")) } }
