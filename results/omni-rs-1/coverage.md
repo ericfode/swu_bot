@@ -2,7 +2,7 @@
 
 Counts come from actual engine events during recorded moves, excluding bot lookahead. Present means present in any full state or event, including the dealt decks. Bases are not played or attacked with; leader deployment and Shield attachment have separate columns. A zero is an observed event count, not an assertion that every event applies to that card.
 
-Never present, played, or attacked with: **HMW_055, Mae, Dealing in Absolutes**. The ordinary dealer cannot fit her three aspects into any selected leader/base pair. Two additional committed engine fixtures exercise Mae, her missing-aspect cost, both unique choices, and both Ambush/Shielded orders; those fixtures are excluded from these counts. **HMW_069, Imperial Venator** was played and attacked with but never defeated in this corpus. No other unit has a zero in these three event columns.
+Never present, played, or attacked with: **HMW_055, Mae, Kill the Dream**. The ordinary dealer cannot fit her three aspects into any selected leader/base pair. Two additional committed engine fixtures exercise Mae, her missing-aspect cost, both unique choices, and both Ambush/Shielded orders; those fixtures are excluded from these counts. **HMW_069, Imperial Venator** was played and attacked with but never defeated in this corpus. No other unit has a zero in these three event columns.
 
 | Card | Name | Games present | Played | Attacked with | Defeated | Deployed | Attached |
 |---|---|---:|---:|---:|---:|---:|---:|

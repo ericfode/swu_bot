@@ -147,7 +147,8 @@ The two provers count action-window work but search different trees, so their no
 | JS, depth limit 8 | 16 | 103 | 66 | 4.4375 | 10 |
 | Rust, depth limit 12 | 16 | 103 | 102 | 6.375 | 12 |
 
-JS ran eight seeds per pairing with `--budget 2000 --stop 2`. That budget counts nodes per prove call; Rust receives
+JS ran eight seeds per pairing with `--budget 2000 --stop 2`. That budget counts nodes cumulatively per window's
+solve, across depths and candidate winners. Rust receives
 the **actual elapsed JS time for each window**, not a blanket 2,000 ms. The mean improvement is 1.9375 recorded
 windows. Rust proves the earliest sampled window in 15/16 games, so this result is a lower bound on its reach in
 this sample: the experiment stops where JS stopped. The maximum distance of 12 is not a 12-window proof; the
@@ -173,6 +174,7 @@ heuristic follow-ups never tried.
 `cargo test --workspace`: 69 tests. `npm test`: 155 tests. `node bot/protocol-test.js`: 13 checks.
 `npm run gate`: seeds 1–3 retain 594/342/486 steps and p2 wins, recorded and unrecorded. The four existing Rust bot
 smoke games, analysis tests, and both viewer builds passed. Engine tracked source and pin are unchanged.
+Advisory `npm run lint` was attempted once after committing; Perch could not run because `PERCH_API_KEY` was unset.
 
 The current match runner, setup/mulligans, and full card engine remain in JavaScript. This crate provides the
 independent Rust transition/search core for the subset; wiring it into `rust-search`, broader card rules,

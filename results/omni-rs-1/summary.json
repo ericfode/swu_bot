@@ -67,10 +67,10 @@
     "rustProofs": 102,
     "jsDepthLimit": 8,
     "rustDepthLimit": 12,
-    "jsBudgetNodesPerCandidate": 2000,
+    "jsBudgetNodesPerWindow": 2000,
     "stopAfterUnknownWindows": 2,
     "seeds": "101-108 for each pairing",
-    "budgetMethod": "Rust receives the observed JS solve elapsed milliseconds for that exact (game, i), via --ms-field jsMs. JS --budget 2000 is a node budget per prove call, not a 2000 ms limit.",
+    "budgetMethod": "Rust receives the observed JS solve elapsed milliseconds for that exact (game, i), via --ms-field jsMs. JS --budget 2000 is a cumulative node budget per window solve across depths and candidate winners, not a 2000 ms limit.",
     "earliestSampledWindowProvedInGames": 15,
     "rightCensored": true,
     "caveat": "Only the 103 windows attempted by JS were compared. Rust proves the earliest sampled window in 15/16 games, so its reported horizon is a lower bound on this sample, not its maximum reach. fromEnd is distance in the recorded bot game, not proof depth."
@@ -730,6 +730,7 @@
     "analysisTests": "passed",
     "viewerBuild": "passed",
     "studioBuild": "passed",
-    "engineTrackedSourceChanged": false
+    "engineTrackedSourceChanged": false,
+    "advisoryLint": "Attempted once after committing; Perch could not run because PERCH_API_KEY was unset."
   }
 }
