@@ -76,8 +76,8 @@ Values are rational, because SWU's randomness is uniform over finite sets.
 ## Measured: the PIMC gap on real endgames (`measure/pimc_bias.py`)
 
 `bot/omni-rs/src/bin/omni-pimc.rs` takes the last 8 action windows of recorded games in the omni-rs
-card subset. For each window it re-deals what the side to move cannot see (the opponent's hand and
-deck together, keeping the hand size, and the order of its own deck), 8 deals including the real
+card subset. For each window it re-deals what the side to move cannot see (the opponent's hand,
+face-down resources and deck together, keeping zone sizes, and the order of its own deck), 8 deals including the real
 one. It solves every legal move in every deal with the Rust prover (depth 12, 20,000 nodes per
 solve) and reports `E[best per deal] − best average`, the gap of `pimc_choice_loss`. Unproven moves
 count as anywhere in [0, 1], which gives bounds on the gap.
@@ -90,9 +90,9 @@ python3 theory/measure/pimc_bias.py pimc.jsonl
 ```
 
 2026-10-11, 120 games (heuristic/heuristic, aggro/control, tempo/rush, random/heuristic; seeds
-201-230), 960 windows: 740 had a proven move on the real deal; in 528 the gap is pinned down, and
-it is 0 in all of them, so the sum along every game (160 player-games) is 0. Hidden cards changed
-some move's value in 2 of the 740 windows; both times a move that wins in every deal existed. The
-other 212 windows are not settled within the budget (gap between 0 and its upper bound). Limits:
+201-230), 960 windows: 740 had a proven move on the real deal; in 529 the gap is pinned down, and
+it is 0 in all of them, so the sum along every game (163 player-games) is 0. Hidden cards changed
+some move's value in 3 of the 740 windows; in the two that settled, a move that wins in every deal
+existed. The other 211 windows are not settled within the budget (gap between 0 and its upper bound). Limits:
 the subset has units only (no events, no leader actions), the windows that settle are mostly the
 last 4, and the belief ignores what the opponent's earlier choices reveal.

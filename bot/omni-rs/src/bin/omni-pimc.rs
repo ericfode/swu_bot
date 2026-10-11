@@ -1,9 +1,9 @@
 //! PIMC (omniscient sampling) bias on real endgames.
 //!
 //! For each action window near the end of a recorded trace, the side to move sees its own hand,
-//! the board, every discard and every count. It does not see the opponent's hand, the order of
-//! either deck, or which of the opponent's unseen cards are in hand rather than in the deck. A
-//! "deal" re-draws exactly that hidden part, keeping every visible fact. Deal 0 is the real one.
+//! the board, every discard and every count. It does not see the opponent's hand or face-down
+//! resources, or the order of either deck. A "deal" re-draws exactly that hidden part, keeping
+//! every visible fact. Deal 0 is the real one.
 //!
 //! For every deal w and every legal move a, the prover solves the position after a and gives
 //! f(w, a) = 1 (mover forces a win), 0 (opponent forces a win) or null (not proven in budget).
@@ -62,22 +62,33 @@ fn zone(ids: &[CardId]) -> Result<Zone, String> {
     Ok(z)
 }
 
-/// Re-deal what `seer` cannot see: the opponent's hand and deck together (hand size kept), and
-/// the order of the seer's own deck.
+/// Re-deal what `seer` cannot see: the opponent's hand, face-down resources and deck from one
+/// shuffle (zone sizes kept, exhausted resources stay at the same resource positions), and the
+/// order of the seer's own deck. Same model as `determinize` in bot/protocol.js.
 fn redeal(s: &State, seer: Seat, rng: &mut Rng) -> Result<State, String> {
     let mut out = *s;
     let opp = s.player(seer.other());
-    let hand_len = opp.hand.len as usize;
-    let mut pool: Vec<CardId> = opp
-        .hand
+    let (hand_len, res_len) = (opp.hand.len as usize, opp.resources.len as usize);
+    let exhausted: Vec<bool> = opp
+        .resources
         .as_slice()
         .iter()
-        .chain(opp.deck.as_slice())
-        .copied()
+        .map(|&id| s.card(id).exhausted)
         .collect();
+    let mut pool: Vec<CardId> = [
+        opp.resources.as_slice(),
+        opp.hand.as_slice(),
+        opp.deck.as_slice(),
+    ]
+    .concat();
     rng.shuffle(&mut pool);
-    out.player_mut(seer.other()).hand = zone(&pool[..hand_len])?;
-    out.player_mut(seer.other()).deck = zone(&pool[hand_len..])?;
+    for (k, &id) in pool.iter().enumerate() {
+        out.card_mut(id).exhausted = k < res_len && exhausted[k];
+    }
+    let p = out.player_mut(seer.other());
+    p.resources = zone(&pool[..res_len])?;
+    p.hand = zone(&pool[res_len..res_len + hand_len])?;
+    p.deck = zone(&pool[res_len + hand_len..])?;
     let mut own: Vec<CardId> = s.player(seer).deck.as_slice().to_vec();
     rng.shuffle(&mut own);
     out.player_mut(seer).deck = zone(&own)?;
@@ -125,6 +136,14 @@ fn value_for(result: Option<Seat>, mover: Seat) -> Value {
 
 fn run_trace(engine: &Engine, path: &Path, o: &Opts, out: &mut impl Write) -> Result<(), String> {
     let (meta, states, winner) = traces(path)?;
+    if let Some(hash) = meta["pool"]["sha256"].as_str() {
+        if hash != engine.pool_hash() {
+            return Err(format!(
+                "{}: trace pool hash differs from loaded pool",
+                path.display()
+            ));
+        }
+    }
     let n = states.len();
     let mut search = Search::new(engine);
     let game = path
@@ -317,39 +336,64 @@ mod tests {
     fn redeal_keeps_everything_the_mover_sees() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let engine = Engine::from_pool(&root.join("../omni/rs/pool.json")).unwrap();
-        let s = engine
-            .load_state(
-                &first_state(&root.join("tests/fixtures/heuristic-vs-heuristic-1.jsonl.gz"))
-                    .unwrap(),
-            )
-            .unwrap();
-        let seer = s.active;
+        let (_, states, _) =
+            traces(&root.join("tests/fixtures/heuristic-vs-heuristic-1.jsonl.gz")).unwrap();
         let mut rng = Rng(7);
         let mut changed = false;
-        for _ in 0..20 {
-            let w = redeal(&s, seer, &mut rng).unwrap();
-            let (o, o2) = (s.player(seer.other()), w.player(seer.other()));
-            assert_eq!(o.hand.len, o2.hand.len);
+        let mut tried_exhausted = false;
+        for (_, sj) in states.iter().step_by(5) {
+            let s = engine.load_state(sj).unwrap();
+            let seer = s.active;
+            let (o, me) = (s.player(seer.other()), s.player(seer));
             let unseen = |p: &omni_rs::model::Player| {
-                sorted(&[p.hand.as_slice(), p.deck.as_slice()].concat())
+                sorted(&[p.hand.as_slice(), p.resources.as_slice(), p.deck.as_slice()].concat())
             };
-            assert_eq!(unseen(o), unseen(o2));
-            assert_eq!(
-                sorted(s.player(seer).deck.as_slice()),
-                sorted(w.player(seer).deck.as_slice())
-            );
-            assert_eq!(s.player(seer).hand, w.player(seer).hand);
-            assert_eq!(s.cards, w.cards);
-            let keys = |x: &State| {
-                engine
-                    .legal_actions(x)
+            let tired = |st: &State, z: &Zone| {
+                z.as_slice()
                     .iter()
-                    .map(|a| a.key())
+                    .map(|&id| st.card(id).exhausted)
                     .collect::<Vec<_>>()
             };
-            assert_eq!(keys(&s), keys(&w));
-            changed |= w.zobrist() != s.zobrist();
+            tried_exhausted |= tired(&s, &o.resources).contains(&true);
+            for _ in 0..5 {
+                let w = redeal(&s, seer, &mut rng).unwrap();
+                let (o2, me2) = (w.player(seer.other()), w.player(seer));
+                assert_eq!(
+                    (o.hand.len, o.resources.len, o.deck.len),
+                    (o2.hand.len, o2.resources.len, o2.deck.len)
+                );
+                assert_eq!(unseen(o), unseen(o2));
+                assert_eq!(tired(&s, &o.resources), tired(&w, &o2.resources));
+                assert!(o2
+                    .hand
+                    .as_slice()
+                    .iter()
+                    .chain(o2.deck.as_slice())
+                    .all(|&id| !w.card(id).exhausted));
+                assert_eq!(sorted(me.deck.as_slice()), sorted(me2.deck.as_slice()));
+                assert_eq!(
+                    (me.hand, me.resources, me.ground, me.space, me.discard),
+                    (me2.hand, me2.resources, me2.ground, me2.space, me2.discard)
+                );
+                assert_eq!(
+                    (o.ground, o.space, o.discard),
+                    (o2.ground, o2.space, o2.discard)
+                );
+                let keys = |x: &State| {
+                    engine
+                        .legal_actions(x)
+                        .iter()
+                        .map(|a| a.key())
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(keys(&s), keys(&w));
+                changed |= w.zobrist() != s.zobrist();
+            }
         }
         assert!(changed, "re-deals must change the hidden part");
+        assert!(
+            tried_exhausted,
+            "the fixture must exercise exhausted resources"
+        );
     }
 }
