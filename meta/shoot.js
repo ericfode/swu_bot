@@ -25,7 +25,7 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(
         p.on('pageerror', (e) => errors.push(`${s.name}: ${e.message}`));
         p.on('console', (m) => { if (m.type() === 'error') errors.push(`${s.name}: ${m.text()}`); });
         await p.goto(url, { waitUntil: 'load' });
-        await p.waitForTimeout(600);
+        await p.waitForTimeout(3000); // let the spot guide settle on its first spot, as a reader sees it after a moment
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         if (overflow > 0) errors.push(`${s.name}: page scrolls sideways by ${overflow}px`);
         await p.screenshot({ path: path.join(outDir, `${s.name}.png`), fullPage: s.full });
@@ -35,6 +35,19 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(
             const tileH = s.name === 'phone-light' ? 1100 : 1000;
             for (let y = 0, i = 1; y < total; y += tileH, i++) {
                 await p.screenshot({ path: path.join(outDir, `${s.name}-tile${i}.png`), fullPage: true, clip: { x: 0, y, width: s.width, height: Math.min(tileH, total - y) } });
+            }
+        }
+        if (s.name === 'desktop-light' && await p.$('#guide-sec')) {
+            // The guide animates; reviewers get frames instead: one spot mid-tween, and every spot's last frame.
+            const el = await p.$('#guide-sec');
+            const ids = await p.evaluate(() => [...document.querySelectorAll('#guide-picks .gpick')].map((b) => b.dataset.s));
+            for (const [i, k] of [[0, 0], [0, 0.5], [0, 1]]) {
+                await p.evaluate(([id, kk]) => window.__guide.show(id, kk), [ids[i], k]);
+                await el.screenshot({ path: path.join(outDir, `guide-${ids[i]}-${k}.png`) });
+            }
+            for (const id of ids.slice(1)) {
+                await p.evaluate((x) => window.__guide.show(x, 1), id);
+                await el.screenshot({ path: path.join(outDir, `guide-${id}-1.png`) });
             }
         }
         await ctx.close();
