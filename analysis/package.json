@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "LLM turn-by-turn position analysis of recorded swu_bot games",
   "scripts": {
-    "test": "node test/mock-llm.test.js && node test/units.test.js && node test/swustats.test.js",
+    "test": "node test/mock-llm.test.js && node test/units.test.js && node test/swustats.test.js && node test/realdeck.test.js && node test/realdeck-skill.test.js",
     "fixture": "node fixtures/sim.js --seed 23 --out fixtures/fixture-game.jsonl"
   },
   "dependencies": {

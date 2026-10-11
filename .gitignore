@@ -1,4 +1,5 @@
 node_modules/
+/target/
 replays/
 replays-*.log
 viewer/dist/
@@ -22,3 +23,6 @@ __pycache__/
 .claude/worktrees/
 bot/c/swu-c
 bot/c/*.o
+
+# compiled bot bundles and their tools (bot/compiled)
+/build/

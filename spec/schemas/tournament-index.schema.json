@@ -138,6 +138,18 @@
           "key": {
             "type": "string",
             "description": "The game's own secret key, written when the game ends; absent in runs seeded from the seed alone (added)."
+          },
+          "versions": {
+            "type": "object",
+            "description": "The version string each seat's bot sent in ready, by seat; absent when neither sent one (added).",
+            "properties": {
+              "p1": {
+                "type": "string"
+              },
+              "p2": {
+                "type": "string"
+              }
+            }
           }
         }
       }

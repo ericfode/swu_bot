@@ -82,6 +82,11 @@ Reply `{"t":"ready","v":2,"name":"rust-mcts","sim":true}`. `v` is the version yo
 1, anything not offered is an error. `sim: true` asks for simulations (the referee then keeps a copy of the game to
 run them on). `name` is informational. Reset any per-game state here: one program plays many games.
 
+`version` (optional, a string of at most 200 characters, for example a git commit or a bundle id `sha256:...`) names
+the build of the bot that plays this game. The referee records it with the game result (`versions` by seat). It
+matters for a bot that changes between games, such as one an agent updates between rounds on a server it runs
+itself: the arena can tie results to the version that earned them and keep one version per round.
+
 ### `decide` → `act`
 
 ```json
@@ -224,7 +229,7 @@ in `node bot/tournament.js --bots ...` like any other bot.
 
 ```json
 {
-  "rust-mcts": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
+  "rust-mcts": { "cmd": "target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
   "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore", "lang": "python" }
 }
 ```

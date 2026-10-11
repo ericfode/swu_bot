@@ -16,6 +16,12 @@
  * game's key goes into its index entry when it ends, and the run key into ladder.json when the run is done: give it as
  * --key to play the same games again (two runs with the same --key and --seed get the same decks). --key none: seed alone.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
+ * --decks <file> plays fixed deck lists instead of random decks (bot/decklists.js: format, checks and how decks are
+ * dealt). Seed --seed + s plays deck pair s mod P (P = n(n-1)/2 pairs, in round-robin rounds), so the deal depends on
+ * the seed minus --seed, not on the seed alone; both games of a seed give each bot the same deck. Give each bot pair a
+ * whole number of passes (--games a multiple of 2P) or some deck pairs play more than others (a warning says so).
+ * Each index entry then carries decks {p1, p2} (the deck names). With a mirror (--bots c-clock#a,c-clock#b) the bots
+ * cancel out and the ratings that matter are the decks'.
  */
 const fs = require('fs');
 const os = require('os');
@@ -26,10 +32,18 @@ const { describeBot } = require('./players');
 const { runKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
+const { loadDecks, dealDecks, deckPairs } = require('./decklists');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
-    return i > 0 ? process.argv[i + 1] : dflt;
+    if (i < 0) {
+        return dflt;
+    }
+    const v = process.argv[i + 1];
+    if (v === undefined || v.startsWith('--')) {
+        throw new Error(`--${name} needs a value`);
+    }
+    return v;
 }
 
 function engineRev() {
@@ -74,11 +88,26 @@ async function main() {
     const out = path.join(path.resolve(arg('out', defaultOut())), id);
     const record = process.argv.includes('--record');
     const key = runKey(arg('key', null));
+    const decksFile = arg('decks', null);
+    // the engine loads in this thread only to check the deck lists before any game starts (and before <out> is made)
+    const deckSet = decksFile ? loadDecks(decksFile, new (require('./env').Env)()) : null;
+    const decks = deckSet?.decks ?? null;
+    if (decks) {
+        const seeds = (perPair + (perPair % 2)) / 2;
+        const P = deckPairs(decks.length).length;
+        if (seeds % P !== 0) {
+            console.warn(`warning: ${seeds} seeds per bot pair is not a whole number of passes over the ${P} deck pairs, so some deck pairs will play more than others (--games ${2 * P} or a multiple of it plays every pair equally often)`);
+        }
+    }
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
-    const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
-    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, ...(vs ? { format: 'gauntlet', vs } : {}) };
+    const plain = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
+    const schedule = decks ? dealDecks(plain, decks.length, firstSeed) : plain;
+    const config = {
+        bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, ...(vs ? { format: 'gauntlet', vs } : {}),
+        ...(decks ? { decks: { file: path.basename(decksFile), sha256: deckSet.sha256, names: decks.map((d) => d.metadata.name) } } : {})
+    };
     const games = [];
     let status = 'running';
     const save = () => {
@@ -90,7 +119,7 @@ async function main() {
     // tournament.js-format index (TournamentIndex in viewer/src/core/types.ts)
     const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
     save();
-    console.log(`${id}: ${schedule.length} games, ${names.length} bots, ${workers} workers -> ${out}`);
+    console.log(`${id}: ${schedule.length} games, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${workers} workers -> ${out}`);
 
     const queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     const t0 = Date.now();
@@ -102,7 +131,10 @@ async function main() {
                 w.postMessage('exit');
                 return;
             }
-            const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null };
+            const entry = {
+                id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null,
+                ...(job.decks ? { decks: { p1: decks[job.decks[0]].metadata.name, p2: decks[job.decks[1]].metadata.name } } : {})
+            };
             games.push(entry);
             tIndex.games.push({ ...entry });
             if (record) {
@@ -113,7 +145,7 @@ async function main() {
         };
         for (let i = 0; i < Math.min(workers, queue.length); i++) {
             live++;
-            const w = new Worker(path.join(__dirname, 'ladder-worker.js'), { workerData: { maxSteps, engineRev: engine, key } });
+            const w = new Worker(path.join(__dirname, 'ladder-worker.js'), { workerData: { maxSteps, engineRev: engine, key, decks } });
             w.on('message', (msg) => {
                 if (msg.ready) {
                     feed(w);
@@ -121,7 +153,7 @@ async function main() {
                 }
                 const { job, result: r } = msg;
                 const winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
-                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, by: r.by ?? null, timing: r.timing, ...(r.key ? { key: r.key } : {}) };
+                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, by: r.by ?? null, timing: r.timing, ...(r.key ? { key: r.key } : {}), ...(r.versions ? { versions: r.versions } : {}) };
                 Object.assign(games.find((g) => g.id === job.id), done, { botStats: r.botStats });
                 Object.assign(tIndex.games.find((g) => g.id === job.id), done);
                 const doc = save();

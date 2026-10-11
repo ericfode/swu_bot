@@ -184,6 +184,8 @@ class ClientSeat {
         }
         this.v = v;
         this.wantsSims = v === 2 && r.sim === true;
+        // the build that plays this game, recorded with the result (informational, any version)
+        this.version = typeof r.version === 'string' && r.version ? r.version.slice(0, 200) : null;
     }
 
     reveal(cards) {

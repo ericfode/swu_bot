@@ -1,0 +1,25 @@
+{
+    "about": "Pinned tools for bot/compiled (README.md). build.py downloads each into build/compiled/.tools and checks its sha256.",
+    "python": {
+        "wasmtime": "49.0.0",
+        "ziglang": "0.17.0"
+    },
+    "javy": {
+        "version": "8.0.0",
+        "url": "https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-x86_64-linux-v8.0.0.gz",
+        "sha256": "2a1e16eff42a5a90f5fb9fcd03a9e61b4eeb2518bfe1bc399196afe46e60ac86",
+        "flags": ["-J", "javy-stream-io=y", "-J", "text-encoding=y", "-J", "event-loop=y"]
+    },
+    "runtimes": {
+        "python-3.14-wasi": {
+            "about": "CPython 3.14.7 for WASI preview 1 (brettcannon/cpython-wasi-build), standard library only",
+            "url": "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.7/python-3.14.7-wasi_sdk-24.zip",
+            "sha256": "2e064d3fb8172471d39d741348efa722349c40b96301f69968dff714999c584b",
+            "dir": "python-3.14.7",
+            "wasm": "python.wasm",
+            "wasm_sha256": "d24bd98d3071af6b17d51d53a08700b9acef59172a0afcb6adb733645c2a1715",
+            "preopen": { "lib": "/usr/local/lib" },
+            "env": { "PYTHONHASHSEED": "0", "PYTHONDONTWRITEBYTECODE": "1" }
+        }
+    }
+}

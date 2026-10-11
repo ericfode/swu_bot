@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fly": {
+      "command": "sh",
+      "args": ["-c", "exec \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/tools/bin/fly-mcp\""]
+    }
+  }
+}
