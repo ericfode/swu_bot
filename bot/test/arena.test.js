@@ -354,3 +354,17 @@ test('runner: a session that follows another with the same tag is not stopped by
     const second = await runUntil('bash', ['-c', 'sleep 6'], opts);
     assert.deepStrictEqual([second.code, second.stopped], [0, false], 'the second session ran to its end');
 });
+
+test('optimizer: against a remote arena it goes on from the genome it last submitted (--state)', () => {
+    const { spawnSync } = require('child_process');
+    const state = path.join(tmp, 'opt-state.json');
+    const read = () => spawnSync(process.execPath, ['-e', 'console.log(JSON.stringify(require("./bot/arena/optimizer").latestGenome()))', '--', '--state', state],
+        { cwd: path.join(__dirname, '..', '..'), env: { ...process.env, ARENA_URL: 'http://127.0.0.1:9' }, encoding: 'utf8' });
+    assert.strictEqual(read().stdout.trim(), 'null', 'nothing submitted yet');
+    const g = require('../arena/optimizer').genomeFrom('tempo');
+    g['weights.power'] = 2.5;
+    fs.writeFileSync(state, JSON.stringify({ version: 'opt-v3', genome: g }));
+    assert.deepStrictEqual(JSON.parse(read().stdout), g);
+    fs.writeFileSync(state, JSON.stringify({ genome: { a: 1 } }));
+    assert.strictEqual(read().stdout.trim(), 'null', 'a broken state file is ignored');
+});

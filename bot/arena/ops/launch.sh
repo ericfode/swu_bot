@@ -54,6 +54,14 @@ setup() {
     local commit=$1
     mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools"
     engine
+    # the engine is built once, in $SRC: it must be the forceteki revision <commit> pins
+    local want have
+    want=$(git -C "$SRC" rev-parse "$commit:forceteki")
+    have=$(git -C "$SRC/forceteki" rev-parse HEAD)
+    if [ "$want" != "$have" ]; then
+        say "$commit pins forceteki $want, but $SRC/forceteki is at $have: check that out and rebuild (npm run build in forceteki), then launch again"
+        exit 1
+    fi
     # a checkout of another commit (an earlier tournament's) is made again
     at() { git -C "$1" rev-parse HEAD 2>/dev/null || true; }
     if [ ! -e "$BASE/referee/bot/arena/referee.js" ] || [ "$(at "$BASE/referee")" != "$commit" ]; then

@@ -5,7 +5,7 @@
  * over HTTP when ARENA_URL is set), so it competes on the same terms as the Claude and Codex competitors.
  *
  *   node bot/arena/optimizer.js --name optimizer [--start tempo] [--lambda 3] [--seeds 1] [--workers 3]
- *       [--sigma 0.25] [--until-round-end] [--generations 50] [--token T]
+ *       [--sigma 0.25] [--until-round-end] [--generations 50] [--token T] [--state ~/.arena-optimizer/<name>.json]
  *
  * Each generation: mutate the incumbent into `lambda` candidates; every candidate plays the incumbent and rush,
  * `seeds` seeds from both seats (eval seeds, never ladder seeds); the incumbent also plays rush. Fitness =
@@ -34,6 +34,8 @@ const WORKERS = Number(arg('workers', 3));
 const SIGMA = Number(arg('sigma', 0.25));
 const GENERATIONS = Number(arg('generations', 50));
 const TOKEN = arg('token', process.env.ARENA_COMPETITOR_TOKEN);
+// the newest genome this machine submitted, for runs against a remote arena (its versions are not on this disk)
+const STATE = path.resolve(arg('state', path.join(os.homedir(), '.arena-optimizer', `${NAME}.json`)));
 
 // The arena the optimizer competes in, reached through the API like any other client.
 async function arena(method, args = {}) {
@@ -76,17 +78,26 @@ function genomeFrom(start) {
     return g;
 }
 
-/** The genome of this competitor's newest submitted version (on a local arena), or null (none yet, or a starter). */
+const isGenome = (g) => !!g && typeof g === 'object' && Object.keys(GENES).every((k) => typeof g[k] === 'number');
+
+/**
+ * The genome of this competitor's newest submitted version, or null (none yet, or a starter). On a local arena it is
+ * read from the version itself; a run against a remote arena (ARENA_URL) reads what this machine last submitted (STATE).
+ */
 function latestGenome() {
-    const v = arenaHome?.versionsOf(NAME) ?? [];
-    if (!v.length) {
-        return null;
-    }
     try {
+        if (!arenaHome) {
+            const g = JSON.parse(fs.readFileSync(STATE, 'utf8')).genome;
+            return isGenome(g) ? g : null;
+        }
+        const v = arenaHome.versionsOf(NAME);
+        if (!v.length) {
+            return null;
+        }
         const src = fs.readFileSync(path.join(arenaHome.VERSIONS, `${NAME}-v${Math.max(...v)}`, 'bot.js'), 'utf8');
         const m = /const GENOME = (\{[\s\S]*?\});\n/.exec(src);
         const g = m ? JSON.parse(m[1]) : null;
-        return g && Object.keys(GENES).every((k) => typeof g[k] === 'number') ? g : null;
+        return isGenome(g) ? g : null;
     } catch {
         return null;
     }
@@ -206,6 +217,8 @@ async function main() {
             prev = best;
             best = top.g;
             const r = await arena('submit', { name: NAME, note: `ES generation ${gen}: fitness ${top.fit.toFixed(2)} vs ${incFit.toFixed(2)}`, bot: { kind: 'js', files: { 'bot.js': botSource(best, `generation ${gen}`), 'heuristic.js': HEURISTIC_SRC } } });
+            fs.mkdirSync(path.dirname(STATE), { recursive: true });
+            fs.writeFileSync(STATE, JSON.stringify({ version: r.version, genome: best }));
             await arena('say', { name: NAME, text: `${msg} -> submitted ${r.version}`, now: `Generation ${gen + 1}`, diagram: diagramFor(best, prev, gen) });
         } else {
             await arena('say', { name: NAME, text: msg, now: `Generation ${gen + 1}` });
