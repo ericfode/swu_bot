@@ -17,6 +17,10 @@ function arg(name, dflt) {
 
 // bot registry: every name resolves to a factory so heuristic/search bots can be added here later
 function makeBot(name) {
+    if (/^h\d?@/.test(name)) {
+        // lookahead bot with a swappable position evaluator, e.g. h@linear (see bot/eval/)
+        return require('./eval/bot').makeEvalBot(name);
+    }
     if (/^heuristic/.test(name)) {
         const d = /-d(\d)/.exec(name);
         return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });

@@ -189,8 +189,10 @@ class HeuristicBot {
      * Between my actions the opponent is modelled as passing, so a plan is "what I can do with my next few turns";
      * only the first action is played and the rest is re-planned at the next window. beam: how many first actions get the deeper look.
      */
-    constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12 } = {}) {
+    constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12, evaluate: evalFn = evaluate } = {}) {
         this.name = name;
+        // position score for pid, higher is better; swap in another evaluator to compare evaluators under the same search
+        this.evaluate = evalFn;
         this.depth = depth;
         this.beam = beam;
         this.maxFollowUps = maxFollowUps;
@@ -358,7 +360,7 @@ class HeuristicBot {
                 }
                 eg.apply(actor, choice, this.rng);
             }
-            score = evaluate(eg, pid);
+            score = this.evaluate(eg, pid);
             fp = fingerprint(eg);
             if (extra > 0 && !eg.over && this.advanceToMyWindow(eg, pid)) {
                 const next = this.bestFrom(eg, pid, extra);
