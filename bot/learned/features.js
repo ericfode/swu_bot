@@ -114,14 +114,15 @@ function findUnit(obs, id) {
     return null;
 }
 
-function action(a, obs) {
+/** `version` reproduces an older encoding, for models trained on it (see Model.featureVersion). */
+function action(a, obs, version = VERSION) {
     const f = KINDS.map((k) => (a.kind === k ? 1 : 0));
     const label = a.kind === 'perCardButton' ? String(a.label).split(':')[0] : String(a.label ?? '');
     f.push(...BUTTONS.map((r) => (a.kind === 'button' || a.kind === 'perCardButton') && r.test(label) ? 1 : 0));
     // card
     const c = a.card;
     // display prompts (search the deck, pick one) name their card only in the label: "<internal name>" or "<button>:<internal name>"
-    const shown = !c && (a.kind === 'displayCard' || a.kind === 'perCardButton') ? cardByName(String(a.label).slice(String(a.label).indexOf(':') + 1)) : null;
+    const shown = version >= 2 && !c && (a.kind === 'displayCard' || a.kind === 'perCardButton') ? cardByName(String(a.label).slice(String(a.label).indexOf(':') + 1)) : null;
     const d = c ? cardDb().get(c.s) : shown;
     const u = c ? findUnit(obs, c.id) : null;
     const isLeader = !!c && Object.values(obs.players).some((ps) => ps.leader?.id === c.id);

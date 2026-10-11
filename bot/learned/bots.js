@@ -32,11 +32,11 @@ function promptOf(eg, pid) {
 }
 
 /** Everything the model sees for one decision, as plain arrays (also what the data generator records). */
-function featurize(eg, pid, actions) {
+function featurize(eg, pid, actions, version = F.VERSION) {
     const obs = observe(eg, pid);
     const { sig, title } = promptOf(eg, pid);
     const plain = actions.map((a) => plainAction(eg, a));
-    return { obs, sig, title, s: F.state(obs), p: F.prompt(sig, title), A: plain.map((a) => F.action(a, obs)), plain };
+    return { obs, sig, title, s: F.state(obs), p: F.prompt(sig, title), A: plain.map((a) => F.action(a, obs, version)), plain };
 }
 
 const softmax = (xs) => {
@@ -77,7 +77,7 @@ class LearnedPolicyBot {
 
     /** Policy probabilities over `actions`, plus the value of the position, for the seat `pid`. */
     think(eg, pid, actions) {
-        const f = featurize(eg, pid, actions);
+        const f = featurize(eg, pid, actions, this.model.featureVersion);
         const z = this.model.encode(f.s);
         const logits = this.model.logits(z, f.p, f.A);
         return { f, z, value: this.model.value(z), logits };

@@ -69,6 +69,8 @@ class Model {
         const f32 = (x) => (typeof x === 'string' ? decode(x) : Float32Array.from(x));
         const conv = (layers) => layers.map((L) => ({ W: f32(L.W), b: f32(L.b), nin: L.nin, nout: L.nout }));
         this.meta = json.meta;
+        // feature encoding the model was trained on (features.js VERSION); models from before it was recorded are 1
+        this.featureVersion = json.meta?.features?.version ?? 1;
         this.enc = conv(json.enc);
         this.val = conv(json.val);
         this.pol = conv(json.pol);

@@ -40,8 +40,8 @@ def load(dirs):
             parts.append(dict(S=s, Sn=sn, P=p, A=acts, meta=meta, gid=gid, dims=(S, P, A)))
             versions.add(f.get('version'))
     assert parts, 'no data found'
-    if len(versions) > 1:
-        print(f'warning: data mixes feature versions {sorted(versions, key=str)}')
+    # the model records one feature version (bots encode its inputs that way), so the data must agree
+    assert len(versions) == 1, f'data mixes feature versions {sorted(versions, key=str)}: train on one version'
     dims = parts[0]['dims']
     off = 0
     out = {k: [] for k in ['S', 'Sn', 'P', 'A', 'meta', 'gid', 'aoff']}
@@ -52,7 +52,7 @@ def load(dirs):
         for k in ['S', 'Sn', 'P', 'A', 'meta', 'gid']:
             out[k].append(q[k])
         out['aoff'].append(offs)
-    return {k: np.concatenate(v) for k, v in out.items()}, dims
+    return {k: np.concatenate(v) for k, v in out.items()}, dims, versions.pop()
 
 
 class MLP:
@@ -124,7 +124,7 @@ def main():
     ap.add_argument('--window-weight', type=float, default=3.0, help='policy loss weight of searched action-window labels vs rule-based labels')
     args = ap.parse_args()
 
-    D, (S, P, A) = load(args.data)
+    D, (S, P, A), fversion = load(args.data)
     meta = D['meta']
     N = len(meta)
     games = np.unique(D['gid'])
@@ -250,7 +250,7 @@ def main():
     check = [{'s': D['S'][i].tolist(), 'p': D['P'][i].tolist(), 'A': D['A'][D['aoff'][i]: D['aoff'][i] + nact[i]].tolist(),
               'value': float(net.value(Tensor(Sn_all[i:i + 1])).numpy()[0]),
               'logits': net.logits(Tensor(cs[r:r + 1]), Tensor(cp[r:r + 1]), Tensor(ca[r:r + 1]), Tensor(cm[r:r + 1])).numpy()[0, :nact[i]].tolist()} for r, i in enumerate(ci)]
-    out = {'check': check, 'meta': {'features': {'S': S, 'P': P, 'A': A}, 'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'data': args.data, 'steps': args.steps, 'report': report},
+    out = {'check': check, 'meta': {'features': {'version': fversion, 'S': S, 'P': P, 'A': A}, 'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'data': args.data, 'steps': args.steps, 'report': report},
            'norm': {'s': [s_mean.round(6).tolist(), s_std.round(6).tolist()], 'a': [a_mean.round(6).tolist(), a_std.round(6).tolist()]},
            **{k: export(v) for k, v in net.heads.items()}}
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

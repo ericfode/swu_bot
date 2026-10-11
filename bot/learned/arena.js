@@ -128,6 +128,9 @@ async function main() {
             }
         }
     }
+    if (!jobs.length || !(workers >= 1)) {
+        throw new Error(`nothing to run: ${jobs.length} games (need 2+ bots and --games >= 1), ${workers} workers (need >= 1)`);
+    }
     const write = (status) => {
         if (!out) {
             return;
