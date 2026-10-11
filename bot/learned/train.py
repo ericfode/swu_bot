@@ -115,6 +115,7 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--steps', type=int, default=6000)
     ap.add_argument('--lr', type=float, default=1e-3)
+    ap.add_argument('--wd', type=float, default=0.01, help='AdamW weight decay')
     ap.add_argument('--window-weight', type=float, default=3.0, help='policy loss weight of searched action-window labels vs rule-based labels')
     args = ap.parse_args()
 
@@ -153,11 +154,12 @@ def main():
 
     tr_pol, va_pol = np.where(pol_ok & ~is_val)[0], np.where(pol_ok & is_val)[0]
     tr_val, va_val = np.where(val_ok & ~is_val)[0], np.where(val_ok & is_val)[0]
-    tr_all, va_all = np.where(~is_val)[0], np.where(is_val)[0]
+    has_next = meta[:, 7] >= 0  # from-traj.js rows have no recorded next state
+    tr_all, va_all = np.where(~is_val & has_next)[0], np.where(is_val & has_next)[0]
     print(f'policy samples {len(tr_pol)}/{len(va_pol)} (windows {int(iswin[tr_pol].sum())}), value samples {len(tr_val)}/{len(va_val)}')
 
     net = Net(S, P, A)
-    opt = nn.optim.AdamW(net.params(), lr=args.lr, weight_decay=1e-4)
+    opt = nn.optim.AdamW(net.params(), lr=args.lr, weight_decay=args.wd)
 
     @TinyJit
     def train_step(s, p, a, mask, y1h, w, vs, vz, ds, da, dd, lr):
@@ -170,6 +172,7 @@ def main():
             return lp.realize(), lv.realize(), ld.realize()
 
     t0 = time.time()
+    rs_eval = np.random.RandomState(1)
     for it in range(args.steps + 1):
         lr = args.lr * (0.1 ** (it / args.steps))
         pi = rs.choice(tr_pol, 256)
@@ -183,7 +186,13 @@ def main():
                            T(Sn_all[di]), T(played_actions(di)), T((D['Sn'][di] - D['S'][di]).astype(np.float32)), T([lr], dtype='float32'))
         if it % 1000 == 0:
             lp, lv, ld = (float(x.item()) for x in parts)
-            print(f'step {it} pol {lp:.3f} val {lv:.3f} dyn {ld:.4f} ({time.time() - t0:.0f}s)', flush=True)
+            # held-out losses on fixed samples, to see overfitting while it trains
+            vp = rs_eval.choice(va_pol, 256)
+            s_, p_, a_, m_, y_, w_ = pol_batch(vp)
+            vlp = float(-(net.logits(Tensor(s_), Tensor(p_), Tensor(a_), Tensor(m_)).log_softmax(-1).numpy()[np.arange(256), y_]).mean())
+            vv = rs_eval.choice(va_val, 512)
+            vlv = float(((net.value(Tensor(Sn_all[vv])).numpy() - outcome[vv]) ** 2).mean())
+            print(f'step {it} train pol {lp:.3f} val {lv:.3f} dyn {ld:.4f} | held-out pol {vlp:.3f} val {vlv:.3f} ({time.time() - t0:.0f}s)', flush=True)
 
     # ---- evaluation on held-out games ----
     report = {}

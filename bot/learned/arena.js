@@ -71,7 +71,8 @@ function ladder(index, cfg, status) {
         const wr = rated ? (wins + draws / 2) / rated : 0;
         const ci = rated ? 1.96 * Math.sqrt((wr * (1 - wr)) / rated) : 0;
         return {
-            name, kind: /^learned/.test(name) ? 'learned' : /^heuristic/.test(name) ? 'heuristic' : 'random', games: mine.length, wins, losses: rated - wins - draws, draws,
+            name, kind: /^learned/.test(name) ? 'learned' : /^heuristic/.test(name) ? 'heuristic' : 'random',
+            lang: /^learned/.test(name) ? 'tinygrad (trained), js (play)' : 'js', games: mine.length, wins, losses: rated - wins - draws, draws,
             incomplete: mine.length - rated, asP1: mine.filter((g) => g.p1 === name).length, winRate: wr, winRateCI95: [Math.max(0, wr - ci), Math.min(1, wr + ci)], elo: Math.round(R[name])
         };
     }).sort((a, b) => b.elo - a.elo);
