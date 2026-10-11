@@ -91,11 +91,6 @@ function spark(vals, c, w = 84, h = 22) {
   const last = pts2.at(-1).split(',');
   return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts2.join(' ')}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round"/><circle cx="${last[0]}" cy="${last[1]}" r="2.2" fill="${c}"/></svg>`;
 }
-function rangeBar(b, lo, hi) {
-  if (b.rating == null) return '';
-  const x = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
-  return `<div class="rr" style="--c:${botColor(b.id)}" title="${b.rating} ± ${2 * b.se} (two standard errors)"><div class="w" style="left:${x(b.rating - 2 * b.se)}%;width:${x(b.rating + 2 * b.se) - x(b.rating - 2 * b.se)}%"></div><div class="d" style="left:${x(b.rating)}%"></div></div>`;
-}
 function hbars(items, { lo = 0, hi = 1, mid = null, fmt = v => v } = {}) {
   const x = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
   return `<div class="hb">${items.map(it => {
@@ -773,7 +768,7 @@ function widgetHtml(w) {
   if (w.type === 'bars') { const vs = (w.items || []).map(i => +i.value || 0), lo = Math.min(0, ...vs), hi = Math.max(...vs, 1e-9); return `<div>${t}${hbars((w.items || []).slice(0, 16).map(i => ({ t: i.label, html: isBot(i.label) ? botLink(BOTALIAS(i.label)) : null, c: isBot(i.label) ? botColor(BOTALIAS(i.label)) : undefined, v: +i.value || 0 })), { lo, hi, mid: lo < 0 ? 0 : null, fmt: v => w.format === 'pct' ? pct(v) : +v.toFixed(2) })}</div>`; }
   if (w.type === 'table') return `<div>${t}<div class="scroll"><table><thead><tr>${(w.columns || []).map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${(w.rows || []).slice(0, 30).map(r => `<tr>${r.map(c => `<td>${cell(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
   if (w.type === 'text') return `<div>${t}<p style="white-space:pre-wrap;font-size:.84rem;color:var(--ink-2)">${esc(numFix(w.body))}</p></div>`;
-  if (w.type === 'tree' && w.root && window.SWUGlyph) { try { const tr = SWUGlyph.tree(w.root, { glyph: 34, colors: GLYPHC }); return `<div>${t}<div class="treebox">${tr.svg}</div>${w.caption ? `<p class="muted" style="font-size:.76rem;margin-top:4px">${esc(w.caption)}</p>` : ''}</div>`; } catch { /* fall through */ } }
+  if (w.type === 'tree' && w.root && window.SWUGlyph) { try { const tr = SWUGlyph.tree(w.root, { glyph: 34, colors: GLYPHC }); return `<div>${t}<div class="treebox">${tr.svg}</div>${w.caption ? `<p class="muted" style="font-size:.76rem;margin-top:4px">${esc(w.caption)}</p>` : ''}</div>`; } catch { return `<div>${t}<div class="notice">This search tree could not be drawn.</div></div>`; } }
   if (w.type === 'spine' && w.steps && window.SWUGlyph) return `<div>${t}<div class="spine">${w.steps.map(s => SWUGlyph.glyph(s.state, { size: 26, value: s.value, title: s.label, colors: GLYPHC })).join('')}</div></div>`;
   if (w.type === 'html' && w.html) return `<div>${t}<iframe class="wframe" sandbox="allow-scripts" title="${esc(w.title || 'custom view')}" style="height:${Math.min(600, +w.height || 200)}px" srcdoc="${esc(w.html)}"></iframe></div>`;
   if (w.type === 'strategy') return `<div data-strategy="${esc(JSON.stringify(w))}"></div>`;
@@ -1027,6 +1022,7 @@ function pageLine(r) {
  *  joins the bots no other bot beats on both. The timing table is folded under it. */
 function pageSpeed() {
   const all = Object.values(M.bots).filter(b => b.speed?.mean != null), bots = all.filter(b => b.rating != null);
+  if (!bots.length) return `<div class="phead"><h1>Speed and strength</h1></div><div class="notice">No bot has both a rating and timed decisions yet.</div>`;
   const W = 900, H = 400, L = 54, R = 150, T = 14, B = 38;
   const lx0 = Math.floor(Math.log10(Math.min(...bots.map(b => b.speed.mean)))), lx1 = Math.ceil(Math.log10(Math.max(...bots.map(b => b.speed.mean))));
   const y0 = Math.floor((Math.min(...bots.map(b => b.rating)) - 30) / 100) * 100, y1 = Math.ceil((Math.max(...bots.map(b => b.rating)) + 30) / 100) * 100;

@@ -126,9 +126,6 @@ svg text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
 .chart svg { width: 100%; height: auto; display: block; overflow: visible; }
 .grid-line { stroke: var(--line); stroke-width: 1; }
 .spark { display: inline-block; vertical-align: middle; }
-.rr { position: relative; height: 14px; min-width: 110px; }
-.rr .w { position: absolute; top: 6px; height: 2px; background: color-mix(in oklab, var(--c) 45%, transparent); }
-.rr .d { position: absolute; top: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--c); transform: translateX(-4px); }
 .hb { display: grid; grid-template-columns: minmax(80px, 34%) 1fr 52px; gap: 4px 8px; align-items: center; font-size: .78rem; }
 .hb .t { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hb .track { position: relative; height: 10px; background: var(--sunken); border-radius: 2px; }
