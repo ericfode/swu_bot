@@ -10,12 +10,15 @@
  * Only deck order stays unknown.
  *
  * Frames of A with no partner in B (a dropped frame, a reconnect) keep B's seat hidden; the result counts them.
+ * Without the log length (SWU Forge, KaraBuddy without keys) a mulligan does not change the key, so a run of equal
+ * keys that lost or repeated a frame stays hidden unless B shows the same cards all through it (dropUnsureRuns).
  */
 
 const { leadersOf, isHidden: isHiddenCard } = require('./karabast');
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-// how far ahead in B to look for a frame's partner; keeps an undo that returns to an old board from pairing with it
+// how far ahead in B a frame may pair with the next copy of its board; further ahead the board must appear only once
+// (one run), so an undo that returns to an old board does not pair with it
 const WINDOW = 200;
 
 const pub = (c) => (c ? [c.uuid ?? null, c.damage ?? 0, !!c.exhausted, c.parentCardId ?? null] : null);
@@ -51,6 +54,19 @@ function ownSeat(frames) {
     return ids[0] ?? null;
 }
 
+/** Index ranges [start, end] of the runs of equal keys in xs. */
+function runs(xs) {
+    const out = [];
+    xs.forEach((k, i) => {
+        if (i > 0 && xs[i - 1] === k) {
+            out[out.length - 1][1] = i;
+        } else {
+            out.push([i, i]);
+        }
+    });
+    return out;
+}
+
 /** For every key of a, the index of its partner in b (or -1), in order. */
 function align(a, b) {
     const pos = new Map();
@@ -64,7 +80,12 @@ function align(a, b) {
         } else if (last >= 0 && b[last] === k) {
             m = last;
         } else {
-            m = (pos.get(k) ?? []).find((j) => j > last && j <= last + WINDOW) ?? -1;
+            const later = (pos.get(k) ?? []).filter((j) => j > last);
+            // past the window (a late start, a long gap) re-anchor only on a key that sits in one run of b,
+            // so a board that comes back later cannot pull the pairing ahead
+            if (later.length && (later[0] <= last + WINDOW || later[later.length - 1] - later[0] === later.length - 1)) {
+                m = later[0];
+            }
         }
         out.push(m);
         if (m >= 0) {
@@ -75,11 +96,41 @@ function align(a, b) {
 }
 
 /**
+ * Without the log a run of equal keys can hide a private change of B's: a mulligan swaps hand cards with the deck and
+ * changes nothing public. A run of A's frames keeps its partners (match, by index into b) only when it pairs one to one
+ * with B's run, or when B's run shows one hand throughout and no card of B's leaves sight (into the deck) at its edges.
+ */
+function dropUnsureRuns(match, keysA, keysB, b, seat) {
+    const own = (j) => {
+        const piles = b[j].state.players[seat]?.cardPiles ?? {};
+        return [...(piles.hand ?? []), ...(piles.resources ?? [])].map((c) => c?.uuid ?? null);
+    };
+    const stays = (from, to) => {
+        if (from < 0 || to >= b.length) {
+            return true;
+        }
+        const seen = new Set(Object.values(b[to].state.players).flatMap((p) => Object.values(p?.cardPiles ?? {}).flat().map((c) => c?.uuid)));
+        return own(from).every((u) => u == null || seen.has(u));
+    };
+    const runEnd = new Map(runs(keysB));
+    for (const [s, e] of runs(keysA)) {
+        const j = match[s];
+        const end = runEnd.get(j);
+        const oneHand = () => b.slice(j, end + 1).every((_, k) => String(own(j + k)) === String(own(j)));
+        if (end === undefined || !(end - j === e - s || (oneHand() && stays(j - 1, j) && stays(end, end + 1)))) {
+            match.fill(-1, s, e + 1);
+        }
+    }
+}
+
+/**
  * a, b: [{t, state}] from importer/sources.js readText, one per seat. Returns { frames, seats: {a, b}, matched, unmatched }.
  */
 function mergeCaptures(a, b) {
-    a = a.filter((f) => isObj(f?.state?.players));
-    b = b.filter((f) => isObj(f?.state?.players));
+    // as in readFrames: a serialization-failure push has players {} and must not pair
+    const twoPlayers = (f) => isObj(f?.state?.players) && Object.keys(f.state.players).length >= 2;
+    a = a.filter(twoPlayers);
+    b = b.filter(twoPlayers);
     const seatA = ownSeat(a);
     const seatB = ownSeat(b);
     if (!seatA || !seatB) {
@@ -89,7 +140,12 @@ function mergeCaptures(a, b) {
         throw new Error('both captures show the same hand; need one capture from each player');
     }
     const withLog = [...a, ...b].every((f) => typeof f.state.totalMessages === 'number');
-    const match = align(a.map((f) => publicKey(f.state, withLog)), b.map((f) => publicKey(f.state, withLog)));
+    const keysA = a.map((f) => publicKey(f.state, withLog));
+    const keysB = b.map((f) => publicKey(f.state, withLog));
+    const match = align(keysA, keysB);
+    if (!withLog) {
+        dropUnsureRuns(match, keysA, keysB, b, seatB);
+    }
     let unmatched = 0;
     const frames = a.map((f, i) => {
         const j = match[i];
