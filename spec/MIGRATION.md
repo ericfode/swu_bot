@@ -67,6 +67,8 @@ it says nothing about the hidden cards.
   game runs without rollback. Before, its rollbacks could change how the real game played out (seen with an ISMCTS bot:
   a later "will have no effect" check came out differently, so the opponent lost its simulations and the replay could
   not be played again). Nothing changes in how such a bot reads or searches the game.
+- A script with its own game loop that calls `choose` itself (`bot/info/dial.js`, `bot/omni/export-positions.js`)
+  can drive only native bots; a bot program (a protocol client from `makeBot`) plays through `playGame`.
 - `bot/jev/look.js` (the Jev look-ahead adapter) is a native bot now: it runs the v1 Jev program and imagines on the
   copy, after dealing every card hidden from Jev again, so an imagined line no longer follows the real opponent hand.
 

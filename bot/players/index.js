@@ -193,6 +193,10 @@ function describeBot(name) {
     if (kind === 'rush') {
         return { name, kind: 'rules', profile: 'rush', depth: 0, lang: 'js' };
     }
+    if (kind === 'learned-pi' || kind === 'learned-v') {
+        // bot/learned: tinygrad-trained network, model file from $SWU_LEARNED_MODEL (default models/learned/current.json)
+        return { name, kind: 'learned', profile: kind, depth: kind === 'learned-v' ? depth : 0, lang: 'js' };
+    }
     if (/^random/.test(kind)) {
         return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
     }
@@ -206,7 +210,7 @@ function describeBot(name) {
 function makeBot(name, taken) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
@@ -228,6 +232,10 @@ function makeBot(name, taken) {
     }
     if (info.kind === 'search') {
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
+    }
+    if (info.kind === 'learned') {
+        const { LearnedPolicyBot, LearnedSearchBot } = require('../learned/bots');
+        return info.profile === 'learned-v' ? new LearnedSearchBot(name, { depth: info.depth }) : new LearnedPolicyBot(name);
     }
     if (info.kind === 'rules') {
         return createRushBot(name);
