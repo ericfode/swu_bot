@@ -115,7 +115,8 @@ function load(name, i, taken) {
         return origin.run(mine, () => {
             const t0 = cpuMs();
             const raw = makeBot(name, taken);
-            const loadMs = Math.max(0, cpuMs() - t0);
+            // read by guard() once it has read the bot's properties (getters run bot code too): all of it is load time
+            const loadMs = () => Math.max(0, cpuMs() - t0);
             if (!raw || (typeof raw.choose !== 'function' && typeof raw.decide !== 'function')) {
                 throw new Error('createBot() did not return a bot with a choose() or decide() method');
             }

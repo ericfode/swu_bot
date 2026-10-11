@@ -452,15 +452,16 @@ async function playQueuedEval(deadline, minLeftMs = EVAL_MIN_LEFT_MS) {
     return true;
 }
 
-/** Evals still queued from an earlier window fail with reason 'window over': each window starts with an empty queue. */
-function expireQueued() {
+/** Evals queued before `since` (ISO) and still waiting fail with reason 'window over': each window starts afresh. */
+function expireQueued(since) {
     const dir = queueDir();
     if (!fs.existsSync(dir)) {
         return;
     }
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json'))) {
         const j = readJson(path.join(dir, f), null);
-        if (j?.state === 'queued') {
+        // queued in an earlier window; one queued in this window already (a client saw it open first) stays
+        if (j?.state === 'queued' && String(j.queuedAt) < since) {
             writeJson(path.join(dir, f), { ...j, state: 'failed', reason: 'window over', finishedAt: new Date().toISOString(), error: 'the work window it was queued in ended before it was played' });
         }
     }
@@ -527,7 +528,7 @@ async function tournament() {
             r = { n, workStart: new Date(now).toISOString(), workEnd: new Date(now + t.roundMinutes * 60000).toISOString() };
             t.rounds.push(r);
             save();
-            expireQueued();
+            expireQueued(r.workStart);
             broadcast(`Round ${n} (${t.rounds.length} of ${t.plannedRounds}) has started. Submit by ${r.workEnd} (${t.roundMinutes} min); the referee then rates the newest version of every competitor submitted by then.${t.task ? ' Task: ' + t.task : ''}`);
         }
         console.log(`round ${r.n}: work until ${r.workEnd}`);

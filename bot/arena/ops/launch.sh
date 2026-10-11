@@ -54,7 +54,10 @@ setup() {
     local commit=$1
     mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools"
     engine
-    if [ ! -e "$BASE/referee/bot/arena/referee.js" ]; then
+    # a checkout of another commit (an earlier tournament's) is made again
+    at() { git -C "$1" rev-parse HEAD 2>/dev/null || true; }
+    if [ ! -e "$BASE/referee/bot/arena/referee.js" ] || [ "$(at "$BASE/referee")" != "$commit" ]; then
+        git -C "$SRC" worktree remove --force "$BASE/referee" 2>/dev/null || true
         git -C "$SRC" worktree prune
         rm -rf "$BASE/referee"
         git -C "$SRC" worktree add --detach "$BASE/referee" "$commit"
@@ -66,7 +69,7 @@ setup() {
     names=$(node -e "const r=require('$ARENA_HOME/roster.json'); console.log(r.agents.filter(a=>a.harness&&['claude-code','script','command'].includes(a.harness.kind)).map(a=>a.name).join(' '))")
     for n in $names; do
         local d=$BASE/repos/$n
-        [ -e "$d/bot/arena/eval.js" ] && [ -d "$d/forceteki/build/server" ] && continue
+        [ -e "$d/bot/arena/eval.js" ] && [ -d "$d/forceteki/build/server" ] && [ "$(at "$d")" = "$commit" ] && continue
         say "competitor copy for $n"
         rm -rf "$d"
         git clone -q --no-hardlinks "$SRC" "$d"

@@ -147,6 +147,13 @@ test('guard: a throw from close() is ignored; name and needsUndo are read once; 
     assert.throws(() => guard({ name: 'none' }), /choose\(\) .* or decide\(\)/);
 });
 
+test('guard: loadMs given as a clock is read after the bot\'s getters, so their work counts as load time', () => {
+    const t0 = cpuNow();
+    const bot = guard({ name: 'g', get choose() { burn(30); return (c) => c.actions[0]; } }, { capMs: 1000, loadMs: () => cpuNow() - t0 });
+    assert.ok(bot.thinkMs >= 30, `thinkMs ${bot.thinkMs}`);
+    assert.strictEqual(guard({ name: 'n', choose: (c) => c.actions[0] }, { loadMs: 7 }).thinkMs, 7, 'a number still works');
+});
+
 test('guard: stats are copied as plain JSON, and close, stats and every call run inside within()', async () => {
     const cyc = {};
     cyc.self = cyc;

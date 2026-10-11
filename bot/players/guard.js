@@ -12,7 +12,8 @@
  * + system) for bots that run here, so a busy engine on another worker does not count against them, and wall time
  * for bot programs (bot/stdio.js StdioClient, or a bot that sets external or stdio). Wall time is also capped for
  * bots that run here, at wallCapMs (default 2 x capMs), so work moved off this thread (worker threads, Atomics.wait,
- * child processes, waiting on a timer) is not free. loadMs (the time createBot took) starts the CPU counter.
+ * child processes, waiting on a timer) is not free. loadMs (the time createBot took, or a function giving it, read
+ * after the bot's properties) starts the CPU counter.
  *
  * A call ends the game as the bot's loss (match.js makes a throw from it an ERROR with `by` = the bot's seat) when
  *   - the bot throws or its promise rejects: fault = { kind: 'error', message };
@@ -96,7 +97,8 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, enter
     // a program's code runs in its own process: what runs here for it (bot/stdio.js) is the referee's transport, which
     // must not pass for the bot's own async work (a program may also serve game after game)
     const own = program ? (fn) => fn() : within;
-    let thinkMs = program ? 0 : loadMs;
+    // loadMs may be a clock read now, so reading the bot's properties above (they may be getters) is charged to it too
+    let thinkMs = program ? 0 : (typeof loadMs === 'function' ? loadMs() : loadMs);
     let wallMs = 0;
     let fault = null;
     // the call in progress: what other bots' async work took from it (ms), so it can be given back

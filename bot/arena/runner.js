@@ -599,6 +599,8 @@ async function mirrorLoop() {
     const mi = process.argv.indexOf('--mirror');
     const pair = mi > 0 ? [path.resolve(process.argv[mi + 1]), path.resolve(process.argv[mi + 2])] : null;
     const backup = arg('backup', null);
+    // the runner that started it went away (killed, crashed): a new runner starts its own mirror
+    process.on('disconnect', () => process.exit(0));
     for (;;) {
         const done = clock().phase === 'done';
         const errors = (pair ? mirror(...pair) : 0) + (backup ? mirror(LOGS, path.resolve(backup), BACKUP_KEEP) : 0);
@@ -606,6 +608,7 @@ async function mirrorLoop() {
             log(`mirror: ${errors} files failed, retrying in ${MIRROR_MS / 1000} s`);
         }
         if (done) {
+            process.disconnect?.(); // the IPC channel would keep this process alive
             return;
         }
         await sleep(MIRROR_MS);
@@ -650,7 +653,7 @@ async function main() {
     const mi = process.argv.indexOf('--mirror');
     if (mi > 0 || arg('backup', null)) {
         mirrorChild = spawn(process.execPath, [__filename, '--mirror-loop', '--logs', LOGS, ...(mi > 0 ? ['--mirror', process.argv[mi + 1], process.argv[mi + 2]] : []),
-            ...(arg('backup', null) ? ['--backup', arg('backup')] : [])], { stdio: ['ignore', 'inherit', 'inherit'] });
+            ...(arg('backup', null) ? ['--backup', arg('backup')] : [])], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
     }
     for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
         process.on(sig, () => {
@@ -691,10 +694,14 @@ async function main() {
         }
         if (st.phase === 'work' && st.round !== lastRound) {
             lastRound = st.round;
-            if (anyClaude) {
-                await probe();
-            }
-            for (const c of runners) {
+            // scripts start at once; Claude Code competitors first read the account's usage (the probe)
+            const order = [...runners].sort((a, b) => (a.harness.kind === 'claude-code') - (b.harness.kind === 'claude-code'));
+            let probed = false;
+            for (const c of order) {
+                if (anyClaude && !probed && c.harness.kind === 'claude-code') {
+                    probed = true;
+                    await probe();
+                }
                 if (busy.has(c.name)) {
                     log(`${c.name}: still busy from the last round, skipping round ${st.round}`);
                     continue;
