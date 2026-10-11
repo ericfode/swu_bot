@@ -146,3 +146,43 @@ Play does not separate the parts yet: the test bots were +83 / +161 Elo over jep
 run 2, inside the ±100 noise of 10 games per pair, because most of their decisions still come from imagination.
 Next: train the predictor on simulated branches (every legal move from sampled positions) and re-run the
 comparison.
+
+## Training the predictor on branches (v1b)
+
+Eric's pick after the oracle test. `branches.js` plays rush and random games and, at a third of the action windows
+(the only place the engine rolls back exactly), plays every legal move on the same game with rollback, then both
+seats play on until the mover's next and 4th next decision. `branch_train.py` fine-tunes the predictor and the
+action encoder on those futures, with the encoder and value head frozen: the plain error plus the error after
+subtracting each position's mean over its moves (the part that tells moves apart), mixed with recorded games.
+
+```bash
+node bot/jepa/branches.js --games 1000 --workers 4 --seed 700000 --bots rush,random --out data/branch/rush-random
+node bot/jepa/branches.js --games 800 --workers 4 --seed 710000 --bots rush,rush --out data/branch/rush-rush
+python3 bot/jepa/branch_train.py --model bot/jepa/models/jepa-v1.safetensors --branches data/branch/rush-random \
+    data/branch/rush-rush --data data/jepa/mix-v1.npz --cache data/jepa/branches-v1.npz --out bot/jepa/models/jepa-v1b
+```
+
+1,800 games gave 30,417 branch points (about 5 moves each) in 40 minutes; 1% of games ended early on engine errors
+after a rollback (known engine bug 6 in the repo CLAUDE.md, plus bug 7). On 2,983 held-out branch points the
+imagined ranking of moves got much closer to the real one:
+
+| Score of a move vs the real future | v1 | v1b |
+|---|---|---|
+| next decision: median ρ, top-1 agree (chance 31%) | 0.43, 43% | 0.69, 61% |
+| 4 decisions on: median ρ, top-1 agree (chance 30%) | 0.40, 38% | 0.50, 43% |
+
+On the bots' own action windows in a ladder (`results/jepa-branch-2`, judged after the round as in the oracle
+test), v1b's ranking also agrees with `linear-deck-g4` on the real future (ρ 0.40, top-1 53% vs chance 48%) where
+v1's did not (ρ −0.16, 34% vs 38%).
+
+**It plays worse.** `jepa-branch-2` (10 games per pair): jepa-h1 1542 (29-31), jepa-b (v1b, mix 0.5) 1431,
+jepa-h1b (v1b, mix 0) 1378 (19-41); jepa-h1 beat jepa-h1b 9-1. v1b also changed the prompts branches cannot cover
+(same pick as v1 in 24% of resource prompts, 70% of target prompts, 48% of action windows), so `jepa-h1w` uses v1b
+in action windows only (`--window-model`). `jepa-branch-3` (20 games per pair): jepa-h1 1414, jepa-h1b 1299,
+jepa-h1w 1278; jepa-h1 beat jepa-h1w 13-7 and jepa-h1b 14-6. So the window choices themselves got worse.
+
+**Lesson: a predictor that tracks the real next position better does not make this planner stronger.** The
+yardstick from the oracle test (imagined-vs-real agreement) rose and play fell. This fits the oracle runs, where the
+perfect predictor (`jepa-sim-v`) was not clearly stronger either. What limits the bot is the planning itself: one
+move scored by V a short way ahead, while 63% of decisions are follow-up and resource prompts it plans no further.
+jepa-h1 (v1) stays the JEPA entry.
