@@ -33,12 +33,23 @@ solver-proven endgames that weight picked the losing side, so gen 3 got only 46-
 and its held-out Brier is the same for linear (0.157) and better for the net (0.153 vs 0.156). Base HP alone still
 gets 63.
 
+Generation 5 (`*-g5`) is the first self-play generation: gen 4's data plus ladders 3-6 and 1,652 games other bots
+recorded (league, Rust, Python, JEPA, ISMCTS, Jev ladders), 3,506 games in all, still without `deckLow`. On the 665
+held-out games of all sources the net scores 0.170 (gen 4: 0.174). It is a little worse on the old sources alone
+(0.158 vs 0.153) and better on the new ones (0.177 vs 0.186). On omni's 225 proven positions it gets 202-204 right
+(gen 4: 195-200).
+
 Hand-made evaluators get one fitted number, the logistic scale, so all of them output calibrated probabilities.
 Features are in `features.js` (base HP, board power/HP, keywords, shields, leader, resources, hand size and
 quality, deck, initiative, a damage-pressure ratio, round, who acts next).
 
 **Views.** `subjective`: the judge sees its own hand; the opponent hand is a count (or, for `-deck` models, the count
-times the average unseen card of their decklist). `objective`: both hands visible.
+times the average unseen card of their decklist). `objective`: both hands visible. `spectator`: neither hand visible,
+only both counts, which is what a Karabast spectator sees. On the 665 held-out games it costs about 0.001 Brier against
+the subjective view, so a spectator can call games almost as well as a player. `score.js` reports it for every
+position, including captures where both hands are hidden (which have no subjective or objective view), split by
+source and round. Its `paired` row scores the spectator view on exactly the judges and positions the subjective view
+uses, so the two compare like with like on one-seat captures too (on engine games the two rows agree).
 
 **Note on the heuristic's base term.** Until 2026-10-11 `bot/players/heuristic.js` scored base HP as `hp*0.9 + (12-hp)^2/6`
 when `hp <= 12`. The second term grows as the base drops, so below about 9 HP each point of damage *raised* that
