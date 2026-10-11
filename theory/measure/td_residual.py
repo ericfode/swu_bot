@@ -181,17 +181,20 @@ _POSITIONS = {}
 
 
 def position_labels(path, g):
-    """Proven labels from omni's positions file, keyed by window index; used only if the window counts match."""
+    """Proven labels from omni's positions file, keyed by window index; used only if every window lines up."""
     if path not in _POSITIONS:
         games = {}
         for line in open(path):
             r = json.loads(line)
-            n, labels = games.setdefault(r['seed'], [r['windows'], {}])
+            seq, labels = games.setdefault(r['seed'], [{}, {}])
+            seq[r['i']] = (r['toMove'], r['round'])
             if r.get('proven') in ('p1', 'p2'):
                 labels[r['i']] = 1.0 if r['proven'] == 'p1' else 0.0
         _POSITIONS[path] = games
-    n, labels = _POSITIONS[path].get(g['seed'], (None, {}))
-    return labels if n == len(g['windows']) else {}
+    seq, labels = _POSITIONS[path].get(g['seed'], ({}, {}))
+    # same game iff every window has the same side to move and round (a different bot can give equal counts)
+    mine = {i: (w['actor'], w['round']) for i, w in enumerate(g['windows'])}
+    return labels if seq == mine else {}
 
 
 def solved_labels(solve_dir, g):
