@@ -62,6 +62,27 @@ function args(argv) {
 const clamp01 = (x) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Math.max(0, Math.min(1, Number(x))));
 const viewSeat = (view) => (view === 'subjective_p2' ? 'p2' : 'p1');
 
+/**
+ * An imported human game (importer/) is recorded from one seat, so the other hand was never seen. The views that
+ * need that hand (the other seat's subjective view, and objective, which would only repeat the recorder's view)
+ * are dropped unless asked for by name.
+ */
+const hiddenSeats = (game) => game.header.source?.hiddenHands ?? [];
+function usableViews(game, views) {
+    const hidden = hiddenSeats(game);
+    if (!hidden.length) {
+        return views;
+    }
+    return views.filter((v) => v === 'omniscient' || (v !== 'objective' && !hidden.includes(viewSeat(v))));
+}
+
+/**
+ * Seats outside hiddenHands whose hand is hidden in this snapshot: a merge of both players' captures (pov both) keeps
+ * a hand hidden on the frames that found no partner. The views that need that hand skip those checkpoints.
+ */
+const unseenAt = (game, state) => ['p1', 'p2'].filter((seat) => !hiddenSeats(game).includes(seat) && (state.players[seat]?.hand ?? []).some((c) => c?.hid));
+const needsHidden = (view, unseen) => (view === 'objective' ? unseen.length > 0 : unseen.includes(viewSeat(view)));
+
 /** Build the Claude requests for one game. */
 function buildRequests(game, cps, views, opt) {
     const names = { p1: botName(game, 'p1'), p2: botName(game, 'p2') };
@@ -69,8 +90,9 @@ function buildRequests(game, cps, views, opt) {
     const reqs = [];
     for (const cp of cps) {
         const state = game.steps[cp.stepIndex].state;
+        const unseen = unseenAt(game, state);
         for (const view of views) {
-            if (view === 'omniscient') {
+            if (view === 'omniscient' || needsHidden(view, unseen)) {
                 continue;
             }
             const pov = view === 'objective' ? null : viewSeat(view);
@@ -90,8 +112,12 @@ function buildRequests(game, cps, views, opt) {
     if (views.includes('omniscient') && game.end?.winner) {
         const lines = cps.map((cp) => trajectoryLine(cp, game.steps[cp.stepIndex].state));
         const result = game.end.winner === 'draw' ? 'The game was a draw.' : `RESULT: ${game.end.winner} (${names[game.end.winner]}) won in round ${game.end.round} after ${game.end.steps} decisions (${game.end.outcome}).`;
+        const hidden = hiddenSeats(game);
+        const unseen = ['p1', 'p2'].map((seat) => [seat, cps.filter((cp) => unseenAt(game, game.steps[cp.stepIndex].state).includes(seat)).length]).filter(([, n]) => n);
         const user = [
             `Players: ${decks}.`,
+            ...(hidden.length ? [`This game was recorded from the ${game.header.source.pov} view: the hand of ${hidden.join(', ')} was never seen and is listed as "Hidden card". Judge from what is shown.`] : []),
+            ...unseen.map(([seat, n]) => `The hand of ${seat} was not recorded at ${n} of ${cps.length} checkpoints and is listed there as "Hidden card". Judge from what is shown.`),
             `CHECKPOINTS (index, round, phase, what was done since the previous checkpoint, then both sides after it; hands are listed in full):`,
             lines.join('\n'),
             result,
@@ -286,13 +312,27 @@ async function main() {
         logWindow: Number(a['log-window'] ?? 30)
     };
     const files = a._.flatMap(gameFiles);
+    const viewsFor = (game) => {
+        const partly = ['p1', 'p2'].filter((seat) => game.steps.some((s) => unseenAt(game, s.state).includes(seat)));
+        if (partly.length && opt.evaluator !== 'heuristic') {
+            const unmatched = game.header.source?.merge?.unmatched;
+            console.error(`${game.id}: ${partly.join(', ')}'s hand is hidden on some frames${unmatched ? ` (${unmatched} unpaired in the merge)` : ''}; checkpoints there are skipped for the views that need it`);
+        }
+        if (!hiddenSeats(game).length) {
+            return opt;
+        }
+        const views = a.views ? opt.views : usableViews(game, opt.views);
+        console.error(`${game.id}: recorded from the ${game.header.source.pov} view (no record of ${hiddenSeats(game).join(', ')}'s hand); views ${views.join(',')}`);
+        return { ...opt, views };
+    };
 
     if (a['dump-prompts']) {
         const lines = [];
         for (const f of files) {
             const game = loadGame(f);
             const cps = checkpoints(game, { granularity: opt.granularity, max: opt.maxCheckpoints });
-            for (const r of buildRequests(game, cps, opt.views, opt)) {
+            const o = viewsFor(game);
+            for (const r of buildRequests(game, cps, o.views, o)) {
                 lines.push(JSON.stringify({ game: game.id, ...r }));
             }
         }
@@ -316,7 +356,7 @@ async function main() {
     for (const f of files) {
         const game = loadGame(f);
         const t0 = Date.now();
-        const res = await analyzeGame(game, opt, evaluator);
+        const res = await analyzeGame(game, viewsFor(game), evaluator);
         const tag = opt.evaluator === 'heuristic' ? 'heuristic' : opt.evaluator === 'external' ? (a.label ?? 'external') : opt.model;
         const out = a.out && files.length === 1 ? a.out : path.join(a['out-dir'] ?? path.join(__dirname, 'out'), `${game.id}.${tag}.json`);
         writeAtomic(out, res);
@@ -335,4 +375,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { analyzeGame, buildRequests, toDashboard, args, clamp01, ALL_VIEWS };
+module.exports = { analyzeGame, buildRequests, toDashboard, args, clamp01, usableViews, ALL_VIEWS };

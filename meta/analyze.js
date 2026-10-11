@@ -5,6 +5,7 @@
  * each strategy's traits (strength, style, and where it wins or loses relative to expectation).
  *
  *   node meta/analyze.js [--results /mnt/project-files/results] [--out meta.json] [--panels dir] [--bots bots.json]
+ *                        [--human /mnt/project-files/human-games]
  *
  * Pure reading: no engine, no card data. Replays are the recorder JSONL format (bot/recorder.js).
  */
@@ -20,16 +21,21 @@ const RESULTS = args.results || '/mnt/project-files/results';
 const OUT = args.out || 'meta.json';
 const PANELS = args.panels || '/mnt/project-files/dashboard/panels';
 const BOTS_META = args.bots || '/mnt/project-files/dashboard/league/bots.json';
+const HUMAN = args.human || '/mnt/project-files/human-games'; // imported karabast.net games (importer/import.js)
 const CACHE = args.cache || null; // replay features keyed by path, size and mtime, so refreshes only read new games
 
 // ---------------------------------------------------------------------------------------------- identities
 
 /**
  * Bot names are the p1/p2 strings in each index. A few names mean the same bot (random-a/b/c are seeds of one
- * random bot; `legacy` is the heuristic bot before the base-danger sign fix). Runs that list `legacy` are the
- * ones with the fixed heuristic profiles, so those profiles get a `+fix` suffix there.
+ * random bot; `legacy` is the heuristic bot before the base-danger sign fix). Runs that list `legacy`, and the
+ * runs in FIXED_ERA_RUNS, use the fixed heuristic profiles, so those profiles get a `+fix` suffix there.
  */
 const HEURISTIC_PROFILES = new Set(['heuristic', 'aggro', 'tempo', 'control']);
+// Runs made with the fixed profiles but without `legacy` in the field. Their aggro records give them away
+// (wasm-ladder-1 58-12, lisp-ladder-1 40-10, against about 35% wins in the old-profile ladders). New runs can
+// say so themselves with `fixedEra: true` in index.json or in ladder.json's config.
+const FIXED_ERA_RUNS = new Set(['wasm-ladder-1', 'lisp-ladder-1']);
 function canonical(name, run) {
     if (/^random(-[a-z])?$/.test(name)) return 'random';
     if (name === 'legacy') return 'heuristic';
@@ -154,6 +160,25 @@ function readReplay(file) {
     return { header, end, snaps, style: st, rounds: Math.max(1, maxRound) };
 }
 
+function styleOf(rows) {
+    const style = {};
+    for (const S of STYLE) {
+        const v = rows.map((s) => s[S.id]).filter((x) => x != null);
+        style[S.id] = v.length ? +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(3) : null;
+    }
+    return style;
+}
+
+function styleRow(bot, won, c, rounds) {
+    return {
+        bot, won,
+        baseDmg: c.baseDmg / rounds, attacks: c.attacks / rounds, kills: c.kills / rounds, deploys: c.deploys / rounds,
+        initiative: c.initiative / rounds, rounds,
+        baseShare: c.attacks ? c.baseAttacks / c.attacks : null,
+        passShare: c.windows ? c.passes / c.windows : null,
+    };
+}
+
 function blankStyle() {
     return { windows: 0, passes: 0, initiative: 0, attacks: 0, baseAttacks: 0, baseDmg: 0, kills: 0, deploys: 0 };
 }
@@ -207,7 +232,8 @@ function main() {
         const idx = readJson(path.join(RESULTS, dir, 'index.json'), null);
         if (!idx || !Array.isArray(idx.games)) continue;
         const names = new Set(idx.bots || idx.games.flatMap((g) => [g.p1, g.p2]));
-        runs.push({ id: dir, createdAt: idx.createdAt, idx, fixedEra: names.has('legacy') });
+        const cfg = readJson(path.join(RESULTS, dir, 'ladder.json'), {}).config || {};
+        runs.push({ id: dir, createdAt: idx.createdAt, idx, fixedEra: names.has('legacy') || FIXED_ERA_RUNS.has(dir) || !!idx.fixedEra || !!cfg.fixedEra });
     }
 
     // 1. Results (all runs, replay or not).
@@ -237,6 +263,33 @@ function main() {
     }
     const botIds = [...new Set(games.flatMap((g) => [g.p1, g.p2]))].sort();
 
+    // Human games: <HUMAN>/<source>/index.json + games/<id>.jsonl, written by importer/import.js. Players are
+    // anonymous seats, and humans only play humans, so they stay out of the ratings and the baseline fit and are
+    // scored as one competitor, "humans", against the bots' baseline.
+    const humanGames = [];
+    const humanSources = [];
+    let humanDirs = [];
+    try { humanDirs = fs.readdirSync(HUMAN).sort(); } catch { /* no human games folder */ }
+    for (const dir of humanDirs) {
+        const idx = readJson(path.join(HUMAN, dir, 'index.json'), null);
+        if (!idx || !Array.isArray(idx.games)) continue;
+        const src = { source: dir, createdAt: idx.createdAt || null, games: idx.games.length, credit: null, url: null };
+        humanSources.push(src);
+        for (const g of idx.games) {
+            if (g.outcome !== 'won' || !g.winnerSeat) continue;
+            const replay = path.join(HUMAN, dir, 'games', `${g.id}.jsonl`);
+            if (!fs.existsSync(replay)) continue;
+            humanGames.push({ run: dir, root: 'human-games', id: g.id, winner: g.winnerSeat, replay });
+            // Public games must show their source's credit wherever their data appears (human-games/README.md).
+            if (!src.credit) {
+                let head = null;
+                try { head = JSON.parse(fs.readFileSync(replay, 'utf8').split('\n', 1)[0]); } catch { /* unreadable header */ }
+                const so = head && head.source;
+                if (so && so.credit) { src.credit = so.credit; src.url = so.url || null; }
+            }
+        }
+    }
+
     // 2. Strength: Bradley-Terry on every decided game.
     const results = games.map((g) => ({ a: g.p1, b: g.p2, score: g.winner === 'p1' ? 1 : 0 }));
     const rating = bradleyTerry(botIds, results, { prior: 1 });
@@ -265,17 +318,30 @@ function main() {
             const won = g.winner === pid ? 1 : 0;
             const c = r.style[pid];
             const rounds = r.rounds;
-            styleRows.push({
-                bot, won,
-                baseDmg: c.baseDmg / rounds, attacks: c.attacks / rounds, kills: c.kills / rounds, deploys: c.deploys / rounds,
-                initiative: c.initiative / rounds, rounds,
-                baseShare: c.attacks ? c.baseAttacks / c.attacks : null,
-                passShare: c.windows ? c.passes / c.windows : null,
-            });
+            styleRows.push(styleRow(bot, won, c, rounds));
             for (const s of r.snaps.filter((q) => q.pid === pid)) {
                 const rd = (rating[bot] - rating[opp]) / 400 * Math.LN10;
                 snapRows.push({ game: g, pid, bot, opp, won, round: s.round, step: s.step, x: { ...s.x, rd } });
             }
+        }
+    }
+
+    const humanSnaps = [];
+    const humanStyle = [];
+    for (const g of humanGames) {
+        let r;
+        try {
+            const st = fs.statSync(g.replay);
+            const key = `${g.replay}|${st.size}|${st.mtimeMs}`;
+            r = cache[key] || readReplay(g.replay);
+            delete r.header;
+            fresh[key] = r;
+        } catch { continue; }
+        if (!r.end) continue;
+        for (const pid of ['p1', 'p2']) {
+            const won = g.winner === pid ? 1 : 0;
+            humanStyle.push(styleRow('humans', won, r.style[pid], r.rounds));
+            for (const s of r.snaps.filter((q) => q.pid === pid)) humanSnaps.push({ game: g, pid, bot: 'humans', opp: 'humans', won, round: s.round, step: s.step, x: { ...s.x, rd: 0 } });
         }
     }
 
@@ -332,35 +398,31 @@ function main() {
         fieldResid[S.id] = n ? r / n : 0;
     }
     const SHRINK = 4; // virtual games at the expected rate, so 2-game cells do not shout
+    const cellsOf = (byS) => Object.fromEntries(SITUATIONS.map((S) => {
+        const b = byS[S.id];
+        if (!b) return [S.id, { n: 0 }];
+        const ex = b.examples.sort((p, q) => Math.abs(q.surprise) - Math.abs(p.surprise));
+        return [S.id, {
+            n: b.n, wins: b.wins, rate: +(b.wins / b.n).toFixed(3), expected: +(b.expAvg / b.n).toFixed(3),
+            edge: +((b.wins - b.expAvg - b.n * fieldResid[S.id]) / (b.n + SHRINK)).toFixed(3),
+            vsOwn: +((b.wins - b.exp - b.n * fieldResid[S.id]) / (b.n + SHRINK)).toFixed(3),
+            se: +(0.5 / Math.sqrt(b.n + SHRINK)).toFixed(3),
+            examples: [...ex.filter((e) => e.won).slice(0, 2), ...ex.filter((e) => !e.won).slice(0, 2)],
+        }];
+    }));
     const bots = botIds.map((id) => {
         const mine = games.filter((g) => g.p1 === id || g.p2 === id);
         const wins = mine.filter((g) => (g.p1 === id ? 'p1' : 'p2') === g.winner).length;
         const forfeits = mine.filter((g) => g.forfeit && (g.forfeit === 'p1' ? g.p1 : g.p2) === id).length;
         const sr = styleRows.filter((s) => s.bot === id);
-        const style = {};
-        for (const S of STYLE) {
-            const v = sr.map((s) => s[S.id]).filter((x) => x != null);
-            style[S.id] = v.length ? +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(3) : null;
-        }
+        const style = styleOf(sr);
         const ms = [];
         for (const g of mine) {
             const t = g.timing && g.timing[g.p1 === id ? 'p1' : 'p2'];
             if (t && t.p50 != null) ms.push(t.p50);
         }
         ms.sort((a, b) => a - b);
-        const situations = {};
-        for (const S of SITUATIONS) {
-            const b = sit[id] && sit[id][S.id];
-            if (!b) { situations[S.id] = { n: 0 }; continue; }
-            const ex = b.examples.sort((p, q) => Math.abs(q.surprise) - Math.abs(p.surprise));
-            situations[S.id] = {
-                n: b.n, wins: b.wins, rate: +(b.wins / b.n).toFixed(3), expected: +(b.expAvg / b.n).toFixed(3),
-                edge: +((b.wins - b.expAvg - b.n * fieldResid[S.id]) / (b.n + SHRINK)).toFixed(3),
-                vsOwn: +((b.wins - b.exp - b.n * fieldResid[S.id]) / (b.n + SHRINK)).toFixed(3),
-                se: +(0.5 / Math.sqrt(b.n + SHRINK)).toFixed(3),
-                examples: [...ex.filter((e) => e.won).slice(0, 2), ...ex.filter((e) => !e.won).slice(0, 2)],
-            };
-        }
+        const situations = cellsOf(sit[id] || {});
         const m = metaBots.find((b) => b.id === id) || metaBots.find((b) => b.id === id.replace(/\+fix$/, '')) || {};
         return {
             id, family: m.family && m.family !== 'other' ? m.family : guessFamily(id), lang: m.lang || 'js', owner: m.owner || null, notes: m.notes || null,
@@ -371,6 +433,31 @@ function main() {
         };
     }).sort((a, b) => b.rating - a.rating);
     describe(bots);
+
+    // 6b. Humans as one competitor, scored like an average bot facing an equal opponent (rd 0), so a human cell
+    // reads "humans win from this spot this much more than an average bot would".
+    let humans = null;
+    if (humanSnaps.length) {
+        const hs = {};
+        const hseen = new Set();
+        for (const r of humanSnaps) {
+            for (const S of SITUATIONS) {
+                const key = `${r.game.run}/${r.game.id}/${r.pid}/${S.id}`;
+                if (hseen.has(key) || !S.test(r.x)) continue;
+                hseen.add(key);
+                const e = model.predict(r.x);
+                const b = (hs[S.id] ||= { n: 0, wins: 0, exp: 0, expAvg: 0, examples: [] });
+                b.n++; b.wins += r.won; b.exp += e; b.expAvg += e;
+                b.examples.push({ root: 'human-games', run: r.game.run, game: r.game.id, step: r.step, seat: r.pid, opp: 'humans', won: r.won, surprise: +(r.won - e).toFixed(3) });
+            }
+        }
+        humans = {
+            id: 'humans', family: 'human', lang: null, owner: null, notes: 'Real karabast.net games, players anonymous',
+            panel: null, rating: null, games: humanGames.length, wins: null, winRate: null, forfeits: 0,
+            replayGames: humanStyle.length, msP50: null, style: styleOf(humanStyle), situations: cellsOf(hs),
+        };
+        describe([humans], bots);
+    }
 
     // 7. Head to head.
     const pairs = {};
@@ -392,24 +479,26 @@ function main() {
         schema: 'swu-meta/1',
         generatedAt: new Date().toISOString(),
         sources: runs.map((r) => ({ run: r.id, createdAt: r.createdAt, games: r.idx.games.length, fixedEra: r.fixedEra })),
-        totals: { games: games.length, replays: styleRows.length / 2, snapshots: snapRows.length, skipped, p1WinRate: +(p1Wins / seatGames).toFixed(3) },
+        totals: { games: games.length, replays: styleRows.length / 2, snapshots: snapRows.length, humanGames: humanGames.length, skipped, p1WinRate: +(p1Wins / seatGames).toFixed(3) },
         baseline: { features: FEATURES, coef: model.coef, note: 'P(win) from position at round start plus rating gap (rd, natural-log units)' },
         situations: SITUATIONS.map(({ test, ...s }) => ({ ...s, fieldResid: +fieldResid[s.id].toFixed(3), field: fieldSit[s.id] ? { n: fieldSit[s.id].n, rate: +(fieldSit[s.id].wins / fieldSit[s.id].n).toFixed(3) } : { n: 0 } })),
         style: STYLE.map((s) => ({ ...s, range: styleRange[s.id] })),
         bots,
+        humans,
+        humanSources,
         pairs: Object.values(pairs),
         ms: Date.now() - t0,
     };
     fs.writeFileSync(OUT + '.tmp', JSON.stringify(out));
     fs.renameSync(OUT + '.tmp', OUT);
-    console.log(`meta: ${bots.length} bots, ${games.length} games, ${out.totals.replays} replays, ${snapRows.length} snapshots in ${out.ms} ms -> ${OUT}`);
+    console.log(`meta: ${bots.length} bots, ${games.length} games, ${out.totals.replays} replays, ${snapRows.length} snapshots, ${humanGames.length} human games in ${out.ms} ms -> ${OUT}`);
 }
 
 /** Short plain-words summary per bot, used by the page and as the answer key for visual review quizzes. */
-function describe(bots) {
+function describe(bots, field = bots) {
     const MIN = 5;
     const pct = (key, q) => {
-        const v = bots.filter((b) => b.replayGames >= MIN && b.style[key] != null).map((b) => b.style[key]).sort((a, b) => a - b);
+        const v = field.filter((b) => b.replayGames >= MIN && b.style[key] != null).map((b) => b.style[key]).sort((a, b) => a - b);
         return v.length ? v[Math.min(v.length - 1, Math.floor(q * v.length))] : 0;
     };
     const killsHi = pct('kills', 0.66);
