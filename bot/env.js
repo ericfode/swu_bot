@@ -26,6 +26,7 @@ const { getUserWithDefaultsSet } = b('Settings.js');
 const { setCodeToString } = b('Util.js');
 const { UndoMode } = b('game/core/snapshot/SnapshotManager.js');
 const { cards: implementedCards } = b('game/cards/Index.js');
+const { Card } = b('game/core/card/Card.js');
 
 const scheduler = {
     setTimeout: () => ({ cancel: () => undefined }),
@@ -54,6 +55,11 @@ class Env {
         this.cardDataGetter = new UnitTestCardDataGetter(cardJsonDir);
         this.mockNames = new Set(require(path.join(cardJsonDir, '_mockCardNames.json')));
         this._index = null;
+    }
+
+    /** forceteki's rule (Card.isImplemented): the card has a class, or no ability text beyond keywords. */
+    isImplemented(c) {
+        return implementedCards.has(c.id) || implementedCards.has(c.internalName) || !Card.checkHasNonKeywordAbilityText(c);
     }
 
     /** Index of usable cards, built lazily by reading every card json once. */

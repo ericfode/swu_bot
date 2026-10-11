@@ -70,4 +70,9 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
   replays (~1 MB each). `--out` defaults to `/mnt/project-files/results` when it exists, else `results/`.
 - `--vs a,b,c` turns the ladder into a gauntlet: each `--bots` entry plays each `--vs` entry on the same seeds (not each
   other), which is what a parameter sweep needs: `node bot/ladder.js --bots ismcts-b0,ismcts-b1,ismcts-b4 --vs rush,heuristic --games 8`.
+- `--decks <file>` plays fixed deck lists instead of random decks (`decklists.js`; real tournament decks in `decks/`, see
+  `decks/README.md`). Seed s plays deck pair `s mod pairs`; each bot keeps its deck when the seats swap, and every second
+  pass over the pairs swaps the decks between the bots. Index entries then carry `decks: {p1, p2}`. A mirror
+  (`--bots c-clock#a,c-clock#b`) cancels the bots out, so it rates the decks: `analysis/realdeck/compare.js` compares
+  that with human results.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
