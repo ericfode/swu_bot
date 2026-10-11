@@ -84,6 +84,10 @@ as heuristic score + w x learned value, on the same seeds:
 
 With v3 the same blend went 3-7 and 25 x went 1-9, so the gain comes from the better value head.
 
+Ladder `/mnt/project-files/results/learned-ladder-v4/` (9 bots, 8 games a pair, model v4): aggro 59-5, `learned-vh`
+51-13, tempo 43-21, heuristic 40-24, rush 31-33, `learned-v` 25-39, control 22-42, `learned-pi` 15-49, random 2-62.
+`learned-vh` beat every bot but aggro (2-6), including the heuristic 7-1.
+
 ## Limits
 
 - Teacher labels are imitation: `learned-pi` can at best copy the heuristic bot, and it is trained on games where
