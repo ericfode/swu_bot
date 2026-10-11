@@ -7,7 +7,7 @@
  * sample worlds that fit what that level knows, play each one out to the end with fixed policy bots, and record the
  * result. The spread of results at a level is "what the outcome can be, given this much knowledge, for these players".
  *
- *   L0 all-seeing   nothing resampled, real engine RNG: one world, the real future (exact for deterministic bots)
+ *   L0 all-seeing   the real future: how the game itself went on from here (its bots, their memory, its RNG)
  *   L1 engine luck  engine RNG reseeded (mid-game shuffles and random picks). In practice equal to L0: after setup the
  *                   engine RNG is almost never used, and draw luck lives in deck order (L2). Run with a small --l1n.
  *   L2 both hands   both hands known; both deck orders shuffled
@@ -18,7 +18,10 @@
  *   - the L3/L4 redeal is a uniform prior over hands, not the posterior given what the opponent has done (real hands
  *     are filtered by the policy: cheaper, castable), and it knows the opponent's remaining decklist;
  *   - face-down resources, cards revealed by search or hand-peek effects, and known deck-bottom cards are not tracked.
- * The playout bots act only on their own cards and public state, so there is no strategy fusion here. The level means
+ *   - L1-L4 samples start fresh bots and a fresh harness RNG at the checkpoint, so bot memory from before it (rush's
+ *     loop map, a search bot's beliefs) is not carried. Every sampled level shares this, so their gaps compare alike.
+ * The playout bots act only on their own cards and public state, so there is no strategy fusion here; bots that read
+ * hidden cards (omni, ismcts-...-peek) would see each sampled world, so they are refused. The level means
  * are the expected outcome of these bots under each sampler. A gap between levels says how much the outcome depends
  * on that hidden information (predictive value), not what knowing it is worth to a player who could act on it.
  *
@@ -28,9 +31,10 @@
 const path = require('path');
 const fs = require('fs');
 const { Env, seededRng } = require('../env');
-const { makeBot } = require('../players');
+const { makeBot, describeBot } = require('../players');
 
 const LEVELS = ['L0', 'L1', 'L2', 'L3', 'L4'];
+const SAMPLED = LEVELS.slice(1);
 
 function parseArgs(argv) {
     const o = { seed: Number(argv[0] ?? 1), bots: ['rush', 'rush'], n: 48, l1n: 8, at: [0.25, 0.5, 0.75, 0.9], out: null, maxSteps: 4000 };
@@ -64,6 +68,22 @@ const hpLeft = (eg, pid) => {
     const b = eg.player(pid).base;
     return Math.max(0, b.getHp() - b.damage);
 };
+
+/** Winner names at the end, or null if not over. Both bases at 0 is a draw, whatever the engine reports. */
+function finalWinners(eg) {
+    if (!eg.over) {
+        return null;
+    }
+    return eg.ids.every((id) => hpLeft(eg, id) === 0) ? [...eg.names] : eg.winners;
+}
+
+/** 'me' | 'opp' | 'draw' | null (not over), seen from me. */
+function outcome(eg, me) {
+    const w = finalWinners(eg);
+    return !w ? null : w.length !== 1 ? 'draw' : (w[0] === eg.names[eg.ids.indexOf(me)] ? 'me' : 'opp');
+}
+
+const closeBots = (bots) => bots.forEach((b) => b.close?.());
 
 /** Shuffle a player's deck with our own rng (does not touch the engine RNG). */
 function shuffleDeck(pl, rng) {
@@ -116,21 +136,17 @@ function playout(eg, me, botNames, rng, maxSteps) {
     const bots = botNames.map((b) => makeBot(b));
     const opp = eg.ids.find((id) => id !== me);
     let n = 0;
-    while (!eg.over && n < maxSteps) {
-        if (!step(eg, bots, rng)) {
-            break;
+    try {
+        while (!eg.over && n < maxSteps) {
+            if (!step(eg, bots, rng)) {
+                break;
+            }
+            n++;
         }
-        n++;
+    } finally {
+        closeBots(bots);
     }
-    let winner = null;
-    if (eg.over) {
-        const w = eg.winners;
-        winner = w.length !== 1 ? 'draw' : (w[0] === eg.names[eg.ids.indexOf(me)] ? 'me' : 'opp');
-        if (hpLeft(eg, me) === 0 && hpLeft(eg, opp) === 0) {
-            winner = 'draw';
-        }
-    }
-    return { winner, margin: hpLeft(eg, me) - hpLeft(eg, opp), rounds: eg.round, steps: n };
+    return { winner: outcome(eg, me), margin: hpLeft(eg, me) - hpLeft(eg, opp), rounds: eg.round, steps: n };
 }
 
 async function main() {
@@ -147,6 +163,12 @@ async function main() {
 }
 
 async function run(o) {
+    for (const b of o.bots) {
+        const info = describeBot(b);
+        if (info && (info.kind === 'omniscient' || info.profile === 'ismcts-peek')) {
+            throw new Error(`--bots ${b}: this bot reads hidden cards, so in a sampled world it would see the sample`);
+        }
+    }
     const env = new Env();
     env.index();
 
@@ -174,7 +196,8 @@ async function run(o) {
         }
         steps++;
     }
-    const realWinner = g1.eg.over ? g1.eg.winners : null;
+    closeBots(bots1);
+    const realWinner = finalWinners(g1.eg);
     if (!windows.length) {
         throw new Error('the real game had no action windows');
     }
@@ -202,9 +225,10 @@ async function run(o) {
             };
             const mark = g.eg.mark(me);
             const t0 = Date.now();
-            for (const L of LEVELS) {
+            // L0 is filled in from the real continuation once the game ends
+            for (const L of SAMPLED) {
                 const res = [];
-                const reps = L === 'L0' ? 1 : L === 'L1' ? o.l1n : o.n;
+                const reps = L === 'L1' ? o.l1n : o.n;
                 for (let i = 0; i < reps; i++) {
                     g.eg.restore(me, mark);
                     const r = seededRng(`dial-${o.seed}-${steps}-${L}-${i}`);
@@ -220,11 +244,12 @@ async function run(o) {
             g.eg.restore(me, mark);
             cp.ms = Date.now() - t0;
             out.checkpoints.push(cp);
-            const summ = LEVELS.map((L) => {
+            const summ = SAMPLED.map((L) => {
                 const ok = cp.levels[L].filter((x) => x.winner === 'me' || x.winner === 'opp');
                 const bad = cp.levels[L].length - ok.length;
                 return `${L} ${ok.length ? (ok.filter((x) => x.winner === 'me').length / ok.length).toFixed(2) : '-'}${bad ? ` (${bad} err/draw)` : ''}`;
             }).join(' | ');
+            cp.pid = me;
             console.error(`seed ${o.seed} step ${steps} r${cp.round} ${meName}: ${summ}  (${cp.ms} ms, real ${cp.meWonReal == null ? 'n/a' : cp.meWonReal ? 'win' : 'loss'})`);
         }
         if (!step(g.eg, bots, g.rng)) {
@@ -232,7 +257,13 @@ async function run(o) {
         }
         steps++;
     }
-    out.replayMatches = g.eg.over && JSON.stringify(g.eg.winners) === JSON.stringify(realWinner);
+    closeBots(bots);
+    for (const cp of out.checkpoints) {
+        const opp = g.eg.ids.find((id) => id !== cp.pid);
+        cp.levels.L0 = [{ winner: outcome(g.eg, cp.pid), margin: hpLeft(g.eg, cp.pid) - hpLeft(g.eg, opp), rounds: g.eg.round, steps: steps - cp.step }];
+        delete cp.pid;
+    }
+    out.replayMatches = g.eg.over && JSON.stringify(finalWinners(g.eg)) === JSON.stringify(realWinner);
     const json = JSON.stringify(out);
     if (o.out) {
         fs.writeFileSync(o.out, json);
