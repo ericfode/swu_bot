@@ -160,6 +160,8 @@ struct Ctx<'a> {
     my: &'a PlayerView,
     op: &'a PlayerView,
     aspects: Vec<String>,
+    /// Hand cards in the best use of this window's ready resources (action windows only).
+    spend: HashSet<String>,
 }
 
 impl<'a> Ctx<'a> {
@@ -294,6 +296,38 @@ impl<'a> Ctx<'a> {
         17.0 + cost * 1.5
     }
 
+    /// Playable hand cards whose total effective cost uses the most of the ready resources (units break ties).
+    /// Cards it would hold anyway (removal with no target) are left out.
+    fn best_spend(&self, actions: &[Action]) -> HashSet<String> {
+        let mut cands: Vec<(String, i32, f64)> = Vec::new();
+        for a in actions {
+            let Some(c) = a.card.as_ref().filter(|c| c.zone.as_deref() == Some("hand") && c.ctl.as_deref() == Some(self.me)) else { continue };
+            let Some(info) = self.card(a) else { continue };
+            if self.play_score(Some(info)) < 5.0 {
+                continue;
+            }
+            let eff = info.cost() + aspect_penalty(info, &self.aspects);
+            cands.push((c.id.clone(), eff, eff as f64 + if info.is("unit") { 0.5 } else { 0.0 }));
+        }
+        cands.truncate(14);
+        let budget = self.my.res.ready as i32;
+        let (mut best, mut best_mask) = (0.0, 0u32);
+        for mask in 1u32..(1 << cands.len()) {
+            let (mut cost, mut val) = (0, 0.0);
+            for (k, c) in cands.iter().enumerate() {
+                if mask & (1 << k) != 0 {
+                    cost += c.1;
+                    val += c.2;
+                }
+            }
+            if cost <= budget && val > best {
+                best = val;
+                best_mask = mask;
+            }
+        }
+        cands.iter().enumerate().filter(|(k, _)| best_mask & (1 << k) != 0).map(|(_, c)| c.0.clone()).collect()
+    }
+
     fn is_my_leader(&self, id: &str) -> bool {
         self.my.leader.as_ref().is_some_and(|l| l.id == id)
     }
@@ -311,7 +345,16 @@ impl<'a> Ctx<'a> {
         let Some(c) = a.card.as_ref() else { return 0.0 };
         let zone = c.zone.as_deref().unwrap_or("");
         match zone {
-            "hand" => self.play_score(self.card(a)),
+            "hand" => {
+                let s = self.play_score(self.card(a));
+                if self.spend.is_empty() || s < 5.0 {
+                    s
+                } else if self.spend.contains(&c.id) {
+                    s + 8.0
+                } else {
+                    s - 8.0
+                }
+            }
             "resource" => self.play_score(self.card(a)) - 4.0,
             "groundArena" | "spaceArena" => {
                 let Some(u) = self.state.unit(&c.id).filter(|_| c.ctl.as_deref() == Some(self.me)) else { return 3.0 };
@@ -331,7 +374,8 @@ impl<'a> Ctx<'a> {
                 }
             }
             _ if self.is_my_leader(&c.id) => {
-                if self.leader_deploy_ready() { 38.0 } else { 6.0 }
+                // deploying costs nothing and the leader arrives ready: do it first
+                if self.leader_deploy_ready() { 60.0 } else { 6.0 }
             }
             "base" => 5.0,
             _ => 10.0,
@@ -605,7 +649,11 @@ impl Greedy2 {
         if let Some(c) = self.db.find(None, my.base.s.as_deref(), my.base.n.as_deref()) {
             aspects.extend(c.aspects().iter().cloned());
         }
-        Ctx { db: self.db, me, state: &req.state, my, op, aspects }
+        let mut cx = Ctx { db: self.db, me, state: &req.state, my, op, aspects, spend: HashSet::new() };
+        if req.prompt.action_window {
+            cx.spend = cx.best_spend(&req.actions);
+        }
+        cx
     }
 }
 
@@ -717,6 +765,20 @@ mod tests {
         let acts = r#"[{"i":0,"kind":"button","label":"Pass"},{"i":1,"kind":"card","label":"cheap-guy","card":{"id":"h1","zone":"hand","ctl":"p1"}},
                        {"i":2,"kind":"card","label":"wampa","card":{"id":"h2","zone":"hand","ctl":"p1"}},{"i":3,"kind":"card","label":"takedown","card":{"id":"h3","zone":"hand","ctl":"p1"}}]"#;
         assert_eq!(pick(&req(WINDOW, &state("[]", "[]", 0), acts)), 2);
+    }
+
+    #[test]
+    fn spends_resources_fully() {
+        // 5 ready: wampa (4) alone wastes 1; cheap-guy (1) + wampa (4) uses all 5, so the plan holds both
+        let acts = r#"[{"i":0,"kind":"button","label":"Pass"},{"i":1,"kind":"card","label":"cheap-guy","card":{"id":"h1","zone":"hand","ctl":"p1"}},
+                       {"i":2,"kind":"card","label":"wampa","card":{"id":"h2","zone":"hand","ctl":"p1"}}]"#;
+        let st = state("[]", "[]", 0).replace(r#""ready":4,"total":4"#, r#""ready":5,"total":5"#);
+        let r = req(WINDOW, &st, acts);
+        let g = Greedy2::new(db());
+        let empty = PlayerView::default();
+        let cx = g.ctx(&r, &empty);
+        assert_eq!(cx.spend.len(), 2);
+        assert_eq!(pick(&r), 2);
     }
 
     #[test]
