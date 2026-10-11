@@ -1,16 +1,72 @@
 #!/usr/bin/env node
-// Runs perch (the @lakeday/perch semantic linter) against TypeSafe Jev instead of Perch Cloud.
-// Only fills in what the caller has not set:
+// Runs perch (the @lakeday/perch semantic linter) against TypeSafe Jev instead of Perch Cloud,
+// with limits so that every thread can use it without running up Jev requests.
+//
+// Environment, only filled in when the caller has not set it:
 // - PERCH_BASE_URL: the TypeSafe System One endpoint. perch then defaults the model to jev-latest.
 // - PERCH_API_KEY: perch falls back to TYPESAFE_API_KEY. In a Claude Code cloud session any value
 //   works, because the egress proxy injects the real Jev key for api.typesafe.ai.
 // - NODE_USE_ENV_PROXY: Node's fetch ignores HTTPS_PROXY without it, so perch could not reach Jev.
+// - PERCH_JEV_DIR: where the Jev answer cache, the usage ledger and the DISABLED switch live:
+//   /mnt/project-files/perch when that folder exists (so threads share answers and one daily
+//   budget), else .perch/jev in this repo. tools/perch/jev-cache.mjs does the caching and budget.
+//
+// Limits on the commands that ask Jev (scan, coverage, check):
+// - scan and coverage need a scope (a target, --since or --paths); the whole repo needs --full.
+// - --parallel defaults to 8 instead of perch's 32.
+// - One run at a time per checkout, stopped after PERCH_TIMEOUT_MIN minutes (default 15).
+// - PERCH_DISABLED=1, or a file named DISABLED in PERCH_JEV_DIR, skips them and exits 0.
+// `perch usage [days]` sums the ledger.
 'use strict';
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+const repo = path.resolve(__dirname, '../..');
+const env = { ...process.env };
+const shared = '/mnt/project-files';
+const jevDir = env.PERCH_JEV_DIR || (fs.existsSync(shared) ? path.join(shared, 'perch') : path.join(repo, '.perch', 'jev'));
+env.PERCH_CACHE_DIR ||= path.join(jevDir, 'cache');
+env.PERCH_USAGE_DIR ||= path.join(jevDir, 'usage');
+env.PERCH_DAILY_REQUESTS ||= '1000';
+env.PERCH_RUN_REQUESTS ||= '250';
+
+const args = process.argv.slice(2);
+const command = args.find((arg) => !arg.startsWith('-'));
+if (command === 'usage') {
+  printUsage(Number(args[args.indexOf('usage') + 1]) || 1);
+  process.exit(0);
+}
+
+const asksJev = ['scan', 'coverage', 'check'].includes(command);
+let passed = args;
+if (asksJev) {
+  const off = env.PERCH_DISABLED === '1' ? 'PERCH_DISABLED=1' : fs.existsSync(path.join(jevDir, 'DISABLED')) && path.join(jevDir, 'DISABLED');
+  if (off) {
+    console.error(`perch is turned off (${off}); skipped ${command}.`);
+    process.exit(0);
+  }
+  if (args.includes('--force')) env.PERCH_CACHE_READ = '0';
+}
+if ((command === 'scan' || command === 'coverage') && !args.includes('--help') && !args.includes('-h')) {
+  passed = args.filter((arg) => arg !== '--full');
+  const { target, since, paths } = scopeOf(passed.slice(passed.indexOf(command) + 1));
+  const whole = !target || path.resolve(target) === repo;
+  if (whole && !since && !paths && !args.includes('--full')) {
+    console.error(`perch: \`perch ${command}\` with no scope asks Jev about every method in the repo. ` +
+      'Use `npm run lint` (code changed since origin/main), name a path, or add --full.');
+    process.exit(2);
+  }
+  if (since && spawnSync('git', ['rev-parse', '--verify', '--quiet', `${since}^{commit}`]).status !== 0) {
+    console.error(`perch: ${since} is not a commit in this checkout. Run \`git fetch origin main\` first.`);
+    process.exit(2);
+  }
+  if (!passed.some((arg) => arg === '--parallel' || arg.startsWith('--parallel='))) passed = [...passed, '--parallel', '8'];
+}
 
 // The repo's own install first, then a global `npm install -g` next to this node binary.
-const searchPaths = [path.resolve(__dirname, '../..'), path.resolve(process.execPath, '../../lib')];
+const searchPaths = [repo, path.resolve(process.execPath, '../../lib')];
 let bin;
 try {
   bin = require.resolve('@lakeday/perch/bin/perch.mjs', { paths: searchPaths });
@@ -19,7 +75,6 @@ try {
   process.exit(1);
 }
 
-const env = { ...process.env };
 env.PERCH_BASE_URL ||= 'https://api.typesafe.ai/v1/systemone';
 if (!env.PERCH_API_KEY && !env.TYPESAFE_API_KEY && env.CLAUDE_CODE_REMOTE === 'true') {
   env.PERCH_API_KEY = 'injected-by-proxy';
@@ -35,6 +90,93 @@ if ((env.HTTPS_PROXY || env.https_proxy) && !env.NODE_USE_ENV_PROXY) {
   env.NODE_OPTIONS = [env.NODE_OPTIONS, '--disable-warning=UNDICI-EHPA'].filter(Boolean).join(' ');
 }
 
-const run = spawnSync(process.execPath, [bin, ...process.argv.slice(2)], { stdio: 'inherit', env });
+if (asksJev) holdLock(path.join(repo, '.perch', 'wrapper.lock'));
+const minutes = Number(env.PERCH_TIMEOUT_MIN) > 0 ? Number(env.PERCH_TIMEOUT_MIN) : 15;
+const preload = pathToFileURL(path.join(repo, 'tools/perch/jev-cache.mjs')).href;
+const run = spawnSync(process.execPath, ['--import', preload, bin, ...passed], {
+  stdio: 'inherit',
+  env,
+  timeout: asksJev ? Math.round(minutes * 60e3) : undefined,
+});
+if (run.error?.code === 'ETIMEDOUT') {
+  console.error(`perch: stopped after ${minutes} min (PERCH_TIMEOUT_MIN).`);
+  process.exit(1);
+}
 if (run.error) throw run.error;
 process.exit(run.status ?? 1);
+
+/** Target, --since and --paths from the arguments after scan or coverage. */
+function scopeOf(rest) {
+  // perch's flags without a value; every other --flag takes the next argument unless written --flag=value.
+  const switches = new Set(['--force', '--all', '--json', '--verbose', '--closed', '--types', '--wait', '--help', '--full']);
+  const scope = {};
+  for (let i = 0; i < rest.length; i++) {
+    const [flag, value] = rest[i].split(/=(.*)/s);
+    if (!flag.startsWith('-')) scope.target ??= rest[i];
+    else if (value !== undefined) scope[flag.slice(2)] = value;
+    else if (!switches.has(flag) && flag !== '-h') scope[flag.slice(2)] = rest[++i];
+  }
+  return scope;
+}
+
+/** Fails the run when another perch run holds the lock; a lock left by a dead process is taken over. */
+function holdLock(file) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const holder = Number(fs.readFileSync(file, 'utf8'));
+    let alive = false;
+    try {
+      alive = holder > 0 && process.kill(holder, 0);
+    } catch (probe) {
+      alive = probe.code === 'EPERM';
+    }
+    if (alive) {
+      console.error(`perch: another perch run (pid ${holder}) is using this checkout. Wait for it, or delete ${file} if none is running.`);
+      process.exit(1);
+    }
+    fs.writeFileSync(file, String(process.pid));
+  }
+  process.on('exit', () => {
+    try {
+      if (fs.readFileSync(file, 'utf8') === String(process.pid)) fs.rmSync(file);
+    } catch {}
+  });
+}
+
+/** One line per UTC day from the ledger that tools/perch/jev-cache.mjs writes. */
+function printUsage(days) {
+  console.log(`Jev usage in ${env.PERCH_USAGE_DIR} (daily limit ${env.PERCH_DAILY_REQUESTS}, per run ${env.PERCH_RUN_REQUESTS})`);
+  for (let back = days - 1; back >= 0; back--) {
+    const date = new Date(Date.now() - back * 86400e3).toISOString().slice(0, 10);
+    const sum = { runs: 0, asked: 0, hits: 0, refused: 0, input_tokens: 0, output_tokens: 0 };
+    const sessions = new Set();
+    let names = [];
+    try {
+      names = fs.readdirSync(path.join(env.PERCH_USAGE_DIR, date));
+    } catch {}
+    for (const name of names) {
+      let text = '';
+      try {
+        text = fs.readFileSync(path.join(env.PERCH_USAGE_DIR, date, name), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const line of text.split('\n').filter(Boolean)) {
+        let entry;
+        try {
+          entry = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        sum.runs++;
+        sessions.add(entry.session);
+        for (const key of ['asked', 'hits', 'refused', 'input_tokens', 'output_tokens']) sum[key] += entry[key] || 0;
+      }
+    }
+    console.log(`${date}  runs ${sum.runs}  asked ${sum.asked}  cached ${sum.hits}  refused ${sum.refused}  ` +
+      `tokens ${sum.input_tokens} in / ${sum.output_tokens} out  sessions ${sessions.size}`);
+  }
+}

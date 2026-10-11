@@ -56,13 +56,19 @@ npm run lint                 # Perch semantic lint with Jev (see "Linting" below
 [Perch](https://github.com/lakeday-org/perch) (`@lakeday/perch`, a root devDependency) is a semantic linter: it asks TypeSafe's Jev model about each method and reports likely defects with a confidence.
 
 ```bash
-npm install                  # once, at the repo root
-npm run lint                 # scan the repo at HEAD (committed code only); exit 3 = findings
-npm run lint:changed         # only what changed since origin/main
+npm install                  # once, at the repo root (or the cloud setup script installs perch globally)
+npm run lint                 # committed code changed since origin/main; exit 3 = findings
+npm run lint:full            # every method in the repo; only when there is a reason
 npm run perch -- issues      # any perch command: issues, check <file::method>, close <id> --reason ...
+npm run perch -- usage 7     # Jev requests per day, from the shared ledger
 ```
 
+Usage rule: lint is advisory, never a gate. Run `npm run lint` once after committing, before you open or update a PR. Do not re-run it hoping for other answers. Treat findings under ~75% as leads to check, not facts.
+
 - `tools/bin/perch` sets `PERCH_BASE_URL` to TypeSafe System One (model `jev-latest`) and turns on `NODE_USE_ENV_PROXY` when `HTTPS_PROXY` is set. Locally, export `PERCH_API_KEY` or `TYPESAFE_API_KEY`. In Claude Code cloud sessions the egress proxy injects the Jev key, so no key is needed.
+- Limits in the wrapper: `scan` and `coverage` need a scope (a path, `--since` or `--paths`; the whole repo needs `--full`), `--parallel` defaults to 8, one run at a time per checkout, and a 15 minute timeout (`PERCH_TIMEOUT_MIN`).
+- `tools/perch/jev-cache.mjs` caches Jev answers by request content, so unchanged code is free and gets the same verdict every run (fresh answers vary by up to ±0.06). `--force` asks again. It also enforces budgets: `PERCH_RUN_REQUESTS` (default 250) per run and `PERCH_DAILY_REQUESTS` (default 1000) per UTC day for the whole project; over budget, perch stops with HTTP 402.
+- The cache, the usage ledger and the off switch live in `/mnt/project-files/perch/` when that folder exists (shared by all threads), else in `.perch/jev/` (`PERCH_JEV_DIR` overrides). `PERCH_DISABLED=1` or a `DISABLED` file there turns off every Jev command (exit 0).
 - Config is `perch.yaml` (ignores `forceteki/` and generated output; no custom rules yet). Results go to `.perch/` (gitignored, except `.perch/rules/` and `.perch/closed.jsonl`, which are committed).
 - Findings are probabilities, not facts. Read the code before changing it, and `perch close <id> --reason "..."` false positives. `perch ci`, `perch cloud` and `perch login` need Perch Cloud, which this repo does not use.
 

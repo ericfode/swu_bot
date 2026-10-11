@@ -12,9 +12,9 @@
     "viewer": "npm --prefix viewer run build && node viewer/server.cjs",
     "viewer:dev": "npm --prefix viewer run dev",
     "ladder": "node bot/ladder.js",
-    "test": "node --test bot/test/*.test.js",
-    "lint": "node tools/bin/perch scan",
-    "lint:changed": "node tools/bin/perch scan --since origin/main",
+    "test": "node --test bot/test/*.test.js tools/test/*.test.js",
+    "lint": "node tools/bin/perch scan --since origin/main",
+    "lint:full": "node tools/bin/perch scan --full",
     "perch": "node tools/bin/perch"
   },
   "devDependencies": {
