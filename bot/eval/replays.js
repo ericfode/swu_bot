@@ -6,7 +6,7 @@
  *
  *   node bot/eval/replays.js --from /mnt/project-files/results/omni-ref-1,... --out data/omni [--every 2]
  *
- * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state}) and <out>/decks/0.jsonl. Positions
+ * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state, hidden?}) and <out>/decks/0.jsonl. Positions
  * are the action-window checkpoints arena.js records (see replayPositions). Decklists are redrawn from the seed the way
  * match.js draws them and checked (see deckLists). Draws, errors and decided boards are skipped. A game id already seen
  * gets the source's position in --from and its folder name as a prefix; the same game recorded twice is kept once.
@@ -40,7 +40,8 @@ function engineRev() {
 const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
 
 /**
- * Both decklists as set codes. A header with `decks` (spec/replay-format.md) gives them exactly. Older replays only name
+ * Both decklists as set codes. A header with `decks` (spec/replay-format.md), or an imported game's
+ * `source.decklists` with both full lists, gives them exactly. Older replays only name
  * the decks, so they are redrawn from the seed the way match.js draws them; that depends on the engine's card pool and
  * env.js's deck builder, so a redraw is trusted only when the header names this engine commit, the deck names match,
  * and at every step the cards in each player's hand and discard pile (owner's real deck cards only, no tokens) fit
@@ -52,6 +53,14 @@ function deckLists(seed, header, lines = []) {
     }
     if (header.decks?.p1?.deck && header.decks?.p2?.deck) {
         return { p1: flat(header.decks.p1), p2: flat(header.decks.p2) };
+    }
+    // imported human games (importer/karabast.js) keep lobby lists here; often only the recorder's own list is full
+    const lobby = header.source?.decklists;
+    if (lobby?.p1?.cards && lobby?.p2?.cards) {
+        return { p1: flat({ deck: lobby.p1.cards }), p2: flat({ deck: lobby.p2.cards }) };
+    }
+    if (header.source) {
+        return null; // an imported game: no seed to redraw from
     }
     const rev = engineRev();
     if (!header.engine || !rev || !rev.startsWith(header.engine)) {
@@ -94,19 +103,21 @@ function replayPositions(file, id, every = 1) {
         return null;
     }
     const steps = lines.filter((l) => l.t === 'step');
+    // seats whose hand was never captured (one-seat imports): their hands are placeholders, so fit.js and score.js
+    // skip those judges and the objective view
+    const hidden = lines[0]?.source?.hiddenHands ?? [];
     const out = [];
     let seen = 0;
     for (let i = 0; i + 1 < steps.length; i++) {
         const prev = steps[i],
             e = steps[i + 1];
         if (e.prompt?.startsWith('actionWindow') && prev.state?.phase === 'action' && seen++ % every === 0 && terminal(prev.state, 'p1') === null) {
-            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state });
+            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, ...(hidden.length ? { hidden } : {}) });
         }
     }
-    // the same game recorded twice (a folder listed twice, or a rerun with the same seed and bots) has the same key
-    const h = lines[0] ?? {};
-    const key = JSON.stringify([h.seed, h.engine, (h.players ?? []).map((p) => [p.bot, p.deck]), end.winner, steps.length]);
-    return { positions: out, decks: deckLists(h.seed, lines[0], lines), key };
+    // the same game recorded twice (a folder listed twice, or a copied replay) has the same content digest
+    const key = require('crypto').createHash('sha1').update(fs.readFileSync(file)).digest('hex');
+    return { positions: out, decks: deckLists(lines[0]?.seed, lines[0], lines), key };
 }
 
 function main() {

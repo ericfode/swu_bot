@@ -54,6 +54,9 @@ function scorePositions(ev, positions) {
         const b = bucketOf(pos.round);
         const rk = `R${b[0]}-${b[1] === 99 ? '' : b[1]}`;
         for (const judge of ['p1', 'p2']) {
+            if (pos.hidden?.includes(judge)) {
+                continue;
+            }
             const p = ev.predict(pos.state, judge, { view: 'subjective', decks: pos.decks, toAct: pos.toAct });
             const y = pos.winner === judge ? 1 : 0;
             for (const key of ['all', `src:${pos.source}`, `round:${rk}`]) {
@@ -63,6 +66,9 @@ function scorePositions(ev, positions) {
             c.n++;
             c.p += p;
             c.y += y;
+        }
+        if (pos.hidden?.length) {
+            continue;
         }
         const p = ev.predict(pos.state, 'p1', { view: 'objective', decks: pos.decks, toAct: pos.toAct });
         const y = pos.winner === 'p1' ? 1 : 0;

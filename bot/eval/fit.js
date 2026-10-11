@@ -26,6 +26,9 @@ function frames(positions, withDecks) {
     const rows = [];
     for (const p of positions) {
         for (const judge of ['p1', 'p2']) {
+            if (p.hidden?.includes(judge)) {
+                continue;
+            }
             const fr = frameFeatures(p.state, judge, { view: 'subjective', decks: withDecks ? p.decks : null, toAct: p.toAct });
             rows.push({ fr, y: p.winner === judge ? 1 : 0, id: p.id, source: p.source });
         }
