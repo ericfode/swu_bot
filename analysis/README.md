@@ -38,7 +38,7 @@ node analysis/analyze.js replays/demo/games/<game>.jsonl --out analysis/out/game
 node analysis/analyze.js replays/demo --batch           # whole tournament as one Message Batch, half price
 node analysis/report.js analysis/out/game.json --baseline analysis/out/game.heuristic.json
 # with the shared game viewer (Holotable kit) embedded and synced to the curves
-node analysis/report.js analysis/out/game.json --kit /mnt/project-files/viewer-kit/swu-viewer-kit.js
+node analysis/report.js analysis/out/game.json --kit /mnt/project-files/viewer-kit/swu-viewer-kit.js --art-pack /mnt/project-files/viewer-kit/art-pack-demo.json
 
 # free and offline: the heuristic evaluator, same output format
 node analysis/analyze.js analysis/fixtures/fixture-game.jsonl --evaluator heuristic --out analysis/out/fixture.heuristic.json
