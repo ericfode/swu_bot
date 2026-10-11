@@ -150,7 +150,7 @@ function build(runDirs, thoughtsDir, prev) {
             items: newest.top.map((x) => ({ label: x.label, value: x.visits })) });
     }
     widgets.push({ type: 'text', title: 'Findings so far',
-        body: 'Beta changes the moves but almost never the winner: on the same decks, beta 0 and beta 4 had the same winner in 24 of 24 games. The peek control, which sees the real hidden cards, wins no more often, and neither do tempo/aggro leaf scores or a 2.3x bigger search. Hidden information is not the bottleneck yet; the position value and the opponent model are. Fitted position evaluators as leaf values (-v, from the position-evaluation bench) did not beat the plain heuristic either: plain ismcts-b1 wins 8/24; race 12/24 with gen-1 models but 8/24 with gen-2, linear-deck 7 then 8, mlp-deck 4 then 6, linear 5. With 24 games a gap under about 5 wins is noise. Next: fit an evaluator on the states ISMCTS actually scores (research/position-eval/ismcts-leaves).' });
+        body: 'Beta changes the moves but almost never the winner: on the same decks, beta 0 and beta 4 had the same winner in 24 of 24 games. The peek control, which sees the real hidden cards, wins no more often, and neither do tempo/aggro leaf scores or a 2.3x bigger search. Hidden information is not the bottleneck yet; the position value and the opponent model are. Position models from the evaluation bench fitted on real game positions (gen 1-2) did not help. Fitted on the positions ISMCTS itself scores (gen 3-4), the linear model does: on fresh seeds 101-112, ismcts-b1-vlinear-deck-g4 wins 35/72 vs 17/72 for plain ismcts-b1 (paired +22/-4, p=0.0005), including 11/24 vs tempo. The mlp models do not carry over (mlp-deck-g4 15/72).' });
     if (newest?.tree) {
         widgets.push({ type: 'tree', title: `${newest.bot}: search tree at its last decision`,
             caption: 'Root = the real position. Children = the end of one imagined world after that action and the opponent\'s reply (hidden cards are sampled, not real). Value = P(p1 wins).',
@@ -184,8 +184,8 @@ function build(runDirs, thoughtsDir, prev) {
             { text: 'Sweep beta 0/1/4 and the peek control vs rush, heuristic, tempo', state: 'done' },
             { text: 'Try tempo/aggro leaf evaluations and a bigger budget', state: 'done' },
             { text: 'Eric picked "better position value": score leaves with the bench evaluators (-v)', state: 'done' },
-            { text: 'Dump ISMCTS leaf states so the bench can fit on them', state: 'doing' },
-            { text: 'Rerun with a leaf-fitted evaluator and more games per pairing', state: 'todo' }
+            { text: 'Dump ISMCTS leaf states so the bench can fit on them', state: 'done' },
+            { text: 'Rerun with leaf-fitted evaluators on fresh seeds: linear-deck-g4 doubles the win rate', state: 'done' }
         ],
         thoughts: thoughts.slice(-40),
         widgets
