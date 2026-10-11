@@ -20,6 +20,7 @@ K = 24  # max legal actions per decision kept for policy training (larger prompt
 def load(dirs):
     parts = []
     versions = set()
+    seen = set()  # games already loaded, across every folder (see the repeat check below)
     for d in dirs:
         for w in sorted(glob.glob(os.path.join(d, 'w*'))) or [d]:
             if not os.path.exists(os.path.join(w, 'meta.i32')):
@@ -36,10 +37,11 @@ def load(dirs):
             sn = np.fromfile(os.path.join(w, 'Sn.f32'), dtype=np.float32)[: n * S].reshape(n, S)
             p = np.fromfile(os.path.join(w, 'P.f32'), dtype=np.float32)[: n * P].reshape(n, P)
             acts = acts[: m * A].reshape(m, A)
-            # gen.js before the resume fix replayed its first seeds after a restart: drop a game that repeats an earlier one
-            # (same seed, length, winner and rounds; games from other sources can share a seed but not all of these)
-            # a missing journal or a torn last line (worker still writing or killed) only means fewer games are checked
-            seen, repeats = set(), set()
+            # drop a game that repeats one already loaded, in this folder or an earlier one: gen.js before the resume fix
+            # replayed its first seeds after a restart, and workers given overlapping seed ranges play the same games.
+            # Same seed, length, winner and rounds; games from other sources can share a seed but not all of these.
+            # A missing journal or a torn last line (worker still writing or killed) only means fewer games are checked.
+            repeats = set()
             journal = os.path.join(w, 'games.jsonl')
             for line in open(journal) if os.path.exists(journal) else []:
                 try:
@@ -54,9 +56,11 @@ def load(dirs):
             if not keep.all():
                 print(f'{w}: dropping {len(set(meta[~keep, 0]))} games that repeat an earlier game')
                 s, sn, p, meta, acts = s[keep], sn[keep], p[keep], meta[keep], acts[np.repeat(keep, meta[:, 4])]
+            versions.add(f.get('version'))
+            if not len(meta):
+                continue
             gid = meta[:, 0].astype(np.int64) + 1_000_000 * len(parts)  # unique game id across worker dirs
             parts.append(dict(S=s, Sn=sn, P=p, A=acts, meta=meta, gid=gid, dims=(S, P, A)))
-            versions.add(f.get('version'))
     assert parts, 'no data found'
     # the model records one feature version (bots encode its inputs that way), so the data must agree
     assert len(versions) == 1, f'data mixes feature versions {sorted(versions, key=str)}: train on one version'
