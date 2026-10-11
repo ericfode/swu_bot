@@ -10,7 +10,7 @@
  * count, same moves played). One JSON line per action window:
  *   { game, seed, bots, i, windows, fromEnd, round, toMove, winner, proven, proofDepth, solveTried,
  *     omniScore, state, deckOrder }
- * - winner: who won the game (a noisy label: the players were heuristic bots, not perfect).
+ * - winner: who won the game (a noisy label: the players were imperfect bots).
  * - proven: 'p1' | 'p2' when the prover found a forced win for that side within proofDepth action windows
  *   (an exact label under the search's move model), null when it found none in budget or was not run there.
  * - state: recorder snapshot (both hands visible); deckOrder: both draw decks, top first (omniscient view).
@@ -26,15 +26,15 @@ const path = require('path');
 const { Env, seededRng } = require('../env');
 const { snapshot } = require('../recorder');
 const { evaluate } = require('./evaluate');
-const { createRandomBot } = require('../players/random');
 const { HeuristicBot } = require('../players/heuristic');
+const { makeBot: registryBot } = require('../players');
 const { OmniSearch } = require('./search');
 
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')));
 
 function makeBot(name) {
     const profile = flags.has('--legacy') ? { side: { legacyDanger: true } } : null;
-    return /^heuristic/.test(name) ? new HeuristicBot(name, { profile }) : createRandomBot(name);
+    return profile && /^heuristic/.test(name) ? new HeuristicBot(name, { profile }) : registryBot(name);
 }
 
 /** Prover result at the current window of `pid`; the engine is left where it was. */
@@ -92,10 +92,6 @@ async function main() {
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) {
         const g = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
         if (!g.winner || !g.windowsList) {
-            continue;
-        }
-        if (g.bots.some((b) => !/^(heuristic|random)/.test(b))) {
-            console.log(`${f}: skipped (bots ${g.bots}) - replay only supports heuristic/random`);
             continue;
         }
         const ws = await replay(env, g);

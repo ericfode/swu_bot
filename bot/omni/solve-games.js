@@ -23,23 +23,12 @@ const path = require('path');
 const { Env, seededRng } = require('../env');
 const { OmniSearch } = require('./search');
 const { evaluate } = require('./evaluate');
-const { createRandomBot } = require('../players/random');
-const { HeuristicBot } = require('../players/heuristic');
-const { OmniscientBot } = require('../players/omniscient');
+// any bot of the shared registry (bot/players/index.js) can play the games that get solved
+const { makeBot } = require('../players');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i >= 0 ? process.argv[i + 1] : dflt;
-}
-
-function makeBot(name) {
-    if (/^heuristic/.test(name)) {
-        return new HeuristicBot(name);
-    }
-    if (/^omni/.test(name)) {
-        return new OmniscientBot(name, { blind: /-blind/.test(name) });
-    }
-    return createRandomBot(name);
 }
 
 function seedList(spec) {
