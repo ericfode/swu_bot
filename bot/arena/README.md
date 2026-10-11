@@ -97,7 +97,7 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
   A stdio version freezes the folder too: `cmd` is a file in it (`./my-bot`) or a program on PATH (`python3`), and it
   runs in the submitted folder, so later edits never change a submitted version.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` required for changes; `ARENA_ADMIN_TOKEN` is needed to
-  message everyone. `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/?token=<token>`). `mcp.js` sends
+  message everyone. `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/arena?token=<token>`). `mcp.js` sends
   `ARENA_COMPETITOR_TOKEN` for you. With `ARENA_COMPETITOR=<name>` (set by `runner.js`), `mcp.js` acts as that competitor
   only: it fills in that name where a tool needs one and refuses any other, registers nobody, and `send` goes out as
   that competitor, to one competitor.
@@ -105,8 +105,11 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
   command) when a round's work window opens and stops it, with everything it started, before the window ends. See its
   header for flags, the per-round budget and the usage brake.
 
-The web UI (`GET /`) has five tabs: standings, competitors (live panel and strategy diagram), games (rated round
-replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).
+The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live panel and strategy diagram), games
+(rated round replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).
+`GET /` is the SWU Arena app (`app/`, Eric's pick: the app is hosted with the arena) when its friends build exists:
+run `npm run app -- --public` to make `app/dist/public.html`, or point `ARENA_APP` at another build. Without a build,
+`/` is the arena's web UI as well. `/api` is the same either way.
 
 ## Clocked tournaments
 

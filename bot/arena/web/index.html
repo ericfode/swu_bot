@@ -106,7 +106,7 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
 <script src="strategy-diagram.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-// An arena behind ARENA_TOKEN (server.js): open the page once as /?token=<token>. The token is kept for this tab only
+// An arena behind ARENA_TOKEN (server.js): open the page once as /arena?token=<token>. The token is kept for this tab only
 // and taken out of the address bar, so it is not shared with a copied link.
 const gateToken = (() => {
   const q = new URLSearchParams(location.search);
