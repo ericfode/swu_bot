@@ -102,6 +102,9 @@ pub struct Card {
     pub deployed: bool,
     pub epic_used: bool,
     pub shield: CardId,
+    pub experience: CardId,
+    /// Token linked-list pointer; only token cards use it.
+    pub next_token: CardId,
 }
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Player {
@@ -131,6 +134,11 @@ pub enum Decision {
     Ambush,
     TriggerOrder,
     ShieldOrder,
+    AbilityMenu,
+    AbilityTarget,
+    AbilityOptional,
+    AbilityNoEffect,
+    AbilityDistribute,
     Terminal,
 }
 
@@ -153,6 +161,16 @@ pub struct State {
     pub after_attack_triggers: u8,
     pub pending_triggers: u8,
     pub trigger_context: u8,
+    pub pending_programs: u16,
+    pub after_attack_programs: u16,
+    /// Zero means no IR continuation; otherwise program index plus one.
+    pub ability_program: u16,
+    pub ability_pc: u8,
+    pub ability_target: CardId,
+    pub ability_result: u16,
+    pub ability_succeeded: bool,
+    pub ability_return: u8,
+    pub ability_committed: bool,
     pub resource_done: [bool; 2],
     pub resource_selected: [CardId; 2],
     /// 0 ongoing, 1 p1, 2 p2, 3 draw.
@@ -177,6 +195,15 @@ impl Default for State {
             after_attack_triggers: 0,
             pending_triggers: 0,
             trigger_context: 0,
+            pending_programs: 0,
+            after_attack_programs: 0,
+            ability_program: 0,
+            ability_pc: 0,
+            ability_target: 0,
+            ability_result: 0,
+            ability_succeeded: false,
+            ability_return: 0,
+            ability_committed: false,
             resource_done: [false; 2],
             resource_selected: [0; 2],
             outcome: 0,
@@ -242,6 +269,15 @@ impl State {
         put(self.pending_triggers as u64);
         put(self.trigger_context as u64);
         put(self.outcome as u64);
+        put(self.pending_programs as u64);
+        put(self.after_attack_programs as u64);
+        put(self.ability_program as u64);
+        put(self.ability_pc as u64);
+        put(self.ability_target as u64);
+        put(self.ability_result as u64);
+        put(self.ability_succeeded as u64);
+        put(self.ability_return as u64);
+        put(self.ability_committed as u64);
         for n in 0..2 {
             put(self.resource_done[n] as u64);
             put(self.resource_selected[n] as u64);
@@ -254,6 +290,8 @@ impl State {
             .skip(1)
         {
             put(idx as u64);
+            put(c.experience as u64);
+            put(c.next_token as u64);
             put(c.def as u64
                 | ((c.present as u64) << 16)
                 | ((c.owner.index() as u64) << 17)
