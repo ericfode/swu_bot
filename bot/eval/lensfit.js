@@ -16,6 +16,7 @@ const path = require('path');
 const { readJsonl } = require('./data');
 const { loadEvaluator, EVALUATORS } = require('./evaluators');
 const { terminal } = require('./features');
+const { deckLists } = require('./replays');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -104,24 +105,6 @@ function firstLine(file) {
     return JSON.parse(buf.slice(0, n).toString().split('\n')[0]);
 }
 
-let envCache = null;
-const env = () => (envCache ??= new (require('../env').Env)());
-
-/**
- * Both decklists (set codes, for the -deck models), redrawn the way match.js draws them from the seed. Returns null
- * when the redrawn deck names do not match the replay header (another card pool or deck builder).
- */
-function deckLists(e, seed, header) {
-    const { seededRng } = require('../env');
-    const rng = seededRng('bot' + seed);
-    const d = [e.randomDeck(rng), e.randomDeck(rng)];
-    if (header?.t !== 'header' || d.some((x, i) => x.metadata.name !== header.players?.[i]?.deck)) {
-        return null;
-    }
-    const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
-    return { p1: flat(d[0]), p2: flat(d[1]) };
-}
-
 function main() {
     const lensDir = arg('lens', '/mnt/project-files/dashboard/lens');
     const field = arg('field', 'edge');
@@ -147,7 +130,7 @@ function main() {
             continue;
         }
         const steps = new Map(lines.filter((l) => l.t === 'step').map((l) => [l.n, l]));
-        const decks = deckLists(env(), lens.seed, lines[0]);
+        const decks = deckLists(lens.seed, lines[0]);
         for (const s of lens.steps) {
             // lens step n = the board after step n's move, so the next actor is step n+1's pid (as in arena.js)
             const st = steps.get(s.n)?.state;

@@ -25,12 +25,32 @@ function arg(name, dflt) {
 let envCache = null;
 const env = () => (envCache ??= new (require('../env').Env)());
 
-/** Both decklists as set codes, redrawn from the seed; null when the names do not match the header. */
+let revCache;
+/** Full commit of the forceteki checkout the decks are redrawn with (null when git cannot tell). */
+function engineRev() {
+    if (revCache === undefined) {
+        try {
+            revCache = require('child_process').execFileSync('git', ['-C', path.join(__dirname, '..', '..', 'forceteki'), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+        } catch {
+            revCache = null;
+        }
+    }
+    return revCache;
+}
+
+/**
+ * Both decklists as set codes, redrawn from the seed. The draw depends on the engine's card pool, so it is trusted only
+ * when the replay header names the same engine commit as this checkout and the deck names match; otherwise null.
+ */
 function deckLists(seed, header) {
+    const rev = engineRev();
+    if (header?.t !== 'header' || !header.engine || !rev || !rev.startsWith(header.engine)) {
+        return null;
+    }
     const { seededRng } = require('../env');
     const rng = seededRng('bot' + seed);
     const d = [env().randomDeck(rng), env().randomDeck(rng)];
-    if (header?.t !== 'header' || d.some((x, i) => x.metadata.name !== header.players?.[i]?.deck)) {
+    if (d.some((x, i) => x.metadata.name !== header.players?.[i]?.deck)) {
         return null;
     }
     const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
@@ -60,8 +80,8 @@ function main() {
     const from = arg('from', '').split(',').filter(Boolean);
     const out = arg('out', null);
     const every = Number(arg('every', '2'));
-    if (!from.length || !out) {
-        console.error('usage: node bot/eval/replays.js --from <tournament dir>[,...] --out <dataset dir> [--every N]');
+    if (!from.length || !out || !Number.isInteger(every) || every < 1) {
+        console.error('usage: node bot/eval/replays.js --from <tournament dir>[,...] --out <dataset dir> [--every N, a positive integer]');
         process.exit(2);
     }
     for (const d of ['positions', 'decks']) {
@@ -105,4 +125,4 @@ function main() {
 if (require.main === module) {
     main();
 }
-module.exports = { replayPositions, deckLists };
+module.exports = { replayPositions, deckLists, engineRev };
