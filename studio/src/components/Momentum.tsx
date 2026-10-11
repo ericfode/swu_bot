@@ -10,6 +10,8 @@ import { isSentinel, type ScoreSeries, type ScoreSource, type ScoreStep } from '
 import { fmtSigned, pct } from '../data/format';
 import { rowColor, sig3 } from '../data/terms';
 import { CHANCE_WORD, setLabel, shortSet } from './ScoreBadge';
+import { SpotLanes } from './Spots';
+import type { SpotTimeline } from '../data/atlas';
 
 export type LaneKey = 'llm' | 'base' | 'power' | 'score' | 'cards';
 /** A lane key as saved by earlier builds ('edge' was the score lane), or null for an unknown one. */
@@ -80,6 +82,8 @@ export interface MomentumProps {
     height?: number;
     /** pivotal actions to pin above the curves */
     markers?: Action[];
+    /** the Strategy Atlas spots over the game, drawn as a lane per seat under the curves (null: none) */
+    spots?: SpotTimeline | null;
     /** Step.n per step index, for labels */
     stepN?: (i: number) => number;
     onSeek: (n: number) => void;
@@ -179,7 +183,7 @@ function ScoreTip({ source, st, chance }: { source: ScoreSource; st: ScoreStep; 
 }
 
 /** The game at a glance: chosen curves over every decision, round bands, and the playhead. Click or drag to seek. */
-export function Momentum({ data: facts, series, others = [], rounds, step, lanes, bots, onSeek, onHover, evals, height = 160, markers = [], stepN = (i) => i }: MomentumProps) {
+export function Momentum({ data: facts, series, others = [], rounds, step, lanes, bots, onSeek, onHover, evals, height = 160, markers = [], spots = null, stepN = (i) => i }: MomentumProps) {
     // a refused file draws nothing; an edge at a search sentinel (never a real lead) never reaches an axis
     const live = series && !series.source.error ? series : null;
     const src = live?.source ?? null;
@@ -418,6 +422,7 @@ export function Momentum({ data: facts, series, others = [], rounds, step, lanes
                     ))}
                 </div>
             </div>
+            {spots && <SpotLanes tl={spots} last={last} inset={inset} step={step} bots={bots} onSeek={onSeek} stepN={stepN} />}
             {showScore && switches.length > 0 && <WeightsStrip series={live!} last={last} inset={inset} stepN={stepN} />}
             {cmp.length > 0 && (
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 pt-1 text-[11px] text-dim" aria-label="Compare legend">

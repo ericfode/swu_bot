@@ -917,3 +917,78 @@ input[type="range"].scrub {
         animation-duration: 0.01ms !important;
     }
 }
+
+/* ---------- Strategy Atlas spots (src/components/Spots.tsx; icons, words and colours from the Atlas kit) ---------- */
+.spot-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px 4px;
+    max-width: 18rem;
+    min-height: 24px;
+}
+.spot-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 8px 0 2px;
+    border-radius: 7px;
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: color-mix(in oklab, var(--g) 55%, var(--color-fg));
+    background: color-mix(in oklab, var(--g) 16%, var(--color-ink));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--g) 50%, transparent);
+    cursor: help;
+}
+.spot-ico {
+    display: inline-flex;
+    width: 32px;
+    height: 20px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--panel);
+}
+.spot-ico .spot-svg {
+    width: 100%;
+    height: 100%;
+}
+.spot-lane {
+    position: relative;
+    height: 20px;
+    border-radius: 3px;
+    background: #ffffff08;
+    box-shadow: inset 2px 0 0 var(--seat);
+}
+.spot-bar {
+    position: absolute;
+    height: 2px;
+    border-radius: 1px;
+    opacity: 0.55;
+}
+.spot-mark {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    margin: -3.5px 0 0 -3.5px;
+    transform: rotate(45deg);
+    background: var(--g, var(--color-dim));
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    z-index: 1;
+}
+.spot-mark.counted {
+    box-shadow: 0 0 0 1.5px var(--color-bg), 0 0 0 2.5px var(--color-fg);
+}
+.spot-mark.ahead {
+    opacity: 0.55;
+}
+.spot-mark:hover,
+.spot-mark:focus-visible {
+    z-index: 2;
+    outline: none;
+    box-shadow: 0 0 0 1.5px var(--color-bg), 0 0 0 3px var(--color-gold);
+}

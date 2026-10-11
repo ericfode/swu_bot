@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BrainCircuit, Coins, Flag, Layers, Library, Skull, Sparkle } from 'lucide-react';
 import { Card, CardBack, regretTag, type CardValue, type Focus } from './Card';
@@ -11,6 +11,8 @@ import { rowColor, type RowDef } from '../data/terms';
 import { digitsOf, displayScales, fmtSigned, fmtValue, pct, unitText } from '../data/format';
 import { PartIcon } from './TermIcon';
 import { badgeText, ScoreBadge } from './ScoreBadge';
+import { SpotChips } from './Spots';
+import { spotsOf, type SeatSpots } from '../data/atlas';
 
 interface BoardProps {
     state: Snapshot;
@@ -27,6 +29,8 @@ interface BoardProps {
     score?: ScoreView | null;
     /** the Card values switch: card chips, totals and search tags (default true; GameViewer passes its button's state) */
     values?: boolean;
+    /** the Strategy Atlas spots each seat is in, as chips by its base (default true) */
+    spots?: boolean;
 }
 
 const spring = { type: 'spring', stiffness: 420, damping: 32 } as const;
@@ -280,7 +284,7 @@ function totalTitle(view: ScoreView, seat: Seat, bot: string): string {
     return `${bot}'s total in ${source.label}: ${what}.\n${badgeText(source, step)}`;
 }
 
-function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl }: { seat: Seat; p: PlayerSnap; prev: PlayerSnap | null; bot: string; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; onHiLeader: (on: boolean) => void; hqRef: RefObject<HTMLDivElement | null>; sl: SeatLens | null }) {
+function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl, spots }: { seat: Seat; p: PlayerSnap; prev: PlayerSnap | null; bot: string; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; onHiLeader: (on: boolean) => void; hqRef: RefObject<HTMLDivElement | null>; sl: SeatLens | null; spots: string[] | null }) {
     const left = Math.max(0, p.base.hp - p.base.d);
     const frac = left / p.base.hp;
     const R = 34;
@@ -335,6 +339,7 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl 
                     )}
                 </div>
             </div>
+            {spots && <SpotChips ids={spots} bot={bot} />}
         </div>
     );
 }
@@ -375,7 +380,7 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
     );
 }
 
-function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens | null }) {
+function Side({ seat, props, sl, spots }: { seat: Seat; props: BoardProps; sl: SeatLens | null; spots: string[] | null }) {
     const { state, prev, ids, prevIds, bots, actor, step, onFocus, onLeave } = props;
     const p = state.players[seat];
     const pp = prev?.players[seat] ?? null;
@@ -390,7 +395,7 @@ function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens
         <div ref={rowRef} className={`grid gap-2 grid-cols-[minmax(0,var(--gw,1fr))_minmax(0,var(--sw,1fr))] items-stretch ${stack ? '' : '@2xl:grid-cols-[minmax(0,var(--gw,1fr))_auto_minmax(0,var(--sw,1fr))]'}`} style={cols}>
             <Lane label="ground" seat={seat} arena="ground" units={p.ground} ids={ids[seat].ground} prevUnits={pp?.ground ?? null} prevIds={prevIds?.[seat].ground ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
             <div className={`relative px-2 py-1 flex flex-col items-center justify-center col-span-2 order-first ${stack ? '' : '@2xl:col-span-1 @2xl:order-none'}`}>
-                <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} onHiLeader={setHiLeader} hqRef={hqRef} sl={sl} />
+                <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} onHiLeader={setHiLeader} hqRef={hqRef} sl={sl} spots={spots} />
                 {hasInit && (
                     <motion.div layoutId="initiative" transition={spring} title={sl && has(sl, 'side.initiative') ? rowTitle(sl, 'side.initiative', `Initiative: ${fmtOf(sl, sl.side.initiative)} ${sl.view.source.unitText}`) : 'Initiative'}
                         className="absolute -left-1 top-1 flex flex-col items-center gap-0.5">
@@ -557,9 +562,11 @@ function BoardImpl(props: BoardProps) {
         const mk = (seat: Seat): SeatLens => ({ seat, side: seats[seat], search: search?.by === seat ? search : null, max, view, bots });
         return { p1: mk('p1'), p2: mk('p2') };
     })();
+    // read straight from the snapshot by the Atlas kit's own rules
+    const spots: SeatSpots | null = useMemo(() => (props.spots === false ? null : spotsOf(state)), [state, props.spots]);
     return (
         <div className="flex flex-col gap-2">
-            <Side seat="p2" props={props} sl={sls?.p2 ?? null} />
+            <Side seat="p2" props={props} sl={sls?.p2 ?? null} spots={spots?.p2 ?? null} />
             {view ? <ScoreLine view={view} bots={bots} state={state} values={values} /> : (
                 <div className="flex items-center gap-3 px-2">
                     <div className="h-px flex-1 bg-gradient-to-r from-transparent via-p2/40 to-transparent" />
@@ -568,7 +575,7 @@ function BoardImpl(props: BoardProps) {
                     <div className="h-px flex-1 bg-gradient-to-r from-transparent via-p1/40 to-transparent" />
                 </div>
             )}
-            <Side seat="p1" props={props} sl={sls?.p1 ?? null} />
+            <Side seat="p1" props={props} sl={sls?.p1 ?? null} spots={spots?.p1 ?? null} />
         </div>
     );
 }

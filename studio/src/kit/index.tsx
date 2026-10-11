@@ -67,6 +67,12 @@ export interface MountOptions {
     onScore?: (key: string) => void;
     /** estimate Omni v1 from the board for a game with no lens file (default true); false shows no score for it */
     estimate?: boolean;
+    /**
+     * the Strategy Atlas spots each seat is in ("Board behind", "Near death", ...): chips by each base and a lane per seat
+     * under the timeline, by the Atlas kit's rules (window.AtlasKit when the page loaded it, else the built-in copy).
+     * Default true; false hides them
+     */
+    spots?: boolean;
     /** card values on (true) or off (false) for every game; default: on when the chosen score has file values for the game, off for an estimate */
     showLens?: boolean;
     /** start with card art (true, default) or generated tiles (false) */
@@ -251,7 +257,7 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
         root.render(
             <SettingsProvider store={settings}><MotionConfig reducedMotion="user">
                 <GameViewer key={key} game={game} live={!game.end} startStep={opts.step ?? (opts.stepN != null ? indexOfN(opts.stepN) : 0)} evals={evals}
-                    lens={lens} registry={registry} score={scoreKey} onScore={onScore} estimate={opts.estimate} layout={opts.layout ?? 'full'} onStep={opts.onStep}
+                    lens={lens} registry={registry} score={scoreKey} onScore={onScore} estimate={opts.estimate} spots={opts.spots !== false} layout={opts.layout ?? 'full'} onStep={opts.onStep}
                     control={(c) => {
                         ctl = c;
                         if (pending != null) {
@@ -432,9 +438,9 @@ function KitBoard({ lens, ...props }: Omit<ComponentProps<typeof Board>, 'score'
  * `lens` (card values): true draws the Omni v1 estimate from the board; `{file, n}` draws the step with Step.n n of a
  * swu-lens/1 file, with that file's label, rules and chance (pass the snapshot of that step); a bare lens step (one entry
  * of a file's steps) is drawn as "lens step (evaluator unknown)": six rows, no rules and no chance, since a step alone
- * doesn't say which score it is (pass `{file, n}` to keep its label).
+ * doesn't say which score it is (pass `{file, n}` to keep its label). `spots: false` hides the Atlas spot chips by each base.
  */
-export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep | FileStep; cardText?: CardTextFile | string } = {}) {
+export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep | FileStep; cardText?: CardTextFile | string; spots?: boolean } = {}) {
     if (opts.fonts !== false) {
         ensureFonts();
     }
@@ -453,7 +459,7 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
         const ids = trackUnits({ header: { t: 'header', v: 1, seed: 0, engine: null, players: [] }, steps, end: null });
         root.render(
             <MotionConfig reducedMotion="user">
-                <KitBoard lens={lensOpt} state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} />
+                <KitBoard lens={lensOpt} spots={opts.spots !== false} state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} />
             </MotionConfig>
         );
     };

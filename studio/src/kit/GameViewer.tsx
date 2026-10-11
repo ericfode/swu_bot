@@ -22,6 +22,7 @@ import { endWinner, failedSeat, resultText } from '../data/result';
 import { deckTitle, LangTag } from '../components/SeatFacts';
 import { cardTextVersion, loadedCardCost } from '../lib/cardText';
 import { humanize } from '../lib/cards';
+import { spotTimeline } from '../data/atlas';
 import { SPEEDS, useSettings, type Perspective } from '../lib/settings';
 
 /** A lens file as given to the viewer: a parsed file, or a file with its dir ('' = the default path). */
@@ -84,6 +85,8 @@ export interface GameViewerProps {
     onScore?: (key: string) => void;
     /** estimate Omni v1 from the board for a game with no lens file (default true) */
     estimate?: boolean;
+    /** the Strategy Atlas spots each seat is in: chips by each base and a lane per seat under the timeline (default true) */
+    spots?: boolean;
     /** timeline lanes to start with; 'edge' (earlier builds) means 'score'. Default: evaluations and base HP with evals, else score and base HP */
     lanes?: string[];
     /** playhead moved: step index, and that step's Step.n (the id evaluations and other data key on) */
@@ -99,7 +102,7 @@ export interface GameViewerProps {
 }
 
 /** The whole replay experience in one component: Holotable's game page and every embed (dashboard, analysis pages) use it. */
-export function GameViewer({ game, live = false, startStep = 0, evals = null, lens = null, registry = null, score: requested = null, onScore, estimate, lanes: startLanes, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control }: GameViewerProps) {
+export function GameViewer({ game, live = false, startStep = 0, evals = null, lens = null, registry = null, score: requested = null, onScore, estimate, spots = true, lanes: startLanes, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control }: GameViewerProps) {
     const last = game.steps.length - 1;
     const [stepState, setStep] = useState(() => (live && !startStep ? last : Math.min(startStep, last)));
     // a live file can be rewritten with fewer steps (a re-run into the same folder): never read past the end
@@ -160,6 +163,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     const [why, setWhy] = useState<'analyst' | 'board' | 'weights'>(() => (evals?.points?.length ? 'analyst' : 'board'));
     const facts = useMemo(() => metrics(game), [game]);
     const rounds = useMemo(() => roundStarts(game), [game]);
+    const spotTl = useMemo(() => (spots ? spotTimeline(game) : null), [game, spots]);
     const changes = useMemo(() => game.steps.map((s, i) => (i ? diff(game.steps[i - 1].state, s.state) : [])), [game]);
     const bots = useMemo(() => ({
         p1: game.header.players.find((p) => p.id === 'p1')?.bot ?? 'p1',
@@ -415,7 +419,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                 <div className="flex flex-col gap-3 min-w-0">
                     <div className="panel p-2 @3xl:p-3 relative overflow-hidden">
                         <Board state={cur.state} prev={prev?.state ?? null} ids={ids[step]} prevIds={step > 0 ? ids[step - 1] : null} bots={bots} actor={actor} step={step}
-                            onFocus={onCardFocus} onLeave={onCardLeave} score={view} values={valuesOn} />
+                            onFocus={onCardFocus} onLeave={onCardLeave} score={view} values={valuesOn} spots={spots} />
                         <AnimatePresence>
                             {end && !hideResult && (
                                 <motion.div className="absolute inset-0 z-20 grid place-items-center bg-bg/60 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setHideResult(true)}>
@@ -450,7 +454,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                                 {SPEEDS.map((s, i) => <button key={s.label} className="btn !h-7 !px-2 num text-xs" aria-pressed={speed === i} onClick={() => setSpeed(i)}>{s.label}</button>)}
                             </div>
                         </div>
-                        <Momentum data={facts} series={score} others={others} rounds={rounds} step={step} lanes={lanes} bots={bots} onSeek={seek} onHover={setHoverStep} stepN={stepN} evals={ev} height={ev.size ? 190 : 160} markers={pivotal} />
+                        <Momentum data={facts} series={score} others={others} rounds={rounds} step={step} lanes={lanes} bots={bots} onSeek={seek} onHover={setHoverStep} stepN={stepN} evals={ev} height={ev.size ? 190 : 160} markers={pivotal} spots={spotTl} />
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                             {lanesOf(liveSource).filter((l) => (l.key !== 'llm' || ev.size) && (l.key !== 'score' || liveSource)).map((l) => {
                                 const on = lanes.includes(l.key);
