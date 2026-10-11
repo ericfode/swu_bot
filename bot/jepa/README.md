@@ -57,6 +57,48 @@ node bot/learn/eval.js --bots jepa,random-a --games 100 --workers 4
 python3 bot/jepa/panel.py --thoughts /tmp/jepa-thoughts.json      # dashboard panel (needs /mnt/project-files)
 ```
 
-Registered bots (`bot/external-bots.json`, `lang: python`): `jepa` (mix 0.5) and `jepa-h1` (mix 0, next decision
-only). `SWU_JEPA_THOUGHTS=<file>` makes the bot write its latest decision for the panel. Card data is read from
-`$SWU_CARD_DATA` (default `forceteki/test/json`).
+Registered bots (`bot/external-bots.json`, `lang: python`): `jepa` (v1, mix 0.5), `jepa-h1` (v1, mix 0, next
+decision only) and `jepa-pure` (v2p, the pure-JEPA encoder). `SWU_JEPA_THOUGHTS=<file>` makes the bot write its
+latest decision for the panel. Card data is read from `$SWU_CARD_DATA` (default `forceteki/test/json`).
+
+**Use the ladder, not `eval.js`, to measure strength against rule bots.** `bot/learn/eval.js` and `collect.js`
+build each bot once per worker and reuse it across games. Rush keeps a loop-guard map of positions it has seen,
+so in later games it thinks it is looping and passes early. Head-to-head numbers against rush from `eval.js` are
+too kind to the other bot (jepa looked 41-18 there and is 2-8 on the ladder). `bot/ladder.js` builds fresh bots
+for every game.
+
+## Results
+
+Ladder `jepa-ladder-1` (`/mnt/project-files/results/jepa-ladder-1`): 6 bots, 10 games per pair, seeds from both
+seats, 150 games, 1 engine error.
+
+| Bot | BT Elo | Record | ms / decision |
+|---|---|---|---|
+| rust-greedy2 | 2081 | 49-1 | 3.2 |
+| rush | 1661 | 35-15 | 0.15 |
+| jepa-h1 | 1491 | 26-24 | 9.3 |
+| jepa | 1422 | 22-28 | 10.3 |
+| jepa-pure | 1276 | 13-36 | 12.5 |
+| random | 1069 | 4-45 | 0.01 |
+
+jepa beats random 9-1, loses to rush 2-8 and to rust-greedy2 0-10. jepa-h1 beat jepa 7-3; jepa beat jepa-pure 8-2.
+
+Model versions (`models/*.train.json` hold the training logs; safetensors for v1, v2 and v2p):
+
+| Model | Recipe | Held-out value acc. | vs rush (eval.js) | vs rust-greedy2 (eval.js) |
+|---|---|---|---|---|
+| v1 (`jepa`, `jepa-h1`) | V trained with the encoder, step-500 checkpoint | 0.702 | 41-18 | 2-57 |
+| v2 | encoder on JEPA loss only, V on frozen latents | 0.719 | 10-29 | 1-37 |
+| v2p (`jepa-pure`) | v2, then predictor + action encoder + V tuned on V(ẑ) | – | 29-30 | – |
+| v3 | as v2, plus 1500 rust-greedy2 games | 0.738 | 11-49 | 0-60 |
+| v3p | v3, then predictor + V tuned | – | 12-47 | 2-58 |
+| v1p | v1, then predictor + V tuned (encoder frozen) | – | 6-53 | – |
+
+The eval.js columns are against the handicapped rush (see above): compare rows with each other only.
+
+**Lesson: better at predicting the winner is not better at choosing moves.** The only label is who won. Every
+later version learned "who is ahead" better (up to 74% on unseen games) and played worse. Choosing a move needs
+the difference between moves from one position, and the outcome label says almost nothing about that, least of
+all in lopsided games (adding rust-greedy2 games made it worse). The latent is fine: linear probes read the board
+back with R² 0.95 to 0.99. The weak part is the score on imagined futures. Next: self-play with exploration (same
+kind of position, different moves), search-based move labels, and rolling the predictor more than one step.
