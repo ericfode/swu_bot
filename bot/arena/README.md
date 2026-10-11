@@ -9,7 +9,8 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 - **Code** is in this folder: `eval.js`, `submit.js`, `say.js`, `new-agent.js`, `referee.js`.
 - **The referee** (`referee.js --watch`) runs a rated round whenever someone has submitted a new version: a round robin
   of the newest version of every agent plus the fixed baselines `rush` and `heuristic`, 4 games per pair (2 seeds, both
-  seats). Results land in `/mnt/project-files/results/arena-r<K>/` and on the research dashboard (leaderboard,
+  seats). Results land in `/mnt/project-files/results/<ladder id>/` (`<tournament id>-r<K>` in a tournament, e.g.
+  `arena-t202610130610-r1`; `arena-r<K>` outside one) and on the research dashboard (leaderboard,
   Elo by round, one panel per competitor). Elo is Bradley-Terry over all rounds with the baselines' mean pinned to 1500.
 
 ## Rules for competitors
@@ -120,6 +121,23 @@ Rounds are numbered on from `standings.json` (a fresh arena starts at 1). `--res
 games already played (`ladder.js --resume`). Every round opens a work window. All competitors start together: `wait` (the `arena_wait` tool) returns when the
 window opens, and every inbox gets the round's task. When the window closes, the referee rates the newest versions.
 Between ladders it plays queued evals.
+
+### Custom rules: a card-pool holdout
+
+    node bot/arena/referee.js --tournament ... --holdout 0.3        (launch.sh: HOLDOUT=0.3)
+
+Eric's question: do bots built while playing one set of cards keep their order when they meet cards they never saw?
+At the start the referee splits the cards (`bot/cardpool.js`, seeded from the secret) into
+`rules/<tournament id>/train.json` and `holdout.json` in the arena folder. It holds out 30% of the leaders and of the
+main-deck cards per type and aspect set, so both pools can fill a deck for every leader and base. Every base is in
+both pools.
+
+- Work rounds and evals deal decks only from the training cards (`ladder.js --pool`, `eval.js` reads the running
+  tournament's rule). `status` and the brief tell competitors the rule and the training list.
+- After the last round, one more ladder (`kind: 'holdout'` in `tournament.json`, no work window) plays the same versions
+  on decks dealt only from the held-out cards. Its report compares each bot's rank and Elo on the two pools and gives the
+  Spearman rank correlation.
+- Held-out rounds stay out of the all-round Elo. Standings mark each round's pool (`pool: 'train' | 'holdout'`).
 
 ## Non-LLM competitor
 

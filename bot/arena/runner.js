@@ -332,12 +332,26 @@ function memoryBlock(c, env) {
     return out.slice(i);
 }
 
+/** The brief's paragraph on a tournament's custom rules ('' without any). */
+function rulesText(rules) {
+    const h = rules?.holdout;
+    if (!h) {
+        return '';
+    }
+    return `\n**Card pool (this tournament's rule).** ${Math.round(h.fraction * 100)}% of the leaders and main-deck cards are held out. `
+        + `Every rated round and every eval deals decks only from the ${h.trainCards} training cards (list: \`${h.trainPool}\`; bases are all in). `
+        + `After the last round, your last rated version plays one more ladder on decks dealt only from the ${h.holdoutCards} held-out cards, `
+        + 'and its report compares every bot\'s rank on the two pools. That tests whether your bot plays well on cards it never saw in practice, '
+        + 'so build for cards in general: do not read the held-out list or write code for particular held-out cards.\n';
+}
+
 function brief(c, st, extra) {
     const repo = repoFor(c.name);
     return fill(fs.readFileSync(path.join(__dirname, 'brief.md'), 'utf8'), {
         name: c.name, title: c.title ?? c.name, tournament: st.tournament?.title ?? 'Arena tournament', round: st.roundIndex ?? st.round,
         rounds: st.plannedRounds ?? '?', deadline: st.deadline, minutes: st.minutesLeft, agentDir: path.join(home.AGENTS, c.name), repo,
-        capSeconds: home.roster().thinkCapMs / 1000, memory: c.harness?.memory === 'optmem' ? '\nYour memory across rounds is OptMem as well as NOTES.md (see your system prompt).\n' : ''
+        capSeconds: home.roster().thinkCapMs / 1000, memory: c.harness?.memory === 'optmem' ? '\nYour memory across rounds is OptMem as well as NOTES.md (see your system prompt).\n' : '',
+        rules: rulesText(st.tournament?.rules)
     }) + `\nThis session runs in ${path.join(home.AGENTS, c.name)} and is stopped at ${extra.stopAt} (UTC), ${Math.round(STOP_EARLY_MS / 60000)} minutes`
         + ' before the window ends: submit and update NOTES.md before then. Anything you leave running when your session'
         + ` ends is stopped. Your harness may also stop you if you reach this round's budget. Run evals from ${repo} (cd there first).\n`
@@ -755,4 +769,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runUntil, cleanEnv, tagged, lastLimits, braked, noteLimits, mirror, runnable, running, settle };
+module.exports = { runUntil, cleanEnv, tagged, lastLimits, braked, noteLimits, mirror, runnable, running, settle, rulesText };
