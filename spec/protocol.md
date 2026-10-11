@@ -229,7 +229,7 @@ in `node bot/tournament.js --bots ...` like any other bot.
 
 ```json
 {
-  "rust-mcts": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
+  "rust-mcts": { "cmd": "target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
   "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore", "lang": "python" }
 }
 ```
