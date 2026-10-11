@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/tournament-list.schema.json",
+  "title": "GET /api/tournaments response (viewer/server.cjs), format v1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "createdAt", "engine", "bots", "games"],
+    "properties": {
+      "id": { "type": "string" },
+      "createdAt": { "type": "string" },
+      "engine": { "type": ["string", "null"] },
+      "bots": { "type": "array", "items": { "type": "string" } },
+      "games": { "type": "integer", "minimum": 0, "description": "Number of games in the index." }
+    }
+  }
+}
