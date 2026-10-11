@@ -24,6 +24,23 @@ const WEB = path.join(__dirname, 'web', 'index.html');
 // read per request, so a rebuilt app shows without a restart (ARENA_APP= with no value keeps the arena UI at /)
 const appFile = () => process.env.ARENA_APP ?? path.join(__dirname, '..', '..', 'app', 'dist', 'public.html');
 
+/** Whether an Accept-Encoding header allows gzip: a gzip (or else *) entry whose q value is above 0. */
+function acceptsGzip(header) {
+    let gzip = null;
+    let star = null;
+    for (const part of String(header ?? '').toLowerCase().split(',')) {
+        const [token, ...params] = part.split(';').map((x) => x.trim());
+        const q = params.find((x) => x.startsWith('q='));
+        const ok = !q || Number(q.slice(2)) > 0;
+        if (token === 'gzip' || token === 'x-gzip') {
+            gzip = ok;
+        } else if (token === '*') {
+            star = ok;
+        }
+    }
+    return gzip ?? star ?? false;
+}
+
 /**
  * Static files: the app, the web UI, the shared viewer kit, and arena round replays/indexes. Gzipped when the client
  * accepts it: the app build is ~10 MB and a replay ~1 MB, and both shrink a lot.
@@ -35,7 +52,7 @@ function serveFile(req, res, file, type) {
             res.end('not found');
             return;
         }
-        const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] ?? '');
+        const gzip = acceptsGzip(req.headers['accept-encoding']);
         res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache', vary: 'accept-encoding', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
         const body = fs.createReadStream(file);
         body.on('error', () => res.destroy());
@@ -140,4 +157,4 @@ if (require.main === module) {
     http.createServer(handler).listen(port, host, () => console.log(`arena API on http://${host}:${port}/api`));
 }
 
-module.exports = { handler };
+module.exports = { handler, acceptsGzip };

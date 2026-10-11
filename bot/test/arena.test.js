@@ -438,3 +438,13 @@ test('server: / is the app when its build exists, /arena is always the arena UI'
         }
     }
 });
+
+test('server: gzip only when Accept-Encoding allows it', () => {
+    const { acceptsGzip } = require('../arena/server');
+    for (const h of ['gzip', 'deflate, gzip', 'GZIP;Q=0.5', 'br, *', 'gzip;q=1, *;q=0']) {
+        assert.strictEqual(acceptsGzip(h), true, h);
+    }
+    for (const h of [undefined, '', 'identity', 'gzip;q=0', 'deflate, gzip;q=0', '*;q=0', 'gzip;q=0, *', 'gzip;q=0.000']) {
+        assert.strictEqual(acceptsGzip(h), false, String(h));
+    }
+});
