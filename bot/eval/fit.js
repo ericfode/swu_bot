@@ -97,9 +97,11 @@ function adam(params, lr) {
     };
 }
 
-function fitLinear(rows, std, { l2 = 1e-4, iters = 600 } = {}) {
+/** drop: feature names to leave out (their weight stays 0), for ablations. */
+function fitLinear(rows, std, { l2 = 1e-4, iters = 600, drop = [] } = {}) {
     const n = SIDE_KEYS.length;
-    const X = rows.map((r) => [...SIDE_KEYS.map((k, i) => (r.fr.me[k] - r.fr.opp[k]) / std[i]), r.fr.g.toAct]);
+    const keep = SIDE_KEYS.map((k) => (drop.includes(k) ? 0 : 1));
+    const X = rows.map((r) => [...SIDE_KEYS.map((k, i) => (keep[i] * (r.fr.me[k] - r.fr.opp[k])) / std[i]), drop.includes('toAct') ? 0 : r.fr.g.toAct]);
     const w = new Array(n + 1).fill(0);
     const step = adam(w, 0.05);
     for (let it = 0; it < iters; it++) {
@@ -274,4 +276,8 @@ function main() {
     }
 }
 
-main();
+if (require.main === module) {
+    main();
+}
+
+module.exports = { frames, stds, fitLinear, fitMlp, fitScale, meanLoss };
