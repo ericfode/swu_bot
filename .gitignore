@@ -17,5 +17,8 @@ __pycache__/
 .perch/*
 !.perch/closed.jsonl
 !.perch/rules/
+
+# Claude Code agent worktrees
+.claude/worktrees/
 bot/c/swu-c
 bot/c/*.o
