@@ -121,3 +121,26 @@ test('guard keeps a bot\'s own damage split on the live distribute action, and r
         assert.strictEqual(bot.fault.kind, 'error');
     }
 });
+
+test('guard: a split may not give an amount to more targets than maxTargets', () => {
+    const live = { kind: 'distribute', label: 'distribute 3', spec: { amount: 3, maxTargets: 1 }, targets: ['a', 'b', 'c'], caps: [3, 3, 3], uuid: 'now' };
+    const ctx = { pid: 'x', actions: [live], game: { refetch: () => ({ ...live }) } };
+    const split = (targets, caps) => guard({ name: 's', choose: () => ({ ...live, targets, caps }) });
+    assert.throws(() => split(['a', 'c'], [1, 2]).choose(ctx), /not one of the legal actions/);
+    // a target given 0 is skipped by env.apply, so it does not count
+    assert.deepStrictEqual(split(['a', 'c'], [3, 0]).choose(ctx).caps, [3, 0]);
+});
+
+test('guard: reading the returned object is part of the bot\'s call, and a throw from close() is ignored', () => {
+    const tricky = guard({ name: 't', choose: () => ({ kind: 'button', get label() { throw new Error('getter'); } }) });
+    assert.throws(() => tricky.choose(ctx), /getter/);
+    assert.deepStrictEqual(tricky.fault, { kind: 'error', message: 'getter' });
+    // fields are read once: a getter that changes its answer cannot pass the check with one value and play another
+    let n = 0;
+    const flip = guard({ name: 'f', choose: () => ({ kind: 'button', get label() { return n++ ? 'Nope' : 'Claim'; } }) });
+    assert.strictEqual(flip.choose(ctx), actions[1]);
+    const closer = guard({ name: 'c', choose: (c) => c.actions[0], close: () => { throw new Error('close'); } });
+    closer.choose(ctx);
+    assert.doesNotThrow(() => closer.close());
+    assert.strictEqual(closer.fault, null);
+});

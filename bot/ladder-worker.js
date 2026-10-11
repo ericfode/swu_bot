@@ -15,6 +15,12 @@
 const fs = require('fs');
 const path = require('path');
 const { parentPort, workerData } = require('worker_threads');
+// Submitted bots run in this thread and get the same module object from require('worker_threads') (and import()):
+// take the parent's channel and the watchdog's control array out of it, so a bot cannot post a result of its own or
+// mark itself idle. Not a sandbox (a bot still shares this thread); the parent's per-game limit backs this up.
+for (const k of ['parentPort', 'workerData']) {
+    Object.defineProperty(require('worker_threads'), k, { value: null, writable: false, configurable: false });
+}
 const { Env } = require('./env');
 const { playGame, timingSummary } = require('./match');
 const { snapshot } = require('./recorder');

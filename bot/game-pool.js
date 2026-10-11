@@ -3,7 +3,7 @@
  * Runs game jobs ({id, seed, p1, p2, replayFile?}) on ladder-worker.js threads, with a watchdog. Shared by ladder.js
  * and arena/pool.js.
  *
- *   runPool(queue, { workers, workerData, hangMs, onStart(job), onResult({ job, result }) }) -> Promise
+ *   runPool(queue, { workers, workerData, hangMs, gameMs, onStart(job), onResult({ job, result }) }) -> Promise
  *
  * `queue` is consumed (shifted) as games start. onStart runs just before a job is posted to a worker, onResult once per
  * job with its finished result (fields: ladder-worker.js). Each worker shares a small control array with the parent
@@ -12,6 +12,9 @@
  *   - one choose() call (or one bot load) has run longer than hangMs of wall time: that seat forfeits, faultKind 'hang'
  *     ('load' while loading). The worker is terminated and replaced, and the queue carries on.
  *   - the engine has gone hangMs without asking either bot anything: the game is an ERROR (no fault), same treatment.
+ *   - the game has run longer than gameMs (default 4 x workerData.capMs + 10 min when there is a cap, else no limit),
+ *     by the parent's own clock: whoever the control array says is thinking forfeits (faultKind 'hang'), else ERROR.
+ *     This one holds even when a bot fakes its `since` from inside the worker.
  * A worker that dies mid-game (crash, out of memory, a bot calling process.exit) is replaced the same way; the game is
  * that seat's forfeit (faultKind 'error') when a bot was running, else an ERROR. Only a worker that dies before it has
  * loaded the engine fails the whole run.
@@ -28,16 +31,21 @@ const PHASE = { idle: 0, engine: 1, load: 2, choose: 3 };
 const CHECK_MS = 2000;
 const KILL_AFTER_MS = 5000;
 const POOL_WORKER = 'SWU_POOL_WORKER';
+const DEFAULT_GAME_MS = (capMs) => (Number.isFinite(capMs) && capMs > 0 ? 4 * capMs + 600000 : 0);
 let workerIds = 0;
+// bound when this module loads, before any bot code runs in the worker, so a bot that later replaces Date.now or
+// Atomics.store cannot make the control array say something else (ladder-worker.js also hides the array itself)
+const clockNow = Date.now;
+const { store, load } = Atomics;
 
 /** The worker's side of the control array (`since` is ms after `base`, a Date.now() the parent picked). */
-function workerControl(sab, base = Date.now()) {
+function workerControl(sab, base = clockNow()) {
     const a = new Int32Array(sab ?? new SharedArrayBuffer(SLOTS * 4));
-    const put = (k, v) => Atomics.store(a, k, Math.round(v));
+    const put = (k, v) => store(a, k, v | 0);
     return {
         // `since` first and `phase` last, so a reader that sees a stale `since` also sees the stale phase and seat
         set(phase, seat = 0) {
-            put(SLOT.since, Date.now() - base);
+            put(SLOT.since, clockNow() - base);
             put(SLOT.seat, seat);
             put(SLOT.phase, phase);
         },
@@ -49,7 +57,7 @@ function workerControl(sab, base = Date.now()) {
         },
         /** Bookkeeping after seat (1 or 2) returned from choose(): one more step, and that bot's think time so far. */
         chose(seat, round, thinkMs) {
-            put(SLOT.steps, Atomics.load(a, SLOT.steps) + 1);
+            put(SLOT.steps, load(a, SLOT.steps) + 1);
             put(SLOT.round, round ?? 0);
             put(seat === 1 ? SLOT.think1 : SLOT.think2, thinkMs);
         }
@@ -126,7 +134,7 @@ function killChildren(worker = null) {
     }
 }
 
-function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart = () => {}, onResult = () => {} } = {}) {
+function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs = DEFAULT_GAME_MS(workerData.capMs), onStart = () => {}, onResult = () => {} } = {}) {
     return new Promise((resolve, reject) => {
         const base = Date.now();
         const slots = new Set();
@@ -222,21 +230,29 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart
                 }
                 const st = readControl(s.ctl);
                 const ms = now - st.since;
-                if (st.phase === PHASE.idle || !(ms > hangMs)) {
+                const gameTime = Date.now() - s.jobStart;
+                const hung = st.phase !== PHASE.idle && ms > hangMs;
+                // the parent's own clock only, so a worker that reports a wrong `since` (or idle) cannot run forever
+                const overtime = gameMs > 0 && gameTime > gameMs;
+                if (!hung && !overtime) {
                     continue;
                 }
                 const job = s.job;
                 const sec = Math.round(ms / 1000);
+                const seat = st.phase === PHASE.choose || st.phase === PHASE.load ? st.seat : 0;
+                const late = `the game passed ${Math.round(gameMs / 1000)} s`;
                 let result;
-                if (st.phase === PHASE.engine || !st.seat) {
-                    result = stoppedResult(job, st, { seat: 0, error: `ENGINE_HANG no decision asked for ${sec} s`, ms: Date.now() - s.jobStart });
+                if (!seat) {
+                    const error = hung ? `ENGINE_HANG no decision asked for ${sec} s` : `GAME_TIMEOUT ${late} (no bot was thinking)`;
+                    result = stoppedResult(job, st, { seat: 0, error, ms: gameTime });
                 } else {
                     const loading = st.phase === PHASE.load;
                     // the hung call's own time counts too (its worker is about to be stopped, so it never reports it)
-                    st.think[st.seat - 1] += ms;
+                    st.think[seat - 1] += Math.max(0, ms);
+                    const doing = loading ? 'still loading' : 'no answer from choose()';
                     result = stoppedResult(job, st, {
-                        seat: st.seat, kind: loading ? 'load' : 'hang', ms: Date.now() - s.jobStart,
-                        error: `HANG ${nameOf(job, st.seat)} ${loading ? 'still loading' : 'no answer from choose()'} after ${sec} s (limit ${Math.round(hangMs / 1000)} s)`
+                        seat, kind: loading ? 'load' : 'hang', ms: gameTime,
+                        error: hung ? `HANG ${nameOf(job, seat)} ${doing} after ${sec} s (limit ${Math.round(hangMs / 1000)} s)` : `GAME_TIMEOUT ${nameOf(job, seat)} ${doing} when ${late}`
                     });
                 }
                 stop(s, result);
