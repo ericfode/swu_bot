@@ -4,7 +4,11 @@
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
  *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--resume]
+ *       [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest.
+ * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot forfeits. --hang-ms is the
+ * watchdog (game-pool.js): one choose() call running longer than that (wall clock) forfeits the game, and its worker is
+ * replaced. A bot that fails to load or throws also forfeits; ladder.json games carry fault / faultKind.
  *
  * Each pair plays `--games` games (rounded up to even): every seed twice, once from each seat, so random-deck luck
  * cancels out. Everything goes in <out>/<id>/, rewritten atomically after every finished game:
@@ -16,11 +20,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Worker } = require('worker_threads');
 const { execFileSync } = require('child_process');
 const { describeBot } = require('./players');
 const { roundRobin } = require('./ratings');
 const { summarize } = require('./ladder-report');
+const { runPool, killChildren } = require('./game-pool');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -46,14 +50,20 @@ function readPrevious(file, config) {
     if (!fs.existsSync(file)) {
         return null;
     }
-    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-    const c = doc.config ?? {};
-    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed) {
-        console.log('resume: the earlier run used other bots or seeds, starting over');
+    let doc;
+    try {
+        doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (e) {
+        console.log(`resume: ${file} is not readable JSON (${e.message.split('\n')[0]}), starting over`);
         return null;
     }
-    return { games: doc.games ?? [] };
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const c = doc?.config ?? {};
+    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || (c.capMs ?? null) !== (config.capMs ?? null)) {
+        console.log('resume: the earlier run used other bots, seeds or time cap, starting over');
+        return null;
+    }
+    return { games: Array.isArray(doc.games) ? doc.games : [] };
 }
 
 function defaultOut() {
@@ -77,6 +87,11 @@ async function main() {
     const firstSeed = Number(arg('seed', 1));
     const maxSteps = Number(arg('max-steps', 6000));
     const workers = Math.max(1, Number(arg('workers', Math.max(1, os.cpus().length - 1))));
+    const capMs = arg('cap-ms') === undefined ? Infinity : Number(arg('cap-ms'));
+    const hangMs = Number(arg('hang-ms', 600000));
+    if (!(capMs > 0) || !(hangMs > 0)) {
+        throw new Error('--cap-ms and --hang-ms must be positive numbers of milliseconds');
+    }
     const createdAt = new Date().toISOString();
     const id = arg('id', `ladder-${createdAt.replace(/[:.]/g, '-').slice(0, 19)}`);
     const out = path.join(path.resolve(arg('out', defaultOut())), id);
@@ -85,7 +100,8 @@ async function main() {
 
     const engine = engineRev();
     const schedule = roundRobin(names, perPair, firstSeed);
-    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers };
+    // capMs null = no cap (JSON has no Infinity)
+    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs };
     const games = [];
     let status = 'running';
     const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config) : null;
@@ -99,9 +115,9 @@ async function main() {
     const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
     let queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     if (prev) {
-        const kept = prev.games.filter((g) => g.outcome !== 'running' && queue.some((q) => q.id === g.id));
+        const kept = prev.games.filter((g) => g?.id && g.outcome !== 'running' && queue.some((q) => q.id === g.id));
         games.push(...kept);
-        tIndex.games.push(...kept.map(({ botStats, timing, ...g }) => g));
+        tIndex.games.push(...kept.map(({ botStats, timing, think, ...g }) => g));
         queue = queue.filter((q) => !kept.some((g) => g.id === q.id));
         console.log(`${id}: resuming, ${kept.length} games already played`);
     }
@@ -109,61 +125,46 @@ async function main() {
     console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${workers} workers -> ${out}`);
 
     const t0 = Date.now();
-    await new Promise((resolve, reject) => {
-        let live = 0;
-        const feed = (w) => {
-            const job = queue.shift();
-            if (!job) {
-                w.postMessage('exit');
-                return;
-            }
-            const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null };
+    await runPool(queue, {
+        workers,
+        hangMs,
+        workerData: { maxSteps, engineRev: engine, capMs },
+        onStart: (job) => {
+            const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, fault: null, faultKind: null };
             games.push(entry);
             tIndex.games.push({ ...entry });
             if (record) {
                 job.replayFile = path.join(out, 'games', `${job.id}.jsonl`);
             }
             save();
-            w.postMessage(job);
-        };
-        for (let i = 0; i < Math.min(workers, queue.length); i++) {
-            live++;
-            const w = new Worker(path.join(__dirname, 'ladder-worker.js'), { workerData: { maxSteps, engineRev: engine } });
-            w.on('message', (msg) => {
-                if (msg.ready) {
-                    feed(w);
-                    return;
-                }
-                const { job, result: r } = msg;
-                const winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
-                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, timing: r.timing };
-                Object.assign(games.find((g) => g.id === job.id), done, { botStats: r.botStats });
-                Object.assign(tIndex.games.find((g) => g.id === job.id), done);
-                const doc = save();
-                const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
-                console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome} ${winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
-                feed(w);
-            });
-            w.on('error', reject);
-            w.on('exit', () => {
-                if (--live === 0) {
-                    resolve();
-                }
-            });
-        }
-        if (!queue.length) {
-            resolve();
+        },
+        onResult: ({ job, result: r }) => {
+            const done = {
+                winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null,
+                fault: r.fault ?? null, faultKind: r.faultKind ?? null
+            };
+            Object.assign(games.find((g) => g.id === job.id), done, { timing: r.timing ?? null, think: r.think ?? null, botStats: r.botStats });
+            Object.assign(tIndex.games.find((g) => g.id === job.id), done);
+            const doc = save();
+            const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
+            const fault = r.fault ? ` (${r.fault} ${r.faultKind})` : '';
+            console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome}${fault} ${r.winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
         }
     });
     status = 'done';
     const doc = save();
     console.log(`done in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     for (const b of doc.bots) {
-        console.log(`${b.name.padEnd(14)} BT ${String(b.btElo).padStart(5)}  Elo ${String(b.elo).padStart(5)}  ${b.wins}-${b.losses}-${b.draws}  incomplete ${b.incomplete}  ${b.winRate === null ? '' : (b.winRate * 100).toFixed(0) + '%'}`);
+        console.log(`${b.name.padEnd(14)} BT ${String(b.btElo).padStart(5)}  Elo ${String(b.elo).padStart(5)}  ${b.wins}-${b.losses}-${b.draws}  incomplete ${b.incomplete}  forfeits ${b.forfeits}  ${b.winRate === null ? '' : (b.winRate * 100).toFixed(0) + '%'}`);
     }
 }
 
-main().catch((e) => {
+// exit explicitly: a worker retired by the watchdog may still be stuck in a bot's synchronous call
+main().then(() => {
+    killChildren();
+    process.exit(0);
+}, (e) => {
+    killChildren();
     console.error(e);
     process.exit(1);
 });

@@ -8,7 +8,8 @@
  *
  * Claude Code:  claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js
  * Codex:        [mcp_servers.arena] command = "node", args = ["/path/to/swu_bot/bot/arena/mcp.js"]  (~/.codex/config.toml)
- * No SDK dependency: the protocol subset used here is initialize, tools/list, tools/call and ping.
+ * No SDK dependency: the protocol subset used here is initialize, tools/list, tools/call and ping. Notifications
+ * (messages without an id) and responses are never answered. Tools carry MCP annotations (readOnlyHint etc.) from METHODS.
  */
 const readline = require('readline');
 const { call, METHODS } = require('./api');
@@ -22,10 +23,16 @@ const REMOTE = arg('remote', process.env.ARENA_URL ?? null);
 const TOKEN = arg('token', process.env.ARENA_TOKEN ?? null);
 const TYPES = { string: { type: 'string' }, integer: { type: 'integer' }, object: { type: 'object' }, array: { type: 'array', items: {} } };
 
+/** MCP tool annotations: read-only tools are idempotent too; the others only add data, except submit (see METHODS). */
+const annotations = (d) => (d.readOnly
+    ? { readOnlyHint: true, idempotentHint: true, openWorldHint: false }
+    : { readOnlyHint: false, destructiveHint: !!d.destructive, idempotentHint: false, openWorldHint: false });
+
 const tools = Object.entries(METHODS).map(([m, d]) => ({
     name: `arena_${m}`,
     description: d.desc,
-    inputSchema: { type: 'object', properties: { ...Object.fromEntries(Object.entries(d.props).map(([k, t]) => [k, TYPES[t]])), ...(d.token ? { token: { type: 'string', description: 'your competitor token (hosted arenas only; ARENA_TOKEN is sent automatically if set)' } } : {}) }, required: d.required ?? [] }
+    annotations: annotations(d),
+    inputSchema: { type: 'object', properties: { ...Object.fromEntries(Object.entries(d.props).map(([k, t]) => [k, TYPES[t]])), ...(d.token ? { token: { type: 'string', description: 'your competitor token (hosted arenas only; ARENA_COMPETITOR_TOKEN is sent automatically if set)' } } : {}) }, required: d.required ?? [] }
 }));
 
 async function invoke(method, args) {
@@ -42,12 +49,10 @@ async function invoke(method, args) {
 }
 
 const write = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
+process.stdout.on('error', () => process.exit(0)); // the client went away
 
 async function handle(msg) {
     const { id, method, params } = msg;
-    if (id === undefined) {
-        return; // notifications (initialized, cancelled) need no answer
-    }
     if (method === 'initialize') {
         return write({ jsonrpc: '2.0', id, result: {
             protocolVersion: params?.protocolVersion ?? '2025-06-18',
@@ -81,5 +86,14 @@ rl.on('line', (line) => {
     } catch {
         return write({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } });
     }
-    handle(msg).catch((e) => write({ jsonrpc: '2.0', id: msg.id ?? null, error: { code: -32603, message: e.message } }));
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+        return write({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'invalid request: one JSON-RPC object per line' } });
+    }
+    if (!('id' in msg) || ('result' in msg || 'error' in msg)) {
+        return; // a notification (initialized, cancelled, ...) or a response: never answered
+    }
+    if (typeof msg.method !== 'string') {
+        return write({ jsonrpc: '2.0', id: msg.id, error: { code: -32600, message: 'invalid request: no method' } });
+    }
+    handle(msg).catch((e) => write({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: e.message } }));
 });

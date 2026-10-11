@@ -66,7 +66,7 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
 <main>
   <section id="standings">
     <h2>Standings</h2>
-    <p class="muted">Elo is Bradley-Terry over every rated round, with the baselines' mean pinned to 1500. Each round rates the newest version of every competitor.</p>
+    <p class="muted">Elo is Bradley-Terry over every rated round, with the baselines' mean pinned to 1500. Each round rates the newest version of every competitor; until a new version has played, the Elo of its newest rated version is shown, marked with that version (vN).</p>
     <div class="tablewrap"><table><thead><tr><th>#</th><th>Competitor</th><th>Harness</th><th>Latest</th><th class="num">Elo</th><th>Last round</th><th class="num">ms/decision</th></tr></thead><tbody id="board"></tbody></table></div>
   </section>
   <section id="competitors" hidden>
@@ -127,35 +127,63 @@ async function refresh() {
     const [st, sd] = await Promise.all([api('status'), api('standings')]);
     const c = $('clock'); c.textContent = '';
     if (st.phase === 'idle') c.append('No tournament running. ');
-    else { c.append('Round ', mk('b', '', String(st.round)), ` · ${st.phase}`); if (st.minutesLeft != null) c.append(` · ${st.minutesLeft} min left`); }
+    else { c.append('Round ', mk('b', '', String(st.round)), st.roundIndex && st.plannedRounds ? ` (${st.roundIndex} of ${st.plannedRounds})` : '', ` · ${st.phase}`); if (st.minutesLeft != null) c.append(` · ${st.minutesLeft} min left`); }
     c.append(` · think cap ${st.thinkCapMs / 1000}s`);
     const last = sd.rounds[sd.rounds.length - 1];
-    const rows = st.competitors.map((x) => ({ ...x, lr: last && last.bots.find((b) => b.agent === x.name) }));
-    for (const b of st.baselines) rows.push({ name: b, title: 'baseline', harness: { kind: 'fixed bot' }, latest: b, elo: sd.global?.[b] ?? 1500, lr: last && last.bots.find((x) => x.name === b) });
+    const rows = st.competitors.map((x) => ({ ...x, ...ratedElo(x, sd.global), lr: last && last.bots.find((b) => b.agent === x.name) }));
+    for (const b of st.baselines) rows.push({ name: b, title: 'baseline', harness: { kind: 'fixed bot' }, latest: b, elo: sd.global?.[b] ?? null, lr: last && last.bots.find((x) => x.name === b) });
     rows.sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1));
     const tb = $('board'); tb.textContent = '';
     rows.forEach((r, i) => {
       const tr = document.createElement('tr');
       const h = r.harness ? [r.harness.kind, r.harness.model].filter(Boolean).join(' · ') : '';
-      for (const [v, cls] of [[i + 1], [r.name + (r.title && r.title !== r.name ? ` (${r.title})` : '')], [h], [r.latest ?? '-'], [r.elo ?? '-', 'num'], [r.lr ? `#${r.lr.rank} · ${r.lr.wins}-${r.lr.losses}` : '-'], [r.lr?.msPerDecision ?? '-', 'num']]) tr.append(mk('td', cls, String(v)));
+      for (const [v, cls] of [[i + 1], [r.name + (r.title && r.title !== r.name ? ` (${r.title})` : '')], [h], [r.latest ?? '-'], [eloText(r), 'num'], [r.lr ? `${r.lr.rank == null ? 'no games yet' : '#' + r.lr.rank} · ${r.lr.wins}-${r.lr.losses}` : '-'], [r.lr?.msPerDecision ?? '-', 'num']]) tr.append(mk('td', cls, String(v)));
+      if (r.eloFrom) tr.children[4].title = `${r.latest} has no rating yet; this is the Elo of ${r.eloFrom}, its newest rated version`;
       tb.append(tr);
     });
     const cards = $('cards'); cards.textContent = '';
     for (const x of st.competitors) {
       const card = mk('div', 'card');
       card.append(mk('h3', '', x.name), mk('div', 'muted', [x.title, x.harness && [x.harness.kind, x.harness.model, x.harness.effort].filter(Boolean).join(' · ')].filter(Boolean).join(' — ')));
-      card.append(mk('div', '', `Latest ${x.latest ?? '-'} · Elo ${x.elo ?? '-'}`));
+      card.append(mk('div', '', `Latest ${x.latest ?? '-'} · Elo ${eloText({ ...x, ...ratedElo(x, sd.global) })}`));
       api('panel', { name: x.name }).then((p) => {
+        const box = strategyBox(x.name, (p?.widgets || []).find((w) => w.type === 'strategy'));
         if (!p) return;
         if (p.now) card.append(mk('div', 'muted', 'Now: ' + p.now));
         if (p.mentalModel?.summary) card.append(mk('div', '', 'Idea: ' + p.mentalModel.summary));
-        const dg = (p.widgets || []).find((w) => w.type === 'strategy');
-        if (dg && window.SWUStrategy) { const box = mk('div'); card.append(box); window.SWUStrategy.render(box, dg); }
+        if (box) card.append(box);
         for (const t of (p.thoughts || []).slice(-3)) card.append(mk('div', 'thought', t.text));
       }).catch(() => {});
       cards.append(card);
     }
+    for (const name of [...diagrams.keys()]) if (!st.competitors.some((x) => x.name === name)) strategyBox(name, null);
   } catch (e) { text($('clock'), 'Arena unreachable: ' + e.message); }
+}
+
+// A competitor whose newest version has no rating yet shows the Elo of its newest rated version (eloFrom names it).
+function ratedElo(x, global) {
+  if (x.elo != null) return { elo: x.elo, eloFrom: null };
+  let best = null;
+  for (const [k, v] of Object.entries(global || {})) {
+    const n = k.startsWith(x.name + '-v') ? k.slice(x.name.length + 2) : '';
+    if (/^\d+$/.test(n) && v != null && (!best || Number(n) > best.n)) best = { n: Number(n), elo: v, name: k };
+  }
+  return best ? { elo: best.elo, eloFrom: best.name } : { elo: null, eloFrom: null };
+}
+const eloText = (r) => (r.elo == null ? '-' : r.eloFrom ? `${r.elo} (${r.eloFrom.slice(r.name.length + 1)})` : String(r.elo));
+
+// Strategy diagrams survive the 15 s refresh: a competitor's diagram is drawn again only when its JSON changed, and the
+// old drawing is destroyed (its timers and animations stop). Returns the element to put in the card, or null.
+const diagrams = new Map();
+function strategyBox(name, dg) {
+  const key = dg && window.SWUStrategy ? JSON.stringify({ ...dg, updatedAt: undefined }) : null;
+  const old = diagrams.get(name);
+  if (old && old.key === key) return old.box;
+  if (old) { old.view?.destroy?.(); diagrams.delete(name); }
+  if (!key) return null;
+  const box = mk('div');
+  diagrams.set(name, { key, box, view: window.SWUStrategy.render(box, dg) });
+  return box;
 }
 
 let viewer = null;
@@ -172,8 +200,9 @@ async function loadGames() {
   if (!$('roundsel').value) { list.append(mk('p', 'muted', 'No rounds yet.')); return; }
   const g = await api('games', { round: Number($('roundsel').value) });
   for (const x of [...g.games].reverse()) {
-    const tf = /TIME_FORFEIT (\S+)/.exec(x.error || '');
-    const res = x.outcome === 'running' ? 'LIVE' : tf ? `${tf[1]} out of time` : x.winner ?? x.outcome;
+    const tf = /TIME_FORFEIT (\S+)/.exec(x.error || ''); // rounds played before games carried fault
+    const by = x.fault === 'p1' ? x.p1 : x.fault === 'p2' ? x.p2 : null;
+    const res = x.outcome === 'running' ? 'LIVE' : by ? `${by} forfeits (${x.faultKind || 'fault'})` : tf ? `${tf[1]} out of time` : x.winner ?? x.outcome;
     const b = mk('button', '', `${x.p1} vs ${x.p2} · ${res}`);
     b.addEventListener('click', () => openGame(g.replayBase + x.id + '.jsonl'));
     list.append(b);

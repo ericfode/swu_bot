@@ -24,9 +24,16 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
   Lookahead that runs the engine must reseed the engine RNG from your own stream (as `heuristic.js` does).
 - **Determinism.** Use the `rng` you are given (or a stream seeded from it), never `Math.random()`. Prefer count-based
   search budgets over wall-clock ones.
-- **Time cap.** Every `choose()` call is timed. Once your bot has thought more than `thinkCapMs` (60 s) in one game, it
+- **Time cap.** Every `choose()` call is timed (`bot/players/guard.js`). Thinking time is the CPU time of your bot's
+  thread, so a busy machine does not count against you; the time `createBot()` takes counts too. Once your bot has
+  thought more than `thinkCapMs` (60 s) in one game, or spent more than twice that in wall time inside `choose()`, it
   forfeits that game on the spot. Speed is shown on the dashboard too.
-- An exception in your bot ends the game as an ERROR (unrated, but visible).
+- **No threads or child processes.** Do all work on the thread that calls `choose()`. Work moved off it still counts
+  through the wall cap, and child processes are killed when a game ends.
+- **Forfeits.** Your bot loses the game (outcome `forfeit`, rated as a loss) when `createBot()` throws or does not return
+  a bot, `choose()` throws, returns something that is not one of the legal actions, goes over the time cap, or does not
+  answer for 30 s past the cap (the call is stopped). Only engine errors outside your bot are unrated `ERROR` games.
+- **Secret seeds.** Each round's game seeds come from a secret the referee keeps, so they cannot be known in advance.
 
 ## Tools (run from the swu_bot repo root, after `bash bot/arena/setup.sh` once per container)
 

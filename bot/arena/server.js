@@ -36,12 +36,18 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-const STATUS = { bad_request: 400, unauthorized: 401, not_found: 404, conflict: 409, internal: 500 };
+const STATUS = { bad_request: 400, unauthorized: 401, not_found: 404, conflict: 409, too_large: 413, bad_bot: 422, internal: 500, unsupported: 501 };
+const MAX_BODY = 1e6;
+// query-string values arrive as text; these arguments are integers
+const INTS = ['round', 'version', 'seeds', 'timeoutSec'];
 
 function handler(req, res) {
     const url = new URL(req.url, 'http://x');
-    const send = (code, body) => {
-        res.writeHead(code, { 'content-type': 'application/json' });
+    const send = (code, body, headers = {}) => {
+        if (res.headersSent) {
+            return;
+        }
+        res.writeHead(code, { 'content-type': 'application/json', ...headers });
         res.end(JSON.stringify(body));
     };
     if (process.env.ARENA_TOKEN && url.pathname.startsWith('/api') && req.headers.authorization !== `Bearer ${process.env.ARENA_TOKEN}`) {
@@ -63,27 +69,44 @@ function handler(req, res) {
     if (url.pathname === '/api' || url.pathname === '/api/') {
         return send(200, { result: METHODS });
     }
-    const m = /^\/api\/([a-z]+)$/.exec(url.pathname);
+    const m = /^\/api\/([a-z_]+)$/.exec(url.pathname);
     if (!m) {
         return send(404, { error: { code: 'not_found', message: 'use /api/<method>' } });
     }
-    let body = '';
+    // collect raw chunks and decode once: decoding chunk by chunk would split multi-byte UTF-8 characters
+    const chunks = [];
+    let size = 0;
+    req.on('error', () => {}); // client went away
     req.on('data', (d) => {
-        body += d;
-        if (body.length > 1e6) {
-            req.destroy();
+        size += d.length;
+        if (size > MAX_BODY) {
+            if (!res.headersSent) {
+                send(413, { error: { code: 'too_large', message: `request body over ${MAX_BODY} bytes` } }, { connection: 'close' });
+                res.on('finish', () => req.destroy());
+            }
+            return;
         }
+        chunks.push(d);
     });
     req.on('end', async () => {
+        if (size > MAX_BODY) {
+            return;
+        }
+        const body = Buffer.concat(chunks).toString('utf8');
         let args = Object.fromEntries(url.searchParams);
         if (body.trim()) {
+            let parsed;
             try {
-                args = { ...args, ...JSON.parse(body) };
+                parsed = JSON.parse(body);
             } catch {
                 return send(400, { error: { code: 'bad_request', message: 'body is not JSON' } });
             }
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                return send(400, { error: { code: 'bad_request', message: 'body must be a JSON object of arguments' } });
+            }
+            args = { ...args, ...parsed };
         }
-        for (const k of ['round']) {
+        for (const k of INTS) {
             if (typeof args[k] === 'string' && /^\d+$/.test(args[k])) {
                 args[k] = Number(args[k]);
             }

@@ -3,14 +3,18 @@
 /**
  * Builds the ladder results document (schema "swu-ladder/1") from finished games. Pure, no engine dependency.
  *
- * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, botStats }
- * where winner is a bot name, 'draw' or null. Only outcome 'won' counts towards ratings; ERROR / STUCK / STEP_CAP
- * games are kept in the list and counted under `incomplete` so engine bugs stay visible.
+ * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, fault, faultKind, botStats }
+ * where winner is a bot name, 'draw' or null. Outcomes 'won' and 'forfeit' (one seat's bot failed to load, threw, went
+ * over the time cap or hung: fault is that seat, winner the other bot) count towards ratings; ERROR / STUCK / STEP_CAP
+ * games are kept in the list and counted under `incomplete` so engine bugs stay visible. Each bot row also counts the
+ * games it forfeited (`forfeits`, included in its losses).
  */
 const { sequentialElo, bradleyTerry, wilson } = require('./ratings');
 
+const isDecided = (g) => g.outcome === 'won' || g.outcome === 'forfeit';
+
 function scoreOf(g) {
-    if (g.outcome !== 'won') {
+    if (!isDecided(g)) {
         return null;
     }
     if (g.winner === 'draw') {
@@ -34,7 +38,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
 
     const bots = names.map((name) => {
         const mine = finished.filter((g) => g.p1 === name || g.p2 === name);
-        const row = { name, ...(botInfo?.[name] ?? {}), games: mine.length, wins: 0, losses: 0, draws: 0, incomplete: 0, asP1: { games: 0, wins: 0 }, msPerWindow: null };
+        const row = { name, ...(botInfo?.[name] ?? {}), games: mine.length, wins: 0, losses: 0, draws: 0, incomplete: 0, forfeits: 0, asP1: { games: 0, wins: 0 }, msPerWindow: null };
         let ms = 0;
         let windows = 0;
         for (const g of mine) {
@@ -47,7 +51,10 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
                 ms += st.ms;
                 windows += st.windows;
             }
-            if (g.outcome !== 'won') {
+            if (g.fault === (seat === 0 ? 'p1' : 'p2')) {
+                row.forfeits++;
+            }
+            if (!isDecided(g)) {
                 row.incomplete++;
             } else if (g.winner === 'draw') {
                 row.draws++;
@@ -77,7 +84,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
             const gs = finished.filter((g) => (g.p1 === a && g.p2 === b) || (g.p1 === b && g.p2 === a));
             const p = { a, b, games: gs.length, aWins: 0, bWins: 0, draws: 0, incomplete: 0 };
             for (const g of gs) {
-                if (g.outcome !== 'won') {
+                if (!isDecided(g)) {
                     p.incomplete++;
                 } else if (g.winner === 'draw') {
                     p.draws++;
@@ -97,7 +104,8 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
     for (const g of finished) {
         outcomes[g.outcome] = (outcomes[g.outcome] ?? 0) + 1;
     }
-    const p1Decided = results.filter((r) => r.score !== 0.5);
+    // seat advantage from played-out games only (a forfeit says nothing about the seat)
+    const p1Decided = finished.filter((g) => g.outcome === 'won').map(scoreOf).filter((x) => x === 0 || x === 1);
 
     return {
         schema: 'swu-ladder/1',
@@ -108,7 +116,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
         engine,
         config,
         progress: { scheduled, finished: finished.length, rated: results.length, outcomes },
-        firstSeatWinRate: p1Decided.length ? p1Decided.filter((r) => r.score === 1).length / p1Decided.length : null,
+        firstSeatWinRate: p1Decided.length ? p1Decided.filter((x) => x === 1).length / p1Decided.length : null,
         bots: bots.sort((x, y) => y.btElo - x.btElo),
         pairs,
         // Elo after each rated game, in finish order (for rating-over-time charts)

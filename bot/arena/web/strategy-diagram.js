@@ -3,6 +3,8 @@
  * pulse and storyboard if window.anime exists, CSS otherwise. Colors come from CSS variables on the host
  * (--ink, --muted, --line, --accent, --good, --bad, --panel) with fallbacks, so it fits both themes.
  *   SWUStrategy.render(element, diagram)  -> { destroy() }
+ * destroy() stops the storyboard timer and every animation and empties the element; rendering into an element again
+ * destroys what was drawn there before. A storyboard step without a caption shows none.
  */
 (function (root) {
   const KINDS = ['input', 'memory', 'feature', 'decision', 'action'];
@@ -15,6 +17,7 @@
     return e;
   }
   function render(host, d) {
+    if (host.__swuStrategy) host.__swuStrategy.destroy();
     host.textContent = '';
     const cols = KINDS.filter((k) => d.nodes.some((n) => n.kind === k));
     const byCol = cols.map((k) => d.nodes.filter((n) => n.kind === k));
@@ -55,10 +58,15 @@
       if (n.note || n.value !== undefined) el('title', {}, g, [n.label, n.value !== undefined ? `value ${n.value}` : '', n.note || ''].filter(Boolean).join('\n'));
       return { n, g, c };
     });
-    let timer = null, anims = [];
-    function apply(highlight, caption) {
-      const on = new Set(highlight || []);
+    let timer = null, anims = [], dead = false;
+    function stopAnims() {
       anims.forEach((a) => a.pause && a.pause()); anims = [];
+      if (root.anime && root.anime.remove) root.anime.remove([...edgeEls.map((x) => x.p), ...nodeEls.map((x) => x.c)]);
+    }
+    function apply(highlight, caption) {
+      if (dead) return;
+      const on = new Set(highlight || []);
+      stopAnims();
       for (const { n, c } of nodeEls) {
         c.setAttribute('stroke-width', on.has(n.id) ? 4 : 2);
         c.style.fill = on.has(n.id) ? 'var(--accent-soft,#fbe6da)' : '';
@@ -70,14 +78,24 @@
         if (hot && root.anime) anims.push(root.anime({ targets: p, strokeDashoffset: [24, 0], duration: 900, easing: 'linear', loop: true }));
       }
       if (root.anime && on.size) anims.push(root.anime({ targets: nodeEls.filter((x) => on.has(x.n.id)).map((x) => x.c), scale: [1, 1.12], direction: 'alternate', loop: true, duration: 700, easing: 'easeInOutSine' }));
-      if (caption !== undefined) cap.textContent = caption || d.caption || '';
+      if (caption !== undefined) cap.textContent = caption;
     }
     apply(d.highlight);
     if (d.steps && d.steps.length && !(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
       let i = 0;
-      timer = setInterval(() => { const s = d.steps[i++ % d.steps.length]; apply(s.highlight, s.caption); }, 2600);
+      timer = setInterval(() => { const s = d.steps[i++ % d.steps.length]; apply(s.highlight, s.caption || ''); }, 2600);
     }
-    return { destroy() { clearInterval(timer); anims.forEach((a) => a.pause && a.pause()); host.textContent = ''; } };
+    const view = {
+      destroy() {
+        if (dead) return;
+        dead = true;
+        clearInterval(timer); timer = null;
+        stopAnims();
+        if (host.__swuStrategy === view) { host.__swuStrategy = null; host.textContent = ''; }
+      }
+    };
+    host.__swuStrategy = view;
+    return view;
   }
   root.SWUStrategy = { render };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -5,11 +5,15 @@
  *   roster.json                 competitors and baselines
  *   agents/<agent>/             each competitor's live, editable bot (bot.js + anything it requires from its own folder)
  *   versions/<agent>-v<N>/      frozen submissions; the referee only rates these
+ *   versions/.staging-*         submissions being copied and checked (invisible to versionsOf and the registry)
  *   standings.json, rounds/     referee output
+ *   inbox/<agent>.jsonl         messages, one JSON object per line
  * Default: /mnt/project-files/arena when the project folder exists, else arena-home/ in the repo (gitignored).
+ * Keep file access to ARENA_HOME behind the helpers here.
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const HOME = path.resolve(process.env.ARENA_HOME ?? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/arena' : path.join(__dirname, '..', '..', 'arena-home')));
 const AGENTS = path.join(HOME, 'agents');
@@ -32,20 +36,125 @@ function readJson(file, dflt) {
     }
 }
 
+/** Competitors and baselines. A missing roster is the default; a roster that exists but does not parse throws, so a
+ *  bad hand edit stops the arena instead of silently running (and later writing) an empty roster. */
 function roster() {
-    return readJson(ROSTER, { thinkCapMs: 60000, baselines: ['rush', 'heuristic'], agents: [] });
+    let text;
+    try {
+        text = fs.readFileSync(ROSTER, 'utf8');
+    } catch (e) {
+        if (e.code === 'ENOENT') {
+            return { thinkCapMs: 60000, baselines: ['rush', 'heuristic'], agents: [] };
+        }
+        throw e;
+    }
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        throw new Error(`${ROSTER} is not valid JSON (${e.message}); fix it by hand`);
+    }
 }
 
-/** Submitted version numbers of an agent, ascending. */
+/** Submitted version numbers of an agent, ascending (staging folders and other dot-folders are ignored). */
 function versionsOf(agent) {
     if (!fs.existsSync(VERSIONS)) {
         return [];
     }
+    const prefix = `${agent}-v`;
     return fs.readdirSync(VERSIONS)
-        .map((d) => new RegExp(`^${agent}-v(\\d+)$`).exec(d))
-        .filter(Boolean)
-        .map((m) => Number(m[1]))
+        .filter((d) => !d.startsWith('.') && d.startsWith(prefix) && /^\d+$/.test(d.slice(prefix.length)))
+        .map((d) => Number(d.slice(prefix.length)))
         .sort((a, b) => a - b);
 }
 
-module.exports = { HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, versionsOf };
+const exists = (file) => fs.existsSync(file);
+
+/** Creates dir; false when it already exists (a cheap claim on a name, e.g. a new competitor's folder). */
+function claimDir(dir) {
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    try {
+        fs.mkdirSync(dir);
+        return true;
+    } catch (e) {
+        if (e.code === 'EEXIST') {
+            return false;
+        }
+        throw e;
+    }
+}
+
+/** Writes [[relative path, text], ...] into dir (the caller has checked that every path stays inside dir). */
+function writeFiles(dir, entries) {
+    for (const [rel, text] of entries) {
+        const f = path.join(dir, rel);
+        fs.mkdirSync(path.dirname(f), { recursive: true });
+        fs.writeFileSync(f, text);
+    }
+}
+
+function removeDir(dir) {
+    fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/** A fresh, empty versions/.staging-<agent>-<random> folder for a submission being assembled. (Not mkdtemp: its 0700
+ *  mode would survive the rename and hide the version from other users of the shared folder.) */
+function stagingDir(agent) {
+    fs.mkdirSync(VERSIONS, { recursive: true });
+    const dir = path.join(VERSIONS, `.staging-${agent}-${crypto.randomBytes(6).toString('hex')}`);
+    fs.mkdirSync(dir);
+    return dir;
+}
+
+/** Copies a bot folder into dst: follows symlinks (a version must not point outside itself), keeps dot-files, skips
+ *  .git and node_modules. */
+function copyBot(src, dst) {
+    fs.cpSync(src, dst, { recursive: true, dereference: true, filter: (f) => !path.relative(src, f).split(path.sep).some((p) => p === '.git' || p === 'node_modules') });
+}
+
+/** Renames a finished staging folder to dst in one step; false (nothing moved) when dst is already taken. */
+function promote(staging, dst) {
+    if (fs.existsSync(dst)) {
+        return false;
+    }
+    try {
+        fs.renameSync(staging, dst);
+        return true;
+    } catch (e) {
+        if (e.code === 'EEXIST' || e.code === 'ENOTEMPTY') {
+            return false;
+        }
+        throw e;
+    }
+}
+
+function appendJsonl(file, obj) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify(obj)}\n`);
+}
+
+/** The objects of a JSON Lines file, oldest first; [] when it is missing. Lines that do not parse are skipped. */
+function readJsonl(file) {
+    let text;
+    try {
+        text = fs.readFileSync(file, 'utf8');
+    } catch {
+        return [];
+    }
+    const out = [];
+    for (const line of text.split('\n')) {
+        if (!line.trim()) {
+            continue;
+        }
+        try {
+            out.push(JSON.parse(line));
+        } catch {
+            // a torn or hand-edited line must not hide the rest
+        }
+    }
+    return out;
+}
+
+module.exports = {
+    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, versionsOf,
+    exists, claimDir, writeFiles, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl
+};

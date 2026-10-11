@@ -7,12 +7,13 @@
  *                  SUBMISSION.json has bot.kind 'stdio' runs that program through the spec's stdio adapter
  * Anything after '#' is ignored (same as players/index.js).
  *
- * Every arena bot is wrapped with the time cap: once its choose() calls in one game add up to more than
- * roster.thinkCapMs, it throws TIME_FORFEIT, which ends the game; the referee scores that as a loss for that bot.
+ * The time cap is not applied here: the game runner (ladder-worker.js) guards every bot, baselines included, with
+ * players/guard.js. A bot whose bot.js throws or does not return a bot makes makeArenaBot throw; the runner scores that
+ * as a load forfeit.
  */
 const fs = require('fs');
 const path = require('path');
-const { AGENTS, VERSIONS, roster, readJson } = require('./home');
+const { AGENTS, VERSIONS, readJson } = require('./home');
 
 const NAME = /^[a-z][a-z0-9_]*$/;
 
@@ -54,25 +55,14 @@ function makeArenaBot(name) {
             throw new Error(`${name} is a stdio bot, but bot/players/external.js (the spec's adapter) is not in this checkout`);
         }
         bot = new ExternalBot(name, { cmd: r.stdio.cmd, args: r.stdio.args ?? [], cwd: r.stdio.cwd });
+        bot.external ??= true; // it thinks in another process: the guard times it by wall clock
     } else {
         bot = require(r.file).createBot(name);
     }
+    if (!bot || typeof bot.choose !== 'function') {
+        throw new Error(`${name}: createBot() did not return a bot with a choose() method`);
+    }
     bot.name = name;
-    const cap = roster().thinkCapMs ?? Infinity;
-    const inner = bot.choose.bind(bot);
-    let used = 0;
-    bot.choose = (ctx) => {
-        const t = process.hrtime.bigint();
-        try {
-            return inner(ctx);
-        } finally {
-            used += Number(process.hrtime.bigint() - t) / 1e6;
-            if (used > cap) {
-                // eslint-disable-next-line no-unsafe-finally
-                throw new Error(`TIME_FORFEIT ${name} thought ${Math.round(used)} ms (cap ${cap})`);
-            }
-        }
-    };
     return bot;
 }
 

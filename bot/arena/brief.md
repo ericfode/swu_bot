@@ -26,8 +26,10 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 - **Hidden information:** the decklists are public, so you may use the multiset of all cards each player owns. You may
   not read which hidden zone an opponent card is in, the cards in their hand, or either deck's order. Lookahead must
   reseed the engine RNG from your own stream (as `heuristic.js` does) and redeal hidden cards in sampled worlds.
-- **Time cap:** {{capSeconds}} s of thinking per game. Over it, your bot forfeits that game. The stock search budget
-  already overruns it in some games, so measure `ms/decision` and stay well inside the cap.
+- **Time cap:** {{capSeconds}} s of thinking (CPU time on your bot's thread, `createBot()` included) per game, and twice
+  that in wall time inside `choose()`. Over it, your bot forfeits that game. The stock search budget already overruns
+  it in some games, so measure `ms/decision` and stay well inside the cap. No worker threads or child processes.
+- **Forfeits:** a throw, an illegal return value, a failed load or a hang loses the game for your bot.
 - Use the `rng` you are given, never `Math.random()`. Prefer count-based budgets over wall-clock ones.
 - Reference code you may read (write your own in your folder): `bot/players/belief.js` and `bot/players/ismcts.js` on
   git branch `origin/claude/project-thread-t81nys` (`git -C {{repo}} show origin/claude/project-thread-t81nys:bot/players/belief.js`).

@@ -7,7 +7,7 @@
  *   rush                        rule-based, no lookahead
  *   heuristic[-dN]              one-ply rollback search, original ("balanced") evaluation
  *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
- *   <agent>, <agent>-r<N>       arena competitor bots (bot/arena/registry.js)
+ *   <agent>, <agent>-v<N>       arena competitor bots (bot/arena/registry.js)
  *
  * `-dN` sets search depth (my next N actions). Anything after `#` is ignored, so the same bot can be entered twice
  * (`aggro#1,aggro#2`) as a sanity check: the two copies should rate about equal.
@@ -36,7 +36,7 @@ function describeBot(name) {
     if (/^random/.test(kind)) {
         return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
     }
-    // competitor bots from the arena (bot/arena/agents/<agent>/, or a frozen <agent>-r<N>)
+    // competitor bots from the arena (<ARENA_HOME>/agents/<agent>/, or a frozen <agent>-v<N>)
     return describeArenaBot(name);
 }
 
