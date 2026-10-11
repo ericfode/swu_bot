@@ -6,3 +6,4 @@ results/
 .perch/*
 !.perch/closed.jsonl
 !.perch/rules/
+data/

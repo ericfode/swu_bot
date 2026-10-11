@@ -1,0 +1,26 @@
+{
+ "bots": ["jepa", "jepa-h1"],
+ "status": "running",
+ "now": "Recording 4000 training games (random and rush) and tuning the tinygrad training step",
+ "goal": "A bot that decides by imagining futures in a learned latent space (JEPA world model), not by reconstructing boards.",
+ "mentalModel": {
+  "summary": "An encoder maps the board to a 96-number latent z. A predictor imagines the latent of my next decision (and 4 decisions on) for each legal move. A value head scores the imagined latents; the best-scoring move is played. Nothing is decoded back to a board.",
+  "features": [
+   {"name": "JEPA prediction loss (+1, +4)", "weight": 1.0, "note": "predict the target encoder's latent of the future position"},
+   {"name": "VICReg variance", "weight": 1.0, "note": "keeps the latent from collapsing"},
+   {"name": "VICReg covariance", "weight": 0.04, "note": "spreads information over latent dims"},
+   {"name": "value (win) head", "weight": 0.5, "note": "grounds the latent and scores imagined futures"}
+  ]
+ },
+ "plan": [
+  {"text": "Share the Rust bot's state/action encoding (Python port)", "state": "done"},
+  {"text": "Write the tinygrad JEPA trainer (EMA target encoder, VICReg)", "state": "done"},
+  {"text": "Record 4000 games (random, rush)", "state": "doing"},
+  {"text": "Train v1 and test vs random and rush", "state": "todo"},
+  {"text": "Ladder vs the other bots", "state": "todo"}
+ ],
+ "thoughts": [
+  {"t": "2026-10-11T08:10:00Z", "text": "JEPA, not a generative world model: the predictor only has to land near the embedding of the future, so it can ignore details it cannot predict (the opponent's hidden hand, draws)."},
+  {"t": "2026-10-11T08:10:30Z", "text": "Smoke test on 196 random games: the predicted next latent is the nearest of 512 candidates 70% of the time, against 6% for 'nothing changes'. Linear probes read base HP, hand size and board power back out of z with R² of 0.9 to 0.98."}
+ ]
+}

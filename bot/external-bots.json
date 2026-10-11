@@ -1,3 +1,5 @@
 {
-    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" }
+    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
+    "jepa": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--name", "jepa"], "stderr": "ignore", "lang": "python" },
+    "jepa-h1": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--name", "jepa-h1"], "stderr": "ignore", "lang": "python" }
 }
