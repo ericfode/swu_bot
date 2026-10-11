@@ -310,6 +310,16 @@ function makeServer({ games, kit, key = null }) {
     });
 }
 
+/**
+ * Refuses to serve beyond this machine without --key: a live bot game shows our bot's hand, and anyone who can reach
+ * the port (the opponent included) could read it during play.
+ */
+function checkBinding(host, key) {
+    if (!['127.0.0.1', '::1', 'localhost'].includes(host) && !key) {
+        throw new Error(`--host ${host} reaches beyond this machine: add --key <secret>, since a live bot game shows our hand`);
+    }
+}
+
 function main() {
     const runs = arg('runs');
     const kit = arg('kit');
@@ -323,6 +333,7 @@ function main() {
     const games = new Games(runs, { predict: arg('predict', null) });
     const port = Number(arg('port', 8080));
     const host = arg('host', '127.0.0.1');
+    checkBinding(host, key);
     makeServer({ games, kit, key }).listen(port, host, () => {
         console.error(`live view on http://${host}:${port}/${key ? '<key>/' : ''} (runs ${games.runs})`);
     });
@@ -337,4 +348,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { Games, makeServer, acceptsGzip, LIVE_MS, STATUS_STALE_MS };
+module.exports = { Games, makeServer, acceptsGzip, checkBinding, LIVE_MS, STATUS_STALE_MS };

@@ -70,7 +70,7 @@ each move. `--predict` adds the evaluator's P(p1 wins) from the public board (no
 Use the shared kit build (`/mnt/project-files/viewer-kit`, 2026-10-11 evening or later): an older kit, such as one
 built from `studio/` on main before the Holotable branch lands, shows the board without card text or the win chance.
 The server reads only the frame files, the runs' `games.jsonl` and `status.json`, and the two kit files. It listens on
-127.0.0.1 unless `--host` says otherwise; on a reachable host, add `--key <secret>` so every route sits under `/<secret>/`.
+127.0.0.1 unless `--host` says otherwise; any other host requires `--key <secret>`, which puts every route under `/<secret>/` (a live bot game shows our bot's hand).
 
 In a bot game (`<run>/frames/`) the frames are our seat's view, so that seat is named after the bot ("c-clock (ours)")
 and the other one "opponent", and the picker says whether our bot won. A watched game is two people and says so.

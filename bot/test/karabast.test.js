@@ -439,7 +439,11 @@ test('the live view gzips only when the client allows it', () => {
 });
 
 test('the live view answers only under its key', async () => {
-    const { Games, makeServer } = require('../karabast/live-view');
+    const { Games, makeServer, checkBinding } = require('../karabast/live-view');
+    // beyond this machine a key is required: a live bot game shows our hand
+    assert.throws(() => checkBinding('0.0.0.0', null), /--key/);
+    assert.doesNotThrow(() => checkBinding('0.0.0.0', 'k3y-for-tests'));
+    assert.doesNotThrow(() => checkBinding('127.0.0.1', null));
     const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
     fs.writeFileSync(path.join(kit, 'swu-viewer-kit.js'), '// kit');
     fs.writeFileSync(path.join(kit, 'card-text.json'), '{}');
