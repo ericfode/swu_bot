@@ -4,8 +4,9 @@
 //! forceteki engine, lists the legal actions and applies the one we pick, so this process needs no card data.
 //!
 //!   cargo build --release --manifest-path bot/rust/Cargo.toml
-//!   swu-bot-rs [random|greedy]          (default: greedy)
+//!   swu-bot-rs [random|greedy|greedy2]  (default: greedy)
 
+mod cards;
 mod policy;
 mod protocol;
 
@@ -33,7 +34,11 @@ impl Bot {
                 Reply::Ready { v: VERSION, name: self.name.clone() }
             }
             Request::Decide(d) if d.actions.is_empty() => Reply::Error { error: "no actions to choose from".into() },
-            Request::Decide(d) => Reply::Act { i: self.policy.choose(&d) },
+            Request::Decide(d) => {
+                let i = self.policy.choose(&d);
+                let distribution = if d.actions[i].kind == "distribute" { self.policy.distribution(&d, i) } else { None };
+                Reply::Act { i, distribution }
+            }
         }
     }
 }

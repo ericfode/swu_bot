@@ -1,22 +1,30 @@
 //! Policies: given one decision, return the index of the action to take.
 
 mod greedy;
+mod greedy2;
 mod random;
 
-use crate::protocol::{Decide, Hello};
+use crate::cards::CardDb;
+use crate::protocol::{Decide, DistShare, Hello};
 
 pub trait Policy {
     /// A new game starts (protocol `hello`): reset per-game state and reseed.
     fn new_game(&mut self, hello: &Hello);
     fn choose(&mut self, req: &Decide) -> usize;
+    /// When the chosen action is a `distribute`, the split to send with it (None: the engine side picks one).
+    fn distribution(&mut self, _req: &Decide, _i: usize) -> Option<Vec<DistShare>> {
+        None
+    }
 }
 
-pub const NAMES: &[&str] = &["random", "greedy"];
+pub const NAMES: &[&str] = &["random", "greedy", "greedy2"];
 
 pub fn create(name: &str) -> Option<Box<dyn Policy>> {
     match name {
         "random" => Some(Box::new(random::Random::default())),
         "greedy" => Some(Box::new(greedy::Greedy::default())),
+        // card data is read once per process; the bot process serves many games
+        "greedy2" => Some(Box::new(greedy2::Greedy2::new(Box::leak(Box::new(CardDb::load_default()))))),
         _ => None,
     }
 }

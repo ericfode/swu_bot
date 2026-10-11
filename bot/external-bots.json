@@ -1,5 +1,6 @@
 {
     "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
     "rust-random": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["random"], "lang": "rust" },
-    "rust-greedy": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy"], "lang": "rust" }
+    "rust-greedy": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy"], "lang": "rust" },
+    "rust-greedy2": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy2"], "lang": "rust" }
 }

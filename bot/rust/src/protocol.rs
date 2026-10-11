@@ -82,7 +82,41 @@ pub struct Action {
     #[serde(default)]
     pub card: Option<CardWire>,
     #[serde(default)]
-    pub distribute: Option<Value>,
+    pub distribute: Option<Distribute>,
+}
+
+/// A `distribute` action: split `amount` damage or healing over `targets`.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Distribute {
+    /// distributeDamage | distributeIndirectDamage | distributeHealing | ...
+    #[serde(default, rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub amount: u32,
+    #[serde(default)]
+    pub can_distribute_less: bool,
+    #[serde(default)]
+    pub can_choose_no_targets: bool,
+    #[serde(default)]
+    pub max_targets: Option<u32>,
+    #[serde(default)]
+    pub targets: Vec<DistTarget>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct DistTarget {
+    pub id: String,
+    /// None = uncapped
+    #[serde(default)]
+    pub cap: Option<u32>,
+}
+
+/// One entry of the split a bot may send with a `distribute` action.
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct DistShare {
+    pub id: String,
+    pub amount: u32,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -123,6 +157,8 @@ pub struct PlayerView {
     #[serde(default)]
     pub base: BaseView,
     #[serde(default)]
+    pub leader: Option<LeaderView>,
+    #[serde(default)]
     pub res: Resources,
     #[serde(default)]
     pub hand_count: u32,
@@ -148,9 +184,28 @@ pub struct CardRef {
 }
 
 #[derive(Debug, Deserialize, Default)]
+pub struct LeaderView {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub n: Option<String>,
+    #[serde(default)]
+    pub s: Option<String>,
+    /// 1 once deployed as a unit
+    #[serde(default)]
+    pub dep: u8,
+    #[serde(default)]
+    pub x: u8,
+}
+
+#[derive(Debug, Deserialize, Default)]
 pub struct BaseView {
     #[serde(default)]
     pub id: String,
+    #[serde(default)]
+    pub n: Option<String>,
+    #[serde(default)]
+    pub s: Option<String>,
     #[serde(default)]
     pub hp: i32,
     #[serde(default)]
@@ -178,9 +233,42 @@ pub struct UnitView {
     #[serde(default)]
     pub d: i32,
     #[serde(default)]
+    pub s: Option<String>,
+    #[serde(default)]
     pub x: Option<u8>,
     #[serde(default)]
     pub sn: Option<u8>,
+    /// Upgrades on the unit; `t: 1` for tokens (Shield, Experience, ...).
+    #[serde(default)]
+    pub u: Vec<UpgradeRef>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct UpgradeRef {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub n: Option<String>,
+    #[serde(default)]
+    pub t: u8,
+}
+
+impl UnitView {
+    pub fn ready(&self) -> bool {
+        self.x != Some(1)
+    }
+
+    pub fn sentinel(&self) -> bool {
+        self.sn == Some(1)
+    }
+
+    pub fn hp_left(&self) -> i32 {
+        (self.h - self.d).max(0)
+    }
+
+    pub fn shields(&self) -> usize {
+        self.u.iter().filter(|u| u.n.as_deref() == Some("Shield")).count()
+    }
 }
 
 impl State {
@@ -188,12 +276,49 @@ impl State {
     pub fn unit(&self, id: &str) -> Option<&UnitView> {
         self.players.values().flat_map(|p| p.ground.iter().chain(p.space.iter())).find(|u| u.id == id)
     }
+
+    /// Seat ("p1"/"p2") and arena ("ground"/"space") of a unit in play.
+    pub fn unit_at(&self, id: &str) -> Option<(&str, &'static str, &UnitView)> {
+        for (seat, p) in &self.players {
+            if let Some(u) = p.ground.iter().find(|u| u.id == id) {
+                return Some((seat.as_str(), "ground", u));
+            }
+            if let Some(u) = p.space.iter().find(|u| u.id == id) {
+                return Some((seat.as_str(), "space", u));
+            }
+        }
+        None
+    }
+
+    /// Seat whose base has this card uuid.
+    pub fn base_owner(&self, id: &str) -> Option<&str> {
+        self.players.iter().find(|(_, p)| p.base.id == id).map(|(s, _)| s.as_str())
+    }
+}
+
+impl PlayerView {
+    pub fn units(&self) -> impl Iterator<Item = &UnitView> {
+        self.ground.iter().chain(self.space.iter())
+    }
+
+    pub fn base_left(&self) -> i32 {
+        (self.base.hp - self.base.d).max(0)
+    }
+}
+
+/// The other seat.
+pub fn other(seat: &str) -> &'static str {
+    if seat == "p1" { "p2" } else { "p1" }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum Reply {
     Ready { v: u32, name: String },
-    Act { i: usize },
+    Act {
+        i: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        distribution: Option<Vec<DistShare>>,
+    },
     Error { error: String },
 }

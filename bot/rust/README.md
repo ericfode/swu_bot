@@ -8,9 +8,27 @@ No card data or engine code is needed on the Rust side.
     node bot/tournament.js --bots rust-greedy,heuristic --games 10 --out replays/rust
     node bot/rust/check.js 10 1                  # both Rust bots vs random-a, both seats
 
-Policies (first CLI argument): `random` (seeded from the game's `hello`) and `greedy` (rules over the wire data:
-play cards, attack with the biggest ready unit, hit enemy threats, help own units; loop guards for no-op choices).
+Policies (first CLI argument, registered as `rust-<policy>` in `bot/external-bots.json`):
+
+- `random`: uniform, seeded from the game's `hello`.
+- `greedy`: rules over the wire data only: play cards, attack with the biggest ready unit, hit enemy threats, help
+  own units; loop guards for no-op choices.
+- `greedy2`: greedy plus card data and combat math. It reads costs, aspects, keywords and upgrade stats from the
+  engine's card JSON (`src/cards.rs`; `$SWU_CARD_JSON`, default `forceteki/test/json`, without it it falls back to
+  rules). Lethal first, then attacks that kill a ready enemy unit, then the most expensive card (removal held until
+  there is a target, leader deployed when affordable), then the other attacks, then claim initiative. Attack targets
+  weigh base damage against trades (kill value, damage taken back, shields, overwhelm, sentinels). Resources the
+  expensive and off-aspect cards, keeps cheap on-aspect units. Sends its own damage/healing split for `distribute`.
+
 Add one in `src/policy/` and a line in `bot/external-bots.json`.
+
+Real cards, forceteki 2be4fcd, both seats per seed (`node bot/ladder.js --bots a,b --games N`):
+
+| Match | Result |
+| --- | --- |
+| greedy vs random-a | 19-1 (`check.js 10 1`) |
+| greedy2 vs greedy | 19-1 |
+| greedy2 vs rush (best JS bot) | 29-11 |
 
 ## Why a subprocess
 
