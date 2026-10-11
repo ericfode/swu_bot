@@ -21,6 +21,9 @@
  * sets how hard the sampler leans on "they passed with 4 resources, so they probably do not hold a 4-drop".
  * beta = 0 is plain determinized ISMCTS over the decklist.
  *
+ * `peek: true` skips the sampling and searches the real hidden cards: an unfair control for measuring how much the
+ * hidden information is worth (the gap between peek and the fair variants).
+ *
  * Fairness: the real hidden cards are never read. The search only sees worlds re-sampled from public information
  * plus the two known decklists, and reseeds the engine RNG in every iteration.
  */
@@ -88,7 +91,7 @@ class IsmctsBot {
      * scale: evaluation points per logistic unit when squashing scores to 0..1. thoughts: optional callback for the
      * dashboard, called after every search with a summary.
      */
-    constructor(name = 'ismcts', { beta = 1, iterPerAction = 8, minIter = 48, maxIter = 240, horizon = 1, c = 0.7, scale = 8, maxTreeDecisions = 3, profile = null, thoughts = null } = {}) {
+    constructor(name = 'ismcts', { beta = 1, iterPerAction = 8, minIter = 48, maxIter = 240, horizon = 1, c = 0.7, scale = 8, maxTreeDecisions = 3, peek = false, profile = null, thoughts = null } = {}) {
         this.name = name;
         this.needsUndo = true;
         this.beta = beta;
@@ -99,6 +102,7 @@ class IsmctsBot {
         this.c = c;
         this.scale = scale;
         this.maxTreeDecisions = maxTreeDecisions;
+        this.peek = peek;
         this.profile = profile;
         this.thoughts = thoughts;
         this.belief = new BeliefModel(beta);
@@ -226,7 +230,9 @@ class IsmctsBot {
         let value = null;
         try {
             eg.game.setRandomSeed(String(Math.floor(this.rng() * 1e9)));
-            determinize(eg, pid, this.belief, this.rng);
+            if (!this.peek) {
+                determinize(eg, pid, this.belief, this.rng);
+            }
             for (let step = 0; step < 120 && !eg.over; step++) {
                 const actor = [pid, opp].find((id) => eg.legalActions(id).length);
                 if (!actor) {
