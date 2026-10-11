@@ -175,6 +175,9 @@ async function run(o) {
         steps++;
     }
     const realWinner = g1.eg.over ? g1.eg.winners : null;
+    if (!windows.length) {
+        throw new Error('the real game had no action windows');
+    }
     const targets = new Set(o.at.map((f) => windows[Math.min(windows.length - 1, Math.floor(f * windows.length))].step));
 
     // pass 2: replay, sampling at the checkpoints
@@ -184,8 +187,9 @@ async function run(o) {
     const out = { seed: o.seed, bots: o.bots, decks: g.decks, n: o.n, windows: windows.length, realWinner, realRounds: g1.eg.round, checkpoints: [] };
     steps = 0;
     while (!g.eg.over && steps < o.maxSteps) {
-        if (targets.has(steps)) {
-            const me = g.eg.ids.find((id) => g.eg.legalActions(id).length && g.eg.isActionWindow(id));
+        // me is null if the replay drifted from pass 1; out.replayMatches records that
+        const me = targets.has(steps) ? g.eg.ids.find((id) => g.eg.legalActions(id).length && g.eg.isActionWindow(id)) : null;
+        if (me) {
             const opp = g.eg.ids.find((id) => id !== me);
             const meName = g.eg.names[g.eg.ids.indexOf(me)];
             const cp = {
