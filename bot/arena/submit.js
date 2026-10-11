@@ -4,25 +4,15 @@
  *
  *   node bot/arena/submit.js <agent> "<one line: what changed and why>" [--no-check]
  *
- * Checks first (unless --no-check) that bot.js loads and that the bot finishes one game against random
- * without throwing, then copies <ARENA_HOME>/agents/<agent>/ to versions/<agent>-v<N>/ with SUBMISSION.json.
+ * Plays one smoke game against random first (unless --no-check), then submits through the API, the same as the
+ * `submit` tool: the live folder is copied to a staging folder, load-checked (require bot.js, call createBot) and renamed
+ * to versions/<agent>-v<N>/ in one step. ARENA_COMPETITOR_TOKEN is sent as the token on an arena with ARENA_AUTH=1.
  */
-const fs = require('fs');
-const path = require('path');
-const { AGENTS, VERSIONS, versionsOf, writeJson } = require('./home');
+const { api } = require('./api');
 
-function submit(agent, note, { check = true } = {}) {
-    const src = path.join(AGENTS, agent);
-    if (!fs.existsSync(path.join(src, 'bot.js'))) {
-        throw new Error(`no bot at ${src}/bot.js`);
-    }
-    const n = (versionsOf(agent).pop() ?? -1) + 1;
-    const name = `${agent}-v${n}`;
-    const dst = path.join(VERSIONS, name);
-    fs.mkdirSync(VERSIONS, { recursive: true });
-    fs.cpSync(src, dst, { recursive: true, filter: (f) => !f.split(path.sep).some((p) => p.startsWith('.')) });
-    writeJson(path.join(dst, 'SUBMISSION.json'), { agent, version: n, name, note: note ?? '', submittedAt: new Date().toISOString(), checked: check });
-    return name;
+/** Submits through the API (atomic: staged, load-checked, then renamed into versions/); returns the version name. */
+function submit(agent, note) {
+    return api.submit({ name: agent, note, token: process.env.ARENA_COMPETITOR_TOKEN }).version;
 }
 
 async function smokeTest(agent) {
@@ -43,12 +33,11 @@ if (require.main === module) {
         if (!agent || !note) {
             throw new Error('usage: node bot/arena/submit.js <agent> "<what changed and why>" [--no-check]');
         }
-        const check = !process.argv.includes('--no-check');
-        if (check) {
+        if (!process.argv.includes('--no-check')) {
             const r = await smokeTest(agent);
             console.log(`smoke game vs random: ${r.outcome} ${r.winner ?? ''}, ${r.steps} steps, my think ${Math.round(r.timing.p1.ms)} ms`);
         }
-        console.log(`submitted ${submit(agent, note, { check })}`);
+        console.log(`submitted ${submit(agent, note)}`);
         process.exit(0);
     })().catch((e) => {
         console.error(e.message || e);

@@ -76,6 +76,8 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
     } catch (e) {
         res.outcome = 'ERROR';
         res.error = String((e && e.message) || e).split('\n')[0].slice(0, 200);
+        // the round the game stopped in (a bot's time forfeit or crash ends it here too)
+        res.round = eg.round ?? 0;
     }
     res.ms = Date.now() - t0;
     // end bot processes whatever the outcome (stdio bots keep a child process and thread until closed)
