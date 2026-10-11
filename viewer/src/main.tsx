@@ -14,7 +14,7 @@ function App() {
             </header>
             <main>
                 {route.page === 'home' && <HomePage />}
-                {route.page === 'tournament' && <TournamentPage key={route.tid} tid={route.tid} />}
+                {route.page === 'tournament' && <TournamentPage key={route.tid} tid={route.tid} initialGame={route.g} />}
                 {route.page === 'game' && <GamePage key={`${route.tid}/${route.gid}`} tid={route.tid} gid={route.gid} step={route.step} />}
             </main>
         </>

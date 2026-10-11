@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 export type Route =
     | { page: 'home' }
-    | { page: 'tournament'; tid: string }
+    | { page: 'tournament'; tid: string; g: string | null }
     | { page: 'game'; tid: string; gid: string; step: number };
 
 function parse(hash: string): Route {
@@ -13,7 +13,7 @@ function parse(hash: string): Route {
         return { page: 'game', tid: parts[1], gid: parts[3], step };
     }
     if (parts[0] === 't' && parts[1]) {
-        return { page: 'tournament', tid: parts[1] };
+        return { page: 'tournament', tid: parts[1], g: new URLSearchParams(query).get('g') };
     }
     return { page: 'home' };
 }

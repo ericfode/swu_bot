@@ -4,13 +4,14 @@ import { CardView } from './CardView';
 import type { Focus } from './CardView';
 import { humanize } from './cardImage';
 import { useSettings } from './settings';
+import type { Perspective } from './settings';
 import type { Game, Seat } from './types';
 
 const SPEEDS = [{ label: 'slow', ms: 1000 }, { label: 'normal', ms: 400 }, { label: 'fast', ms: 120 }, { label: 'turbo', ms: 30 }];
 
 /** The shared replay view: board, transport controls, decision log and card preview. The tournament page embeds this too. */
 export function Replay({ game, startStep = 0 }: { game: Game; startStep?: number }) {
-    const { cardMode, setCardMode, godView, setGodView } = useSettings();
+    const { cardMode, setCardMode, perspective, setPerspective } = useSettings();
     const last = game.steps.length - 1;
     const [step, setStep] = useState(Math.min(startStep, last));
     const [playing, setPlaying] = useState(false);
@@ -134,7 +135,13 @@ export function Replay({ game, startStep = 0 }: { game: Game; startStep?: number
                     </div>
                 </div>
                 <div className="toggles">
-                    <label className="field"><input type="checkbox" checked={godView} onChange={(e) => setGodView(e.target.checked)} /> Show hands</label>
+                    <label className="field">Hands
+                        <select value={perspective} onChange={(e) => setPerspective(e.target.value as Perspective)}>
+                            <option value="god">Both (god view)</option>
+                            <option value="p1">Player 1's view</option>
+                            <option value="p2">Player 2's view</option>
+                        </select>
+                    </label>
                     <label className="field"><input type="checkbox" checked={cardMode === 'images'} onChange={(e) => setCardMode(e.target.checked ? 'images' : 'tiles')} /> Card art</label>
                     <span className="muted keys">&larr; &rarr; step · shift = 10 · space play · home/end</span>
                 </div>

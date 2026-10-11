@@ -49,10 +49,10 @@ function pct(wins: number, n: number): string {
     return n === 0 ? '–' : `${Math.round((wins / n) * 100)}%`;
 }
 
-export function TournamentPage({ tid }: { tid: string }) {
+export function TournamentPage({ tid, initialGame }: { tid: string; initialGame: string | null }) {
     const { data: index, error } = usePolled(() => loadIndex(tid), [tid], 4000);
     const [pair, setPair] = useState<[string, string] | null>(null);
-    const [selected, setSelected] = useState<string | null>(null);
+    const [selected, setSelected] = useState<string | null>(initialGame);
     const game = usePolled(() => (selected ? loadGame(tid, selected) : Promise.resolve(null)), [tid, selected]);
     const rows = useMemo(() => (index ? standings(index.bots, index.games) : []), [index]);
     const shown: IndexGame[] = useMemo(() => {

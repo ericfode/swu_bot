@@ -25,7 +25,8 @@ function Arena({ label, units, leaderS, onFocus }: { label: string; units: UnitR
 }
 
 function Side({ seat, p, botName, active, hasInitiative, onFocus }: SideProps) {
-    const { godView } = useSettings();
+    const { perspective } = useSettings();
+    const handVisible = perspective === 'god' || perspective === seat;
     const hpLeft = Math.max(0, p.base.hp - p.base.d);
     const low = hpLeft <= p.base.hp * 0.35;
     const leaderIsUnit = !!p.leader && p.leader.dep === 1;
@@ -55,7 +56,7 @@ function Side({ seat, p, botName, active, hasInitiative, onFocus }: SideProps) {
             <Arena label="space" units={p.space} leaderS={leaderS} onFocus={onFocus} />
             <Arena label="ground" units={p.ground} leaderS={leaderS} onFocus={onFocus} />
             <div className="hand-row" aria-label="hand">
-                {godView
+                {handVisible
                     ? p.hand.map((c, i) => <CardView key={`${c.n}-${i}`} card={c} kind="hand" onFocus={onFocus} />)
                     : p.hand.map((_, i) => <CardBack key={i} count={i + 1} label="hidden card" />)}
                 {p.hand.length === 0 && <span className="muted">no cards in hand</span>}
