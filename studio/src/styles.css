@@ -1,0 +1,570 @@
+@import "tailwindcss";
+
+/* Holotable: a dark tactical table. Player 1 reads as Rebel blue, player 2 as Imperial red; gold marks initiative, wins and
+   outcomes only (states like "on" and "current" are plain white), and the lens's score colours are never seat colours.
+   Layout: app rail on the left, page body scrolls; the game page is board + log + timeline in one screen. */
+@theme {
+    --color-bg: #060a13;
+    --color-ink: #0b1220;
+    --color-panel: #0f1829;
+    --color-raise: #16223a;
+    --color-line: #1d2a44;
+    --color-fg: #dce6fb;
+    --color-dim: #8494b8;
+    --color-faint: #56658a;
+    --color-p1: #56c8ff;
+    --color-p2: #ff5f6d;
+    --color-gold: #f6c454;
+    --color-good: #4fe0a8;
+    --font-display: "Oxanium", "Eurostile", "Segoe UI", system-ui, sans-serif;
+    --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+/* always emitted (they are read through var() from TS, which Tailwind doesn't see) */
+@theme static {
+    /* the lens: one colour per part of the omni board score (src/data/lens.ts TERM_COLOR), never a seat colour */
+    --color-v-base: #ff9a5c;
+    --color-v-ground: #5fd68f;
+    --color-v-space: #f28bd0;
+    --color-v-hand: #cde26a;
+    --color-v-res: #aebad3;
+    --color-v-init: #f6c454;
+    /* the omni score itself (the timeline curve, the breakdown's total) */
+    --color-edge: #c4b2ff;
+}
+
+:root {
+    color-scheme: dark;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* faint table grid + two seat glows; fixed so it doesn't scroll with content */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(60rem 30rem at 85% -10%, color-mix(in oklab, var(--color-p2) 10%, transparent), transparent 70%),
+        radial-gradient(60rem 30rem at 10% 110%, color-mix(in oklab, var(--color-p1) 10%, transparent), transparent 70%),
+        linear-gradient(var(--color-line) 1px, transparent 1px) 0 0 / 48px 48px,
+        linear-gradient(90deg, var(--color-line) 1px, transparent 1px) 0 0 / 48px 48px;
+    opacity: 0.55;
+    mask-image: radial-gradient(ellipse at center, #000 30%, transparent 85%);
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+    letter-spacing: 0.01em;
+}
+
+.num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+}
+
+.panel {
+    background: color-mix(in oklab, var(--color-panel) 82%, transparent);
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+}
+
+:focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding-inline: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--color-line);
+    background: var(--color-raise);
+    color: var(--color-fg);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover {
+    border-color: color-mix(in oklab, var(--color-p1) 50%, var(--color-line));
+}
+.btn[aria-pressed="true"] {
+    border-color: color-mix(in oklab, var(--color-fg) 55%, transparent);
+    background: color-mix(in oklab, var(--color-fg) 10%, var(--color-raise));
+    color: var(--color-fg);
+}
+.btn.primary {
+    background: var(--color-fg);
+    color: var(--color-ink);
+    border-color: transparent;
+    font-weight: 600;
+}
+
+.chip {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--color-line);
+    color: var(--color-dim);
+    white-space: nowrap;
+}
+
+/* ---------- cards ---------- */
+.card {
+    --w: 84px;
+    position: relative;
+    width: var(--w);
+    aspect-ratio: 5 / 7;
+    border-radius: 7px;
+    overflow: hidden;
+    flex: none;
+    box-shadow: 0 6px 18px -8px #000c, inset 0 0 0 1px #ffffff1a;
+    background: var(--color-raise);
+    transition: transform 0.35s cubic-bezier(.2, .8, .2, 1), filter 0.35s;
+    cursor: default;
+}
+.card.sm {
+    --w: 46px;
+    border-radius: 5px;
+}
+.card.lg {
+    --w: 220px;
+    border-radius: 14px;
+}
+/* inspector size: as big as the side panel and the window height allow */
+.card.xl {
+    --w: min(250px, calc(44vh * 5 / 7));
+    border-radius: 14px;
+}
+/* leader fronts and bases are printed landscape */
+.card.wide {
+    aspect-ratio: 7 / 5;
+    --w: 116px;
+}
+.card.wide.sm {
+    --w: 64px;
+}
+.card.wide.lg {
+    --w: 300px;
+}
+.card.wide.xl {
+    --w: min(350px, calc(44vh * 7 / 5));
+}
+.card img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+/* art whose orientation doesn't match its box: shown whole over a blurred copy of itself */
+.card img.whole {
+    object-fit: contain;
+}
+.card img.backdrop {
+    filter: blur(10px) brightness(0.5);
+    transform: scale(1.2);
+}
+.card.lensed img {
+    filter: brightness(0.72) saturate(0.85);
+}
+.card.lensed img.backdrop {
+    filter: blur(10px) brightness(0.4);
+}
+.card.exh {
+    transform: rotate(10deg) scale(0.94);
+    filter: saturate(0.45) brightness(0.72);
+}
+.tile {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px 6px 30px;
+    background:
+        radial-gradient(circle at 30% 20%, #ffffff22, transparent 55%),
+        linear-gradient(var(--ang), var(--a), var(--b));
+}
+.tile .mono {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: calc(var(--w) * 0.36);
+    line-height: 1;
+    color: #ffffffd0;
+    text-shadow: 0 2px 10px #0008;
+    align-self: center;
+    margin-top: 12%;
+}
+.tile .nm {
+    font-size: max(9px, calc(var(--w) * 0.115));
+    line-height: 1.15;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 2px #000;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.card.sm .tile,
+.card.lg .tile,
+.card.xl .tile,
+.card.wide .tile {
+    padding-bottom: 6px;
+}
+.card.sm .tile .nm {
+    display: none;
+}
+.stat {
+    position: absolute;
+    bottom: 4px;
+    display: grid;
+    place-items: center;
+    min-width: 22px;
+    height: 22px;
+    padding-inline: 4px;
+    border-radius: 6px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+    box-shadow: 0 2px 6px #0009;
+}
+.stat.pw {
+    left: 4px;
+    background: #c2333f;
+}
+.stat.hp {
+    right: 4px;
+    background: #2a6fd6;
+}
+/* damaged: same blue (SWU prints HP on blue), outlined so it shows without borrowing gold */
+.stat.hp.hurt {
+    color: #ffd9dd;
+    box-shadow: inset 0 0 0 2px #ffb4bc, 0 2px 6px #0009;
+}
+.mark {
+    position: absolute;
+    top: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+.mark.sentinel {
+    left: 4px;
+    background: #e9eef8;
+    color: #1d2a44;
+}
+.ups {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-end;
+}
+.up {
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: #f6c454;
+    color: #2a1d00;
+    max-width: calc(var(--w) - 8px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.up.token {
+    background: #e9eef8;
+    color: #1d2a44;
+}
+/* ---------- lens: card values from the omni bot's board score ---------- */
+.lens {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    pointer-events: none;
+}
+.card.sm .lens {
+    top: auto;
+    bottom: 2px;
+    translate: -50% 0;
+    gap: 1px;
+}
+.card.wide .lens {
+    left: 6px;
+    top: auto;
+    bottom: 6px;
+    translate: none;
+    align-items: flex-start;
+}
+.card.wide.sm .lens {
+    left: 2px;
+    bottom: 2px;
+}
+.lensv {
+    min-width: 34px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: max(13px, calc(var(--w) * 0.19));
+    line-height: 1.2;
+    text-align: center;
+    color: var(--term);
+    font-variant-numeric: tabular-nums;
+    background: color-mix(in oklab, var(--color-bg) 86%, transparent);
+    box-shadow: inset 0 0 0 1.5px var(--term), 0 4px 12px -2px #000;
+}
+.lensv.sm {
+    min-width: 0;
+    padding: 0 3px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+}
+.lensr {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+    color: var(--color-fg);
+    background: #0b1220eb;
+    box-shadow: inset 0 0 0 1px #dce6fb55, 0 2px 6px #0009;
+}
+.lensr.sm {
+    padding: 0 3px;
+    font-size: 9px;
+}
+/* the card the omni bot's chosen move starts with */
+.lensr.pick {
+    color: var(--color-bg);
+    background: var(--color-fg);
+    box-shadow: 0 0 12px -1px #dce6fbaa;
+}
+/* a lens total: --term colours the number and outline (a part of the score); without it, an outline in the seat colour (a player's total) */
+.lens-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 5px;
+    border-radius: 5px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--term, var(--color-fg));
+    background: color-mix(in oklab, var(--color-bg) 70%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--term, var(--seat, var(--color-fg))) 70%, transparent);
+    white-space: nowrap;
+}
+.lens-chip svg {
+    flex-shrink: 0;
+}
+
+.card-back {
+    background:
+        repeating-linear-gradient(45deg, #ffffff08 0 6px, transparent 6px 12px),
+        linear-gradient(160deg, #1b2a4a, #0b1220);
+}
+.card-back::after {
+    content: "";
+    position: absolute;
+    inset: 22% 18%;
+    border-radius: 50%;
+    border: 2px solid #ffffff22;
+}
+
+.pop {
+    position: absolute;
+    left: 50%;
+    top: 30%;
+    translate: -50% 0;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 22px;
+    color: #ffd2d6;
+    text-shadow: 0 0 12px #ff3b4f, 0 2px 4px #000;
+    pointer-events: none;
+    z-index: 5;
+}
+.pop.heal {
+    color: #d5ffee;
+    text-shadow: 0 0 12px #2fd38f, 0 2px 4px #000;
+}
+
+/* ---------- board ---------- */
+.lane {
+    min-height: 118px;
+    border-radius: 12px;
+    border: 1px dashed color-mix(in oklab, var(--color-line) 80%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 60%, transparent);
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+}
+.lane-label {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+    width: 100%;
+}
+
+.seat-p1 {
+    --seat: var(--color-p1);
+}
+.seat-p2 {
+    --seat: var(--color-p2);
+}
+.to-act {
+    box-shadow: 0 0 0 1px var(--seat), 0 0 28px -6px var(--seat);
+}
+
+.pips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+.pips i {
+    width: 9px;
+    height: 13px;
+    border-radius: 2px;
+    background: var(--seat);
+    box-shadow: 0 0 6px -1px var(--seat);
+}
+.pips i.spent {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--seat) 45%, transparent);
+}
+
+.log li button {
+    width: 100%;
+    text-align: left;
+}
+.log li button[aria-current="step"] {
+    background: var(--color-raise);
+    box-shadow: inset 2px 0 0 var(--color-fg);
+}
+
+input[type="range"].scrub {
+    width: 100%;
+    accent-color: var(--color-gold);
+}
+
+/* cmdk palette */
+[cmdk-root] {
+    width: min(640px, calc(100vw - 32px));
+}
+[cmdk-input] {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: var(--color-fg);
+    font-size: 16px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-line);
+}
+[cmdk-list] {
+    max-height: min(60vh, 420px);
+    overflow: auto;
+    padding: 6px;
+}
+[cmdk-group-heading] {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+    padding: 8px 10px 4px;
+}
+[cmdk-item] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--color-dim);
+}
+[cmdk-item][data-selected="true"] {
+    background: var(--color-raise);
+    color: var(--color-fg);
+}
+[cmdk-empty] {
+    padding: 16px;
+    color: var(--color-faint);
+}
+
+.recharts-cartesian-grid line {
+    stroke: var(--color-line);
+}
+.recharts-text {
+    fill: var(--color-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
