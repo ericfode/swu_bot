@@ -37,14 +37,24 @@ function engineRev() {
     return revCache;
 }
 
+const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
+
 /**
- * Both decklists as set codes, redrawn from the seed. The draw depends on the engine's card pool and on env.js's deck
- * builder, so it is trusted only when the replay header names this engine commit, the deck names match, and every card
- * the replay shows in a player's hand or discard pile is in that player's redrawn list; otherwise null.
+ * Both decklists as set codes. A header with `decks` (spec/replay-format.md) gives them exactly. Older replays only name
+ * the decks, so they are redrawn from the seed the way match.js draws them; that depends on the engine's card pool and
+ * env.js's deck builder, so a redraw is trusted only when the header names this engine commit, the deck names match,
+ * and at every step the cards in each player's hand and discard pile (owner's real deck cards only, no tokens) fit
+ * inside that player's redrawn list, counting copies. Otherwise null.
  */
 function deckLists(seed, header, lines = []) {
+    if (header?.t !== 'header') {
+        return null;
+    }
+    if (header.decks?.p1?.deck && header.decks?.p2?.deck) {
+        return { p1: flat(header.decks.p1), p2: flat(header.decks.p2) };
+    }
     const rev = engineRev();
-    if (header?.t !== 'header' || !header.engine || !rev || !rev.startsWith(header.engine)) {
+    if (!header.engine || !rev || !rev.startsWith(header.engine)) {
         return null;
     }
     const { seededRng } = require('../env');
@@ -53,15 +63,19 @@ function deckLists(seed, header, lines = []) {
     if (d.some((x, i) => x.metadata.name !== header.players?.[i]?.deck)) {
         return null;
     }
-    const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
     const decks = { p1: flat(d[0]), p2: flat(d[1]) };
-    // hand and discard hold only the owner's real deck cards (no tokens, no leader or base)
     for (const pid of ['p1', 'p2']) {
-        const have = new Set(decks[pid]);
+        const copies = new Map();
+        for (const c of decks[pid]) {
+            copies.set(c, (copies.get(c) ?? 0) + 1);
+        }
         for (const l of lines) {
             const ps = l.t === 'step' ? l.state?.players?.[pid] : null;
-            if (ps && [...(ps.hand ?? []), ...(ps.discard ?? [])].some((c) => c.s && !have.has(c.s))) {
-                return null;
+            const seen = new Map();
+            for (const c of ps ? [...(ps.hand ?? []), ...(ps.discard ?? [])] : []) {
+                if (c.s && (seen.set(c.s, (seen.get(c.s) ?? 0) + 1).get(c.s) > (copies.get(c.s) ?? 0))) {
+                    return null;
+                }
             }
         }
     }
