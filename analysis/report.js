@@ -7,12 +7,16 @@
  * --baseline overlays a second evaluator's objective curve (e.g. the heuristic) for comparison.
  * --game defaults to the replay path stored in the analysis; it adds the board at each checkpoint.
  * --fragment omits <!doctype>/<html>/<head>/<body> (for publishing as a claude.ai Artifact).
+ * --kit swu-viewer-kit.js inlines the shared game viewer (Holotable kit) with the replay, synced to the curves;
+ *   without it the page shows a compact board summary per checkpoint instead.
+ * --art-pack art-pack.json adds card art to the kit (only the cards in this game are kept).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { loadGame, checkpoints } = require('./lib/game');
 const { gameFitness } = require('./fitness');
+const { toDashboard } = require('./analyze');
 
 function opt(argv, k, d) {
     const i = argv.indexOf(`--${k}`);
@@ -37,7 +41,7 @@ function boardSummaries(game, a) {
     });
 }
 
-function build(a, { baseline = null, boards = null }) {
+function build(a, { baseline = null, boards = null, jsonl = null, art = null }) {
     const fit = gameFitness(a, { view: 'objective' });
     const data = {
         game: a.game,
@@ -48,7 +52,10 @@ function build(a, { baseline = null, boards = null }) {
         fitness: { seats: fit.seats, views: fit.views, gaps: fit.gaps },
         cps: a.checkpoints.map((c) => ({ i: c.i, step: c.step, round: c.round, phase: c.phase, actor: c.actor, actions: c.actions, v: c.views })),
         baseline: baseline ? { model: baseline.evaluator.model, byStep: Object.fromEntries(baseline.checkpoints.map((c) => [c.step, c.views.objective?.p1 ?? null])) } : null,
-        boards
+        boards,
+        jsonl,
+        art,
+        evals: jsonl ? toDashboard(a) : null
     };
     return { data, title: `${a.game.players.map((p) => p.bot).join(' vs ')}` };
 }
@@ -376,7 +383,30 @@ function inspect(j) {
   if (D.boards && D.boards[j]) { const bd = h('div', 'board', null, box); boardSide(bd, 'p1', D.boards[j].p1); boardSide(bd, 'p2', D.boards[j].p2); }
   h('div', 'note', 'Factor bars point right when they favour P1.', box);
 }
-function select(j) { selected = j; markers.forEach((m) => m && m(j)); inspect(j); }
+// the shared game viewer (Holotable kit), when inlined: its playhead and the curves follow each other
+let viewer = null;
+function select(j, fromViewer) {
+  selected = j; markers.forEach((m) => m && m(j)); inspect(j);
+  if (viewer && !fromViewer) viewer.seekStepN(D.cps[j].step);
+}
+if (window.SWUViewer && D.jsonl) {
+  try {
+    if (D.art) window.SWUViewer.loadArtPack(D.art);
+    viewer = window.SWUViewer.mount($('#kit'), {
+      jsonl: D.jsonl, evals: D.evals, layout: 'full', step: 0,
+      onStep: (i, n) => {
+        // the checkpoint whose position is on the board: the last one at or before the playhead
+        let j = 0;
+        D.cps.forEach((c, k) => { if (c.step <= n) j = k; });
+        if (j !== selected) select(j, true);
+      }
+    });
+  } catch (e) {
+    $('#kit').textContent = 'The game viewer could not start: ' + e.message;
+  }
+} else {
+  $('#kitPanel').hidden = true;
+}
 
 // ---------- turning points, credit, table ----------
 function sidebar() {
@@ -422,7 +452,7 @@ let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTime
 select(D.cps.length - 1 > 0 ? Math.min(D.cps.length - 1, (D.omniscient && D.omniscient.turningPoints && D.omniscient.turningPoints[0] ? D.cps.findIndex((c) => c.i === D.omniscient.turningPoints[0].i) : 0)) : 0);
 `;
 
-function html(data, title, fragment) {
+function html(data, title, fragment, kit = null) {
     const json = JSON.stringify(data).replace(/</g, '\\u003c');
     const body = `<title>${title.replace(/</g, '&lt;')}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -436,6 +466,11 @@ function html(data, title, fragment) {
     <div class="vs" id="vs"></div>
   </header>
   <div class="tiles" id="tiles"></div>
+  <section class="panel" id="kitPanel" aria-labelledby="h-kit">
+    <h2 id="h-kit">The game</h2>
+    <div class="note">Scrub or play the replay; the curves and the analyst notes below follow the playhead, and clicking a curve moves it.</div>
+    <div id="kit"></div>
+  </section>
   <section class="panel" aria-labelledby="h-main">
     <h2 id="h-main">Who is winning, by viewpoint</h2>
     <div class="note">Every curve is the probability that P1 wins, so the views share one axis. Click a point to inspect it; turning points are ringed.</div>
@@ -461,7 +496,7 @@ function html(data, title, fragment) {
   <details class="panel" id="table"><summary>All checkpoints as a table</summary></details>
 </div>
 <script type="application/json" id="data">${json}</script>
-<script>${JS}</script>`;
+${kit ? `<script>${kit.replace(/<\/script/gi, '<\\/script')}</script>\n` : ''}<script>${JS}</script>`;
     return fragment ? body : `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
 }
 
@@ -469,19 +504,31 @@ if (require.main === module) {
     const argv = process.argv.slice(2);
     const file = argv.find((x) => !x.startsWith('--') && !argv[argv.indexOf(x) - 1]?.startsWith('--'));
     if (!file) {
-        console.error('usage: node analysis/report.js <analysis.json> [--baseline other.json] [--game game.jsonl] [--out report.html] [--fragment]');
+        console.error('usage: node analysis/report.js <analysis.json> [--baseline other.json] [--game game.jsonl] [--kit swu-viewer-kit.js [--art-pack pack.json]] [--out report.html] [--fragment]');
         process.exit(2);
     }
     const a = JSON.parse(fs.readFileSync(file, 'utf8'));
     const baseline = opt(argv, 'baseline') ? JSON.parse(fs.readFileSync(opt(argv, 'baseline'), 'utf8')) : null;
     const gamePath = opt(argv, 'game', a.game.file);
+    const kit = opt(argv, 'kit') ? fs.readFileSync(opt(argv, 'kit'), 'utf8') : null;
     let boards = null;
+    let jsonl = null;
     if (gamePath && fs.existsSync(gamePath)) {
-        boards = boardSummaries(loadGame(gamePath), a);
+        if (kit) {
+            jsonl = fs.readFileSync(gamePath, 'utf8');
+        } else {
+            boards = boardSummaries(loadGame(gamePath), a);
+        }
     }
-    const { data, title } = build(a, { baseline, boards });
+    let art = null;
+    if (kit && jsonl && opt(argv, 'art-pack')) {
+        const pack = JSON.parse(fs.readFileSync(opt(argv, 'art-pack'), 'utf8'));
+        const codes = new Set(jsonl.match(/"s":"[^"]+"/g)?.map((m) => m.slice(5, -1)) ?? []);
+        art = Object.fromEntries(Object.entries(pack).filter(([k]) => codes.has(k.replace(/-b$/, ''))));
+    }
+    const { data, title } = build(a, { baseline, boards, jsonl, art });
     const out = opt(argv, 'out', file.replace(/\.json$/, '.html'));
-    fs.writeFileSync(out, html(data, title, argv.includes('--fragment')));
+    fs.writeFileSync(out, html(data, title, argv.includes('--fragment'), kit));
     console.error(`wrote ${out}`);
 }
 
