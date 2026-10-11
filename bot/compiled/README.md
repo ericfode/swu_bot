@@ -59,17 +59,30 @@ its `hello` time compiling. Never load `.cwasm` files from anywhere else: wasmti
 
 ## Same games as native?
 
-Run with `--key none` so both builds see the same seeds and deals.
+Run with `--key none` so both builds see the same seeds and deals. On 2026-10-11, each bot and its `-wasm` build played
+the same seeds against `rush` (6 games each) and `heuristic` (10 games each, 6 for the search bots), and
+`compare.py` paired the games:
 
-- Rust, C and JS bundles play the same games as their native builds.
-- `py-random` plays the same games.
-- `py-clock` picks the same winners but some games differ: `python.wasm` is a 32-bit build, so `hash()`, and with it
-  set order, differs from 64-bit Python even with `PYTHONHASHSEED=0` (which both runs set), and some ties break the
-  other way. Each build is repeatable on its own.
+| Bot | Game pairs | Identical | Same winner | ms per decision, native | wasm |
+|---|---|---|---|---|---|
+| `rust-random`, `rust-greedy`, `rust-greedy2` | 48 | 48 | 48 | 1.0-2.3 | 1.4-2.8 |
+| `rust-search` | 12 | 12 | 12 | 209-298 | 193-287 |
+| `c-clock` | 16 | 16 | 16 | 0.5-2.4 | 0.9-2.5 |
+| `py-random` | 16 | 16 | 16 | 0.6-1.3 | 1.2-1.7 |
+| `py-clock` | 16 | 14 | 16 | 1.7-2.0 | 2.9-3.1 |
+| `node-random` | 16 | 16 | 16 | 0.7-1.2 | 1.1-1.6 |
+| `node-search` | 12 | 12 | 12 | 106-119 | 118-126 |
 
-Speed: Rust and C run at 1.1-1.5x native compute. The JS bundles run QuickJS, an interpreter, so pure JS compute is
-about 38x slower than Node; message handling is 4-5x. For search bots the referee's simulations take most of the time
-either way.
+Times are the referee's, per decision, pipe included. `py-clock` games can differ because `python.wasm` is a 32-bit
+build: `hash()`, and with it set order, differs from 64-bit Python even with `PYTHONHASHSEED=0` (both runs set it),
+so some ties break the other way. Each build is repeatable on its own.
+
+Pure compute is slower than the times above suggest: Rust and C run at 1.1-1.5x native, and the JS bundles run
+QuickJS, an interpreter, at about 38x Node for pure compute (4-5x for message handling). For the search bots the
+referee's simulations take most of the time, so the bundles keep pace.
+
+Bundle ids repeat from build to build for Rust, C and Python. Javy's output differs in a few bytes each build, so a
+JS bundle gets a new id every build even when its games do not change.
 
 ## Not here yet
 
