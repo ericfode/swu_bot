@@ -8,7 +8,7 @@
  * else falls back to the heuristic bot's rule-based defaultChoose. A position that keeps coming back to the same
  * window is treated as a loop (e.g. a card click that gets cancelled) and the bot passes.
  */
-const { defaultChoose } = require('./heuristic');
+const { defaultChoose, arenaUnits } = require('./heuristic');
 
 const isPass = (a) => a.kind === 'button' && /^pass$/i.test(a.label);
 const ARENAS = new Set(['groundArena', 'spaceArena']);
@@ -56,7 +56,7 @@ function createRushBot(name = 'rush') {
                 this.stats.windows++;
                 const pass = actions.find(isPass);
                 // same window, same visible counts as before: something we tried got cancelled, so stop retrying
-                const key = [eg.round, pl.hand.length, pl.readyResourceCount, pl.opponent.base.damage, pl.getArenaUnits().filter((u) => !u.exhausted).length].join('|');
+                const key = [eg.round, pl.hand.length, pl.readyResourceCount, pl.opponent.base.damage, arenaUnits(pl).filter((u) => !u.exhausted).length].join('|');
                 const n = (seen.get(key) ?? 0) + 1;
                 seen.set(key, n);
                 if (n > 2 && pass) {
