@@ -71,6 +71,8 @@ test('ismcts names parse into options', () => {
     assert.deepEqual(parseIsmcts('ismcts-b2.5-h2-n4'), { beta: 2.5, horizon: 2, iterPerAction: 4, peek: false });
     assert.equal(parseIsmcts('ismcts-peek').peek, true);
     assert.equal(parseIsmcts('ismctsx'), null);
+    assert.equal(parseIsmcts('ismcts-b2-etempo').evalProfile, 'tempo');
+    assert.equal(parseIsmcts('ismcts-enosuchprofile'), null);
     assert.equal(describeBot('ismcts-b0#2').profile, 'ismcts-b0');
 });
 

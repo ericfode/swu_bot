@@ -79,11 +79,13 @@ function betaOf(name) {
 }
 
 function build(runDirs, thoughtsDir, prev) {
-    const runs = runDirs.map((d) => readJson(path.join(d, 'ladder.json'))).filter(Boolean);
+    const read = runDirs.map((d) => readJson(path.join(d, 'ladder.json')));
+    const runs = read.filter(Boolean);
     const table = sweepTable(runs);
     const bots = [...new Set(table.map((r) => r.bot))].sort();
     const opps = [...new Set(table.map((r) => r.opp))].sort();
-    const running = runs.some((r) => r.status === 'running');
+    // a run that could not be read this time (shared folders can fail a read) counts as still running
+    const running = read.some((r) => !r || r.status === 'running');
 
     // live thoughts: newest file per bot
     const live = [];
