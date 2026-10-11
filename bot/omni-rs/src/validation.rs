@@ -91,13 +91,14 @@ pub fn validate_pool(v: &Value) -> Result<(), String> {
     Ok(())
 }
 
-struct References {
+struct References<'a> {
+    catalogue: &'a HashMap<String, Value>,
     seen: HashMap<String, String>,
     next: u64,
 }
 
-impl References {
-    fn card<'a>(&mut self, v: &'a Value, at: &str) -> Result<(&'a str, &'static Value), String> {
+impl<'a> References<'a> {
+    fn card<'v>(&mut self, v: &'v Value, at: &str) -> Result<(&'v str, &'a Value), String> {
         let id = v["id"]
             .as_str()
             .ok_or_else(|| format!("{at}: missing card id"))?;
@@ -120,7 +121,8 @@ impl References {
         let code = v["setCode"]
             .as_str()
             .ok_or_else(|| format!("{at}: missing setCode"))?;
-        let info = catalogue()
+        let info = self
+            .catalogue
             .get(code)
             .ok_or_else(|| format!("unsupported card {} ({code})", v["name"]))?;
         if v["name"] != info["internalName"] {
@@ -137,6 +139,16 @@ fn has_type(info: &Value, kind: &str) -> bool {
 }
 
 pub fn validate_state(v: &Value) -> Result<(), String> {
+    validate_state_with_catalogue(v, catalogue())
+}
+
+/// Validate a snapshot against the card definitions already accepted by its
+/// engine. This checks state shape and references, not ability implementation;
+/// callers must validate a supplied catalogue before constructing their engine.
+pub fn validate_state_with_catalogue(
+    v: &Value,
+    catalogue: &HashMap<String, Value>,
+) -> Result<(), String> {
     fields(
         v,
         &[
@@ -184,6 +196,7 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
     }
     fields(&v["players"], &["p1", "p2"], "players")?;
     let mut refs = References {
+        catalogue,
         seen: HashMap::new(),
         next,
     };
@@ -292,8 +305,15 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                     leader_info
                 } else {
                     let (_, info) = refs.card(c, &at)?;
-                    if !has_type(info, "unit") || has_type(info, "token") {
-                        return Err(format!("{at}: expected a nonleader unit"));
+                    if has_type(info, "token")
+                        || has_type(info, "leader")
+                        || has_type(info, "base")
+                        || !(has_type(info, "unit") || (!arena && has_type(info, "event")))
+                    {
+                        return Err(format!(
+                            "{at}: expected a nonleader unit{}",
+                            if arena { "" } else { " or event" }
+                        ));
                     }
                     info
                 };
@@ -326,8 +346,8 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                     let upgrades = c["upgrades"]
                         .as_array()
                         .ok_or_else(|| format!("{at}: upgrades must be an array"))?;
-                    if upgrades.len() > 1 {
-                        return Err(format!("{at}: multiple upgrades unsupported"));
+                    if upgrades.len() >= MAX_CARDS {
+                        return Err(format!("{at}: upgrade capacity exceeded"));
                     }
                     for u in upgrades {
                         fields(
@@ -336,9 +356,45 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                             &format!("{at}.upgrades"),
                         )?;
                         let (_, info) = refs.card(u, &format!("{at}.upgrades"))?;
-                        if info["setCode"] != "TOKEN_SHIELD" || !boolean(u, "token", "upgrade")? {
-                            return Err(format!("{at}: only Shield tokens are supported"));
+                        if !matches!(
+                            u["setCode"].as_str(),
+                            Some("TOKEN_SHIELD" | "TOKEN_EXPERIENCE")
+                        ) || !has_type(info, "token")
+                            || !has_type(info, "upgrade")
+                            || !boolean(u, "token", "upgrade")?
+                        {
+                            return Err(format!(
+                                "{at}: only Shield and Experience tokens are supported"
+                            ));
                         }
+                    }
+                    // Validate composed stat capacity before the compact engine
+                    // calculates it. Terminal snapshots may retain a defeated
+                    // Grit unit, so damage need not be below its printed HP.
+                    let experience = upgrades
+                        .iter()
+                        .filter(|u| u["setCode"] == "TOKEN_EXPERIENCE")
+                        .count() as u64;
+                    let grit = info["keywords"]
+                        .as_array()
+                        .is_some_and(|ks| ks.iter().any(|k| k == "grit"));
+                    let computed_power = info["power"]
+                        .as_u64()
+                        .unwrap_or(0)
+                        .checked_add(experience)
+                        .and_then(|power| power.checked_add(if grit { damage } else { 0 }));
+                    if !computed_power.is_some_and(|power| power <= u16::MAX as u64) {
+                        return Err(format!(
+                            "{at}: computed power exceeds compact state capacity"
+                        ));
+                    }
+                    if !info["hp"]
+                        .as_u64()
+                        .unwrap_or(0)
+                        .checked_add(experience)
+                        .is_some_and(|hp| hp <= u16::MAX as u64)
+                    {
+                        return Err(format!("{at}: computed HP exceeds compact state capacity"));
                     }
                 }
             }
@@ -395,6 +451,127 @@ mod tests {
         assert!(validate_state(&bad)
             .unwrap_err()
             .contains("unsupported state field"));
+    }
+
+    #[test]
+    fn supplied_catalogue_replaces_static_catalogue_without_fallback() {
+        let mut state = initial_state();
+        let mut cards = catalogue().clone();
+        let card = &mut state["players"]["p1"]["hand"][0];
+        let old_code = card["setCode"].as_str().unwrap();
+        let mut custom = cards[old_code].clone();
+        custom["setCode"] = json!("CUSTOM_001");
+        custom["internalName"] = json!("custom-unit");
+        card["setCode"] = custom["setCode"].clone();
+        card["name"] = custom["internalName"].clone();
+        cards.insert("CUSTOM_001".into(), custom);
+
+        validate_state_with_catalogue(&state, &cards).unwrap();
+        assert!(validate_state(&state).unwrap_err().contains("CUSTOM_001"));
+
+        let base_code = state["players"]["p1"]["base"]["setCode"].as_str().unwrap();
+        let removed = cards.remove(base_code).unwrap();
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains(base_code));
+        cards.insert(base_code.into(), removed);
+        state["players"]["p1"]["hand"][0]["name"] = json!("wrong-name");
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("name does not match CUSTOM_001"));
+    }
+
+    #[test]
+    fn catalogue_events_are_allowed_outside_arenas() {
+        let mut state = initial_state();
+        let mut cards = catalogue().clone();
+        let original = state["players"]["p1"]["hand"][0].clone();
+        let code = original["setCode"].as_str().unwrap();
+        let mut event = cards[code].clone();
+        event["types"] = json!(["event"]);
+        event["setCode"] = json!("CUSTOM_EVENT");
+        event["internalName"] = json!("custom-event");
+        cards.insert("CUSTOM_EVENT".into(), event);
+        let reference =
+            json!({"id":original["id"], "setCode":"CUSTOM_EVENT", "name":"custom-event"});
+        state["players"]["p1"]["hand"][0] = reference.clone();
+        validate_state_with_catalogue(&state, &cards).unwrap();
+
+        state["players"]["p1"]["hand"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+        state["players"]["p1"]["ground"] = json!([reference]);
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("expected a nonleader unit"));
+    }
+
+    #[test]
+    fn multiple_shield_and_experience_tokens_keep_unique_references() {
+        let mut state = initial_state();
+        let mut cards = catalogue().clone();
+        let mut experience = cards["TOKEN_SHIELD"].clone();
+        experience["setCode"] = json!("TOKEN_EXPERIENCE");
+        experience["internalName"] = json!("experience");
+        experience["upgradePower"] = json!(1);
+        experience["upgradeHp"] = json!(1);
+        cards.insert("TOKEN_EXPERIENCE".into(), experience);
+        let next = state["nextCardId"].as_u64().unwrap();
+        let info = &cards["IBH_003"];
+        let arena = info["arena"].as_str().unwrap().to_owned();
+        state["players"]["p1"][&arena] = json!([{
+            "id":format!("c{next}"), "setCode":info["setCode"], "name":info["internalName"],
+            "damage":0, "power":info["power"].as_u64().unwrap()+1, "hp":info["hp"].as_u64().unwrap()+1,
+            "exhausted":false, "upgrades":[
+                {"id":format!("c{}",next+1), "setCode":"TOKEN_SHIELD", "name":"shield", "token":true},
+                {"id":format!("c{}",next+2), "setCode":"TOKEN_SHIELD", "name":"shield", "token":true},
+                {"id":format!("c{}",next+3), "setCode":"TOKEN_EXPERIENCE", "name":"experience", "token":true}
+            ]
+        }]);
+        state["nextCardId"] = json!(next + 4);
+        validate_state_with_catalogue(&state, &cards).unwrap();
+        assert!(validate_state(&state)
+            .unwrap_err()
+            .contains("TOKEN_EXPERIENCE"));
+
+        let upgrades = &mut state["players"]["p1"][&arena][0]["upgrades"];
+        upgrades[1]["id"] = upgrades[0]["id"].clone();
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("duplicate card"));
+        let upgrades = &mut state["players"]["p1"][&arena][0]["upgrades"];
+        upgrades[1]["id"] = json!(format!("c{}", next + 2));
+        upgrades[2]["token"] = json!(false);
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("only Shield and Experience tokens"));
+    }
+
+    #[test]
+    fn terminal_grit_damage_cannot_overflow_computed_power() {
+        let mut state = initial_state();
+        let info = catalogue()
+            .values()
+            .find(|c| {
+                has_type(c, "unit")
+                    && c["power"].as_u64().is_some_and(|n| n > 0)
+                    && c["keywords"]
+                        .as_array()
+                        .is_some_and(|ks| ks.iter().any(|k| k == "grit"))
+            })
+            .unwrap();
+        let next = state["nextCardId"].as_u64().unwrap();
+        state["players"]["p1"][info["arena"].as_str().unwrap()] = json!([{
+            "id":format!("c{next}"), "setCode":info["setCode"], "name":info["internalName"],
+            "damage":65535, "power":65535, "hp":info["hp"], "exhausted":false, "upgrades":[]
+        }]);
+        state["nextCardId"] = json!(next + 1);
+        state["players"]["p2"]["base"]["damage"] = json!(30);
+        state["winner"] = json!("p1");
+        assert!(validate_state(&state)
+            .unwrap_err()
+            .contains("computed power"));
     }
 
     #[test]
@@ -475,6 +652,7 @@ mod tests {
         let c = &p["cards"][0];
         let mut card = json!({"id":"c0", "setCode":c["setCode"], "name":c["internalName"]});
         let mut refs = References {
+            catalogue: catalogue(),
             seen: HashMap::new(),
             next: 3,
         };

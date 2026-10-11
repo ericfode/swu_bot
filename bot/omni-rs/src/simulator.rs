@@ -1,3 +1,6 @@
+#[path = "generic_runtime.rs"]
+mod generic_runtime;
+use crate::ability_ir::{CardPrograms, Catalogue};
 use crate::model::*;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -23,12 +26,16 @@ pub struct Definition {
     raid: u16,
     restore: u16,
     aspects: [u8; 6],
+    programs: CardPrograms,
+    traits: Vec<String>,
 }
 pub struct Engine {
     pool_hash: String,
     pub definitions: Vec<Definition>,
     by_code: HashMap<String, u16>,
     shield_def: u16,
+    experience_def: Option<u16>,
+    catalogue: Option<Catalogue>,
 }
 fn aspect(s: &str) -> Result<usize, String> {
     match s {
@@ -176,6 +183,8 @@ impl Engine {
                 raid,
                 restore,
                 aspects,
+                programs: CardPrograms::default(),
+                traits: vec![],
             });
         }
         // The shared loader owns catalogue interpretation; this also exercises its identity indexing.
@@ -189,6 +198,8 @@ impl Engine {
             definitions,
             by_code,
             shield_def: shield_def.ok_or("pool must include TOKEN_SHIELD")?,
+            experience_def: None,
+            catalogue: None,
         })
     }
     pub fn pool_hash(&self) -> &str {
@@ -233,8 +244,20 @@ impl Engine {
                 0
             }
             + if attacking { d.raid } else { 0 }
+            + self.token_count(s, s.card(id).experience)
     }
     fn leader_available(&self, s: &State) -> (bool, bool) {
+        if self.catalogue.is_some() {
+            let id = s.player(s.active).leader;
+            let c = s.card(id);
+            let deploy = !c.deployed
+                && !c.epic_used
+                && s.player(s.active).resources.len as i32 >= self.def(s, id).info.cost();
+            return (
+                deploy,
+                !c.deployed && !self.available_programs(s, id, "action").is_empty(),
+            );
+        }
         let p = s.player(s.active);
         let c = s.card(p.leader);
         let d = self.def(s, p.leader);
@@ -283,6 +306,9 @@ impl Engine {
         if s.is_terminal() {
             return vec![];
         }
+        if self.is_ability_decision(s.decision) {
+            return self.ability_actions(s);
+        }
         let p = s.player(s.active);
         let mut out = Vec::new();
         match s.decision {
@@ -292,11 +318,18 @@ impl Engine {
                     out.push(Action::button("Claim Initiative", "claimInitiative"));
                 }
                 for &id in p.ground.as_slice().iter().chain(p.space.as_slice()) {
-                    if !s.card(id).exhausted {
+                    if !s.card(id).exhausted || !self.available_programs(s, id, "action").is_empty()
+                    {
                         out.push(self.card_action(s, id));
                     }
                 }
                 for &id in p.hand.as_slice() {
+                    if self.catalogue.is_some()
+                        && self.def(s, id).info.is("event")
+                        && self.available_programs(s, id, "event").is_empty()
+                    {
+                        continue;
+                    }
                     if self.cost(s, id) as usize <= self.ready_resources(s, s.active) {
                         out.push(self.card_action(s, id));
                     }
@@ -314,7 +347,14 @@ impl Engine {
                         out.len(),
                     ));
                 }
-                if ability {
+                if ability && self.catalogue.is_some() {
+                    for program in self.available_programs(s, p.leader, "action") {
+                        out.push(Action::button(
+                            self.program_menu_title(s, p.leader, program),
+                            out.len(),
+                        ));
+                    }
+                } else if ability {
                     let title = self.leader_title(s);
                     let title = if self.def(s, p.leader).code == "SEC_005"
                         && s.players.iter().all(|p| p.ground.len + p.space.len == 0)
@@ -397,20 +437,19 @@ impl Engine {
                 out.push(Action::button("Pass", "pass"));
             }
             Decision::TriggerOrder => {
-                for bit in self.trigger_bits(s) {
-                    if s.pending_triggers & bit != 0 {
-                        let mut label = self.trigger_title(s, bit);
-                        if !self.trigger_effect(s, bit) {
-                            label = format!("(No effect) {label}");
-                        }
-                        out.push(Action::button(label, out.len().to_string()));
-                    }
+                for label in self.ordered_trigger_titles(s) {
+                    out.push(Action::button(label, out.len().to_string()));
                 }
             }
             Decision::ShieldOrder => {
                 out.push(Action::button("You", 0));
                 out.push(Action::button("Opponent", 1));
             }
+            Decision::AbilityMenu
+            | Decision::AbilityTarget
+            | Decision::AbilityOptional
+            | Decision::AbilityNoEffect
+            | Decision::AbilityDistribute => unreachable!(),
             Decision::Terminal => {}
         }
         out
@@ -471,6 +510,9 @@ impl Engine {
         if !self.legal_actions(s).contains(a) {
             return Err(format!("illegal action {} at {:?}", a.key(), s.decision));
         }
+        if self.is_ability_decision(s.decision) {
+            return self.apply_ability_action(s, a);
+        }
         let mut t = *s;
         let seat = t.active;
         let id = a.id().unwrap_or(0);
@@ -495,12 +537,20 @@ impl Engine {
                 } else if id == t.player(seat).leader && !t.card(id).deployed {
                     t.source = id;
                     let (deploy, ability) = self.leader_available(&t);
-                    if deploy {
+                    if deploy || self.available_programs(&t, id, "action").len() > 1 {
                         t.decision = Decision::LeaderMenu;
                     } else if ability {
                         self.use_leader(&mut t)?;
                     }
                 } else if t.player(seat).hand.contains(id) {
+                    if self.catalogue.is_some() && self.def(&t, id).info.is("event") {
+                        t.source = id;
+                        t.trigger_context = 0;
+                        let programs = self.available_programs(&t, id, "event");
+                        let program = *programs.first().ok_or("event has no executable ability")?;
+                        self.begin_program(&mut t, program, 0)?;
+                        return Ok(t);
+                    }
                     self.spend(&mut t, self.cost(s, id));
                     t.player_mut(seat).hand.remove(id);
                     t.card_mut(id).exhausted = true;
@@ -516,7 +566,16 @@ impl Engine {
                     t.source = id;
                     t.ambush = false;
                     t.trigger_context = 0;
-                    t.decision = Decision::AttackTarget;
+                    let programs = self.available_programs(&t, id, "action");
+                    if t.card(id).exhausted && programs.len() == 1 {
+                        self.begin_program(&mut t, programs[0], 0)?;
+                    } else {
+                        t.decision = if programs.is_empty() {
+                            Decision::AttackTarget
+                        } else {
+                            Decision::AbilityMenu
+                        };
+                    }
                 }
             }
             Decision::LeaderMenu => {
@@ -533,7 +592,21 @@ impl Engine {
                     self.add_arena(&mut t, leader)?;
                     self.finish(&mut t)?;
                 } else {
-                    self.use_leader(&mut t)?;
+                    if self.catalogue.is_some() {
+                        let id = t.player(seat).leader;
+                        let (deploy, _) = self.leader_available(&t);
+                        let index = a
+                            .arg
+                            .as_ref()
+                            .and_then(Value::as_u64)
+                            .ok_or("ability index missing")?
+                            as usize
+                            - usize::from(deploy);
+                        let program = self.available_programs(&t, id, "action")[index];
+                        self.begin_program(&mut t, program, 0)?;
+                    } else {
+                        self.use_leader(&mut t)?;
+                    }
                 }
             }
             Decision::AttackTarget => {
@@ -552,9 +625,10 @@ impl Engine {
                     if d.flags & SABOTEUR != 0 && self.in_arena(&t, id) {
                         t.pending_triggers |= T_SABOTEUR;
                     }
-                    if d.code == "SOR_014" || d.code == "IBH_053" {
+                    if self.catalogue.is_none() && (d.code == "SOR_014" || d.code == "IBH_053") {
                         t.pending_triggers |= T_LEADER;
                     }
+                    self.queue_programs(&mut t, "onAttack");
                     self.process_triggers(&mut t)?;
                 }
             }
@@ -625,6 +699,8 @@ impl Engine {
             }
             Decision::Ambush => {
                 if arg == "trigger" && !self.attack_targets(&t, t.source, true).is_empty() {
+                    t.after_attack_programs = t.pending_programs;
+                    t.pending_programs = 0;
                     t.after_attack_triggers = t.pending_triggers;
                     t.pending_triggers = 0;
                     t.ambush = true;
@@ -635,17 +711,17 @@ impl Engine {
             }
             Decision::TriggerOrder => {
                 let index = arg.parse::<usize>().map_err(|e| e.to_string())?;
-                let bit = self
-                    .trigger_bits(&t)
-                    .into_iter()
-                    .nth(index)
-                    .ok_or("invalid trigger index")?;
-                self.resolve_trigger(&mut t, bit)?;
+                self.resolve_ordered_trigger(&mut t, index)?;
             }
             Decision::ShieldOrder => {
                 t.trigger_context = 3;
                 self.combat(&mut t)?;
             }
+            Decision::AbilityMenu
+            | Decision::AbilityTarget
+            | Decision::AbilityOptional
+            | Decision::AbilityNoEffect
+            | Decision::AbilityDistribute => unreachable!(),
             Decision::Terminal => return Err("game is over".into()),
         }
         Ok(t)
@@ -679,6 +755,16 @@ impl Engine {
         }
     }
     fn use_leader(&self, s: &mut State) -> Result<(), String> {
+        if self.catalogue.is_some() {
+            let id = s.player(s.active).leader;
+            s.source = id;
+            s.trigger_context = 0;
+            let program = *self
+                .available_programs(s, id, "action")
+                .first()
+                .ok_or("leader has no executable action")?;
+            return self.begin_program(s, program, 0);
+        }
         let id = s.player(s.active).leader;
         s.source = id;
         s.trigger_context = 0;
@@ -709,6 +795,15 @@ impl Engine {
         s.trigger_context = 0;
         s.pending_triggers = 0;
         s.ambush = false;
+        s.ability_program = 0;
+        s.ability_pc = 0;
+        s.ability_target = 0;
+        s.ability_result = 0;
+        s.ability_succeeded = false;
+        s.ability_return = 0;
+        s.ability_committed = false;
+        s.pending_programs = 0;
+        s.after_attack_programs = 0;
         s.decision = Decision::Window;
     }
     fn enter_triggers(&self, s: &mut State) -> Result<(), String> {
@@ -723,9 +818,13 @@ impl Engine {
                 0
             };
         s.trigger_context = 1;
+        self.queue_programs(s, "whenPlayed");
         self.process_triggers(s)
     }
     fn process_triggers(&self, s: &mut State) -> Result<(), String> {
+        if self.catalogue.is_some() {
+            return self.process_all_triggers(s);
+        }
         if s.is_terminal() && s.trigger_context != 2 {
             return Ok(());
         }
@@ -797,9 +896,19 @@ impl Engine {
             return;
         }
         if s.card(id).shield != 0 {
-            s.card_mut(id).shield = 0;
+            let mut token = s.card(id).shield;
+            let mut previous = 0;
+            while s.card(token).next_token != 0 {
+                previous = token;
+                token = s.card(token).next_token;
+            }
+            if previous == 0 {
+                s.card_mut(id).shield = 0;
+            } else {
+                s.card_mut(previous).next_token = 0;
+            }
         } else {
-            s.card_mut(id).damage += amount;
+            s.card_mut(id).damage = s.card(id).damage.saturating_add(amount);
         }
     }
     fn combat(&self, s: &mut State) -> Result<(), String> {
@@ -818,8 +927,7 @@ impl Engine {
         let target_unit = self.in_arena(s, target);
         if target_unit {
             let defend = self.power(s, target, false);
-            let remaining = (self.def(s, target).info.hp.unwrap_or(0) as u16)
-                .saturating_sub(s.card(target).damage);
+            let remaining = self.hp(s, target).saturating_sub(s.card(target).damage);
             let excess = if self.def(s, source).flags & OVERWHELM != 0 {
                 attack.saturating_sub(remaining)
             } else {
@@ -831,10 +939,8 @@ impl Engine {
                 let base = s.player(s.active.other()).base;
                 s.card_mut(base).damage += excess;
             }
-            let source_dead =
-                s.card(source).damage >= self.def(s, source).info.hp.unwrap_or(0) as u16;
-            let target_dead =
-                s.card(target).damage >= self.def(s, target).info.hp.unwrap_or(0) as u16;
+            let source_dead = s.card(source).damage >= self.hp(s, source);
+            let target_dead = s.card(target).damage >= self.hp(s, target);
             if source_dead {
                 self.defeat(s, source)?;
             }
@@ -848,7 +954,11 @@ impl Engine {
         if s.is_terminal() {
             self.finish(s)?;
         } else {
-            if s.after_attack_triggers != 0 && self.in_arena(s, source) {
+            if (s.after_attack_triggers != 0 || s.after_attack_programs != 0)
+                && self.in_arena(s, source)
+            {
+                s.pending_programs = s.after_attack_programs;
+                s.after_attack_programs = 0;
                 s.pending_triggers = s.after_attack_triggers;
                 s.after_attack_triggers = 0;
                 s.trigger_context = 1;
@@ -862,15 +972,17 @@ impl Engine {
     fn defeat(&self, s: &mut State, id: CardId) -> Result<(), String> {
         let owner = s.card(id).owner;
         let leader = id == s.player(owner).leader;
+        let token = self.def(s, id).info.is("token");
         let p = s.player_mut(owner);
         p.ground.remove(id);
         p.space.remove(id);
-        if !leader {
+        if !leader && !token {
             p.discard.push(id)?;
         }
         let c = s.card_mut(id);
         c.damage = 0;
         c.shield = 0;
+        c.experience = 0;
         c.exhausted = leader;
         c.deployed = false;
         Ok(())
@@ -910,6 +1022,15 @@ impl Engine {
         }
         s.prev_passed = false;
         s.after_attack_triggers = 0;
+        s.after_attack_programs = 0;
+        s.pending_programs = 0;
+        s.ability_program = 0;
+        s.ability_pc = 0;
+        s.ability_target = 0;
+        s.ability_result = 0;
+        s.ability_succeeded = false;
+        s.ability_return = 0;
+        s.ability_committed = false;
         s.source = 0;
         s.target = 0;
         s.pending_triggers = 0;
@@ -1011,21 +1132,30 @@ impl Engine {
         }
         s.next_id = s.next_id.max(id + 1);
         if let Some(upgrades) = v["upgrades"].as_array() {
-            if upgrades.len() > 1 {
-                return Err(format!("unsupported state: {text} has multiple upgrades"));
-            }
             for u in upgrades {
                 let uid = self.load_card(s, u, owner)?;
-                if s.card(uid).def != self.shield_def {
+                let prior = if s.card(uid).def == self.shield_def {
+                    let prior = s.card(id).shield;
+                    s.card_mut(id).shield = uid;
+                    prior
+                } else if Some(s.card(uid).def) == self.experience_def {
+                    let prior = s.card(id).experience;
+                    s.card_mut(id).experience = uid;
+                    prior
+                } else {
                     return Err(format!("unsupported upgrade {}", u));
-                }
-                s.card_mut(id).shield = uid;
+                };
+                s.card_mut(uid).next_token = prior;
             }
         }
         Ok(id)
     }
     pub fn load_state(&self, v: &Value) -> Result<State, String> {
-        crate::validation::validate_state(v)?;
+        if let Some(catalogue) = &self.catalogue {
+            crate::validation::validate_state_with_catalogue(v, &catalogue.metadata)?;
+        } else {
+            crate::validation::validate_state(v)?;
+        }
         if v["phase"].as_str() != Some("action") {
             return Err("positions must start at an action window in the action phase".into());
         }
@@ -1089,7 +1219,7 @@ impl Engine {
                 for c in p[name].as_array().unwrap() {
                     let id = cid(c["id"].as_str().unwrap())?;
                     if c["power"].as_u64() != Some(self.power(&s, id, false) as u64)
-                        || c["hp"].as_i64() != self.def(&s, id).info.hp.map(i64::from)
+                        || c["hp"].as_u64() != Some(self.hp(&s, id) as u64)
                     {
                         return Err(format!(
                             "unit stats mismatch on {}: engine {}/{}, Rust {}/{}",
@@ -1158,14 +1288,23 @@ impl Engine {
                             v["damage"] = json!(c.damage);
                             v["exhausted"] = json!(c.exhausted);
                             v["power"] = json!(self.power(s, id, false));
-                            v["hp"] = json!(self.def(s, id).info.hp.unwrap_or(0));
-                            let upgrades = if c.shield != 0 {
-                                let mut u = self.card_ref(s, c.shield);
-                                u["token"] = json!(true);
-                                vec![u]
-                            } else {
-                                vec![]
-                            };
+                            v["hp"] = json!(self.hp(s, id));
+                            let mut ids = Vec::new();
+                            for mut token in [c.shield, c.experience] {
+                                while token != 0 {
+                                    ids.push(token);
+                                    token = s.card(token).next_token;
+                                }
+                            }
+                            ids.sort_unstable();
+                            let upgrades: Vec<_> = ids
+                                .into_iter()
+                                .map(|id| {
+                                    let mut u = self.card_ref(s, id);
+                                    u["token"] = json!(true);
+                                    u
+                                })
+                                .collect();
                             v["upgrades"] = json!(upgrades);
                             v
                         })

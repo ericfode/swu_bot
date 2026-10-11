@@ -3,7 +3,7 @@
 function ref(eg, c) {
     const { placedRef } = require('../../view');
     const v = placedRef(eg, c);
-    return { id: v.id, setCode: v.s || (c.internalName === 'shield' ? 'TOKEN_SHIELD' : null), name: c.internalName };
+    return { id: v.id, setCode: v.s || (c.isToken?.() ? `TOKEN_${c.internalName.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}` : null), name: c.internalName };
 }
 function fullState(eg, actor = null) {
     const players = {};
@@ -41,19 +41,42 @@ function canonicalAction(eg, a) {
     const method = a.method ?? null;
     return { key: JSON.stringify([a.kind, card, arg, method, a.label]), kind: a.kind, card, arg, method, label: a.label };
 }
-/** A distribute menu is a family of actions. Enumerate every legal concrete allocation. */
-function expandActions(eg, actions) {
+/** A distribution prompt represents every legal integer allocation, not a sample.
+ * Refuse a combinatorial explosion explicitly so a conformance trace can never
+ * pretend that a pruned action list is the engine's complete legal action set.
+ */
+function expandActions(eg, actions, maxAllocations = 4096) {
     const out = [];
     for (const a of actions) {
         if (a.kind !== 'distribute') { out.push(a); continue; }
-        if (a.spec.type !== 'distributeHealing' || a.spec.maxTargets !== 1 || a.spec.amount > 2) {
-            throw new Error(`Pool produced unsupported distribution ${JSON.stringify(a.spec)}`);
+        const { spec, targets, caps } = a;
+        if (!['distributeHealing', 'distributeDamage', 'distributeIndirectDamage'].includes(spec.type) ||
+            !Number.isSafeInteger(spec.amount) || spec.amount < 0 || spec.amount > 64 ||
+            targets.length > 64 || new Set(targets).size !== targets.length || caps.length !== targets.length ||
+            caps.some((cap) => cap !== Infinity && (!Number.isSafeInteger(cap) || cap < 0))) {
+            throw new Error(`Unsupported distribution shape ${JSON.stringify(spec)}`);
         }
-        if (a.spec.canDistributeLess || a.spec.canChooseNoTargets) out.push({ ...a, split: [] });
-        a.targets.forEach((id, i) => {
-            const start = a.spec.canDistributeLess ? 1 : a.spec.amount;
-            for (let amount = start; amount <= Math.min(a.spec.amount, a.caps[i]); amount++) out.push({ ...a, split: [{ id, amount }] });
-        });
+        const maxTargets = Math.min(spec.maxTargets ?? targets.length, targets.length);
+        if (!Number.isSafeInteger(maxTargets) || maxTargets < 0) throw new Error(`Invalid distribution maxTargets ${maxTargets}`);
+        let count = 0;
+        let visited = 0;
+        const add = (split) => {
+            if (++count > maxAllocations) throw new Error(`Distribution exceeds ${maxAllocations} exact allocations; trace aborted without pruning`);
+            out.push({ ...a, split });
+        };
+        if (spec.canChooseNoTargets) add([]);
+        const walk = (start, sum, split) => {
+            if (++visited > 1000000) throw new Error('Distribution exceeds exact enumeration work bound; trace aborted without pruning');
+            if (sum > 0 && (spec.canDistributeLess || sum === spec.amount)) add(split);
+            if (split.length === maxTargets || sum === spec.amount) return;
+            for (let i = start; i < targets.length; i++) {
+                for (let amount = 1; amount <= Math.min(spec.amount - sum, caps[i]); amount++) {
+                    walk(i + 1, sum + amount, [...split, { id: targets[i], amount }]);
+                }
+            }
+        };
+        walk(0, 0, []);
+        if (!count) throw new Error('Distribution has no legal concrete allocation');
     }
     const seen = new Set();
     for (const a of out) {

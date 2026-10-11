@@ -46,6 +46,18 @@ simulator.free();
 must match. Imports start at action windows; copying a live Wasm handle preserves unresolved prompts too.
 Returned snapshots are detached observations: editing one cannot change the retained game.
 
+For compiled cards, pass `cataloguePath` (or raw `catalogueJson`) to `createSimulator`. Optional `poolPath` or
+`poolJson` restricts the admitted cards and preserves the pool's exact hash for recorded games. With a catalogue
+and no pool, the simulator loads every runtime-admitted card. Runtime admission is separate from game validation;
+the compiler's coverage report retains explicit reasons for unsupported cards.
+
+```js
+const simulator = await createSimulator({
+    cataloguePath: './bot/card-compiler/generated/catalog.json',
+    poolPath: './bot/omni-rs/tests/compiled-fixtures/pool.json',
+});
+```
+
 The adapter exposes `legalActions(pid)`, `apply(pid, action)`, `mark(pid)`, `restore(pid, mark)`, `isActionWindow(pid)`,
 `round`, `over`, `winner`, `winners`, `snapshot()`, `clone()`, `prove(limits)`, and `free()`. Player IDs can be mapped
 from the existing engine. Actions have stable canonical keys; they are not forceteki UUID-bearing objects.
@@ -69,12 +81,14 @@ simulator.free();
 Serve the generated `.wasm` alongside its loader over HTTP. Run proofs in a Worker when connected to an
 interactive UI: the call is synchronous until its budget completes. Browser state/search use the same Rust
 implementation; filesystem loading is kept in the Node adapter.
+The browser loader also accepts `catalogueJson`, with optional `poolJson`, using text fetched by the caller.
 
 ## Command-line integration and checks
 
 ```sh
 # Exact fixture/corpus replay through the JavaScript adapter.
 node bot/omni/wasm/check.js bot/omni-rs/tests/fixtures/*.jsonl.gz
+node bot/omni/wasm/check.js bot/omni-rs/tests/compiled-fixtures/*.jsonl.gz --catalogue bot/card-compiler/generated/catalog.json --pool bot/omni-rs/tests/compiled-fixtures/pool.json
 
 # Existing JS match runner, using Wasm for complete endgame searches.
 node bot/omni/solve-games.js --engine wasm --pool bot/omni/rs/pool.json --bots aggro,control --seeds 101 --budget 2000 --depth 12 --sample 0 --out replays/wasm-solves
@@ -82,6 +96,7 @@ node bot/omni/solve-games.js --engine wasm --pool bot/omni/rs/pool.json --bots a
 # Prove exported positions, with a fixed budget or their measured JS time allowance.
 node bot/omni/wasm/prove.js replays/omni-rs-matched.jsonl --depth 12 --ms-field jsMs
 node bot/omni/wasm/prove.js replays/omni-rs-matched.jsonl --depth 12 --nodes 100000
+# Compiled positions use --catalogue catalog.json plus their exact --pool pool.json.
 
 # Three whole-Wasm rollout runs, with one 10,000-node warmup.
 node bot/omni/wasm/bench.js bot/omni-rs/tests/fixtures/heuristic-vs-heuristic-1.jsonl.gz 1000000 3

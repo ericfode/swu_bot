@@ -1,10 +1,13 @@
 // The live position, checkpoints, and all search nodes belong to Rust/Wasm.
 // Objects returned by snapshot() are detached observations, never mutable game state.
 export class WasmSimulator {
-    constructor(bindings, poolJson) {
-        if (typeof poolJson !== 'string') throw new TypeError('Pass the original pool JSON text to preserve its SHA-256');
+    constructor(bindings, poolJson, { catalogueJson } = {}) {
+        if (catalogueJson !== undefined && typeof catalogueJson !== 'string') throw new TypeError('Pass the compiled catalogue as JSON text');
+        if ((catalogueJson === undefined || poolJson !== undefined) && typeof poolJson !== 'string') throw new TypeError('Pass the original pool JSON text to preserve its SHA-256');
         this.bindings = bindings;
-        this.handle = new bindings.WasmEngine(poolJson);
+        this.handle = catalogueJson === undefined
+            ? new bindings.WasmEngine(poolJson)
+            : bindings.WasmEngine.fromCatalogue(catalogueJson, poolJson);
         this.disposed = false;
     }
 
@@ -33,8 +36,16 @@ export class WasmSimulator {
 }
 
 export class WasmGame {
-    constructor(handle, { ids = ['p1', 'p2'], names = ids } = {}) {
-        if (ids.length !== 2 || ids[0] === ids[1] || names.length !== 2) throw new Error('Exactly two distinct player IDs and two names are required');
+    constructor(handle, options = {}) {
+        let ids, names;
+        try {
+            ({ ids = ['p1', 'p2'], names = ids } = options);
+            if (!Array.isArray(ids) || !Array.isArray(names) || ids.length !== 2 || ids[0] === ids[1] || names.length !== 2) throw new Error('Exactly two distinct player IDs and two names are required');
+        } catch (error) {
+            // The constructor takes ownership even if wrapper options are bad.
+            handle.free();
+            throw error;
+        }
         this.handle = handle;
         this.ids = [...ids];
         this.names = [...names];
