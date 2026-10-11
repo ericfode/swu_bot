@@ -40,7 +40,7 @@ const sharedFolder = '/mnt/project-files';
 const jevDir = env.PERCH_JEV_DIR || (fs.existsSync(sharedFolder) ? path.join(sharedFolder, 'perch') : path.join(repo, '.perch', 'jev'));
 env.PERCH_CACHE_DIR ||= path.join(jevDir, 'cache');
 env.PERCH_USAGE_DIR ||= path.join(jevDir, 'usage');
-env.PERCH_DAILY_REQUESTS ||= '1000';
+env.PERCH_DAILY_REQUESTS ||= '2000';
 env.PERCH_RUN_REQUESTS ||= '250';
 // perch sends at most 8 questions in its first request until Jev has answered once, so a method
 // could be asked in two different requests. A fixed limit keeps requests, and cache keys, the same.

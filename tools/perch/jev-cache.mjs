@@ -24,7 +24,7 @@ const readCache = env.PERCH_CACHE_READ !== '0';
 const number = (name, fallback) => (env[name] && Number(env[name]) >= 0 ? Number(env[name]) : fallback);
 const maxAgeMs = number('PERCH_CACHE_DAYS', 30) * 86400e3;
 const runLimit = number('PERCH_RUN_REQUESTS', 250);
-const dayLimit = number('PERCH_DAILY_REQUESTS', 1000);
+const dayLimit = number('PERCH_DAILY_REQUESTS', 2000);
 const SYNC_MS = 2000;
 
 const started = new Date();
