@@ -67,3 +67,11 @@ test('Wasm rejects incorrect pools, unsupported cards, invalid limits and illega
         } finally { game.free(); }
     } finally { simulator.free(); }
 });
+
+test('A drawn game lists both player names, like EnvGame.winners', async () => {
+    const { WasmGame } = await import('../adapter.mjs');
+    const draw = new WasmGame({ winner: () => 'draw' }, { ids: ['alice', 'bob'], names: ['Alice', 'Bob'] });
+    assert.deepEqual(draw.winners, ['Alice', 'Bob']);
+    const won = new WasmGame({ winner: () => 'p2' }, { ids: ['alice', 'bob'], names: ['Alice', 'Bob'] });
+    assert.deepEqual(won.winners, ['Bob']);
+});

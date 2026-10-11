@@ -54,7 +54,8 @@ function compare(positions, rustResults) {
         }
     }
     for (const key of rust.keys()) if (!pos.has(key)) throw new Error(`Rust result has no input position: ${key}`);
-    const enriched = rustResults.map((r) => ({ ...pos.get(positionKey(r)), ...r }));
+    // Every input position counts, so a game whose Rust rows are missing scores 0 instead of leaving the mean.
+    const enriched = [...pos].map(([key, p]) => ({ ...p, ...rust.get(key) }));
     const jsNodes = positions.reduce((n, p) => n + (p.jsNodes ?? 0), 0);
     const jsMs = positions.reduce((n, p) => n + (p.jsMs ?? 0), 0);
     return { horizon: { js: horizon(positions, 'proven'), rust: horizon(enriched) },
