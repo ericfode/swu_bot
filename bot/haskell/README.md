@@ -50,8 +50,23 @@ Card data (costs, keywords, upgrade stats) is read from `$SWU_CARD_JSON`, defaul
 the working directory (the repo root when the adapter starts it). Without it the bot still plays, with flat values.
 `SWU_HS_DEBUG=1` prints every action-window candidate with its search value, and every prompt answer, to stderr.
 
-Speed: about 5 ms per decision as the harness measures it (adapter included), at most about 0.2 s.
+Speed: about 5 ms per decision as the harness measures it (adapter included), at most about 0.4 s.
 
 ## Results
 
-RESULTS_PLACEHOLDER
+One ladder run, `haskell-ladder-1` (`node bot/ladder.js --bots haskell,rust-greedy2,rush,aggro,tempo,control,heuristic,random --games 10 --seed 501`),
+real cards, forceteki `2be4fcd`, 10 games per pair (5 seeds, both seats). Full report:
+`/mnt/project-files/results/haskell-ladder-1/ladder.json`. No engine or bot errors in Haskell's 70 games.
+
+| Opponent | Haskell W-L |
+| --- | --- |
+| rust-greedy2 (PR #9) | 2-8 |
+| rush | 7-3 |
+| aggro | 8-2 |
+| tempo | 9-1 |
+| control | 8-2 |
+| heuristic | 10-0 |
+| random | 10-0 |
+| **Total** | **54-16 (77%)**, second behind rust-greedy2 |
+
+Per decision: Haskell 5.5 ms on average (max 0.37 s), rust-greedy2 2.6 ms, the JS search bots 160-350 ms.
