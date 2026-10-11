@@ -105,6 +105,7 @@ class IsmctsBot {
         this.peek = peek;
         this.profile = profile;
         this.thoughts = thoughts;
+        this.snapshotFn = thoughts ? require('../recorder').snapshot : null;
         this.belief = new BeliefModel(beta);
         this.rng = null;
         this.cursor = null;
@@ -227,34 +228,38 @@ class IsmctsBot {
         let oppActed = false;
         let myTurnDone = false;
         const oppSeen = new Map();
+        const mySeen = new Map();
         let value = null;
         try {
             eg.game.setRandomSeed(String(Math.floor(this.rng() * 1e9)));
             if (!this.peek) {
                 determinize(eg, pid, this.belief, this.rng);
             }
+            let oppActions = 0;
             for (let step = 0; step < 120 && !eg.over; step++) {
                 const actor = [pid, opp].find((id) => eg.legalActions(id).length);
                 if (!actor) {
                     break;
                 }
+                if (step > 0 && !myTurnDone && actor === pid && eg.isActionWindow(pid)) {
+                    myTurnDone = true;
+                    // my turn changed nothing and it is my window again: this path is not a move
+                    if (!oppActed && fingerprint(eg) === rootFp) {
+                        path[path.length - 1].noop = path.length > 1;
+                        this.stats.noops++;
+                        return;
+                    }
+                }
+                // score every line at the same point: once the opponent has answered with one action (or the round
+                // ended). Without this, passing was scored a round later than playing a card, which flattered passing.
+                if (myTurnDone && (eg.phase !== 'action' || (oppActions >= exchanges + 1 && eg.ids.some((id) => eg.isActionWindow(id))))) {
+                    exchanges++;
+                    if (exchanges >= this.horizon || eg.phase !== 'action') {
+                        break;
+                    }
+                }
                 const acts = eg.legalActions(actor);
                 if (actor === pid) {
-                    if (step > 0 && eg.isActionWindow(pid)) {
-                        if (!myTurnDone) {
-                            myTurnDone = true;
-                            // my turn changed nothing and it is my window again: this path is not a move
-                            if (!oppActed && fingerprint(eg) === rootFp) {
-                                path[path.length - 1].noop = path.length > 1;
-                                this.stats.noops++;
-                                return;
-                            }
-                        }
-                        exchanges++;
-                        if (exchanges >= this.horizon) {
-                            break;
-                        }
-                    }
                     let choice;
                     if (inTree && !myTurnDone && decisions < this.maxTreeDecisions) {
                         const sel = this.select(node, acts);
@@ -271,19 +276,27 @@ class IsmctsBot {
                             decisions++;
                             choice = a;
                         }
+                    } else if (myTurnDone && eg.isActionWindow(pid)) {
+                        choice = opponentChoice(eg, pid, acts, mySeen); // beyond my searched turn, I play the fast policy too
                     } else {
                         choice = defaultChoose(eg, pid, acts);
                     }
                     eg.apply(pid, choice, this.rng);
                 } else {
-                    if (!myTurnDone) {
-                        myTurnDone = true;
-                    }
+                    myTurnDone = true;
                     oppActed = true;
+                    if (eg.isActionWindow(opp)) {
+                        oppActions++;
+                    }
                     eg.apply(opp, opponentChoice(eg, opp, acts, oppSeen), this.rng);
                 }
             }
             value = this.leafValue(eg, pid, rootScore);
+            if (this.thoughts) {
+                // the dashboard draws the imagined end position of the latest iteration through each top node
+                const st = this.snapshotFn(eg);
+                path.slice(1, 3).forEach((nd) => (nd.leafState = st));
+            }
         } catch {
             this.stats.failedPlayouts++;
             value = null;
@@ -322,6 +335,17 @@ class IsmctsBot {
             beliefObservations: this.belief.observations
         };
         if (this.thoughts) {
+            const p1 = eg.ids.indexOf(pid) === 0;
+            const asP1 = (v) => (v === null ? null : p1 ? v : 1 - v);
+            const toNode = (ch, depth) => ({
+                label: ch.action.label, state: ch.leafState ?? null, value: asP1(ch.mean()), visits: ch.n, chosen: ch === best,
+                children: depth > 0 ? [...ch.children.values()].filter((g) => g.n > 0 && !g.noop).sort((a, b) => b.n - a.n).slice(0, 3).map((g) => toNode(g, depth - 1)) : []
+            });
+            this.last.tree = {
+                label: `${eg.names[eg.ids.indexOf(pid)]} decision, round ${eg.round}`,
+                state: this.snapshotFn(eg), value: asP1(best ? best.mean() : null), visits: iters,
+                children: kids.slice(0, 6).map((ch) => toNode(ch, ch === best ? 1 : 0))
+            };
             const opp = eg.player(pid).opponent;
             // a separate stream, so turning the dashboard on does not change how the bot plays
             this.last.oppHand = this.belief.handMarginals(opp, seededRng(`m${eg.round}|${this.stats.windows}`), 120).slice(0, 10);

@@ -147,6 +147,11 @@ function build(runDirs, thoughtsDir, prev) {
         widgets.push({ type: 'bars', title: `Visits at ${newest.bot}'s last decision (round ${newest.round})`,
             items: newest.top.map((x) => ({ label: x.label, value: x.visits })) });
     }
+    if (newest?.tree) {
+        widgets.push({ type: 'tree', title: `${newest.bot}: search tree at its last decision`,
+            caption: 'Root = the real position. Children = the end of one imagined world after that action and the opponent\'s reply (hidden cards are sampled, not real). Value = P(p1 wins).',
+            root: newest.tree });
+    }
     if (newest?.oppHand?.length) {
         widgets.push({ type: 'table', title: `What ${newest.bot} thinks is in the opponent's hand (${newest.oppHandSize} cards)`,
             columns: ['card', 'P(in hand)'], rows: newest.oppHand.map((x) => [x.name, pct(x.p)]) });
