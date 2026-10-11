@@ -23,7 +23,8 @@
  * runs a clocked tournament: every round opens a work window of --minutes (all competitors start together; the API's
  * `wait` returns when it opens, and everyone's inbox gets a message), then rates the newest version of every competitor
  * submitted by the end of the window. During the window the referee also plays evals queued through the API (`eval`),
- * each in its own process (eval.js --job) that is stopped when the window ends, so clients without the engine can test.
+ * each in its own process (eval.js --job, --eval-workers, default --workers) that is stopped when the window ends, so
+ * clients without the engine can test. Evals still queued when a window ends are dropped when the next one opens.
  */
 const fs = require('fs');
 const os = require('os');
@@ -424,7 +425,7 @@ async function playQueuedEval(deadline, minLeftMs = EVAL_MIN_LEFT_MS) {
     const tries = (j.tries ?? 0) + 1;
     writeJson(file, { ...j, state: 'running', startedAt: new Date().toISOString(), tries });
     console.log(`eval ${j.id}: ${j.bot} vs ${j.vs.join(', ')} (try ${tries})`);
-    const child = track(spawn(process.execPath, [EVAL_JS, '--job', file, '--workers', arg('workers', '3')], { stdio: ['ignore', 'inherit', 'inherit'] }));
+    const child = track(spawn(process.execPath, [EVAL_JS, '--job', file, '--workers', arg('eval-workers', arg('workers', '3'))], { stdio: ['ignore', 'inherit', 'inherit'] }));
     let stopped = false;
     const timer = setTimeout(() => {
         stopped = true;
@@ -449,6 +450,20 @@ async function playQueuedEval(deadline, minLeftMs = EVAL_MIN_LEFT_MS) {
         console.log(`eval ${j.id}: ${stopped ? 'stopped at the end of the work window' : `exited with ${code}`}`);
     }
     return true;
+}
+
+/** Evals still queued from an earlier window fail with reason 'window over': each window starts with an empty queue. */
+function expireQueued() {
+    const dir = queueDir();
+    if (!fs.existsSync(dir)) {
+        return;
+    }
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+        const j = readJson(path.join(dir, f), null);
+        if (j?.state === 'queued') {
+            writeJson(path.join(dir, f), { ...j, state: 'failed', reason: 'window over', finishedAt: new Date().toISOString(), error: 'the work window it was queued in ended before it was played' });
+        }
+    }
 }
 
 /** A message to every competitor's inbox; a failed write is logged, it does not stop the tournament. */
@@ -512,6 +527,7 @@ async function tournament() {
             r = { n, workStart: new Date(now).toISOString(), workEnd: new Date(now + t.roundMinutes * 60000).toISOString() };
             t.rounds.push(r);
             save();
+            expireQueued();
             broadcast(`Round ${n} (${t.rounds.length} of ${t.plannedRounds}) has started. Submit by ${r.workEnd} (${t.roundMinutes} min); the referee then rates the newest version of every competitor submitted by then.${t.task ? ' Task: ' + t.task : ''}`);
         }
         console.log(`round ${r.n}: work until ${r.workEnd}`);

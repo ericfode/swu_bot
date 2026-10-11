@@ -342,6 +342,11 @@ const api = {
             need(home.versionsOf(name).includes(v), 'not_found', `no version ${v} of "${name}" (see versions)`);
             bot = `${name}-v${v}`;
         }
+        // one eval at a time per competitor, so nobody can fill the queue the referee plays in order
+        const qdir = path.join(home.HOME, 'queue');
+        const mine = fs.existsSync(qdir) ? fs.readdirSync(qdir).filter((f) => f.endsWith('.json')).map((f) => home.readJson(path.join(qdir, f), null))
+            .filter((j) => j && (j.state === 'queued' || j.state === 'running') && (j.bot === name || j.bot.startsWith(`${name}-v`))) : [];
+        need(!mine.length, 'conflict', `eval ${mine[0]?.id} is still ${mine[0]?.state}: one eval at a time per competitor (poll eval_result)`);
         const id = `${bot}-${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`.replace(/[^a-z0-9_-]/g, '');
         home.writeJson(path.join(home.HOME, 'queue', `${id}.json`), { id, bot, vs: opps, seeds: k, state: 'queued', queuedAt: new Date().toISOString() });
         return { id, state: 'queued', note: 'the referee plays queued evals between ladders; poll eval_result' };

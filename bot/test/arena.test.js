@@ -335,7 +335,7 @@ test('runner: the usage brake stops Claude sessions only, and the runner starts 
         assert.deepStrictEqual(stopped, ['a-r1']);
     } finally {
         running.clear();
-        noteLimits({ status: 'allowed', unifiedWindows: {} });
+        noteLimits({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0 }, seven_day: { utilization: 0 } } });
     }
     assert.ok(runnable({ kind: 'claude-code', model: 'opus' }));
     assert.ok(runnable({ kind: 'script', cmd: 'node bot/arena/optimizer.js' }));
@@ -343,4 +343,14 @@ test('runner: the usage brake stops Claude sessions only, and the runner starts 
     for (const h of [{ kind: 'script' }, { kind: 'command', cmd: [] }, { kind: 'codex' }, { kind: 'Claude Code' }, null]) {
         assert.ok(!runnable(h), JSON.stringify(h));
     }
+});
+
+test('runner: a session that follows another with the same tag is not stopped by the first one\'s cleanup', async () => {
+    const { runUntil } = require('../arena/runner');
+    const tag = `test-next-${process.pid}`;
+    const opts = { cwd: tmp, env: { ...process.env, ARENA_RUN: tag }, out: path.join(tmp, 'next.log'), stopAt: Date.now() + 60000, tag };
+    const first = await runUntil('bash', ['-c', 'sleep 30 & exit 0'], opts);
+    assert.strictEqual(first.code, 0);
+    const second = await runUntil('bash', ['-c', 'sleep 6'], opts);
+    assert.deepStrictEqual([second.code, second.stopped], [0, false], 'the second session ran to its end');
 });

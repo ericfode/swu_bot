@@ -20,6 +20,7 @@ const { seededRng } = require('../env');
 // loaded before main() points ARENA_HOME at the scratch arena, so API calls still reach the real one;
 // the eval worker threads start later and see the scratch home
 const directApi = process.env.ARENA_URL ? null : require('./api');
+const arenaHome = directApi ? require('./home') : null;
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -73,6 +74,22 @@ function genomeFrom(start) {
     g['search.maxCandidates'] = 16; // start inside the time cap: the stock 40 forfeits about half its games
     g['search.maxBranch'] = 4;
     return g;
+}
+
+/** The genome of this competitor's newest submitted version (on a local arena), or null (none yet, or a starter). */
+function latestGenome() {
+    const v = arenaHome?.versionsOf(NAME) ?? [];
+    if (!v.length) {
+        return null;
+    }
+    try {
+        const src = fs.readFileSync(path.join(arenaHome.VERSIONS, `${NAME}-v${Math.max(...v)}`, 'bot.js'), 'utf8');
+        const m = /const GENOME = (\{[\s\S]*?\});\n/.exec(src);
+        const g = m ? JSON.parse(m[1]) : null;
+        return g && Object.keys(GENES).every((k) => typeof g[k] === 'number') ? g : null;
+    } catch {
+        return null;
+    }
 }
 
 function mutate(g, rng) {
@@ -155,11 +172,14 @@ async function main() {
     };
     const rate = (sum, opp) => (sum.byOpp[opp] ? sum.byOpp[opp].win / Math.max(1, sum.byOpp[opp].win + sum.byOpp[opp].loss + sum.byOpp[opp].other) : 0);
 
-    const rng = seededRng(`optimizer-${NAME}`);
-    let best = genomeFrom(arg('start', 'tempo'));
+    // each round goes on from the newest submitted genome, with its own mutations and eval seeds
+    const status0 = await arena('status');
+    const round = status0.round ?? 0;
+    const rng = seededRng(`optimizer-${NAME}-r${round}`);
+    let best = latestGenome() ?? genomeFrom(arg('start', 'tempo'));
     let prev = null;
     let gen = 0;
-    let seed = 30001;
+    let seed = 30001 + 1000 * round;
     await arena('say', { name: NAME, now: 'Starting the evolution strategy', diagram: diagramFor(best, null, 0), idea: `(1+${LAMBDA}) evolution strategy over ${Object.keys(GENES).length} evaluation weights and search-budget genes; fitness = win rate vs the incumbent and vs rush.` });
     const status = await arena('status');
     const roundEnd = process.argv.includes('--until-round-end') && status.deadline ? Date.parse(status.deadline) : Infinity;
@@ -201,3 +221,5 @@ if (require.main === module) {
         process.exit(1);
     });
 }
+
+module.exports = { botSource, genomeFrom, latestGenome };

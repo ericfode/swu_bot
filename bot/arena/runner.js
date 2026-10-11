@@ -4,8 +4,9 @@
  * it starts every competitor's harness with the round's brief (brief.md, filled in), and stops it shortly before the
  * window ends, together with everything it started (evals included).
  *
- *   node bot/arena/runner.js [--only a,b] [--logs <dir>] [--repo <checkout>] [--budget-usd 50] [--stop-early-min 2]
- *                            [--mirror <local results> <shared results>] [--once]
+ *   node bot/arena/runner.js [--only a,b] [--logs <dir>] [--repo <checkout, may contain {name}>] [--memo <path>]
+ *                            [--budget-usd 50] [--stop-early-min 2] [--brake-5h 0.8] [--brake-7d 0.95]
+ *                            [--mirror <local results> <shared results>] [--backup <dir>] [--once]
  *
  * The harness comes from the competitor's roster entry:
  *   {kind: 'claude-code', model, effort?, memory?: 'optmem'}   headless Claude Code (claude -p) with the arena MCP
@@ -13,27 +14,35 @@
  *   {kind: 'script', cmd: 'node bot/arena/optimizer.js ...'}    a program, run from the repo each round
  *   {kind: 'command', cmd: ['prog', 'arg', '{prompt_file}']}    anything else: {prompt}, {prompt_file}, {name} and
  *                                                              {minutes} are filled in
- * A claude-code harness that stops while 5 minutes or more are left is resumed (same session) with the time left, up to
- * 5 times a round. --budget-usd caps what one competitor may spend in one round (claude --max-budget-usd, over all of
- * its sessions that round). memory 'optmem' gives the competitor OptMem (github.com/VictorTaelin/OptMem): `memo` from
- * <ARENA_HOME>/tools on its PATH, its memory in <ARENA_HOME>/memory/<name>, and the OptMem block in its system prompt.
- * A claude-code harness gets only the tools in TOOLS plus the arena MCP server: no subagents, web, schedules or messages
- * to other sessions.
+ * Other kinds (a Codex or human competitor registered on the web page) run themselves; the runner skips them.
  *
- * Every harness runs with a clean environment: PATH, locale, the proxy and certificate settings, ANTHROPIC_BASE_URL,
- * ARENA_HOME and ARENA_DASH, and its own HOME (<logs>/homes/<name>). Nothing else of the runner's environment (no
- * tokens, no session of the Claude Code that started the runner). Each one runs in its own process group, and its
- * environment carries ARENA_RUN=<name>-r<round>, so whatever it leaves running (an eval in another process group too) is
- * stopped with it when its session ends or the window closes.
- * --repo is the checkout competitors see as the repo (evals, reference code): give them a copy, so a stray edit cannot
- * change the referee's code. Logs go to <logs>/<name>/ (r<K>-<n>.jsonl: claude's stream-json, usage.jsonl) and are
- * copied to <ARENA_HOME>/logs/<name>/ after every session. --mirror copies the referee's results from local disk into
- * the shared folder every 60 s (each file written whole, then renamed), so the ladder never appends to the synced mount.
+ * Claude Code: a session that ends while 5 minutes or more are left is resumed with the time left (a fresh session, with
+ * the brief, if the resume fails at once), up to 12 sessions a round. --budget-usd caps what one competitor may spend in
+ * one round over all its sessions (each session gets claude --max-budget-usd = what is left; spend is kept in
+ * usage.jsonl, so a restarted runner does not hand out a new budget). It gets only the tools in TOOLS plus the arena MCP
+ * server (no subagents, web, schedules or messages to other sessions), no auto-memory and no CLAUDE.md files, and a HOME
+ * of its own for each round (<logs>/homes/<name>-r<K>), so nothing carries over between rounds except its folder and
+ * NOTES.md. memory 'optmem' adds OptMem (github.com/VictorTaelin/OptMem): `memo` (--memo, default <logs>/../tools/memo,
+ * on local disk because the shared folder cannot hold an executable) on its PATH, its memory in <logs>/<name>/memory, and
+ * the OptMem block in its system prompt; that memory does carry over.
+ *
+ * Every harness runs with a clean environment: PATH, locale, NO_PROXY and the certificate settings, ANTHROPIC_BASE_URL,
+ * ARENA_HOME and ARENA_DASH, its own HOME and TMPDIR. Nothing else of the runner's environment: no tokens, no session of
+ * the Claude Code that started the runner, no proxy (in the cloud container it adds the account's credentials). It runs under `timeout` in its own process group, so the window's end stops it
+ * even if this process stalls, and its environment carries ARENA_RUN=<name>-r<round>: whatever it leaves running (an
+ * eval in another process group too) is stopped with it, and a restarted runner first stops what an earlier one left.
+ * --repo is the checkout competitors see as the repo (evals, reference code): give each one a copy of its own
+ * (`{name}` in the path), so a stray edit cannot change the referee's code or another competitor's evals.
+ * Logs stay in <logs>/<name>/ (r<K>-<n>.jsonl: claude's stream-json, usage.jsonl) while the tournament runs, where
+ * other competitors are not told to look, and are copied to <ARENA_HOME>/logs/<name>/ when it is over. --mirror copies
+ * the referee's results from local disk into the shared folder every 60 s from a separate process (each file written
+ * whole, then renamed), so the ladder never appends to the synced mount and a stalled mount never delays a stop.
+ * --backup <dir> copies what a restart needs from the logs (usage.jsonl, prompts, OptMem memory) there the same way.
  *
  * Usage brake: the competitors share the account's usage limits with everything else on it. The runner reads the
- * limits claude reports (rate_limit_event), from the sessions and from a tiny probe every 10 minutes, and when the
- * 5-hour window passes --brake-5h (default 0.8) or the 7-day window passes --brake-7d (default 0.95) it stops every
- * claude-code competitor and starts none until that window resets. Scripts keep running.
+ * limits claude reports (rate_limit_event), from the sessions and from a tiny probe every 10 minutes, and while the
+ * 5-hour window is over --brake-5h or the 7-day window over --brake-7d it stops every claude-code competitor and
+ * starts none; they go on when the window resets, if their round is still open. Scripts keep running.
  */
 const fs = require('fs');
 const os = require('os');
@@ -47,26 +56,33 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-const REPO = path.resolve(arg('repo', path.join(__dirname, '..', '..')));
+const REPO = arg('repo', path.join(__dirname, '..', '..'));
 const LOGS = path.resolve(arg('logs', path.join(os.homedir(), 'arena-run', 'logs')));
+const MEMO = path.resolve(arg('memo', path.join(LOGS, '..', 'tools', 'memo')));
 const BUDGET_USD = Number(arg('budget-usd', '50'));
 const STOP_EARLY_MS = Number(arg('stop-early-min', '2')) * 60000;
 const RESUME_MIN_MS = 5 * 60000;
-const MAX_SESSIONS = 6;
+const MAX_SESSIONS = 12;
+const FAST_FAIL_MS = 60000; // a resumed session that ends this fast without a result is retried as a fresh one
 const POLL_MS = 5000;
 const PROBE_MS = 10 * 60000;
+const MIRROR_MS = 60000;
 const BRAKE = { five_hour: Number(arg('brake-5h', '0.8')), seven_day: Number(arg('brake-7d', '0.95')) };
 const ONLY = arg('only', null)?.split(',');
-// what a harness may see of the runner's environment: what it needs to reach the network and the API, nothing else
-const PASS = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'TERM', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy',
-    'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE', 'GLOBAL_AGENT_HTTPS_PROXY', 'GLOBAL_AGENT_NO_PROXY',
-    'NODE_USE_ENV_PROXY', 'JAVA_TOOL_OPTIONS', 'ANTHROPIC_BASE_URL', 'ARENA_DASH'];
+// what a harness may see of the runner's environment: what claude needs to reach the API, nothing else. No proxy
+// settings: in the cloud container the egress proxy adds the account's credentials (GitHub too), while the API is in
+// NO_PROXY and reached directly, so a competitor's shell reaches nothing outside by accident.
+const PASS = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'TERM', 'NO_PROXY', 'no_proxy', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE',
+    'CURL_CA_BUNDLE', 'ANTHROPIC_BASE_URL', 'ARENA_DASH'];
 // the built-in tools a claude-code harness gets (--tools). No subagents (4 cores are shared by every competitor, and the
 // duel compares models, each working alone), no web, schedules, remote triggers or messages to other sessions.
 const TOOLS = ['Bash', 'Read', 'Edit', 'Write', 'Glob', 'Grep', 'TaskCreate', 'TaskGet', 'TaskList', 'TaskUpdate'];
+// a push to GitHub from a competitor's shell goes nowhere (its repo copy has no remote either)
+const GITCONFIG = '[url "https://push-blocked.invalid/"]\n\tpushInsteadOf = https://github.com/\n\tpushInsteadOf = git@github.com:\n\tpushInsteadOf = ssh://git@github.com/\n';
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const repoFor = (name) => path.resolve(REPO.replaceAll('{name}', name));
 
 /** Writes a file whole and renames it into place, so a reader (or a synced folder) never sees half of it. */
 function copyWhole(src, dst) {
@@ -80,25 +96,33 @@ function fill(tpl, vars) {
     return tpl.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 }
 
-function cleanEnv(name, tag) {
+function cleanEnv(homeDir, tag) {
     const env = Object.fromEntries(PASS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
-    env.HOME = path.join(LOGS, 'homes', name);
+    env.HOME = homeDir;
     env.ARENA_HOME = home.HOME;
     env.ARENA_RUN = tag;
-    fs.mkdirSync(env.HOME, { recursive: true });
+    // what a competitor knows comes from its folder, its notes and the brief: no Claude Code memory, no CLAUDE.md from
+    // the folders above its own (another competitor could write one there)
+    env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
+    env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';
+    // its own temp folder: a tmux or other server it starts lives there, inside its tagged tree
+    env.TMPDIR = env.TMUX_TMPDIR = path.join(homeDir, 'tmp');
+    fs.mkdirSync(env.TMPDIR, { recursive: true });
+    fs.writeFileSync(path.join(homeDir, '.gitconfig'), GITCONFIG);
     return env;
 }
 
-/** Processes whose environment carries ARENA_RUN=<tag>: everything a harness started, in any process group. */
-function tagged(tag) {
-    const want = `ARENA_RUN=${tag}`;
+/** Processes (other than this one) whose ARENA_RUN satisfies want(value): what harnesses started, in any group. */
+function tagged(want) {
+    const test = typeof want === 'function' ? want : (v) => v === want;
     const pids = [];
     for (const p of fs.readdirSync('/proc')) {
         if (!/^\d+$/.test(p) || Number(p) === process.pid) {
             continue;
         }
         try {
-            if (fs.readFileSync(`/proc/${p}/environ`, 'utf8').split('\0').includes(want)) {
+            const v = fs.readFileSync(`/proc/${p}/environ`, 'utf8').split('\0').find((e) => e.startsWith('ARENA_RUN='));
+            if (v && test(v.slice('ARENA_RUN='.length))) {
                 pids.push(Number(p));
             }
         } catch {
@@ -119,7 +143,26 @@ function stopAll(pgid, tag, sig) {
     }
 }
 
-// the newest usage limits claude reported: {five_hour: {utilization, resetsAt}, seven_day: ..., status, at}
+const groupAlive = (pgid) => {
+    try {
+        process.kill(-pgid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+/** SIGTERM to the group and the tag, up to `graceMs` for them to go, then SIGKILL to whatever is left. */
+async function settle(pgid, tag, graceMs) {
+    stopAll(pgid, tag, 'SIGTERM');
+    const end = Date.now() + graceMs;
+    while (Date.now() < end && ((pgid && groupAlive(pgid)) || tagged(tag).length)) {
+        await sleep(100);
+    }
+    stopAll(pgid, tag, 'SIGKILL');
+}
+
+// the newest usage limits claude reported: {five_hour: {utilization, resetsAt}, seven_day: ..., status, resetsAt, at}
 let limits = null;
 const running = new Map(); // tag -> {stop(), claude}: for the brake (claude sessions only) and the runner's own exit
 
@@ -127,7 +170,8 @@ function noteLimits(info) {
     if (!info) {
         return;
     }
-    limits = { ...info.unifiedWindows, status: info.status, at: new Date().toISOString() };
+    // an event may carry only some windows: the others keep their last reading (braked() ignores a window once it resets)
+    limits = { ...(limits ?? {}), ...(info.unifiedWindows ?? {}), status: info.status ?? limits?.status, resetsAt: info.resetsAt ?? null, at: new Date().toISOString() };
     const why = braked();
     const sessions = [...running].filter(([, r]) => r.claude);
     if (why && sessions.length) {
@@ -144,13 +188,14 @@ function braked(now = Date.now()) {
     if (!limits) {
         return null;
     }
-    if (limits.status === 'rejected') {
-        return 'claude reports the account is over its limit';
+    const until = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 16) : '?');
+    if (limits.status === 'rejected' && !(limits.resetsAt && now > limits.resetsAt * 1000)) {
+        return `claude reports the account is over its limit until ${until(limits.resetsAt)}`;
     }
     for (const [w, max] of Object.entries(BRAKE)) {
         const u = limits[w];
         if (u && u.utilization >= max && !(u.resetsAt && now > u.resetsAt * 1000)) {
-            return `${w} usage ${Math.round(u.utilization * 100)}% >= ${Math.round(max * 100)}% until ${u.resetsAt ? new Date(u.resetsAt * 1000).toISOString().slice(0, 16) : '?'}`;
+            return `${w} usage ${Math.round(u.utilization * 100)}% >= ${Math.round(max * 100)}% until ${until(u.resetsAt)}`;
         }
     }
     return null;
@@ -195,6 +240,52 @@ function follower(file) {
     };
 }
 
+/**
+ * Runs cmd under `timeout` (so the deadline holds even if this process stalls) in its own process group until it exits
+ * or `stopAt`. Then it stops the group and every process tagged `tag` (SIGTERM, SIGKILL after a grace period) and only
+ * then resolves, so a next session with the same tag never meets a kill meant for this one. While it runs, `running`
+ * holds a stop() for it (`claude`: the usage brake may stop it), and tick() (if given) is called every few seconds.
+ * Resolves {code, signal, stopped, error}.
+ */
+function runUntil(cmd, args, { cwd, env, out, stopAt, tag, tick, claude = false }) {
+    return new Promise((resolve) => {
+        const fd = fs.openSync(out, 'a');
+        const secs = Math.max(1, Math.ceil((stopAt - Date.now()) / 1000));
+        const child = spawn('timeout', ['-k', '15', String(secs), cmd, ...args], { cwd, env, stdio: ['ignore', fd, fd], detached: true });
+        fs.closeSync(fd);
+        let stopped = false;
+        let killer = null;
+        const stop = () => {
+            if (!stopped) {
+                stopped = true;
+                stopAll(child.pid, tag, 'SIGTERM');
+                killer = setTimeout(() => stopAll(child.pid, tag, 'SIGKILL'), 15000);
+            }
+        };
+        running.set(tag, { stop, claude });
+        const timer = setTimeout(stop, Math.max(0, stopAt - Date.now()));
+        const ticker = tick ? setInterval(tick, POLL_MS) : null;
+        let once = false;
+        const done = async (r) => {
+            if (once) {
+                return;
+            }
+            once = true;
+            clearTimeout(timer);
+            clearInterval(ticker);
+            running.delete(tag);
+            // whatever it left running (an eval, a server) goes with it, before the next session starts
+            await settle(child.pid, tag, 5000);
+            clearTimeout(killer);
+            tick?.();
+            // 124: `timeout` stopped it at the deadline
+            resolve({ ...r, stopped: stopped || r.code === 124 });
+        };
+        child.on('error', (e) => done({ code: null, error: e.message }));
+        child.on('exit', (code, signal) => done({ code, signal }));
+    });
+}
+
 /** Asks claude for one word, only to read the account's current usage limits from its stream. */
 async function probeLimits() {
     const dir = path.join(LOGS, '_probe');
@@ -202,7 +293,7 @@ async function probeLimits() {
     const out = path.join(dir, 'probe.jsonl');
     fs.writeFileSync(out, '');
     await runUntil('claude', ['-p', 'Reply with the single word ok.', '--model', 'haiku', '--tools', '', '--strict-mcp-config', '--disable-slash-commands',
-        '--output-format', 'stream-json', '--verbose', '--max-turns', '1'], { cwd: dir, env: cleanEnv('_probe', 'probe'), out, stopAt: Date.now() + 120000, tag: 'probe', claude: true });
+        '--output-format', 'stream-json', '--verbose', '--max-turns', '1'], { cwd: dir, env: cleanEnv(path.join(dir, 'home'), 'probe'), out, stopAt: Date.now() + 120000, tag: 'probe', claude: true });
     noteLimits(lastLimits(fs.readFileSync(out, 'utf8')));
 }
 
@@ -211,14 +302,15 @@ function memoryBlock(c, env) {
     if (c.harness?.memory !== 'optmem') {
         return '';
     }
-    const tools = path.join(home.HOME, 'tools');
-    if (!fs.existsSync(path.join(tools, 'memo'))) {
-        throw new Error(`${c.name}: memory 'optmem' needs ${tools}/memo (github.com/VictorTaelin/OptMem)`);
+    try {
+        fs.accessSync(MEMO, fs.constants.X_OK);
+    } catch {
+        throw new Error(`${c.name}: memory 'optmem' needs an executable ${MEMO} (github.com/VictorTaelin/OptMem; --memo)`);
     }
-    env.MEMORY_DIR = path.join(home.HOME, 'memory', c.name);
-    env.PATH = `${tools}:${env.PATH}`;
+    env.MEMORY_DIR = path.join(LOGS, c.name, 'memory');
+    env.PATH = `${path.dirname(MEMO)}:${env.PATH}`;
     // init is safe to repeat: it only creates what is missing, and prints the block to put in the agent's instructions
-    const out = execFileSync('memo', ['init'], { env, encoding: 'utf8' });
+    const out = execFileSync(path.basename(MEMO), ['init'], { env, encoding: 'utf8' });
     const i = out.indexOf('## Memory');
     if (i < 0) {
         throw new Error(`${c.name}: memo init printed no setup block`);
@@ -227,13 +319,15 @@ function memoryBlock(c, env) {
 }
 
 function brief(c, st, extra) {
+    const repo = repoFor(c.name);
     return fill(fs.readFileSync(path.join(__dirname, 'brief.md'), 'utf8'), {
         name: c.name, title: c.title ?? c.name, tournament: st.tournament?.title ?? 'Arena tournament', round: st.roundIndex ?? st.round,
-        rounds: st.plannedRounds ?? '?', deadline: st.deadline, minutes: st.minutesLeft, agentDir: path.join(home.AGENTS, c.name), repo: REPO,
+        rounds: st.plannedRounds ?? '?', deadline: st.deadline, minutes: st.minutesLeft, agentDir: path.join(home.AGENTS, c.name), repo,
         capSeconds: home.roster().thinkCapMs / 1000, memory: c.harness?.memory === 'optmem' ? '\nYour memory across rounds is OptMem as well as NOTES.md (see your system prompt).\n' : ''
     }) + `\nThis session runs in ${path.join(home.AGENTS, c.name)} and is stopped at ${extra.stopAt} (UTC), ${Math.round(STOP_EARLY_MS / 60000)} minutes`
         + ' before the window ends: submit and update NOTES.md before then. Anything you leave running when your session'
-        + ` ends is stopped. Your harness may also stop you if you reach this round's budget. Run evals from ${REPO} (cd there first).\n`;
+        + ` ends is stopped. Your harness may also stop you if you reach this round's budget. Run evals from ${repo} (cd there first).\n`
+        + (extra.again ? '\nThis round is already under way: an earlier session of yours this round has ended. Your folder, NOTES.md and arena_versions show where you are.\n' : '');
 }
 
 function claudeArgs(c, prompt, { sessionId, budget, system }) {
@@ -260,7 +354,10 @@ function claudeArgs(c, prompt, { sessionId, budget, system }) {
     return args;
 }
 
-/** What one claude session reported: its session id, cost and turns (null fields when it ended without a result). */
+/**
+ * What one claude run reported: session id, total_cost_usd (for the whole session so far: a resumed session counts its
+ * earlier runs too), turns and result subtype (null fields when it ended without a result).
+ */
 function readSession(file) {
     const r = { sessionId: null, costUSD: 0, turns: null, result: null };
     let text = '';
@@ -289,52 +386,25 @@ function readSession(file) {
     return r;
 }
 
-/**
- * Runs cmd in its own process group until it exits or `stopAt`, then stops the group and every process tagged `tag`
- * (SIGTERM, SIGKILL 15 s later). While it runs, `running` holds a stop() for it (`claude`: the usage brake may stop it),
- * and tick() (if given) is called every few seconds. Resolves {code, signal, stopped, error}.
- */
-function runUntil(cmd, args, { cwd, env, out, stopAt, tag, tick, claude = false }) {
-    return new Promise((resolve) => {
-        const fd = fs.openSync(out, 'a');
-        const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', fd, fd], detached: true });
-        fs.closeSync(fd);
-        let stopped = false;
-        const stop = () => {
-            if (!stopped) {
-                stopped = true;
-                stopAll(child.pid, tag, 'SIGTERM');
-                setTimeout(() => stopAll(child.pid, tag, 'SIGKILL'), 15000).unref();
-            }
-        };
-        running.set(tag, { stop, claude });
-        const timer = setTimeout(stop, Math.max(0, stopAt - Date.now()));
-        const ticker = tick ? setInterval(tick, POLL_MS) : null;
-        const done = (r) => {
-            clearTimeout(timer);
-            clearInterval(ticker);
-            running.delete(tag);
-            // whatever it left running (an eval, a server) goes with it
-            stopAll(child.pid, tag, 'SIGTERM');
-            setTimeout(() => stopAll(child.pid, tag, 'SIGKILL'), 5000).unref();
-            tick?.();
-            resolve({ ...r, stopped });
-        };
-        child.on('error', (e) => done({ code: null, error: e.message }));
-        child.on('exit', (code, signal) => done({ code, signal }));
-    });
+/** What a competitor already spent in round k (usage.jsonl), so a restarted runner keeps the round's budget. */
+function spentIn(dir, k) {
+    try {
+        return fs.readFileSync(path.join(dir, 'usage.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+            .filter((u) => u.round === k).reduce((s, u) => s + (u.costUSD ?? 0), 0);
+    } catch {
+        return 0;
+    }
 }
 
-function saveLogs(c) {
-    const dir = path.join(LOGS, c.name);
-    for (const f of fs.readdirSync(dir)) {
-        if (/^r\d+-\d+\.(jsonl|log)$|^usage\.jsonl$/.test(f)) {
-            try {
-                copyWhole(path.join(dir, f), path.join(home.HOME, 'logs', c.name, f));
-            } catch (e) {
-                log(`${c.name}: could not copy ${f} to the arena folder: ${e.message}`);
-            }
+/** When the tournament is over: every competitor's transcripts, prompts, usage and memory into <ARENA_HOME>/logs. */
+function publishLogs(runners) {
+    for (const c of runners) {
+        const src = path.join(LOGS, c.name);
+        if (!fs.existsSync(src)) {
+            continue;
         }
+        const errors = mirror(src, path.join(home.HOME, 'logs', c.name), (rel) => !/^mcp\.json$/.test(rel));
+        log(`${c.name}: logs copied to ${path.join(home.HOME, 'logs', c.name)}${errors ? ` (${errors} files failed)` : ''}`);
     }
 }
 
@@ -354,54 +424,87 @@ async function work(c, st) {
     const stopAt = Date.parse(st.deadline) - STOP_EARLY_MS;
     const h = c.harness ?? {};
     const tag = `${c.name}-r${k}`;
-    const env = cleanEnv(c.name, tag);
     const usage = (u) => fs.appendFileSync(path.join(dir, 'usage.jsonl'), `${JSON.stringify({ round: k, at: new Date().toISOString(), ...u })}\n`);
     if (Date.now() > stopAt - 60000) {
         log(`${c.name}: round ${k} window is nearly over, skipping it`);
         return;
     }
     if (h.kind === 'claude-code') {
+        const env = cleanEnv(path.join(LOGS, 'homes', `${c.name}-r${k}`), tag);
         const memory = memoryBlock(c, env);
-        let spent = 0;
+        let spent = spentIn(dir, k);
         let sessionId = null;
+        let sessionTotal = 0;
+        let started = spent > 0;
+        const done = new Set(fs.readdirSync(dir).filter((f) => f.startsWith(`r${k}-`)));
         for (let n = 1; n <= MAX_SESSIONS; n++) {
+            let waiting = false;
+            while (braked() && stopAt - Date.now() >= RESUME_MIN_MS) {
+                if (!waiting) {
+                    waiting = true;
+                    log(`${c.name}: waiting: usage brake (${braked()})`);
+                    usage({ waiting: `usage brake: ${braked()}` });
+                }
+                await sleep(POLL_MS * 6);
+            }
             const left = stopAt - Date.now();
             const budget = BUDGET_USD - spent;
-            if (left < (n === 1 ? 60000 : RESUME_MIN_MS) || budget < 0.5) {
-                break;
-            }
-            if (braked()) {
-                log(`${c.name}: not starting session ${n}: usage brake (${braked()})`);
-                usage({ session: n, skipped: `usage brake: ${braked()}` });
+            if (braked() || left < (started ? RESUME_MIN_MS : 60000) || budget < 0.5) {
                 break;
             }
             const minutes = Math.floor(left / 60000);
             const stopText = new Date(stopAt).toISOString().slice(11, 16);
-            const prompt = n === 1
-                ? brief(c, { ...clock(), round: k }, { stopAt: stopText })
+            const prompt = !sessionId
+                ? brief(c, { ...clock(), round: k }, { stopAt: stopText, again: started })
                 : `Round ${st.roundIndex ?? k} is still open: ${minutes} minutes are left before you are stopped at ${stopText} UTC. Anything you left running when your last session ended (an eval) was stopped. Keep improving your bot: test the next idea against your last version and the baselines, submit when it is better, post a thought with arena_say, and keep NOTES.md current.`;
-            const out = path.join(dir, `r${k}-${n}.jsonl`);
-            fs.writeFileSync(path.join(dir, `r${k}-${n}.prompt.md`), prompt);
-            log(`${c.name}: round ${k} session ${n}, ${minutes} min, budget $${budget.toFixed(2)}`);
-            say(c, n === 1 ? `Round ${st.roundIndex ?? k}: working until ${stopText} UTC` : `Round ${st.roundIndex ?? k}: back to work (${minutes} min left)`);
+            let m = n;
+            while (done.has(`r${k}-${m}.jsonl`)) {
+                m++; // a restarted runner numbers on from the sessions already logged this round
+            }
+            done.add(`r${k}-${m}.jsonl`);
+            const out = path.join(dir, `r${k}-${m}.jsonl`);
+            fs.writeFileSync(path.join(dir, `r${k}-${m}.prompt.md`), prompt);
+            log(`${c.name}: round ${k} session ${m}${sessionId ? ' (resumed)' : ''}, ${minutes} min, budget $${budget.toFixed(2)}`);
+            say(c, !started ? `Round ${st.roundIndex ?? k}: working until ${stopText} UTC` : `Round ${st.roundIndex ?? k}: back to work (${minutes} min left)`);
+            started = true;
             const t0 = Date.now();
             const follow = follower(out);
+            const resumed = sessionId;
             const res = await runUntil('claude', claudeArgs(c, prompt, { sessionId, budget, system: memory || null }),
                 { cwd: path.join(home.AGENTS, c.name), env, out, stopAt, tag, claude: true, tick: () => noteLimits(lastLimits(follow())) });
             const s = readSession(out);
-            sessionId = s.sessionId ?? sessionId;
-            spent += s.costUSD;
-            usage({ session: n, exit: res.code, signal: res.signal ?? null, stopped: res.stopped, minutes: +((Date.now() - t0) / 60000).toFixed(1), costUSD: s.costUSD, turns: s.turns, result: s.result, error: res.error });
-            saveLogs(c);
-            log(`${c.name}: session ${n} ended (${res.stopped ? (braked() ? 'stopped by the usage brake' : 'stopped at the deadline') : `exit ${res.code ?? res.signal}`}), $${s.costUSD.toFixed(2)}`);
-            if (res.stopped || !sessionId) {
+            // total_cost_usd covers the whole session, earlier runs of a resumed one included: count only what is new
+            const cost = Math.max(0, s.sessionId && s.sessionId === resumed ? s.costUSD - sessionTotal : s.costUSD);
+            spent += cost;
+            if (s.sessionId) {
+                sessionTotal = s.sessionId === resumed ? Math.max(sessionTotal, s.costUSD) : s.costUSD;
+                sessionId = s.sessionId;
+            }
+            const brakeStop = res.stopped && !!braked();
+            usage({ session: m, sessionId: s.sessionId, resumed: !!resumed, exit: res.code, signal: res.signal ?? null, stopped: res.stopped, brake: brakeStop,
+                minutes: +((Date.now() - t0) / 60000).toFixed(1), costUSD: +cost.toFixed(4), turns: s.turns, result: s.result, error: res.error });
+            log(`${c.name}: session ${m} ended (${res.stopped ? (brakeStop ? 'stopped by the usage brake' : 'stopped at the deadline') : `exit ${res.code ?? res.signal}`}${s.result ? `, ${s.result}` : ''}), $${cost.toFixed(2)}, $${spent.toFixed(2)} this round`);
+            if (res.stopped && !brakeStop) {
                 break;
+            }
+            if (s.result === 'error_max_budget_usd') {
+                break;
+            }
+            if (resumed && !s.result && Date.now() - t0 < FAST_FAIL_MS) {
+                // the resume itself failed: start a fresh session with the brief next time, after a pause
+                log(`${c.name}: the resumed session ended at once without a result, next one starts fresh`);
+                sessionId = null;
+                sessionTotal = 0;
+                await sleep(30000);
+            } else if (!s.sessionId) {
+                await sleep(30000);
             }
         }
         say(c, `Round ${st.roundIndex ?? k}: done working, waiting for the ladder`);
         return;
     }
     if (h.kind === 'script' || h.kind === 'command') {
+        const env = cleanEnv(path.join(LOGS, 'homes', c.name), tag);
         const out = path.join(dir, `r${k}-1.log`);
         let cmd;
         let args;
@@ -419,40 +522,76 @@ async function work(c, st) {
         }
         log(`${c.name}: round ${k}, running ${cmd} ${args.join(' ')}`);
         const t0 = Date.now();
-        const res = await runUntil(cmd, args, { cwd: REPO, env, out, stopAt, tag });
+        const res = await runUntil(cmd, args, { cwd: repoFor(c.name), env, out, stopAt, tag });
         usage({ session: 1, exit: res.code, signal: res.signal ?? null, stopped: res.stopped, minutes: +((Date.now() - t0) / 60000).toFixed(1), error: res.error });
-        saveLogs(c);
         return;
     }
     throw new Error(`${c.name}: harness ${JSON.stringify(h)} cannot run unattended (kind claude-code, script or command)`);
 }
 
-/** Copies new or changed files from `from` to `to` (each written whole, then renamed). */
-function mirror(from, to) {
+/**
+ * Copies new or changed files from `from` to `to` (each written whole, then renamed; keep(rel) filters). A file that
+ * fails is skipped (and counted), so one bad file never stops the rest. Returns the number of failures.
+ */
+function mirror(from, to, keep = () => true) {
+    let errors = 0;
     const walk = (rel) => {
-        for (const e of fs.readdirSync(path.join(from, rel), { withFileTypes: true })) {
+        let entries = [];
+        try {
+            entries = fs.readdirSync(path.join(from, rel), { withFileTypes: true });
+        } catch {
+            errors++;
+            return;
+        }
+        for (const e of entries) {
             const r = path.join(rel, e.name);
             if (e.isDirectory()) {
                 walk(r);
                 continue;
             }
-            if (!e.isFile() || e.name.endsWith('.tmp') || e.name === 'referee.lock') {
+            if (!e.isFile() || e.name.endsWith('.tmp') || e.name === 'referee.lock' || !keep(r)) {
                 continue;
             }
-            const a = fs.statSync(path.join(from, r));
-            let b = null;
             try {
-                b = fs.statSync(path.join(to, r));
+                const a = fs.statSync(path.join(from, r));
+                let b = null;
+                try {
+                    b = fs.statSync(path.join(to, r));
+                } catch {
+                    // new
+                }
+                if (!b || b.size !== a.size || b.mtimeMs < a.mtimeMs) {
+                    copyWhole(path.join(from, r), path.join(to, r));
+                }
             } catch {
-                // new
-            }
-            if (!b || b.size !== a.size || b.mtimeMs < a.mtimeMs) {
-                copyWhole(path.join(from, r), path.join(to, r));
+                errors++;
             }
         }
     };
     if (fs.existsSync(from)) {
         walk('');
+    }
+    return errors;
+}
+
+// what --backup keeps of the logs: small files a restart needs (spend, prompts, OptMem memory), not the transcripts
+const BACKUP_KEEP = (rel) => !/^(homes|_probe)\//.test(rel) && /(^|\/)usage\.jsonl$|\.prompt\.md$|\/memory\//.test(rel);
+
+/** --mirror-loop: the separate process that mirrors results (--mirror) and backs up logs (--backup) until the end. */
+async function mirrorLoop() {
+    const mi = process.argv.indexOf('--mirror');
+    const pair = mi > 0 ? [path.resolve(process.argv[mi + 1]), path.resolve(process.argv[mi + 2])] : null;
+    const backup = arg('backup', null);
+    for (;;) {
+        const done = clock().phase === 'done';
+        const errors = (pair ? mirror(...pair) : 0) + (backup ? mirror(LOGS, path.resolve(backup), BACKUP_KEEP) : 0);
+        if (errors) {
+            log(`mirror: ${errors} files failed, retrying in ${MIRROR_MS / 1000} s`);
+        }
+        if (done) {
+            return;
+        }
+        await sleep(MIRROR_MS);
     }
 }
 
@@ -463,6 +602,9 @@ function runnable(h) {
 }
 
 async function main() {
+    if (process.argv.includes('--mirror-loop')) {
+        return mirrorLoop();
+    }
     const roster = home.roster();
     const chosen = roster.agents.filter((a) => a.harness && (!ONLY || ONLY.includes(a.name)));
     for (const a of chosen.filter((x) => !runnable(x.harness))) {
@@ -473,18 +615,37 @@ async function main() {
     if (!runners.length) {
         throw new Error('no competitor with a harness the runner can start (roster.json agents[].harness)');
     }
-    const mi = process.argv.indexOf('--mirror');
-    const mirrorPair = mi > 0 ? [path.resolve(process.argv[mi + 1]), path.resolve(process.argv[mi + 2])] : null;
-    let lastMirror = 0;
+    for (const c of runners) {
+        const r = repoFor(c.name);
+        if (!fs.existsSync(path.join(r, 'bot', 'arena', 'eval.js'))) {
+            throw new Error(`${c.name}: no checkout at ${r} (--repo)`);
+        }
+    }
     log(`runner: ${runners.map((a) => a.name).join(', ')}; repo ${REPO}; logs ${LOGS}; $${BUDGET_USD} per competitor per round;`
         + ` usage brake at 5h ${BRAKE.five_hour}, 7d ${BRAKE.seven_day}`);
+    // what an earlier runner left running (it crashed, or was killed) has no deadline any more
+    const left = tagged(() => true);
+    if (left.length) {
+        log(`runner: stopping ${left.length} processes an earlier runner left`);
+        await settle(null, () => true, 10000);
+    }
+    let mirrorChild = null;
+    const mi = process.argv.indexOf('--mirror');
+    if (mi > 0 || arg('backup', null)) {
+        mirrorChild = spawn(process.execPath, [__filename, '--mirror-loop', '--logs', LOGS, ...(mi > 0 ? ['--mirror', process.argv[mi + 1], process.argv[mi + 2]] : []),
+            ...(arg('backup', null) ? ['--backup', arg('backup')] : [])], { stdio: ['ignore', 'inherit', 'inherit'] });
+    }
     for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
         process.on(sig, () => {
             log(`runner: ${sig}, stopping ${[...running.keys()].join(', ') || 'nothing'}`);
             for (const r of running.values()) {
                 r.stop();
             }
-            setTimeout(() => process.exit(1), 16000);
+            mirrorChild?.kill('SIGTERM');
+            setTimeout(() => {
+                stopAll(null, () => true, 'SIGKILL');
+                process.exit(1);
+            }, 15000);
         });
     }
     const anyClaude = runners.some((a) => a.harness.kind === 'claude-code');
@@ -504,20 +665,11 @@ async function main() {
         if (anyClaude && busy.size && Date.now() - lastProbe > PROBE_MS) {
             probe();
         }
-        if (mirrorPair && Date.now() - lastMirror > 60000) {
-            lastMirror = Date.now();
-            try {
-                mirror(...mirrorPair);
-            } catch (e) {
-                log(`mirror: ${e.message}`);
-            }
-        }
         const st = clock();
         if (st.phase === 'done' && !busy.size) {
-            if (mirrorPair) {
-                mirror(...mirrorPair);
-            }
+            publishLogs(runners);
             log('runner: the tournament is over');
+            await new Promise((res) => (mirrorChild && mirrorChild.exitCode === null ? mirrorChild.on('exit', res) : res()));
             return;
         }
         if (st.phase === 'work' && st.round !== lastRound) {
@@ -539,9 +691,7 @@ async function main() {
                 while (busy.size) {
                     await sleep(POLL_MS);
                 }
-                if (mirrorPair) {
-                    mirror(...mirrorPair);
-                }
+                mirrorChild?.kill('SIGTERM');
                 return;
             }
         }
@@ -556,4 +706,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runUntil, cleanEnv, tagged, lastLimits, braked, noteLimits, mirror, runnable, running };
+module.exports = { runUntil, cleanEnv, tagged, lastLimits, braked, noteLimits, mirror, runnable, running, settle };

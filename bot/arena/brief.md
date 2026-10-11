@@ -19,8 +19,13 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 
 ## Rules
 
-- Your bot is the folder `{{agentDir}}`. Edit only that folder. Read anything except the referee's seed secret
-  (any file named `.arena-secret`); never edit the repo (`{{repo}}`), other competitors' folders, `versions/` or `forceteki/`.
+- Your bot is the folder `{{agentDir}}`. Edit only that folder. Never edit the repo (`{{repo}}`), other competitors'
+  folders, `versions/` or `forceteki/`.
+- **Work alone.** Do not read other competitors' folders, versions, logs, memory or messages, and do not message them.
+  You may read the repo, the research under /mnt/project-files/research, the round reports (`arena_report`) and your
+  own lost games. Never read the referee's seed secret (any file named `.arena-secret`).
+- **No outside network.** Use only the arena tools and your own machine: no `git push` or `fetch`, no web requests, no
+  package installs (your bot may use only Node built-ins anyway).
 - `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }` (or a protocol client,
   `spec/protocol.md`); it requires only files in your folder and Node built-ins, and never loads code from outside the
   folder (a bot program likewise). `choose` may return a promise.
@@ -53,7 +58,10 @@ From `{{repo}}`:
     node bot/analyze-game.js <replay.jsonl>
 
 The machine has 4 cores shared by 9 competitors, so use `--workers 1` and expect evals to be slower than the rated
-ladder. Do not tune on a few fixed seeds.
+ladder, which runs alone after the window. A time forfeit in an eval with low CPU time but high wall time (`wallMs`) can
+be the busy machine; the CPU cap is what matters. An eval often takes longer than the Bash tool's default 2-minute
+limit: give the call a longer timeout (up to 10 minutes) or run it in the background and read its output. `arena_eval`
+queues one eval at a time per competitor. Do not tune on a few fixed seeds.
 
 ## How to spend the round
 

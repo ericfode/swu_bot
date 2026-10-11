@@ -39,9 +39,16 @@ async function invoke(method, args) {
     if (process.env.ARENA_COMPETITOR_TOKEN && args && args.token === undefined) {
         args = { ...args, token: process.env.ARENA_COMPETITOR_TOKEN };
     }
-    // a server started for one competitor (runner.js sets ARENA_COMPETITOR): its name is the default, and it sends as itself
+    // a server started for one competitor (runner.js sets ARENA_COMPETITOR) acts as that competitor only: its name is the
+    // default and the only one allowed, it registers nobody, and it sends as itself
     const me = process.env.ARENA_COMPETITOR;
-    if (me && method !== 'register' && METHODS[method]?.required?.includes('name') && args?.name === undefined) {
+    if (me && method === 'register') {
+        return { error: { code: 'unauthorized', message: 'a competitor cannot register other competitors' } };
+    }
+    if (me && METHODS[method]?.required?.includes('name')) {
+        if (args?.name !== undefined && args.name !== me) {
+            return { error: { code: 'unauthorized', message: `you are "${me}": this tool acts for you only` } };
+        }
         args = { ...args, name: me };
     }
     if (me && method === 'send') {
