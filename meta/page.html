@@ -1,0 +1,861 @@
+<title>Strategy Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a scouting dossier. Hero = one tile per game spot naming the bot to bet on; then the full grid, style map, rivalries, per-bot cards. */
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #0f1420; --ink-2: #4a5263; --muted: #8a90a0; --line: #e1e4ea; --line-2: #c9ced8;
+  --accent: #2a5bd7; --you: #2a5bd7; --opp: #b8bfcc; --them: #d0603a; --fa: #6250d6; --fb: #b07800;
+  --pos-1: #dbe8fb; --pos-2: #a9c8f3; --pos-3: #5f9be8; --pos-4: #2a6fd0; --pos-5: #184f95;
+  --neg-1: #fbe0dc; --neg-2: #f4b0a6; --neg-3: #e8735f; --neg-4: #cc4632; --neg-5: #962a1c;
+  --mid: #eef0f3; --hatch: rgba(15, 20, 32, .14); --clock: #b4361f;
+  --f-heur: #2a78d6; --f-search: #eb6834; --f-llm: #1baf7a; --f-learned: #c98500; --f-arena: #d55181; --f-random: #8a90a0; --f-human: var(--ink);
+  --display: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1118; --panel: #161a23; --ink: #eef0f4; --ink-2: #b4bac8; --muted: #7d8494; --line: #262b37; --line-2: #343a48;
+  --accent: #6f9cf0; --you: #6f9cf0; --opp: #4a5263; --them: #e58258; --fa: #9085e9; --fb: #e0a526;
+  --pos-1: #1d2c45; --pos-2: #23467a; --pos-3: #2f66b3; --pos-4: #4a8ae6; --pos-5: #8db8f5;
+  --neg-1: #3a2220; --neg-2: #6a2f27; --neg-3: #a5412f; --neg-4: #d9654f; --neg-5: #f2a092;
+  --mid: #1e232e; --hatch: rgba(238, 240, 244, .16); --clock: #f08a72;
+  --f-heur: #3987e5; --f-search: #d95926; --f-llm: #199e70; --f-learned: #c98500; --f-arena: #d55181; --f-random: #7d8494; --f-human: var(--ink);
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1118; --panel: #161a23; --ink: #eef0f4; --ink-2: #b4bac8; --muted: #7d8494; --line: #262b37; --line-2: #343a48;
+  --accent: #6f9cf0; --you: #6f9cf0; --opp: #4a5263; --them: #e58258; --fa: #9085e9; --fb: #e0a526;
+  --pos-1: #1d2c45; --pos-2: #23467a; --pos-3: #2f66b3; --pos-4: #4a8ae6; --pos-5: #8db8f5;
+  --neg-1: #3a2220; --neg-2: #6a2f27; --neg-3: #a5412f; --neg-4: #d9654f; --neg-5: #f2a092;
+  --mid: #1e232e; --hatch: rgba(238, 240, 244, .16); --clock: #f08a72;
+  --f-heur: #3987e5; --f-search: #d95926; --f-llm: #199e70; --f-learned: #c98500; --f-arena: #d55181; --f-random: #7d8494; --f-human: var(--ink);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: grid; gap: 36px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: .01em; }
+h1 { font-size: 34px; font-weight: 700; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+.eyebrow { font-family: var(--display); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.lede { color: var(--ink-2); max-width: 70ch; margin: 6px 0 0; }
+.meta-line { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.live { display: inline-flex; align-items: center; gap: 6px; }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.live.on i { background: var(--f-llm); }
+.section { display: grid; gap: 12px; min-width: 0; }
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.section-head p { margin: 0; color: var(--ink-2); max-width: 64ch; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.scroll { overflow-x: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.ramp { display: inline-flex; gap: 2px; vertical-align: middle; }
+.ramp b { width: 18px; height: 12px; border-radius: 2px; display: inline-block; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 14px; border-radius: 2px; display: inline-block; }
+.hatch { background-image: repeating-linear-gradient(135deg, var(--hatch) 0 2px, transparent 2px 6px); }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
+.botname { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+.clock { color: var(--clock); font-family: var(--mono); font-size: 12px; font-weight: 600; white-space: nowrap; }
+button { font: inherit; color: inherit; }
+
+/* Hero: spot tiles */
+.spots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .spots { grid-template-columns: 1fr; } }
+.spot-group { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.spot-group > h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-2); border-bottom: 2px solid var(--line-2); padding-bottom: 4px; }
+.tile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; width: 100%; }
+.tile:hover, .tile:focus-visible { border-color: var(--accent); outline: none; }
+.tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.tile .spot { font-family: var(--display); font-weight: 600; font-size: 14px; color: var(--ink-2); display: flex; justify-content: space-between; gap: 8px; }
+.tile .spot small { font-family: var(--mono); font-weight: 400; font-size: 11px; color: var(--muted); }
+.tile .champ { font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.15; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tile .champ span.n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .champ .edge { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 4px; flex: none; }
+.tile .runner { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pict { width: 64px; height: 40px; }
+.pict text { font-family: var(--mono); font-size: 9px; fill: var(--muted); }
+
+/* Moments (examples + replay) */
+.moments { display: grid; gap: 10px; }
+.moment-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.moment { border: 1px solid var(--line-2); background: var(--panel); border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; text-align: left; }
+.moment:hover, .moment:focus-visible { border-color: var(--accent); outline: none; }
+.moment b { font-family: var(--display); }
+.moment .res-w { color: var(--pos-4); font-weight: 600; }
+.moment .res-l { color: var(--neg-4); font-weight: 600; }
+#viewer { min-height: 0; }
+.note { font-size: 13px; color: var(--muted); }
+
+/* Grid */
+.grid { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
+.grid th, .grid td { padding: 0; }
+.grid .grp { font-family: var(--display); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); text-align: center; padding-bottom: 2px; border-bottom: 2px solid var(--line-2); }
+.grid .colh { font-family: var(--display); font-size: 13px; font-weight: 600; text-align: center; width: 70px; padding: 6px 2px 2px; line-height: 1.1; vertical-align: bottom; }
+.grid .colh small { display: block; font-family: var(--mono); font-weight: 400; font-size: 10px; color: var(--muted); margin-top: 2px; }
+.grid .rowh { text-align: left; padding-right: 10px; white-space: nowrap; position: sticky; left: 0; background: var(--panel); z-index: 1; }
+.grid .rowh .botname { font-size: 14px; }
+.str { width: 112px; padding-right: 10px; }
+.strbar { position: relative; height: 18px; background: var(--mid); border-radius: 3px; overflow: hidden; }
+.strbar i { position: absolute; inset: 0 auto 0 0; background: var(--ink-2); opacity: .22; }
+.strbar span { position: absolute; left: 6px; top: 0; font-family: var(--mono); font-size: 11px; line-height: 18px; color: var(--ink); }
+.cell { width: 70px; height: 32px; border-radius: 4px; position: relative; display: flex; align-items: center; justify-content: center; gap: 3px; font-family: var(--mono); font-size: 12px; cursor: pointer; }
+.cell.none { border: 1px dashed var(--line-2); color: var(--muted); cursor: default; }
+.cell .mk { font-size: 10px; line-height: 1; }
+.cell.sel { box-shadow: 0 0 0 2px var(--ink) inset; }
+.style-tag { font-family: var(--display); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; }
+.swipe { display: none; font-size: 12px; color: var(--muted); }
+@media (max-width: 900px) { .swipe { display: block; } }
+
+/* Style map */
+svg text { fill: var(--ink-2); font-family: var(--body); font-size: 12px; }
+svg .lbl { fill: var(--ink); font-weight: 600; font-size: 12px; }
+svg .ax { stroke: var(--line-2); }
+svg .gridl { stroke: var(--line); }
+svg .lead { stroke: var(--muted); stroke-width: 1; }
+svg .quad { fill: var(--muted); font-family: var(--display); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+
+/* Rivalries */
+.riv { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 22px; }
+.rv { display: grid; grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.rv .a { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv .b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv .win { font-weight: 700; color: var(--ink); }
+.rv .lose { color: var(--muted); }
+.split { display: flex; height: 16px; border-radius: 3px; overflow: hidden; font-family: var(--mono); font-size: 10px; line-height: 16px; }
+.split i { display: block; text-align: center; font-style: normal; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+.h2h { border-collapse: separate; border-spacing: 2px; font-family: var(--mono); font-size: 11px; margin-top: 10px; }
+.h2h th { font-family: var(--body); font-weight: 600; font-size: 12px; color: var(--ink-2); }
+.h2h th.v { writing-mode: vertical-rl; transform: rotate(180deg); height: 96px; text-align: left; padding: 2px; }
+.h2h th.r { text-align: right; padding-right: 6px; white-space: nowrap; }
+.h2h td { width: 28px; height: 24px; text-align: center; border-radius: 3px; }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.card .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card .verdict { font-size: 14px; }
+.card .row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.card .row b { font-family: var(--display); font-weight: 600; color: var(--ink); }
+.strip { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; }
+.strip i { height: 14px; border-radius: 2px; }
+.strip span { font-family: var(--mono); font-size: 9px; color: var(--muted); text-align: center; overflow: hidden; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 7px; border-radius: 4px; background: var(--mid); color: var(--ink-2); }
+.small { font-size: 13px; color: var(--ink-2); }
+
+.ladder { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rung { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; }
+.rung b { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+.rung.top { font-weight: 700; border-color: var(--line-2); }
+.rung .st { font-family: var(--display); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+@media (max-width: 600px) { #scatter { display: none; } }
+.rung .r { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+.ladder-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: baseline; }
+.ranks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 28px; margin-top: 8px; }
+.rank h4 { margin: 0 0 6px; font-family: var(--display); font-size: 14px; font-weight: 600; }
+.rank .bar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 46px; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 4px; }
+.rank .bar span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .bar i { display: block; height: 10px; border-radius: 0 3px 3px 0; }
+.rank .bar em { font-style: normal; font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+.styles-key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+.colh .pict { width: 52px; height: 32px; display: block; margin: 0 auto 2px; }
+.strip .pict { width: 100%; height: 18px; }
+/* Spot guide */
+.guide { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; align-items: center; }
+@media (max-width: 820px) { .guide { grid-template-columns: 1fr; } }
+#guide-svg { width: 100%; max-width: 440px; height: auto; display: block; }
+.bd-num { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.bd-lab { font-family: var(--mono); font-size: 9.5px; fill: var(--ink-2); }
+.bd-who { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.bd-round { font-family: var(--display); font-size: 12px; font-weight: 700; fill: var(--ink); }
+.bd-pill { font-family: var(--mono); font-size: 10px; font-weight: 600; fill: var(--panel); }
+.bd-eq { font-family: var(--display); font-size: 28px; font-weight: 700; fill: var(--ink); }
+#guide-cap { display: grid; gap: 6px; transition: opacity .3s; }
+#guide-title { font-family: var(--display); font-size: 26px; font-weight: 700; }
+#guide-say { font-size: 17px; max-width: 40ch; }
+#guide-rule { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.gpicks { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+@media (max-width: 820px) { .gpicks { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.gpick { display: grid; justify-items: center; gap: 2px; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-size: 11.5px; color: var(--ink-2); line-height: 1.15; text-align: center; }
+.gpick.on { border-color: var(--ink); color: var(--ink); font-weight: 600; }
+.gpick .gp { width: 100%; max-width: 72px; height: auto; }
+.gpick .gbest { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ghost { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--panel); cursor: pointer; font-size: 13px; }
+/* Face-off */
+.fo-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.fo-head select { font: inherit; font-weight: 600; padding: 4px 8px; border-radius: 8px; border: 2px solid var(--line-2); background: var(--panel); color: var(--ink); max-width: 46vw; }
+#fo-a { border-color: var(--fa); } #fo-b { border-color: var(--fb); }
+.fo-sum { font-family: var(--display); font-size: 20px; font-weight: 600; }
+.fo-sum .a { color: var(--fa); } .fo-sum .b { color: var(--fb); }
+.hum-row th, .hum-row td { border-bottom: 2px solid var(--line-2); }
+.runner.hum { color: var(--ink); font-weight: 600; }
+.runner.hum .dot { margin-right: 4px; }
+.verdict { margin: 12px 0 0; font-size: 15px; max-width: 80ch; }
+.fo-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+.fo-key i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid; vertical-align: -2px; margin-right: 5px; box-sizing: border-box; }
+.fo-grid { display: grid; gap: 4px; margin-top: 10px; }
+.fo-row { display: grid; grid-template-columns: 64px 128px minmax(0, 1fr) 118px; gap: 10px; align-items: center; }
+@media (max-width: 640px) { .fo-row { grid-template-columns: 48px minmax(0, 1fr) 84px; } .fo-row .fo-lab { display: none; } }
+.fo-row .pict { width: 64px; height: 40px; }
+@media (max-width: 640px) { .fo-row .pict { width: 48px; height: 30px; } }
+.fo-lab { font-family: var(--display); font-weight: 600; font-size: 14px; line-height: 1.1; }
+.fo-lab small { display: block; font-family: var(--body); font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.fo-track { position: relative; height: 34px; }
+.fo-track .rail { position: absolute; left: 0; right: 0; top: 14px; height: 6px; border-radius: 3px; background: var(--line); }
+.fo-track .zero { position: absolute; left: 50%; top: 5px; bottom: 5px; width: 1px; background: var(--line-2); }
+.fo-track .gap { position: absolute; top: 14px; height: 6px; border-radius: 3px; opacity: .35; }
+.fo-track .dot { position: absolute; top: 8px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; border: 2.5px solid; box-sizing: border-box; }
+.fo-win { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) { .fo-win { white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.15; } }
+.fo-grp { font-family: var(--display); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid var(--line-2); padding: 8px 0 2px; }
+.fo-style { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; margin-top: 14px; }
+.fo-st h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.fo-st .bb { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 6px; align-items: center; margin-bottom: 3px; }
+.fo-st .bb i { display: block; height: 10px; border-radius: 0 3px 3px 0; }
+.fo-st .bb em { font-style: normal; font-family: var(--mono); font-size: 12px; text-align: right; color: var(--ink-2); }
+.cmp { justify-self: start; }
+.tip { position: fixed; pointer-events: none; z-index: 10; background: var(--panel); color: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; max-width: 280px; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.foot { color: var(--ink-2); font-size: 14px; display: grid; gap: 10px; }
+.foot ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.ask { display: grid; gap: 8px; max-width: 640px; }
+.ask textarea { width: 100%; min-height: 64px; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel); color: var(--ink); }
+.ask .btn { justify-self: start; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--panel); cursor: pointer; font-weight: 600; }
+.ask .btn[disabled] { opacity: .5; cursor: default; }
+@media (max-width: 520px) { h1 { font-size: 28px; } .wrap { padding-inline: 16px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SWU bot research · meta-analyzer</div>
+    <h1>Strategy Atlas</h1>
+    <p class="lede" id="lede"></p>
+    <div class="meta-line"><span id="stamp"></span><span class="live" id="live"><i></i><span>snapshot</span></span></div>
+  </header>
+
+  <section class="section" id="guide-sec">
+    <div class="section-head"><h2>What the spots mean</h2><button class="ghost" id="guide-play" type="button">Pause</button></div>
+    <div class="panel guide">
+      <svg id="guide-svg" viewBox="0 0 240 150" role="img" aria-label="Animated table showing how a game gets into each spot"></svg>
+      <div id="guide-cap"><div class="eyebrow">at the start of a round</div><div id="guide-title"></div><div id="guide-say"></div><div id="guide-rule"></div>
+        <div class="small">Top half is the opponent, bottom half is you. Tower = base HP left, cards on the table = units with their power, fanned cards = hand, badge = round.</div></div>
+    </div>
+    <div class="gpicks" id="guide-picks"></div>
+  </section>
+
+  <section class="section" id="hero">
+    <div class="section-head">
+      <h2>Who to bet on in each spot</h2>
+      <p>The bot that wins most often from that spot, compared with an average bot in the same spot against the same opponent.</p>
+    </div>
+    <div class="ladder-head"><span class="eyebrow">overall strength (rating), strongest first · <span class="clock">⏱</span> = games lost on the clock</span><span class="legend" id="fam-legend"></span></div>
+    <div class="ladder" id="ladder"></div>
+    <p class="verdict" id="verdict"></p>
+    <div class="spots" id="spots"></div>
+    <div class="moments panel" id="moments" hidden></div>
+  </section>
+
+  <section class="section" id="faceoff">
+    <div class="section-head"><h2>Face-off</h2><p>Pick two bots. Each row is one spot; the dots show how much better than an average bot each one does there.</p></div>
+    <div class="panel">
+      <div class="fo-head"><select id="fo-a" aria-label="First bot"></select><span class="eyebrow">vs</span><select id="fo-b" aria-label="Second bot"></select><button class="ghost" id="fo-swap" type="button">Swap</button></div>
+      <div class="fo-sum" id="fo-sum"></div>
+      <div class="fo-grid" id="fo-grid"></div>
+      <div class="fo-style" id="fo-style"></div>
+    </div>
+  </section>
+
+  <section class="section" id="map">
+    <div class="section-head">
+      <h2>Every bot in every spot</h2>
+      <p>Numbers are points of win chance above or below an average bot. Tap a cell for real games.</p>
+    </div>
+    <div class="legend" id="map-legend"></div>
+    <div class="panel scroll"><table class="grid" id="grid"></table></div>
+    <div class="swipe">Swipe the table sideways for more spots →</div>
+    <div class="small" id="few"></div>
+  </section>
+
+  <section class="section" id="style">
+    <div class="section-head"><h2>How each bot plays</h2><p>Bigger dot = stronger bot.</p></div>
+    <div class="panel"><svg id="scatter" role="img" aria-label="Style map: enemy units removed per round against base damage per round"></svg>
+      <div class="ranks" id="ranks"></div>
+      <div class="styles-key" id="styles-key"></div></div>
+  </section>
+
+  <section class="section" id="rivals">
+    <div class="section-head"><h2>Rivalries</h2><p>Pairs with at least 10 games. Winner on the left; the bar splits the games each side won.</p></div>
+    <div class="panel"><div class="riv" id="riv"></div>
+      <details><summary>Full head-to-head table (row bot's win %)</summary><div class="scroll"><table class="h2h" id="h2h"></table></div></details>
+    </div>
+  </section>
+
+  <section class="section" id="cards-sec">
+    <div class="section-head"><h2>Scouting cards</h2><p>Best and worst spot are relative to the bot's own level.</p></div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="section foot" id="theory"></section>
+
+  <section class="section" id="ask-sec" hidden>
+    <h2>Tell the analyzer what's unclear</h2>
+    <div class="ask">
+      <textarea id="ask-text" placeholder="What did you have to work out? What would you rather see?"></textarea>
+      <button class="btn" id="ask-send" type="button">Send to Claude</button>
+      <div class="note" id="ask-note"></div>
+    </div>
+  </section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const PROJECT_FILES_META = 'meta/meta.json';
+let META = /*__META__*/null;
+const THEORY = /*__THEORY__*/null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const FAM = { heuristic: 'heur', search: 'search', llm: 'llm', learned: 'learned', other: 'arena', random: 'random', human: 'human' };
+const FAMLABEL = { heur: 'Rules', search: 'Search', llm: 'LLM', learned: 'Learned', arena: 'Arena entrant', random: 'Random', human: 'Humans' };
+const famKey = (b) => FAM[b.family] || 'arena';
+const famVar = (b) => `var(--f-${famKey(b)})`;
+const MIN_GAMES = 8;
+const pp = (x) => { const v = Math.round(x * 100); return v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v); };
+const pct = (x) => Math.round(x * 100) + '%';
+const GROUP = { Behind: 'When behind', Even: 'Close or long', Ahead: 'When ahead' };
+let SIT = {}, mapped = [], few = [], sel = null, HUM = null;
+// Humans (real karabast.net games) are one extra competitor: shown beside the bots, never ranked among them.
+const botById = (id) => (id === 'humans' ? HUM : META.bots.find((x) => x.id === id));
+// Public human games must carry their source's credit wherever their data appears.
+const humCredit = () => (META.humanSources || []).filter((x) => x.credit).map((x) => x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.credit)}</a>` : esc(x.credit)).join(', ');
+const humNote = () => (humCredit() ? ` · games from ${humCredit()}` : '');
+const humCell = (sid) => (HUM && HUM.situations[sid] && HUM.situations[sid].n >= 5 ? HUM.situations[sid] : null);
+
+function edgeColor(e) {
+  const a = Math.abs(e);
+  const step = a < 0.03 ? 0 : a < 0.08 ? 1 : a < 0.14 ? 2 : a < 0.22 ? 3 : a < 0.32 ? 4 : 5;
+  if (!step) return { bg: 'var(--mid)', fg: 'var(--ink-2)' };
+  const side = e > 0 ? 'pos' : 'neg';
+  return { bg: `var(--${side}-${step})`, fg: step >= 4 ? 'var(--panel)' : 'var(--ink)' };
+}
+
+const tip = $('tip');
+function bindTip(el, html) {
+  el.addEventListener('mouseenter', () => { tip.innerHTML = typeof html === 'function' ? html() : html; tip.hidden = false; });
+  el.addEventListener('mousemove', (e) => {
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + 'px';
+    tip.style.top = Math.min(e.clientY + 14, innerHeight - h - 8) + 'px';
+  });
+  el.addEventListener('mouseleave', () => { tip.hidden = true; });
+}
+
+/**
+ * One drawing language for every spot: a tiny SWU table. Top half = the opponent, bottom half = you.
+ * Base = tower with its HP left, units = cards with power, hand = fanned cards, round = badge on the centre line.
+ * The animated guide tweens from an even opening into each spot; the icons elsewhere are that drawing's last frame.
+ */
+const OPEN = { you: { base: 30, units: [2, 3], hand: 4 }, them: { base: 30, units: [2, 3], hand: 4 }, round: 1 };
+const SPOTS = {
+  base_behind:  { focus: 'base',  end: { you: { base: 12, units: [3, 2], hand: 3 }, them: { base: 21, units: [2, 3], hand: 3 }, round: 4 }, gap: ['you', 'them', 'base'], say: 'Your base has 5 or more HP less left than theirs.' },
+  board_behind: { focus: 'units', end: { you: { base: 24, units: [2, 1], hand: 3 }, them: { base: 24, units: [3, 4, 2, 3], hand: 3 }, round: 3 }, gap: ['you', 'them', 'units'], say: 'Their units on the table have 4 or more power more than yours.' },
+  low_base:     { focus: 'base',  end: { you: { base: 7, units: [2], hand: 2 }, them: { base: 18, units: [3, 2], hand: 3 }, round: 6 }, only: 'you', say: 'Your base is down to 8 HP or less. One or two more hits and you lose.' },
+  cards_behind: { focus: 'hand',  end: { you: { base: 26, units: [2, 3], hand: 1 }, them: { base: 26, units: [2, 3], hand: 5 }, round: 3 }, gap: ['you', 'them', 'hand'], say: 'You hold 2 or more fewer cards than they do, so you have fewer options.' },
+  close_mid:    { focus: 'round', end: { you: { base: 22, units: [3, 2, 3], hand: 3 }, them: { base: 21, units: [2, 3, 3], hand: 3 }, round: 4 }, even: true, say: 'Round 4 starts and both sides are level: base and board within 3.' },
+  long_game:    { focus: 'round', end: { you: { base: 13, units: [4, 2], hand: 2 }, them: { base: 15, units: [3, 3], hand: 2 }, round: 8 }, say: 'The game reaches round 8. Most games are over by then.' },
+  base_ahead:   { focus: 'base',  end: { you: { base: 21, units: [2, 3], hand: 3 }, them: { base: 12, units: [3, 2], hand: 3 }, round: 4 }, gap: ['you', 'them', 'base'], say: 'Your base has 5 or more HP more left than theirs.' },
+  board_ahead:  { focus: 'units', end: { you: { base: 24, units: [3, 4, 2, 3], hand: 3 }, them: { base: 24, units: [2, 1], hand: 3 }, round: 3 }, gap: ['you', 'them', 'units'], say: 'Your units on the table have 4 or more power more than theirs.' },
+  kill_range:   { focus: 'base',  end: { you: { base: 18, units: [3, 2], hand: 3 }, them: { base: 6, units: [2], hand: 2 }, round: 6 }, only: 'them', say: 'Their base is down to 8 HP or less. You can finish them soon.' },
+};
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+const lerp = (a, b, t) => a + (b - a) * t;
+const powerOf = (units) => units.reduce((a, b) => a + b, 0);
+
+/** Draws the table at tween position k (0 = opening, 1 = the spot). `mini` drops text and dims what doesn't matter. */
+function drawBoard(id, k, { mini = false, glow = 0 } = {}) {
+  const S = SPOTS[id], A = OPEN, B = S.end;
+  const dim = (part) => (k > 0.55 && S.focus !== part ? (mini ? 0.22 : 0.4) : 1);
+  const side = (who, top) => {
+    const a = A[who], b = B[who];
+    const ink = who === 'you' ? 'var(--you)' : 'var(--them)';
+    const yB = top ? 8 : 82, yU = top ? 22 : 96, yH = top ? 28 : 102;
+    const hp = lerp(a.base, b.base, k), hpFrac = hp / 30, low = hp <= 8.5;
+    let g = '';
+    // base tower
+    const bh = 58, fill = bh * hpFrac;
+    const hot = S.focus === 'base' && (!S.only || S.only === who) && k > 0.6;
+    g += `<g opacity="${dim('base')}"><rect x="8" y="${yB}" width="34" height="${bh}" rx="4" fill="var(--panel)" stroke="${hot ? 'var(--ink)' : 'var(--line-2)'}" stroke-width="${hot ? 2 + glow * 2 : 1.5}"/>`;
+    g += `<rect x="11" y="${yB + bh - fill + 2}" width="28" height="${Math.max(0, fill - 4)}" rx="2" fill="${low ? 'var(--neg-4)' : ink}"/>`;
+    if (!mini) g += `<text x="25" y="${yB + bh / 2 + 5}" text-anchor="middle" class="bd-num" style="fill:${hpFrac > 0.45 ? 'var(--panel)' : 'var(--ink)'}">${Math.round(hp)}</text>`;
+    g += '</g>';
+    // units: slots fade in or out across the tween
+    const n0 = a.units.length, n1 = b.units.length, slots = Math.max(n0, n1);
+    g += `<g opacity="${dim('units')}">`;
+    for (let i = 0; i < slots; i++) {
+      let op = 1;
+      if (i >= Math.min(n0, n1)) { const j = i - Math.min(n0, n1), m = Math.abs(n1 - n0), t0 = j / (m + 1), t1 = (j + 1) / (m + 1); const f = Math.max(0, Math.min(1, (k - t0) / (t1 - t0))); op = n1 > n0 ? f : 1 - f; }
+      if (op <= 0.01) continue;
+      const pw = (n1 >= n0 ? b.units : a.units)[i] ?? b.units[i] ?? a.units[i];
+      const x = 52 + i * 27, sc = 0.6 + 0.4 * op;
+      g += `<g opacity="${op}" transform="translate(${x + 12} ${yU + 16}) scale(${sc}) translate(${-(x + 12)} ${-(yU + 16)})"><rect x="${x}" y="${yU}" width="24" height="32" rx="3" fill="${ink}"/>`;
+      if (!mini) g += `<text x="${x + 12}" y="${yU + 21}" text-anchor="middle" class="bd-num" style="fill:var(--panel)">${pw}</text>`;
+      g += '</g>';
+    }
+    if (!mini && k > 0.6 && S.focus === 'units') g += `<text x="52" y="${top ? yU - 4 : yU + 43}" class="bd-lab">total power ${powerOf(b.units)}</text>`;
+    g += '</g>';
+    // hand: fanned cards
+    const h = Math.round(lerp(a.hand, b.hand, k));
+    g += `<g opacity="${dim('hand')}">`;
+    for (let i = 0; i < h; i++) g += `<rect x="${170 + i * 9}" y="${yH}" width="13" height="20" rx="2" fill="var(--panel)" stroke="${ink}" stroke-width="1.6" transform="rotate(${(i - (h - 1) / 2) * 6} ${176 + i * 9} ${yH + 26})"/>`;
+    if (!mini) g += `<text x="${170}" y="${top ? yH - 6 : yH + 34}" class="bd-lab">${h} in hand</text>`;
+    g += '</g>';
+    if (!mini) g += `<text x="236" y="${top ? 11 : 146}" text-anchor="end" class="bd-who" style="fill:${ink}">${who === 'you' ? 'YOU' : 'THEM'}</text>`;
+    return g;
+  };
+  const r = Math.round(lerp(A.round, B.round, ease(Math.min(1, k * 1.1))));
+  let g = `<line x1="4" x2="236" y1="75" y2="75" stroke="var(--line-2)" stroke-dasharray="3 4"/>`;
+  g += side('them', true) + side('you', false);
+  const rHot = S.focus === 'round' && k > 0.6;
+  g += `<g opacity="${dim('round')}"><circle cx="214" cy="75" r="${mini ? 15 : 14}" fill="var(--panel)" stroke="${rHot ? 'var(--ink)' : 'var(--line-2)'}" stroke-width="${rHot ? 2 + glow * 2 : 1.5}"/><text x="214" y="${mini ? 81 : 80}" text-anchor="middle" class="bd-round" style="${mini ? 'font-size:17px' : ''}">R${r}${S.id === 'long_game' && k > 0.95 ? '+' : ''}</text></g>`;
+  // The measured gap, as a pill on the centre line once the tween lands.
+  if (!mini && k > 0.6) {
+    let txt = null;
+    const you = B.you, them = B.them;
+    if (S.gap && S.focus === 'base') { const d = you.base - them.base; txt = `you ${d > 0 ? '+' : '−'}${Math.abs(d)} HP`; }
+    if (S.gap && S.focus === 'units') { const d = powerOf(you.units) - powerOf(them.units); txt = `you ${d > 0 ? '+' : '−'}${Math.abs(d)} power`; }
+    if (S.gap && S.focus === 'hand') { const d = you.hand - them.hand; txt = `you ${d > 0 ? '+' : '−'}${Math.abs(d)} cards`; }
+    if (S.only) txt = `${S.only === 'you' ? 'your' : 'their'} base ${B[S.only].base} HP`;
+    if (S.even) txt = 'level: base and board within 3';
+    if (S.id === 'long_game') txt = 'round 8 or later';
+    if (txt) {
+      const w = txt.length * 6.1 + 14, op = Math.min(1, (k - 0.6) * 3);
+      g += `<g opacity="${op}"><rect x="${128 - w / 2}" y="66" width="${w}" height="18" rx="9" fill="var(--ink)"/><text x="128" y="79" text-anchor="middle" class="bd-pill">${txt}</text></g>`;
+    }
+  }
+  return g;
+}
+function miniBoard(id, cls = 'pict') { return `<svg class="${cls}" viewBox="0 0 240 150" aria-hidden="true">${drawBoard(id, 1, { mini: true })}</svg>`; }
+function pictogram(s) { return miniBoard(s.id); }
+
+/** The animated guide: cycles through the spots, or holds the one picked. */
+const GUIDE = { i: 0, t0: 0, auto: true, raf: 0 };
+const GUIDE_MS = { hold0: 700, tween: 1900, hold1: 2400 };
+function renderGuideShell() {
+  const ids = Object.keys(SPOTS);
+  $('guide-picks').innerHTML = META.situations.filter((s) => SPOTS[s.id]).map((s) => `<button class="gpick" type="button" data-s="${s.id}" title="${esc(s.label)}">${miniBoard(s.id, 'gp')}<span>${esc(s.label)}</span>${((b) => b ? `<b class="gbest">best: ${esc(b.id)}</b>` : '')(rankIn(s.id)[0])}</button>`).join('');
+  for (const el of $('guide-picks').querySelectorAll('.gpick')) el.addEventListener('click', () => { GUIDE.i = ids.indexOf(el.dataset.s); GUIDE.t0 = performance.now(); GUIDE.auto = false; $('guide-play').textContent = 'Play all'; frame(performance.now()); });
+  $('guide-play').onclick = () => { GUIDE.auto = !GUIDE.auto; $('guide-play').textContent = GUIDE.auto ? 'Pause' : 'Play all'; GUIDE.t0 = performance.now(); };
+}
+function guideAt(id, k, glow) {
+  const s = SIT[id] || { label: id, short: '' }, S = SPOTS[id];
+  $('guide-svg').innerHTML = drawBoard(id, k, { glow });
+  $('guide-title').textContent = s.label;
+  $('guide-say').textContent = S.say;
+  $('guide-rule').textContent = `counts when, at the start of a round: ${s.short}`;
+  $('guide-cap').style.opacity = k > 0.6 ? 1 : 0.8;
+  for (const el of $('guide-picks').querySelectorAll('.gpick')) el.classList.toggle('on', el.dataset.s === id);
+}
+function frame(now) {
+  const ids = Object.keys(SPOTS), total = GUIDE_MS.hold0 + GUIDE_MS.tween + GUIDE_MS.hold1;
+  let t = now - GUIDE.t0;
+  if (t > total) { if (GUIDE.auto) { GUIDE.i = (GUIDE.i + 1) % ids.length; GUIDE.t0 = now; t = 0; } else t = total; }
+  const k = t < GUIDE_MS.hold0 ? 0 : t < GUIDE_MS.hold0 + GUIDE_MS.tween ? ease((t - GUIDE_MS.hold0) / GUIDE_MS.tween) : 1;
+  const glow = k === 1 ? 0.5 + 0.5 * Math.sin((t - GUIDE_MS.hold0 - GUIDE_MS.tween) / 160) : 0;
+  guideAt(ids[GUIDE.i], k, glow);
+  GUIDE.raf = requestAnimationFrame(frame);
+}
+function startGuide() {
+  renderGuideShell();
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { GUIDE.auto = false; $('guide-play').hidden = true; guideAt(Object.keys(SPOTS)[0], 1, 0); return; }
+  if (!GUIDE.raf) { GUIDE.t0 = performance.now(); GUIDE.raf = requestAnimationFrame(frame); }
+}
+// For screenshots and tests: hold one spot at tween position k.
+window.__guide = { show(id, k = 1) { cancelAnimationFrame(GUIDE.raf); GUIDE.raf = 0; GUIDE.auto = false; guideAt(id, k, 0); } };
+
+function prepare(M) {
+  SIT = Object.fromEntries(M.situations.map((s) => [s.id, s]));
+  mapped = M.bots.filter((b) => b.games >= MIN_GAMES && b.replayGames >= 5);
+  few = M.bots.filter((b) => !mapped.includes(b));
+  HUM = M.humans && M.humans.replayGames >= 5 ? M.humans : null;
+}
+const rankIn = (sid) => mapped.filter((b) => b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
+
+function renderHeader(M) {
+  const t = M.totals;
+  $('lede').textContent = `${mapped.length} bots, ${t.games.toLocaleString()} games${HUM ? `, plus ${HUM.games} real human games` : ''}. For each kind of game spot: which bot wins from there, and how each one plays.`;
+  $('stamp').textContent = `updated ${new Date(M.generatedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${M.sources.length} runs · ${t.replays} replays · ${t.snapshots.toLocaleString()} round starts`;
+}
+
+function renderSpots(M) {
+  const won = {};
+  for (const s of M.situations) { const b = rankIn(s.id)[0]; if (b) won[b.id] = (won[b.id] || 0) + 1; }
+  const most = Object.entries(won).sort((a, b) => b[1] - a[1])[0], top = mapped[0];
+  $('verdict').innerHTML = most && top ? (most[0] === top.id
+    ? `<b>${esc(top.id)}</b> is both the top rated bot and the best bot in the most spots (${most[1]} of ${M.situations.length}).`
+    : `<b>${esc(top.id)}</b> has the top rating (wins the most games overall), but <b>${esc(most[0])}</b> is the best bot in the most spots (${most[1]} of ${M.situations.length}). Rating counts every game; a spot counts only games that reach it.`) : '';
+  if (HUM) $('verdict').innerHTML += ` The <b>humans</b> line under each spot comes from ${HUM.games} real games${humNote()}.`;
+  const groups = {};
+  for (const s of M.situations) (groups[s.group] ||= []).push(s);
+  $('spots').innerHTML = Object.entries(groups).map(([g, list]) => `
+    <div class="spot-group"><h3>${esc(GROUP[g] || g)}</h3>
+      ${list.map((s) => {
+        const r = rankIn(s.id);
+        if (!r.length) return '';
+        const c = r[0].situations[s.id], col = edgeColor(c.edge);
+        const next = r.slice(1, 3).map((b) => `${esc(b.id)} ${pp(b.situations[s.id].edge)}`).join(' · ');
+        const real = r.filter((b) => b.family !== 'random');
+        const last = real[real.length - 1] || r[r.length - 1];
+        return `<button class="tile${sel && sel.s === s.id && sel.b === r[0].id ? ' sel' : ''}" data-s="${s.id}" data-b="${esc(r[0].id)}" type="button">
+          ${pictogram(s)}
+          <div style="min-width:0">
+            <div class="spot">${esc(s.label)} <small>${esc(s.short)}</small></div>
+            <div class="champ"><span class="dot" style="background:${famVar(r[0])}"></span><span class="n">${esc(r[0].id)}</span><span class="edge" style="background:${col.bg};color:${col.fg}" title="points of win chance above an average bot">${pp(c.edge)} pts</span></div>
+            <div class="runner">then ${next || '–'}</div>
+            <div class="runner">worst: ${esc(last.id)} ${pp(last.situations[s.id].edge)}</div>
+            ${humCell(s.id) ? `<div class="runner hum"><span class="dot" style="background:var(--f-human)"></span>humans ${pp(humCell(s.id).edge)}</div>` : ''}
+          </div></button>`;
+      }).join('')}
+    </div>`).join('');
+  for (const el of $('spots').querySelectorAll('.tile')) el.addEventListener('click', () => select(el.dataset.b, el.dataset.s));
+}
+
+function renderLadder() {
+  const fams = [...new Set(mapped.map(famKey))];
+  $('fam-legend').innerHTML = fams.map((f) => `<span class="key"><span class="dot" style="background:var(--f-${f})"></span>${FAMLABEL[f]}</span>`).join('');
+  $('ladder').innerHTML = mapped.map((b, i) => `<span class="rung${i < 3 ? ' top' : ''}" title="${b.wins}–${b.games - b.wins} in ${b.games} games"><b>${i + 1}</b><span class="dot" style="background:${famVar(b)}"></span>${esc(b.id)}<span class="r">${b.rating}</span>${b.summary.style && b.summary.style !== 'Balanced' && b.summary.style !== 'Random' ? `<span class="st">${esc(b.summary.style)}</span>` : ''}${b.forfeits ? `<span class="clock">⏱${b.forfeits}</span>` : ''}</span>`).join('');
+}
+
+function renderLegend() {
+  const steps = ['neg-5', 'neg-4', 'neg-3', 'neg-2', 'neg-1', 'mid', 'pos-1', 'pos-2', 'pos-3', 'pos-4', 'pos-5'];
+  $('map-legend').innerHTML = `
+    <span class="key">worse <span class="ramp">${steps.map((s) => `<b style="background:var(--${s})"></b>`).join('')}</span> better</span>
+    <span class="key">★ best bot in that spot</span>
+    <span class="key">▲ ▼ the bot's best and worst spot for its own level</span>
+    <span class="key"><span class="sw hatch" style="border:1px solid var(--line-2)"></span> under 5 games</span>
+    <span class="key"><span class="clock">⏱4</span> games lost on the clock</span>`;
+}
+
+function renderGrid(M) {
+  const sits = M.situations;
+  const groups = [];
+  for (const s of sits) { const g = groups[groups.length - 1]; if (g && g.name === s.group) g.n++; else groups.push({ name: s.group, n: 1 }); }
+  const crown = Object.fromEntries(sits.map((s) => [s.id, (rankIn(s.id)[0] || {}).id]));
+  const maxR = Math.max(...mapped.map((b) => b.rating)), minR = Math.min(...mapped.map((b) => b.rating));
+  let h = `<thead><tr><th class="rowh"></th><th></th>${groups.map((g) => `<th class="grp" colspan="${g.n}">${esc(GROUP[g.name] || g.name)}</th>`).join('')}<th></th></tr>`;
+  h += `<tr><th class="rowh"><span class="eyebrow">bot</span></th><th class="str"><span class="eyebrow">rating</span></th>${sits.map((s) => `<th class="colh">${pictogram(s)}${esc(s.label)}<small>${esc(s.short)}</small></th>`).join('')}<th><span class="eyebrow">style</span></th></tr></thead><tbody>`;
+  const repeat = `<tr><th class="rowh"></th><th></th>${sits.map((s) => `<th class="colh">${pictogram(s)}${esc(s.label)}</th>`).join('')}<th></th></tr>`;
+  if (HUM) {
+    h += `<tr data-bot="humans" class="hum-row"><th class="rowh"><span class="botname"><span class="dot" style="background:var(--f-human)"></span>humans</span></th><td class="str"><span class="small">${HUM.games} real games${humNote()}</span></td>`;
+    for (const s of sits) {
+      const c = HUM.situations[s.id];
+      if (!c.n) { h += `<td><div class="cell none">–</div></td>`; continue; }
+      const col = edgeColor(c.edge), thin = c.n < 5, isSel = sel && sel.b === 'humans' && sel.s === s.id;
+      h += `<td><div class="cell${thin ? ' hatch' : ''}${isSel ? ' sel' : ''}" data-s="${s.id}" style="background-color:${thin ? 'var(--mid)' : col.bg};color:${thin ? 'var(--muted)' : col.fg}">${pp(c.edge)}</div></td>`;
+    }
+    h += `<td><span class="style-tag">${esc(HUM.summary.style || '')}</span></td></tr>`;
+  }
+  mapped.forEach((b, i) => {
+    if (i && i % 12 === 0) h += repeat;
+    const w = 8 + 92 * (b.rating - minR) / Math.max(1, maxR - minR);
+    h += `<tr data-bot="${esc(b.id)}"><th class="rowh"><span class="botname"><span class="dot" style="background:${famVar(b)}"></span>${esc(b.id)}${b.forfeits ? ` <span class="clock">⏱${b.forfeits}</span>` : ''}</span></th>`;
+    h += `<td class="str"><div class="strbar" title="${b.wins}–${b.games - b.wins} in ${b.games} games"><i style="width:${w}%"></i><span>${b.rating}</span></div></td>`;
+    for (const s of sits) {
+      const c = b.situations[s.id];
+      if (!c.n) { h += `<td><div class="cell none">–</div></td>`; continue; }
+      const col = edgeColor(c.edge);
+      const mk = (crown[s.id] === b.id ? '★' : '') + (b.summary.best && b.summary.best.id === s.id ? '▲' : '') + (b.summary.worst && b.summary.worst.id === s.id ? '▼' : '');
+      const isSel = sel && sel.b === b.id && sel.s === s.id;
+      const thin = c.n < 5;
+      h += `<td><div class="cell${thin ? ' hatch' : ''}${isSel ? ' sel' : ''}" data-s="${s.id}" style="background-color:${thin ? 'var(--mid)' : col.bg};color:${thin ? 'var(--muted)' : col.fg}">${mk ? `<span class="mk">${mk}</span>` : ''}${pp(c.edge)}</div></td>`;
+    }
+    h += `<td><span class="style-tag">${esc(b.summary.style || '')}</span></td></tr>`;
+  });
+  $('grid').innerHTML = h + '</tbody>';
+  for (const tr of $('grid').querySelectorAll('tr[data-bot]')) {
+    const b = botById(tr.dataset.bot);
+    for (const el of tr.querySelectorAll('.cell[data-s]')) {
+      const s = SIT[el.dataset.s], c = b.situations[s.id];
+      bindTip(el, `<b>${esc(b.id)}</b> · ${esc(s.label)} (${esc(s.short)})<br>won ${c.wins} of ${c.n} (${pct(c.rate)})<br>an average bot here: ${pct(c.expected)}<br>${pp(c.edge)} points of win chance`);
+      el.addEventListener('click', () => select(b.id, s.id));
+    }
+  }
+  $('few').textContent = few.length ? `Not shown yet (under ${MIN_GAMES} games or no replays): ` + few.map((b) => `${b.id} (${b.games} games${b.replayGames ? '' : ', results only'}, rating ${b.rating})`).join(', ') + '.' : '';
+}
+
+function renderScatter(M) {
+  const svg = $('scatter');
+  const W = 1100, H = 470, L = 52, R = 24, T = 20, B = 46;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.style.width = '100%';
+  const pts = mapped.filter((b) => b.style.kills != null);
+  const xs = pts.map((b) => b.style.kills), ys = pts.map((b) => b.style.baseDmg);
+  const x1 = Math.ceil(Math.max(...xs) * 10 + 1) / 10, y1 = Math.ceil(Math.max(...ys) + 0.5);
+  const X = (v) => L + (W - L - R) * v / x1, Y = (v) => H - B - (H - T - B) * v / y1;
+  const med = (a) => { const s = [...a].sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; };
+  const mx = med(xs), my = med(ys);
+  let g = '';
+  for (let v = 0; v <= y1; v += 1) g += `<line class="gridl" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  for (let v = 0; v <= x1 + 1e-9; v += 0.1) g += `<line class="gridl" y1="${T}" y2="${H - B}" x1="${X(v)}" x2="${X(v)}"/><text x="${X(v)}" y="${H - B + 16}" text-anchor="middle">${v.toFixed(1)}</text>`;
+  g += `<line class="ax" x1="${X(mx)}" x2="${X(mx)}" y1="${T}" y2="${H - B}" stroke-dasharray="4 4"/><line class="ax" x1="${L}" x2="${W - R}" y1="${Y(my)}" y2="${Y(my)}" stroke-dasharray="4 4"/>`;
+  g += `<text class="quad" x="${L + 10}" y="${T + 18}">Racers · hit the base</text><text class="quad" x="${W - R - 10}" y="${T + 18}" text-anchor="end">Bruisers · do both</text><text class="quad" x="${W - R - 10}" y="${H - B - 10}" text-anchor="end">Controllers · clear the board</text><text class="quad" x="${L + 10}" y="${H - B - 10}">Passive</text>`;
+  g += `<text x="${(L + W - R) / 2}" y="${H - 8}" text-anchor="middle">enemy units removed per round →</text><text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle">base damage per round →</text>`;
+  // Label placement: greedy, try 8 positions around the dot, then a leader line further out.
+  const boxes = [];
+  const dots = pts.map((b) => ({ b, x: X(b.style.kills), y: Y(b.style.baseDmg), r: 5 + 9 * Math.max(0, (b.rating - 950) / 1000) }));
+  for (const d of dots) boxes.push({ x0: d.x - d.r, x1: d.x + d.r, y0: d.y - d.r, y1: d.y + d.r });
+  const hit = (bx) => boxes.some((o) => bx.x0 < o.x1 && bx.x1 > o.x0 && bx.y0 < o.y1 && bx.y1 > o.y0) || bx.x0 < L || bx.x1 > W - R || bx.y0 < T || bx.y1 > H - B;
+  let labels = '', marks = '';
+  for (const d of [...dots].sort((p, q) => q.b.rating - p.b.rating)) {
+    const tw = d.b.id.length * 6.6 + 4, th = 14;
+    let placed = null;
+    for (const dist of [0, 14, 28, 44]) {
+      const cands = [[d.r + 4 + dist, 4, 'start'], [-d.r - 4 - dist, 4, 'end'], [0, -d.r - 6 - dist, 'middle'], [0, d.r + 14 + dist, 'middle'], [d.r + 2 + dist, -d.r - 2 - dist, 'start'], [-d.r - 2 - dist, -d.r - 2 - dist, 'end'], [d.r + 2 + dist, d.r + 12 + dist, 'start'], [-d.r - 2 - dist, d.r + 12 + dist, 'end']];
+      for (const [dx, dy, a] of cands) {
+        const lx = d.x + dx, ly = d.y + dy;
+        const x0 = a === 'start' ? lx : a === 'end' ? lx - tw : lx - tw / 2;
+        const bx = { x0, x1: x0 + tw, y0: ly - th + 3, y1: ly + 3 };
+        if (!hit(bx)) { placed = { lx, ly, a, bx, dist }; break; }
+      }
+      if (placed) break;
+    }
+    if (!placed) placed = { lx: d.x + d.r + 4, ly: d.y + 4, a: 'start', bx: null, dist: 0 };
+    if (placed.bx) boxes.push(placed.bx);
+    if (placed.dist > 0) labels += `<line class="lead" x1="${d.x}" y1="${d.y}" x2="${placed.lx}" y2="${placed.ly - 4}"/>`;
+    labels += `<text class="lbl" x="${placed.lx}" y="${placed.ly}" text-anchor="${placed.a}">${esc(d.b.id)}</text>`;
+  }
+  for (const d of dots) marks += `<g data-bot="${esc(d.b.id)}"><circle cx="${d.x}" cy="${d.y}" r="${d.r}" fill="${famVar(d.b)}" stroke="var(--panel)" stroke-width="2"/></g>`;
+  svg.innerHTML = g + labels + marks;
+  for (const el of svg.querySelectorAll('g[data-bot]')) {
+    const b = M.bots.find((x) => x.id === el.dataset.bot);
+    bindTip(el, `<b>${esc(b.id)}</b> · ${esc(b.summary.style)}<br>${b.style.baseDmg.toFixed(1)} base damage / round<br>${b.style.kills.toFixed(2)} units removed / round<br>${pct(b.style.baseShare || 0)} of attacks at the base<br>rating ${b.rating}`);
+  }
+}
+
+function renderRanks() {
+  const top = (key, fmt, label) => {
+    const list = mapped.filter((b) => b.style[key] != null).sort((a, b) => b.style[key] - a.style[key]).slice(0, 5);
+    const max = list[0] ? list[0].style[key] : 1;
+    return `<div class="rank"><h4>${label}</h4>${list.map((b) => `<div class="bar"><span>${esc(b.id)}</span><i style="width:${100 * b.style[key] / max}%;background:${famVar(b)}"></i><em>${fmt(b.style[key])}</em></div>`).join('')}</div>`;
+  };
+  $('ranks').innerHTML = top('baseShare', pct, 'Hits the base most (share of attacks)') + top('kills', (v) => v.toFixed(2), 'Clears the most units (per round)') + top('baseDmg', (v) => v.toFixed(1), 'Most base damage (per round)');
+  $('styles-key').innerHTML = [['Racer', '80%+ of attacks at the base, high base damage'], ['Bruiser', 'high base damage and many kills'], ['Controller', 'many kills, attacks units more than the base'], ['Cautious', 'low base damage'], ['Balanced', 'none of these']]
+    .map(([k, v]) => `<span><span class="style-tag">${k}</span> ${v}</span>`).join('');
+}
+
+function pairGetter(M) {
+  const P = {};
+  for (const p of M.pairs) P[p.a + '|' + p.b] = p;
+  return (a, b) => { const p = P[a + '|' + b]; if (p) return { n: p.games, w: p.aWins }; const q = P[b + '|' + a]; if (q) return { n: q.games, w: q.games - q.aWins }; return null; };
+}
+
+function renderRivals(M) {
+  const ids = new Set(mapped.map((b) => b.id));
+  const rows = M.pairs.filter((p) => p.games >= 10 && ids.has(p.a) && ids.has(p.b) && p.a !== 'random' && p.b !== 'random');
+  const rate = (id) => (M.bots.find((b) => b.id === id) || {}).rating || 0;
+  // Grouped by the stronger bot of each pair, so one bot's rivalries sit together.
+  const lead = (p) => (rate(p.a) >= rate(p.b) ? p.a : p.b);
+  rows.sort((p, q) => rate(lead(q)) - rate(lead(p)) || lead(p).localeCompare(lead(q)) || q.games - p.games);
+  $('riv').innerHTML = rows.map((p) => {
+    // Stronger bot on the left so the eye reads one direction.
+    const [a, b, aw] = p.aWins >= p.games - p.aWins ? [p.a, p.b, p.aWins] : [p.b, p.a, p.games - p.aWins];
+    const bw = p.games - aw, fa = aw / p.games;
+    const ca = edgeColor(fa - 0.5), cb = edgeColor(0.5 - fa);
+    return `<div class="rv"><span class="a ${aw > bw ? 'win' : 'lose'}">${esc(a)}</span>
+      <span class="split" title="${aw}–${bw} in ${p.games} games"><i style="width:${fa * 100}%;background:${ca.bg};color:${ca.fg}">${aw}</i><i style="width:${100 - fa * 100}%;background:${cb.bg};color:${cb.fg}">${bw}</i></span>
+      <span class="b ${bw > aw ? 'win' : 'lose'}">${esc(b)}</span></div>`;
+  }).join('') || '<span class="note">No pair has 10 games yet.</span>';
+  const get = pairGetter(M);
+  const list = mapped.map((b) => b.id);
+  let h = `<thead><tr><th></th>${list.map((id) => `<th class="v">${esc(id)}</th>`).join('')}</tr></thead><tbody>`;
+  for (const a of list) {
+    h += `<tr><th class="r">${esc(a)}</th>`;
+    for (const b of list) {
+      const r = a === b ? null : get(a, b);
+      if (!r) { h += '<td></td>'; continue; }
+      const col = edgeColor((r.w / r.n - 0.5) * 0.8);
+      h += `<td title="${esc(a)} beat ${esc(b)} in ${r.w} of ${r.n}" class="${r.n < 4 ? 'hatch' : ''}" style="background-color:${col.bg};color:${col.fg}">${Math.round(100 * r.w / r.n)}</td>`;
+    }
+    h += '</tr>';
+  }
+  $('h2h').innerHTML = h + '</tbody>';
+}
+
+function renderCards(M) {
+  $('cards').innerHTML = mapped.map((b) => {
+    const s = b.style, best = b.summary.best && SIT[b.summary.best.id], worst = b.summary.worst && SIT[b.summary.worst.id];
+    return `<article class="card">
+      <div class="top"><h3><span class="botname"><span class="dot" style="background:${famVar(b)}"></span>${esc(b.id)}</span></h3><span class="eyebrow">${esc(FAMLABEL[famKey(b)])} · ${esc(b.lang)}</span></div>
+      <div class="row"><b>${b.rating}</b><span>${b.wins}–${b.games - b.wins} in ${b.games} games</span>${b.forfeits ? `<span class="clock">⏱ ${b.forfeits} lost on the clock</span>` : ''}</div>
+      <div class="verdict"><span class="style-tag">${esc(b.summary.style)}</span> ▲ ${esc(best ? best.label.toLowerCase() : '?')} · ▼ ${esc(worst ? worst.label.toLowerCase() : '?')}</div>
+      <button class="ghost cmp" type="button" data-cmp="${esc(b.id)}">Compare in face-off</button>
+      <div class="chips"><span class="chip">${pct(s.baseShare || 0)} of attacks at base</span><span class="chip">${s.baseDmg.toFixed(1)} base dmg / rd</span><span class="chip">${s.kills.toFixed(2)} kills / rd</span><span class="chip">${s.rounds.toFixed(1)} rounds / game</span>${b.msP50 != null ? `<span class="chip">${b.msP50 < 1 ? '<1' : Math.round(b.msP50)} ms / move</span>` : ''}</div>
+      ${b.panel && b.panel.summary ? `<div class="small">${esc(b.panel.summary.length > 200 ? b.panel.summary.slice(0, 197) + '…' : b.panel.summary)}</div>` : ''}
+    </article>`;
+  }).join('');
+}
+
+let FO = { a: null, b: null };
+try { FO = JSON.parse(localStorage.getItem('atlas-faceoff')) || FO; } catch {}
+function renderFaceoff(M) {
+  const ids = [...mapped.map((b) => b.id), ...(HUM ? ['humans'] : [])];
+  if (!ids.includes(FO.a)) FO.a = ids[0];
+  if (!ids.includes(FO.b) || FO.b === FO.a) FO.b = ids.find((x) => x !== FO.a);
+  const opts = (sel) => ids.map((id) => `<option value="${esc(id)}"${id === sel ? ' selected' : ''}>${esc(id)}</option>`).join('');
+  $('fo-a').innerHTML = opts(FO.a); $('fo-b').innerHTML = opts(FO.b);
+  const A = botById(FO.a), B = botById(FO.b);
+  const get = pairGetter(M), h = get(A.id, B.id);
+  let aw = 0, bw = 0, rows = '', lastG = null;
+  const span = 0.45;
+  for (const s of M.situations) {
+    if (s.group !== lastG) { rows += `<div class="fo-grp">${esc(GROUP[s.group] || s.group)}</div>`; lastG = s.group; }
+    const ca = A.situations[s.id], cb = B.situations[s.id];
+    const has = (c) => c && c.n > 0;
+    let win = '';
+    if (has(ca) && has(cb)) {
+      const d = ca.edge - cb.edge;
+      if (Math.abs(d) < 0.03) win = `<span class="fo-win" style="color:var(--muted)">about even</span>`;
+      else if (d > 0) { aw++; win = `<span class="fo-win" style="color:var(--fa)">${esc(A.id)} +${Math.round(d * 100)}</span>`; }
+      else { bw++; win = `<span class="fo-win" style="color:var(--fb)">${esc(B.id)} +${Math.round(-d * 100)}</span>`; }
+    } else win = `<span class="fo-win" style="color:var(--muted)">not enough games</span>`;
+    const P = (e) => 4 + 92 * (0.5 + 0.5 * Math.max(-1, Math.min(1, e / span)));
+    let tr = `<i class="rail"></i><i class="zero"></i>`;
+    if (has(ca) && has(cb)) {
+      const pa = P(ca.edge), pb = P(cb.edge), lead = ca.edge >= cb.edge ? 'var(--fa)' : 'var(--fb)';
+      tr += `<i class="gap" style="left:${Math.min(pa, pb)}%;width:${Math.abs(pa - pb)}%;background:${lead}"></i>`;
+    }
+    const dot = (c, col) => has(c) ? `<i class="dot" style="left:${P(c.edge)}%;border-color:${col};background:${c.n < 5 ? 'var(--panel)' : col}" title="${pp(c.edge)} pts · won ${c.wins} of ${c.n}"></i>` : '';
+    tr += dot(cb, 'var(--fb)') + dot(ca, 'var(--fa)');
+    rows += `<div class="fo-row">${miniBoard(s.id)}<div class="fo-lab">${esc(s.label)}<small>${esc(s.short)}</small></div><div class="fo-track">${tr}</div>${win}</div>`;
+  }
+  rows += `<div class="fo-row"><span></span><span class="fo-lab"></span><div style="display:grid;grid-template-columns:1fr auto 1fr;font-size:11px;color:var(--muted)"><span>← worse than an average bot</span><span>average</span><span style="text-align:right">better →</span></div><span></span></div>`;
+  $('fo-grid').innerHTML = rows;
+  $('fo-sum').innerHTML = `<span class="a">${esc(A.id)}</span> is better in ${aw} spot${aw === 1 ? '' : 's'}, <span class="b">${esc(B.id)}</span> in ${bw}`
+    + `<div class="small" style="font-family:var(--body);font-weight:400">${A.rating == null || B.rating == null ? `humans: ${HUM.games} real games${humNote()}, scored like an average bot facing an equal opponent` : `rating ${A.rating} vs ${B.rating}${h ? ` · head to head ${h.w}–${h.n - h.w}` : ' · they have not played each other'}`}</div>`
+    + `<div class="fo-key"><span><i style="border-color:var(--fa);background:var(--fa)"></i>${esc(A.id)}</span><span><i style="border-color:var(--fb);background:var(--fb)"></i>${esc(B.id)}</span><span><i style="border-color:var(--muted)"></i>hollow dot = fewer than 5 games in that spot</span></div>`;
+  const st = [['baseShare', 'Attacks aimed at the base', pct], ['baseDmg', 'Base damage per round', (v) => v.toFixed(1)], ['kills', 'Enemy units removed per round', (v) => v.toFixed(2)], ['rounds', 'Rounds per game', (v) => v.toFixed(1)]];
+  $('fo-style').innerHTML = st.map(([k, label, f]) => {
+    const va = A.style[k] || 0, vb = B.style[k] || 0, mx = Math.max(va, vb, 1e-9);
+    return `<div class="fo-st"><h4>${label}</h4><div class="bb"><i style="width:${100 * va / mx}%;background:var(--fa)"></i><em>${f(va)}</em></div><div class="bb"><i style="width:${100 * vb / mx}%;background:var(--fb)"></i><em>${f(vb)}</em></div></div>`;
+  }).join('');
+  try { localStorage.setItem('atlas-faceoff', JSON.stringify(FO)); } catch {}
+}
+function bindFaceoff() {
+  $('fo-a').onchange = (e) => { FO.a = e.target.value; if (FO.a === FO.b) FO.b = null; renderFaceoff(META); };
+  $('fo-b').onchange = (e) => { FO.b = e.target.value; renderFaceoff(META); };
+  $('fo-swap').onclick = () => { FO = { a: FO.b, b: FO.a }; renderFaceoff(META); };
+  $('cards').addEventListener('click', (e) => {
+    const id = e.target && e.target.dataset && e.target.dataset.cmp;
+    if (!id) return;
+    if (id !== FO.a) { FO.b = FO.a; FO.a = id; }
+    renderFaceoff(META);
+    $('faceoff').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+function renderTheory() {
+  const T = THEORY || { versions: [] };
+  const cur = T.versions[T.versions.length - 1];
+  $('theory').innerHTML = `
+    <h2>How this page decides what to show</h2>
+    ${cur ? `<p><b>Current theory (v${cur.v}):</b> ${esc(cur.idea)}</p>` : ''}
+    <ol>${T.versions.slice().reverse().map((v) => `<li><b>v${v.v}</b> · ${esc(v.date)} · ${esc(v.change)}${v.score != null ? ` · reviewers answered <b>${Math.round(v.score * 100)}%</b> of the quiz from screenshots alone` : ''}</li>`).join('')}</ol>
+    <p class="small">Spots are read at the start of each round; a game counts once per spot, at the first round it gets there. "Average bot" is a logistic model of P(win) from base, board, hand, resources and initiative plus the rating gap, fitted on every round start, then evaluated for a 1500-rated bot. Ratings are Bradley-Terry over every finished game; a time forfeit counts as a loss. Each review round, three reviewers who see only screenshots answer a quiz whose answers come from the data.</p>`;
+}
+
+function renderAll() {
+  prepare(META);
+  renderHeader(META); renderLadder(); startGuide(); renderSpots(META); renderFaceoff(META); renderRanks(); renderLegend(); renderGrid(META); renderScatter(META); renderRivals(META); renderCards(META); renderTheory();
+}
+renderAll();
+bindFaceoff();
+
+// ---- live layer: project files (fresh meta.json, replays for "show me")
+let files = null, prefix = '';
+async function findPrefix() {
+  const r = await files.list({});
+  const hit = r.entries.find((e) => /(^|\/)(meta|results)\/?$/.test(e.path));
+  if (hit) return hit.path.replace(/(meta|results)\/?$/, '');
+  for (const e of r.entries.filter((e) => e.isDirectory)) {
+    const sub = await files.list({ path: e.path });
+    const h = sub.entries.find((x) => /(^|\/)results\/?$/.test(x.path));
+    if (h) return h.path.replace(/results\/?$/, '');
+  }
+  return '';
+}
+async function readText(p) { const r = await files.read((prefix + p).replace(/\/+/g, '/')); return new TextDecoder().decode(r.bytes); }
+function setLive(on, text) { $('live').classList.toggle('on', on); $('live').querySelector('span').textContent = text; }
+async function refresh() {
+  if (!files) return;
+  try {
+    const m = JSON.parse(await readText(PROJECT_FILES_META));
+    if (m && m.schema === META.schema && m.generatedAt > META.generatedAt) { META = m; renderAll(); }
+    setLive(true, 'live');
+  } catch (e) { setLive(false, e && e.code === 'not_granted' ? 'snapshot' : 'offline'); }
+}
+async function startLive() {
+  try {
+    files = await window.claude?.use?.('files');
+    if (!files) return;
+    prefix = await findPrefix();
+    await refresh();
+    setInterval(refresh, 5 * 60 * 1000);
+  } catch (e) { setLive(false, 'snapshot'); }
+}
+if (window.claude?.use) setTimeout(startLive, 400);
+
+// ---- selecting a spot: examples, then a replay in the shared viewer kit
+function select(botId, sid) {
+  sel = { b: botId, s: sid };
+  renderSpots(META); renderGrid(META);
+  const b = botById(botId), s = SIT[sid], c = b.situations[sid];
+  const box = $('moments');
+  box.hidden = false;
+  const ex = c.examples || [];
+  box.innerHTML = `<div class="section-head"><h3>${esc(b.id)} · ${esc(s.label)} <span class="eyebrow">${esc(s.short)}</span></h3><span class="small">won ${c.wins} of ${c.n} · an average bot: ${pct(c.expected)}</span></div>
+    <div class="moment-list">${ex.map((e, i) => `<button class="moment" type="button" data-i="${i}"><span class="${e.won ? 'res-w' : 'res-l'}">${e.won ? 'Won' : 'Lost'}</span> vs <b>${esc(e.opp === 'humans' ? 'a human' : e.opp)}</b> · ${esc(e.run)} · step ${e.step}</button>`).join('')}</div>
+    <div id="viewer"></div><div class="note" id="viewer-note">${files ? 'Pick a game to replay it from that moment.' : 'Replays open here when the page can read the project files.'}</div>`;
+  for (const el of box.querySelectorAll('.moment')) el.addEventListener('click', () => openReplay(ex[+el.dataset.i]));
+  box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+let viewer = null;
+async function openReplay(e) {
+  const note = $('viewer-note');
+  if (!files) { note.textContent = `Replay file: ${e.root || 'results'}/${e.run}/games/${e.game}.jsonl, step ${e.step}.`; return; }
+  if (!window.SWUViewer) { note.textContent = 'The replay viewer did not load.'; return; }
+  note.textContent = 'Loading replay…';
+  try {
+    const text = await readText(`${e.root || 'results'}/${e.run}/games/${e.game}.jsonl`);
+    if (viewer) viewer.destroy();
+    viewer = window.SWUViewer.mount($('viewer'), { jsonl: text, layout: 'compact', stepN: e.step });
+    note.textContent = `${e.game} · ${e.seat === 'p1' ? 'player 1' : 'player 2'} is ${e.root ? 'the human in this spot' : 'the bot'} · opened at the round start where it reached this spot.`;
+  } catch (err) { note.textContent = err && err.code === 'not_granted' ? 'Replays need access to the project files.' : `Could not open the replay (${(err && err.code) || 'error'}).`; }
+}
+
+// ---- feedback to the analyzer
+(async () => {
+  const comments = await window.claude?.use?.('comments');
+  if (!comments || !comments.canSendToClaude) return;
+  let state = 'off';
+  try { state = await comments.canSendToClaude(); } catch {}
+  if (state !== 'available') return;
+  $('ask-sec').hidden = false;
+  $('ask-send').addEventListener('click', async () => {
+    const text = $('ask-text').value.trim();
+    if (!text) return;
+    $('ask-send').disabled = true;
+    try {
+      const anchor = await comments.anchorFor($('ask-sec'));
+      await comments.sendToClaude({ anchor, text: `[Strategy Atlas feedback] ${text}` });
+      $('ask-note').textContent = 'Sent. The next review round will use it.';
+      $('ask-text').value = '';
+    } catch (e) { $('ask-note').textContent = `Not sent (${(e && e.code) || 'error'}). You can also write in the project thread.`; }
+    $('ask-send').disabled = false;
+  });
+})();
+</script>
+<script>/*__KIT__*/</script>

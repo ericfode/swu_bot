@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/stdio-protocol.schema.json",
+  "title": "swu-bot-stdio protocol v1: one JSON line per message",
+  "description": "Adapter -> bot: hello, decide. Bot -> adapter: ready (to hello), act (to decide), or error. Unknown fields must be ignored. See spec/stdio-protocol.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/Hello" },
+    { "$ref": "#/$defs/Ready" },
+    { "$ref": "#/$defs/Decide" },
+    { "$ref": "#/$defs/Act" },
+    { "$ref": "#/$defs/Error" }
+  ],
+  "$defs": {
+    "Seat": { "enum": ["p1", "p2"] },
+    "Flag": { "enum": [0, 1] },
+    "SetCode": { "type": ["string", "null"] },
+    "Hello": {
+      "type": "object",
+      "required": ["t", "protocol", "v", "bot", "you", "seed", "players"],
+      "properties": {
+        "t": { "const": "hello" },
+        "protocol": { "const": "swu-bot-stdio" },
+        "v": { "const": 1 },
+        "bot": { "type": "string" },
+        "you": { "$ref": "#/$defs/Seat" },
+        "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": { "id": { "$ref": "#/$defs/Seat" }, "name": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "Ready": {
+      "type": "object",
+      "required": ["t"],
+      "properties": { "t": { "const": "ready" }, "v": { "const": 1 }, "name": { "type": "string" } }
+    },
+    "Error": {
+      "type": "object",
+      "required": ["t"],
+      "properties": { "t": { "const": "error" }, "error": { "type": "string" } }
+    },
+    "Act": {
+      "type": "object",
+      "required": ["t", "i"],
+      "properties": {
+        "t": { "const": "act" },
+        "i": { "type": "integer", "minimum": 0, "description": "Index into decide.actions." },
+        "distribution": {
+          "type": "array",
+          "description": "Only for a distribute action: the split. Omit to let the engine side split randomly.",
+          "items": {
+            "type": "object",
+            "required": ["id", "amount"],
+            "properties": { "id": { "type": "string" }, "amount": { "type": "integer", "minimum": 0 } }
+          }
+        }
+      }
+    },
+    "Decide": {
+      "type": "object",
+      "required": ["t", "seq", "you", "prompt", "state", "actions"],
+      "properties": {
+        "t": { "const": "decide" },
+        "seq": { "type": "integer", "minimum": 1 },
+        "you": { "$ref": "#/$defs/Seat" },
+        "prompt": { "$ref": "#/$defs/Prompt" },
+        "state": { "$ref": "#/$defs/Observation" },
+        "actions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Action" } }
+      }
+    },
+    "Prompt": {
+      "type": "object",
+      "required": ["type", "signature", "title", "promptTitle", "selectCardMode", "selected", "actionWindow"],
+      "properties": {
+        "type": { "type": ["string", "null"], "description": "Engine promptType: initiative, number, resource, actionWindow, displayCards, distributeAmongTargets, triggerWindow, passDelay, batchTriggerResolution, optionalTrigger; null for target selection." },
+        "signature": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "promptTitle": { "type": ["string", "null"] },
+        "selectCardMode": { "enum": ["single", "multiple", null] },
+        "selected": { "type": "array", "items": { "type": "string" } },
+        "actionWindow": { "type": "boolean" }
+      }
+    },
+    "Action": {
+      "type": "object",
+      "required": ["i", "kind", "label"],
+      "properties": {
+        "i": { "type": "integer", "minimum": 0 },
+        "kind": { "enum": ["button", "card", "option", "displayCard", "perCardButton", "distribute"] },
+        "label": { "type": "string" },
+        "arg": { "type": ["string", "number"], "description": "Buttons in choice menus can carry a numeric arg; dropdown and number options are strings." },
+        "cardUuid": { "type": "string" },
+        "card": {
+          "type": "object",
+          "required": ["id", "n", "s", "zone", "ctl"],
+          "properties": {
+            "id": { "type": "string" },
+            "n": { "type": "string" },
+            "s": { "$ref": "#/$defs/SetCode" },
+            "zone": { "type": ["string", "null"] },
+            "ctl": { "oneOf": [{ "$ref": "#/$defs/Seat" }, { "type": "null" }] }
+          }
+        },
+        "distribute": {
+          "type": "object",
+          "required": ["type", "amount", "canDistributeLess", "canChooseNoTargets", "maxTargets", "tokenType", "targets"],
+          "properties": {
+            "type": { "enum": ["distributeDamage", "distributeIndirectDamage", "distributeHealing", "distributeTokenUpgrade"] },
+            "amount": { "type": "integer", "minimum": 0 },
+            "canDistributeLess": { "type": "boolean" },
+            "canChooseNoTargets": { "type": "boolean" },
+            "maxTargets": { "type": ["integer", "null"] },
+            "tokenType": { "type": ["string", "null"] },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "cap"],
+                "properties": { "id": { "type": "string" }, "cap": { "type": ["integer", "null"], "description": "null = uncapped." } }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "card" } } }, "then": { "required": ["cardUuid", "card"] } },
+        { "if": { "properties": { "kind": { "const": "distribute" } } }, "then": { "required": ["distribute"] } }
+      ]
+    },
+    "CardRef": {
+      "type": "object",
+      "required": ["id", "n", "s"],
+      "properties": {
+        "id": { "type": "string", "description": "Engine card uuid." },
+        "n": { "type": "string" },
+        "s": { "$ref": "#/$defs/SetCode" }
+      }
+    },
+    "UnitRef": {
+      "allOf": [{ "$ref": "#/$defs/CardRef" }],
+      "required": ["p", "h", "d"],
+      "properties": {
+        "p": { "type": "number" },
+        "h": { "type": "number" },
+        "d": { "type": "number" },
+        "x": { "const": 1 },
+        "sn": { "const": 1 },
+        "u": {
+          "type": "array",
+          "items": { "allOf": [{ "$ref": "#/$defs/CardRef" }], "required": ["t"], "properties": { "t": { "$ref": "#/$defs/Flag" } } }
+        }
+      }
+    },
+    "PlayerView": {
+      "type": "object",
+      "required": ["name", "base", "leader", "res", "handCount", "deck", "discard", "ground", "space"],
+      "properties": {
+        "name": { "type": "string" },
+        "base": { "allOf": [{ "$ref": "#/$defs/CardRef" }], "required": ["hp", "d"], "properties": { "hp": { "type": "number" }, "d": { "type": "number" } } },
+        "leader": {
+          "oneOf": [
+            { "allOf": [{ "$ref": "#/$defs/CardRef" }], "required": ["dep", "x"], "properties": { "dep": { "$ref": "#/$defs/Flag" }, "x": { "$ref": "#/$defs/Flag" } } },
+            { "type": "null" }
+          ]
+        },
+        "res": { "type": "object", "required": ["ready", "total"], "properties": { "ready": { "type": "integer" }, "total": { "type": "integer" } } },
+        "handCount": { "type": "integer", "minimum": 0 },
+        "hand": { "type": "array", "items": { "$ref": "#/$defs/CardRef" }, "description": "Only on your own player." },
+        "resources": {
+          "type": "array",
+          "description": "Only on your own player: resource cards, x: 1 when exhausted.",
+          "items": { "allOf": [{ "$ref": "#/$defs/CardRef" }], "properties": { "x": { "const": 1 } } }
+        },
+        "deck": { "type": "integer", "minimum": 0 },
+        "discard": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
+        "ground": { "type": "array", "items": { "$ref": "#/$defs/UnitRef" } },
+        "space": { "type": "array", "items": { "$ref": "#/$defs/UnitRef" } }
+      }
+    },
+    "Observation": {
+      "type": "object",
+      "required": ["round", "phase", "initiative", "players"],
+      "properties": {
+        "round": { "type": "integer" },
+        "phase": { "type": ["string", "null"] },
+        "initiative": { "oneOf": [{ "$ref": "#/$defs/Seat" }, { "type": "null" }] },
+        "players": {
+          "type": "object",
+          "required": ["p1", "p2"],
+          "properties": { "p1": { "$ref": "#/$defs/PlayerView" }, "p2": { "$ref": "#/$defs/PlayerView" } }
+        }
+      }
+    }
+  }
+}

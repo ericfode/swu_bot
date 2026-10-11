@@ -14,7 +14,7 @@ const path = require('path');
 const { Model } = require('./model');
 const F = require('./features');
 const { observe, plainAction } = require('./observe');
-const { HeuristicBot } = require('../players/heuristic');
+const { HeuristicBot, evaluate } = require('../players/heuristic');
 
 const DEFAULT_MODEL = path.join(__dirname, '..', '..', 'models', 'learned', 'current.json');
 const models = new Map();
@@ -117,11 +117,13 @@ class LearnedSearchBot extends HeuristicBot {
         super(name, opts);
         this.policy = new LearnedPolicyBot(name, opts);
         this.model = this.policy.model;
+        // HeuristicBot scores playouts with this.evaluate when set (its constructor's `evaluate` option)
+        this.evaluate = (eg, pid) => this.valueOf(eg, pid);
     }
 
-    evaluate(eg, pid) {
+    valueOf(eg, pid) {
         if (eg.over) {
-            return super.evaluate(eg, pid);
+            return evaluate(eg, pid); // decided games: the heuristic's +-10000
         }
         const obs = observe(eg, pid);
         return this.model.value(this.model.encode(F.state(obs)));
