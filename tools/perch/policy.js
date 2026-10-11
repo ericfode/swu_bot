@@ -365,7 +365,7 @@ function snapshotRepo(repo, scope, dir, { workingTree = false } = {}) {
   const wanted = (f) => SOURCE.test(f) && inScope(f, scope);
   const names = listed.stdout.split('\0').filter((f) => f === 'perch.yaml' || wanted(f));
   const files = new Map([...readAtHead(repo, names)].filter(([file, bytes]) => file === 'perch.yaml' || handWritten(bytes)));
-  const perchFiles = new Map([['closed.jsonl', readBytes(path.join(repo, '.perch', 'closed.jsonl'))]]);
+  const perchFiles = new Map([['closed.jsonl', closedIssues(path.join(repo, '.perch', 'closed.jsonl'))]]);
   const rules = path.join(repo, '.perch', 'rules');
   for (const name of readdirOr(rules)) {
     const bytes = readBytes(path.join(rules, name), null);
@@ -400,7 +400,7 @@ function snapshotShared(scope, dir, closures) {
       if (bytes) files.set(file, bytes);
     }
   }
-  snapshot(dir, files, new Map([['closed.jsonl', readBytes(closures)]]));
+  snapshot(dir, files, new Map([['closed.jsonl', closedIssues(closures)]]));
 }
 
 /** Contents of `files` at HEAD in `repo`, read with one git process. */
@@ -430,11 +430,31 @@ function appendNew(from, before, to) {
   const now = readBytes(from);
   if (now.equals(before)) return;
   if (now.length > before.length && now.subarray(0, before.length).equals(before)) {
+    const added = now.subarray(before.length);
+    // A torn last line has no newline; start on a new line so the added issues stay readable.
+    const last = readBytes(to, null)?.at(-1);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.appendFileSync(to, now.subarray(before.length));
+    fs.appendFileSync(to, last === undefined || last === 10 ? added : Buffer.concat([Buffer.from('\n'), added]));
   } else {
     console.error(`perch: ${from} was rewritten instead of added to, so its changes were not copied to ${to}.`);
   }
+}
+
+/**
+ * The closed issues in `file`, without lines that are not JSON. perch stops on such a line, and the
+ * shared folder, a synced mount, can tear a line when two sessions append at once.
+ */
+function closedIssues(file) {
+  const lines = readBytes(file).toString('utf8').split('\n').filter(Boolean);
+  const valid = lines.filter((line) => {
+    try {
+      return Boolean(JSON.parse(line));
+    } catch {
+      return false;
+    }
+  });
+  if (valid.length < lines.length) console.error(`perch: skipped ${lines.length - valid.length} unreadable line(s) in ${file}.`);
+  return Buffer.from(valid.map((line) => line + '\n').join(''));
 }
 
 function readBytes(file, fallback = Buffer.alloc(0)) {
