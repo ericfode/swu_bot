@@ -1,3 +1,4 @@
 {
-    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" }
+    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
+    "clj-forecast": { "cmd": "bot/clojure/run.sh", "args": [], "lang": "clojure", "startTimeoutMs": 60000 }
 }
