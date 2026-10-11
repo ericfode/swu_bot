@@ -34,16 +34,22 @@ function deckLists(eg) {
     return out;
 }
 
+/**
+ * (eg, pid) -> logit of P(pid wins) from pid's own view (terminal: +-10000). Decklists are read once per game,
+ * so one evaluate function can be shared across games (e.g. by the ISMCTS bot).
+ */
 function snapshotEvaluate(ev) {
-    let decks = null;
+    const deckCache = new WeakMap();
     return (eg, pid) => {
         if (eg.over) {
             const me = eg.names[eg.ids.indexOf(pid)];
             const w = eg.winners;
             return w.length === 1 ? (w[0] === me ? WIN : -WIN) : 0;
         }
-        if (ev.decks && !decks) {
-            decks = deckLists(eg);
+        let decks = null;
+        if (ev.decks) {
+            decks = deckCache.get(eg.game) ?? deckLists(eg);
+            deckCache.set(eg.game, decks);
         }
         const judge = `p${eg.ids.indexOf(pid) + 1}`;
         const actor = eg.ids.findIndex((id) => eg.isActionWindow(id));
