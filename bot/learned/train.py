@@ -134,7 +134,9 @@ def main():
     print(f'{N} decisions, {len(games)} games ({len(val_games)} validation), dims S={S} P={P} A={A}')
 
     s_mean, s_std = D['S'][~is_val].mean(0), np.maximum(D['S'][~is_val].std(0), 0.05)
-    a_mean, a_std = D['A'].mean(0), np.maximum(D['A'].std(0), 0.05)
+    # action rows of training decisions only, so held-out games do not shape the preprocessing
+    tr_rows = np.concatenate([np.arange(o, o + k) for o, k in zip(D['aoff'][~is_val], meta[~is_val, 4])])
+    a_mean, a_std = D['A'][tr_rows].mean(0), np.maximum(D['A'][tr_rows].std(0), 0.05)
     ns = lambda x: (x - s_mean) / s_std
     na = lambda x: (x - a_mean) / a_std
     Sn_all, An_all = ns(D['S']).astype(np.float32), na(D['A']).astype(np.float32)

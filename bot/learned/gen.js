@@ -133,10 +133,8 @@ function write(out, { recs, res, info }) {
  */
 function repair(out) {
     const metaFile = path.join(out, 'meta.i32');
-    if (!fs.existsSync(metaFile)) {
-        return 0;
-    }
-    const raw = fs.readFileSync(metaFile);
+    // no meta yet means no complete game: any array rows are from an interrupted first game
+    const raw = fs.existsSync(metaFile) ? fs.readFileSync(metaFile) : Buffer.alloc(0);
     const n = Math.floor(raw.length / 32);
     const meta = new Int32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + n * 32));
     let M = 0, games = 0;
@@ -147,7 +145,13 @@ function repair(out) {
     const want = { 'S.f32': n * F.S * 4, 'Sn.f32': n * F.S * 4, 'P.f32': n * F.P * 4, 'A.f32': M * F.A * 4, 'meta.i32': n * 32 };
     for (const [f, bytes] of Object.entries(want)) {
         const file = path.join(out, f);
-        const have = fs.existsSync(file) ? fs.statSync(file).size : 0;
+        if (!fs.existsSync(file)) {
+            if (bytes > 0) {
+                throw new Error(`${file} is missing but meta has rows: data is damaged`);
+            }
+            continue;
+        }
+        const have = fs.statSync(file).size;
         if (have < bytes) {
             throw new Error(`${file} is shorter than its meta rows say (${have} < ${bytes} bytes): data is damaged`);
         }
