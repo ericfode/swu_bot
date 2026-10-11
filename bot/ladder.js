@@ -6,7 +6,8 @@
  *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--resume]
  *       [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine
- * and same bot/ code too: config.harness is the git tree of bot/, plus a hash of uncommitted changes there).
+ * and same bot code and models too: config.harness is the git trees of bot/ and models/, plus a hash of uncommitted
+ * changes there and of the $SWU_LEARNED_MODEL file when set).
  * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot forfeits. --hang-ms is the
  * watchdog (game-pool.js): one choose() call running longer than that (wall clock) forfeits the game, and its worker is
  * replaced. A bot that fails to load or throws also forfeits; ladder.json games carry fault / faultKind.
@@ -44,22 +45,29 @@ function engineRev() {
 }
 
 /**
- * The revision of the harness and built-in bots: the git tree id of bot/ at HEAD, plus a hash of uncommitted changes and
- * new files under bot/ when there are any. Arena versions live outside the repo and never change. null without git.
+ * The revision of the harness and the built-in bots with their models: the git tree ids of bot/ and models/ at HEAD,
+ * plus a hash of uncommitted changes and new files there, and of the file $SWU_LEARNED_MODEL names (the learned bots
+ * read it instead of models/learned/current.json), when there are any. Arena versions live outside the repo and never
+ * change. null without git.
  */
 function harnessRev() {
     const root = path.join(__dirname, '..');
     const git = (...a) => execFileSync('git', ['-C', root, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    const dirs = ['bot', 'models'].filter((d) => fs.existsSync(path.join(root, d)));
     try {
-        const tree = git('rev-parse', '--short', 'HEAD:bot').trim();
-        const extra = git('ls-files', '--others', '--exclude-standard', '-z', '--', 'bot').split('\0').filter(Boolean).sort();
-        const diff = git('diff', 'HEAD', '--', 'bot');
-        if (!diff && !extra.length) {
+        const tree = dirs.map((d) => git('rev-parse', '--short', `HEAD:${d}`).trim()).join('.');
+        const extra = git('ls-files', '--others', '--exclude-standard', '-z', '--', ...dirs).split('\0').filter(Boolean).sort();
+        const diff = git('diff', 'HEAD', '--', ...dirs);
+        const model = process.env.SWU_LEARNED_MODEL;
+        if (!diff && !extra.length && !model) {
             return tree;
         }
         const h = crypto.createHash('sha256').update(diff);
         for (const f of extra) {
             h.update(`\0${f}\0`).update(fs.readFileSync(path.join(root, f)));
+        }
+        if (model) {
+            h.update(`\0model\0`).update(fs.existsSync(model) ? fs.readFileSync(model) : 'missing');
         }
         return `${tree}+${h.digest('hex').slice(0, 10)}`;
     } catch {

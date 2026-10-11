@@ -281,7 +281,13 @@ const api = {
                 }
             }
             if (upload) {
-                home.writeFiles(live, upload); // the live folder follows what was uploaded, so eval of the live bot plays it
+                // the live folder follows what was uploaded, so eval of the live bot plays it; only the newest version
+                // may write it, so a slower concurrent submit cannot overwrite a newer one
+                home.withLock(path.join(home.HOME, 'locks', `live-${name}.lock`), () => {
+                    if ((home.versionsOf(name).pop() ?? -1) === n) {
+                        home.writeFiles(live, upload);
+                    }
+                });
             }
             return { version: `${name}-v${n}`, round };
         } finally {

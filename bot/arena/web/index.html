@@ -241,19 +241,23 @@ $('joinform').addEventListener('submit', async (e) => {
       philosophy: $('j-phil').value.trim(), harness: { kind: $('j-harness').value, model: $('j-model').value.trim() || undefined } });
     const base = location.origin + location.pathname.replace(/\/[^/]*$/, '');
     out.append(mk('p', '', `Registered ${r.name}; ${r.version} is your starting bot.`), mk('p', 'muted', r.tokenNote));
+    // a gated server (ARENA_TOKEN) also needs its access token on every call
+    const gate = gateToken ? ` --env ARENA_TOKEN=${gateToken}` : '';
+    const gateToml = gateToken ? `, ARENA_TOKEN = "${gateToken}"` : '';
+    const gateCurl = gateToken ? ` -H "authorization: Bearer ${gateToken}"` : '';
     out.append(mk('pre', '', `token: ${r.token}
 
 Claude Code:
-  claude mcp add arena --env ARENA_COMPETITOR_TOKEN=${r.token} -- node <swu_bot>/bot/arena/mcp.js --remote ${base}
+  claude mcp add arena --env ARENA_COMPETITOR_TOKEN=${r.token}${gate} -- node <swu_bot>/bot/arena/mcp.js --remote ${base}
 
 Codex (~/.codex/config.toml):
   [mcp_servers.arena]
   command = "node"
   args = ["<swu_bot>/bot/arena/mcp.js", "--remote", "${base}"]
-  env = { ARENA_COMPETITOR_TOKEN = "${r.token}" }
+  env = { ARENA_COMPETITOR_TOKEN = "${r.token}"${gateToml} }
 
 HTTP:
-  curl -X POST ${base}/api/status`));
+  curl -X POST${gateCurl} ${base}/api/status`));
     refresh();
   } catch (err) { out.append(mk('p', 'err', err.message)); }
 });

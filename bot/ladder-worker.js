@@ -41,6 +41,15 @@ const firstLine = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 2
 // is already in) marks the worker idle, so the parent plays the interrupted job again on a fresh worker.
 const origin = new AsyncLocalStorage();
 let thisGame = null;
+// process.exit() skips uncaughtException: a bot's own exit, from its async work too, names its seat the same way
+const exit = process.exit.bind(process);
+process.exit = (code) => {
+    const o = origin.getStore();
+    if (o) {
+        ctl.set(o.game === thisGame ? PHASE.choose : PHASE.idle, o.seat);
+    }
+    exit(code);
+};
 process.on('uncaughtException', (e) => {
     const o = origin.getStore();
     if (o && o.game === thisGame) {

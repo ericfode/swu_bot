@@ -59,13 +59,11 @@ const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),
 const LOCK_STALE_MS = 30000;
 
 /**
- * Read-modify-write of roster.json under roster.json.lock: fn(roster) returns the new roster. Clients in different
- * processes (MCP, CLI, HTTP) register at the same time, and without the lock the last writer would drop the others.
- * A lock older than 30 s is taken as abandoned.
+ * Runs fn() while holding the lock file `lock` (created with O_EXCL), for read-modify-write steps that clients in
+ * different processes (MCP, CLI, HTTP) can run at the same time. A lock older than 30 s is taken as abandoned.
  */
-function updateRoster(fn) {
-    const lock = `${ROSTER}.lock`;
-    fs.mkdirSync(HOME, { recursive: true });
+function withLock(lock, fn) {
+    fs.mkdirSync(path.dirname(lock), { recursive: true });
     for (const t0 = Date.now(); ;) {
         try {
             fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });
@@ -90,12 +88,19 @@ function updateRoster(fn) {
         }
     }
     try {
-        const r = fn(roster());
-        writeJson(ROSTER, r);
-        return r;
+        return fn();
     } finally {
         fs.rmSync(lock, { force: true });
     }
+}
+
+/** Read-modify-write of roster.json under roster.json.lock: fn(roster) returns the new roster. */
+function updateRoster(fn) {
+    return withLock(`${ROSTER}.lock`, () => {
+        const r = fn(roster());
+        writeJson(ROSTER, r);
+        return r;
+    });
 }
 
 /** Submitted version numbers of an agent, ascending (staging folders and other dot-folders are ignored). */
@@ -199,5 +204,5 @@ function readJsonl(file) {
 
 module.exports = {
     HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, updateRoster, versionsOf,
-    exists, claimDir, writeFiles, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl
+    exists, claimDir, writeFiles, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
 };
