@@ -111,6 +111,7 @@ class KarabastSeat {
         if ((gs.newMessages ?? []).some((m) => ROLLED_BACK.test(lineText(m)))) {
             // a rollback can bring back the decision we just answered: it is a new decision, not an ignored answer
             this.sent = null;
+            this.ignored = null;
         }
         this.latest = gs;
         if (gs.winners?.length) {
