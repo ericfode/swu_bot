@@ -7,4 +7,10 @@ studio/dist-static/
 studio/fixtures/replays/
 studio/static-replays/
 studio/dist-kit/
+analysis/node_modules/
+analysis/.cache/
+analysis/out/
 results/
+.perch/*
+!.perch/closed.jsonl
+!.perch/rules/
