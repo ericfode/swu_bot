@@ -164,7 +164,10 @@ function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
   if (listed.status !== 0) return { ...out, error: `perch: git could not list the files to read: ${String(listed.stderr).trim()}` };
   let files = listed.stdout.split('\n').filter(Boolean);
   if (narrow.length) files = files.filter((f) => narrow.some((p) => f === p || f.startsWith(p + '/')));
-  files = files.filter((f) => SOURCE.test(f) && (!scope || inScope(f, scope)) && handWrittenFile(path.join(root, f)));
+  files = files.filter((f) => SOURCE.test(f) && (!scope || inScope(f, scope)));
+  // Judged on the committed copy, which is what perch reads.
+  const committed = readAtHead(root, files);
+  files = files.filter((f) => !committed.has(f) || handWritten(committed.get(f)));
   if (!files.length) {
     out.nothing = (since ? `perch: no code in Perch's scope changed since ${since}.` : "perch: nothing in Perch's scope there.") +
       ' Bot code is out of scope (tools/perch/scope.js).';
@@ -191,13 +194,6 @@ function count(bytes, byte) {
   let n = 0;
   for (let at = bytes.indexOf(byte); at !== -1; at = bytes.indexOf(byte, at + 1)) n++;
   return n;
-}
-
-/** handWritten for a file on disk. A missing file passes. */
-function handWrittenFile(file) {
-  const stat = fs.statSync(file, { throwIfNoEntry: false });
-  if (!stat?.isFile()) return true;
-  return stat.size <= MAX_BYTES && handWritten(fs.readFileSync(file));
 }
 
 /** The contents of a hand-written source file, or null for anything else (links included). */
@@ -383,6 +379,7 @@ function snapshotRepo(repo, scope, dir, { workingTree = false } = {}) {
   for (const file of new Set(changed)) {
     const bytes = readSource(path.join(repo, file));
     if (bytes) writeIfChanged(path.join(dir, file), bytes);
+    else if (!fs.existsSync(path.join(repo, file))) fs.rmSync(path.join(dir, file), { force: true }); // deleted or renamed
   }
 }
 

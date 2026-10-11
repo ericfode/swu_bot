@@ -235,6 +235,10 @@ test('the repo snapshot holds only in-scope code at HEAD, so bot code never reac
   assert.strictEqual(fs.readFileSync(path.join(dir, 'bot/match.js'), 'utf8'), 'module.exports = 2;\n');
   assert.strictEqual(fs.readFileSync(path.join(dir, 'bot/ratings.js'), 'utf8'), 'module.exports = 1;\n');
   assert.deepStrictEqual(lsTree(dir), ['bot/match.js', 'perch.yaml'], 'not committed');
+  fs.rmSync(path.join(root, 'bot/match.js')); // deleted, not committed
+  snapshotRepo(root, scope, dir, { workingTree: true });
+  assert.strictEqual(fs.existsSync(path.join(dir, 'bot/match.js')), false);
+  git('checkout', '--', 'bot/match.js');
   snapshotRepo(root, scope, dir);
   assert.match(fs.readFileSync(path.join(dir, 'bot/match.js'), 'utf8'), /choose/);
   assert.strictEqual(fs.existsSync(path.join(dir, 'bot/ratings.js')), false);
