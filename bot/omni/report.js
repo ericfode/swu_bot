@@ -194,6 +194,12 @@ function decisionStats() {
     };
 }
 
+function trees() {
+    const dir = path.join(root, 'omni', 'decisions');
+    return list(dir).filter((f) => /^latest-tree-.*\.json$/.test(f)).map((f) => readJson(path.join(dir, f))).filter(Boolean)
+        .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 1);
+}
+
 // ---------- publish ----------
 
 function main() {
@@ -284,6 +290,7 @@ function main() {
             { type: 'line', title: 'Win rate vs heuristic', x: 'games', yFormat: 'pct', series: matches.map((m) => ({ name: m.bot, points: m.curve })) },
             { type: 'bars', title: 'Endgames solved, by windows before the end', items: solve.solveRateByFromEnd.slice(0, 12).map((b) => ({ label: `${b.fromEnd} from end`, value: Math.round(b.rate * 100) })) },
             { type: 'bars', title: 'Distinct moves per window, by round', items: solve.movesByRound.map(([round, v]) => ({ label: `R${round}`, value: v })) },
+            ...trees().map((t) => ({ type: 'tree', title: `Search tree at the last decision (${t.bot})`, caption: 'Values are the search score squashed to P(p1 wins) with a 15-point logistic (not calibrated yet). Children: its 8 best moves; under each, the replies it expects.', root: t.root })),
             ...(last ? [{ type: 'table', title: `Last decision (round ${last.round}, ${last.seat})`, columns: ['move', 'searched value'], rows: (last.moves ?? []).slice(0, 8).map((m) => [m.move, String(m.value)]) }] : [])
         ]
     });

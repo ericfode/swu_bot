@@ -16,7 +16,7 @@
  * So the tree is exact about the order and targets of actions and approximate about deep sub-choices.
  *
  * Two searches are provided:
- *   - `alphaBeta`: depth-limited minimax with the heuristic `evaluate` at the leaves (the playing bot).
+ *   - `alphaBeta`: depth-limited minimax with `bot/omni/evaluate.js` at the leaves (the playing bot).
  *   - `prove`: AND/OR proof search to the end of the game. Answers "can player X force a win within N windows,
  *     whatever the other player does?" with a transposition table. This is the exact solver; it is only feasible
  *     close to the end of a game.
@@ -26,7 +26,8 @@
 
 const crypto = require('crypto');
 const { seededRng } = require('../env');
-const { evaluate, defaultChoose } = require('../players/heuristic');
+const { defaultChoose } = require('../players/heuristic');
+const { evaluate } = require('./evaluate');
 const { snapshot } = require('../recorder');
 
 const WIN = 10000;
@@ -141,8 +142,10 @@ class OmniSearch {
      * @param opts.budget node budget (one node = one move applied on the engine); `BudgetExceeded` is thrown past it.
      * @param opts.deadline wall-clock deadline (ms since epoch), same effect.
      */
-    constructor(eg, { followUps = 8, maxMoves = 40, budget = Infinity, deadline = Infinity, reseed = null, side = null } = {}) {
+    constructor(eg, { followUps = 8, maxMoves = 40, budget = Infinity, deadline = Infinity, reseed = null, side = null, snapshots = false } = {}) {
         this.eg = eg;
+        // keep a recorder snapshot of every child position (for drawing the search tree)
+        this.snapshots = snapshots;
         // the maximizing side; values are from its point of view (p1 unless `side` says otherwise)
         this.p1 = side ?? eg.ids[0];
         // optional () => string: reseed the engine RNG before every move, so the search cannot see real future draws
@@ -287,6 +290,9 @@ class OmniSearch {
             if (!seen.has(key)) {
                 seen.add(key);
                 const kid = { seq: seq.map(strip), key, value: this.value(ply + 1), over: eg.over, stuck: r.stuck, winners: eg.winners };
+                if (this.snapshots) {
+                    kid.state = snapshot(eg);
+                }
                 if (visit(kid)) {
                     throw new Cutoff();
                 }
@@ -374,6 +380,7 @@ class OmniSearch {
                     r = this.alphaBeta(depth - 1, alpha, beta, ply + 1, beam);
                 }
                 kid.searched = r.value;
+                kid.sub = r.kids;
                 if (best === null || (maxing ? r.value > best.value : r.value < best.value)) {
                     best = { value: r.value, pv: [kid.seq, ...r.pv] };
                 }

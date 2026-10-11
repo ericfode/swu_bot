@@ -9,8 +9,8 @@
  * (see /mnt/project-files/omni/LENS.md). Needs no engine, only card data for unit costs, so it works on any replay.
  *
  * Two layers:
- *   - static: each card's share of the position score the omni search uses at its leaves (the heuristic
- *     `evaluate` in bot/players/heuristic.js, same weights), for every step of the game;
+ *   - static: each card's share of the position score the omni search uses at its leaves
+ *     (bot/omni/evaluate.js), for every step of the game;
  *   - search: at the omni bot's own action windows (from the OMNI_LOG_DIR decision logs), the searched value of
  *     the best move led by each card, relative to the move it played.
  */
@@ -18,8 +18,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// keep in step with W, unitValue, baseTerm and sideValue in bot/players/heuristic.js
-const W = { power: 1.3, hp: 0.9, cost: 0.25, shield: 2.2, upgrade: 0.6, sentinel: 1.0, exhaustedMult: 0.85, hand: 1.8, resource: 1.4, initiative: 2.5, baseHp: 0.9, baseMult: 1.5 };
+// the omni leaf score (bot/omni/evaluate.js); the lens reads it from snapshots instead of the engine
+const { W, baseTermHp } = require('./evaluate');
 
 let cards = null;
 function cardData() {
@@ -59,8 +59,7 @@ function unitValue(u) {
 }
 
 function baseValue(b) {
-    const hp = Math.max(0, b.hp - b.d);
-    return (hp * W.baseHp + (hp <= 12 ? ((12 - hp) ** 2) / 6 : 0)) * W.baseMult;
+    return baseTermHp(b.hp - b.d);
 }
 
 /** Per-card values for one side of a recorder snapshot. Arrays line up with the snapshot's arrays. */
@@ -155,7 +154,7 @@ function buildLens(gameFile, decisionsDir) {
     return {
         schema: 'swu-lens/1', gameId, seed: header?.seed ?? null,
         players: (header?.players ?? []).map((p) => ({ id: p.id, bot: p.bot })),
-        source: 'bot/omni/lens.js: static = omni leaf evaluation (heuristic evaluate weights); search = omni decision logs',
+        source: 'bot/omni/lens.js: static = omni leaf evaluation (bot/omni/evaluate.js); search = omni decision logs',
         weights: W,
         steps
     };

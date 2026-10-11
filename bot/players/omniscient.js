@@ -28,6 +28,16 @@ const fs = require('fs');
 const path = require('path');
 const { seededRng } = require('../env');
 const { OmniSearch, BudgetExceeded, ruleChoice, stateKey, same, isPass } = require('../omni/search');
+const { snapshot } = require('../recorder');
+
+/** Search value (deciding side's points) as an uncalibrated P(p1 wins): logistic with a 15-point scale. */
+function toP1(v, seat) {
+    const x = seat === 'p1' ? v : -v;
+    if (Math.abs(x) >= 9000) {
+        return x > 0 ? 1 : 0;
+    }
+    return Math.round(1000 / (1 + Math.exp(-x / 15))) / 1000;
+}
 
 class OmniscientBot {
     constructor(name = 'omni', { depth = 2, budget = 600, ms = 6000, blind = false, beam = 8, followUps = 8 } = {}) {
@@ -81,7 +91,9 @@ class OmniscientBot {
         const reseed = this.blind ? () => String(Math.floor(this.rng() * 1e9)) : null;
         // branch on targets for our own first move only; deeper moves and the opponent's use the rule-based targets
         const followUps = (who, ply) => (who === pid && ply === 0 ? this.followUps : 0);
-        const search = new OmniSearch(eg, { budget: this.budget, deadline: t0 + this.ms, followUps, reseed, side: pid });
+        const logging = !!process.env.OMNI_LOG_DIR;
+        const rootState = logging ? snapshot(eg) : null;
+        const search = new OmniSearch(eg, { budget: this.budget, deadline: t0 + this.ms, followUps, reseed, side: pid, snapshots: logging });
         let best = null;
         let reached = 0;
         try {
@@ -121,6 +133,9 @@ class OmniscientBot {
             moves: (best.kids ?? []).slice(0, 40).map((k) => ({ move: k.seq.map((a) => a.label).join(' > '), value: +(k.searched ?? k.value).toFixed(2) }))
         };
         this.log(eg, pid);
+        if (logging) {
+            this.writeTree(eg, pid, best, rootState);
+        }
         this.plan = seq.slice(1);
         return eg.refetch(pid, seq[0]) ?? pass ?? actions[0];
     }
@@ -135,6 +150,29 @@ OmniscientBot.prototype.log = function log(eg, pid) {
     const seed = String(eg.game.id).replace(/^bot-/, '');
     fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(path.join(dir, `${seed}-${this.name}-${seat}.jsonl`), `${JSON.stringify({ seat, ...this.last })}\n`);
+};
+
+/** Latest search tree in the dashboard's `tree` widget shape: root, our best moves, and the replies we expect. */
+OmniscientBot.prototype.writeTree = function writeTree(eg, pid, best, rootState) {
+    const seat = `p${eg.ids.indexOf(pid) + 1}`;
+    const label = (k) => k.seq.map((a) => a.label).join(' > ');
+    const val = (k) => k.searched ?? k.value;
+    const mine = (best.kids ?? []).slice().sort((a, b) => val(b) - val(a)).slice(0, 8);
+    const tree = {
+        bot: this.name, seat, round: eg.round, updatedAt: new Date().toISOString(),
+        root: {
+            label: `Round ${eg.round}: ${this.name} (${seat}) to act, ${this.last.nodes} nodes, depth ${this.last.depth}`,
+            state: rootState, value: toP1(best.value, seat),
+            children: mine.map((k) => ({
+                label: label(k), state: k.state, value: toP1(val(k), seat), chosen: label(k) === label({ seq: best.pv[0] }),
+                // the opponent's replies, best for the opponent first (lowest value for us)
+                children: (k.sub ?? []).slice().sort((a, b) => val(a) - val(b)).slice(0, 4).map((o) => ({ label: `reply: ${label(o)}`, state: o.state, value: toP1(val(o), seat) }))
+            }))
+        }
+    };
+    const file = path.join(process.env.OMNI_LOG_DIR, `latest-tree-${this.name}.json`);
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(tree));
+    fs.renameSync(`${file}.tmp`, file);
 };
 
 module.exports = { OmniscientBot };
