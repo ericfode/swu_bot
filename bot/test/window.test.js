@@ -8,6 +8,8 @@ const http = require('http');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'window-test-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+// a scratch arena for anything that loads home.js (server.js, which window.js uses, loads api.js): never the project's
+Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RESULTS: path.join(tmp, 'arena-results'), ARENA_DASH: path.join(tmp, 'no-dash') });
 
 const { createWindow, Store, storeReader, scrub } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
@@ -280,6 +282,28 @@ test('push: a ladder run reaches the window as it plays: whole lines while runni
         fs.writeFileSync(file, '{"t":"header","key":"k"}\n{"t":"step"}\n{"t":"end"}\n'); // ladder.js adds the key in place
         await pushRunOnce(dir, mem);
         assert.match(await replay(), /"key":"k"/);
+    } finally {
+        delete process.env.SWU_WINDOW;
+        delete process.env.SWU_WINDOW_TOKEN;
+        await close();
+    }
+});
+
+test('push: the arena uplink sends the roster without token hashes, the bench included', async () => {
+    const home = process.env.ARENA_HOME;
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'roster.json'), JSON.stringify({ thinkCapMs: 60000, baselines: ['rush'],
+        agents: [{ name: 'aa', title: 'aa', philosophy: '', start: 'rush', tokenHash: 'h1' }], bench: [{ name: 'bb', title: 'bb', tokenHash: 'h2' }] }));
+    const w = makeWindow('w7');
+    const { srv, close } = await serve(w);
+    try {
+        process.env.SWU_WINDOW = `http://127.0.0.1:${srv.address().port}`;
+        process.env.SWU_WINDOW_TOKEN = 'push-secret';
+        delete require.cache[require.resolve('../arena/push')];
+        await require('../arena/push').pushArena({ once: true });
+        const roster = JSON.parse(w.store.getDoc('arena', 'roster'));
+        assert.deepStrictEqual([roster.agents[0].name, roster.bench[0].name], ['aa', 'bb']);
+        assert.doesNotMatch(JSON.stringify(roster), /tokenHash/);
     } finally {
         delete process.env.SWU_WINDOW;
         delete process.env.SWU_WINDOW_TOKEN;

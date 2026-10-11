@@ -242,7 +242,8 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
             await put('status', await result('status'));
             await put('standings', standings);
             await put('tournament', t);
-            await put('roster', { ...roster, agents: roster.agents.map(({ tokenHash, ...a }) => a) });
+            // no token hashes, wherever the roster keeps competitors (agents, and the bench between tournaments)
+            await put('roster', JSON.parse(JSON.stringify(roster, (k, v) => (k === 'tokenHash' ? undefined : v))));
             const reports = async (dir, prefix) => {
                 for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
                     const m = /^r(\d+)\.md$/.exec(f);
