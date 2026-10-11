@@ -47,6 +47,7 @@ Inputs are detected from the content (`sources.js`):
 | socket.io text frames, one per line: `42["gamestate",{...}]` | browser devtools export of the game socket |
 | JSON array or JSON Lines of `gamestate` objects | any other recorder |
 | `importer/capture.js` output | engine-made test captures |
+| SWU-PGN/1.x game file (`.swupgn`, `[Game "SWU-PGN/1.0"]` header) | Karabast's draft game notation, see below |
 
 ### Public KaraBuddy replays
 
@@ -100,6 +101,35 @@ What this means for the tools:
 unpaired frames, checkpoints where a hand is hidden skip that seat's view and `objective`. Pass `--views` to override.
 - **Fitness / bot training:** no legal-action lists, so imitation learning needs the engine to replay the decisions.
 
+## SWU-PGN game files
+
+[SWU-PGN](https://github.com/SWU-Karabast/forceteki/pull/2350) (draft, branch `swu-game-notation`, spec
+`docs/SWU-PGN-1.0-SPEC.md`) is a game file Karabast's server can write: both deck lists, both shuffled deck orders, the
+seed, and one NDJSON record per board change, with a full board ("keyframe") at every round edge. It is omniscient, so
+`importer/swupgn.js` gives a replay with both hands (`source.format: "swu-pgn"`, `pov: "both"`, `hiddenHands: []`).
+
+```bash
+node importer/import.js game.swupgn --out replays/pgn
+```
+
+- **Board:** the records are folded in order (spec sections 11-13; the MOVE rule, the keyframe check and the `for`
+  linking follow the MIT reference reader). The fold equals the reference reader's on all five spec test vectors and
+  reproduces every keyframe in them; mismatches, if a file has any, are counted in `source.check`.
+- **Decisions:** one step per action-window move (play, attack, deploy, ability, pass, claim), per `CHOICE` /
+  `MODAL_CHOICE` (target, mode, who goes first; `legal` is the number offered), per mulligan / keep, and per card
+  resourced in setup and regroup. An attack is two steps (attacker, then target) like a bot replay. Each step carries
+  `seq` (the record it came from) and `log` (the story lines of the records it covers).
+- **Header:** `source.decks`, `source.deckOrder` (INIT, before any reshuffle) and `source.cards` (the file's card
+  index) keep the file's own ids (`SOR#095:2`); `source.pgnSeed`, `engineBuild`, `result`, `reason` keep the tags.
+  `P1Id` / `P2Id` are never copied.
+- **Not in our snapshot:** which cards are in the resource row (we keep counts; which ones are exhausted is not in the
+  file either), deck order after a shuffle (not recorded), card copy ids, keywords other than Sentinel, credits and the
+  Force token, Epic Action use, a flipped leader's face, `active`, annotations and `ms` timings. Captives held by a
+  unit are an optional `cap` list on that unit. Base HP before round 1 comes from the first keyframe.
+- **Perspective files:** a `Perspective "P1"` tag means the other player's hidden cards may be missing (the spec does
+  not say how they are blanked, and the reference writer never writes one). The import then says `pov: "p1"`,
+  `hiddenHands: ["p2"]`, and fills a hand whose size exceeds its known cards with hidden cards.
+
 ## Seats and privacy
 
 `p1` is the player holding the initiative when the game starts, unless the capture says otherwise. Usernames, user ids
@@ -111,7 +141,7 @@ not written either, unless you pass `--keep-file-names`.
 ## Testing
 
 ```bash
-npm test                                                     # includes importer/test (format readers, rounds, chat)
+npm test                                                     # includes importer/test (format readers, rounds, chat, SWU-PGN vectors)
 node importer/capture.js --bots rush,random --seeds 1-10 --out /tmp/cap   # engine captures + truth replays
 node importer/verify.js /tmp/cap                             # every frame of every view against the truth
 ```

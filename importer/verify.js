@@ -109,7 +109,9 @@ function main() {
         }
     }
     const bad = results.filter((r) => r.mismatchedFrames || r.lengthMismatch).length;
-    console.log(`${results.length - bad}/${results.length} captures match the truth on every frame`);
+    if (!process.argv.includes('--json')) {
+        console.log(`${results.length - bad}/${results.length} captures match the truth on every frame`);
+    }
     process.exitCode = bad ? 1 : 0;
 }
 

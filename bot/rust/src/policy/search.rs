@@ -82,12 +82,15 @@ impl Weights {
 /// Board score from `me`'s seat: base HP (steeper when low), units, cards in hand, resources, initiative.
 pub fn evaluate(state: &State, me: &str, w: &Weights) -> f64 {
     let empty = PlayerView::default();
+    // after the action phase every unit readies in the regroup, so an exhausted unit only counts for less mid-phase
+    // (scoring it lower there made search keep units home and claim initiative instead of attacking)
+    let exhausted = if state.phase.as_deref() == Some("action") { w.exhausted } else { 1.0 };
     let side = |seat: &str| -> f64 {
         let p = state.players.get(seat).unwrap_or(&empty);
         let hp = p.base_left() as f64;
         let mut v = hp * w.base + if hp <= 12.0 { (12.0 - hp).powi(2) / 6.0 * -1.5 } else { 0.0 };
         for u in p.units() {
-            v += unit_value(u) * w.unit * if u.ready() { 1.0 } else { w.exhausted };
+            v += unit_value(u) * w.unit * if u.ready() { 1.0 } else { exhausted };
         }
         let initiative = if state.initiative.as_deref() == Some(seat) { w.initiative } else { 0.0 };
         v + p.hand_count as f64 * w.hand + p.res.total as f64 * w.resource + initiative
@@ -259,6 +262,19 @@ mod tests {
         let mut sim = Scripted { last: None, calls: vec![] };
         assert_eq!(s.choose_sim(&req, &mut sim), 1);
         assert_eq!(sim.calls, ["begin", "act", "begin", "act", "end"]);
+    }
+
+    #[test]
+    fn exhausted_units_count_less_only_during_the_action_phase() {
+        let board = |phase: &str| -> State {
+            serde_json::from_str(&format!(
+                r#"{{"round":2,"phase":"{phase}","players":{{"p1":{{"ground":[{{"id":"a","p":3,"h":4,"x":1}}]}},"p2":{{"ground":[{{"id":"b","p":3,"h":4}}]}}}}}}"#
+            ))
+            .unwrap()
+        };
+        let w = Weights::default();
+        assert!(evaluate(&board("action"), "p1", &w) < 0.0);
+        assert_eq!(evaluate(&board("regroup"), "p1", &w), 0.0);
     }
 
     #[test]

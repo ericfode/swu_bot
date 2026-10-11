@@ -1,4 +1,5 @@
 node_modules/
+/target/
 replays/
 replays-*.log
 viewer/dist/
@@ -15,6 +16,7 @@ analysis/node_modules/
 analysis/.cache/
 analysis/out/
 results/
+arena-home/
 data/
 # the viewer keeps source code in studio/src/data
 !studio/src/data/
@@ -27,3 +29,9 @@ __pycache__/
 .claude/worktrees/
 bot/c/swu-c
 bot/c/*.o
+
+# compiled bot bundles and their tools (bot/compiled)
+/build/
+
+# SWU Arena app builds (app/build.mjs)
+app/dist/

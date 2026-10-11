@@ -137,7 +137,8 @@ function targetScore(card, pl, title) {
     const attack = /attack/i.test(title);
     const harm = HARM.test(title);
     const help = HELP.test(title) && !harm;
-    const val = card.isUnit?.() ? unitValue(card) : 0;
+    // only units in an arena have upgrades: the engine asserts when they are read on a card in another zone
+    const val = card.isUnit?.() && /arena/i.test(card.zoneName ?? '') ? unitValue(card) : 0;
     if (card.isBase?.()) {
         return mine ? -100 : (attack || harm ? 8 : -5);
     }

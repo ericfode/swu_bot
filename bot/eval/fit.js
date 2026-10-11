@@ -3,10 +3,11 @@
  * Fit every candidate evaluator on recorded positions and write bot/eval/models/<name>.json.
  *
  *   node bot/eval/fit.js --data <dir>[,<dir>...] [--out bot/eval/models] [--only linear,mlp] [--hidden 8] [--l2 1e-3] [--epochs 30]
- *                        [--drop deckLow,toAct,...] [--suffix -g4]
+ *                        [--drop deckLow,toAct,...] [--suffix -g4] [--view subjective|spectator]
  *
- * Training rows: the train split (by game) of every decided checkpoint, seen subjectively by each player in turn,
- * labelled with whether that player won. Hand-made evaluators get only their logistic scale fitted.
+ * Training rows: the train split (by game) of every decided checkpoint, seen by each player in turn (subjectively by
+ * default; --view spectator hides both hands, as a Karabast spectator sees them), labelled with whether that player
+ * won. A spectator model is still scored in every view; it simply never learned from a visible hand. Hand-made evaluators get only their logistic scale fitted.
  */
 const fs = require('fs');
 const path = require('path');
@@ -22,15 +23,18 @@ function arg(name, dflt) {
 
 const logloss = (p, y) => -(y * Math.log(Math.max(p, 1e-9)) + (1 - y) * Math.log(Math.max(1 - p, 1e-9)));
 
-/** Two subjective frames (one per judge) per position. */
-function frames(positions, withDecks) {
+/**
+ * Two frames (one per judge) per position. Subjective frames need the judge's hand; spectator frames see neither
+ * hand, so they also use positions where both hands are hidden.
+ */
+function frames(positions, withDecks, view = 'subjective') {
     const rows = [];
     for (const p of positions) {
         for (const judge of ['p1', 'p2']) {
-            if (p.hidden?.includes(judge)) {
+            if (view === 'subjective' && p.hidden?.includes(judge)) {
                 continue;
             }
-            const fr = frameFeatures(p.state, judge, { view: 'subjective', decks: withDecks ? p.decks : null, toAct: p.toAct });
+            const fr = frameFeatures(p.state, judge, { view, decks: withDecks ? p.decks : null, toAct: p.toAct });
             rows.push({ fr, y: p.winner === judge ? 1 : 0, id: p.id, source: p.source });
         }
     }
@@ -257,12 +261,17 @@ function main() {
         process.exit(2);
     }
     const tag = arg('suffix', '');
+    const view = arg('view', 'subjective');
+    if (view !== 'subjective' && view !== 'spectator') {
+        console.error(`--view must be subjective or spectator, not ${view}`);
+        process.exit(2);
+    }
     const want = (n) => !only || only.includes(n);
     fs.mkdirSync(out, { recursive: true });
     const positions = loadPositions(dirs);
     const train = positions.filter((p) => !p.test);
     console.log(`${positions.length} positions from ${new Set(positions.map((p) => p.id)).size} games; ${train.length} for training`);
-    const meta = { ...(drop.length ? { dropped: drop } : {}), trainedOn: dirs.map((d) => path.basename(d)), trainPositions: train.length, trainGames: new Set(train.map((p) => p.id)).size, fittedAt: new Date().toISOString() };
+    const meta = { ...(drop.length ? { dropped: drop } : {}), ...(view === 'spectator' ? { view } : {}), trainedOn: dirs.map((d) => path.basename(d)), trainPositions: train.length, trainGames: new Set(train.map((p) => p.id)).size, fittedAt: new Date().toISOString() };
     const save = (name, model, rows) => {
         const fit = meanLoss(rows, (fr) => (model.kind === 'hand' ? model.scale * HAND[model.base](fr) : model.kind === 'linear' ? linearLogit(model, fr) : mlpLogit(model, fr)));
         Object.assign(model, meta, { trainLogloss: Number(fit.logloss.toFixed(4)), trainBrier: Number(fit.brier.toFixed(4)) });
@@ -271,9 +280,9 @@ function main() {
     };
 
     for (const withDecks of [false, true]) {
-        const rows = frames(train, withDecks);
+        const rows = frames(train, withDecks, view);
         if (!rows.length) {
-            console.error('no training rows: every position is in the test split or has both hands hidden');
+            console.error(`no training rows: every position is in the test split${view === 'subjective' ? ' or has both hands hidden' : ''}`);
             process.exit(2);
         }
         const suffix = withDecks ? '-deck' : '';

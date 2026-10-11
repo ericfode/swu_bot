@@ -11,6 +11,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 - `forceteki/` — **git submodule** of `SWU-Karabast/forceteki`, pinned to upstream `2be4fcd`. It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `app/` — the SWU Arena app (watch the arena, read the research): one HTML file built from the shared project folder by `app/build.mjs`; see `app/README.md` and `app/DESIGN.md`.
 - `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
 - `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.
 
@@ -40,12 +41,14 @@ node bot/debug-seed.js <seed>                           # replay one seed, dump 
 ```bash
 npm run demo                 # 3 random bots, 4 games per pairing -> replays/demo
 npm run viewer               # build viewer/, serve on http://localhost:5180 (PORT, REPLAYS_DIR to override)
+npm run app                  # SWU Arena app -> app/dist/app.html (--public for the friends build, --data DIR)
 npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
 npm test                     # unit tests (ratings, ladder report, bot logic on mock boards, importer); no card data needed
 node importer/import.js <capture>... --out replays/human   # import human Karabast games
 npm run lint                 # Perch semantic lint with Jev (see "Linting" below)
+python3 bot/compiled/build.py   # 9 bots as sandboxed WebAssembly bundles in build/compiled, played as <name>-wasm (bot/compiled/README.md)
 ```
 
 - Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format: `spec/replay-format.md`; snapshot fields: `bot/view.js`, types in `viewer/src/core/types.ts`.
@@ -71,10 +74,14 @@ Usage rule for every thread. Perch (semantic lint with Jev) is advisory, never a
 - `tools/bin/perch` sets `PERCH_BASE_URL` to TypeSafe System One (model `jev-latest`) and turns on `NODE_USE_ENV_PROXY` when `HTTPS_PROXY` is set. Locally, export `PERCH_API_KEY` or `TYPESAFE_API_KEY`. In Claude Code cloud sessions the egress proxy injects the Jev key, so no key is needed.
 - Scope (`tools/perch/scope.js`, an allow-list): Perch reads the shared core, meaning the runners, recorder, ratings, bot protocol and registry, the arena, the evaluation study, the knowledge dial, viewers, analysis, meta, importers and tools. It never reads the code of specific bots (`bot/players/*` except the registry and stdio adapter, `bot/<language>/`, `bot/examples/`, arena starters, checks and panels for one bot) or tests: Eric's call, 2026-10-11. A new folder of core code must be added to `include`. Named paths outside the scope are refused, and built bundles (over 256 KB or minified) are skipped. Every perch command that reads code or findings (scan, check, issues, close, reopen, doctor) runs in a git snapshot that holds only the in-scope files at HEAD (`.perch/core`), so Jev never sees bot or test code, not even as a caller or callee. `check` also sees uncommitted in-scope changes. Closed issues are added back to `.perch/closed.jsonl`; `rules` and `setup` run in the repo itself. `perch shared <command>` does the same for the code in `/mnt/project-files` (`.perch/shared`); its closed issues live in the shared folder.
 - Limits in the wrapper (`tools/perch/policy.js`): `scan` needs a scope (a path, `--since` or `--paths`); all core code needs `--full`. `coverage` is refused, since it measures tests and tests are out of scope. `--parallel` defaults to 8, one perch command at a time per checkout, and a 15 minute timeout (`PERCH_TIMEOUT_MIN`).
-- `tools/perch/jev-cache.mjs` caches Jev answers by request content, so unchanged code is free and gets the same verdict every run (fresh answers vary by up to ±0.06). `--force` asks again; use it after Jev changes model, since requests name `jev-latest` and entries live 30 days (`PERCH_CACHE_DAYS`). It also enforces budgets: `PERCH_RUN_REQUESTS` (default 250) per run and `PERCH_DAILY_REQUESTS` (default 1000) per UTC day for the whole project. Over budget, methods without a cached answer fail (HTTP 409) and the run exits 1; perch itself stops after 16 such failures in a row. A limit of 0 means cached answers only.
+- `tools/perch/jev-cache.mjs` caches Jev answers by request content, so unchanged code is free and gets the same verdict every run (fresh answers vary by up to ±0.06). `--force` asks again; use it after Jev changes model, since requests name `jev-latest` and entries live 30 days (`PERCH_CACHE_DAYS`). It also enforces budgets: `PERCH_RUN_REQUESTS` (default 250) per run and `PERCH_DAILY_REQUESTS` (default 2000, Eric's pick) per UTC day for the whole project. Over budget, methods without a cached answer fail (HTTP 409) and the run exits 1; perch itself stops after 16 such failures in a row. A limit of 0 means cached answers only.
 - The cache, the usage ledger and the off switch live in `/mnt/project-files/perch/` when that folder exists (shared by all threads), else in `.perch/jev/` (`PERCH_JEV_DIR` overrides). `PERCH_DISABLED=1` or a `DISABLED` file there turns off every Jev command (exit 0).
 - Config is `perch.yaml` (ignores `forceteki/` and generated output; no custom rules yet). Results go to `.perch/` (gitignored, except `.perch/rules/` and `.perch/closed.jsonl`, which are committed).
 - Findings are probabilities, not facts. Read the code before changing it, and `perch close <id> --reason "..."` false positives. `perch ci`, `perch cloud` and `perch login` need Perch Cloud, which this repo does not use.
+
+## Fly.io (MCP server)
+
+`.mcp.json` starts Fly's MCP server (`flyctl mcp server`, through `tools/bin/fly-mcp`): tools for apps, machines, volumes, secrets, certs, IPs and logs. In cloud sessions `.claude/hooks/session-start.sh` builds flyctl from source through the Go module proxy (a few minutes the first time), and the egress proxy injects the Fly key for api.fly.io and api.machines.dev, so no key is stored anywhere. Locally, flyctl uses your own `fly auth login`. Creating Fly resources costs money: the compute budget is $70 a month.
 
 ## Architecture of `bot/env.js`
 
@@ -104,5 +111,7 @@ Engine input is always followed by `game.continue()`. Prompt-handling rules alre
 5. Mystic Monastery: its action stays legal while the player already has the Force; used then, it changes nothing and does not count toward its 3 uses. When the opponent is out for the phase, the player gets the same action window again, so a bot that prefers the action over passing loops until the step cap (found by `bot/examples/search-bot.js` before its loop guard).
 6. Rollback (`UndoMode.Full`) does not restore everything: the order of simultaneous triggers, token ids made in one step, and whether an action ability "will have no effect" can come out differently after a rollback than in a game never rolled back. So the referee never rolls back the real game: every lookahead runs on a copy (`Shadow` in `bot/protocol.js`) that is rebuilt when it drifts. Seen in an ISMCTS game (seed 3005, rust-search vs ismcts-vlinear-deck).
 7. `ItBindsAllThings.ts`: its `then` reads `thenContext.events[0].totalDistributed`, which throws `Cannot read properties of undefined (reading 'totalDistributed')` when the heal made no event, also during playability checks (`hasAnyLegalEffects`). Same shape as #1. Seen once: seed 1, key `e1540cffc63f5e63cc6cd8dad8a8f96a77f8ee3dd05da42d6c5c45747e82afc7`, a Jev look test bot vs `node-search`, step 22.
+8. `BarrissOffeeRedeemingHerself.ts` (ASH_044): its "if you do" step reads `individualEvents[0].card` before checking that anything was healed, so playing her when the heal resolves on nothing throws `Cannot read properties of undefined (reading 'card')`. It ends 36% of the real-deck games of `lando-calrissian_law_blue` (the only list in `bot/decks/` that runs her). Repro: `playGame` seed 19, decks `lando-calrissian_law_blue` vs `admiral-piett_jtl_blue`, bots `c-clock#b` vs `c-clock#a`, key `e0976551196cb25b019af62563b83e2e05c3f13d7dedaa334e7a30a0bc8ee9b3`.
+9. `JustifierRelentless.ts`: its `ifYouDoCondition` reads `.willDefeat` from an undefined event (5 of 7,020 real-deck games).
 
 Treat engine errors during random play as findings to report, not something to patch in `forceteki/`.

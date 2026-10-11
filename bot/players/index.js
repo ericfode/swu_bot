@@ -8,6 +8,7 @@
  *   heuristic[-dN]              one-ply rollback search, "balanced" evaluation (original weights, danger sign fixed)
  *   legacy[-dN]                 same search with the original evaluation exactly, inverted danger term included
  *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
+ *   <agent>, <agent>-v<N>       arena competitor bots (bot/arena/registry.js)
  *   ismcts[-bB][-hH][-nN][-eP][-vV] known-decklist ISMCTS (players/ismcts.js): belief sharpness B (default 1, 0 = uniform),
  *                               horizon H exchanges (default 1), N iterations per legal action (default 6).
  *                               `-v<evaluator>` scores leaves with a calibrated P(win) from bot/eval (`-vlinear-deck`).
@@ -36,6 +37,7 @@ const { HeuristicBot } = require('./heuristic');
 const { StdioClient } = require('../stdio');
 const examples = { 'js-random': require('../examples/random-bot').create, 'js-search': require('../examples/search-bot').create };
 const { PROFILES } = require('./profiles');
+const { describeArenaBot, makeArenaBot } = require('../arena/registry');
 const { IsmctsBot } = require('./ismcts');
 const { OmniscientBot } = require('./omniscient');
 
@@ -110,6 +112,8 @@ function loadExternalBots() {
 }
 const externalBots = loadExternalBots();
 const programOf = (name) => (Object.hasOwn(externalBots, name.split('#')[0]) ? externalBots[name.split('#')[0]] : null);
+/** A copy of the bot program entry for `name` ({cmd, args, cwd, adapter, ...}), or null when it is not a bot program. */
+const programSpec = (name) => (programOf(name) ? structuredClone(programOf(name)) : null);
 
 const running = new Map();
 /** The program client for `name` that is not one of `taken` (the bots already seated in this game). */
@@ -194,14 +198,16 @@ function describeBot(name) {
     if (kind === 'rush') {
         return { name, kind: 'rules', profile: 'rush', depth: 0, lang: 'js' };
     }
-    if (kind === 'learned-pi' || kind === 'learned-v') {
-        // bot/learned: tinygrad-trained network, model file from $SWU_LEARNED_MODEL (default models/learned/current.json)
-        return { name, kind: 'learned', profile: kind, depth: kind === 'learned-v' ? depth : 0, lang: 'js' };
+    if (kind === 'learned-pi' || kind === 'learned-v' || kind === 'learned-vh') {
+        // bot/learned: tinygrad-trained network, model file from $SWU_LEARNED_MODEL (default models/learned/current.json).
+        // learned-vh scores lookahead positions with the heuristic score plus a learned correction
+        return { name, kind: 'learned', profile: kind, depth: kind === 'learned-pi' ? 0 : depth, lang: 'js' };
     }
     if (/^random/.test(kind)) {
         return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
     }
-    return null;
+    // competitor bots from the arena (<ARENA_HOME>/agents/<agent>/, or a frozen <agent>-v<N>)
+    return describeArenaBot(name);
 }
 
 /**
@@ -211,7 +217,7 @@ function describeBot(name) {
 function makeBot(name, taken) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', 'learned-vh', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
@@ -234,9 +240,15 @@ function makeBot(name, taken) {
     if (info.kind === 'search') {
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
     }
+    if (info.kind === 'arena') {
+        return makeArenaBot(name);
+    }
     if (info.kind === 'learned') {
-        const { LearnedPolicyBot, LearnedSearchBot } = require('../learned/bots');
-        return info.profile === 'learned-v' ? new LearnedSearchBot(name, { depth: info.depth }) : new LearnedPolicyBot(name);
+        const { LearnedPolicyBot, LearnedSearchBot, HEURISTIC_BLEND } = require('../learned/bots');
+        if (info.profile === 'learned-pi') {
+            return new LearnedPolicyBot(name);
+        }
+        return new LearnedSearchBot(name, { depth: info.depth, blend: info.profile === 'learned-vh' ? HEURISTIC_BLEND : undefined });
     }
     if (info.kind === 'rules') {
         return createRushBot(name);
@@ -244,4 +256,4 @@ function makeBot(name, taken) {
     return createRandomBot(name);
 }
 
-module.exports = { makeBot, closeBots, describeBot, parseName, parseIsmcts, parseOmni };
+module.exports = { makeBot, closeBots, describeBot, programSpec, parseName, parseIsmcts, parseOmni };

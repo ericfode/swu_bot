@@ -12,6 +12,9 @@
  * an action-window decision; --every N keeps every Nth) plus the game result, which is the training and test data for evaluators.
  *
  * Bot names: random*, heuristic (shipped evaluator), heuristic-d2, h@<evaluator>, h2@<evaluator>.
+ *
+ * Exit code: 1 when a worker process failed (games are missing); 2 when every game ran but some ended without a
+ * winner (an engine ERROR or the step cap), which index.json also lists under `undecided`.
  */
 const fs = require('fs');
 const path = require('path');
@@ -157,6 +160,8 @@ async function main() {
             }
         }
         index.games = jobs.filter((j) => byId.has(j.id)).map((j) => byId.get(j.id));
+        // finished games without a winner (engine ERROR with no forfeiting seat, step cap); training and ratings skip them
+        index.undecided = index.games.filter((g) => g.outcome !== 'won' && g.outcome !== 'running' && !g.by).map((g) => ({ id: g.id, outcome: g.outcome, error: g.error }));
         writeJson(path.join(out, 'index.json'), index);
     };
     merge();
@@ -169,12 +174,23 @@ async function main() {
     const failures = (await Promise.all(procs)).filter(Boolean);
     clearInterval(timer);
     merge();
+    const won = index.games.filter((g) => g.outcome === 'won').length;
+    console.log(`wrote ${index.games.length} games (${won} decided) to ${out}`);
+    if (index.games.length < jobs.length) {
+        // a part file that never appeared or could not be read (merge skips those while workers run)
+        failures.push(`${jobs.length - index.games.length} of ${jobs.length} games missing from parts/`);
+    }
     if (failures.length) {
         console.error(`incomplete run: ${failures.join('; ')}`);
         process.exitCode = 1;
+    } else if (index.undecided.length) {
+        const kinds = {};
+        for (const g of index.undecided) {
+            kinds[g.outcome] = (kinds[g.outcome] ?? 0) + 1;
+        }
+        console.error(`${index.undecided.length} game(s) ended without a winner (${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}); listed under "undecided" in index.json`);
+        process.exitCode = 2;
     }
-    const won = index.games.filter((g) => g.outcome === 'won').length;
-    console.log(`wrote ${index.games.length} games (${won} decided) to ${out}`);
 }
 
 main().catch((e) => {
