@@ -5,5 +5,8 @@
     "rust-greedy2": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy2"], "lang": "rust" },
     "rust-search": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["search"], "lang": "rust" },
     "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" },
-    "haskell": { "cmd": "bot/haskell/build/swu-bot-hs", "args": [], "lang": "haskell" }
+    "haskell": { "cmd": "bot/haskell/build/swu-bot-hs", "args": [], "lang": "haskell" },
+    "bend": { "cmd": "bot/bend/run.sh", "args": [], "lang": "bend" },
+    "bend-jev": { "cmd": "bot/bend/run.sh", "args": ["--jev"], "lang": "bend", "timeoutMs": 20000 },
+    "bend-jev-ties": { "cmd": "bot/bend/run.sh", "args": ["--jev-ties"], "lang": "bend", "timeoutMs": 20000 }
 }
