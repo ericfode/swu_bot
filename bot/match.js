@@ -78,6 +78,10 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
         res.error = String((e && e.message) || e).split('\n')[0].slice(0, 200);
     }
     res.ms = Date.now() - t0;
+    // end bot processes whatever the outcome (stdio bots keep a child process and thread until closed)
+    for (const b of bots) {
+        b.close?.();
+    }
     res.botStats = bots.map((b) => b.stats ?? null);
     res.timing = { p1: timingSummary(choiceMs.p1), p2: timingSummary(choiceMs.p2) };
     if (record) {
