@@ -15,7 +15,7 @@ import { ACTION_CLASSES, classifyGame, describe, pivotalActions, type Action, ty
 import { edgeTerms } from '../data/derive';
 import { evalsByIndex } from '../data/evals';
 import { useSettings } from '../lib/settings';
-import { setArtResolver, type ArtResolver } from '../lib/cards';
+import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
 import { parseGame } from '../data/source';
 import type { EvalFile } from '../data/evals';
 import type { Game } from '../data/types';
@@ -191,7 +191,7 @@ export function setCardArt(on: boolean) {
     useSettings.getState().setArt(on);
 }
 
-export { setArtResolver };
+export { setArtResolver, loadArtPack };
 export type { ArtResolver };
 export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES };
 export type { EvalFile, Game, Action, ActionClass, ActionIconProps };

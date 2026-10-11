@@ -12,6 +12,18 @@ export function setArtResolver(r: ArtResolver | null) {
     resolver = r ?? ((s, b) => swuDbImageUrl(s, b));
 }
 
+/**
+ * Use a pack of images ({"SOR_010": "data:...", "SOR_010-b": ...}, or a URL to one) instead of the CDN; cards not in
+ * the pack fall back to tiles. Made by studio/scripts/art-pack.py.
+ */
+export async function loadArtPack(pack: string | Record<string, string>): Promise<number> {
+    const map: Record<string, string> = typeof pack === 'string' ? await (await fetch(pack)).json() : pack;
+    setArtResolver((code, back) => map[back ? `${code}-b` : code] ?? (back ? map[code] : null) ?? null);
+    const { useSettings } = await import('./settings');
+    useSettings.setState((s) => ({ artVersion: s.artVersion + 1 }));
+    return Object.keys(map).length;
+}
+
 export function cardImageUrl(setCode: string | null, back = false): string | null {
     return setCode ? resolver(setCode, back) : null;
 }

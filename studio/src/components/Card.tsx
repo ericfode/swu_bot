@@ -24,6 +24,7 @@ interface Props {
 /** One card: art when the CDN has it, otherwise a generated tile (tokens, unreleased sets, fixtures). */
 export function Card({ card, size = 'md', back = false, unit, exhausted = false, note, onFocus }: Props) {
     const art = useSettings((s) => s.art);
+    useSettings((s) => s.artVersion);
     const [failed, setFailed] = useState<string | null>(null);
     const url = art ? cardImageUrl(card.s, back) : null;
     const showImg = url !== null && failed !== url;

@@ -47,6 +47,7 @@ const SEAT = { p1: 'var(--color-p1)', p2: 'var(--color-p2)' };
 
 function Face({ card, back = false }: { card: CardRef; back?: boolean }) {
     const art = useSettings((s) => s.art);
+    useSettings((s) => s.artVersion);
     const [failed, setFailed] = useState<string | null>(null);
     const url = art ? cardImageUrl(card.s, back) : null;
     const look = tileLook(card.n);

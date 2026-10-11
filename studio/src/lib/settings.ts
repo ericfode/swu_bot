@@ -7,6 +7,8 @@ interface Settings {
     art: boolean;
     perspective: Perspective;
     speed: number;
+    /** bumps when a card-art source changes, so cards re-resolve their images */
+    artVersion: number;
     setArt: (v: boolean) => void;
     setPerspective: (v: Perspective) => void;
     setSpeed: (v: number) => void;
@@ -31,9 +33,9 @@ function save(s: Pick<Settings, 'art' | 'perspective' | 'speed'>) {
 export const SPEEDS = [{ label: '0.5×', ms: 900 }, { label: '1×', ms: 420 }, { label: '3×', ms: 140 }, { label: '10×', ms: 40 }];
 
 const saved = load();
-// The bundled fixtures use a fake card set with no art, so the static preview starts on tiles.
 export const useSettings = create<Settings>((set, get) => ({
-    art: saved.art ?? import.meta.env.MODE !== 'static',
+    art: saved.art ?? true,
+    artVersion: 0,
     perspective: saved.perspective ?? 'god',
     speed: saved.speed ?? 1,
     setArt: (art) => (set({ art }), save({ ...get(), art })),
