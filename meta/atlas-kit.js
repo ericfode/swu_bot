@@ -106,7 +106,7 @@
     { part: 'base', text: 'Tower = base HP left (30 at the start). It turns red at 8 HP or less.' },
     { part: 'units', text: 'Cards on the table = units, with their power.' },
     { part: 'hand', text: 'Fanned cards = cards in hand.' },
-    { part: 'round', text: 'Badge on the centre line = round number (R8+ = round 8 or later).' },
+    { part: 'round', text: 'Tag on the centre line = round number (R8+ = round 8 or later). Small icons show it only for Close at R4 and Long game.' },
     { part: 'focus', text: 'In the small icons, the part the spot is about stays bright; the rest is dimmed.' },
   ];
 
@@ -166,7 +166,7 @@
   const TERMS = {
     spot: 'A kind of game situation, checked at the start of each round from one player\'s side. A game counts in a spot from the first round start where its rule holds.',
     averageBot: 'What a 1500-rated bot is expected to win from the same position against the same opponent (a logistic fit on every round start).',
-    edge: 'Points of win chance above (+) or below (−) an average bot in the same spot. +10 = wins 10% more of those games.',
+    edge: 'Points of win chance above (+) or below (−) an average bot in the same spot. +10 = wins 10 more of every 100 such games.',
     vsOwn: 'The same, measured against the bot\'s own level. A bot\'s best and worst spot use this, so a strong bot still has a weak spot.',
     best: 'The bot with the highest edge in a spot, among bots with 8+ games there.',
     rating: 'Overall strength from every finished game (Bradley-Terry, 1500 = average). Counts all games; a spot counts only games that reach it.',
@@ -232,7 +232,7 @@
       // Hand: fanned cards.
       const h = Math.round(lerp(a.hand, b.hand, k));
       g += `<g opacity="${dim('hand')}">`;
-      for (let i = 0; i < h; i++) g += `<rect x="${170 + i * 9}" y="${yH}" width="13" height="20" rx="2" fill="var(--panel)" stroke="${ink}" stroke-width="1.6" transform="rotate(${(i - (h - 1) / 2) * 6} ${176 + i * 9} ${yH + 26})"/>`;
+      for (let i = 0; i < h; i++) g += `<rect x="${170 + i * 9}" y="${yH}" width="13" height="20" rx="2" fill="${ink}" stroke="var(--panel)" stroke-width="1.2" transform="rotate(${(i - (h - 1) / 2) * 6} ${176 + i * 9} ${yH + 26})"/>`;
       if (!mini) g += `<text x="${170}" y="${top ? yH - 6 : yH + 34}" class="bd-lab">${h} in hand</text>`;
       g += '</g>';
       if (!mini) g += `<text x="236" y="${top ? 11 : 146}" text-anchor="end" class="bd-who" style="fill:${ink}">${who === 'you' ? 'YOU' : 'THEM'}</text>`;
@@ -242,7 +242,8 @@
     let g = `<line x1="4" x2="236" y1="75" y2="75" stroke="var(--line-2)" stroke-dasharray="3 4"/>`;
     g += side('them', true) + side('you', false);
     const rHot = S.focus === 'round' && k > 0.6;
-    g += `<g opacity="${dim('round')}"><circle cx="214" cy="75" r="${mini ? 15 : 14}" fill="var(--panel)" stroke="${rHot ? 'var(--ink)' : 'var(--line-2)'}" stroke-width="${rHot ? 2 + glow * 2 : 1.5}"/><text x="214" y="${mini ? 81 : 80}" text-anchor="middle" class="bd-round" style="${mini ? 'font-size:17px' : ''}">R${r}${S.late && k > 0.95 ? '+' : ''}</text></g>`;
+    // Round tag: a square-cornered tag, not a circle (a circle read as a clock). Small icons show it only for spots about the round.
+    if (!mini || S.focus === 'round') g += `<g opacity="${dim('round')}"><rect x="${mini ? 192 : 194}" y="${mini ? 63 : 64}" width="${mini ? 44 : 40}" height="${mini ? 24 : 22}" rx="3" fill="var(--panel)" stroke="${rHot ? 'var(--ink)' : 'var(--line-2)'}" stroke-width="${rHot ? 2 + glow * 2 : 1.5}"/><text x="214" y="${mini ? 81 : 80}" text-anchor="middle" class="bd-round" style="${mini ? 'font-size:17px' : ''}">R${r}${S.late && k > 0.95 ? '+' : ''}</text></g>`;
     // The measured gap, as a pill on the centre line once the tween lands.
     if (!mini && k > 0.6) {
       let txt = null;
