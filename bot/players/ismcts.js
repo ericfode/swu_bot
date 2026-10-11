@@ -87,11 +87,12 @@ function opponentChoice(eg, pid, acts, seen) {
 class IsmctsBot {
     /**
      * beta: belief sharpness (0 = uniform over the decklist). iterations: per action, clamped to [minIter, maxIter].
+     * value: optional (eg, pid) -> calibrated P(pid wins); when set it replaces the squashed heuristic score at leaves.
      * horizon: exchanges simulated before scoring (1 = my turn + the opponent's reply). c: UCB exploration.
      * scale: evaluation points per logistic unit when squashing scores to 0..1. thoughts: optional callback for the
      * dashboard, called after every search with a summary.
      */
-    constructor(name = 'ismcts', { beta = 1, iterPerAction = 6, minIter = 32, maxIter = 128, horizon = 1, c = 0.7, scale = 8, maxTreeDecisions = 3, peek = false, profile = null, thoughts = null } = {}) {
+    constructor(name = 'ismcts', { beta = 1, iterPerAction = 6, minIter = 32, maxIter = 128, horizon = 1, c = 0.7, scale = 8, maxTreeDecisions = 3, peek = false, profile = null, value = null, thoughts = null } = {}) {
         this.name = name;
         this.needsUndo = true;
         this.beta = beta;
@@ -103,6 +104,7 @@ class IsmctsBot {
         this.scale = scale;
         this.maxTreeDecisions = maxTreeDecisions;
         this.peek = peek;
+        this.value = value;
         this.profile = profile;
         this.thoughts = thoughts;
         this.snapshotFn = thoughts ? require('../recorder').snapshot : null;
@@ -318,6 +320,10 @@ class IsmctsBot {
             const me = eg.names[eg.ids.indexOf(pid)];
             const w = eg.winners;
             return w.length === 1 ? (w[0] === me ? 1 : 0) : 0.5;
+        }
+        if (this.value) {
+            // a calibrated evaluator: its P(win) is the leaf value as is
+            return Math.min(1, Math.max(0, this.value(eg, pid)));
         }
         const s = evaluate(eg, pid, this.profile) - rootScore;
         return 1 / (1 + Math.exp(-s / this.scale));

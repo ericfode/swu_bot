@@ -56,7 +56,7 @@ Everything is scored in tenths of a point of enemy base damage, around a zero po
   stats and keywords, my hand with card text); the question is a `choice` over the bot's top four candidates, plus a
   `noul` "will I win?" for an outlook. Jev cannot pick a move the bot thinks is clearly bad (score below `Z - 20`).
 
-Thoughts go to stderr, one line per decision, e.g. `[bend] r4 #68 window: play Card_232 (+164, 9 options) | jev m1/4 win 62%`.
+Thoughts go to stderr, one line per decision, e.g. `[bend] r4 #68 window: play c232 (+164, 9 options) | jev m1/4 win 62%`.
 
 ## Files
 

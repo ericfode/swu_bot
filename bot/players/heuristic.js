@@ -24,14 +24,16 @@ const W = { power: 1.3, hp: 0.9, cost: 0.25, shield: 2.2, upgrade: 0.6, sentinel
 
 /**
  * Side multipliers on top of W, so profiles can value the two sides differently (an aggressive bot cares more
- * about the opponent's base than its own). All 1.5/1/1 reproduces the original evaluation exactly.
+ * about the opponent's base than its own). All 1.5/1/1 is the original weighting; only the `legacy` profile (which
+ * sets legacyDanger) reproduces the original evaluation exactly, inverted base-danger term included.
  * baseDangerHp: base HP below which the quadratic "danger" term kicks in; dangerScale divides that term.
  */
 const SIDE = { myBase: 1.5, oppBase: 1.5, myUnits: 1, oppUnits: 1, baseDangerHp: 12, dangerScale: 6 };
 
 /**
- * Arena units that behave as units right now. A Piloting card attached as an upgrade is still returned by
- * getArenaUnits() but throws a contract assertion on unit properties such as `exhausted`; skip those.
+ * Arena units that answer `exhausted` without throwing. A defensive guard: no game so far has hit it. The seed-212
+ * crash (a leader deployed as a pilot) came from reading the leader's `exhausted` in fingerprint(), fixed there with
+ * readExhausted().
  */
 function arenaUnits(p) {
     return p.getArenaUnits().filter((u) => readExhausted(u) !== null);
@@ -103,7 +105,8 @@ const isPass = (a) => a.kind === 'button' && /^pass$/i.test(a.label);
 
 /**
  * Score the position for `pid` (higher is better). Only public information is read for hidden zones.
- * `profile` ({weights, side}) overrides W/SIDE; omitted, this is the original heuristic evaluation.
+ * `profile` ({weights, side}) overrides W/SIDE; omitted, this is the `balanced` evaluation (the original weights with
+ * the base-danger sign fixed; the `legacy` profile is the original exactly).
  */
 function evaluate(eg, pid, profile = null) {
     if (eg.over) {
@@ -233,9 +236,11 @@ class HeuristicBot {
      * Between my actions the opponent is modelled as passing, so a plan is "what I can do with my next few turns";
      * only the first action is played and the rest is re-planned at the next window. beam: how many first actions get the deeper look.
      */
-    constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12, profile = null } = {}) {
+    constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12, profile = null, evaluate: evalFn = null } = {}) {
         this.name = name;
         this.profile = profile;
+        // optional (eg, pid) -> score that replaces the profile evaluation, to compare evaluators under the same search (bot/eval/)
+        this.evaluate = evalFn;
         this.depth = depth;
         this.beam = beam;
         this.maxFollowUps = maxFollowUps;
@@ -403,7 +408,7 @@ class HeuristicBot {
                 }
                 eg.apply(actor, choice, this.rng);
             }
-            score = evaluate(eg, pid, this.profile);
+            score = this.evaluate ? this.evaluate(eg, pid) : evaluate(eg, pid, this.profile);
             fp = fingerprint(eg);
             if (extra > 0 && !eg.over && this.advanceToMyWindow(eg, pid)) {
                 const next = this.bestFrom(eg, pid, extra);

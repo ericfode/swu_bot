@@ -23,8 +23,11 @@ Policies (first CLI argument, registered as `rust-<policy>` in `bot/external-bot
 - `search`: greedy2 plus lookahead with v2 simulations (`sim` requests). At a decision it takes greedy2's six best
   actions; for each it starts a simulation (hidden cards dealt again, the same deal for every candidate), plays the
   action, lets greedy2 play both seats until the round's action phase ends (60 steps at most), and scores the board
-  from its seat (base HP, steeper below 12; units; cards in hand; resources; initiative). It plays the best score and
-  uses at most a third of the decision's time, 3 s at most. Under a v1 referee it plays exactly like greedy2.
+  from its seat (base HP, steeper below 12; units at 3 times greedy2's unit value; cards in hand; resources;
+  initiative). It plays the best score and uses at most a third of the decision's time, 3 s at most. Under a v1
+  referee it plays exactly like greedy2. Settings for experiments: `SWU_SEARCH_WIDTH`, `_DEALS`, `_STEPS`, `_ROUNDS`
+  and the score weights `SWU_EVAL_BASE`, `_UNIT`, `_EXHAUSTED`, `_HAND`, `_RESOURCE`, `_INITIATIVE` (`env` in
+  `bot/external-bots.json`).
 
 Add one in `src/policy/` and a line in `bot/external-bots.json`.
 
@@ -36,6 +39,20 @@ Real cards, forceteki 2be4fcd, both seats per seed (`node bot/ladder.js --bots a
 | greedy2 vs greedy | 19-1 |
 | greedy2 vs rush (best JS bot) | 29-11; 78-21 over 100 games (seeds 101-150) |
 | Ladder: greedy2, greedy, rush, tempo, random (10 games per pair, seeds 201-250) | greedy2 33-5 (87%, first); rush 65%, tempo 51%, greedy 42% |
+
+search vs greedy2 on the v2 referee (spec thread's work in progress, `--key none`). 48-game rows are seeds 1001,
+2001, 3001, 4001 (12 games each), except units x5 on 5001-8001; 96-game rows are both sets:
+
+| search setting | vs greedy2 | ms per decision |
+| --- | --- | --- |
+| units x1 (first version) | 55-41 (57%) | 200-220 |
+| units x1, 3 deals per candidate | 27-21 | 511 |
+| units x1, no exhausted discount | 29-19 | 176 |
+| units x1, one more round per playout | 30-18 | 395 |
+| units x2 | 32-16 | 182 |
+| **units x3 (default)** | **68-28 (71%)** | 187-205 |
+| units x4 | 62-34 (65%) | 195-216 |
+| units x5 | 32-16 | 233 |
 
 Decision time: the Rust policy takes about 30 us; the harness measures about 1 ms per decision because the adapter
 builds and sends the board JSON. The JS search bots (tempo, heuristic) average 170-430 ms.
