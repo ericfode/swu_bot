@@ -8,8 +8,8 @@
 // --out     output file (default app/dist/app.html, or app/dist/public.html with --public)
 // --public  the friends build (Eric's pick 6): no Lab, no thread names, no live mode
 //
-// Parts reused read-only from their owners: the research console's loader and board glyphs (dashboard/site, in the
-// data folder), the Strategy Atlas kit (meta/atlas-kit.js), the viewer kit (studio, or its copy in the data folder)
+// Parts reused read-only from their owners: the research console's loader and board glyphs (dashboard/site, in this
+// repo once committed, else in the data folder), the Strategy Atlas kit (meta/atlas-kit.js), the viewer kit (studio, or its copy in the data folder)
 // and the arena strategy renderer (arena/strategy, in the data folder).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,8 +43,8 @@ if (!fs.existsSync(root)) { console.error(`data folder not found: ${root} (pass 
 // the first file that exists, else null
 const first = (...ps) => ps.find(p => p && fs.existsSync(p)) || null;
 const parts = {
-    core: first(path.join(root, 'dashboard/site/core.cjs')),
-    glyph: first(path.join(root, 'dashboard/site/glyph.cjs')),
+    core: first(path.join(repo, 'dashboard/site/core.cjs'), path.join(root, 'dashboard/site/core.cjs')),
+    glyph: first(path.join(repo, 'dashboard/site/glyph.cjs'), path.join(root, 'dashboard/site/glyph.cjs')),
     atlasKit: first(path.join(repo, 'meta/atlas-kit.js'), path.join(root, 'meta/kit/atlas-kit.js')),
     viewerKit: first(path.join(repo, 'studio/dist-kit/swu-viewer-kit.js'), path.join(root, 'viewer-kit/swu-viewer-kit.js')),
     strategy: first(path.join(root, 'arena/strategy/strategy-diagram.js')),
@@ -125,6 +125,7 @@ if (fs.existsSync(t0dir)) for (const f of fs.readdirSync(t0dir).filter(f => /^ar
 const DATA = { audience: opts.public ? 'public' : 'project', model: opts.public ? model.publicModel(M) : M, bundle, picks, evals, lens, art, t0panels: opts.public ? t0panels.map(model.publicPanel) : t0panels, traces };
 const read = p => (p && fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
 const html = read(src('page.html'))
+    .replace('/*__ATLASCSS__*/', () => globalThis.AtlasKit.css()) // the Atlas colours, from the kit (the app's own tokens follow and win)
     .replace('/*__CSS__*/', () => read(src('style.css')))
     .replace('/*__KIT__*/', () => read(parts.viewerKit))
     .replace('/*__CORE__*/', () => read(parts.core))
