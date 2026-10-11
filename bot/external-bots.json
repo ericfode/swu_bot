@@ -25,5 +25,14 @@
     "node-search": { "cmd": "node", "args": ["bot/examples/search-bot.js", "node-search"], "lang": "js" },
     "jepa": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--name", "jepa"], "stderr": "ignore", "lang": "python" },
     "jepa-h1": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--name", "jepa-h1"], "stderr": "ignore", "lang": "python" },
-    "jepa-pure": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v2p.safetensors", "--name", "jepa-pure"], "stderr": "ignore", "lang": "python" }
+    "jepa-pure": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v2p.safetensors", "--name", "jepa-pure"], "stderr": "ignore", "lang": "python" },
+    "rust-random-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-random"], "lang": "rust" },
+    "rust-greedy-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-greedy"], "lang": "rust" },
+    "rust-greedy2-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-greedy2"], "lang": "rust" },
+    "rust-search-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-search"], "lang": "rust" },
+    "c-clock-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/c-clock"], "lang": "c" },
+    "py-random-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/py-random"], "lang": "python", "stderr": "ignore" },
+    "py-clock-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/py-clock"], "lang": "python" },
+    "node-random-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/node-random"], "lang": "js" },
+    "node-search-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/node-search"], "lang": "js" }
 }

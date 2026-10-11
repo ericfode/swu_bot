@@ -21,6 +21,10 @@ test('Rust proof measurements join by game and window even when output is reorde
 test('Missing results stay visible and duplicate or unrecognized identities fail', () => {
     const p = [{ game: 'a', i: 0, fromEnd: 1, proven: null }];
     assert.equal(compare(p, []).agreement.missing.length, 1);
+    const two = [{ game: 'a', i: 0, fromEnd: 4, proven: null }, { game: 'b', i: 0, fromEnd: 2, proven: null }];
+    const partial = compare(two, [{ game: 'a', i: 0, result: 'p1' }]).horizon.rust;
+    assert.deepEqual(partial.perGame, { a: 4, b: 0 }); // game b has no Rust rows but stays in the mean
+    assert.equal(partial.mean, 2);
     assert.throws(() => compare(p, [{ game: 'x', i: 0, result: 'p1' }]), /no input position/);
     assert.throws(() => compare(p, [{ game: 'a', i: 0 }, { game: 'a', i: 0 }]), /Duplicate/);
     assert.throws(() => compare([{ game: 'a', fromEnd: 1 }], []), /integer i/);

@@ -76,6 +76,8 @@ export class WasmGame {
     get winner() { this.assertAlive(); return this.handle.winner() ?? null; }
     get winners() {
         const winner = this.winner;
+        // Same shape as EnvGame.winners: a draw lists both players.
+        if (winner === 'draw') return [...this.names];
         return winner === 'p1' || winner === 'p2' ? [this.names[winner === 'p1' ? 0 : 1]] : [];
     }
 

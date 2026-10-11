@@ -125,3 +125,11 @@ test('invalid wrapper options release their owned Wasm handle and CLI flags cann
         assert.throws(() => parse(['input.jsonl', '--pool', '--catalogue', 'catalog.json']), /requires/);
     }
 });
+
+test('A drawn game lists both player names, like EnvGame.winners', async () => {
+    const { WasmGame } = await import('../adapter.mjs');
+    const draw = new WasmGame({ winner: () => 'draw' }, { ids: ['alice', 'bob'], names: ['Alice', 'Bob'] });
+    assert.deepEqual(draw.winners, ['Alice', 'Bob']);
+    const won = new WasmGame({ winner: () => 'p2' }, { ids: ['alice', 'bob'], names: ['Alice', 'Bob'] });
+    assert.deepEqual(won.winners, ['Bob']);
+});
