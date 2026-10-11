@@ -582,6 +582,9 @@ static const Act *choose_window(State *st, const Act *acts, int n) {
                 other = other ? other : a; /* exhausted unit: an action ability, not an attack */
                 continue;
             }
+            if (natk >= MAXU) {
+                continue;
+            }
             const Unit *t;
             atk[natk] = a;
             atkU[natk] = u;
@@ -589,7 +592,7 @@ static const Act *choose_window(State *st, const Act *acts, int n) {
             natk++;
             continue;
         }
-        if (!strcmp(a->zone, "hand") || !strcmp(a->zone, "resource") || !strcmp(a->zone, "discard")) {
+        if ((!strcmp(a->zone, "hand") || !strcmp(a->zone, "resource") || !strcmp(a->zone, "discard")) && nplay < MAXC) {
             const Card *c = lookup(a->cs, a->cn);
             Play *p = &plays[nplay++];
             p->a = a;
