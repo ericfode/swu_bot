@@ -8,7 +8,9 @@ each one plays. It reads only recorded results, so it needs no engine or card da
 | `analyze.js` | reads `results/*/index.json` and every replay; writes `meta.json` (`swu-meta/1`) |
 | `page.html` | the page template; `build-page.js` inlines `meta.json`, `theory.json` and the shared viewer kit |
 | `panel.js` | writes the research dashboard panel `dashboard/panels/meta-analyzer.json` |
-| `refresh.sh` | one refresh: analyze, build the page, write the panel (outputs in `/mnt/project-files/meta/`) |
+| `atlas-kit.js` | the shared picture language and words: spot icons (static and animated), spot names and rules, styles, families, terms. The page is built from it |
+| `export-kit.js`, `kit-README.md` | publish the kit for other pages to `/mnt/project-files/meta/kit/` (script, `kit.json`, SVG files, demo) |
+| `refresh.sh` | one refresh: analyze, build the page, export the kit, write the panel (outputs in `/mnt/project-files/meta/`) |
 | `shoot.js` | Playwright screenshots for review: desktop light/dark, phone, first screen, readable tiles |
 | `quiz.js`, `grade.js` | a quiz with an answer key built from the data, and a grader for reviewer answers |
 | `review-prompt.md`, `review-prompts.js` | reviewer instructions for three personas (glance, analyst, phone) |
