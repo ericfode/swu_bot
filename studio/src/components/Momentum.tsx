@@ -12,7 +12,7 @@ export const LANES: { key: LaneKey; label: string; hint: string }[] = [
     { key: 'llm', label: 'Evaluations', hint: 'Chance player 1 wins, from each viewpoint; the band spans their disagreement' },
     { key: 'base', label: 'Base HP', hint: 'HP left on each base' },
     { key: 'power', label: 'Board power', hint: 'Total power of each side\'s units' },
-    { key: 'edge', label: 'Omni score', hint: 'The omniscient bot\'s board score for player 1 (its total minus player 2\'s), squashed to -1..+1: above the middle player 1 is ahead' },
+    { key: 'edge', label: 'Omni score', hint: 'The omniscient bot\'s board score for player 1 in points (its total minus player 2\'s), scaled to this game\'s biggest lead: above the middle player 1 is ahead' },
     { key: 'cards', label: 'Hand', hint: 'Cards in hand' }
 ];
 
@@ -88,6 +88,8 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
     const hasEvals = !!evals?.size;
     const show = (k: LaneKey) => lanes.includes(k);
     const labels = evalLabels(bots);
+    // the omni score in points, scaled to this game's biggest lead (at least 25), so a lopsided game doesn't pin the line to the edge
+    const scale = useMemo(() => Math.max(25, ...data.map((m) => Math.abs(m.score))), [data]);
     const rows = useMemo(() => {
         // evals exist at checkpoints only: the lines step between them, and the tooltip carries the latest one forward
         let held: (EvalPoint & { at: number }) | null = null;
@@ -99,13 +101,14 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
             const vs = e ? [e.p1_subjective, e.p2_subjective, e.objective_state, e.objective_hindsight].filter((v): v is number => v != null) : [];
             return {
                 ...m,
-                edgeUp: Math.max(0, m.edge),
-                edgeDown: Math.min(0, m.edge),
+                sn: m.score / scale,
+                snUp: Math.max(0, m.score / scale),
+                snDown: Math.min(0, m.score / scale),
                 ...(e ? { p1_subjective: e.p1_subjective, p2_subjective: e.p2_subjective, objective_state: e.objective_state, objective_hindsight: e.objective_hindsight, band: vs.length ? [Math.min(...vs), Math.max(...vs)] : undefined } : {}),
                 held
             };
         });
-    }, [data, evals]);
+    }, [data, evals, scale]);
     const bands = useMemo(() => rounds.map((r, i) => ({ ...r, end: rounds[i + 1]?.step ?? last })), [rounds, last]);
     // round labels: drop ones that would sit closer than 14px to the previous one
     const roundLabels = useMemo(() => {
@@ -152,9 +155,9 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
                         {centred && <ReferenceLine yAxisId="e" y={0} stroke="#56658a" strokeDasharray="2 4" />}
                         {centred && <ReferenceLine yAxisId="e" y={0.5} stroke="#56658a" strokeOpacity={0.45} strokeDasharray="1 5" />}
                         {centred && <ReferenceLine yAxisId="e" y={-0.5} stroke="#56658a" strokeOpacity={0.45} strokeDasharray="1 5" />}
-                        {show('edge') && <Area yAxisId="e" type="linear" dataKey="edgeUp" baseValue={0} stroke="none" fill={P1} fillOpacity={0.22} isAnimationActive={false} dot={false} legendType="none" tooltipType="none" />}
-                        {show('edge') && <Area yAxisId="e" type="linear" dataKey="edgeDown" baseValue={0} stroke="none" fill={P2} fillOpacity={0.22} isAnimationActive={false} dot={false} legendType="none" tooltipType="none" />}
-                        {show('edge') && <Line yAxisId="e" type="linear" dataKey="edge" name="Omni score" stroke={EDGE} strokeWidth={1.8} dot={false} isAnimationActive={false} />}
+                        {show('edge') && <Area yAxisId="e" type="linear" dataKey="snUp" baseValue={0} stroke="none" fill={P1} fillOpacity={0.22} isAnimationActive={false} dot={false} legendType="none" tooltipType="none" />}
+                        {show('edge') && <Area yAxisId="e" type="linear" dataKey="snDown" baseValue={0} stroke="none" fill={P2} fillOpacity={0.22} isAnimationActive={false} dot={false} legendType="none" tooltipType="none" />}
+                        {show('edge') && <Line yAxisId="e" type="linear" dataKey="sn" name="Omni score" stroke={EDGE} strokeWidth={1.8} dot={false} isAnimationActive={false} />}
                         {show('power') && <Line yAxisId="v" type="stepAfter" dataKey="power1" name={`${bots.p1} power`} stroke={P1} strokeDasharray="4 3" strokeWidth={1.5} dot={false} isAnimationActive={false} />}
                         {show('power') && <Line yAxisId="v" type="stepAfter" dataKey="power2" name={`${bots.p2} power`} stroke={P2} strokeDasharray="4 3" strokeWidth={1.5} dot={false} isAnimationActive={false} />}
                         {show('cards') && <Line yAxisId="v" type="stepAfter" dataKey="hand1" name={`${bots.p1} hand`} stroke={P1} strokeOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />}
@@ -166,8 +169,8 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
                         ))}
                         <ReferenceLine yAxisId="v" x={step} stroke={PLAYHEAD} strokeOpacity={0.85} strokeWidth={1.5} />
                         {show('edge') && cur && (
-                            <ReferenceDot yAxisId="e" x={step} y={cur.edge} r={3.5} fill={EDGE} stroke="#060a13" strokeWidth={1.5}
-                                label={{ value: `${cur.edge >= 0 ? '+' : '−'}${Math.abs(cur.edge).toFixed(2)}`, position: step > last * 0.9 ? 'left' : 'right', fill: EDGE, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }} />
+                            <ReferenceDot yAxisId="e" x={step} y={cur.sn} r={3.5} fill={EDGE} stroke="#060a13" strokeWidth={1.5}
+                                label={{ value: `${cur.score >= 0 ? '+' : '−'}${Math.abs(cur.score).toFixed(1)}`, position: step > last * 0.9 ? 'left' : 'right', fill: EDGE, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }} />
                         )}
                         <defs>
                             <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={P1} stopOpacity={0.4} /><stop offset="1" stopColor={P1} stopOpacity={0} /></linearGradient>
@@ -183,7 +186,7 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
                                 <div className="rounded-[10px] border border-line bg-panel/95 px-3 py-2 text-[12px] leading-relaxed shadow-xl">
                                     <div className="text-dim">step {stepN(i)} · round {r.round}</div>
                                     <div className="num"><span className="text-p1">{r.base1}</span> <span className="text-faint">vs</span> <span className="text-p2">{r.base2}</span> <span className="text-faint">base HP</span></div>
-                                    <div className="num"><span style={{ color: EDGE }}>{r.edge >= 0 ? '+' : '−'}{Math.abs(r.edge).toFixed(2)}</span> <span className="text-faint">Omni score</span></div>
+                                    <div className="num"><span style={{ color: EDGE }}>{r.score >= 0 ? '+' : '−'}{Math.abs(r.score).toFixed(1)}</span> <span className="text-faint">Omni score (points)</span></div>
                                     {hasEvals && r.held && (
                                         <div className="mt-1 border-t border-line pt-1">
                                             <div className="text-faint text-[11px]">chance {bots.p1} wins{r.held.at !== i ? `, as of step ${stepN(r.held.at)}` : ''}</div>
@@ -202,8 +205,8 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
                 </ResponsiveContainer>
                 {centred && (
                     <div className="pointer-events-none absolute inset-y-0 left-1 flex flex-col justify-between py-2 text-[10px] text-faint">
-                        <span>▲ {bots.p1} ahead</span>
-                        <span>▼ {bots.p2} ahead</span>
+                        <span>▲ {bots.p1} ahead{show('edge') && <span className="num"> · top +{scale.toFixed(0)}</span>}</span>
+                        <span>▼ {bots.p2} ahead{show('edge') && <span className="num"> · bottom −{scale.toFixed(0)}</span>}</span>
                     </div>
                 )}
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-4">

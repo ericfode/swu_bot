@@ -53,6 +53,8 @@ export interface Metrics {
     res2: number;
     /** p1's edge in the omni bot's board score, squashed to -1..1 (see edgeTerms). */
     edge: number;
+    /** the same edge in points (p1 total - p2 total), unsquashed */
+    score: number;
 }
 
 export interface EdgeTerm {
@@ -117,7 +119,7 @@ export function metrics(game: Game, lensSteps?: Map<number, LensStep>): Metrics[
             hand2: p2.hand.length,
             res1: p1.res.total,
             res2: p2.res.total,
-            edge: edgeTerms(st.state, lensSteps?.get(i) ?? null).edge
+            ...(({ edge, sum: score }) => ({ edge, score }))(edgeTerms(st.state, lensSteps?.get(i) ?? null))
         };
     });
 }

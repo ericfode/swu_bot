@@ -31,7 +31,7 @@ function Bar({ value, prev }: { value: number; prev: number | null }) {
 
 /**
  * Why the board score is what it is, in the omniscient bot's own terms: what each part of the board is worth to each
- * player, the rule for each row, the total, and where that lands on the timeline's curve. Bars keep one scale (15 points
+ * player, the rule for each row, the total, and the chance to win it implies. Bars keep one scale (15 points
  * to the end) and the dashed outline is the previous step, so a change shows as movement.
  * `lens` is the game's lens step for this board (exact values); without it the score is estimated without card cost.
  */
@@ -52,7 +52,7 @@ export function EdgeBreakdown({ state, prev, bots, lens = null, prevLens = null,
         <div className="@container flex flex-col gap-2">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="eyebrow">Omni board score</span>
-                <span className="num text-lg font-semibold" style={{ color: 'var(--color-edge)' }} title="The same number as the timeline's Omni score curve and the board's centre line">{sgn(sum)}</span>
+                <span className="num text-lg font-semibold" style={{ color: 'var(--color-edge)' }} title="The same number as the timeline's Omni score line (in points) and the board's centre line">{sgn(sum)}</span>
                 <span className="text-dim text-[13px]">{lead ? <>{name(lead)} ahead by {Math.abs(sum).toFixed(1)} points</> : 'even board'}</span>
                 {previewN != null && <span className="chip !text-fg !border-fg/40 ml-auto">previewing step {previewN}</span>}
             </div>
@@ -89,13 +89,13 @@ export function EdgeBreakdown({ state, prev, bots, lens = null, prevLens = null,
                 <span className="num text-right pt-1.5 border-t border-line font-semibold" style={{ color: 'var(--color-edge)' }}>{sgn(sum)}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-dim">
-                <span>On the Omni score curve: tanh({sgn(sum)} / {LENS_SCALE}) = <b className="num" style={{ color: 'var(--color-edge)' }}>{sgn(edge, 2)}</b></span>
+                <span title="The estimate action swings use when a game has no evaluations">As a chance {name('p1')} wins: (1 + tanh({sgn(sum)} / {LENS_SCALE})) / 2 = <b className="num" style={{ color: 'var(--color-edge)' }}>{Math.round(50 + edge * 50)}%</b></span>
                 <span className="relative h-2 w-40 rounded-full bg-line shrink-0" aria-hidden="true">
                     <span className="absolute left-1/2 -top-0.5 -bottom-0.5 w-px bg-line" />
                     <motion.span className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-bg" initial={false} transition={spring}
                         animate={{ left: `${50 + edge * 50}%` }} style={{ background: 'var(--color-edge)' }} />
-                    <span className="absolute -bottom-3.5 left-0 text-[9px] text-faint num">−1</span>
-                    <span className="absolute -bottom-3.5 right-0 text-[9px] text-faint num">+1</span>
+                    <span className="absolute -bottom-3.5 left-0 text-[9px] text-faint num">0%</span>
+                    <span className="absolute -bottom-3.5 right-0 text-[9px] text-faint num">100%</span>
                 </span>
             </div>
             {moved && (
