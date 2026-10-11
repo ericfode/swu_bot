@@ -42,6 +42,11 @@ setting() { node -e "const j=require('$LAUNCH'); process.stdout.write(String(j[p
 
 engine() {
     [ -e "$SRC/forceteki/package.json" ] || git -C "$SRC" submodule update --init
+    # an edited engine would not match the revision its build records (and the engine is read-only here): refuse it
+    if [ -n "$(git -C "$SRC/forceteki" status --porcelain --untracked-files=no)" ]; then
+        say "$SRC/forceteki has uncommitted changes; the arena runs only a committed engine revision"
+        exit 1
+    fi
     # the build records the forceteki revision it was made from; another one (or none recorded) is built again
     local rev stamp="$SRC/forceteki/build/.built-from"
     rev=$(git -C "$SRC/forceteki" rev-parse HEAD)
