@@ -11,6 +11,10 @@ Registered in `bot/external-bots.json` as:
   four candidates (needs `curl` and `TYPESAFE_API_KEY`; on any failure the bot plays its own pick).
 - `bend-jev-ties`: Jev only breaks near-ties: it chooses among the moves within 15 (1.5 base damage) of the best.
 
+Measured on 60 paired games vs `rush`: `bend-jev` won 34 where `bend` won 40; `bend-jev-ties` won 44, the same as
+`bend`. So `bend` is the default and the Jev modes are experiments. Round robin of 10 games per pairing (seed 501):
+`bend` 29-11, `bend-jev-ties` 27-13, `rust-greedy2` 26-14, `rush` 15-25, `tempo` 3-37.
+
 ```bash
 cd forceteki && npm run get-cards && cd ..             # card data, once
 BEND2=~/bend/bend2/main.ts bot/bend/build.sh           # card tables + native binary bot/bend/swu-bend
