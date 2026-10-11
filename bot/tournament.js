@@ -9,14 +9,25 @@ const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
 const { createRandomBot } = require('./players/random');
 const { HeuristicBot } = require('./players/heuristic');
+const { ExternalBot } = require('./players/external');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
+// out-of-process bots (spec/stdio-protocol.md): name -> {cmd, args, ...}, from $SWU_EXTERNAL_BOTS or bot/external-bots.json
+function loadExternalBots() {
+    const file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, 'external-bots.json');
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+}
+const externalBots = loadExternalBots();
+
 // bot registry: every name resolves to a factory so heuristic/search bots can be added here later
 function makeBot(name) {
+    if (externalBots[name]) {
+        return new ExternalBot(name, externalBots[name]);
+    }
     if (/^heuristic/.test(name)) {
         const d = /-d(\d)/.exec(name);
         return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
