@@ -59,7 +59,9 @@ pub struct Weights {
 
 impl Default for Weights {
     fn default() -> Self {
-        Weights { base: 1.35, unit: 1.0, exhausted: 0.85, hand: 1.8, resource: 1.4, initiative: 2.5 }
+        // unit 3: a unit keeps dealing damage every round, so it is worth more than the same base HP now
+        // (vs greedy2 over 96 games: unit 1 57%, 2 67% (48), 3 71%, 4 65%, 5 67% (48))
+        Weights { base: 1.35, unit: 3.0, exhausted: 0.85, hand: 1.8, resource: 1.4, initiative: 2.5 }
     }
 }
 
