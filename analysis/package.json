@@ -1,0 +1,13 @@
+{
+  "name": "swu-bot-analysis",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LLM turn-by-turn position analysis of recorded swu_bot games",
+  "scripts": {
+    "test": "node test/mock-llm.test.js && node test/units.test.js",
+    "fixture": "node fixtures/sim.js --seed 23 --out fixtures/fixture-game.jsonl"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0"
+  }
+}

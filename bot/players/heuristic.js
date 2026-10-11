@@ -420,4 +420,4 @@ class HeuristicBot {
     }
 }
 
-module.exports = { HeuristicBot, evaluate, defaultChoose, arenaUnits, unitValue, keepScore, targetScore, W, SIDE };
+module.exports = { HeuristicBot, evaluate, defaultChoose, arenaUnits, fingerprint, unitValue, keepScore, targetScore, W, SIDE };
