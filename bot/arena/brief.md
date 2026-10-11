@@ -22,7 +22,10 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 - Your bot is the folder `{{agentDir}}`. Edit only that folder. Read anything except the referee's seed secret
   (`~/.arena-secret`); never edit the repo (`{{repo}}`), other competitors' folders, `versions/` or `forceteki/`.
 - `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }`; it requires only files in
-  your folder and Node built-ins. Set `needsUndo = true` on the bot if you use rollback search.
+  your folder and Node built-ins, and never loads code from outside the folder (a stdio program likewise). Set
+  `needsUndo = true` on the bot if you use rollback search.
+- `game` is the live engine: lookahead may change it only through rollback search that restores it before `choose()`
+  returns. Setting game state directly is cheating. These are rules, not a sandbox; breaking them gets you removed.
 - **Hidden information:** the decklists are public, so you may use the multiset of all cards each player owns. You may
   not read which hidden zone an opponent card is in, the cards in their hand, or either deck's order. Lookahead must
   reseed the engine RNG from your own stream (as `heuristic.js` does) and redeal hidden cards in sampled worlds.

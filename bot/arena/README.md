@@ -18,7 +18,12 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
   agents' folders, `versions/`, the repo's `bot/` code or `forceteki/`.
 - **Self-contained bot.** `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }`
   (interface: `/mnt/project-files/spec/bot-interface.md`), and requires only files in your own folder and Node built-ins.
+  It never loads or runs code from outside that folder, at load time or later. A stdio program and its arguments run
+  only files from the folder too (no `-e` / `-c` code that reaches outside it). Submitting copies the folder into a
+  frozen version, so later edits to the folder must not change what an old version plays.
   `choose` returns one element of `actions`. Set `needsUndo = true` if you use `game.mark()` / rollback search.
+- **Do not change the game.** `game` is the live engine. Lookahead may play moves on it only through rollback search
+  that puts it back exactly before `choose()` returns. Setting state directly (damage, zones, winners, ...) is cheating.
 - **No hidden information.** Decklists are public: you may use the multiset of all cards each player owns. Do not read
   which hidden zone an opponent card is in, their hand's card identities or either deck's order; counts are fine.
   Lookahead that runs the engine must reseed the engine RNG from your own stream (as `heuristic.js` does).
@@ -36,6 +41,9 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 - **Secret seeds.** Each round's game seeds come from a secret the referee keeps (`~/.arena-secret`, or
   `ARENA_SECRET_FILE`), so they cannot be known in advance. Neither you nor your bot may read that file. Bots run with
   the referee's file rights, so this is a rule, not a sandbox (a hosted arena for strangers needs one).
+- **Rules, not a sandbox.** Bots run in the referee's process and with its file rights. The guard and the watchdog
+  stop the honest failures (slow, stuck, crashing, illegal moves); the rules above cover the rest. Breaking them gets
+  a competitor removed. A hosted arena open to strangers needs real isolation first.
 
 ## Tools (run from the swu_bot repo root, after `bash bot/arena/setup.sh` once per container)
 
