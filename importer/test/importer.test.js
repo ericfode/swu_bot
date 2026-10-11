@@ -166,6 +166,46 @@ test('merge pairs frames across dropped and repeated frames', () => {
     assert.deepStrictEqual(align(['a', 'b', 'a', 'c'], ['a', 'b', 'a', 'c']), [0, 1, 2, 3]);
 });
 
+test('KaraBuddy deck lists land in the header by seat, without names', () => {
+    const g = game();
+    const kb = toKaraBuddy(g);
+    kb.decks = {
+        u1: { username: 'alice', name: 'my secret deck', leader: { id: 'SOR_005', count: 1 }, base: { id: 'SOR_023', count: 1 }, deck: [{ id: 'SOR_042', count: 3, internalName: 'wampa' }], sideboard: [] },
+        u2: { username: 'bob', name: null, leader: { id: 'SOR_010', count: 1 }, base: { id: 'SOR_028', count: 1 }, deck: null, sideboard: null }
+    };
+    const cap = readText(JSON.stringify(kb));
+    const h = convertFrames(cap.frames, { decks: cap.meta.decks }).events[0];
+    assert.deepStrictEqual(h.source.decklists, {
+        p1: { leader: 'SOR_005', base: 'SOR_023', cards: [{ id: 'SOR_042', count: 3 }], sideboard: [] },
+        p2: { leader: 'SOR_010', base: 'SOR_028', cards: null, sideboard: null }
+    });
+    assert.ok(!/alice|bob|secret/.test(JSON.stringify(h)));
+});
+
+test('KaraBuddy message keys keep a log line pushed twice in a row', () => {
+    const g = game();
+    g[3].newMessages = structuredClone(g[2].newMessages);
+    const kb = toKaraBuddy(g);
+    let total = 0;
+    kb.events.forEach((e, i) => {
+        total += g[i].newMessages.length;
+        e.key = total;
+    });
+    const lines = (r) => r.items.flatMap((x) => x.lines.map((l) => l.text));
+    const withKey = lines(readFrames(readText(JSON.stringify(kb)).frames));
+    kb.events.forEach((e) => delete e.key);
+    const without = lines(readFrames(readText(JSON.stringify(kb)).frames));
+    assert.strictEqual(withKey.length, without.length + 1);
+});
+
+test("KaraBuddy's REPLAYHIDDEN placeholder cards count as hidden", () => {
+    const g = game();
+    g[0].players.u2.cardPiles.hand = [0, 1].map((i) => ({ controllerId: 'u2', zone: 'hand', uuid: `replay-hidden-u2-${i}`, id: 'REPLAYHIDDEN_0', setId: { set: 'REPLAYHIDDEN', number: 0 }, name: '' }));
+    const r = readFrames(frames(g));
+    assert.strictEqual(r.pov, 'p1');
+    assert.deepStrictEqual(r.items[0].state.players.p2.hand, [{ n: 'Hidden card', s: null, hid: 1 }, { n: 'Hidden card', s: null, hid: 1 }]);
+});
+
 test('compact snapshot of a deployed leader', () => {
     const s = game()[4];
     s.players.u1.leaders[0] = { ...s.players.u1.leaders[0], zone: 'groundArena', type: 'leaderUnit', power: 6, hp: 7, damage: 0, exhausted: true };

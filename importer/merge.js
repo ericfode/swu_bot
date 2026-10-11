@@ -12,10 +12,9 @@
  * Frames of A with no partner in B (a dropped frame, a reconnect) keep B's seat hidden; the result counts them.
  */
 
-const { leadersOf } = require('./karabast');
+const { leadersOf, isHidden: isHiddenCard } = require('./karabast');
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const isHiddenCard = (c) => !c || (c.name == null && c.setId == null && c.id == null);
 // how far ahead in B to look for a frame's partner; keeps an undo that returns to an old board from pairing with it
 const WINDOW = 200;
 

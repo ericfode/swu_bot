@@ -20,8 +20,11 @@ function setCode(setId) {
     return setId && setId.set && setId.number != null ? `${setId.set}_${String(setId.number).padStart(3, '0')}` : null;
 }
 
-/** A card summary the viewer could not see (opponent hand, face-down resource): no name, no set, no id. */
-const isHidden = (c) => !c || (c.name == null && c.setId == null && c.id == null);
+/**
+ * A card summary the viewer could not see (opponent hand, face-down resource): no name, no set, no id. KaraBuddy's
+ * player can swap these for a 'REPLAYHIDDEN' placeholder card, which counts as hidden too.
+ */
+const isHidden = (c) => !c || (c.name == null && c.setId == null && c.id == null) || c.setId?.set === 'REPLAYHIDDEN' || /^REPLAYHIDDEN/.test(c.id ?? '');
 const cardRef = (c) => (isHidden(c) ? { ...HIDDEN } : { n: c.name, s: setCode(c.setId) });
 
 // forceteki CardType values; older Karabast builds used other spellings, so match loosely
@@ -354,6 +357,30 @@ function readFrames(frames, opts = {}) {
  * @param {number} [opts.seed] header.seed (default 0: a human game has no replayable seed)
  * @returns {{events: object[], report: object}}
  */
+/**
+ * Deck lists from the lobby, keyed by player id (KaraBuddy keeps them: the recorder's full list, the opponent's
+ * leader and base only), as { <seat>: { leader, secondLeader?, base, cards, sideboard } } with set codes and counts.
+ * Deck names and usernames are dropped.
+ */
+function decklistsBySeat(decks, seatIds) {
+    if (!isObj(decks)) {
+        return null;
+    }
+    const entry = (e) => (isObj(e) && e.id ? e.id : null);
+    const list = (l) => (Array.isArray(l) ? l.filter((e) => isObj(e) && e.id).map((e) => ({ id: e.id, count: e.count ?? 1 })) : null);
+    const out = {};
+    for (const [seat, id] of Object.entries(seatIds)) {
+        const d = decks[id];
+        if (isObj(d)) {
+            out[seat] = {
+                leader: entry(d.leader), ...(d.secondLeader ? { secondLeader: entry(d.secondLeader) } : {}), base: entry(d.base),
+                cards: list(d.deck), sideboard: list(d.sideboard)
+            };
+        }
+    }
+    return Object.keys(out).length ? out : null;
+}
+
 function convertFrames(frames, opts = {}) {
     const r = readFrames(frames, opts);
     const { seatIds, items, pov } = r;
@@ -439,6 +466,7 @@ function convertFrames(frames, opts = {}) {
     report.steps = n;
 
     const names = opts.names ?? ['p1', 'p2'];
+    const decklists = decklistsBySeat(opts.decks, seatIds);
     events.unshift({
         t: 'header', v: 1, seed: opts.seed ?? 0, engine: opts.engine ?? null,
         players: ['p1', 'p2'].map((seat, k) => ({ id: seat, bot: names[k] ?? seat, deck: deckName(seat), human: true })),
@@ -447,7 +475,8 @@ function convertFrames(frames, opts = {}) {
             format: 'karabast-gamestate',
             pov,
             hiddenHands: pov === 'both' ? [] : pov === 'p1' ? ['p2'] : pov === 'p2' ? ['p1'] : ['p1', 'p2'],
-            synthetic: ['seed', 'prompt', 'title', 'action', 'legal']
+            synthetic: ['seed', 'prompt', 'title', 'action', 'legal'],
+            ...(decklists ? { decklists } : {})
         }
     });
     events.push({
@@ -460,4 +489,4 @@ function convertFrames(frames, opts = {}) {
     return { events, report };
 }
 
-module.exports = { convertFrames, readFrames, compactSnapshot, assignSeats, parseMessage, messageText, decisionsFromLine, setCode, leadersOf, HIDDEN };
+module.exports = { convertFrames, readFrames, compactSnapshot, decklistsBySeat, isHidden, assignSeats, parseMessage, messageText, decisionsFromLine, setCode, leadersOf, HIDDEN };

@@ -50,7 +50,14 @@ function fromFullPatch(list, pick = (e) => e) {
         } else {
             continue;
         }
-        frames.push({ t: e.t ?? null, state: structuredClone(cur) });
+        const state = structuredClone(cur);
+        // KaraBuddy strips totalMessages/messageOffset from the state but keeps totalMessages as the event's `key`.
+        // Restoring them lets readFrames tell a repeated log line from an unchanged (patched-over) newMessages.
+        if (Number.isFinite(e.key) && typeof state.totalMessages !== 'number') {
+            state.totalMessages = e.key;
+            state.messageOffset = e.key - (Array.isArray(state.newMessages) ? state.newMessages.length : 0);
+        }
+        frames.push({ t: e.t ?? null, state });
     }
     return frames;
 }
@@ -201,7 +208,8 @@ function readKaraBuddy(file) {
         meta: {
             reader: file.version ? `karabuddy-v${file.version}` : 'karabuddy-events',
             url: file.url ?? null, startedAt: file.startedAt ?? null, durationMs: file.durationMs ?? null,
-            reason: file.reason ?? null, note: file.note ?? null
+            reason: file.reason ?? null, note: file.note ?? null,
+            decks: isObj(file.decks) ? file.decks : null
         }
     };
 }

@@ -60,7 +60,7 @@ function importFile(file, { names, source }) {
     const cap = readText(fs.readFileSync(file, 'utf8'));
     const seats = cap.meta.capture?.seats;
     const { events, report } = convertFrames(cap.frames, {
-        seats, names: names ?? undefined,
+        seats, names: names ?? undefined, decks: cap.meta.decks,
         source: { kind: source ?? cap.meta.reader, file: path.basename(file), ...(cap.meta.url ? { url: cap.meta.url } : {}), ...(cap.meta.startedAt ? { startedAt: cap.meta.startedAt } : {}) }
     });
     return { id: gameId(file), events, report, reader: cap.meta.reader };
@@ -71,8 +71,15 @@ function importPair(fileA, fileB, { names, source }) {
     const a = readText(fs.readFileSync(fileA, 'utf8'));
     const b = readText(fs.readFileSync(fileB, 'utf8'));
     const m = mergeCaptures(a.frames, b.frames);
+    // each player's file has their own full list; prefer it over the other file's leader-and-base entry
+    const decks = { ...(b.meta.decks ?? {}), ...(a.meta.decks ?? {}) };
+    for (const [id, d] of Object.entries(b.meta.decks ?? {})) {
+        if (Array.isArray(d?.deck)) {
+            decks[id] = d;
+        }
+    }
     const { events, report } = convertFrames(m.frames, {
-        seats: a.meta.capture?.seats, names: names ?? undefined,
+        seats: a.meta.capture?.seats, names: names ?? undefined, decks,
         source: {
             kind: source ?? `${a.meta.reader}+${b.meta.reader}`, file: path.basename(fileA), pairedWith: path.basename(fileB),
             merge: { frames: m.frames.length, matched: m.matched, unmatched: m.unmatched }
