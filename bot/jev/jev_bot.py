@@ -551,6 +551,29 @@ def probs_of(ans, n):
     return [float(ans["probabilities"].get(f"a{i}", 0.0)) for i in range(n)]
 
 
+MAX_CHOICES = 250  # the API allows at most 255 choices per question
+
+
+def ask_action(panel, state, texts, extra=None):
+    """Probabilities over all `texts`, plus the raw response. Over MAX_CHOICES (e.g. a 'name a card' list), Jev first
+    picks inside each chunk, then among the chunk winners; p(i) = p(i in its chunk) * p(its chunk's winner)."""
+    if len(texts) <= MAX_CHOICES:
+        res, _ = call_jev(panel, state, {"action": action_question(texts), **(extra or {})})
+        return probs_of(res["answers"]["action"], len(texts)), res
+    chunks = [list(range(j, min(j + MAX_CHOICES, len(texts)))) for j in range(0, len(texts), MAX_CHOICES)]
+    qs = {f"action{c}": action_question([texts[i] for i in ids]) for c, ids in enumerate(chunks)}
+    res, _ = call_jev(panel, state, {**qs, **(extra or {})})
+    inner, best = [], []
+    for c, ids in enumerate(chunks):
+        p = probs_of(res["answers"][f"action{c}"], len(ids))
+        inner.append(p)
+        best.append(ids[max(range(len(ids)), key=lambda j: p[j])])
+    final, _ = call_jev(panel, state, {"action": action_question([texts[i] for i in best])})
+    pf = probs_of(final["answers"]["action"], len(best))
+    probs = [inner[c][j] * pf[c] for c, ids in enumerate(chunks) for j in range(len(ids))]
+    return probs, res
+
+
 def decide(msg, rng, guard, panel, logf, io=None):
     """io: (send, recv) for imagine requests, or None when lookahead is off."""
     actions = msg["actions"]
@@ -566,8 +589,7 @@ def decide(msg, rng, guard, panel, logf, io=None):
     win = None
     imagined, looked = [], set()
     try:
-        res, _ = call_jev(panel, state, {"action": action_question(texts), "win": WIN_QUESTION})
-        probs = probs_of(res["answers"]["action"], len(allowed))
+        probs, res = ask_action(panel, state, texts, {"win": WIN_QUESTION})
         w = res["answers"].get("win")
         if w and w.get("score") is not None:
             win = float(w["score"]) / 4.0
@@ -602,8 +624,7 @@ def decide(msg, rng, guard, panel, logf, io=None):
             panel.stats["imagined"] += 1
             # re-ask the action with what it has imagined so far
             state["imagined"] = imagined
-            res, _ = call_jev(panel, state, {"action": action_question(texts)})
-            probs = probs_of(res["answers"]["action"], len(allowed))
+            probs, _ = ask_action(panel, state, texts)
         k = max(range(len(allowed)), key=lambda i: probs[i])
         ms = (time.time() - t0) * 1000
         fallback = False
