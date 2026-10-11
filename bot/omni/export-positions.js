@@ -86,7 +86,9 @@ async function replayWith(env, g, bots) {
             }
             out.push(w);
         }
-        const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions, rng });
+        // reprove() rolls the engine back, which renews prompt UUIDs: give the bot a fresh list.
+        const fresh = w?.reproved ? eg.legalActions(pid) : actions;
+        const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions: fresh, rng });
         if (w) {
             w.played = action.label;
         }
