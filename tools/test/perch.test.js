@@ -196,7 +196,7 @@ test('the shared snapshot holds the in-scope source files and nothing of perch\'
   snapshotShared(scope, dir, closures);
   assert.deepStrictEqual(lsTree(dir), ['arena/strategy/diagram.js', 'bend/score.js', 'dashboard/build.mjs']);
   fs.rmSync(path.join(root, 'arena/strategy/diagram.js'));
-  write('closed.jsonl', '{"id":"x"}\n');
+  write('closed.jsonl', '{"id":"x"}\n{"id":"y","reas\n'); // the second line torn, as a synced mount can leave it
   snapshotShared(scope, dir, closures);
   assert.deepStrictEqual(lsTree(dir), ['bend/score.js', 'dashboard/build.mjs']);
   assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/closed.jsonl'), 'utf8'), '{"id":"x"}\n');
@@ -345,6 +345,11 @@ test('closed issues are added to the shared list, never copied over it', (t) => 
   fs.appendFileSync(local, 'c\n');
   appendNew(local, before, shared);
   assert.strictEqual(fs.readFileSync(shared, 'utf8'), 'a\nb\nc\n');
+  fs.appendFileSync(shared, '{"id":"torn'); // a torn append leaves no newline
+  const again = fs.readFileSync(local);
+  fs.appendFileSync(local, 'd\n');
+  appendNew(local, again, shared);
+  assert.strictEqual(fs.readFileSync(shared, 'utf8'), 'a\nb\nc\n{"id":"torn\nd\n');
 });
 
 test('the lock admits one holder and is taken over from a dead one', (t) => {

@@ -1,8 +1,9 @@
 """Measure real evaluators against the Lean theory (theory/SwuTheory).
 
 Input: JSONL from `node bot/td-measure.js` (one game per line: every action window with the position's
-features `s` and the features of each 1-ply child `kids`), plus the omni solver's proven endgames
-(/mnt/project-files/omni/solve-hh/heuristic-vs-heuristic-<seed>.json, matched by window index and step).
+features `s` and the features of each 1-ply child `kids`), plus the omni solver's proven endgames: either
+/mnt/project-files/omni/positions-hh.jsonl (preferred: relabelled by the fixed prover, see omni/POSITIONS.md) or
+the raw solve runs in /mnt/project-files/omni/solve-hh/ (the first prover's labels, 4 of which are not proofs).
 
 Evaluators, all turned into player 1 win probabilities:
   legacy   the heuristic score on fork main (base danger term ADDED, the known sign bug), calibrated
@@ -10,7 +11,7 @@ Evaluators, all turned into player 1 win probabilities:
   mc       logistic regression on features, fitted to game results (outcome regression)
   td       the same model, fitted to minimise the TD loss on recorded windows (Fitness.lean `tdLoss`)
 
-Usage: python3 theory/measure/td_residual.py <td dir> <solve dir> <out.json> [folds=5]
+Usage: python3 theory/measure/td_residual.py <td dir> <positions.jsonl | solve dir> <out.json> [folds=5]
 """
 import json
 import math
@@ -176,7 +177,29 @@ def fit_td(games, init, rounds=40, mix=0.0):
     return (w, mu, sd), hist
 
 
+_POSITIONS = {}
+
+
+def position_labels(path, g):
+    """Proven labels from omni's positions file, keyed by window index; used only if every window lines up."""
+    if path not in _POSITIONS:
+        games = {}
+        for line in open(path):
+            r = json.loads(line)
+            seq, labels = games.setdefault(r['seed'], [{}, {}])
+            seq[r['i']] = (r['toMove'], r['round'])
+            if r.get('proven') in ('p1', 'p2'):
+                labels[r['i']] = 1.0 if r['proven'] == 'p1' else 0.0
+        _POSITIONS[path] = games
+    seq, labels = _POSITIONS[path].get(g['seed'], ({}, {}))
+    # same game iff every window has the same side to move and round (a different bot can give equal counts)
+    mine = {i: (w['actor'], w['round']) for i, w in enumerate(g['windows'])}
+    return labels if seq == mine else {}
+
+
 def solved_labels(solve_dir, g):
+    if solve_dir.endswith('.jsonl'):
+        return position_labels(solve_dir, g)
     path = os.path.join(solve_dir, f"heuristic-vs-heuristic-{g['seed']}.json")
     if not os.path.exists(path):
         return {}
