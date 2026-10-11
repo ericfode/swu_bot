@@ -237,9 +237,10 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
         try {
             const roster = home.roster();
             const t = home.readJson(path.join(home.HOME, 'tournament.json'), null);
+            const standings = home.readJson(path.join(home.HOME, 'standings.json'), null);
             const put = (id, doc) => (doc == null ? null : putChanged(docs, 'arena', id, doc));
             await put('status', await result('status'));
-            await put('standings', home.readJson(path.join(home.HOME, 'standings.json'), null));
+            await put('standings', standings);
             await put('tournament', t);
             await put('roster', { ...roster, agents: roster.agents.map(({ tokenHash, ...a }) => a) });
             const reports = async (dir, prefix) => {
@@ -257,6 +258,15 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
                 await put(`versions-${a.name}`, list.map((s, i) => ({ v: vs[i], ...s })));
                 await put(`panel-${a.name}`, await result('panel', { name: a.name }));
             }
+            // the same panels, leaderboard and experiment where the dashboard's loader reads them (dash.js writes them to
+            // dashboard/panels and dashboard/experiments in the project)
+            const boards = await result('panels');
+            for (const p of [...(boards?.panels ?? []), boards?.leaderboard].filter((x) => typeof x?.id === 'string')) {
+                await putChanged(docs, 'panels', p.id, p);
+            }
+            if (boards?.experiment) {
+                await putChanged(docs, 'experiments', 'arena', boards.experiment);
+            }
             const t0 = path.join(home.HOME, 'archive', 't0');
             if (fs.existsSync(t0)) {
                 await put('archive-t0-standings', home.readJson(path.join(t0, 'standings.json'), null));
@@ -265,8 +275,11 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
                 const panels = fs.existsSync(pd) ? fs.readdirSync(pd).filter((f) => /^arena-.*\.json$/.test(f) && f !== 'arena-leaderboard.json').map((f) => readJson(path.join(pd, f))).filter(Boolean) : [];
                 await put('archive-t0-panels', panels);
             }
-            // the newest two round ladders (the one playing and the one before), from the arena's results folder
-            const ids = (t?.rounds ?? []).map((r) => r?.ladder).filter((x) => typeof x === 'string' && /^arena-[\w-]+$/.test(x)).slice(-2);
+            // the newest two round ladders (the one playing and the one before), from the arena's results folder: a
+            // tournament names them; a referee without one names finished rounds in standings and plays arena-r<K+1> next
+            const done = [...(standings?.rounds ?? [])].sort((a, b) => a.round - b.round);
+            const named = t ? (t.rounds ?? []).map((r) => r?.ladder) : [...done.map((r) => r?.ladderId), `arena-r${(done.at(-1)?.round ?? 0) + 1}`];
+            const ids = [...new Set(named)].filter((x) => typeof x === 'string' && /^arena-[\w-]+$/.test(x) && fs.existsSync(path.join(home.PUBLIC_RESULTS, x))).slice(-2);
             for (const id of ids) {
                 const dir = path.join(home.PUBLIC_RESULTS, id);
                 if (fs.existsSync(dir)) {
