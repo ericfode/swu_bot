@@ -632,3 +632,73 @@ test('the watchdog restarts a stuck or dead loop, leaves a stopped-on-purpose lo
     fs.writeFileSync(path.join(dir, 'q-1', 'status.json'), JSON.stringify(st('queued', 1)));
     assert.strictEqual(newestStatus(dir).run, 'q-1');
 });
+
+test('the window feed hides our hand while live, holds back the newest step, and sends the whole replay at the end', async () => {
+    const { Feed, faceDown, indexRow } = require('../karabast/feed');
+    const card = (n, extra = {}) => ({ n, s: 'X', ...extra });
+    const board = (hand, space = [], discard = []) => ({ players: { p1: { hand: [{ n: 'Hidden card', s: null, hid: 1 }], ground: [], space: [], discard: [], base: card('Base A'), leader: card('Leader A') }, p2: { hand, ground: [], space, discard, base: card('Base B'), leader: card('Leader B') } } });
+    const header = { t: 'header', seed: 0, players: [{ id: 'p1', bot: 'opponent' }, { id: 'p2', bot: 'c-clock (ours)' }], source: { pov: 'p2', hiddenHands: ['p1'] }, ours: { seat: 'p2', bot: 'c-clock' } };
+    const step = (n, action, state) => ({ t: 'step', n, pid: 'p2', title: 'Choose an action', action, state });
+    const events = [
+        header,
+        step(1, { kind: 'card', label: 'Wing' }, board([card('Wing'), card('Secret')])), // played: on the board next step
+        step(2, { kind: 'card', label: 'Pilot' }, board([card('Secret'), card('Pilot')], [card('Wing', { u: [] })])),
+        step(3, { kind: 'card', label: 'Secret' }, board([card('Secret')], [card('Wing', { u: [card('Pilot')] })])), // resourced: never shown
+        step(4, { kind: 'displayCard', label: 'Drawn' }, board([], [card('Wing')])), // a deck search into the hand
+        step(5, { kind: 'button', label: 'Pass' }, board([card('Drawn')], [card('Wing')]))
+    ];
+    const fd = faceDown(events, 'p2');
+    assert.deepStrictEqual(fd[0].source.hiddenHands, ['p1', 'p2']);
+    assert.deepStrictEqual(fd.slice(1).map((e) => e.action.label), ['Wing', 'Pilot', 'a hidden card', 'a hidden card', 'Pass']);
+    assert.strictEqual(faceDown(events.slice(0, 5), 'p2').length, 4, 'a last step whose label needs the next one waits');
+    assert.strictEqual(faceDown([header, step(0, null, board([card('Wing')]))], 'p2').length, 2, 'the first board goes at once');
+    const again = [header, step(0, null, board([], [], [card('Wing')])), step(1, { kind: 'displayCard', label: 'Wing' }, board([], [], [card('Wing')])), step(2, { kind: 'button', label: 'Pass' }, board([card('Wing')], [], [card('Wing')]))];
+    assert.strictEqual(faceDown(again, 'p2')[2].action.label, 'a hidden card', 'a copy already in a discard pile does not make this one public');
+    const attack = [header, step(0, null, board([card('Wing')], [card('Wing')])), step(1, { kind: 'card', label: 'Wing' }, board([card('Wing')], [card('Wing', { x: 1 })])), step(2, { kind: 'button', label: 'Pass' }, board([card('Wing')], [card('Wing', { x: 1 })]))];
+    assert.strictEqual(faceDown(attack, 'p2')[2].action.label, 'Wing', 'attacking with a unit on the board names it, though a copy is in hand');
+    assert.ok(fd.slice(1).every((e) => e.state.players.p2.hand.every((c) => c.hid)));
+    assert.deepStrictEqual(faceDown(events.slice(0, 4), 'p2').map((e) => JSON.stringify(e)), fd.slice(0, 3).map((e) => JSON.stringify(e)), 'a line once sent never changes');
+
+    const calls = [];
+    const api = { putDoc: async (ns, id, text) => calls.push(['PUT', `${ns}/${id}`, JSON.parse(text)]), request: async (method, url, o) => calls.push([method, url, o.query?.at ?? null, o.body?.length ?? null]) };
+    let g = { events: events.slice(0, 4), live: true, version: 'v1-live' };
+    const games = { list: () => [{ id: 'q-1/frames/abcdef012345', kind: 'bot game', mtime: Date.parse('2026-10-11T21:00:00Z'), size: 1 }, { id: 'w-1/abcdef012346', kind: 'watched', mtime: 0, size: 1 }], get: () => g, ev: null };
+    const feed = new Feed({ games, api });
+    await feed.once();
+    const live1 = calls.filter((c) => c[1] === '/api/replays/karabast/karabast-abcdef012345');
+    assert.deepStrictEqual(live1.map((c) => c[0]), ['PUT'], 'the first send of a live game is whole');
+    const run = calls.find((c) => c[1] === 'runs/karabast')[2];
+    assert.deepStrictEqual(run.games.map((r) => [r.id, r.p1, r.p2, r.outcome]), [['karabast-abcdef012345', 'opponent', 'c-clock', 'running']]);
+    assert.deepStrictEqual(run.bots, ['c-clock']);
+    calls.length = 0;
+    g = { events, live: true, version: 'v2-live' };
+    await feed.once();
+    assert.strictEqual(calls[0][0], 'POST', 'new lines go as an append');
+    assert.ok(calls[0][2] > 0);
+    calls.length = 0;
+    g = { events: [...events, { t: 'end', winner: 'p2', round: 3, steps: 5 }], live: false, version: 'v3-done' };
+    await feed.once();
+    assert.strictEqual(calls[0][0], 'PUT', 'the finished game goes whole');
+    assert.deepStrictEqual(indexRow('q-1/frames/abcdef012345', { ...g, winnerSeat: 'p2' }), { id: 'karabast-abcdef012345', seed: 0, p1: 'opponent', p2: 'c-clock', winner: 'c-clock', winnerSeat: 'p2', rounds: 3, steps: 5, outcome: 'won', error: null, ms: 0 });
+    assert.deepStrictEqual(['winner', 'outcome'].map((k) => indexRow('q-1/frames/abcdef012345', { ...g, winnerSeat: 'draw' })[k]), ['draw', 'draw']);
+    calls.length = 0;
+    await feed.once();
+    assert.ok(!calls.some((c) => c[0] !== 'GET'), 'a finished game is not sent again');
+
+    // a game that went quiet (live-view's LIVE_MS ran out) stays hidden until queue.js records how it ended
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'feed-'));
+    fs.mkdirSync(path.join(runs, 'q-1'));
+    const quiet = { events: [...events, { t: 'end', winner: null, round: 3, steps: 5 }], live: false, version: 'q1-done' };
+    const feed2 = new Feed({ games: { ...games, runs, get: () => quiet }, api });
+    calls.length = 0;
+    await feed2.once();
+    const sent = calls.find((c) => c[1] === '/api/replays/karabast/karabast-abcdef012345');
+    assert.strictEqual(sent[3], Buffer.from(faceDown(events, 'p2').map((e) => JSON.stringify(e)).join('\n') + '\n').length, 'sent face-down');
+    assert.strictEqual(calls.find((c) => c[1] === 'runs/karabast')[2].games[0].outcome, 'running');
+    fs.writeFileSync(path.join(runs, 'q-1', 'games.jsonl'), JSON.stringify({ file: 'abcdef012345.jsonl', result: 'loss' }) + '\n{"half');
+    calls.length = 0;
+    await feed2.once();
+    assert.deepStrictEqual(calls.filter((c) => c[0] === 'PUT' && c[1] !== 'runs/karabast').map((c) => c[3]), [Buffer.from(quiet.events.map((e) => JSON.stringify(e)).join('\n') + '\n').length], 'whole once the seat ended');
+    const row = calls.find((c) => c[1] === 'runs/karabast')[2].games[0];
+    assert.deepStrictEqual([row.outcome, row.winnerSeat, row.winner], ['won', 'p1', 'opponent']);
+});

@@ -12,6 +12,7 @@ without a browser. Plain CommonJS on Node 22's built-in `WebSocket` and `fetch`,
 | `queue.js` | Quick match as a bot: enter the queue with a deck, play the match, leave; with `--games N`, a loop that queues again after each game. Counts people (`ledger.js`) and writes what it is doing to `status.json`. |
 | `spectate.js` | Watches games as a spectator and writes scrubbed frames as JSON Lines, which `importer/import.js` turns into replays. `--predict <evaluator>` prints P(win) as the game goes. |
 | `live-view.js` | Serves recorded games to the Holotable viewer kit while they are played: a game picker, the board following each move, and an evaluator's chance that p1 wins. |
+| `feed.js` | Streams our bot's games against people to the arena window (`runs/karabast`, replays, lens), with our hand face-down while a game is live. |
 | `watchdog.js` | Keeps a `queue.js` loop going: restarts it when it is stuck or died, and raises an alert past its restart budget. |
 | `ledger.js` | The people cap: counts each real person a run touches (salted hashes, no ids) and stops at the limit. |
 | `selfplay.js` | Two protocol bots on a local server, through `seat.js`: the end-to-end test. `--pester-undo` makes seat 2 ask for undos. |
@@ -100,6 +101,21 @@ two hours; past that it stops restarting and writes an `alert`. It leaves a loop
 games done) alone, waits 20 minutes after a loop that ran out of opponents, and never restarts while the stop file
 exists. What it saw goes to `--out` (state, verdict, `alert`, recent restarts and events), rewritten every check, for
 an agent or a person to read.
+
+## Games against people in the app (`feed.js`)
+
+`feed.js` sends the bot games under `--runs` to the arena window (`SWU_WINDOW`, see bot/arena/WINDOW.md "Outside
+machines"): the game list as `runs/karabast` (tournament index shape, ids `karabast-<frame hash>`, our seat named
+after the bot and the other "opponent"), each replay as it grows, and with `--predict` its lens under the game's id.
+It reads the window's feed token (`ARENA_FEED_TOKEN_KARABAST`, which the window knows from PR #106 on) from
+`--token-file`, a file kept on the Sprite. Watched games between two people are not sent.
+
+While a game is live it hides what the opponent cannot see: our hand goes face-down (count only), and a card our bot
+put into resources, drew or took from a hidden zone is called "a hidden card": a choice is named only when one more
+copy of that card reaches the public board, or when it clicked a card already there. A last step whose choice depends
+on the next one waits for it, so a line once sent never changes. The whole replay replaces the live one when the game
+ends: when its frames name a winner, or when queue.js has written its row (the seat won, lost, conceded or gave up). A
+game that only went quiet stays hidden, since it may resume.
 
 ## What a bot sees (`fidelity.js`)
 
