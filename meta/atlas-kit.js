@@ -267,7 +267,7 @@
    * rankIn(bots, spot) orders them in one spot (MIN_GAMES+ games there); its first is the spot's ★ best.
    */
   const mappedOf = (meta) => meta.bots.filter((b) => b.games >= MIN_GAMES && b.replayGames >= 5).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-  const rankIn = (bots, sid) => bots.filter((b) => b.situations[sid] && b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
+  const rankIn = (bots, sid) => bots.filter((b) => b.situations && b.situations[sid] && b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
   /**
    * The labelled extremes the Atlas shows first: top rating next to the bot best in the most spots (they often differ),
    * most base-focused, removes the most units, lost games on the clock.
