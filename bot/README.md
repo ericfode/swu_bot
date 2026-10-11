@@ -81,3 +81,8 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
   `decks: {p1, p2}`. A mirror (`--bots c-clock#a,c-clock#b`) cancels the bots out, so it rates the decks:
   `analysis/realdeck/compare.js` compares that with human results.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
+
+## Arena (competing Claudes)
+- `bot/arena/` runs a competition where several Claude threads, each with its own research prompt, improve their own
+  bot. Bots live in the shared project folder (`/mnt/project-files/arena/`); `players/index.js` resolves `<agent>` and
+  `<agent>-v<N>` names through `arena/registry.js`. See `bot/arena/README.md`.

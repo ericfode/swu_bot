@@ -9,7 +9,11 @@ Evaluators, all turned into player 1 win probabilities:
   legacy   the heuristic score on fork main (base danger term ADDED, the known sign bug), calibrated
   fixed    the same score with the danger term subtracted (the omni bot's leaf score), calibrated
   mc       logistic regression on features, fitted to game results (outcome regression)
-  td       the same model, fitted to minimise the TD loss on recorded windows (Fitness.lean `tdLoss`)
+  td       the same model, fitted by fitted value iteration: regress on the backup of the current model over the
+           recorded children (frozen targets), then repeat. This is semi-gradient TD; it is NOT a minimiser of the TD loss
+  td-resid the same model, fitted by gradient descent on the TD loss itself (Fitness.lean `tdLoss`), gradient
+           through both h(s) and the backup (residual gradient)
+  hybrid   fitted value iteration with targets 0.5 * backup + 0.5 * game result
 
 Usage: python3 theory/measure/td_residual.py <td dir> <positions.jsonl | solve dir> <out.json> [folds=5]
 """
@@ -280,6 +284,35 @@ def summarize(res):
     return out
 
 
+def fit_td_resid(games, init, steps=1500, lr=0.02):
+    """Minimise the mean squared TD residual h(s) - backup_h(s) directly (Adam on the full gradient; the backup's
+    gradient goes through the child that attains the max/min). Started from the outcome-regression fit."""
+    w, mu, sd = init
+    w = w.copy()
+    rows, X, KX, term, win, owner, is_max = child_table(games, mu, sd)
+    m1, m2 = np.zeros_like(w), np.zeros_like(w)
+    idx = np.arange(len(owner))
+    for t in range(1, steps + 1):
+        h = sigmoid(X @ w)
+        v = np.where(term, win, sigmoid(KX @ w))
+        # pick the attaining child per window: max for p1 windows, min for p2 (ties: first)
+        key = np.where(is_max[owner], v, -v)
+        best = np.full(len(rows), -np.inf)
+        np.maximum.at(best, owner, key)
+        hit = key == best[owner]
+        first = np.full(len(rows), len(owner))
+        np.minimum.at(first, owner[hit], idx[hit])
+        b = v[first]
+        r = h - b
+        dh = (h * (1 - h))[:, None] * X
+        db = np.where(term[first], 0.0, v[first] * (1 - v[first]))[:, None] * KX[first]
+        g = 2 * np.mean(r[:, None] * (dh - db), axis=0)
+        m1 = 0.9 * m1 + 0.1 * g
+        m2 = 0.999 * m2 + 0.001 * g * g
+        w -= lr * (m1 / (1 - 0.9 ** t)) / (np.sqrt(m2 / (1 - 0.999 ** t)) + 1e-8)
+    return (w, mu, sd), float(np.mean(r ** 2))
+
+
 def fit_all(train):
     evs, params = {}, {}
     base = float(np.mean([1.0 if g['winner'] == 'p1' else 0.0 for g in train]))
@@ -293,6 +326,9 @@ def fit_all(train):
     tdp, _ = fit_td(train, mc)
     evs['td'] = Evaluator('td', model(*tdp))
     params['td'] = dict(zip(['bias'] + KEYS, tdp[0].tolist()))
+    tdr, _ = fit_td_resid(train, mc)
+    evs['td-resid'] = Evaluator('td-resid', model(*tdr))
+    params['td-resid'] = dict(zip(['bias'] + KEYS, tdr[0].tolist()))
     hyb, _ = fit_td(train, mc, mix=0.5)
     evs['hybrid'] = Evaluator('hybrid', model(*hyb))
     params['hybrid'] = dict(zip(['bias'] + KEYS, hyb[0].tolist()))

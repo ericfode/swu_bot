@@ -5,14 +5,19 @@
  * `node importer/import.js <dir> --out <replays>` turns into replays (seen as a spectator: both hands hidden).
  *
  *   node bot/karabast/spectate.js --out captures [--lobby <id> | --public] [--games 1] [--gap 30]
- *                                 [--server http://127.0.0.1:9500] [--predict race] [--max-minutes 90]
- *                                 [--allow-host <host> --token-env KARABAST_TOKEN]
+ *                                 [--server http://127.0.0.1:9500] [--predict mlp-g5] [--max-minutes 90]
+ *                                 [--allow-host <host> --token-env KARABAST_TOKEN --ledger <file> [--max-people 10]]
+ *                                 [--stop-file <file>]
  *
  * --lobby watches one game by its lobby id (from a spectate link `.../spectate?lobbyId=<id>`). --public watches
  * games listed by `/api/ongoing-games` that allow spectators, one at a time, oldest listing skipped once seen.
  * --predict prints P(win) after each decision with a bot/eval evaluator (card data: SWU_CARD_JSON or
- * forceteki/test/json). `race` and `base` only use the public board; the fitted evaluators need the spectator view
- * (both hands hidden) in bot/eval.
+ * forceteki/test/json), using bot/eval's spectator view (both hands hidden, only their counts). `mlp-g5` is the best
+ * one without decklists: Brier 0.213 on 181 real KaraBuddy games, 0.171 on engine games.
+ *
+ * People cap: a run against a non-local server needs --ledger (bot/karabast/ledger.js). Two places under --max-people
+ * are reserved before joining a game, or the run stops; both players are counted in them when the first frame
+ * arrives. The run stops before the next game when --stop-file exists.
  *
  * Only localhost is allowed unless --allow-host names the host. The live site needs a login to spectate (anonymous
  * spectators are a development-only setting), so a live run also needs a session token, read from the environment
@@ -27,6 +32,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { KarabastSocket, get, post } = require('./socket');
 const { makeScrubber } = require('./frame');
+const { PeopleLedger } = require('./ledger');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -75,21 +81,38 @@ async function watch(server, lobbyId, out, opts) {
     if (!res.body?.success) {
         throw new Error(`spectate-game refused: ${res.body?.message ?? res.status}`);
     }
+    // from here on the players may see us in the spectator list
+    opts.onJoined?.();
     const sock = new KarabastSocket(server, { user, spectator: true, token: opts.token, allowHosts: opts.allowHosts });
     const scrub = makeScrubber([user.id, user.username]);
     const frames = [];
     let file = null;
     let fd = null;
+    let counted = false;
+    let stopped = false;
+    let timer = null;
     let predict = predictor(opts.predict);
     const ended = new Promise((resolve) => {
-        const timer = setTimeout(() => resolve('time limit'), opts.maxMs);
+        timer = setTimeout(() => resolve('time limit'), opts.maxMs);
         sock.on('disconnect', (why) => {
             clearTimeout(timer);
             resolve(why);
         });
         sock.on('gamestate', (gs) => {
-            if (!gs?.players || Object.keys(gs.players).length < 2) {
+            if (stopped || !gs?.players || Object.keys(gs.players).length < 2) {
                 return;
+            }
+            if (!counted) {
+                counted = true;
+                try {
+                    opts.onPlayers?.(Object.keys(gs.players));
+                } catch (e) {
+                    // over the people cap: leave before anything is saved
+                    stopped = true;
+                    clearTimeout(timer);
+                    resolve(e.message);
+                    return;
+                }
             }
             const clean = scrub(gs);
             if (!fd) {
@@ -113,11 +136,17 @@ async function watch(server, lobbyId, out, opts) {
             }
         });
     });
-    await sock.connect();
-    const why = await ended;
-    sock.close();
-    if (fd) {
-        fs.closeSync(fd);
+    let why;
+    try {
+        await sock.connect();
+        why = await ended;
+    } finally {
+        stopped = true;
+        clearTimeout(timer);
+        sock.close();
+        if (fd) {
+            fs.closeSync(fd);
+        }
     }
     console.error(`${frames.length} frames -> ${file ?? '(nothing saved)'} (${why})`);
     return frames.length;
@@ -141,6 +170,12 @@ async function main() {
     if (tokenEnv && !opts.token) {
         throw new Error(`environment variable ${tokenEnv} is empty`);
     }
+    const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(new URL(server).hostname);
+    if (!local && !arg('ledger')) {
+        throw new Error('a run against a non-local server needs --ledger <file> (the people cap)');
+    }
+    const ledger = arg('ledger') ? new PeopleLedger(arg('ledger'), Number(arg('max-people', 10))) : null;
+    const stopFile = arg('stop-file');
     fs.mkdirSync(out, { recursive: true });
     const games = Number(arg('games', 1));
     const gapMs = Number(arg('gap', 30)) * 1000;
@@ -150,6 +185,14 @@ async function main() {
     }
     const seen = new Set();
     for (let g = 0; g < games; g++) {
+        if (stopFile && fs.existsSync(stopFile)) {
+            console.error(`stop file ${stopFile} exists; stopping`);
+            break;
+        }
+        if (ledger && !ledger.room(2)) {
+            console.error(`people cap reached (${ledger.count} of ${ledger.max}); stopping`);
+            break;
+        }
         let id = lobby;
         if (!id) {
             const list = await get(server, '/api/ongoing-games', opts);
@@ -162,7 +205,24 @@ async function main() {
             }
         }
         seen.add(id);
-        await watch(server, id, out, opts);
+        // both players' places are held before joining, so another run sharing the ledger cannot take them
+        const hold = ledger ? ledger.reserve(2) : null;
+        if (ledger && !hold) {
+            console.error(`people cap reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max}); stopping`);
+            break;
+        }
+        let joined = false;
+        try {
+            const counted = { onJoined: () => { joined = true; }, onPlayers: (ids) => ledger.add(ids, 'watched', hold) };
+            await watch(server, id, out, ledger ? { ...opts, ...counted } : opts);
+        } finally {
+            // joined but no frame told us who played: the two places stay counted
+            if (joined) {
+                ledger?.spend(hold, 'watched');
+            } else {
+                ledger?.release(hold);
+            }
+        }
         if (lobby) {
             break;
         }

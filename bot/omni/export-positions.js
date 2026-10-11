@@ -29,6 +29,11 @@ const { evaluate } = require('./evaluate');
 const { HeuristicBot } = require('../players/heuristic');
 const { makeBot: registryBot } = require('../players');
 const { OmniSearch } = require('./search');
+const { verifyPool } = require('./rs/pool');
+const { fullState, stateHash, canonicalAction } = require('./rs/state');
+const poolFlag = process.argv.indexOf('--pool');
+const poolOverride = poolFlag >= 0 ? process.argv[poolFlag + 1] : null;
+if (poolFlag >= 0 && (!poolOverride || poolOverride.startsWith('--'))) throw new Error('--pool needs a file');
 
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')));
 
@@ -60,8 +65,9 @@ async function replay(env, g) {
 
 async function replayWith(env, g, bots) {
     const rng = seededRng('bot' + g.seed);
-    const deck1 = env.randomDeck(rng);
-    const deck2 = env.randomDeck(rng);
+    const pool = verifyPool(g.pool || g.config?.pool, poolOverride);
+    const deck1 = env.randomDeck(rng, { pool });
+    const deck2 = env.randomDeck(rng, { pool });
     const eg = env.newGame({ seed: g.seed, deck1, deck2, undo: true });
     await eg.start();
     const out = [];
@@ -78,6 +84,7 @@ async function replayWith(env, g, bots) {
         if (eg.isActionWindow(pid)) {
             w = {
                 toMove: eg.ids.indexOf(pid) === 0 ? 'p1' : 'p2', round: eg.round, state: snapshot(eg),
+                ...(pool ? { fullState: fullState(eg, pid), pool: pool.provenance } : {}),
                 deckOrder: { p1: eg.player(eg.ids[0]).drawDeck.map((c) => c.internalName), p2: eg.player(eg.ids[1]).drawDeck.map((c) => c.internalName) },
                 omniScore: Math.round(evaluate(eg, eg.ids[0]) * 100) / 100
             };
@@ -91,6 +98,7 @@ async function replayWith(env, g, bots) {
         const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions: fresh, rng });
         if (w) {
             w.played = action.label;
+            if (pool) w.actionKey = canonicalAction(eg, action).key;
         }
         eg.apply(pid, action, rng);
         steps++;
@@ -99,7 +107,9 @@ async function replayWith(env, g, bots) {
 }
 
 async function main() {
-    const [dir, outFile] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+    const positional = process.argv.slice(2).filter((a, i, args) => !a.startsWith('--') && args[i - 1] !== '--pool');
+    const [dir, outFile] = positional;
+    if (!dir || !outFile || positional.length !== 2) throw new Error('Usage: export-positions.js <solve dir> <out.jsonl> [--pool file] [--legacy] [--reprove]');
     const env = new Env();
     const lines = [];
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) {
@@ -108,7 +118,12 @@ async function main() {
             continue;
         }
         const ws = await replay(env, g);
-        const ok = ws.length === g.windowsList.length && ws.every((w, i) => w.played === g.windowsList[i].played);
+        const ok = ws.length === g.windowsList.length && ws.every((w, i) => {
+            const expected = g.windowsList[i];
+            return w.played === expected.played &&
+                (!expected.actionKey || w.actionKey === expected.actionKey) &&
+                (!expected.stateHash || (w.fullState && stateHash(w.fullState) === expected.stateHash));
+        });
         if (!ok) {
             console.log(`${f}: replay diverged (${ws.length} vs ${g.windowsList.length} windows), skipped`);
             continue;
@@ -125,6 +140,7 @@ async function main() {
                 game: path.basename(f, '.json'), seed: g.seed, bots: g.bots, i, windows: ws.length, fromEnd: ws.length - i,
                 round: w.round, toMove: w.toMove, winner: g.winner, proven: s?.result ?? null, proofDepth: s?.result ? s.depth : null,
                 ...(w.reproved ? { provenBefore: before } : {}),
+                ...(w.fullState ? { fullState: w.fullState, pool: w.pool } : {}),
                 solveTried: solves.has(i), omniScore: w.omniScore, played: w.played, state: w.state, deckOrder: w.deckOrder
             }));
         });

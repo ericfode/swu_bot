@@ -47,6 +47,11 @@ Values are rational, because SWU's randomness is uniform over finite sets.
 | `value_affine`, `rescore_flips_lottery` | Transform | With chance (SWU shuffles), a score must be calibrated: affine rescoring is safe, a merely monotone one can flip a decision. |
 | `omniscience_bias`, `_min`, `_strict` | Information | Seeing hidden cards before choosing is worth ≥ choosing blind: omniscient evaluation overrates the side to move. |
 | `maximin_le_minimax`, `maximin_lt_minimax_pennies` | Information | Answering a simultaneous prompt in order favors whoever answers second. |
+| `perf_diff` | Hidden | Value minus what two policies get = expected sum, along their play, of each move's loss in true value. |
+| `regret_bound` | Hidden | If each player-1 move gives up at most δ of true value, player 1 keeps ≥ value − δ × (moves left) against anyone. |
+| `Info`, `Info.blind`, `blind_le_value`, `blind_gap` | Hidden | Information sets for player 1 and blind (observation-only) policies; the omniscient value overrates any blind player, by exactly its expected regret along play. |
+| `pimc_choice_loss`, `blind_choice_loss_ge`, `pimc_loss_nonneg` | Hidden | At one information set, PIMC's move loses exactly the omniscience bias in expectation, and no blind move loses less. |
+| `hiddenCoin_blind` | Hidden | A whole game where every blind policy gets 1/2 and the omniscient value is 1. |
 | `coinFlip_value` | Example | The assumptions are consistent (a concrete game satisfies them). |
 
 ## What is assumed, not proven
@@ -57,7 +62,12 @@ Values are rational, because SWU's randomness is uniform over finite sets.
   shuffle results are frozen per event or drawn independently.
 - **One fixed deal, perfect information.** Real SWU hides hands and deck order. Its true value
   is a Nash equilibrium of an imperfect-information game (exists by Nash/Kuhn); that is cited,
-  not formalized. The Information file only bounds the gap.
+  not formalized. The Information and Hidden files bound the gap: at one decision, and over a
+  whole game for a blind player 1. Not formalized: that the belief PIMC samples from equals the
+  true conditional distribution of hidden cards given the play so far, which is what turns
+  `perf_diff` plus `pimc_choice_loss` into "the omniscient value overrates PIMC by the expected
+  sum of the information sets' biases along play". Player 2's information sets are not modelled
+  (the opponent is omniscient or arbitrary).
 - **Simultaneous prompts** (mulligan, setup and regroup resourcing) have a mixed-strategy value
   between maximin and minimax (von Neumann's minimax theorem, cited, not formalized).
 - **Policy values are expected game results.** `polVal` is defined as that expectation by

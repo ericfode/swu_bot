@@ -11,11 +11,14 @@
 const fs = require('fs');
 const path = require('path');
 
+/** One JSON value per line; a .gz file is gunzipped first (ladder.js stores recordings as games/<id>.jsonl.gz). */
 function readJsonl(file) {
     if (!fs.existsSync(file)) {
         return [];
     }
-    return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const raw = fs.readFileSync(file);
+    const text = file.endsWith('.gz') ? require('zlib').gunzipSync(raw).toString('utf8') : raw.toString('utf8');
+    return text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
 
 function readDir(dir, sub) {
@@ -37,7 +40,7 @@ function isTest(id, testShare = 0.2) {
 
 /**
  * Positions from one or more dataset dirs, each tagged with its source name (the dir's basename).
- * Returns [{ source, id, n, round, toAct, winner, state, hidden, decks, test }] for decided games only. `hidden` lists
+ * Returns [{ source, id, n, round, toAct, winner, state, hidden, endLeft, final, decks, test }] for decided games only. `hidden` lists
  * seats whose hand the recording never saw (imported one-seat games); they are not valid judges.
  */
 function loadPositions(dirs, { testShare = 0.2 } = {}) {
@@ -49,7 +52,7 @@ function loadPositions(dirs, { testShare = 0.2 } = {}) {
             if (p.outcome !== 'won' || (p.winner !== 'p1' && p.winner !== 'p2')) {
                 continue;
             }
-            out.push({ source, id: p.id, n: p.n, round: p.round, toAct: p.toAct, winner: p.winner, state: p.state, hidden: p.hidden ?? [], decks: decks.get(p.id) ?? null, test: isTest(p.id, testShare) });
+            out.push({ source, id: p.id, n: p.n, round: p.round, toAct: p.toAct, winner: p.winner, state: p.state, hidden: p.hidden ?? [], endLeft: p.endLeft ?? null, final: p.final ?? false, decks: decks.get(p.id) ?? null, test: isTest(p.id, testShare) });
         }
     }
     return out;

@@ -3,10 +3,12 @@
 /**
  * Builds the ladder results document (schema "swu-ladder/1") from finished games. Pure, no engine dependency.
  *
- * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, by, botStats }
+ * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, by, faultKind, botStats }
  * where winner is a bot name, 'draw' or null. Won games count towards ratings, and so do ERROR games a bot caused
- * (`by` set), which that bot loses. Other ERROR, STUCK and STEP_CAP games are kept in the list and counted under
- * `incomplete` so engine bugs stay visible.
+ * (`by` set: its bot failed to load, threw, answered wrong, went over the time cap or hung; faultKind says which, when
+ * the game ran on game-pool.js), which that bot loses. Other ERROR, STUCK and STEP_CAP games are kept in the list and
+ * counted under `incomplete` so engine bugs stay visible. Each bot row also counts the games it lost that way
+ * (`forfeits`, included in its losses).
  */
 const { sequentialElo, bradleyTerry, wilson } = require('./ratings');
 
@@ -37,7 +39,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
 
     const bots = names.map((name) => {
         const mine = finished.filter((g) => g.p1 === name || g.p2 === name);
-        const row = { name, ...(botInfo?.[name] ?? {}), games: mine.length, wins: 0, losses: 0, draws: 0, incomplete: 0, asP1: { games: 0, wins: 0 }, msPerWindow: null };
+        const row = { name, ...(botInfo?.[name] ?? {}), games: mine.length, wins: 0, losses: 0, draws: 0, incomplete: 0, forfeits: 0, asP1: { games: 0, wins: 0 }, msPerWindow: null };
         let ms = 0;
         let windows = 0;
         for (const g of mine) {
@@ -49,6 +51,9 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
             if (st?.windows && st.ms !== undefined) {
                 ms += st.ms;
                 windows += st.windows;
+            }
+            if (rated(g) && g.outcome === 'ERROR' && g.by === (seat === 0 ? 'p1' : 'p2')) {
+                row.forfeits++;
             }
             if (!rated(g)) {
                 row.incomplete++;
@@ -100,7 +105,8 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
     for (const g of finished) {
         outcomes[g.outcome] = (outcomes[g.outcome] ?? 0) + 1;
     }
-    const p1Decided = results.filter((r) => r.score !== 0.5);
+    // seat advantage from played-out games only (a forfeit says nothing about the seat)
+    const p1Decided = finished.filter((g) => g.outcome === 'won').map(scoreOf).filter((x) => x === 0 || x === 1);
 
     return {
         schema: 'swu-ladder/1',
@@ -111,7 +117,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
         engine,
         config,
         progress: { scheduled, finished: finished.length, rated: results.length, outcomes },
-        firstSeatWinRate: p1Decided.length ? p1Decided.filter((r) => r.score === 1).length / p1Decided.length : null,
+        firstSeatWinRate: p1Decided.length ? p1Decided.filter((x) => x === 1).length / p1Decided.length : null,
         bots: bots.sort((x, y) => y.btElo - x.btElo),
         pairs,
         // Elo after each rated game, in finish order (for rating-over-time charts)

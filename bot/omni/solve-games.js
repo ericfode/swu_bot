@@ -25,6 +25,8 @@ const { OmniSearch } = require('./search');
 const { evaluate } = require('./evaluate');
 // any bot of the shared registry (bot/players/index.js) can play the games that get solved
 const { makeBot } = require('../players');
+const { loadPool } = require('./rs/pool');
+const { fullState, stateHash, canonicalAction } = require('./rs/state');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -39,21 +41,25 @@ function seedList(spec) {
 }
 
 /** Bots are closed when the game is solved: external bots run as child processes. */
-async function solveGame(env, seed, names, opts) {
+async function solveGame(env, seed, names, opts, simulator) {
     const bots = names.map(makeBot);
+    const wasmGames = [];
     try {
-        return await playAndSolve(env, seed, names, opts, bots);
+        return await playAndSolve(env, seed, names, opts, bots, simulator, wasmGames);
     } finally {
         for (const b of bots) {
             b.close?.();
         }
+        for (const game of wasmGames) game.free();
     }
 }
 
-async function playAndSolve(env, seed, names, opts, bots) {
+async function playAndSolve(env, seed, names, opts, bots, simulator, wasmGames) {
     const rng = seededRng('bot' + seed);
-    const deck1 = env.randomDeck(rng);
-    const deck2 = env.randomDeck(rng);
+    const pool = opts.pool ? loadPool(opts.pool.path) : null;
+    if (pool && pool.provenance.sha256 !== opts.pool.sha256) throw new Error(`Pool changed during solve: ${opts.pool.path}`);
+    const deck1 = env.randomDeck(rng, { pool });
+    const deck2 = env.randomDeck(rng, { pool });
     const eg = env.newGame({ seed, deck1, deck2, undo: true });
     await eg.start();
     const windows = [];
@@ -69,6 +75,14 @@ async function playAndSolve(env, seed, names, opts, bots) {
         let w = null;
         if (eg.isActionWindow(pid)) {
             w = { i: windows.length, step: steps, round: eg.round, actor: eg.ids.indexOf(pid) === 0 ? 'p1' : 'p2', pid, mark: eg.mark(pid), firstActions: actions.length, eval: +evaluate(eg, eg.ids[0]).toFixed(2) };
+            if (pool) {
+                const state = fullState(eg, pid);
+                w.stateHash = stateHash(state);
+                if (simulator) {
+                    w.wasmIndex = wasmGames.length;
+                    wasmGames.push(simulator.loadState(state));
+                }
+            }
             if (opts.sample && windows.length % opts.sample === 0) {
                 const s = new OmniSearch(eg, { followUps: opts.followUps });
                 w.moves = s.children(pid, w.mark, 0).length;
@@ -80,28 +94,37 @@ async function playAndSolve(env, seed, names, opts, bots) {
         const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions: fresh, rng });
         if (w) {
             w.played = action.label;
+            if (pool) w.actionKey = canonicalAction(eg, action).key;
         }
         eg.apply(pid, action, rng);
         steps++;
     }
     const winner = eg.over ? (eg.winners.length === 1 ? (eg.winners[0] === eg.names[0] ? 'p1' : 'p2') : 'draw') : null;
-    const game = { seed, bots: names, decks: [deck1.metadata.name, deck2.metadata.name], winner, rounds: eg.round, steps, windows: windows.length, playMs: Date.now() - t0 };
+    const game = { seed, bots: names, ...(pool ? { pool: pool.provenance } : {}), decks: [deck1.metadata.name, deck2.metadata.name], winner, rounds: eg.round, steps, windows: windows.length, playMs: Date.now() - t0 };
 
     // walk backwards from the last window
     const solves = [];
     let unknownRun = 0;
     for (let k = windows.length - 1; k >= 0 && unknownRun < opts.stop && winner; k--) {
         const w = windows[k];
-        eg.restore(w.pid, w.mark);
-        const s = new OmniSearch(eg, { budget: opts.budget, followUps: opts.followUps });
-        const r = s.solve(opts.depth);
-        solves.push({ i: w.i, fromEnd: windows.length - k, roundsFromEnd: game.rounds - w.round, round: w.round, actor: w.actor, ...r, tt: s.tt.size });
+        let r, tt;
+        if (simulator) {
+            r = wasmGames[w.wasmIndex].prove({ depth: opts.depth, nodes: opts.budget });
+            tt = r.transpositions;
+        } else {
+            eg.restore(w.pid, w.mark);
+            const s = new OmniSearch(eg, { budget: opts.budget, followUps: opts.followUps });
+            r = s.solve(opts.depth);
+            tt = s.tt.size;
+        }
+        solves.push({ i: w.i, fromEnd: windows.length - k, roundsFromEnd: game.rounds - w.round, round: w.round, actor: w.actor, ...r, tt });
         unknownRun = r.result ? 0 : unknownRun + 1;
         console.log(`seed ${seed} window ${w.i}/${windows.length} R${w.round} ${w.actor}: ${r.result ?? '?'} d${r.depth} ${r.nodes}n ${r.ms}ms${r.complete ? '' : ' (budget)'}`);
     }
     for (const w of windows) {
         delete w.pid;
         delete w.mark;
+        delete w.wasmIndex;
     }
     return { ...game, windowsList: windows, solves, config: opts };
 }
@@ -111,21 +134,30 @@ async function main() {
     const seeds = seedList(arg('seeds', '1-4'));
     const out = path.resolve(arg('out', 'replays/solve'));
     const opts = { budget: Number(arg('budget', 600)), depth: Number(arg('depth', 8)), stop: Number(arg('stop', 3)), sample: Number(arg('sample', 6)), followUps: Number(arg('followUps', 8)) };
+    if (arg('pool', null)) opts.pool = loadPool(arg('pool')).provenance;
+    const backend = arg('engine', 'js');
+    if (!['js', 'wasm'].includes(backend)) throw new Error('--engine must be js or wasm');
+    if (backend === 'wasm' && !opts.pool) throw new Error('--engine wasm requires --pool; unsupported cards are not silently simulated');
+    let simulator;
+    if (backend === 'wasm') {
+        opts.engine = 'wasm';
+        simulator = await require('./wasm/node').createSimulator({ poolPath: opts.pool.path });
+    }
     fs.mkdirSync(out, { recursive: true });
     const env = new Env();
-    for (const seed of seeds) {
+    try { for (const seed of seeds) {
         let res;
         try {
-            res = await solveGame(env, seed, names, opts);
+            res = await solveGame(env, seed, names, opts, simulator);
         } catch (e) {
-            res = { seed, bots: names, error: String(e?.message ?? e).split('\n')[0] };
+            res = { seed, bots: names, ...(opts.pool ? { pool: opts.pool } : {}), error: String(e?.message ?? e).split('\n')[0] };
             console.log(`seed ${seed}: ERROR ${res.error}`);
         }
         const file = path.join(out, `${names.join('-vs-')}-${seed}.json`);
         fs.writeFileSync(`${file}.tmp`, JSON.stringify(res));
         fs.renameSync(`${file}.tmp`, file);
         console.log(`seed ${seed}: winner ${res.winner} rounds ${res.rounds} windows ${res.windows} solved ${res.solves?.filter((s) => s.result).length ?? 0}`);
-    }
+    } } finally { simulator?.free(); }
 }
 
 main().catch((e) => {

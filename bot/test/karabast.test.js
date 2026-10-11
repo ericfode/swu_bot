@@ -3,9 +3,8 @@
 // No engine, no card data and no server needed.
 const test = require('node:test');
 const assert = require('node:assert');
-const { legalActions, gameMessage, decisionKey, makeScrubber } = require('../karabast/frame');
+const { legalActions, gameMessage, decisionKey, makeScrubber, randomSplit } = require('../karabast/frame');
 const { checkHost } = require('../karabast/socket');
-const { randomSplit } = require('../karabast/selfplay');
 const { seededRng } = require('../rng');
 
 const unit = (uuid, extra = {}) => ({ uuid, name: uuid, zone: 'groundArena', hp: 4, damage: 1, ...extra });
@@ -122,9 +121,234 @@ test('the scrub removes ids, names, user objects, spectators and chat text', () 
     assert.deepStrictEqual(Object.keys(scrub(frame({})).players), ['player1', 'player2']);
 });
 
-test('checkHost allows localhost and refuses other hosts unless named', () => {
+test('checkHost allows localhost, refuses other hosts unless named, and needs NODE_USE_ENV_PROXY behind a proxy', () => {
     assert.strictEqual(checkHost('http://127.0.0.1:9500').hostname, '127.0.0.1');
     assert.strictEqual(checkHost('http://localhost:9500').hostname, 'localhost');
     assert.throws(() => checkHost('https://karabast.net'), /refusing to connect to karabast.net/);
-    assert.strictEqual(checkHost('https://example.org', ['example.org']).hostname, 'example.org');
+    const saved = { ...process.env };
+    try {
+        delete process.env.https_proxy;
+        process.env.HTTPS_PROXY = 'http://127.0.0.1:1';
+        delete process.env.NODE_USE_ENV_PROXY;
+        assert.throws(() => checkHost('https://example.org', ['example.org']), /NODE_USE_ENV_PROXY=1/);
+        assert.strictEqual(checkHost('http://127.0.0.1:9500').hostname, '127.0.0.1');
+        process.env.NODE_USE_ENV_PROXY = '1';
+        assert.strictEqual(checkHost('https://example.org', ['example.org']).hostname, 'example.org');
+    } finally {
+        for (const k of ['HTTPS_PROXY', 'https_proxy', 'NODE_USE_ENV_PROXY']) {
+            if (k in saved) {
+                process.env[k] = saved[k];
+            } else {
+                delete process.env[k];
+            }
+        }
+    }
+});
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { EventEmitter } = require('events');
+const { Observer } = require('../karabast/observe');
+const { KarabastSeat } = require('../karabast/seat');
+const { PeopleLedger } = require('../karabast/ledger');
+
+const noCards = { internal: new Map(), title: new Map() };
+
+test('observe builds the protocol state: own hand open, the other hidden, upgrades under their unit', () => {
+    const f = frame({ promptUuid: 'P1', promptType: 'actionWindow', menuTitle: 'Choose an action', buttons: [{ text: 'Pass', arg: 'pass', uuid: 'P1', command: 'menuButton' }] }, {
+        hand: [{ uuid: 'H1', name: 'Wampa', setId: { set: 'SOR', number: 42 }, zone: 'hand', controllerId: 'user-a', selectable: true }],
+        resources: [{ uuid: 'R1', name: 'Ruin', setId: { set: 'SOR', number: 1 }, zone: 'resource', exhausted: true }]
+    });
+    f.players['user-a'].forceToken = { active: true, uuid: 'F1', selectionState: { selectable: true } };
+    f.players['user-b'].cardPiles.groundArena[0].type = 'basicUnit';
+    f.players['user-b'].cardPiles.groundArena.push({ uuid: 'UP', name: 'Shield', setId: { set: 'SOR', number: 9 }, type: 'tokenUpgrade', parentCardId: 'U9', zone: 'groundArena' });
+    const obs = new Observer('user-a', { cards: noCards });
+    const d = obs.decision(f);
+    assert.strictEqual(d.prompt.actionWindow, true);
+    assert.strictEqual(d.state.players.p1.handCount, 1);
+    assert.deepStrictEqual(d.state.players.p1.hand, [{ id: 'c1', n: 'Wampa', s: 'SOR_042' }]);
+    assert.deepStrictEqual(d.state.players.p1.resources[0].x, 1);
+    assert.strictEqual(d.state.players.p1.force, 1);
+    assert.strictEqual(d.state.players.p2.hand, undefined);
+    assert.strictEqual(d.state.players.p2.handCount, 1);
+    assert.deepStrictEqual(d.state.players.p2.ground[0].u, [{ id: obs.id('UP'), n: 'Shield', s: 'SOR_009', t: 1 }]);
+    // the Force token is clickable through its selectionState
+    assert.ok(d.actions.some((a) => a.kind === 'card' && a.cardUuid === obs.id('F1')));
+    assert.deepStrictEqual(d.actions[0], { i: 0, kind: 'button', label: 'Pass', arg: 'pass' });
+});
+
+test('observe checks a bot split against targets, caps and the amount', () => {
+    const obs = new Observer('user-a', { cards: noCards });
+    const a = { kind: 'distribute', spec: { amount: 3, maxTargets: null }, targets: ['U1', 'B1'], caps: [2, Infinity] };
+    const [u, b] = [obs.id('U1'), obs.id('B1')];
+    assert.deepStrictEqual(obs.split(a, [{ id: u, amount: 2 }, { id: b, amount: 1 }]), [{ id: 'U1', amount: 2 }, { id: 'B1', amount: 1 }]);
+    assert.strictEqual(obs.split(a, [{ id: u, amount: 3 }]), null); // over the cap
+    assert.strictEqual(obs.split(a, [{ id: b, amount: 2 }]), null); // short of the amount
+    assert.strictEqual(obs.split(a, [{ id: 'c99', amount: 3 }]), null); // not a target
+});
+
+function fakeSeat(client = { name: 'fake', decide: () => ({ t: 'act', i: 0 }) }, opts = {}) {
+    const sock = new EventEmitter();
+    sock.sent = [];
+    sock.send = (...m) => sock.sent.push(m);
+    return { sock, seat: new KarabastSeat(sock, 'user-a', client, { seed: 't', ...opts }) };
+}
+
+test('a seat never sends undo and answers undo requests itself: allow twice, then deny, never block', () => {
+    const { seat } = fakeSeat();
+    assert.throws(() => seat.send('rollbackToSnapshot', { type: 'quick' }), /refusing/);
+    assert.throws(() => seat.send('resetActionTimer'), /refusing/);
+    const ask = frame({
+        promptUuid: 'U', menuTitle: 'Your opponent would like to undo their previous action',
+        buttons: ['Allow', 'Deny', 'Deny and Block Requests'].map((t) => ({ text: t, arg: t, uuid: 'U', command: 'menuButton' }))
+    });
+    ask.players['user-a'].leaders[0].selectable = false;
+    assert.deepStrictEqual([1, 2, 3, 4].map(() => seat.rule(ask).label), ['Allow', 'Allow', 'Deny', 'Deny']);
+    const pay = frame({ promptUuid: 'Q', menuTitle: 'You can no longer pay the cost for Wampa', buttons: ['Request undo', 'Abandon'].map((t) => ({ text: t, arg: t, uuid: 'Q', command: 'menuButton' })) });
+    assert.strictEqual(seat.rule(pay).label, 'Abandon');
+});
+
+test('a seat plays the bot answer, hides undo buttons from it, and reports the result', async () => {
+    let seen = null;
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: (msg) => { seen = msg; return { t: 'act', i: msg.actions.findIndex((a) => a.label === 'Pass') }; }, over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client);
+    const done = seat.play();
+    const f = frame({ promptUuid: 'P1', menuTitle: 'Choose an action', buttons: ['Undo', 'Pass'].map((t) => ({ text: t, arg: t.toLowerCase(), uuid: 'P1', command: 'menuButton' })) });
+    sock.emit('gamestate', f);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(seen && !seen.actions.some((a) => /undo/i.test(a.label)));
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'menuButton', 'pass', 'P1']);
+    sock.emit('gamestate', { ...frame({}), winners: ['Alice'] });
+    const r = await done;
+    assert.strictEqual(r.result, 'win');
+    assert.strictEqual(r.stats.decisions, 1);
+});
+
+test('the people ledger caps distinct people and keeps no ids', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const l = new PeopleLedger(file, 3);
+    assert.strictEqual(l.add(['user-a', 'user-b'], 'watched'), 2);
+    assert.strictEqual(l.add(['user-a'], 'played'), 0);
+    assert.ok(l.room(1) && !l.room(2));
+    assert.throws(() => l.add(['user-c', 'user-d'], 'watched'), /cap/);
+    const again = new PeopleLedger(file, 3);
+    assert.strictEqual(again.count, 2);
+    assert.ok(again.has('user-b'));
+    assert.ok(!fs.readFileSync(file, 'utf8').includes('user-'));
+    for (const bad of [NaN, Number('ten'), Number(undefined), -1, 2.5, Infinity]) {
+        assert.throws(() => new PeopleLedger(file, bad), /people cap/);
+    }
+});
+
+test('two ledgers on one file share the cap', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const a = new PeopleLedger(file, 2);
+    const b = new PeopleLedger(file, 2);
+    assert.strictEqual(a.add(['user-a'], 'played'), 1);
+    assert.strictEqual(b.add(['user-b'], 'watched'), 1);
+    // a's own snapshot still says 1; the file says 2
+    assert.ok(!a.room(1));
+    assert.throws(() => a.add(['user-c'], 'played'), /cap/);
+    assert.strictEqual(new PeopleLedger(file, 2).count, 2);
+    assert.ok(!fs.existsSync(`${file}.lock`));
+    // a lock someone else holds is never taken over, however old
+    fs.writeFileSync(`${file}.lock`, '');
+    fs.utimesSync(`${file}.lock`, new Date(0), new Date(0));
+    assert.throws(() => new PeopleLedger(file, 5, { lockWaitMs: 100 }).add(['user-d'], 'played'), /stayed locked.*remove/);
+    assert.ok(fs.existsSync(`${file}.lock`));
+    assert.strictEqual(new PeopleLedger(file, 5).count, 2);
+});
+
+test('a bad split is a bot failure, and the seat concedes at maxFailures', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0, split: [{ id: 'c99', amount: 3 }] }), over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client);
+    const done = seat.play();
+    const dist = (uuid) => {
+        const f = frame({ promptUuid: uuid, distributeAmongTargets: { type: 'distributeIndirectDamage', amount: 3, canDistributeLess: false, canChooseNoTargets: false, maxTargets: null } },
+            { groundArena: [unit('U1', { selectable: true })] });
+        f.players['user-a'].leaders[0].selectable = false;
+        f.players['user-a'].base.selectable = true;
+        return f;
+    };
+    sock.emit('gamestate', dist('P1'));
+    await new Promise((r) => setTimeout(r, 20));
+    // the first failure plays a random split for the bot
+    assert.strictEqual(sock.sent.at(-1)[1], 'statefulPromptResults');
+    sock.emit('gamestate', dist('P2'));
+    // a seat that never concedes would keep the test waiting: end it after 2 s
+    const timer = setTimeout(() => seat.done('none', 'the seat did not concede'), 2000);
+    const r = await done;
+    clearTimeout(timer);
+    assert.strictEqual(r.result, 'loss');
+    assert.strictEqual(r.stats.failures.length, 2);
+    assert.match(r.stats.failures[0], /bad split/);
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
+});
+
+test('a seat concedes when the server keeps ignoring its answers at one decision', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0 }), over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client, { retryMs: 50, maxIgnored: 3 });
+    const done = seat.play();
+    // the server never moves on from this frame, as when it can no longer serialize the game
+    sock.emit('gamestate', frame({ promptUuid: 'P1', menuTitle: 'Choose an action', buttons: ['Pass', 'Claim'].map((t) => ({ text: t, arg: t, uuid: 'P1', command: 'menuButton' })) }));
+    const timer = setTimeout(() => seat.done('none', 'the seat did not concede'), 5000);
+    const r = await done;
+    clearTimeout(timer);
+    assert.strictEqual(r.result, 'loss');
+    assert.strictEqual(r.stats.rejected, 3);
+    assert.match(r.reason, /ignored 3 answers/);
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
+});
+
+test('a quick-match run that fails after entering the queue keeps the place counted', async () => {
+    const http = require('http');
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const { spawn } = require('child_process');
+    // a server that takes the queue entry, then drops the socket before any lobbystate
+    const server = http.createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+    });
+    server.on('upgrade', (req, socket) => socket.destroy());
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-queue-'));
+    const ledgerFile = path.join(dir, 'people.json');
+    const child = spawn(process.execPath, [path.join(__dirname, '..', 'karabast', 'queue.js'), '--server', `http://127.0.0.1:${server.address().port}`,
+        '--bot', 'js-random', '--deck', 'luke-skywalker_jtl_data-vault', '--games', '1', '--ledger', ledgerFile, '--max-people', '10'], { stdio: 'ignore' });
+    const code = await new Promise((r) => child.on('exit', r));
+    server.close();
+    assert.strictEqual(code, 1);
+    const data = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    assert.strictEqual(Object.keys(data.people).length, 1);
+    assert.match(Object.keys(data.people)[0], /^unidentified-/);
+    assert.deepStrictEqual(data.held, {});
+});
+
+test('a reservation holds places until it is used or released', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const a = new PeopleLedger(file, 3);
+    const b = new PeopleLedger(file, 3);
+    a.add(['user-a'], 'played');
+    const hold = a.reserve(2);
+    assert.ok(hold);
+    // 1 counted + 2 held: nothing left for b, whether it reserves or adds directly
+    assert.strictEqual(b.reserve(1), null);
+    assert.ok(!b.room(1));
+    assert.throws(() => b.add(['user-x'], 'played'), /reserved/);
+    // the watched game had one new player: the unused place goes back with the reservation
+    assert.strictEqual(a.add(['user-a', 'user-b'], 'watched', hold), 1);
+    const again = b.reserve(1);
+    assert.ok(again);
+    b.release(again);
+    assert.ok(b.room(1));
+    assert.strictEqual(new PeopleLedger(file, 3).reserved(), 0);
+    // a place held for a game that was joined but never identified stays counted
+    const seen = b.reserve(1);
+    b.spend(seen, 'watched');
+    b.release(seen);
+    assert.strictEqual(new PeopleLedger(file, 3).count, 3);
+    assert.ok(!b.room(1));
 });
