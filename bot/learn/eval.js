@@ -1,10 +1,12 @@
 'use strict';
-// node bot/learn/eval.js --bots rust-learned,random-a --games 200 [--seed 500000] [--workers 4] [--out results/learned-vs-random] [--record]
+// node bot/learn/eval.js --bots rust-learned,random-a --games 200 [--seed 500000] [--workers 4] [--out results/learned-vs-random] [--record] [--key K|none]
 //
 // Head-to-head match between two bots, games split over worker processes, seats alternating by seed.
 // Prints the win rate over decided games (draws count half) with a 95% interval and, with --out, writes a tournament index.json (the format
 // bot/tournament.js writes, so the viewer and the research dashboard read it unchanged), plus replays
 // with --record.
+// Games are dealt from a secret run key (rng.js runKey), printed at the end and kept in summary.json: give it as --key to
+// play the same games again, or to give an A/B pair of runs the same decks. --key none: seed alone.
 const fs = require('fs');
 const path = require('path');
 const { fork } = require('child_process');
@@ -14,12 +16,15 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-const { makeBot } = require('../players');
+const { makeBot, closeBots } = require('../players');
+const { gameKey, runKey } = require('../rng');
 
 async function worker() {
     const { Env } = require('../env');
     const { playGame } = require('../match');
     const { snapshot } = require('../recorder');
+    // the run key comes over IPC, not argv or the environment, which the bot programs could read
+    const key = await new Promise((resolve) => process.once('message', (m) => resolve(m.key)));
     const names = arg('bots').split(',');
     const first = Number(arg('first'));
     const count = Number(arg('count'));
@@ -37,10 +42,11 @@ async function worker() {
             onEvent = (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`);
         }
         process.send({ start: { id, seed, p1: names[seats[0]], p2: names[seats[1]] } });
-        const r = await playGame(env, { seed, bots: seats.map((k) => bots[k]), record: !!onEvent, snapshot, onEvent });
+        const r = await playGame(env, { seed, bots: seats.map((k) => bots[k]), key: key && gameKey(key, seed), record: !!onEvent, snapshot, onEvent });
         const winner = r.winner === 'p1' ? names[seats[0]] : r.winner === 'p2' ? names[seats[1]] : r.winner;
-        process.send({ done: { id, seed, p1: names[seats[0]], p2: names[seats[1]], winner, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing } });
+        process.send({ done: { id, seed, p1: names[seats[0]], p2: names[seats[1]], winner, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by ?? null, ms: r.ms, timing: r.timing, ...(r.key ? { key: r.key } : {}) } });
     }
+    await closeBots();
     process.exit(0);
 }
 
@@ -66,6 +72,7 @@ async function main() {
     const workers = Number(arg('workers', 4));
     const out = arg('out', null) && path.resolve(arg('out'));
     const record = process.argv.includes('--record');
+    const key = runKey(arg('key', null));
     const index = { id: out ? path.basename(out) : 'eval', createdAt: new Date().toISOString(), engine: null, bots: names, gamesPerPairing: games, games: [] };
     if (out) {
         fs.mkdirSync(path.join(out, 'games'), { recursive: true });
@@ -81,7 +88,8 @@ async function main() {
     let done = 0;
     let other = 0;
     let draws = 0;
-    // win rate over decided games only (ERROR / STUCK / STEP_CAP left out), a draw counting half
+    // win rate over decided games, a draw counting half; a forfeit (ERROR with a `by`) is a win for the other bot,
+    // and games with no winner (STUCK, STEP_CAP, an engine error) are left out
     const rate = () => {
         const decided = wins[names[0]] + wins[names[1]] + draws;
         const score = wins[names[0]] + draws / 2;
@@ -103,6 +111,7 @@ async function main() {
             args.push('--record');
         }
         const p = fork(__filename, args, { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+        p.send({ key });
         p.on('message', (m) => {
             if (m.start) {
                 index.games.push({ ...m.start, winner: null, winnerSeat: null, rounds: 0, steps: 0, outcome: 'running', error: null, ms: 0 });
@@ -129,7 +138,7 @@ async function main() {
     }
     await Promise.all(procs);
     const r = rate();
-    const summary = { bots: names, games: done, decided: r.decided, wins, draws, unfinished: other, winRate: r.p, ci95: r.ci, secs: (Date.now() - t0) / 1000 };
+    const summary = { bots: names, games: done, decided: r.decided, wins, draws, unfinished: other, winRate: r.p, ci95: r.ci, secs: (Date.now() - t0) / 1000, key };
     console.log(JSON.stringify(summary));
     if (out) {
         fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(summary, null, 2));

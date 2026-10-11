@@ -48,11 +48,13 @@ plays games through the normal match loop (any bots, including external ones) an
 ```jsonl
 {"t":"game","seed":100000,"bots":["random-a","random-b"]}
 {"t":"d","seq":3,"you":"p1","prompt":{...},"state":{...},"actions":[...],"i":1}
-{"t":"end","seed":100000,"winner":"p1","outcome":"won","round":15,"steps":369,"error":null}
+{"t":"end","seed":100000,"winner":"p1","outcome":"won","round":15,"steps":369,"error":null,"by":null,"key":"9f2c..."}
 ```
 
 A `d` line is exactly the `decide` message the referee would send that seat (same `bot/view.js`
 code), plus `i`, the index that was chosen. Decisions with one legal action are skipped unless `--all`.
+`winner` is set only for games played out (`outcome` "won"); a game a bot broke has outcome "ERROR",
+`by` naming that seat, and no winner. `key` is the game's key: the game is dealt from it, not from the seed.
 
 Labels: Q and V learn "did the deciding seat win this game"; the world head learns the change of the
 board block of the state until that seat's next action window. With random players this makes

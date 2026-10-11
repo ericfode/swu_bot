@@ -4,14 +4,13 @@
 // Games are seeded from a secret key (random unless given) so bots cannot rebuild hidden cards from the seed; each
 // game's own key (rng.js gameKey) goes into its index entry and replay when it ends. --key none: seed alone. Bot programs
 // can read the referee's command line, so give --key only to play a finished run again.
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { Env } = require('./env');
 const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
-const { gameKey } = require('./rng');
+const { gameKey, runKey } = require('./rng');
 const { makeBot, closeBots } = require('./players');
 
 function arg(name, dflt) {
@@ -37,8 +36,7 @@ async function main() {
     const perPair = Number(arg('games', 4));
     const out = path.resolve(arg('out', 'replays/demo'));
     let seed = Number(arg('seed', 1));
-    const keyArg = arg('key', null);
-    const key = keyArg === 'none' ? null : keyArg ?? crypto.randomBytes(16).toString('hex');
+    const key = runKey(arg('key', null));
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const env = new Env();

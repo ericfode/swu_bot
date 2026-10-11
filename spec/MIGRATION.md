@@ -62,7 +62,8 @@ it says nothing about the hidden cards.
 - `playGame` takes `key` (secret seeding) and `limits` (reply budgets), returns `by`, `key` and `timing`, refuses one
   protocol client in both seats, and closes no bot. `makeBot(name, taken)` in `bot/players/index.js` hands out one
   process per bot name for the whole run (`taken`: the bots already seated in this game); call `closeBots()` at the
-  end. `bot/ladder-worker.js`, `bot/learn/*.js` and `bot/rust/check.js` do.
+  end and await it before `process.exit()`, so every program sees the end of its input and exits.
+  `bot/ladder-worker.js`, `bot/learn/*.js`, `bot/eval/arena.js` and `bot/rust/check.js` do.
 - A native bot with `needsUndo` gets the referee's copy of the game as `ctx.game`, never the real one, and the real
   game runs without rollback. Before, its rollbacks could change how the real game played out (seen with an ISMCTS bot:
   a later "will have no effect" check came out differently, so the opponent lost its simulations and the replay could
@@ -95,9 +96,17 @@ which brings back deck order and face-down resources; ids come out the same.
 
 ## Tournaments and servers
 
-- `node bot/tournament.js --key K|none`. By default each run draws a random key; every game gets its own key derived
-  from it, written to its index entry and replay when the game ends. `--key none` seeds from the seed alone, as
-  upstream. Bot programs can read the referee's command line, so give `--key` only to play a finished run again.
+- `node bot/tournament.js --key K|none`, and the same option on `bot/ladder.js`, `bot/learn/eval.js` and
+  `bot/learn/collect.js`. By default each run draws a random key; every game gets its own key derived from it,
+  written to its index entry and replay when the game ends (`end` lines in collect's output). `--key none` seeds from
+  the seed alone, as upstream. Bot programs can read the referee's command line, so give `--key` only to play a
+  finished run again. The run key is in `ladder.json` (`config.key`) when the run is done, in eval's `summary.json`,
+  and in collect's last line.
+- A/B runs: within one run every pairing gets the same decks for the same seed, as before. Two separate runs get the
+  same decks only with the same `--key` (take it from the first run) or with `--key none`; before, the same `--seed`
+  was enough.
+- `bot/learn/collect.js` writes `winner: null` for a game a bot broke (`outcome` "ERROR", `by` that seat), so it is
+  never a training label, and keeps each program's own time limits.
 - Bot programs are registered in `bot/external-bots.json` as before, with an optional `lang` and `adapter`.
 - The messages are the same over every transport. A server (such as the arena) offers the request-response binding
   in [protocol.md](protocol.md#transports): each call carries the bot's message and returns the referee's next one.

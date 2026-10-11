@@ -7,13 +7,14 @@ const { Env } = require('./env');
 const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
 const { makeBot, closeBots } = require('./players');
+const { gameKey } = require('./rng');
 
 const env = new Env();
 env.engineRev = workerData.engineRev ?? null;
 
 parentPort.on('message', async (job) => {
     if (job === 'exit') {
-        closeBots();
+        await closeBots();
         process.exit(0);
     }
     const bots = [];
@@ -24,7 +25,7 @@ parentPort.on('message', async (job) => {
         fs.writeFileSync(job.replayFile, '');
         onEvent = (e) => fs.appendFileSync(job.replayFile, `${JSON.stringify(e)}\n`);
     }
-    const r = await playGame(env, { seed: job.seed, bots, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
+    const r = await playGame(env, { seed: job.seed, bots, key: workerData.key && gameKey(workerData.key, job.seed), maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
     delete r.events;
     parentPort.postMessage({ job, result: r });
 });

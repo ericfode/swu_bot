@@ -108,7 +108,7 @@ async function worker(out, shard, shards, jobs, record, maxSteps, every) {
         }
         console.log(`[${shard}] ${job.id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''}`);
     }
-    require('../players').closeBots();
+    await require('../players').closeBots();
 }
 
 function engineRev() {

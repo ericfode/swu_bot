@@ -4,7 +4,8 @@
  * Lookahead adapter for stdio bots: the bot can ask to "imagine" a situation before it acts.
  *
  * A native bot (spec/bot-interface.md#native-bots) that runs a v1 bot program (spec/stdio-protocol.md) and adds one
- * message pair: it imagines on the real engine and rolls back, so it needs engine access. At an action window the
+ * message pair: it imagines on the game it is given and rolls back, so it needs engine access (`needsUndo`: the
+ * referee hands it a copy, never the real game). At an action window the
  * program may answer `decide` with
  *
  *   {"t":"imagine","situation":{"kind":"after"|"reply"|"round","i":<action index>}}
@@ -166,15 +167,9 @@ class LookaheadBot {
         return { look: this.look };
     }
 
-    /** One message to the program; any failure ends it, and the next game starts it again. */
-    async call(msg, what = msg.t) {
-        try {
-            return await within(what === 'hello' ? this.client.hello(msg) : this.client.request(msg), this.ms[what === 'hello' ? 'hello' : 'decide'], what);
-        } catch (e) {
-            this.client.close();
-            this.game = null;
-            throw e;
-        }
+    /** One message to the program. */
+    call(msg, what = msg.t) {
+        return within(what === 'hello' ? this.client.hello(msg) : this.client.request(msg), this.ms[what === 'hello' ? 'hello' : 'decide'], what);
     }
 
     async beginGame(eg, pid, rng) {
@@ -192,7 +187,17 @@ class LookaheadBot {
         this.game = eg;
     }
 
-    async choose({ game: eg, pid, actions, rng }) {
+    /** Any failure, the program's or one found here, ends the program, so the next game starts it again. */
+    async choose(ctx) {
+        try {
+            return await this.chooseOnce(ctx);
+        } catch (e) {
+            this.close();
+            throw e;
+        }
+    }
+
+    async chooseOnce({ game: eg, pid, actions, rng }) {
         if (eg !== this.game) {
             await this.beginGame(eg, pid, rng);
         }
@@ -224,11 +229,11 @@ class LookaheadBot {
     }
 
     close() {
-        this.client.close();
         this.game = null;
+        return this.client.close();
     }
 
-    /** Play one situation out on the real engine and roll back. Only exact at an action window. */
+    /** Play one situation out on the game and roll back. Only exact at an action window. */
     imagine(eg, pid, actions, situation) {
         const t0 = Date.now();
         this.look.asked++;

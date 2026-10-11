@@ -29,6 +29,6 @@ const { makeBot, closeBots } = require('../players');
         }
     }
     console.log(JSON.stringify(tally));
-    closeBots();
+    await closeBots();
     process.exitCode = bad ? 1 : 0;
 })();

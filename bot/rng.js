@@ -52,4 +52,11 @@ function gameStreams(seed, key = null) {
 /** The key of one game of a run: publishing it after the game reveals nothing about the run's other games. */
 const gameKey = (key, seed) => hmac(key, `game:${seed}`);
 
-module.exports = { seededRng, keyedRng, gameStreams, gameKey };
+/**
+ * The run key for a `--key` argument: a fresh secret when none is given, null for `none` (the seed alone, as upstream
+ * seeds games), else the key itself, to play a run again or to give two runs the same games. Bot programs can read
+ * the referee's command line, so a key given there is no secret.
+ */
+const runKey = (arg) => (arg == null ? crypto.randomBytes(16).toString('hex') : arg === 'none' ? null : String(arg));
+
+module.exports = { seededRng, keyedRng, gameStreams, gameKey, runKey };

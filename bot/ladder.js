@@ -3,7 +3,7 @@
  * Round-robin ladder with ratings, run on worker threads.
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
- *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c]
+ *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--key K|none]
  *
  * Each pair plays `--games` games (rounded up to even): every seed twice, once from each seat, so random-deck luck
  * cancels out. Everything goes in <out>/<id>/, rewritten atomically after every finished game:
@@ -12,6 +12,9 @@
  *   games/       per-game recordings (<id>.jsonl, same format as tournament.js), only with --record
  * --vs a,b,c makes it a gauntlet: each --bots entry plays each --vs entry (and --bots entries do not play each
  * other). Every challenger gets the same seeds, so a parameter sweep compares variants on the same decks.
+ * Games are dealt from a secret run key (rng.js runKey), so bots cannot rebuild hidden cards from their seed. Each
+ * game's key goes into its index entry when it ends, and the run key into ladder.json when the run is done: give it as
+ * --key to play the same games again (two runs with the same --key and --seed get the same decks). --key none: seed alone.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
  */
 const fs = require('fs');
@@ -20,6 +23,7 @@ const path = require('path');
 const { Worker } = require('worker_threads');
 const { execFileSync } = require('child_process');
 const { describeBot } = require('./players');
+const { runKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 
@@ -69,6 +73,7 @@ async function main() {
     const id = arg('id', `ladder-${createdAt.replace(/[:.]/g, '-').slice(0, 19)}`);
     const out = path.join(path.resolve(arg('out', defaultOut())), id);
     const record = process.argv.includes('--record');
+    const key = runKey(arg('key', null));
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
@@ -108,7 +113,7 @@ async function main() {
         };
         for (let i = 0; i < Math.min(workers, queue.length); i++) {
             live++;
-            const w = new Worker(path.join(__dirname, 'ladder-worker.js'), { workerData: { maxSteps, engineRev: engine } });
+            const w = new Worker(path.join(__dirname, 'ladder-worker.js'), { workerData: { maxSteps, engineRev: engine, key } });
             w.on('message', (msg) => {
                 if (msg.ready) {
                     feed(w);
@@ -116,7 +121,7 @@ async function main() {
                 }
                 const { job, result: r } = msg;
                 const winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
-                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, by: r.by ?? null, timing: r.timing };
+                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, by: r.by ?? null, timing: r.timing, ...(r.key ? { key: r.key } : {}) };
                 Object.assign(games.find((g) => g.id === job.id), done, { botStats: r.botStats });
                 Object.assign(tIndex.games.find((g) => g.id === job.id), done);
                 const doc = save();
@@ -136,6 +141,9 @@ async function main() {
         }
     });
     status = 'done';
+    if (key) {
+        config.key = key;
+    }
     const doc = save();
     console.log(`done in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     for (const b of doc.bots) {

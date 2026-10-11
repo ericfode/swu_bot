@@ -79,9 +79,11 @@ class StdioClient {
         return this.request(msg);
     }
 
-    /** Ends the program (it sees EOF; killed if still running 2 s later). */
+    /** Ends the program: it sees EOF, and is killed if still running 2 s later. Resolves once it has exited. */
     close() {
+        const child = this.child;
         this.fail('closed');
+        return child && live.has(child) ? new Promise((resolve) => child.once('exit', resolve)) : Promise.resolve();
     }
 
     start() {
@@ -113,7 +115,10 @@ class StdioClient {
         });
         const fail = (why) => this.child === child && this.fail(why);
         live.add(child);
-        child.on('error', (e) => fail(`could not start ${cmd}: ${e.message}`));
+        child.on('error', (e) => {
+            live.delete(child); // a program that never started has no exit to wait for
+            fail(`could not start ${cmd}: ${e.message}`);
+        });
         child.on('exit', (code, signal) => {
             live.delete(child);
             fail(`exited (code ${code}${signal ? `, ${signal}` : ''})`);
@@ -134,6 +139,7 @@ class StdioClient {
                 child.stdin.end();
                 const kill = setTimeout(() => child.kill('SIGKILL'), 2000);
                 child.once('exit', () => clearTimeout(kill));
+                child.ref(); // until it has exited, so its exit is seen
             }
         }
         const w = this.waiter;

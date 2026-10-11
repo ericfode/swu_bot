@@ -60,8 +60,10 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
     `node bot/ismcts-panel.js --runs <ladder dir> --thoughts <dir> --watch 10` turns that into the dashboard panel.
     `node bot/determinize-check.js` checks that world sampling keeps zone sizes and that rollback restores exactly.
   - `name#tag` enters the same bot twice (`aggro#1,aggro#2`) as a sanity check.
-- `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record]`
+- `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record] [--key K|none]`
   runs a round robin on worker threads. Each seed is played once from each seat (random decks follow the seat, so deck luck cancels).
+  Decks come from a random run key, as in `tournament.js`; it is saved in `ladder.json` (`config.key`) when the run is done.
+  Pass it as `--key` to give a second run the same games, or use `--key none` to deal from the seed alone.
   After every game it rewrites `<out>/<id>/index.json` (same tournament index as `tournament.js`, so the viewer and the
   research dashboard read it unchanged) and `<out>/<id>/ladder.json` (schema `swu-ladder/1`: per-bot W/L/D, win rate with
   95% CI, sequential Elo, Bradley-Terry Elo, pair matrix, Elo history). Writes are atomic. `--record` also saves `games/<id>.jsonl`

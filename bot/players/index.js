@@ -127,10 +127,11 @@ function program(name, taken) {
     return c;
 }
 
-/** Ends every bot program started by makeBot. */
+/** Ends every bot program started by makeBot. Resolves once they have exited; await it before process.exit(). */
 function closeBots() {
-    [...running.values()].flat().forEach((c) => c.close());
+    const all = [...running.values()].flat();
     running.clear();
+    return Promise.all(all.map((c) => c.close()));
 }
 
 function parseName(name) {
