@@ -7,7 +7,7 @@
  *   node bot/karabast/queue.js --bot c-clock --decks bot/decks/ash-meta-2026-09.json --deck <name> [--games 1]
  *        [--server http://127.0.0.1:9500] [--allow-host <host>] [--username "swu-bot (bot)"]
  *        [--format premier] [--card-pool current] [--wait-minutes 10] [--chat "<line>"] [--out <dir>]
- *        [--ledger <file> --max-people 10] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
+ *        [--ledger <file> --max-people 10|none] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
  *        [--max-waits 6]
  *
  * With --games above 1 it is a loop: after each game it waits --gap seconds (at least 25: a finished lobby keeps its
@@ -19,6 +19,9 @@
  * - A non-local run needs --ledger: before entering the queue the run reserves one place under --max-people, or stops
  *   (ledger.js). The opponent is counted in that place as soon as the match is made. A run that fails after entering
  *   the queue, a wait with no match included, keeps the place counted: only the server knows whether it matched us.
+ *   `--max-people none` keeps counting with no cap.
+ * - One game at a time on a machine (Eric, 2026-10-11 22:16: the budget is one concurrent game): a non-local run holds
+ *   ~/karabast/playing.pid while it runs, and refuses to start while another live run holds it.
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -143,6 +146,97 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
     }
 }
 
+/** Whether `pid` is a live bot run. A pid reused by another program (after the machine restarted) is not one. */
+/** One game at a time on this machine (Eric, 2026-10-11 22:16), whichever ledger a run counts people in. */
+const PLAY_LOCK = path.join(require('os').homedir(), 'karabast', 'playing.pid');
+
+/** What a run writes to the play lock: its pid and, where /proc exists, its start time (ticks since boot). */
+const lockToken = (pid) => {
+    try {
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        return `${pid} ${stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]}`; // field 22, starttime
+    } catch {
+        return String(pid); // no /proc (macOS)
+    }
+};
+
+/**
+ * Whether the run that wrote `token` still runs. The start time tells it from a later process given the same pid
+ * (after a restart, or a local run); a token without one trusts the pid.
+ */
+const holding = (token) => {
+    const [pid, start] = token.trim().split(' ');
+    if (!(Number(pid) > 0) || Number(pid) === process.pid) {
+        return false;
+    }
+    try {
+        process.kill(Number(pid), 0);
+    } catch (e) {
+        if (e.code !== 'EPERM') {
+            return false;
+        }
+    }
+    return start === undefined || lockToken(pid) === token.trim();
+};
+
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Writes our lockToken() to `file` so only one run plays at a time, or throws while another live run holds it. The
+ * check and the write happen while holding `<file>.lock` (created exclusively, held for a moment), so two starters
+ * cannot both take it. Like the ledger's, that lock is never taken over: one left by a run that died says which file
+ * to remove. A `file` left by a run that died (killed, or the machine restarted) is taken over, also when its pid now
+ * belongs to another process (holding()). Released at exit; a killed run leaves it for the next one to take over.
+ */
+function holdPlayLock(file, { lockWaitMs = 10000 } = {}) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const lock = `${file}.lock`;
+    const mine = lockToken(process.pid);
+    const t0 = Date.now();
+    let fd;
+    for (;;) {
+        try {
+            fd = fs.openSync(lock, 'wx');
+            break;
+        } catch (e) {
+            if (e.code !== 'EEXIST') {
+                throw e;
+            }
+        }
+        if (Date.now() - t0 > lockWaitMs) {
+            throw new Error(`${lock} stayed locked for ${lockWaitMs / 1000} s; if no other run is starting, remove it`);
+        }
+        sleepSync(50);
+    }
+    try {
+        let held = '';
+        try {
+            held = fs.readFileSync(file, 'utf8');
+        } catch {
+            // free
+        }
+        if (holding(held)) {
+            throw new Error(`another bot run (pid ${held.trim().split(' ')[0]}) is playing: one game at a time (${file})`);
+        }
+        const tmp = `${file}.${process.pid}.tmp`;
+        fs.writeFileSync(tmp, mine);
+        fs.renameSync(tmp, file);
+    } finally {
+        fs.closeSync(fd);
+        fs.rmSync(lock, { force: true });
+    }
+    process.on('exit', () => {
+        // nobody replaces the file while our pid is alive, so read-then-remove cannot remove another run's
+        try {
+            if (fs.readFileSync(file, 'utf8') === mine) {
+                fs.unlinkSync(file);
+            }
+        } catch {
+            // already gone
+        }
+    });
+}
+
 async function main() {
     const server = arg('server', 'http://127.0.0.1:9500');
     const allowHosts = arg('allow-host') ? [arg('allow-host')] : [];
@@ -151,7 +245,11 @@ async function main() {
     if (!local && !ledgerFile) {
         throw new Error('a run against a non-local server needs --ledger <file> (the people cap)');
     }
-    const ledger = ledgerFile ? new PeopleLedger(ledgerFile, Number(arg('max-people', 10))) : null;
+    const maxPeople = arg('max-people', '10');
+    const ledger = ledgerFile ? new PeopleLedger(ledgerFile, maxPeople === 'none' ? Infinity : Number(maxPeople)) : null;
+    if (!local) {
+        holdPlayLock(PLAY_LOCK);
+    }
     const decks = JSON.parse(fs.readFileSync(arg('decks', path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json')), 'utf8'));
     const name = arg('deck');
     const deck = checkDeck(decks.find((d) => d.metadata?.name === name) ?? (() => {
@@ -322,4 +420,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { queueOnce, runLoop, checkDeck, KNOWN_ERRORS, MIN_GAP_S };
+module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, lockToken, KNOWN_ERRORS, MIN_GAP_S };

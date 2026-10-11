@@ -14,7 +14,7 @@ without a browser. Plain CommonJS on Node 22's built-in `WebSocket` and `fetch`,
 | `live-view.js` | Serves recorded games to the Holotable viewer kit while they are played: a game picker, the board following each move, and an evaluator's chance that p1 wins. |
 | `feed.js` | Streams our bot's games against people to the arena window (`runs/karabast`, replays, lens), with our hand face-down while a game is live. |
 | `watchdog.js` | Keeps a `queue.js` loop going: restarts it when it is stuck or died, and raises an alert past its restart budget. |
-| `ledger.js` | The people cap: counts each real person a run touches (salted hashes, no ids) and stops at the limit. |
+| `ledger.js` | Counts each real person a run touches (salted hashes, no ids) and stops at the people cap, when there is one. |
 | `selfplay.js` | Two protocol bots on a local server, through `seat.js`: the end-to-end test. `--pester-undo` makes seat 2 ask for undos. |
 | `fidelity.js` | Checks `observe.js` against the referee: the same engine state, seen through a Karabast frame and through `bot/view.js`. |
 
@@ -153,7 +153,11 @@ people. Before any live run:
   game that would pass `--max-people` (default 10). Places are reserved before each game (1 for a bot game, 2 for a
   watched one), so a bot run and a recorder can share one ledger. A place stays counted whenever someone may have
   been reached without being identified: a bot run that entered the queue and failed or waited with no match, a
-  recorder that joined a game and saw no frame. `--stop-file <file>` stops a run before the next game.
+  recorder that joined a game and saw no frame. `--max-people none` keeps counting with no cap: since 2026-10-11 22:16
+  Eric's budget for the bot is one game at a time, not a number of people. `--stop-file <file>` stops a run before the
+  next game.
+- One game at a time on a machine: a non-local `queue.js` holds `~/karabast/playing.pid` while it runs, whatever its
+  ledger, and refuses to start while another live run holds it; a file left by a run that was killed is taken over.
 - Karabast logs every engine error and sends severe ones to its developers' Discord (Lobby `handleError`), so
   `queue.js` refuses decks with cards that are known to throw (Barriss Offee, ASH_044).
 - Spectating needs a login (anonymous spectators are a development-only setting): a session token in the variable

@@ -236,7 +236,7 @@ test('the people ledger caps distinct people and keeps no ids', () => {
     assert.strictEqual(again.count, 2);
     assert.ok(again.has('user-b'));
     assert.ok(!fs.readFileSync(file, 'utf8').includes('user-'));
-    for (const bad of [NaN, Number('ten'), Number(undefined), -1, 2.5, Infinity]) {
+    for (const bad of [NaN, Number('ten'), Number(undefined), -1, 2.5, -Infinity]) {
         assert.throws(() => new PeopleLedger(file, bad), /people cap/);
     }
 });
@@ -701,4 +701,39 @@ test('the window feed hides our hand while live, holds back the newest step, and
     assert.deepStrictEqual(calls.filter((c) => c[0] === 'PUT' && c[1] !== 'runs/karabast').map((c) => c[3]), [Buffer.from(quiet.events.map((e) => JSON.stringify(e)).join('\n') + '\n').length], 'whole once the seat ended');
     const row = calls.find((c) => c[1] === 'runs/karabast')[2].games[0];
     assert.deepStrictEqual([row.outcome, row.winnerSeat, row.winner], ['won', 'p1', 'opponent']);
+});
+
+test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', () => {
+    const { holdPlayLock, lockToken } = require('../karabast/queue');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'play-lock-'));
+    const file = path.join(dir, 'playing.pid');
+    const run = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); // a live bot run
+    try {
+        fs.writeFileSync(file, lockToken(run.pid));
+        assert.throws(() => holdPlayLock(file), /one game at a time/);
+        fs.writeFileSync(file, String(run.pid)); // a token without a start time trusts the pid
+        assert.throws(() => holdPlayLock(file), /one game at a time/);
+    } finally {
+        run.kill();
+    }
+    if (fs.existsSync('/proc/self/stat')) {
+        fs.writeFileSync(file, `${process.ppid} 1`); // alive, but started later than the run that wrote it: a reused pid
+        holdPlayLock(file);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), lockToken(process.pid));
+        assert.match(lockToken(process.pid), /^\d+ \d+$/);
+    }
+    fs.writeFileSync(file, '999999999'); // no such process
+    fs.writeFileSync(`${file}.lock`, ''); // another starter is checking: wait for it, never take over beside it
+    assert.throws(() => holdPlayLock(file, { lockWaitMs: 200 }), /stayed locked/);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), '999999999');
+    fs.unlinkSync(`${file}.lock`);
+    holdPlayLock(file);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), lockToken(process.pid));
+    assert.ok(!fs.existsSync(`${file}.lock`), 'the starter lock is let go');
+    const ledger = new PeopleLedger(path.join(dir, 'people.json'), Infinity);
+    for (let i = 0; i < 40; i++) {
+        ledger.add([`u${i}`], 'played', ledger.reserve(1));
+    }
+    assert.strictEqual(ledger.count, 40);
+    assert.throws(() => new PeopleLedger(path.join(dir, 'people.json'), NaN), /whole number/); // Infinity only on purpose (--max-people none)
 });
