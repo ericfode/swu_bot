@@ -210,16 +210,19 @@ const sameDecks = (x, y) => !!x && !!y && x.p1 === y.p1 && x.p2 === y.p2;
 
 /**
  * How evenly a challenger's decided games (the games its rate counts) put each deck on its side and on the
- * reference's. decided: those games; full / half: seeds with both games finished / with one; off: decks on one side
+ * reference's. decided: those games; full / half: seeds with both games decided / with one; off: decks on one side
  * in more games than the other; max: the largest gap, in games. A dropped game (engine error, step cap) unbalances
  * its decks as much as a missing one.
  */
 function deckBalance(t) {
     const side = new Map();
     let full = 0;
+    let half = 0;
     let decided = 0;
     for (const rec of t.seeds.values()) {
-        full += rec.p1 && rec.p2 ? 1 : 0;
+        const n = ['p1', 'p2'].filter((s) => rec[s] && rec[s].y !== null).length;
+        full += n === 2 ? 1 : 0;
+        half += n === 1 ? 1 : 0;
         for (const seat of ['p1', 'p2']) {
             const g = rec[seat];
             if (!g || g.y === null || !g.decks?.p1 || !g.decks?.p2) {
@@ -232,7 +235,7 @@ function deckBalance(t) {
         }
     }
     const gaps = [...side.values()].map(Math.abs).filter((g) => g > 0);
-    return { decided, full, half: t.seeds.size - full, off: gaps.length, max: gaps.length ? Math.max(...gaps) : 0 };
+    return { decided, full, half, off: gaps.length, max: gaps.length ? Math.max(...gaps) : 0 };
 }
 
 /** Paired score difference of challengers A and B over the seeds both played with the same deals (see the header). */
@@ -429,7 +432,7 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
         const b = deckBalance(t);
         if (b.off) {
             warnings.push(`${t.bot} (${t.run}${status === 'running' ? ', still running' : ''}): over its ${b.decided} decided games ` +
-                `(${t.incomplete} incomplete left out, ${b.full} seeds with both games finished${b.half ? `, ${b.half} with one` : ''}), ` +
+                `(${t.incomplete} incomplete left out, ${b.full} seeds with both games decided${b.half ? `, ${b.half} with one` : ''}), ` +
                 `${b.off} decks are not on its side as often as on the reference's (off by up to ${b.max} games), so some deck luck is ` +
                 `left in its rate (whole passes, --games ${2 * P}, balance every deck when no game is dropped)`);
         }
