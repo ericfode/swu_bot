@@ -6,10 +6,11 @@
 
 use crate::{Action, Engine, Seat, State};
 use serde::Serialize;
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+use std::{collections::HashMap, time::Duration};
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
 
 /// Small adapter also permits adversarial tests of the proof algorithm itself.
 pub trait Game {

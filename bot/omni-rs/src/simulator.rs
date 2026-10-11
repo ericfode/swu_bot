@@ -107,9 +107,14 @@ fn keyword_text(text: &str) -> Result<(u16, u16, u16), String> {
 impl Engine {
     pub fn from_pool(path: &Path) -> Result<Self, String> {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let v: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        Self::from_pool_bytes(&bytes)
+    }
+    /// Browser and native hosts share exactly the same catalogue validation and
+    /// provenance hash; this constructor does not access the filesystem.
+    pub fn from_pool_bytes(bytes: &[u8]) -> Result<Self, String> {
+        let v: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
         let mut e = Self::from_pool_value(&v)?;
-        e.pool_hash = format!("{:x}", Sha256::digest(&bytes));
+        e.pool_hash = format!("{:x}", Sha256::digest(bytes));
         Ok(e)
     }
     pub fn from_pool_value(v: &Value) -> Result<Self, String> {

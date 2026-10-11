@@ -8,6 +8,9 @@ The library is the starting point for a Rust backend: game transitions and searc
 trace tools use JavaScript to obtain reference decisions and states from the pinned engine. Extending the card
 pool requires implementing and checking the new rules; unsupported cards are errors.
 
+The same core is now available as a [WebAssembly package and JavaScript adapter](../omni/wasm/README.md).
+It keeps persistent state, checkpoints, and complete searches inside Wasm, with Node and browser loaders.
+
 ```mermaid
 flowchart LR
   C[Engine card data] --> P[Explicit pool]
@@ -178,4 +181,5 @@ Advisory `npm run lint` was attempted once after committing; Perch could not run
 
 The current match runner, setup/mulligans, and full card engine remain in JavaScript. This crate provides the
 independent Rust transition/search core for the subset; wiring it into `rust-search`, broader card rules,
-hidden information, WebAssembly delivery, and parallel search remain separate work.
+hidden information, and parallel search remain separate work. The Wasm adapter is available for this same subset;
+it does not expose the full forceteki object graph.

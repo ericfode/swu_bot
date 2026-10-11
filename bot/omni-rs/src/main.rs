@@ -202,7 +202,7 @@ fn bench(engine: &Engine, args: &Args) -> Result<(), String> {
         random ^= random << 13;
         random ^= random >> 7;
         random ^= random << 17;
-        state = engine.apply(&state, &actions[(random as usize) % actions.len()])?;
+        state = engine.apply(&state, &actions[(random % actions.len() as u64) as usize])?;
         decisions += 1;
     }
     let seconds = start.elapsed().as_secs_f64();
@@ -210,7 +210,7 @@ fn bench(engine: &Engine, args: &Args) -> Result<(), String> {
         &json!({"benchmark":"complete_action_windows", "source":path.display().to_string(),
         "nodes":nodes,"decisions":decisions,"games":games,"seconds":seconds,
         "nodesPerSecond":nodes as f64 / seconds, "microsecondsPerNode":seconds*1_000_000./nodes as f64,
-        "stateBytes":std::mem::size_of::<State>(),"threads":1,"checksum":checksum,
+        "stateBytes":std::mem::size_of::<State>(),"threads":1,"checksum":checksum,"checksumHex":format!("{checksum:016x}"),
         "setupExcluded":true,"profile":if cfg!(debug_assertions) {"debug"} else {"release"}}),
     )
 }
