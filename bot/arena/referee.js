@@ -7,7 +7,9 @@
  *                                                                              submitted a new version since the last one
  *
  * A round is a round robin (bot/ladder.js) of <agent>-v<latest> for every roster agent plus roster.baselines: --games per
- * pair, every seed from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live).
+ * pair, every seed from both seats, replays recorded to <results>/<ladder id>/ (the dashboard follows the games live). A
+ * tournament's rounds are <tournament id>-r<K> (arena-t202610130610-r1), so a later tournament never reuses a folder;
+ * rounds outside a tournament are arena-r<K>.
  * Round seeds and keys are secret until the ladder starts: they come from a 32-byte secret outside the arena folder
  * (roundSeed, roundKey; the key deals every game, rng.js).
  * Every bot plays under the same rules (ladder.js --cap-ms roster.thinkCapMs, --hang-ms 30 s past the 2x wall cap): a bot that thinks
@@ -17,7 +19,7 @@
  *   standings.json     every round so far
  *   rounds/r<K>.md     what competitors read: standings, results per opponent, lost games with replay paths
  * plus the dashboard panels and experiment (dash.js), refreshed every 30 s while a round runs. While its ladder runs,
- * <results>/arena-r<K>/referee.lock holds the referee's pid: a second referee will not start a ladder there.
+ * <results>/<ladder id>/referee.lock holds the referee's pid: a second referee will not start a ladder there.
  *
  *   node bot/arena/referee.js --tournament --rounds 3 --minutes 60 [--games 2] [--title "..."] [--task "..."] [--resume | --force]
  * runs a clocked tournament: every round opens a work window of --minutes (all competitors start together; the API's
@@ -25,6 +27,12 @@
  * submitted by the end of the window. During the window the referee also plays evals queued through the API (`eval`),
  * each in its own process (eval.js --job, --eval-workers, default --workers) that is stopped when the window ends, so
  * clients without the engine can test. Evals still queued when a window ends are dropped when the next one opens.
+ *
+ * Custom rules (Eric, 2026-10-11). --holdout <fraction> (e.g. 0.3) makes a card-pool holdout tournament: at the start
+ * the referee splits the cards (cardpool.js, seeded from the secret) into ARENA_HOME/rules/<tournament id>/train.json
+ * and holdout.json. Every work round's ladder and every eval deals decks from the training cards only. After the last
+ * round, one more ladder (kind 'holdout', no work window) plays the same versions on decks dealt only from the held-out
+ * cards, and its report compares each bot's rank on the two pools. Held-out rounds stay out of the all-round Elo.
  */
 const fs = require('fs');
 const os = require('os');
@@ -36,6 +44,7 @@ const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, roster: loadRoster, 
 const dash = require('./dash');
 const { TOURNAMENT, notify } = require('./api');
 const { resolveArena } = require('./registry');
+const { splitPool, writePools, loadPool, checkPool } = require('../cardpool');
 
 const STANDINGS = path.join(HOME, 'standings.json');
 const EVAL_JS = path.join(__dirname, 'eval.js');
@@ -164,20 +173,55 @@ function scoreRound(round, ladder) {
     }
     bots.forEach((b, i) => (b.rank = elo ? i + 1 : null));
     const finished = ladder.games.filter((x) => x.outcome !== 'running').length;
-    return { round, ladderId: ladder.id, seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
+    return { round, ladderId: ladder.id, ...(ladder.config.pool ? { pool: ladder.config.pool.kind, poolCards: ladder.config.pool.cards } : {}),
+             seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
              status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, bots, results };
 }
 
-/** All-round Elo of every bot with at least one rated game. */
+/** All-round Elo of every bot with at least one rated game. Held-out rounds (another card pool) are left out. */
 function globalElo(rounds) {
-    const results = rounds.flatMap((rd) => rd.results);
+    const results = rounds.filter((rd) => rd.pool !== 'holdout').flatMap((rd) => rd.results);
     const names = [...new Set(results.flatMap((x) => [x.a, x.b]))];
     return Object.fromEntries(Object.entries(anchoredBT(names, results)).map(([k, v]) => [k, Math.round(v)]));
 }
 
-function report(rd, g) {
+/** Spearman rank correlation of two rankings ({name: rank}) over the names both have; null with fewer than 3. */
+function rankCorrelation(a, b) {
+    const names = Object.keys(a).filter((n) => a[n] !== null && b[n] !== null && b[n] !== undefined);
+    if (names.length < 3) {
+        return null;
+    }
+    // re-rank within the common names, so a bot missing from one side does not leave a gap
+    const rerank = (r) => Object.fromEntries([...names].sort((x, y) => r[x] - r[y]).map((n, i) => [n, i + 1]));
+    const ra = rerank(a);
+    const rb = rerank(b);
+    const d2 = names.reduce((s, n) => s + (ra[n] - rb[n]) ** 2, 0);
+    const n = names.length;
+    return +(1 - (6 * d2) / (n * (n * n - 1))).toFixed(3);
+}
+
+/** The held-out section of a report: each bot's rank and Elo on the training cards (round cmp) and on the held-out ones. */
+function holdoutSection(rd, cmp) {
+    const rank = (r) => Object.fromEntries(r.bots.map((b) => [b.name, b.rank]));
+    const elo = (r) => Object.fromEntries(r.bots.map((b) => [b.name, b.btElo]));
+    const [trainRank, testRank, trainElo, testElo] = [rank(cmp), rank(rd), elo(cmp), elo(rd)];
+    const rho = rankCorrelation(trainRank, testRank);
+    const L = ['', '## Held-out cards vs training cards', '',
+        `The same versions on round ${cmp.round}'s training cards and on the held-out cards. Spearman rank correlation: ${rho ?? '- (fewer than 3 rated bots)'}${rho === null ? '' : ' (1 = the same order, 0 = unrelated, -1 = reversed)'}.`, '',
+        `| bot | rank, training (round ${cmp.round}) | rank, held-out | Elo, training | Elo, held-out | Elo change |`, '|---|---|---|---|---|---|'];
+    for (const b of rd.bots) {
+        const change = trainElo[b.name] !== null && trainElo[b.name] !== undefined && testElo[b.name] !== null ? testElo[b.name] - trainElo[b.name] : null;
+        L.push(`| ${b.name} | ${trainRank[b.name] ?? '-'} | ${testRank[b.name] ?? '-'} | ${trainElo[b.name] ?? '-'} | ${testElo[b.name] ?? '-'} | ${change === null ? '-' : (change > 0 ? '+' : '') + change} |`);
+    }
+    return L;
+}
+
+function report(rd, g, cmp = null) {
     const cap = roster.thinkCapMs ? `${roster.thinkCapMs / 1000}s of thinking per game` : 'none';
-    const L = [`# Arena round ${rd.round} results`, '', `Ladder \`${rd.ladderId}\`: ${rd.games}/${rd.scheduled} games, ${rd.gamesPerPair} per pair (seeds from ${rd.seed}, each from both seats). Status: ${rd.status}.`,
+    const cards = rd.pool === 'holdout' ? `Cards: decks dealt only from the held-out pool (${rd.poolCards} cards: the leaders and main-deck cards no competitor practised with, plus every base). This round is left out of the all-round Elo.`
+        : rd.pool === 'train' ? `Cards: decks dealt only from this tournament's training pool (${rd.poolCards} cards, every base included).` : null;
+    const L = [`# Arena round ${rd.round} results${rd.pool === 'holdout' ? ' (held-out cards)' : ''}`, '', `Ladder \`${rd.ladderId}\`: ${rd.games}/${rd.scheduled} games, ${rd.gamesPerPair} per pair (seeds from ${rd.seed}, each from both seats). Status: ${rd.status}.`,
+        ...(cards ? [cards] : []),
         `Elo = Bradley-Terry, baselines' mean pinned to 1500. "All rounds" rates every game played so far, so it compares across rounds. Time cap: ${cap}. A bot that goes over it, throws, hangs or fails to load forfeits the game (a loss).`, ''];
     if (!rd.bots.some((b) => b.rank !== null)) {
         L.push(`No rated games yet${rd.games ? ` (${rd.games} finished, none rated)` : ''}.`, '');
@@ -185,6 +229,9 @@ function report(rd, g) {
     L.push('| # | bot | Elo (round) | Elo (all rounds) | W-L-D | win % | ms/decision | forfeits |', '|---|---|---|---|---|---|---|---|');
     for (const b of rd.bots) {
         L.push(`| ${b.rank ?? '-'} | ${b.name} | ${b.btElo ?? '-'} | ${g[b.name] ?? '-'} | ${b.wins}-${b.losses}-${b.draws} | ${b.winRate === null ? '-' : Math.round(b.winRate * 100)} | ${b.msPerDecision ?? '-'} | ${b.forfeits} |`);
+    }
+    if (rd.pool === 'holdout' && cmp) {
+        L.push(...holdoutSection(rd, cmp));
     }
     for (const b of rd.bots.filter((x) => x.agent)) {
         L.push('', `## ${b.agent} (${b.name})`, '', `Submission note: ${b.idea ?? '(none)'}`, '', 'Per opponent (W-L-D, unfinished):');
@@ -201,11 +248,30 @@ function report(rd, g) {
     return L.join('\n') + '\n';
 }
 
-/** What standings.json says about the tournament in progress (progress on the dashboard). */
-const tourInfo = (t) => (t ? { id: t.id, title: t.title, plannedRounds: t.plannedRounds, rounds: t.rounds.map((r) => r.n) } : null);
+/**
+ * A round's ladder id, which is also its folder in <results>: scoped to the tournament (its id plus -r<K>, with the
+ * arena- prefix every arena run carries), so rounds of different tournaments never share a folder.
+ */
+function ladderIdOf(round, t = null) {
+    if (!t) {
+        return `arena-r${round}`;
+    }
+    return `${t.id.startsWith('arena-') ? '' : 'arena-'}${t.id}-r${round}`;
+}
 
-function publish(round, t = null) {
-    const ladderFile = path.join(RESULTS, `arena-r${round}`, 'ladder.json');
+/** What standings.json says about the tournament in progress (progress on the dashboard). */
+// rounds lists the work rounds (plannedRounds counts those); a holdout tournament's extra ladder is holdoutRound
+const tourInfo = (t) => (t ? { id: t.id, title: t.title, plannedRounds: t.plannedRounds, rounds: t.rounds.filter((r) => r.kind !== 'holdout').map((r) => r.n),
+                                ...(t.rules ? { rules: rulesInfo(t.rules) } : {}), ...(t.rounds.some((r) => r.kind === 'holdout') ? { holdoutRound: t.rounds.find((r) => r.kind === 'holdout').n } : {}) } : null);
+
+/** The public summary of a tournament's rules (standings, the API clock and the brief show it). */
+function rulesInfo(rules) {
+    const h = rules?.holdout;
+    return h ? { holdout: { fraction: h.fraction, train: h.train, trainCards: h.counts?.train ?? null, holdoutCards: h.counts?.holdout ?? null } } : {};
+}
+
+function publish(round, t = null, id = ladderIdOf(round, t)) {
+    const ladderFile = path.join(RESULTS, id, 'ladder.json');
     if (!fs.existsSync(ladderFile)) {
         return null;
     }
@@ -213,6 +279,8 @@ function publish(round, t = null) {
     const st = readJson(STANDINGS, { schema: 'swu-arena/1', startedAt: new Date().toISOString(), rounds: [] });
     const rd = scoreRound(round, ladder);
     st.rounds = [...st.rounds.filter((x) => x.round !== round), rd].sort((a, b) => a.round - b.round);
+    // a held-out round is compared with the last round played on the training cards
+    const cmp = rd.pool === 'holdout' ? st.rounds.filter((x) => x.round < round && x.pool !== 'holdout').pop() ?? null : null;
     st.global = globalElo(st.rounds);
     st.updatedAt = new Date().toISOString();
     st.status = 'running';
@@ -221,7 +289,7 @@ function publish(round, t = null) {
     st.now = rd.status === 'done' ? `Round ${round} done, ${lead}` : `Round ${round} running: ${rd.games}/${rd.scheduled} games${rd.rated ? '' : ', no games yet'}`;
     fs.mkdirSync(path.join(HOME, 'rounds'), { recursive: true });
     writeJson(STANDINGS, st);
-    fs.writeFileSync(path.join(HOME, 'rounds', `r${round}.md`), report(rd, st.global));
+    fs.writeFileSync(path.join(HOME, 'rounds', `r${round}.md`), report(rd, st.global, cmp));
     dash.publishStandings(st);
     return rd;
 }
@@ -352,20 +420,20 @@ function releaseLock() {
     }
 }
 
-async function runRound(round, bots, { games = Number(arg('games', 4)), seed, key, t = null } = {}) {
-    const dir = path.join(RESULTS, `arena-r${round}`);
+async function runRound(round, bots, { games = Number(arg('games', 4)), seed, key, t = null, id = ladderIdOf(round, t), pool = null } = {}) {
+    const dir = path.join(RESULTS, id);
     const cap = Number(roster.thinkCapMs);
     // the watchdog waits 30 s past the wall cap (guard.js: 2 x cap), so a call the guard allows is never taken for a hang
     const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(2 * cap + 30000)] : [];
     const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed), '--key', key,
-        '--id', `arena-r${round}`, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, '--record', '--resume'];
+        '--id', id, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, ...(pool ? ['--pool', pool] : []), '--record', '--resume'];
     takeLock(dir);
     console.log(`round ${round}: ${bots.join(', ')}`);
     let code;
     const tick = setInterval(() => {
         try {
             touchLock();
-            publish(round, t);
+            publish(round, t, id);
         } catch (e) {
             console.error(`round ${round}: publishing failed (${e.message}); retrying in 30 s`);
         }
@@ -384,7 +452,7 @@ async function runRound(round, bots, { games = Number(arg('games', 4)), seed, ke
     if (code !== 0) {
         throw new Error(`ladder exited with ${code}`);
     }
-    const rd = publish(round, t);
+    const rd = publish(round, t, id);
     console.log(fs.readFileSync(path.join(HOME, 'rounds', `r${round}.md`), 'utf8').split('\n## ')[0]);
     return rd;
 }
@@ -493,6 +561,30 @@ function readTournament() {
 }
 
 /**
+ * The card split of a holdout tournament (--holdout): cardpool.js splits the cards the engine can play, seeded from the
+ * secret, into ARENA_HOME/rules/<tournament id>/{train,holdout}.json, and both are checked to fill a deck for every
+ * leader and base. Returns the rule kept in tournament.json (paths relative to ARENA_HOME). Counts leave out the bases,
+ * which are in both pools.
+ */
+function makeHoldout(t, fraction, secret) {
+    if (!(fraction > 0 && fraction < 1)) {
+        throw new Error(`--holdout ${fraction}: the share of the cards to hold out, between 0 and 1 (e.g. 0.3)`);
+    }
+    const { Env } = require('../env');
+    const env = new Env();
+    const seed = crypto.createHash('sha256').update(`${secret}:${t.id}:holdout`).digest('hex');
+    const rel = path.join('rules', t.id);
+    const files = writePools(path.join(HOME, rel), splitPool(env.index(), { fraction, seed }), { fraction });
+    for (const f of Object.values(files)) {
+        checkPool(env, loadPool(f.path));
+    }
+    const playable = (c) => c.leaders + c.main;
+    console.log(`holdout: ${playable(files.train.counts)} training cards, ${playable(files.holdout.counts)} held out (${fraction}), in ${path.join(HOME, rel)}`);
+    return { fraction, train: path.join(rel, 'train.json'), holdout: path.join(rel, 'holdout.json'),
+             counts: { train: playable(files.train.counts), holdout: playable(files.holdout.counts) }, sha256: { train: files.train.sha256, holdout: files.holdout.sha256 } };
+}
+
+/**
  * Clocked tournament: rounds of (work window, rated ladder), all competitors on the same clock. Round numbers continue
  * from standings.json (a fresh arena starts at round 1). With --resume it picks up the tournament in tournament.json
  * where it stopped: it waits out the open work window, or replays the unfinished ladder (finished games are kept).
@@ -515,18 +607,36 @@ async function tournament() {
         const rounds = Number(arg('rounds', 3));
         t = { id: arg('id', `arena-t${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`), title: arg('title', 'Arena tournament'), task: arg('task', null),
               plannedRounds: rounds, roundMinutes: Number(arg('minutes', 60)), gamesPerPair: Number(arg('games', '2')), state: 'running', startedAt: new Date().toISOString(), rounds: [] };
+        if (!/^[\w-]+$/.test(t.id)) {
+            throw new Error(`--id ${JSON.stringify(t.id)}: letters, digits, _ and - only (it names the rounds' result folders)`);
+        }
+        if (arg('holdout') !== undefined) {
+            t.rules = { holdout: makeHoldout(t, Number(arg('holdout')), secret) };
+        }
     }
     requeueRunning();
     const save = () => writeJson(TOURNAMENT(), t);
     for (;;) {
         let r = t.rounds[t.rounds.length - 1];
         if (!r || r.ladderEnd) {
-            if (t.rounds.length >= t.plannedRounds) {
-                break;
+            const n = Math.max(r?.n ?? 0, st().rounds.map((x) => x.round).pop() ?? 0) + 1;
+            if (t.rounds.filter((x) => x.kind !== 'holdout').length >= t.plannedRounds) {
+                if (!t.rules?.holdout || t.rounds.some((x) => x.kind === 'holdout') || !r?.bots) {
+                    break;
+                }
+                // the held-out ladder: no work window, the versions of the last round, decks from the held-out cards
+                const last = r;
+                const now = new Date().toISOString();
+                r = { n, kind: 'holdout', ladder: ladderIdOf(n, t), workStart: now, workEnd: now, ladderStart: now, bots: last.bots, seed: roundSeed(secret, t.id, n) };
+                t.rounds.push(r);
+                save();
+                broadcast(`The work rounds are over. Last ladder (round ${n}): the versions rated in round ${last.n} play again on decks dealt only from the ${t.rules.holdout.counts.holdout} held-out cards. Its report compares every bot's rank on the training and the held-out cards.`);
             }
+        }
+        if (!r || r.ladderEnd) {
             const n = Math.max(r?.n ?? 0, st().rounds.map((x) => x.round).pop() ?? 0) + 1;
             const now = Date.now();
-            r = { n, workStart: new Date(now).toISOString(), workEnd: new Date(now + t.roundMinutes * 60000).toISOString() };
+            r = { n, ladder: ladderIdOf(n, t), workStart: new Date(now).toISOString(), workEnd: new Date(now + t.roundMinutes * 60000).toISOString() };
             t.rounds.push(r);
             save();
             expireQueued(r.workStart);
@@ -546,9 +656,13 @@ async function tournament() {
             r.seed = roundSeed(secret, t.id, r.n);
             save();
         }
+        // a round opened before ladder ids were scoped to the tournament keeps its arena-r<K> folder
+        const id = r.ladder ?? `arena-r${r.n}`;
         // a ladder started before seeds were kept in tournament.json resumes with the seed it was started with
-        const seed = r.seed ?? readJson(path.join(RESULTS, `arena-r${r.n}`, 'ladder.json'), null)?.config?.firstSeed ?? roundSeed(secret, t.id, r.n);
-        await runRound(r.n, r.bots ?? lineup(r.workEnd), { games: t.gamesPerPair, seed, key: roundKey(secret, t.id, r.n), t });
+        const seed = r.seed ?? readJson(path.join(RESULTS, id, 'ladder.json'), null)?.config?.firstSeed ?? roundSeed(secret, t.id, r.n);
+        // a holdout tournament deals its work rounds from the training cards and its last ladder from the held-out ones
+        const pool = t.rules?.holdout ? path.resolve(HOME, r.kind === 'holdout' ? t.rules.holdout.holdout : t.rules.holdout.train) : null;
+        await runRound(r.n, r.bots ?? lineup(r.workEnd), { games: t.gamesPerPair, seed, key: roundKey(secret, t.id, r.n), t, id, pool });
         r.ladderEnd = new Date().toISOString();
         save();
     }
@@ -603,4 +717,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning };
+module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning, ladderIdOf, rankCorrelation };

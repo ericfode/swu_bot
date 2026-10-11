@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Worker thread for ladder.js and arena/pool.js (both through game-pool.js): loads the engine once, then plays the
- * games it is sent. workerData: { maxSteps, engineRev, capMs, key, control, base }.
+ * games it is sent. workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool }.
  *
  * Both bots are built here and guarded (players/guard.js) with the same capMs. While a bot loads or runs (its calls,
  * and the timers and promise callbacks its code left behind) the worker writes its seat and start time into the
@@ -203,7 +203,7 @@ parentPort.on('message', async (job) => {
         const key = workerData.key ? gameKey(workerData.key, job.seed) : null;
         // a fresh copy per game: the deck objects go into the engine and the replay header
         const decks = job.decks && { p1: structuredClone(workerData.decks[job.decks[0]]), p2: structuredClone(workerData.decks[job.decks[1]]) };
-        r = await playGame(env, { seed: job.seed, bots, decks, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
+        r = await playGame(env, { seed: job.seed, bots, decks, pool: decks ? null : workerData.pool ?? null, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
         // let the timers and promise callbacks a bot left that are due now run while this game is still the current one
         // (a throw there is that bot's loss, see origin)
         await new Promise((resolve) => later(resolve, 1));

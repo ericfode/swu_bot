@@ -16,7 +16,7 @@ evaluation in your starter:
    (alpha-beta or similar, heuristic at the leaves) instead of sampling.
 
 How you weigh, prune, budget and combine these is up to you. That is what is being measured.
-
+{{rules}}
 ## Rules
 
 - Your bot is the folder `{{agentDir}}`. Edit only that folder. Never edit the repo (`{{repo}}`), other competitors'

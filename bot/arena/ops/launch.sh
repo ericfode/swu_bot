@@ -4,7 +4,8 @@
 #
 #   bot/arena/ops/launch.sh start <commit>     set up and start a new tournament on <commit> (TITLE, TASK, ROUNDS,
 #                                              MINUTES, GAMES, BUDGET_USD, BRAKE_5H (0.8), BRAKE_7D (0.85) from the
-#                                              environment)
+#                                              environment; HOLDOUT=0.3 makes it a card-pool holdout tournament, see
+#                                              referee.js)
 #   bot/arena/ops/launch.sh resume             set up whatever is missing and resume the tournament in tournament.json
 #                                              (the commit comes from <ARENA_HOME>/launch.json)
 #   bot/arena/ops/launch.sh referee|runner     restart only that process, on the existing setup (keeper.sh uses these)
@@ -27,6 +28,7 @@ SHARED_RESULTS=${SHARED_RESULTS:-/mnt/project-files/results}
 BACKUP=${BACKUP:-/mnt/project-files/arena-runner}
 MEMO_SRC=${MEMO_SRC:-$ARENA_HOME/tools/memo}
 LAUNCH=$ARENA_HOME/launch.json
+LAUNCH_TOURNAMENT=$ARENA_HOME/tournament.json
 
 # a minimal environment for the referee and the runner (the runner passes even less on to competitors)
 CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
@@ -105,9 +107,21 @@ setup() {
     if [ ! -x "$BASE/tools/memo" ]; then
         install -m 755 "$MEMO_SRC" "$BASE/tools/memo"
     fi
-    # after a new container: what the mirror and the backup kept
-    for r in "$SHARED_RESULTS"/arena-r*; do
-        [ -d "$r" ] && [ ! -e "$BASE/results/$(basename "$r")" ] && cp -a "$r" "$BASE/results/" && say "restored $(basename "$r") from $SHARED_RESULTS"
+    # after a new container: every round ladder the mirror kept that standings.json or tournament.json names (games and the
+    # replay server read them here; a running round resumes from its copy), and the backup of the logs
+    local id ids
+    ids=$(node -e "
+const fs = require('fs');
+const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+const ids = new Set();
+for (const rd of read(process.argv[1])?.rounds ?? []) ids.add(rd.ladderId ?? 'arena-r' + rd.round);
+for (const r of read(process.argv[2])?.rounds ?? []) ids.add(r.ladder ?? 'arena-r' + r.n);
+console.log([...ids].join('\n'));" "$ARENA_HOME/standings.json" "$LAUNCH_TOURNAMENT" 2>/dev/null || true)
+    for id in $ids; do
+        [[ "$id" =~ ^arena-[A-Za-z0-9_-]+$ ]] || continue
+        if [ -d "$SHARED_RESULTS/$id" ] && [ ! -e "$BASE/results/$id" ]; then
+            cp -a "$SHARED_RESULTS/$id" "$BASE/results/" && say "restored $id from $SHARED_RESULTS"
+        fi
     done
     if [ -d "$BACKUP" ] && [ -z "$(ls -A "$BASE/logs" 2>/dev/null)" ]; then
         cp -a "$BACKUP/." "$BASE/logs/" && say "restored the runner's logs backup from $BACKUP"
@@ -121,7 +135,7 @@ start_referee() {
         "${CLEAN[@]}" setsid nohup node bot/arena/referee.js --tournament --resume --workers 3 --eval-workers 1 >> "$BASE/referee.log" 2>&1 < /dev/null &
     else
         "${CLEAN[@]}" setsid nohup node bot/arena/referee.js --tournament --rounds "${ROUNDS:-3}" --minutes "${MINUTES:-60}" --games "${GAMES:-2}" \
-            --workers 3 --eval-workers 1 --title "${TITLE:?TITLE}" --task "${TASK:-}" >> "$BASE/referee.log" 2>&1 < /dev/null &
+            --workers 3 --eval-workers 1 --title "${TITLE:?TITLE}" --task "${TASK:-}" ${HOLDOUT:+--holdout "$HOLDOUT"} >> "$BASE/referee.log" 2>&1 < /dev/null &
     fi
     say "referee started (pid $!)"
 }

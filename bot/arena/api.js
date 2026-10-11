@@ -97,8 +97,13 @@ function clock(now = Date.now()) {
     const cur = t.rounds?.[t.rounds.length - 1] ?? null;
     const phase = t.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
     const deadline = phase === 'work' && cur ? cur.workEnd : null;
-    return { tournament: { id: t.id, title: t.title, rounds: t.plannedRounds, roundMinutes: t.roundMinutes, task: t.task ?? null }, round: cur?.n ?? null,
-             roundIndex: cur ? t.rounds.length : null, plannedRounds: t.plannedRounds ?? null, phase, deadline,
+    const h = t.rules?.holdout;
+    // a holdout tournament's card rule: what competitors may build and test with (the held-out list stays unnamed here)
+    const rules = h ? { holdout: { fraction: h.fraction, trainPool: path.join(home.HOME, h.train), trainCards: h.counts?.train ?? null, holdoutCards: h.counts?.holdout ?? null } } : null;
+    // roundIndex counts work rounds (plannedRounds counts those): a holdout tournament's extra ladder is `holdout: true`
+    const holdout = cur?.kind === 'holdout';
+    return { tournament: { id: t.id, title: t.title, rounds: t.plannedRounds, roundMinutes: t.roundMinutes, task: t.task ?? null, rules }, round: cur?.n ?? null,
+             roundIndex: cur ? t.rounds.filter((r) => r.kind !== 'holdout').length : null, plannedRounds: t.plannedRounds ?? null, ...(holdout ? { holdout } : {}), phase, deadline,
              minutesLeft: deadline ? Math.max(0, Math.round((Date.parse(deadline) - now) / 60000)) : null };
 }
 
@@ -384,9 +389,14 @@ const api = {
         const k = int(round ?? st.rounds[st.rounds.length - 1]?.round);
         need(k !== undefined, 'not_found', 'no rounds yet');
         need(Number.isInteger(k) && k >= 0, 'bad_request', 'round: an integer');
-        const idx = home.readJson(path.join(home.RESULTS, `arena-r${k}`, 'index.json'), null);
+        // the round's ladder folder: standings name it once the round is published, tournament.json as soon as it opens
+        // (tournament rounds are <tournament id>-r<K>, referee.js ladderIdOf); anything else falls back to arena-r<K>
+        const t = home.readJson(TOURNAMENT(), null);
+        const named = st.rounds.find((x) => x.round === k)?.ladderId ?? (Array.isArray(t?.rounds) ? t.rounds.find((r) => r?.n === k)?.ladder : undefined);
+        const id = typeof named === 'string' && /^arena-[\w-]+$/.test(named) ? named : `arena-r${k}`;
+        const idx = home.readJson(path.join(home.RESULTS, id, 'index.json'), null);
         need(idx, 'not_found', `no games for round ${k}`);
-        return { round: k, replayBase: `replays/arena-r${k}/games/`, games: idx.games };
+        return { round: k, ladderId: id, replayBase: `replays/${id}/games/`, games: idx.games };
     },
 
     async wait({ timeoutSec = 45, round } = {}) {

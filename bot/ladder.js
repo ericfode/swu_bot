@@ -34,6 +34,8 @@
  * whole number of passes (--games a multiple of 2P) or some deck pairs play more than others (a warning says so).
  * Each index entry then carries decks {p1, p2} (the deck names). With a mirror (--bots c-clock#a,c-clock#b) the bots
  * cancel out and the ratings that matter are the decks'.
+ * --pool <file> deals the random decks from an arena card pool only (cardpool.js: a holdout tournament's training
+ * or held-out cards); config.pool records its file name, kind and sha256. Not with --decks.
  */
 const fs = require('fs');
 const os = require('os');
@@ -46,6 +48,7 @@ const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 const { runPool, killChildren } = require('./game-pool');
 const { loadDecks, dealDecks, deckPairs } = require('./decklists');
+const { loadPool, checkPool } = require('./cardpool');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -237,9 +240,10 @@ function readPrevious(file, config, engine) {
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
         || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
         || (c.harness ?? null) !== (config.harness ?? null) || (c.engineDiff ?? null) !== (config.engineDiff ?? null) || (c.programs ?? null) !== (config.programs ?? null)
-        || (c.keyId === null) !== (config.keyId === null) || (config.record && !c.record) || !same(c.decks ?? null, config.decks ?? null)) {
+        || (c.keyId === null) !== (config.keyId === null) || (config.record && !c.record) || !same(c.decks ?? null, config.decks ?? null)
+        || !same(c.pool ?? null, config.pool ?? null)) {
         // a run that records needs a replay of every game: the kept games of a run that did not record have none
-        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs, deck lists, seeding (--key none) or did not record, starting over');
+        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs, deck lists, card pool, seeding (--key none) or did not record, starting over');
         return null;
     }
     if (c.keyId !== config.keyId) {
@@ -285,6 +289,15 @@ async function main() {
     // the engine loads in this thread only to check the deck lists before any game starts (and before <out> is made)
     const deckSet = decksFile ? loadDecks(decksFile, new (require('./env').Env)()) : null;
     const decks = deckSet?.decks ?? null;
+    const poolFile = arg('pool', null);
+    if (poolFile && decksFile) {
+        throw new Error('--pool deals random decks from a card pool; --decks plays fixed deck lists: give one of them');
+    }
+    // likewise a card pool is checked against the card data first: it must fill a deck for every leader and base it has
+    const pool = poolFile ? loadPool(poolFile) : null;
+    if (pool) {
+        checkPool(new (require('./env').Env)(), pool);
+    }
     if (decks) {
         const seeds = (perPair + (perPair % 2)) / 2;
         const P = deckPairs(decks.length).length;
@@ -300,7 +313,8 @@ async function main() {
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
                      harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), record, ...(vs ? { format: 'gauntlet', vs } : {}),
-                     ...(decks ? { decks: { file: path.basename(decksFile), sha256: deckSet.sha256, names: decks.map((d) => d.metadata.name) } } : {}) };
+                     ...(decks ? { decks: { file: path.basename(decksFile), sha256: deckSet.sha256, names: decks.map((d) => d.metadata.name) } } : {}),
+                     ...(pool ? { pool: { file: path.basename(poolFile), kind: pool.kind, cards: pool.cards.length, sha256: pool.provenance.sha256 } } : {}) };
     const games = [];
     let status = 'running';
     let prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
@@ -359,13 +373,13 @@ async function main() {
         [...held.keys()].filter((s) => !unplayed.has(s)).forEach(publish);
     }
     save();
-    console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${workers} workers -> ${out}`);
+    console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${pool ? `${pool.kind} pool of ${pool.cards.length} cards, ` : ''}${workers} workers -> ${out}`);
 
     const t0 = Date.now();
     await runPool(queue, {
         workers,
         hangMs,
-        workerData: { maxSteps, engineRev: engine, capMs, key, decks },
+        workerData: { maxSteps, engineRev: engine, capMs, key, decks, pool: pool ? { cards: pool.cards } : null },
         onStart: (job) => {
             const entry = {
                 id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, by: null, faultKind: null,
