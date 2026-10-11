@@ -119,14 +119,17 @@ class LearnedSearchBot extends HeuristicBot {
         this.model = this.policy.model;
         // HeuristicBot scores playouts with this.evaluate when set (its constructor's `evaluate` option)
         this.evaluate = (eg, pid) => this.valueOf(eg, pid);
+        const blend = opts.blend ?? process.env.SWU_LEARNED_BLEND;
+        this.blend = blend === undefined || blend === '' ? null : Number(blend);
     }
 
     valueOf(eg, pid) {
         if (eg.over) {
             return evaluate(eg, pid); // decided games: the heuristic's +-10000
         }
-        const obs = observe(eg, pid);
-        return this.model.value(this.model.encode(F.state(obs)));
+        const v = this.model.value(this.model.encode(F.state(observe(eg, pid))));
+        // with a blend weight: the heuristic score plus a learned correction (blend = points for a sure win, ~32 = 1 sd)
+        return this.blend === null ? v : evaluate(eg, pid) + this.blend * v;
     }
 
     choose(ctx) {
