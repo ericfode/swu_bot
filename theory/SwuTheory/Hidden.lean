@@ -22,7 +22,8 @@ whole game tree.
 * `pimc_choice_loss`: at one information set, with a belief `p` over the hidden states, the move
   PIMC picks (best average child value) loses in expectation exactly the omniscience bias of that
   set, and no blind move loses less (`blind_choice_loss_ge`).
-* `hiddenCoin_gap`: a whole game where the gap is the full payoff range: guess a hidden coin.
+* `hiddenCoin_blind`: a whole game where the gap is half the payoff range: guess a hidden coin.
+  The omniscient value is 1 and every blind policy gets 1/2.
 
 Not formalized: that the belief PIMC samples from is the true conditional distribution of the
 hidden state given the play so far. With that, `perf_diff` and `pimc_choice_loss` together say
