@@ -49,7 +49,10 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
   null).
 - **Secret seeds.** Each round's game seeds and its key (which deals every game, so the seed alone says nothing about
   hidden cards) come from a secret the referee keeps (`~/.arena-secret`, or `ARENA_SECRET_FILE`), so they cannot be
-  known in advance. Neither you nor your bot may read that file, nor the referee's command line. Bots run with
+  known in advance. Neither you nor your bot may read that file, nor the referee's command line. A game's key is
+  published once both games on its seed have ended (they deal the same cards). Your bot may not read the round's
+  results or replays while it runs (a running game's replay shows both hands), nor keep anything from one game for
+  the next. Bots run with
   the referee's file rights, so this is a rule, not a sandbox (a hosted arena for strangers needs one).
 - **Rules, not a sandbox.** Bots run in the referee's process and with its file rights. The guard and the watchdog
   stop the honest failures (slow, stuck, crashing, illegal moves); the rules above cover the rest. Breaking them gets

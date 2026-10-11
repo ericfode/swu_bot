@@ -209,7 +209,8 @@ to finish before the next game is done. A failure here changes no result; the pr
 - **A key hides the hidden cards.** The referee derives every random stream (decks, engine shuffles, `hello.seed`,
   simulations) from the game seed and a secret key (`playGame({ key })`). `bot/tournament.js` draws a key per run and
   writes each game's own key (derived from the run key) to its index entry and replay when the game ends, so every
-  game can be played again. Without a key the streams follow from the seed alone: that suits development and
+  game can be played again. `bot/ladder.js` plays each seed from both seats with the same key, so it writes the key
+  once both games (in a gauntlet, every game on that seed) have ended. Without a key the streams follow from the seed alone: that suits development and
   `npm run gate`, but a bot can find a small seed from `hello.seed` or the deck lists and rebuild the hidden cards.
   Use a key whenever a bot is not trusted.
 - **Programs in other languages need a sandbox to be held to these rules.** A program on the referee's machine, as the

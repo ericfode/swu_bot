@@ -50,7 +50,7 @@ replays/                          (REPLAYS_DIR; gitignored)
 | `games[].faultKind` *(added, optional)* | With `by`, in runs on `bot/game-pool.js` (`ladder.js`, the arena): how the bot failed, `load` (could not be built), `error` (threw, crashed or answered wrong), `time` (over the time cap) or `hang` (stopped by the watchdog). `null` otherwise. |
 | `games[].rounds`, `steps`, `ms` | Final round number, decisions taken, wall time. `0` while running. |
 | `games[].timing` *(added)* | Per seat: `n` decisions, `ms` total, `p50`, `p95`, `max` per decision, in milliseconds, timed by the referee around each decision (for a program: the whole exchange, simulations included). |
-| `games[].key` *(added)* | The game's own secret, which its random streams were derived from (see [protocol.md](protocol.md#fairness)), written when the game ends. Absent while running and in runs seeded from the seed alone. (Indexes written before this field have one top-level `key` for the run instead.) |
+| `games[].key` *(added)* | The game's own secret, which its random streams were derived from (see [protocol.md](protocol.md#fairness)), written when the game ends; `bot/ladder.js` waits until every game on its seed has ended, since the seat-swapped games share it. Absent until then and in runs seeded from the seed alone. (Indexes written before this field have one top-level `key` for the run instead.) |
 
 ## Game file (`.jsonl`)
 

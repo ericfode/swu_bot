@@ -30,6 +30,8 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 - **Hidden information:** the decklists are public, so you may use the multiset of all cards each player owns. You may
   not read which hidden zone an opponent card is in, the cards in their hand, or either deck's order. Lookahead must
   reseed the engine RNG from your own stream (as `heuristic.js` does) and redeal hidden cards in sampled worlds.
+  Your bot may not read the round's results or replays (a running game's replay shows both hands) and may not keep
+  anything from one game for the next: the two games on a seed deal the same cards.
 - **Time cap:** {{capSeconds}} s of thinking (CPU time on your bot's thread, `createBot()` included) per game, and twice
   that in wall time inside `choose()`; async work your bot leaves running counts too. Over it, your bot loses that game. The stock search budget already overruns
   it in some games, so measure `ms/decision` and stay well inside the cap. No worker threads or child processes.

@@ -147,7 +147,7 @@
           },
           "key": {
             "type": "string",
-            "description": "The game's own secret key, written when the game ends; absent in runs seeded from the seed alone (added)."
+            "description": "The game's own secret key, written when the game ends (bot/ladder.js: once every game on its seed has ended, since the seat-swapped games share it); absent in runs seeded from the seed alone (added)."
           }
         }
       }

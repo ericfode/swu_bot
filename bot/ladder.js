@@ -23,7 +23,8 @@
  * --vs a,b,c makes it a gauntlet: each --bots entry plays each --vs entry (and --bots entries do not play each
  * other). Every challenger gets the same seeds, so a parameter sweep compares variants on the same decks.
  * Games are dealt from a secret run key (rng.js runKey), so bots cannot rebuild hidden cards from their seed. Each
- * game's key goes into its index entry when it ends, and the run key into ladder.json when the run is done: give it as
+ * game's key goes into its index entry (and replay) once every game on its seed has ended (the seat-swapped games share
+ * it), and the run key into ladder.json when the run is done: give it as
  * --key to play the same games again (two runs with the same --key and --seed get the same decks). --key none: seed alone.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
  */
@@ -33,7 +34,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { describeBot, programSpec } = require('./players');
-const { runKey } = require('./rng');
+const { runKey, gameKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 const { runPool, killChildren } = require('./game-pool');
@@ -138,11 +139,33 @@ function programsRev(names) {
     return any ? h.digest('hex').slice(0, 12) : null;
 }
 
-function writeJson(file, data) {
+/** Adds a game's key to the end event (the last line) of its finished replay, atomically; nothing when there is none. */
+function addReplayKey(file, k) {
+    let text;
+    try {
+        text = fs.readFileSync(file, 'utf8');
+    } catch {
+        return;
+    }
+    const i = text.lastIndexOf('\n', text.length - 2) + 1;
+    let end = null;
+    try {
+        end = JSON.parse(text.slice(i));
+    } catch {
+        return;
+    }
+    if (end?.t === 'end' && !end.key) {
+        writeText(file, `${text.slice(0, i)}${JSON.stringify({ ...end, key: k })}\n`);
+    }
+}
+
+function writeText(file, text) {
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data));
+    fs.writeFileSync(tmp, text);
     fs.renameSync(tmp, file);
 }
+
+const writeJson = (file, data) => writeText(file, JSON.stringify(data));
 
 /**
  * Names the run key without giving it away (ladder.json is written during the run, where bots can read it): null for
@@ -176,7 +199,7 @@ function readPrevious(file, config, engine) {
     if (c.keyId !== config.keyId) {
         console.log('resume: the earlier run had another key, so the games left are dealt from this run\'s key (kept games keep theirs)');
     }
-    return { games: Array.isArray(doc.games) ? doc.games : [] };
+    return { games: Array.isArray(doc.games) ? doc.games : [], sameKey: c.keyId === config.keyId };
 }
 
 function defaultOut() {
@@ -238,6 +261,32 @@ async function main() {
         queue = queue.filter((q) => !kept.some((g) => g.id === q.id));
         console.log(`${id}: resuming, ${kept.length} games already played`);
     }
+    // A game's key is published (index entry, ladder.json, replay) only once every game dealt from it has ended: a seed's
+    // two seat-swapped games share it (and in a gauntlet every challenger's games on that seed), so the key of the first
+    // one would give away the hidden cards of the others while they are still to play.
+    const unplayed = new Map(); // seed -> games on it not finished yet
+    queue.forEach((q) => unplayed.set(q.seed, (unplayed.get(q.seed) ?? 0) + 1));
+    const held = new Map(); // seed -> [{ id, key }] finished games whose key is not published yet
+    const hold = (seed, gameId, k) => held.set(seed, [...(held.get(seed) ?? []), { id: gameId, key: k }]);
+    const publish = (seed) => {
+        for (const h of held.get(seed) ?? []) {
+            games.find((g) => g.id === h.id).key = h.key;
+            tIndex.games.find((g) => g.id === h.id).key = h.key;
+            if (record) {
+                addReplayKey(path.join(out, 'games', `${h.id}.jsonl`), h.key);
+            }
+        }
+        held.delete(seed);
+    };
+    if (prev?.sameKey && key) {
+        // kept games whose key an interrupted run had not published yet: the same run key, so the same game keys
+        for (const g of games) {
+            if (!g.key) {
+                hold(g.seed, g.id, gameKey(key, g.seed));
+            }
+        }
+        [...held.keys()].filter((s) => !unplayed.has(s)).forEach(publish);
+    }
     save();
     console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${workers} workers -> ${out}`);
 
@@ -258,16 +307,24 @@ async function main() {
         onResult: ({ job, result: r }) => {
             const done = {
                 winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null,
-                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, ...(r.key ? { key: r.key } : {})
+                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null
             };
             Object.assign(games.find((g) => g.id === job.id), done, { think: r.think ?? null, botStats: r.botStats });
             Object.assign(tIndex.games.find((g) => g.id === job.id), done);
+            if (r.key) {
+                hold(job.seed, job.id, r.key);
+            }
+            unplayed.set(job.seed, unplayed.get(job.seed) - 1);
+            if (!unplayed.get(job.seed)) {
+                publish(job.seed);
+            }
             const doc = save();
             const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
             const fault = r.by ? ` (${r.by} ${r.faultKind})` : '';
             console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome}${fault} ${r.winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
         }
     });
+    [...held.keys()].forEach(publish);
     status = 'done';
     if (key) {
         config.key = key;

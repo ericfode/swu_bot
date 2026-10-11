@@ -188,7 +188,8 @@ parentPort.on('message', async (job) => {
         if (job.replayFile) {
             fs.mkdirSync(path.dirname(job.replayFile), { recursive: true });
             fs.writeFileSync(job.replayFile, '');
-            // the end event is written below, once the fault kind is known
+            // the end event is written below, once the fault kind is known; its key is added by ladder.js once every game
+            // dealt from that key has ended
             onEvent = (e) => {
                 if (e.t !== 'end') {
                     fs.appendFileSync(job.replayFile, `${JSON.stringify(e)}\n`);
@@ -208,7 +209,7 @@ parentPort.on('message', async (job) => {
         r.faultKind = culprit < 0 ? null : bots[culprit].fault?.kind ?? 'error';
         r.think = { p1: r3(bots[0].thinkMs), p2: r3(bots[1].thinkMs) };
         if (job.replayFile) {
-            fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind, ...(r.key ? { key: r.key } : {}) })}\n`);
+            fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind })}\n`);
         }
     }
     // bots built for this game end here (a program sees the end of its input); programs kept between games stay up.
