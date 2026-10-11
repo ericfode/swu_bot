@@ -10,7 +10,7 @@
  * count, same moves played). One JSON line per action window:
  *   { game, seed, bots, i, windows, fromEnd, round, toMove, winner, proven, proofDepth, solveTried,
  *     omniScore, state, deckOrder }
- * - winner: who won the game (a noisy label: the players were heuristic bots, not perfect).
+ * - winner: who won the game (a noisy label: the players were imperfect bots).
  * - proven: 'p1' | 'p2' when the prover found a forced win for that side within proofDepth action windows
  *   (an exact label under the search's move model), null when it found none in budget or was not run there.
  * - state: recorder snapshot (both hands visible); deckOrder: both draw decks, top first (omniscient view).
@@ -26,15 +26,15 @@ const path = require('path');
 const { Env, seededRng } = require('../env');
 const { snapshot } = require('../recorder');
 const { evaluate } = require('./evaluate');
-const { createRandomBot } = require('../players/random');
 const { HeuristicBot } = require('../players/heuristic');
+const { makeBot: registryBot } = require('../players');
 const { OmniSearch } = require('./search');
 
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')));
 
 function makeBot(name) {
     const profile = flags.has('--legacy') ? { side: { legacyDanger: true } } : null;
-    return /^heuristic/.test(name) ? new HeuristicBot(name, { profile }) : createRandomBot(name);
+    return profile && /^heuristic/.test(name) ? new HeuristicBot(name, { profile }) : registryBot(name);
 }
 
 /** Prover result at the current window of `pid`; the engine is left where it was. */
@@ -46,13 +46,24 @@ function reprove(eg, pid, config) {
     return { result: r.result, depth: r.depth };
 }
 
+/** Bots are closed after the replay: external bots run as child processes. */
 async function replay(env, g) {
+    const bots = g.bots.map(makeBot);
+    try {
+        return await replayWith(env, g, bots);
+    } finally {
+        for (const b of bots) {
+            b.close?.();
+        }
+    }
+}
+
+async function replayWith(env, g, bots) {
     const rng = seededRng('bot' + g.seed);
     const deck1 = env.randomDeck(rng);
     const deck2 = env.randomDeck(rng);
     const eg = env.newGame({ seed: g.seed, deck1, deck2, undo: true });
     await eg.start();
-    const bots = g.bots.map(makeBot);
     const out = [];
     const tried = new Set(flags.has('--reprove') ? g.solves.map((s) => s.i) : []);
     let steps = 0;
@@ -75,7 +86,9 @@ async function replay(env, g) {
             }
             out.push(w);
         }
-        const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions, rng });
+        // reprove() rolls the engine back, which renews prompt UUIDs: give the bot a fresh list.
+        const fresh = w?.reproved ? eg.legalActions(pid) : actions;
+        const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions: fresh, rng });
         if (w) {
             w.played = action.label;
         }
@@ -92,10 +105,6 @@ async function main() {
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) {
         const g = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
         if (!g.winner || !g.windowsList) {
-            continue;
-        }
-        if (g.bots.some((b) => !/^(heuristic|random)/.test(b))) {
-            console.log(`${f}: skipped (bots ${g.bots}) - replay only supports heuristic/random`);
             continue;
         }
         const ws = await replay(env, g);
