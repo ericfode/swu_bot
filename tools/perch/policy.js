@@ -378,8 +378,9 @@ function snapshotRepo(repo, scope, dir, { workingTree = false } = {}) {
     .filter((f) => f && wanted(f));
   for (const file of new Set(changed)) {
     const bytes = readSource(path.join(repo, file));
+    // A file deleted, renamed or turned into a bundle leaves the snapshot, rather than leave its HEAD copy.
     if (bytes) writeIfChanged(path.join(dir, file), bytes);
-    else if (!fs.existsSync(path.join(repo, file))) fs.rmSync(path.join(dir, file), { force: true }); // deleted or renamed
+    else fs.rmSync(path.join(dir, file), { force: true });
   }
 }
 

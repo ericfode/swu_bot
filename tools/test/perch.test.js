@@ -169,7 +169,7 @@ test('the repo scope reads the shared core and leaves the bots out', () => {
     assert.ok(inScope(file, scopes.repo), file);
   }
   for (const file of ['bot/players/heuristic.js', 'bot/players/rush.js', 'bot/rust/src/main.rs', 'bot/haskell/src/Main.hs', 'bot/examples/random_bot.py', 'bot/test/bots.test.js', 'bot/test/ratings.test.js', 'analysis/test/units.test.js', 'forceteki/server/game/Game.ts', 'README.md',
-    'bot/arena/starters/rush.js', 'bot/arena/optimizer.js', 'bot/eval/bot.js', 'bot/omni/search.js', 'bot/learn/panel.js', 'bot/learned/arena.js', 'bot/jev/look.js', 'bot/ismcts-panel.js', 'bot/determinism-check.js']) {
+    'bot/arena/starters/rush.js', 'bot/arena/optimizer.js', 'bot/eval/bot.js', 'bot/omni/search.js', 'bot/learn/panel.js', 'bot/learned/arena.js', 'bot/jev/look.js', 'bot/ismcts-panel.js', 'bot/determinism-check.js', 'bot/rollback-test.js', 'bot/python/test_policy.py']) {
     assert.ok(!inScope(file, scopes.repo), file);
   }
 });
@@ -235,9 +235,11 @@ test('the repo snapshot holds only in-scope code at HEAD, so bot code never reac
   assert.strictEqual(fs.readFileSync(path.join(dir, 'bot/match.js'), 'utf8'), 'module.exports = 2;\n');
   assert.strictEqual(fs.readFileSync(path.join(dir, 'bot/ratings.js'), 'utf8'), 'module.exports = 1;\n');
   assert.deepStrictEqual(lsTree(dir), ['bot/match.js', 'perch.yaml'], 'not committed');
-  fs.rmSync(path.join(root, 'bot/match.js')); // deleted, not committed
-  snapshotRepo(root, scope, dir, { workingTree: true });
-  assert.strictEqual(fs.existsSync(path.join(dir, 'bot/match.js')), false);
+  for (const change of [() => fs.rmSync(path.join(root, 'bot/match.js')), () => write('bot/match.js', `var a=${'x'.repeat(5000)};\n`)]) {
+    change(); // deleted, or turned into a bundle, not committed
+    snapshotRepo(root, scope, dir, { workingTree: true });
+    assert.strictEqual(fs.existsSync(path.join(dir, 'bot/match.js')), false);
+  }
   git('checkout', '--', 'bot/match.js');
   snapshotRepo(root, scope, dir);
   assert.match(fs.readFileSync(path.join(dir, 'bot/match.js'), 'utf8'), /choose/);

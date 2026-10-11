@@ -36,8 +36,11 @@ module.exports = {
       'bot/determinism-check.js', // checks the heuristic bot's playouts
       'bot/determinize-check.js', // checks the ISMCTS bot's belief model
       'bot/ismcts-panel.js', // the ISMCTS bots' own dashboard panel
-      '**/test/**',
+      '**/test/**', // tests, by folder or by name
       '**/*.test.*',
+      '**/*-test.*',
+      '**/*_test.*',
+      '**/test_*',
     ],
   },
   // Code in the shared project folder (not in git). `perch shared ...` copies it into a scratch git
