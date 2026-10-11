@@ -55,7 +55,7 @@ needs. The `label` is for humans and logs (it is what replays record), not a sta
 
 | `kind` | Fields | When offered | Engine call made by `apply` |
 |---|---|---|---|
-| `button` | `label` (button text), `arg`, `uuid`, `method` | Every enabled prompt button, except a distribute prompt's `Done` (its `command` is `statefulPromptResults`). | `menuButton(pid, arg, uuid, method)` |
+| `button` | `label` (button text), `arg` (string, or a number for choice-menu buttons), `uuid`, `method` | Every enabled prompt button, except a distribute prompt's `Done` (its `command` is `statefulPromptResults`). | `menuButton(pid, arg, uuid, method)` |
 | `card` | `label` (card internal name, e.g. `luke-skywalker#faithful-friend`), `cardUuid`, `card` (live engine `Card`) | Every card in `promptState.selectableCards` that is not already selected, when the prompt is not a distribute prompt. | `cardClicked(pid, cardUuid)` |
 | `option` | `label`, `arg` (string), `uuid` (prompt uuid) | One per dropdown entry (`label` = entry), and one per number from `selectNumber.min` to `max` (`label` = `#<n>`, `arg` = `"<n>"`). | `menuButton(pid, arg, uuid)` |
 | `displayCard` | `label` (internal name), `arg` (card uuid), `uuid` (prompt uuid) | Each display card whose `selectionState` is `selectable`, only when the prompt has no per-card buttons. | `menuButton(pid, arg, uuid, 'menuButton')` |

@@ -96,12 +96,16 @@ these differences:
 
 - every card ref (base, leader, hand, discard, units, upgrades) has `id`, the engine card uuid, which is what
   `cardUuid`, `card.id` and distribute target ids refer to;
-- each player has `handCount`; only your own player has `hand`, the opponent's is omitted.
+- each player has `handCount`; only your own player has `hand`, the opponent's is omitted;
+- only your own player has `resources`: your resource cards (`{ id, n, s }`, plus `x: 1` when exhausted), since
+  cards can be played from there (Smuggle). The opponent's resources are face down, so only `res` counts.
 
-Deck order and resource identities are not shown, as in replays.
+Deck order is never shown.
 
 **`actions[]`** are `legalActions(pid)` in order, without engine objects. `i`, `kind`, `label` are always present;
-`arg` and `cardUuid` are copied when the action has them. Extra fields:
+`arg` and `cardUuid` are copied when the action has them. `arg` is a string, except that buttons in choice menus
+("Choose an ability:", "Yourself / Opponent", ...) carry a number. A dropdown can be long: "name a card" prompts list
+every card name (about 1,900 `option` actions, a ~150 KB line). Extra fields:
 
 | `kind` | Extra |
 |---|---|

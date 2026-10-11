@@ -7,32 +7,11 @@ const { execFileSync } = require('child_process');
 const { Env } = require('./env');
 const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
-const { createRandomBot } = require('./players/random');
-const { HeuristicBot } = require('./players/heuristic');
-const { ExternalBot } = require('./players/external');
+const { makeBot } = require('./players');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
-}
-
-// out-of-process bots (spec/stdio-protocol.md): name -> {cmd, args, ...}, from $SWU_EXTERNAL_BOTS or bot/external-bots.json
-function loadExternalBots() {
-    const file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, 'external-bots.json');
-    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-}
-const externalBots = loadExternalBots();
-
-// bot registry: every name resolves to a factory so heuristic/search bots can be added here later
-function makeBot(name) {
-    if (externalBots[name]) {
-        return new ExternalBot(name, externalBots[name]);
-    }
-    if (/^heuristic/.test(name)) {
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    return createRandomBot(name);
 }
 
 function statLine(r) {
@@ -75,7 +54,7 @@ async function main() {
                 write();
                 const r = await playGame(env, { seed, bots: seats.map(makeBot), record: true, snapshot, onEvent: (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) });
                 const winnerBot = r.winner === 'p1' ? seats[0] : r.winner === 'p2' ? seats[1] : r.winner;
-                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms });
+                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing });
                 write();
                 console.log(`${id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''}${statLine(r)}`);
             }

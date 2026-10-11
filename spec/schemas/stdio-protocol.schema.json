@@ -93,7 +93,7 @@
         "i": { "type": "integer", "minimum": 0 },
         "kind": { "enum": ["button", "card", "option", "displayCard", "perCardButton", "distribute"] },
         "label": { "type": "string" },
-        "arg": { "type": "string" },
+        "arg": { "type": ["string", "number"], "description": "Buttons in choice menus can carry a numeric arg; dropdown and number options are strings." },
         "cardUuid": { "type": "string" },
         "card": {
           "type": "object",
@@ -171,6 +171,11 @@
         "res": { "type": "object", "required": ["ready", "total"], "properties": { "ready": { "type": "integer" }, "total": { "type": "integer" } } },
         "handCount": { "type": "integer", "minimum": 0 },
         "hand": { "type": "array", "items": { "$ref": "#/$defs/CardRef" }, "description": "Only on your own player." },
+        "resources": {
+          "type": "array",
+          "description": "Only on your own player: resource cards, x: 1 when exhausted.",
+          "items": { "allOf": [{ "$ref": "#/$defs/CardRef" }], "properties": { "x": { "const": 1 } } }
+        },
         "deck": { "type": "integer", "minimum": 0 },
         "discard": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
         "ground": { "type": "array", "items": { "$ref": "#/$defs/UnitRef" } },
