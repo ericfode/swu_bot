@@ -1,6 +1,6 @@
-import { deltas as diff, edgeTerms } from './derive';
+import { deltas as diff } from './derive';
 import type { EvalPoint } from './evals';
-import { LENS_SCALE, type LensStep } from './lens';
+import { botsOf, estimateSource, resolveScore, swingChance, type Chance, type ScoreSeries } from './score';
 import type { CardRef, Game, PlayerSnap, Seat, Snapshot, Step } from './types';
 
 /**
@@ -64,9 +64,11 @@ export interface Action {
     outcome: Outcome;
     /**
      * How much the action moved the game toward its player, in percentage points of p1's winning chance: the share of
-     * the evaluation change it caused when the game is annotated, else the change of (1 + board edge) / 2.
+     * the evaluation change it caused when the game is annotated, else the change of the score's chance (swingFrom).
      */
     swing: number;
+    /** what the swing was measured with: the score source, its chance state, and how a weight switch inside the action was treated */
+    swingFrom?: SwingFrom;
     /** resource: the cards that went into the resource zone (empty when the player skipped) */
     cards?: CardRef[];
     /** the steps that make up the action when that is not all of index..until (a resource window interleaves both players' clicks) */
@@ -77,6 +79,18 @@ export interface Action {
     targetSeat?: Seat;
     /** the bot name of the target's controller, when that is the opponent */
     targetOwner?: string;
+}
+
+export interface SwingFrom {
+    /** the score source's key and label */
+    key: string;
+    label: string;
+    /** fitted, model, rough (a hand-set map), or none (sized by a stand-in logistic of the points; not a chance) */
+    chance: Chance;
+    /** the swing is a share of an evaluation change, shared by the score's changes */
+    evals?: boolean;
+    /** the score's weights changed inside the action: 'removed' when the switch's own move was taken out (by, toward the player), else 'included' */
+    weights?: { switch: 'removed' | 'included'; by?: number };
 }
 
 /** Below this eval swing (percentage points) a pass or an initiative claim that left the board alone earns no credit. */
@@ -170,15 +184,14 @@ function thirdPerson(title: string): string {
     return [s, ...rest].join(' ');
 }
 
-const botNames = (game: Game): Record<Seat, string> => ({
-    p1: game.header.players.find((p) => p.id === 'p1')?.bot ?? 'p1',
-    p2: game.header.players.find((p) => p.id === 'p2')?.bot ?? 'p2'
-});
-
-/** Groups a game's decisions into actions. Steps that only answer a follow-up prompt fold into the action they belong to. */
-export function classifyGame(game: Game, evals?: Map<number, EvalPoint>, lens?: Map<number, LensStep>): Action[] {
+/**
+ * Groups a game's decisions into actions. Steps that only answer a follow-up prompt fold into the action they belong
+ * to. `series` is the chosen score resolved over the game (score.ts); left out, the Omni v1 estimate sizes the swings,
+ * as for a game with no lens file; null gives no board swings.
+ */
+export function classifyGame(game: Game, evals?: Map<number, EvalPoint>, series?: ScoreSeries | null): Action[] {
     const steps = game.steps;
-    const names = botNames(game);
+    const names = botsOf(game);
     // the recorded deck is "leader-id / base-id"; a leader keeps that label when it flips or deploys under another name
     const leaderId = Object.fromEntries(SEATS.map((k) => [k, game.header.players.find((p) => p.id === k)?.deck.split(' / ')[0] ?? ''])) as Record<Seat, string>;
     // upgrades on a base are not in the snapshots; remember which ones were attached so their abilities read as abilities
@@ -327,7 +340,7 @@ export function classifyGame(game: Game, evals?: Map<number, EvalPoint>, lens?: 
         i = until + 1;
     }
     out.sort((a, b) => a.index - b.index);
-    applySwings(game, out, evals, lens);
+    applySwings(game, out, evals, series === undefined ? resolveScore(game, estimateSource(game)) : series);
     return out;
 }
 
@@ -464,42 +477,78 @@ const evalValue = (p: EvalPoint) => p.objective_state ?? p.objective_hindsight ?
 
 /**
  * Swing of every action on one scale, percentage points toward the acting player.
- * Board: the change of (1 + edge) / 2 where edge = tanh(board score / 25), so a swing counts less once the game is
- * decided. Pass, initiative and resource count only when the board itself changed (not the initiative token).
+ * Board: the change of the series' chance over the action (fitted or model: the chance; rough: the hand-set map; none:
+ * a stand-in logistic(kEff·edge)), so a swing counts less once the game is decided; 0 when either end is a gap. Pass,
+ * initiative and resource count only when the board itself changed, and then without the transient rows (the
+ * initiative token). A weight switch at an action's last step is taken out through edgePrevWeights when the source has
+ * no calibrated chance and the action is not quiet. A sparse source (decisions, checkpoints) has no per-action changes: each change between two of
+ * its points is shared evenly among the major plays in between (with none, a change of QUIET_SWING or more goes to
+ * the passes and initiative claims).
  * Evals: each checkpoint-to-checkpoint change is shared among the actions in that interval in proportion to how far
  * each moved the board the same way; when none did and the change is at least QUIET_SWING, it goes to the passes and
  * initiative claims in the interval (passing with lethal on board), else to the interval's plays evenly.
  */
-function applySwings(game: Game, acts: Action[], evals?: Map<number, EvalPoint>, lens?: Map<number, LensStep>) {
+export function applySwings(game: Game, acts: Action[], evals?: Map<number, EvalPoint>, series?: ScoreSeries | null) {
     const steps = game.steps;
-    const memo = new Map<number, { sum: number; init: number }>();
-    const score = (i: number) => {
-        let v = memo.get(i);
-        if (!v) {
-            const e = edgeTerms(steps[i].state, lens?.get(i) ?? null);
-            v = { sum: e.sum, init: e.terms.find((t) => t.key === 'initiative')?.points ?? 0 };
-            memo.set(i, v);
-        }
-        return v;
-    };
-    const pp = (x: number) => 50 * (1 + Math.tanh(x / LENS_SCALE));
+    const src = series?.source ?? null;
+    const from: SwingFrom | undefined = src ? { key: src.key, label: src.label, chance: src.chance } : undefined;
+    const sparse = !!src && src.sampling !== 'every-step';
+    const calibrated = src?.chance === 'fitted' || src?.chance === 'model';
     const quiet = (c: ActionClass) => c === 'pass' || c === 'initiative' || c === 'resource';
+    const even = (k: number) => classInfo(acts[k].cls).major && acts[k].cls !== 'initiative';
+    const toward = (a: Action) => (a.seat === 'p1' ? 1 : -1);
     // board change of each action, p1's way
     const board = acts.map((a) => {
-        if (a.cls === 'setup' || a.cls === 'cancel') {
+        // a weight switch inside the action is noted even when the action has no swing of its own
+        const switches = series ? series.steps.slice(a.index, a.until + 1).filter((s) => s.weightsChanged) : [];
+        a.swingFrom = from && switches.length ? { ...from, weights: { switch: 'included' } } : from;
+        if (!series || sparse || a.cls === 'setup' || a.cls === 'cancel') {
             return 0;
         }
-        const from = score(a.index - 1);
-        const to = score(a.until);
-        if (quiet(a.cls)) {
-            return boardMoved(steps[a.index - 1].state, steps[a.until].state) ? pp(to.sum - to.init) - pp(from.sum - from.init) : 0;
+        const q = quiet(a.cls);
+        if (q && !boardMoved(steps[a.index - 1].state, steps[a.until].state)) {
+            return 0;
         }
-        return pp(to.sum) - pp(from.sum);
+        const p0 = swingChance(series, a.index - 1, { quiet: q });
+        let p1 = swingChance(series, a.until, { quiet: q });
+        if (p0 == null || p1 == null) {
+            return 0;
+        }
+        const end = series.steps[a.until];
+        // not for a quiet action: its transient rows are only known at the new weights, not at edgePrevWeights' ones
+        const before = from && !calibrated && !q && switches.length === 1 && switches[0] === end && end.edgePrevWeights != null
+            ? swingChance(series, a.until, { quiet: q, edge: end.edgePrevWeights }) : null;
+        if (from && before != null) {
+            a.swingFrom = { ...from, weights: { switch: 'removed', by: (100 * p1 - 100 * before) * toward(a) } };
+            p1 = before;
+        }
+        return 100 * p1 - 100 * p0;
     });
-    const toward = (a: Action) => (a.seat === 'p1' ? 1 : -1);
     acts.forEach((a, k) => {
         a.swing = board[k] * toward(a);
     });
+    if (series && sparse) {
+        // the source's own points: each change between two of them is shared evenly among the major plays in between
+        const marks = series.steps.flatMap((s) => {
+            const p = s.status === 'file' ? swingChance(series, s.i) : null;
+            return p == null ? [] : [[s.i, p] as const];
+        });
+        for (let c = 0; c + 1 < marks.length; c++) {
+            const [a0, v0] = marks[c];
+            const [a1, v1] = marks[c + 1];
+            const d = 100 * (v1 - v0);
+            const all = acts.flatMap((a, k) => (a.until > a0 && a.until <= a1 ? [k] : []));
+            // with no major play in between, a change of QUIET_SWING or more goes to the passes and initiative claims
+            // (as with evals); a smaller one is left unassigned
+            let inside = all.filter(even);
+            if (!inside.length && Math.abs(d) >= QUIET_SWING) {
+                inside = all.filter((k) => acts[k].cls === 'pass' || acts[k].cls === 'initiative');
+            }
+            inside.forEach((k) => {
+                acts[k].swing = (d / inside.length) * toward(acts[k]);
+            });
+        }
+    }
     if (!evals?.size) {
         return;
     }
@@ -512,19 +561,24 @@ function applySwings(game: Game, acts: Action[], evals?: Map<number, EvalPoint>,
         const [to, v1] = pts[c + 1];
         const dE = (v1 - v0) * 100;
         const inside = acts.flatMap((a, k) => (a.until > from && a.until <= to ? [k] : []));
-        const w = inside.map((k) => Math.max(0, board[k] * Math.sign(dE)));
+        // a board change under 1e-9 pp is float noise, never a move that takes the interval's change
+        const w = inside.map((k) => (Math.abs(board[k]) < 1e-9 ? 0 : Math.max(0, board[k] * Math.sign(dE))));
         const total = w.reduce((x, y) => x + y, 0);
         let share = w.map((x) => (total > 0 ? x / total : 0));
         if (total === 0) {
             const quietOk = Math.abs(dE) >= QUIET_SWING;
             let cands = quietOk ? inside.filter((k) => acts[k].cls === 'pass' || acts[k].cls === 'initiative') : [];
             if (!cands.length) {
-                cands = inside.filter((k) => classInfo(acts[k].cls).major && acts[k].cls !== 'initiative');
+                cands = inside.filter(even);
             }
             share = inside.map((k) => (cands.includes(k) ? 1 / cands.length : 0));
         }
         inside.forEach((k, j) => {
-            acts[k].swing = dE * share[j] * toward(acts[k]);
+            const a = acts[k];
+            a.swing = dE * share[j] * toward(a);
+            if (a.swingFrom) {
+                a.swingFrom = { ...a.swingFrom, evals: true };
+            }
         });
     }
 }

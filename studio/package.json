@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fixtures": "node fixtures/generate.mjs",
-    "build:kit": "tsc --noEmit && vite build --config vite.kit.config.ts --mode kit"
+    "build:kit": "tsc --noEmit && vite build --config vite.kit.config.ts --mode kit",
+    "check:lens": "vite build --ssr scripts/check-lens.ts --outDir .check --logLevel warn && node .check/check-lens.js"
   },
   "dependencies": {
     "cmdk": "^1.1.1",

@@ -13,8 +13,10 @@ import { EdgeBreakdown } from './EdgeBreakdown';
 import { classifyGame, describe, pivotalActions } from '../data/actions';
 import { deltas as diff, metrics, roundStarts, trackUnits } from '../data/derive';
 import { EVAL_KEYS, evalAt, evalsByIndex, type EvalFile, type EvalPoint } from '../data/evals';
-import { lensAt, lensByIndex, type LensFile } from '../data/lens';
-import type { Game, Seat } from '../data/types';
+import type { LensFile } from '../data/lensFile';
+import { useScores, type LensInput, type ScoreView } from '../data/score';
+import type { CardRef, Game, Seat } from '../data/types';
+import { cardTextVersion, loadedCardCost } from '../lib/cardText';
 import { humanize } from '../lib/cards';
 import { SPEEDS, useSettings, type Perspective } from '../lib/settings';
 
@@ -70,14 +72,20 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     const [hoverStep, setHoverStep] = useState<number | null>(null);
     const { speed, setSpeed, perspective, setPerspective, art, setArt, lens: lensOn, setLens } = useSettings();
     const root = useRef<HTMLDivElement>(null);
-    const lensSteps = useMemo(() => lensByIndex(game, lens), [game, lens]);
+    // the game's score sources (its lens file, or the Omni v1 estimate) and the chosen one resolved over every step
+    const lensFiles = useMemo<LensInput[]>(() => (lens ? [{ dir: '', file: lens }] : []), [lens]);
+    // printed costs from the loaded card data, for the estimate and for Omni v1 files without parts; a new function
+    // (and the series resolved again) only when card data arrives (each load bumps artVersion, which renders this again)
+    const textVersion = cardTextVersion();
+    const cardCost = useMemo(() => (c: CardRef) => loadedCardCost(c), [textVersion]);
+    const { series: score } = useScores(game, lensFiles, null, { cardCost });
 
     const ids = useMemo(() => trackUnits(game), [game]);
-    const actions = useMemo(() => classifyGame(game, ev, lensSteps), [game, ev, lensSteps]);
+    const actions = useMemo(() => classifyGame(game, ev, score), [game, ev, score]);
     const pivotal = useMemo(() => pivotalActions(actions, 10), [actions]);
     const actionAt = useMemo(() => new Map(actions.map((a) => [a.index, a])), [actions]);
     const [why, setWhy] = useState<'analyst' | 'board'>(() => (evals?.points?.length ? 'analyst' : 'board'));
-    const series = useMemo(() => metrics(game, lensSteps), [game, lensSteps]);
+    const series = useMemo(() => metrics(game).map((m, i) => ({ ...m, score: score?.steps[i]?.edge ?? null })), [game, score]);
     const rounds = useMemo(() => roundStarts(game), [game]);
     const changes = useMemo(() => game.steps.map((s, i) => (i ? diff(game.steps[i - 1].state, s.state) : [])), [game]);
     const bots = useMemo(() => ({
@@ -219,11 +227,10 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     const end = step === last ? game.end : null;
     const winner = game.end?.winner;
     const analysis = ev.size ? evalAt(ev, step) : null;
-    const view = useMemo(() => lensAt(game, step, lensSteps, lens), [game, step, lensSteps, lens]);
+    const viewAt = useCallback((i: number): ScoreView | null => (score && score.steps[i] ? { source: score.source, step: score.steps[i] } : null), [score]);
+    const view = useMemo(() => viewAt(step), [viewAt, step]);
     // the board score panel shows the playhead's step, or the one under the pointer on the timeline
     const shown = hoverStep != null && hoverStep >= 0 && hoverStep <= last ? hoverStep : step;
-    const shownView = useMemo(() => (shown === step ? view : lensAt(game, shown, lensSteps, lens)), [game, shown, step, view, lensSteps, lens]);
-    const shownPrev = useMemo(() => (shown > 0 ? lensAt(game, shown - 1, lensSteps, lens) : null), [game, shown, lensSteps, lens]);
     const stepN = useCallback((i: number) => game.steps[i]?.n ?? i, [game]);
     const prevCheckpoint = useMemo(() => {
         if (!analysis) {
@@ -333,7 +340,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                                 {SPEEDS.map((s, i) => <button key={s.label} className="btn !h-7 !px-2 num text-xs" aria-pressed={speed === i} onClick={() => setSpeed(i)}>{s.label}</button>)}
                             </div>
                         </div>
-                        <Momentum data={series} rounds={rounds} step={step} lanes={lanes} bots={bots} onSeek={seek} onHover={setHoverStep} stepN={stepN} evals={ev} height={ev.size ? 190 : 160} markers={pivotal} />
+                        <Momentum data={series} typical={score?.source.typical} rounds={rounds} step={step} lanes={lanes} bots={bots} onSeek={seek} onHover={setHoverStep} stepN={stepN} evals={ev} height={ev.size ? 190 : 160} markers={pivotal} />
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                             {LANES.filter((l) => l.key !== 'llm' || ev.size).map((l) => {
                                 const on = lanes.includes(l.key);
@@ -362,8 +369,8 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                                     </div>
                                 )}
                                 <div className={`px-3 py-2 min-w-0 ${!ev.size || why === 'board' ? '' : 'hidden'} @3xl:block`}>
-                                    <EdgeBreakdown state={game.steps[shown].state} prev={shown > 0 ? game.steps[shown - 1].state : null} bots={bots}
-                                        lens={shownView.exact ? shownView : null} prevLens={shownPrev?.exact ? shownPrev : null} previewN={shown !== step ? game.steps[shown].n : null} />
+                                    <EdgeBreakdown state={game.steps[shown].state} bots={bots}
+                                        lens={viewAt(shown)} prevLens={shown > 0 ? score?.steps[shown - 1] ?? null : null} previewN={shown !== step ? game.steps[shown].n : null} />
                                 </div>
                             </div>
                         </div>

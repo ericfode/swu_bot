@@ -1,8 +1,9 @@
 import { motion } from 'motion/react';
 import { BrainCircuit } from 'lucide-react';
 import { Card, type Focus } from './Card';
-import { baseValue, TERM_COLOR, unitTerms, type LensView } from '../data/lens';
-import { TermIcon } from './TermIcon';
+import type { ScoreView } from '../data/score';
+import { rowColor } from '../data/terms';
+import { PartIcon } from './TermIcon';
 import { CardTextFace } from './CardFace';
 import { cardTextOf } from '../lib/cardText';
 import { useSettings } from '../lib/settings';
@@ -20,41 +21,42 @@ function faceOf(focus: Focus, text: ReturnType<typeof cardTextOf>) {
 
 const sg = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`;
 
-/** Why a card is worth what the lens says: the omni bot's score terms for that one card. */
-function ValueBreakdown({ focus, lens }: { focus: Focus; lens: LensView }) {
-    const w = lens.weights;
+/** Why a card is worth what the chosen score says: the parts of that one card, labelled from the score's terms. */
+function ValueBreakdown({ focus, lens }: { focus: Focus; lens: ScoreView }) {
+    const { source, step } = lens;
     const v = focus.value?.v ?? null;
-    const rows: { label: string; points: number }[] = [];
+    const rows = [...(focus.value?.parts ?? [])];
+    const seat = step.seats?.[focus.value?.seat ?? 'p1'];
     let note: string | null = null;
-    if (focus.kind === 'unit' && focus.unit && v != null) {
-        rows.push(...unitTerms(focus.unit, lens.exact ? v : null, w));
-        if (!lens.exact) {
-            note = 'Estimated: replays don\'t record card cost, the lens file adds it (cost × 0.25).';
+    if (focus.kind === 'unit' && v != null) {
+        if (focus.unit?.x && rows.length) {
+            note = `Exhausted: ${source.unitNote(step.weights)}.`;
+        }
+        if (step.status === 'estimate') {
+            note = `${note ? `${note} ` : ''}${rows.some((r) => r.key === 'cost') ? 'Estimated here from the board, with the printed cost from the card data.'
+                : 'Estimated here from the board: replays don\'t record card cost, so the cost part is left out.'}`;
+        } else if (seat?.partsFrom === 'computed' && seat.costFrom === 'rest') {
+            note = `${note ? `${note} ` : ''}This file gives no split: the parts are computed here, and cost is the rest of the file's value.`;
+        } else if (!rows.length) {
+            note = 'This file gives no split for this card.';
         }
     } else if (focus.kind === 'base' && v != null) {
         const hp = focus.hpLeft ?? null;
-        if (hp != null) {
-            rows.push({ label: `${hp} HP left × ${w.baseHp}`, points: hp * w.baseHp });
-            if (hp <= 12) {
-                rows.push({ label: `low-base penalty (12 − ${hp})² / 6`, points: -((12 - hp) ** 2) / 6 });
-            }
-            rows.push({ label: `all × ${w.baseMult}`, points: baseValue(hp, w) - baseValue(hp, w) / w.baseMult });
-            if (hp <= 12) {
-                note = 'Under 12 HP the penalty makes a base lose worth faster the closer it gets to 0.';
-            }
+        if (hp != null && (focus.value?.parts ?? []).some((r) => r.key === 'danger' && r.points < 0)) {
+            note = 'Under the danger line the base loses worth faster the closer it gets to 0 HP.';
         }
     } else if (focus.kind === 'hand' && v != null) {
-        rows.push({ label: 'any card in hand', points: v });
+        rows.push({ key: 'hand', label: 'any card in hand', points: v });
     } else if (focus.kind === 'leader') {
-        note = 'An undeployed leader adds no points of its own; once deployed it scores as a unit.';
+        note = `${source.label} gives an undeployed leader no value of its own; once deployed it scores as a unit.`;
     }
     const regret = focus.value?.regret;
     return (
         <div className="flex flex-col gap-1 rounded-lg bg-ink/70 border border-line px-2.5 py-2">
             <div className="flex items-baseline gap-2">
-                <span className="eyebrow">Omni value</span>
-                {v != null && <span className="num font-semibold inline-flex items-center gap-1" style={{ color: TERM_COLOR[focus.value!.term ?? 'ground'] }}><TermIcon term={focus.value!.term ?? 'ground'} />{v.toFixed(1)}</span>}
-                <span className="text-faint text-[10px] ml-auto">{lens.exact ? 'lens file' : 'estimate'}</span>
+                <span className="eyebrow">{source.label} value</span>
+                {v != null && <span className="num font-semibold inline-flex items-center gap-1" style={{ color: rowColor(focus.value!.row ?? 'ground') }}><PartIcon row={focus.value!.row ?? 'ground'} />{v.toFixed(1)}</span>}
+                <span className="text-faint text-[10px] ml-auto">{step.status === 'file' ? 'lens file' : step.status === 'estimate' ? 'estimate' : step.status}</span>
             </div>
             {rows.length > 0 && (
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-[12px]">
@@ -78,7 +80,7 @@ function ValueBreakdown({ focus, lens }: { focus: Focus; lens: LensView }) {
 }
 
 /** Name, stats, upgrades and (under the lens) the value breakdown of the inspected card. */
-export function CardFacts({ focus, lens, compact = false }: { focus: Focus; lens: LensView | null; compact?: boolean }) {
+export function CardFacts({ focus, lens, compact = false }: { focus: Focus; lens: ScoreView | null; compact?: boolean }) {
     const u = focus.unit;
     const text = useFocusText(focus);
     return (
@@ -91,13 +93,13 @@ export function CardFacts({ focus, lens, compact = false }: { focus: Focus; lens
             </div>
             {u?.u?.length ? <div className="flex flex-wrap gap-1">{u.u.map((x, i) => <span key={i} className={`up !static${x.t ? ' token' : ''}`} title={x.t ? `${x.n} (token upgrade)` : x.n}>{x.n}</span>)}</div> : null}
             {lens && !compact && <ValueBreakdown focus={focus} lens={lens} />}
-            {lens && compact && focus.value?.v != null && <span className="text-xs text-dim inline-flex items-center gap-1">Omni value <TermIcon term={focus.value.term ?? 'ground'} /><b className="num" style={{ color: TERM_COLOR[focus.value.term ?? 'ground'] }}>{focus.value.v.toFixed(1)}</b></span>}
+            {lens && compact && focus.value?.v != null && <span className="text-xs text-dim inline-flex items-center gap-1">{lens.source.label} value <PartIcon row={focus.value.row ?? 'ground'} /><b className="num" style={{ color: rowColor(focus.value.row ?? 'ground') }}>{focus.value.v.toFixed(1)}</b></span>}
         </div>
     );
 }
 
 /** The inspected card as large as the side panel allows, with its facts underneath. */
-export function CardInspector({ focus, lens }: { focus: Focus; lens: LensView | null }) {
+export function CardInspector({ focus, lens }: { focus: Focus; lens: ScoreView | null }) {
     const text = useFocusText(focus);
     return (
         <div className="flex flex-col gap-3">
@@ -115,7 +117,7 @@ export function CardInspector({ focus, lens }: { focus: Focus; lens: LensView | 
  * The hovered card, enlarged next to the pointer, for layouts with no side panel beside the board (narrow windows,
  * compact embeds, phones). Fixed to the viewport and click-through.
  */
-export function FloatingZoom({ focus, lens }: { focus: Focus; lens: LensView | null }) {
+export function FloatingZoom({ focus, lens }: { focus: Focus; lens: ScoreView | null }) {
     const text = useFocusText(focus);
     const vw = window.innerWidth;
     const vh = window.innerHeight;

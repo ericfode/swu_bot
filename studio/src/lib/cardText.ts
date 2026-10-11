@@ -96,6 +96,12 @@ export function cardTextOf(card: Pick<CardRef, 'n' | 's'>): CardText | null {
     return card.s ? bySet.get(card.s) ?? null : tokens.get(card.n) ?? null;
 }
 
+/**
+ * A card's printed cost from the loaded card data, or null. Every score path passes this as `cardCost` (the viewer, the
+ * kit's pivotal and classifyGame, mountBoard, a standalone EdgeBreakdown), so they all give the same estimate.
+ */
+export const loadedCardCost = (card: Pick<CardRef, 'n' | 's'>): number | null => cardTextOf(card)?.c ?? null;
+
 /** Bumps every time card data is added (for caches keyed on it). */
 export const cardTextVersion = () => version;
 

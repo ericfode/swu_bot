@@ -36,8 +36,13 @@ export function LaneSwatch({ lane }: { lane: LaneKey }) {
     );
 }
 
+/** A step's board facts plus the chosen score's edge there (null at a gap). */
+export type MomentumRow = Metrics & { score: number | null };
+
 interface Props {
-    data: Metrics[];
+    data: MomentumRow[];
+    /** the score's typical lead (a source's scale.typical): the smallest top of its axis */
+    typical?: number;
     rounds: { step: number; round: number }[];
     step: number;
     lanes: LaneKey[];
@@ -81,15 +86,15 @@ function useWidth(ref: RefObject<HTMLElement | null>) {
 }
 
 /** The game at a glance: chosen curves over every decision, round bands, and the playhead. Click or drag to seek. */
-export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, evals, height = 160, markers = [], stepN = (i) => i }: Props) {
+export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, evals, typical = 1, height = 160, markers = [], stepN = (i) => i }: Props) {
     const box = useRef<HTMLDivElement>(null);
     const width = useWidth(box);
     const last = Math.max(1, data.length - 1);
     const hasEvals = !!evals?.size;
     const show = (k: LaneKey) => lanes.includes(k);
     const labels = evalLabels(bots);
-    // the omni score in points, scaled to this game's biggest lead (at least 25), so a lopsided game doesn't pin the line to the edge
-    const scale = useMemo(() => Math.max(25, ...data.map((m) => Math.abs(m.score))), [data]);
+    // the score in its unit, scaled to this game's biggest lead (at least the source's typical lead), so a lopsided game doesn't pin the line to the edge
+    const scale = useMemo(() => Math.max(typical, ...data.map((m) => (m.score == null ? 0 : Math.abs(m.score)))), [data, typical]);
     const rows = useMemo(() => {
         // evals exist at checkpoints only: the lines step between them, and the tooltip carries the latest one forward
         let held: (EvalPoint & { at: number }) | null = null;
@@ -101,9 +106,9 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
             const vs = e ? [e.p1_subjective, e.p2_subjective, e.objective_state, e.objective_hindsight].filter((v): v is number => v != null) : [];
             return {
                 ...m,
-                sn: m.score / scale,
-                snUp: Math.max(0, m.score / scale),
-                snDown: Math.min(0, m.score / scale),
+                sn: m.score == null ? null : m.score / scale,
+                snUp: m.score == null ? null : Math.max(0, m.score / scale),
+                snDown: m.score == null ? null : Math.min(0, m.score / scale),
                 ...(e ? { p1_subjective: e.p1_subjective, p2_subjective: e.p2_subjective, objective_state: e.objective_state, objective_hindsight: e.objective_hindsight, band: vs.length ? [Math.min(...vs), Math.max(...vs)] : undefined } : {}),
                 held
             };
@@ -168,7 +173,7 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
                                 dot={{ r: 1.8, strokeWidth: 0, fill: l.color }} activeDot={false} isAnimationActive={false} />
                         ))}
                         <ReferenceLine yAxisId="v" x={step} stroke={PLAYHEAD} strokeOpacity={0.85} strokeWidth={1.5} />
-                        {show('edge') && cur && (
+                        {show('edge') && cur && cur.score != null && cur.sn != null && (
                             <ReferenceDot yAxisId="e" x={step} y={cur.sn} r={3.5} fill={EDGE} stroke="#060a13" strokeWidth={1.5}
                                 label={{ value: `${cur.score >= 0 ? '+' : '−'}${Math.abs(cur.score).toFixed(1)}`, position: step > last * 0.9 ? 'left' : 'right', fill: EDGE, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }} />
                         )}
@@ -186,7 +191,7 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, onHover, eva
                                 <div className="rounded-[10px] border border-line bg-panel/95 px-3 py-2 text-[12px] leading-relaxed shadow-xl">
                                     <div className="text-dim">step {stepN(i)} · round {r.round}</div>
                                     <div className="num"><span className="text-p1">{r.base1}</span> <span className="text-faint">vs</span> <span className="text-p2">{r.base2}</span> <span className="text-faint">base HP</span></div>
-                                    <div className="num"><span style={{ color: EDGE }}>{r.score >= 0 ? '+' : '−'}{Math.abs(r.score).toFixed(1)}</span> <span className="text-faint">Omni score (points)</span></div>
+                                    {r.score != null && <div className="num"><span style={{ color: EDGE }}>{r.score >= 0 ? '+' : '−'}{Math.abs(r.score).toFixed(1)}</span> <span className="text-faint">Omni score (points)</span></div>}
                                     {hasEvals && r.held && (
                                         <div className="mt-1 border-t border-line pt-1">
                                             <div className="text-faint text-[11px]">chance {bots.p1} wins{r.held.at !== i ? `, as of step ${stepN(r.held.at)}` : ''}</div>

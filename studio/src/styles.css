@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* Holotable: a dark tactical table. Player 1 reads as Rebel blue, player 2 as Imperial red; gold marks initiative, wins and
-   outcomes only (states like "on" and "current" are plain white), and the lens's score colours are never seat colours.
+   outcomes only (states like "on" and "current" are plain white), and a score's part colours are never seat colours.
    Layout: app rail on the left, page body scrolls; the game page is board + log + timeline in one screen. */
 @theme {
     --color-bg: #060a13;
@@ -23,14 +23,21 @@
 
 /* always emitted (they are read through var() from TS, which Tailwind doesn't see) */
 @theme static {
-    /* the lens: one colour per part of the omni board score (src/data/lens.ts TERM_COLOR), never a seat colour */
+    /* one colour per part of a score (src/data/terms.ts rowColor), the same on every source, never a seat colour:
+       the six fixed rows, then the extra terms with a place on the board (x1 deck, x2 discard, x3 leader; each at least
+       ΔE76 34 from every other token), any other extra term (grey), and joint terms and "Other (not split)" (faint, hatched) */
     --color-v-base: #ff9a5c;
     --color-v-ground: #5fd68f;
     --color-v-space: #f28bd0;
     --color-v-hand: #cde26a;
     --color-v-res: #aebad3;
     --color-v-init: #f6c454;
-    /* the omni score itself (the timeline curve, the breakdown's total) */
+    --color-v-x1: #9a8f6a;
+    --color-v-x2: #e5989b;
+    --color-v-x3: #e0f0c0;
+    --color-v-other: #8c8c8c;
+    --color-v-joint: #56658a;
+    /* the score itself (the timeline curve, the breakdown's total) */
     --color-edge: #c4b2ff;
     /* card states on the board, each its own hue: none is a seat, score, gold or violet colour */
     --color-exh: #7480ff;
@@ -441,7 +448,7 @@ h3 {
 .card.lensed:not(.art):has(.ups > :nth-child(3)) .nmbar {
     -webkit-line-clamp: 1;
 }
-/* ---------- lens: card values from the omni bot's board score ---------- */
+/* ---------- lens: card values from a score's lens file (or the built-in estimate) ---------- */
 .lens {
     display: flex;
     flex-wrap: wrap;
@@ -487,6 +494,12 @@ h3 {
     background: color-mix(in oklab, var(--color-bg) 86%, transparent);
     box-shadow: inset 0 0 0 1.5px var(--term), 0 4px 12px -2px #000;
 }
+.lensv.est {
+    /* a value estimated here, not read from a lens file */
+    box-shadow: 0 4px 12px -2px #000;
+    outline: 1.5px dashed var(--term);
+    outline-offset: -1.5px;
+}
 .lensv.sm {
     min-width: 0;
     padding: 0 3px;
@@ -510,11 +523,15 @@ h3 {
     padding: 0 3px;
     font-size: 9px;
 }
-/* the card the omni bot's chosen move starts with */
+/* the card the searching bot's chosen move starts with */
 .lensr.pick {
     color: var(--color-bg);
     background: var(--color-fg);
     box-shadow: 0 0 12px -1px #dce6fbaa;
+}
+/* parts of a score that sit on no card (joint terms, "Other (not split)"): hatched in the faint colour */
+.hatch {
+    background-image: repeating-linear-gradient(135deg, color-mix(in oklab, var(--color-v-joint) 45%, transparent) 0 2px, transparent 2px 6px);
 }
 /* a lens total: --term colours the number and outline (a part of the score); without it, an outline in the seat colour (a player's total) */
 .lens-chip {

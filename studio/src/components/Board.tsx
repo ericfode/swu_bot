@@ -6,8 +6,10 @@ import { useSettings } from '../lib/settings';
 import { humanize } from '../lib/cards';
 import type { PlayerSnap, Seat, Snapshot, UnitRef } from '../data/types';
 import type { UnitIds } from '../data/derive';
-import { TERM_COLOR, type LensSearch, type LensSide, type LensView, type TermKey } from '../data/lens';
-import { TermIcon } from './TermIcon';
+import { estimateCostFrom, partRows, type NormSearch, type ScoreView, type SeatScore } from '../data/score';
+import { rowColor } from '../data/terms';
+import { displayScales, fmtSigned } from '../data/format';
+import { PartIcon } from './TermIcon';
 
 interface BoardProps {
     state: Snapshot;
@@ -20,14 +22,13 @@ interface BoardProps {
     onFocus: (f: Focus | null) => void;
     /** the pointer left a card (the floating zoom closes; the side inspector keeps the last card) */
     onLeave?: () => void;
-    /** card values to draw on the board (the lens), or null */
-    lens?: LensView | null;
+    /** the chosen score at this step (its source and its step), drawn as card values and the centre line; or null */
+    lens?: ScoreView | null;
 }
 
 const spring = { type: 'spring', stiffness: 420, damping: 32 } as const;
 const fmt = (v: number) => v.toFixed(1);
-const termStyle = (term: TermKey) => ({ '--term': TERM_COLOR[term] }) as CSSProperties;
-const TERM_LABEL: Record<TermKey, string> = { ground: 'Ground units', space: 'Space units', base: 'Base', hand: 'Hand', resources: 'Resources', initiative: 'Initiative' };
+const rowStyle = (id: string) => ({ '--term': rowColor(id) }) as CSSProperties;
 
 /** Floating "-3" / "+2" over a unit or base whose damage changed since the previous step. */
 function Pop({ delta, k }: { delta: number; k: string }) {
@@ -42,20 +43,27 @@ function Pop({ delta, k }: { delta: number; k: string }) {
     );
 }
 
-/** Per-seat lens values lined up with the snapshot, plus the search's per-card regrets when that seat is the one deciding. */
+/** Per-seat score values lined up with the snapshot, plus the search's per-card regrets when that seat is the one deciding. */
 interface SeatLens {
-    side: LensSide;
-    search: LensSearch | null;
-    /** the most valuable unit on the whole table, for the glow */
+    side: SeatScore;
+    search: NormSearch | null;
+    /** the most valuable unit on the whole table (at least the heat floor), for the glow */
     max: number;
+    view: ScoreView;
 }
+
+const has = (sl: SeatLens | null, id: string) => !!sl?.view.source.rows.some((r) => r.id === id);
 
 function valueOf(seat: Seat, sl: SeatLens | null, zone: 'ground' | 'space' | 'hand', i: number): CardValue | null {
     if (!sl) {
         return null;
     }
     const v = sl.side[zone][i] ?? null;
-    return { v, seat, term: zone, heat: zone === 'hand' || v == null ? 0 : Math.max(0, v) / sl.max, regret: sl.search?.[zone]?.[i] ?? null };
+    const parts = zone === 'hand' ? undefined : partRows(sl.view.source.unitTerms, sl.side.parts[zone][i] ?? null, sl.side.unitCostFrom?.[zone][i] ?? sl.side.costFrom);
+    return {
+        v, seat, row: zone === 'hand' ? 'side.hand' : zone, heat: zone === 'hand' || v == null ? 0 : Math.max(0, v) / sl.max,
+        regret: sl.search?.[zone]?.[i] ?? null, ...(parts?.length ? { parts } : {}), ...(sl.view.step.status === 'estimate' ? { estimated: true } : {})
+    };
 }
 
 // Lane geometry, matching .lane and .card in styles.css: an 84px card, 8px gaps, 8px padding and a 1px border each side.
@@ -148,11 +156,12 @@ function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, hiLe
     leader: PlayerSnap['leader']; hiLeader: boolean; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null;
 }) {
     const total = sl ? sl.side[arena].reduce((a, b) => a + b, 0) : 0;
+    const additive = sl?.view.source.cardValues === 'additive';
     return (
         <div className="lane">
-            <span className="lane-label">{label}{sl && units.length > 0 && (
-                <span className="lens-chip !text-[10px] !tracking-normal" style={termStyle(arena)} title={`This player's ${label} units together: the ${TERM_LABEL[arena]} row of the board score`}>
-                    <TermIcon term={arena} size={10} />{fmt(total)}
+            <span className="lane-label">{label}{sl && additive && units.length > 0 && (
+                <span className="lens-chip !text-[10px] !tracking-normal" style={rowStyle(arena)} title={`This player's ${label} units together: the ${arena === 'ground' ? 'Ground units' : 'Space units'} row of ${sl.view.source.label}`}>
+                    <PartIcon row={arena} size={10} />{fmt(total)}
                 </span>
             )}</span>
             <AnimatePresence mode="popLayout" initial={false}>
@@ -204,7 +213,7 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl 
     return (
         <div ref={hqRef} className="flex flex-col items-center gap-2 min-w-0">
             <div className="relative base-frame">
-                <Card card={p.base} shape="wide" kind="base" hpLeft={left} note={baseNote} onFocus={onFocus} onLeave={onLeave} value={sl ? { v: sl.side.base, seat, term: 'base' } : null} />
+                <Card card={p.base} shape="wide" kind="base" hpLeft={left} note={baseNote} onFocus={onFocus} onLeave={onLeave} value={sl && has(sl, 'base') ? baseValue(seat, sl) : null} />
                 <svg viewBox="0 0 80 80" className="absolute -right-3 -top-3 size-14 drop-shadow-lg pointer-events-none z-[4]" aria-label={`Base HP ${left} of ${p.base.hp}`}>
                     <circle cx="40" cy="40" r="38" fill="#060a13" />
                     <circle cx="40" cy="40" r={R} fill="none" stroke="#1d2a44" strokeWidth="6" />
@@ -219,14 +228,14 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl 
                 <div className="flex flex-col gap-1 min-w-0">
                     <span className="flex items-center gap-1.5 min-w-0">
                         <span className="font-display text-[13px] font-semibold truncate max-w-[9rem]" style={{ color: 'var(--seat)' }}>{bot}</span>
-                        {sl && <span className="lens-chip" style={{ '--seat': `var(--color-${seat})` } as CSSProperties} title="This player's total in the omni bot's board score: every coloured number on their side added up">Σ {fmt(sl.side.total)}</span>}
+                        {sl && sl.side.total != null && <span className="lens-chip" style={{ '--seat': `var(--color-${seat})` } as CSSProperties} title={`This player's total in ${sl.view.source.label}: every coloured number on their side added up`}>Σ {fmt(sl.side.total)}</span>}
                     </span>
                     <div className="flex items-center gap-1.5">
                         {/* more than 12 resources: two even rows (a pip and its gap are 12px) */}
                         <div className="pips" style={p.res.total > 12 ? { maxWidth: Math.ceil(p.res.total / 2) * 12 } : undefined} aria-label={`${p.res.ready} of ${p.res.total} resources ready`}>
                             {Array.from({ length: p.res.total }, (_, i) => <i key={i} className={i < p.res.ready ? '' : 'spent'} />)}
                         </div>
-                        {sl && <span className="lens-chip !text-[10px]" style={termStyle('resources')} title="All resources together: the Resources row of the board score"><TermIcon term="resources" size={10} />{fmt(sl.side.resources)}</span>}
+                        {sl && has(sl, 'side.resources') && <span className="lens-chip !text-[10px]" style={rowStyle('side.resources')} title={`All resources together: the Resources row of ${sl.view.source.label}`}><PartIcon row="side.resources" size={10} />{fmt(sl.side.resources)}</span>}
                     </div>
                     <div className="flex gap-2 text-[11px] text-dim num">
                         <span title="Cards in hand" className="inline-flex items-center gap-0.5"><Layers size={11} />{p.hand.length}</span>
@@ -245,6 +254,7 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
     const visible = perspective === 'god' || perspective === seat;
     // hand cards all score the same; a per-card number only when they differ
     const flat = !sl || sl.side.hand.every((v) => v === sl.side.hand[0]);
+    const additive = sl?.view.source.cardValues === 'additive';
     const handTotal = sl ? sl.side.hand.reduce((a, b) => a + b, 0) : 0;
     return (
         <div className="hand" aria-label={`${seat} hand, ${p.hand.length} cards`}>
@@ -264,9 +274,9 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
                 </AnimatePresence>
                 {p.hand.length === 0 && <span className="text-faint text-xs self-center">empty</span>}
             </div>
-            {sl && p.hand.length > 0 && (
-                <span className="lens-chip shrink-0 ml-auto" style={termStyle('hand')} title="Cards in hand: the Hand row of the board score">
-                    <TermIcon term="hand" size={10} />
+            {sl && additive && has(sl, 'side.hand') && p.hand.length > 0 && (
+                <span className="lens-chip shrink-0 ml-auto" style={rowStyle('side.hand')} title={`Cards in hand: the Hand row of ${sl.view.source.label}`}>
+                    <PartIcon row="side.hand" size={10} />
                     {flat ? `${p.hand.length} × ${fmt(sl.side.hand[0])} = ${fmt(handTotal)}` : fmt(handTotal)}
                 </span>
             )}
@@ -291,10 +301,10 @@ function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens
             <div className={`relative px-2 py-1 flex flex-col items-center justify-center col-span-2 order-first ${stack ? '' : '@2xl:col-span-1 @2xl:order-none'}`}>
                 <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} onHiLeader={setHiLeader} hqRef={hqRef} sl={sl} />
                 {hasInit && (
-                    <motion.div layoutId="initiative" transition={spring} title={sl ? `Initiative: ${fmt(sl.side.initiative)} points` : 'Initiative'}
+                    <motion.div layoutId="initiative" transition={spring} title={sl && has(sl, 'side.initiative') ? `Initiative: ${fmt(sl.side.initiative)} ${sl.view.source.unitText}` : 'Initiative'}
                         className="absolute -left-1 top-1 flex flex-col items-center gap-0.5">
                         <span className="size-7 rounded-full grid place-items-center bg-gold text-ink shadow-[0_0_18px_-2px_var(--color-gold)]"><Flag size={14} strokeWidth={2.5} /></span>
-                        {sl && <span className="lens-chip !text-[10px]" style={termStyle('initiative')}>{fmt(sl.side.initiative)}</span>}
+                        {sl && has(sl, 'side.initiative') && <span className="lens-chip !text-[10px]" style={rowStyle('side.initiative')}>{fmt(sl.side.initiative)}</span>}
                     </motion.div>
                 )}
             </div>
@@ -310,37 +320,63 @@ function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens
     );
 }
 
-/** The lens's centre line: both totals as a tug of war, and what the omni bot's search saw when it is about to move. */
-function LensLine({ lens, bots, state }: { lens: LensView; bots: Record<Seat, string>; state: Snapshot }) {
-    const edge = lens.edge;
-    const lead: Seat | null = edge > 0.5 ? 'p1' : edge < -0.5 ? 'p2' : null;
-    const w = Math.min(50, (Math.abs(edge) / 40) * 50);
-    const s = lens.search;
+/** The base's value chip, with its parts for the inspector. */
+function baseValue(seat: Seat, sl: SeatLens): CardValue {
+    const parts = partRows(sl.view.source.baseTerms, sl.side.parts.base);
+    return { v: sl.side.base, seat, row: 'base', ...(parts.length ? { parts } : {}), ...(sl.view.step.status === 'estimate' ? { estimated: true } : {}) };
+}
+
+/** Where the centre line's numbers come from, in a few words. */
+function provenance(view: ScoreView): string {
+    const { step } = view;
+    switch (step.status) {
+        case 'file': return `${view.source.label} lens file`;
+        case 'estimate': return estimateCostFrom(step) === 'card' ? 'estimated here (card cost from card data)' : 'estimated here, card cost left out';
+        case 'held': return `as of step ${step.heldFromN ?? step.n}`;
+        case 'mismatch': return 'file doesn\'t match this board here';
+        default: return view.source.error ?? 'no value at this step';
+    }
+}
+
+/** The score's centre line: both totals as a tug of war, and what the searching bot saw when it is about to move. */
+function LensLine({ lens, bots, state }: { lens: ScoreView; bots: Record<Seat, string>; state: Snapshot }) {
+    const { source, step } = lens;
+    const scales = displayScales(source.kEff, source.unit);
+    const edge = step.edge ?? 0;
+    const lead: Seat | null = step.edge == null ? null : edge > scales.lead ? 'p1' : edge < -scales.lead ? 'p2' : null;
+    const w = Math.min(50, (Math.abs(edge) / scales.tug) * 50);
+    const s = step.search;
+    const total = (seat: Seat) => step.seats?.[seat].total ?? null;
+    const rows = source.rows.filter((r) => r.group !== 'joint');
     return (
         <div className="flex flex-col gap-1 px-2">
             <div className="flex items-center gap-3">
-                <span className="lens-chip seat-p2 shrink-0" title={`${bots.p2}'s total`}>{bots.p2} Σ {fmt(lens.p2.total)}</span>
+                {total('p2') != null && <span className="lens-chip seat-p2 shrink-0" title={`${bots.p2}'s total`}>{bots.p2} Σ {fmt(total('p2')!)}</span>}
                 <div className="relative h-2 flex-1 rounded-full bg-ink/80 overflow-hidden" title="p1 total − p2 total">
                     <span className="absolute left-1/2 top-0 bottom-0 w-px bg-line" />
                     <motion.span className="absolute top-0 bottom-0 rounded-full" initial={false} animate={{ left: edge >= 0 ? '50%' : `${50 - w}%`, width: `${w}%` }}
                         style={{ background: edge >= 0 ? 'var(--color-p1)' : 'var(--color-p2)' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} />
                 </div>
-                <span className="lens-chip seat-p1 shrink-0" title={`${bots.p1}'s total`}>{bots.p1} Σ {fmt(lens.p1.total)}</span>
+                {total('p1') != null && <span className="lens-chip seat-p1 shrink-0" title={`${bots.p1}'s total`}>{bots.p1} Σ {fmt(total('p1')!)}</span>}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-[11px] text-dim">
                 <span className="eyebrow !text-[10px]">round {state.round} · {state.phase}</span>
-                <span className="num" title="Omni score: player 1's total minus player 2's, the same number as the timeline's Omni score curve and the breakdown's total">
-                    <span className="text-faint">score </span><b style={{ color: 'var(--color-edge)' }}>{edge >= 0 ? '+' : '−'}{Math.abs(edge).toFixed(1)}</b>
-                    {lead ? <> · <b style={{ color: `var(--color-${lead})` }}>{bots[lead]}</b> ahead</> : ' · even'}
-                </span>
-                <span className="text-faint">{lens.exact ? 'omni lens file' : 'estimated (no lens file, cost left out)'}</span>
+                {step.edge != null && (
+                    <span className="num" title={`${source.label}: player 1's total minus player 2's, the same number as the timeline's score curve and the breakdown's total`}>
+                        <span className="text-faint">score </span><b style={{ color: 'var(--color-edge)' }}>{fmtSigned(edge, source.unit)}</b>
+                        {lead ? <> · <b style={{ color: `var(--color-${lead})` }}>{bots[lead]}</b> ahead</> : ' · even'}
+                    </span>
+                )}
+                <span className="text-faint">{provenance(lens)}</span>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 text-[10.5px]" aria-label="What the colours mean">
-                {(Object.keys(TERM_LABEL) as TermKey[]).map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1" style={{ color: TERM_COLOR[t] }}><TermIcon term={t} size={10} />{TERM_LABEL[t]}</span>
-                ))}
-                <span className="text-faint">· each colour is one row of the board score</span>
-            </div>
+            {rows.length > 0 && (
+                <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 text-[10.5px]" aria-label="What the colours mean">
+                    {rows.map((r) => (
+                        <span key={r.id} className="inline-flex items-center gap-1" style={{ color: r.color }}><PartIcon row={r} size={10} />{r.label}</span>
+                    ))}
+                    <span className="text-faint">· each colour is one row of {source.label}</span>
+                </div>
+            )}
             {s && (
                 <div className={`seat-${s.by} flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[11px]`}>
                     <BrainCircuit size={13} style={{ color: 'var(--seat)' }} />
@@ -348,7 +384,7 @@ function LensLine({ lens, bots, state }: { lens: LensView; bots: Record<Seat, st
                     {s.pv?.length ? <span className="text-fg">plan {s.pv.map(humanize).join(' → ')}</span> : null}
                     <span className="num text-faint">{[s.depth != null && `depth ${s.depth}`, s.nodes != null && `${s.nodes} nodes`, s.ms != null && `${(s.ms / 1000).toFixed(2)} s`].filter(Boolean).join(' · ')}</span>
                     {Object.entries(s.buttons ?? {}).map(([b, v]) => (
-                        <span key={b} className={`lensr sm${v >= -0.05 ? ' pick' : ''}`}>{b} {v >= -0.05 ? '★' : `−${Math.abs(v).toFixed(1)}`}</span>
+                        <span key={b} className={`lensr sm${v >= -s.tolerance ? ' pick' : ''}`}>{b} {v >= -s.tolerance ? '★' : `−${Math.abs(v).toFixed(1)}`}</span>
                     ))}
                 </div>
             )}
@@ -359,12 +395,14 @@ function LensLine({ lens, bots, state }: { lens: LensView; bots: Record<Seat, st
 function BoardImpl(props: BoardProps) {
     const { lens, state, bots } = props;
     const sls = (() => {
-        if (!lens) {
+        const seats = lens?.step.seats;
+        if (!lens || !seats) {
             return null;
         }
-        const all = [lens.p1.ground, lens.p1.space, lens.p2.ground, lens.p2.space].flat();
-        const max = Math.max(1, ...all);
-        const mk = (seat: Seat): SeatLens => ({ side: lens[seat], search: lens.search?.by === seat ? lens.search : null, max });
+        const all = [seats.p1.ground, seats.p1.space, seats.p2.ground, seats.p2.space].flat();
+        const max = Math.max(displayScales(lens.source.kEff, lens.source.unit).heatFloor, ...all);
+        const search = lens.step.search;
+        const mk = (seat: Seat): SeatLens => ({ side: seats[seat], search: search?.by === seat ? search : null, max, view: lens });
         return { p1: mk('p1'), p2: mk('p2') };
     })();
     return (

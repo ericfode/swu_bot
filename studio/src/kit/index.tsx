@@ -17,10 +17,12 @@ import { Board } from '../components/Board';
 import { evalsByIndex } from '../data/evals';
 import { createSettingsStore, releaseSettingsStore, setEverywhere, SettingsProvider } from '../lib/settings';
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
-import { cardTextBySet, loadCardText, type CardText, type CardTextFile } from '../lib/cardText';
+import { cardTextBySet, loadCardText, loadedCardCost, type CardText, type CardTextFile } from '../lib/cardText';
 import { parseGame } from '../data/source';
 import type { EvalFile, EvalPoint } from '../data/evals';
-import { estimateLens, lensAt, lensByIndex, OMNI_WEIGHTS, type LensFile, type LensStep, type LensView } from '../data/lens';
+import { estimateLens, lensAt, lensByIndex, type LensFile, type LensStep } from '../data/lens';
+import { defaultSeries, scoreOfBoard, type FileStep, type ScoreView } from '../data/score';
+import { OMNI_V1_ID } from '../data/omniV1';
 import type { Game, Seat, Snapshot } from '../data/types';
 
 export interface MountOptions {
@@ -35,7 +37,7 @@ export interface MountOptions {
     /** position evaluations (dashboard/evals/<gameId>.json contract), or a URL to fetch them from */
     evals?: EvalFile | null;
     evalsUrl?: string;
-    /** the omni bot's card values (dashboard/lens/<gameId>.json, swu-lens/1), or a URL to fetch them from; the Lens button estimates them without it */
+    /** the game's lens file (dashboard/lens/<gameId>.json, swu-lens/1: an evaluator's score and card values), or a URL to fetch it from; without one the Lens button estimates Omni v1 from the board */
     lens?: LensFile | null;
     lensUrl?: string;
     /** start with the Lens on (true) or off (false); default off */
@@ -268,9 +270,12 @@ export function mountActionIcon(el: HTMLElement, props: ActionIconProps) {
 
 /**
  * Draw one position (a recorder Snapshot, i.e. a step's `state`) as the full animated board. update() animates to the next one.
- * `lens`: true draws card values estimated from the board; a lens step (one entry of a swu-lens/1 file's steps) draws the omni bot's own.
+ * `lens`: true draws Omni v1 card values estimated from the board; `{file, n}` draws the step with Step.n n of a swu-lens/1
+ * file with that file's evaluator, rules and chance (pass the snapshot of that step); a bare lens step (one entry of a
+ * file's steps) draws that step's values as "lens step (evaluator unknown)": six rows, no rules and no chance (earlier
+ * builds read it as the omni bot's score; pass `{file: lensFile, n: step.n}` to keep its label and rules).
  */
-export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep; cardText?: CardTextFile | string } = {}) {
+export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep | FileStep; cardText?: CardTextFile | string } = {}) {
     if (opts.fonts !== false) {
         ensureFonts();
     }
@@ -284,8 +289,8 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
     let prev: Snapshot | null = null;
     let n = 0;
     let lensOpt = opts.lens;
-    const viewOf = (cur: Snapshot): LensView | null => !lensOpt ? null
-        : lensOpt === true ? { ...estimateLens(cur), exact: false, weights: OMNI_WEIGHTS } : { ...lensOpt, exact: true, weights: OMNI_WEIGHTS };
+    // the estimate takes card cost from the loaded card data, as the viewer and pivotal() do
+    const viewOf = (cur: Snapshot): ScoreView | null => (lensOpt ? scoreOfBoard(cur, lensOpt, { cardCost: loadedCardCost }) : null);
     const draw = (cur: Snapshot) => {
         const steps = (prev ? [prev, cur] : [cur]).map((st, i) => ({ t: 'step' as const, n: i, state: st }));
         const ids = trackUnits({ header: { t: 'header', v: 1, seed: 0, engine: null, players: [] }, steps, end: null });
@@ -297,7 +302,7 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
     };
     draw(state);
     return {
-        update: (next: Snapshot, lens?: boolean | LensStep) => {
+        update: (next: Snapshot, lens?: boolean | LensStep | FileStep) => {
             if (lens !== undefined) {
                 lensOpt = lens;
             }
@@ -311,14 +316,18 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
 
 /**
  * Every decision of a game grouped into actions. Pass the game's evals file (dashboard/evals) and lens file (swu-lens/1)
- * when there are any: swings then come from the evaluations, or from the omni bot's exact board score.
+ * when there are any: swings then come from the evaluations, or from the lens file's score (the Omni v1 estimate without one,
+ * with card cost once card data is loaded, so call it after loadCardText() resolves to match a mounted viewer).
  */
 /** Takes the evals and lens files; Maps by step index (what earlier kit builds took) still work. */
 function classify(game: Game, evals?: EvalFile | Map<number, EvalPoint> | null, lens?: LensFile | Map<number, LensStep> | null): Action[] {
-    return classifyGame(game, evals instanceof Map ? evals : evalsByIndex(game, evals), lens instanceof Map ? lens : lensByIndex(game, lens));
+    // a Map by step index (earlier builds) holds omni lens steps: read them as an omni-linear-v1 file
+    const file = lens instanceof Map ? { schema: 'swu-lens/1', evaluator: { id: OMNI_V1_ID }, steps: [...lens].map(([i, st]) => ({ ...st, n: game.steps[i]?.n ?? st.n })) } : lens;
+    // card cost from the loaded card data, as GameViewer uses it: the same swings and pivotal actions as a mounted viewer
+    return classifyGame(game, evals instanceof Map ? evals : evalsByIndex(game, evals), defaultSeries(game, file ?? null, { cardCost: loadedCardCost }));
 }
 
-/** The k most game-changing actions, using the evaluations' swing when given, else the omni board score's (exact with a lens file). */
+/** The k most game-changing actions, using the evaluations' swing when given, else the lens file's score (the Omni v1 estimate without one). */
 export function pivotal(game: Game, evals?: EvalFile | Map<number, EvalPoint> | null, k = 8, lens?: LensFile | Map<number, LensStep> | null): Action[] {
     return pivotalActions(classify(game, evals, lens), k);
 }
@@ -336,4 +345,4 @@ export function setCardArt(on: boolean) {
 export { setArtResolver, loadArtPack, loadCardText, cardTextBySet as cardText };
 export type { ArtResolver, CardText, CardTextFile };
 export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classify as classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES, estimateLens, lensAt, lensByIndex };
-export type { EvalFile, Game, Action, ActionClass, ActionIconProps, LensFile, LensStep };
+export type { EvalFile, Game, Action, ActionClass, ActionIconProps, LensFile, LensStep, FileStep };

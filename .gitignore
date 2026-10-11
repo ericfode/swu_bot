@@ -8,3 +8,6 @@ studio/fixtures/replays/
 studio/static-replays/
 studio/static-data/
 studio/dist-kit/
+studio/.check/
+studio/fixtures/lens-cases/golden/
+studio/fixtures/lens-cases/out/

@@ -3,18 +3,22 @@ import { cardImageUrl, tileLook } from '../lib/cards';
 import { isToken } from '../lib/cardText';
 import { useSettings } from '../lib/settings';
 import type { CardRef, Seat, UnitRef, UpgradeRef } from '../data/types';
-import { TERM_COLOR, type TermKey } from '../data/lens';
+import { rowColor } from '../data/terms';
 
 /** Leader fronts and bases are printed landscape ('wide'); everything else, a deployed leader included, is portrait ('tall'). */
 export type CardShape = 'tall' | 'wide';
 
-/** What a card is worth under the lens (the omni bot's board score), drawn on the card. */
+/** What a card is worth under the chosen score, drawn on the card. */
 export interface CardValue {
-    /** points for the card's owner; null for cards the score doesn't count on their own (an undeployed leader) */
+    /** the score's value for the card's owner; null for cards the score doesn't count on their own (an undeployed leader) */
     v: number | null;
     seat: Seat;
-    /** which part of the score the card counts in: sets the chip's colour, the same as that part's total and breakdown row */
-    term?: TermKey;
+    /** the row of the score the card counts in (row id, terms.ts): sets the chip's colour, the same as that row's total and breakdown row */
+    row?: string;
+    /** what the value is made of, labelled from the score's terms (the inspector lists them) */
+    parts?: { key: string; label: string; points: number }[];
+    /** computed here, not read from a lens file (dashed chip) */
+    estimated?: boolean;
     /** 0..1: how this card compares with the most valuable unit on the table (drives the glow) */
     heat?: number;
     /** the omni bot's search on this board: 0 = the card it picked, negative = how much worse its best move with this card was */
@@ -65,7 +69,7 @@ export function LensMarks({ value, size }: { value: CardValue; size: 'sm' | 'md'
     return (
         <span className="lens">
             {value.v != null && (
-                <span className={`lensv${small ? ' sm' : ''}`} style={{ '--term': TERM_COLOR[value.term ?? 'ground'] } as CSSProperties} title="What this card is worth to its owner in the omni bot's board score">
+                <span className={`lensv${small ? ' sm' : ''}${value.estimated ? ' est' : ''}`} style={{ '--term': rowColor(value.row ?? 'ground') } as CSSProperties} title="What this card is worth to its owner in the omni bot's board score">
                     {fmt(value.v)}
                 </span>
             )}
@@ -142,7 +146,7 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
         ...(width ? { '--w': `${width}px` } : {}),
         // the glow: the card's score colour, stronger the closer it is to the most valuable unit on the table
         ...(lensed && heat > 0.05 ? {
-            '--term': TERM_COLOR[value?.term ?? 'ground'],
+            '--term': rowColor(value?.row ?? 'ground'),
             boxShadow: `0 0 0 2px color-mix(in oklab, var(--term) ${Math.round(25 + heat * 75)}%, transparent), 0 0 ${Math.round(6 + heat * 22)}px -2px color-mix(in oklab, var(--term) ${Math.round(heat * 80)}%, transparent)`
         } : {})
     } as CSSProperties;
