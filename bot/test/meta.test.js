@@ -2,7 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { canonical, view, fitLogistic, SITUATIONS } = require('../../meta/analyze');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { canonical, view, fitLogistic, SITUATIONS, readReplay } = require('../../meta/analyze');
 const { grade } = require('../../meta/grade');
 
 test('canonical merges random seeds and moves pre-fix heuristic games to legacy', () => {
@@ -22,6 +25,20 @@ test('view reads a snapshot from one player', () => {
     assert.deepStrictEqual([x.myBase, x.oppBase, x.baseLead, x.boardLead, x.hpLead, x.handLead, x.initiative], [20, 28, -8, 3, 3, -3, 0]);
     const behind = SITUATIONS.find((s) => s.id === 'base_behind');
     assert.ok(behind.test(x));
+});
+
+test('readReplay reads round starts and style from a recording', () => {
+    const side = (d, units) => ({ base: { n: 'Base', hp: 30, d }, ground: units, space: [], hand: [], res: { total: 3 } });
+    const step = (n, round, p2Units) => ({ t: 'step', n, state: { round, phase: 'action', initiative: 'p1', players: { p1: side(0, [{ p: 2, h: 3, d: 0 }]), p2: side(n, p2Units) } } });
+    // p1 attacks: the step after its decision shows p2's unit gone and 1 more damage on p2's base.
+    const attack = { ...step(2, 2, []), pid: 'p1', prompt: 'actionWindow', title: 'Choose a target for attack', action: { kind: 'card', label: 'Base' } };
+    const lines = [{ t: 'header', v: 1 }, step(1, 1, [{ p: 1, h: 1, d: 0 }]), attack, { t: 'end', winner: 'p1', round: 2 }];
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'meta-')), 'g.jsonl');
+    fs.writeFileSync(f, lines.map((x) => JSON.stringify(x)).join('\n'));
+    const r = readReplay(f);
+    assert.ok(r.end);
+    assert.strictEqual(r.snaps.length, 4);
+    assert.deepStrictEqual([r.style.p1.attacks, r.style.p1.baseAttacks, r.style.p1.kills, r.style.p1.baseDmg], [1, 1, 1, 1]);
 });
 
 test('fitLogistic learns that a base lead wins', () => {
