@@ -52,9 +52,12 @@ process.on('uncaughtException', (e) => {
     throw e; // the worker dies as before
 });
 const r3 = (x) => Math.round(x * 1000) / 1000;
+// bound before any bot loads, so a bot that replaces process.threadCpuUsage while it loads cannot shrink its load time
+const threadCpu = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage.bind(process) : null;
+const perfNow = performance.now.bind(performance);
 const cpuMs = () => {
-    const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
-    return u ? (u.user + u.system) / 1000 : performance.now();
+    const u = threadCpu?.();
+    return u ? (u.user + u.system) / 1000 : perfNow();
 };
 
 /** Builds and guards the bot for seat i (0 or 1); { bot } or { error }. */
@@ -65,7 +68,7 @@ function load(name, i) {
     try {
         const t0 = cpuMs();
         const bot = makeBot(name);
-        const loadMs = cpuMs() - t0;
+        const loadMs = Math.max(0, cpuMs() - t0);
         if (!bot || typeof bot.choose !== 'function') {
             throw new Error('createBot() did not return a bot with a choose() method');
         }
@@ -81,6 +84,17 @@ function load(name, i) {
                 origin.enterWith(undefined);
                 ctl.chose(i + 1, game?.round, guarded.thinkMs);
                 ctl.set(PHASE.engine);
+            },
+            // the bot's other code (close, stats) runs as this seat too: a hang there, or async work it starts, is its own
+            around: (fn) => {
+                ctl.set(PHASE.choose, i + 1);
+                origin.enterWith(mine);
+                try {
+                    return fn();
+                } finally {
+                    origin.enterWith(undefined);
+                    ctl.set(PHASE.engine);
+                }
             }
         };
         // the engine only ever sees the guard's object, so a bot cannot unwrap the guard or reset its counters

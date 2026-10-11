@@ -154,3 +154,25 @@ test('guard: name and needsUndo are read once, and a throwing stats getter reads
     assert.strictEqual(bot.needsUndo, true);
     assert.strictEqual(bot.stats, null);
 });
+
+test('guard: stats are copied as plain JSON (functions, cycles and huge values read as null), and close and stats run inside around()', () => {
+    const cyc = {};
+    cyc.self = cyc;
+    const seen = [];
+    const around = (fn) => {
+        seen.push('in');
+        try {
+            return fn();
+        } finally {
+            seen.push('out');
+        }
+    };
+    const mk = (stats) => guard({ name: 's', stats, choose: (c) => c.actions[0], close: () => seen.push('close') }, { around });
+    assert.deepStrictEqual(mk({ nodes: 5, f: () => 1 }).stats, { nodes: 5 });
+    assert.strictEqual(mk(cyc).stats, null);
+    assert.strictEqual(mk({ big: 'x'.repeat(70000) }).stats, null);
+    assert.strictEqual(mk(10n).stats, null);
+    seen.length = 0;
+    mk(null).close();
+    assert.deepStrictEqual(seen, ['in', 'close', 'out']);
+});

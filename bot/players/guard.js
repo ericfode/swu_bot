@@ -2,7 +2,7 @@
 /**
  * Time cap and fault tracking around a bot's choose(), the same for every bot (baselines included).
  *
- *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, onEnter, onExit }) -> a new object for the game runner:
+ *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, onEnter, onExit, around }) -> a new object for the game runner:
  *       { name, needsUndo, stats, choose, close, thinkMs, wallMs, fault }   (getters; the bot cannot reach or change them)
  *
  * The game runner hands the engine this object, never the bot, so a bot cannot unwrap its own guard or reset its
@@ -17,7 +17,9 @@
  * kept, see narrowed), sets fault = { kind: 'error', message } and throws. Going over a cap sets
  * fault = { kind: 'time', ms } and throws TIME_FORFEIT. Either way the game ends there, and the game runner reads
  * fault (never the error text) to decide who forfeits. The engine's own live action (not the bot's object) is played.
- * A throw from close() is ignored: the game is over by then and its result stands.
+ * A throw from close() is ignored: the game is over by then and its result stands. stats is read as plain JSON data
+ * (at most 64 KB; anything else reads as null), so it can always go into the game's result. around(fn) runs the bot's
+ * code outside choose() (close, stats); the ladder worker uses it to tell its watchdog that seat is running.
  *
  * The clocks are bound when this module loads, before any bot code runs, so a bot that replaces
  * process.threadCpuUsage or performance.now later does not change them.
@@ -94,7 +96,9 @@ function narrowed(live, a) {
     return { ...live, targets: [...targets], caps: [...caps], spec: { ...spec, maxTargets: Math.min(targets.length, spec.maxTargets ?? targets.length) } };
 }
 
-function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnter = null, onExit = null } = {}) {
+const STATS_MAX = 65536;
+
+function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnter = null, onExit = null, around = (fn) => fn() } = {}) {
     const inner = bot.choose.bind(bot);
     // read once, now (while the bot loads): these may be getters, and the game runner reads them outside any bot call
     const name = String(bot.name);
@@ -151,12 +155,17 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnt
             return needsUndo;
         },
         get stats() {
-            // optional numbers for the record: a getter that throws must not cost the finished game its result
-            try {
-                return bot.stats ?? null;
-            } catch {
-                return null;
-            }
+            // optional numbers for the record: a getter that throws, or a value that cannot be copied into the result
+            // (functions, cycles, BigInt, huge), must not cost the finished game its result
+            return around(() => {
+                try {
+                    const s = bot.stats;
+                    const j = s === undefined || s === null ? null : JSON.stringify(s);
+                    return typeof j === 'string' && j.length <= STATS_MAX ? JSON.parse(j) : null;
+                } catch {
+                    return null;
+                }
+            });
         },
         get thinkMs() {
             return thinkMs;
@@ -169,13 +178,13 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnt
         },
         choose,
         // match.js closes bots after every game (stdio bots end their process and thread)
-        close: () => {
+        close: () => around(() => {
             try {
                 bot.close?.();
             } catch {
                 // cleanup only: the game is over and its result stands
             }
-        }
+        })
     };
 }
 
