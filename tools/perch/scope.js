@@ -21,6 +21,7 @@ module.exports = {
       'bot/learn/collect.js', // trajectory collector for any bot
       'bot/learn/eval.js', // head-to-head runner for any two bots
       'bot/omni/lens.js', // writes the per-card lens files the viewers show
+      'bot/karabast/**', // Karabast socket client, frame reader and spectate recorder (any bot, any game)
       'spec/**',
       'viewer/**',
       'studio/**',
