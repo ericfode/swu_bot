@@ -1,8 +1,12 @@
 // Shared by build.mjs (Node, reads the disk) and the published page (reads project files live).
 // A reader is { list(dir) -> [{name, path, isDirectory}], text(path) -> string|null }; paths are project-relative.
 (function (root) {
-    const LAST = {};
-    const ORDER = { running: 0, planned: 1, done: 2, failed: 3 };
+    // Every map keyed by a name from a file (bot id, alias, display name, game id, status) has no prototype, so a
+    // name like constructor or __proto__ is an ordinary key; `own` reads a caller's plain object the same way.
+    const dict = (entries = []) => { const o = Object.create(null); for (const [k, v] of entries) o[k] = v; return o; };
+    const own = (o, k) => o != null && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined;
+    const LAST = dict();
+    const ORDER = dict(Object.entries({ running: 0, planned: 1, done: 2, failed: 3 }));
     const parse = (s, warn, p) => { if (s == null) return null; try { return JSON.parse(s); } catch (e) { warn.push(`${p}: ${e.message}`); return null; } };
 
     async function loadSources(reader) {
@@ -15,7 +19,7 @@
         for (const top of ['results', 'games']) {
             for (const e of (await reader.list(top)).filter(e => e.isDirectory && !e.name.startsWith('_') && e.name !== 'card-data')) {
                 const ix = await json(`${top}/${e.name}/index.json`);
-                if (ix && Array.isArray(ix.games) && !runs.some(r => r.id === ix.id)) { const lad = await json(`${top}/${e.name}/ladder.json`).catch(() => null); const extra = Object.fromEntries((lad?.games || []).map(g => [g.id, g]));
+                if (ix && Array.isArray(ix.games) && !runs.some(r => r.id === ix.id)) { const lad = await json(`${top}/${e.name}/ladder.json`).catch(() => null); const extra = dict((lad?.games || []).map(g => [g.id, g]));
                     const games = ix.games.map(g => extra[g.id] ? { ...g, botStats: g.botStats ?? extra[g.id].botStats, timing: g.timing ?? extra[g.id].timing } : g);
                     runs.push({ ...ix, games, _dir: `${top}/${e.name}`, _bots: lad?.bots || null, _scheduled: Number.isFinite(+lad?.progress?.scheduled) && lad.progress.scheduled > 0 ? +lad.progress.scheduled : null }); }
             }
@@ -35,7 +39,7 @@
         const threads = (await json('dashboard/threads.json')) || { threads: [] };
         // bot cards (swu-bot/1, dashboard/bots/<id>.json); a card's family/lang/owner/oneLine win over bots.json
         const about = (await many('dashboard/bots')).filter(b => b && b.id && b.schema === 'swu-bot/1');
-        const metaIdx = Object.fromEntries(botMeta.map((m, i) => [m.id, i]));
+        const metaIdx = dict(botMeta.map((m, i) => [m.id, i]));
         for (const a of about) for (const id of [a.id, ...(a.aliases || [])]) {
             const m = { ...(botMeta[metaIdx[id]] || { id }) };
             if (a.family) m.family = a.family; if (a.lang) m.lang = a.lang; if (a.owner) m.owner = a.owner; if (a.oneLine) m.notes = a.oneLine;
@@ -46,16 +50,16 @@
         const meta = mj && Array.isArray(mj.bots) ? { generatedAt: mj.generatedAt, games: mj.totals?.games ?? null,
             situations: (mj.situations || []).map(s => ({ id: s.id, group: s.group, label: s.label, short: s.short, field: s.field })),
             style: mj.style || [],
-            bots: Object.fromEntries(mj.bots.map(b => [b.id, { family: b.family, lang: b.lang, owner: b.owner, games: b.replayGames ?? b.games, played: b.games, rating: b.rating, msP50: b.msP50, style: b.style, forfeits: b.forfeits || 0,
+            bots: dict(mj.bots.map(b => [b.id, { family: b.family, lang: b.lang, owner: b.owner, games: b.replayGames ?? b.games, played: b.games, rating: b.rating, msP50: b.msP50, style: b.style, forfeits: b.forfeits || 0,
                 // Atlas scouting line: style tag, best and worst spot for its own level (by vsOwn)
                 tag: b.summary?.style || null, best: b.summary?.best?.id || null, worst: b.summary?.worst?.id || null,
-                situations: Object.fromEntries(Object.entries(b.situations || {}).map(([k, v]) => [k, { n: v.n, rate: v.rate, expected: v.expected, edge: v.edge, vsOwn: v.vsOwn }])) }])),
+                situations: dict(Object.entries(b.situations || {}).map(([k, v]) => [k, { n: v.n, rate: v.rate, expected: v.expected, edge: v.edge, vsOwn: v.vsOwn }])) }])),
             // per spot: the 5 best bots by edge with 8+ games there (the Strategy Atlas picks its spot winner the same way), with replay examples
-            spots: Object.fromEntries((mj.situations || []).map(s => [s.id, mj.bots.filter(b => (b.situations?.[s.id]?.n || 0) >= 8)
+            spots: dict((mj.situations || []).map(s => [s.id, mj.bots.filter(b => (own(b.situations, s.id)?.n || 0) >= 8)
                 .sort((a, b) => b.situations[s.id].edge - a.situations[s.id].edge).slice(0, 5)
                 .map(b => ({ id: b.id, edge: b.situations[s.id].edge, n: b.situations[s.id].n, examples: (b.situations[s.id].examples || []).slice(0, 2) }))])),
             // per spot: the weakest non-random bot with 8+ games there (the Atlas tile's "worst" line)
-            spotWorst: Object.fromEntries((mj.situations || []).map(s => [s.id, mj.bots.filter(b => b.family !== 'random' && (b.situations?.[s.id]?.n || 0) >= 8)
+            spotWorst: dict((mj.situations || []).map(s => [s.id, mj.bots.filter(b => b.family !== 'random' && (own(b.situations, s.id)?.n || 0) >= 8)
                 .sort((a, b) => a.situations[s.id].edge - b.situations[s.id].edge).slice(0, 1).map(b => ({ id: b.id, edge: b.situations[s.id].edge, n: b.situations[s.id].n }))[0] || null])) } : null;
         // Lean theory thread: evaluator measurements (research/eval-theory/td-report.json); any evaluator added there shows up
         const td = await json('research/eval-theory/td-report.json');
@@ -98,8 +102,7 @@
     // ratings: meta/ratings.json (or null). Rows are ranked by that rating; the running Elo stays as "form" (its
     // history draws the chart, `trend` is its change over the last 30 games).
     function computeLeague(runs, meta, ratings) {
-        // bot-keyed maps have no prototype, so a bot named constructor or __proto__ is an ordinary key
-        const K = 24, rating = Object.create(null), stats = Object.create(null), history = Object.create(null), h2h = Object.create(null);
+        const K = 24, rating = dict(), stats = dict(), history = dict(), h2h = dict(); // h2h[x][y] = {s, n}: x's score against y
         const bot = b => {
             if (!(b in rating)) { rating[b] = 1500; stats[b] = { games: 0, wins: 0, losses: 0, draws: 0, faults: 0, rounds: 0, firstSeen: null }; history[b] = []; }
             return stats[b];
@@ -126,12 +129,12 @@
                 n++;
                 for (const [s, r] of [[a, sa], [b, 1 - sa]]) { s.games++; s.rounds += g.rounds || 0; r === 1 ? s.wins++ : r === 0 ? s.losses++ : s.draws++; }
                 if (!draw) { decided++; if (sa === 1) p1Wins++; } // a forfeit is a decided result too (the bot that failed loses), as in bot/ladder-report.js
-                for (const [x, y, r] of [[g.p1, g.p2, sa], [g.p2, g.p1, 1 - sa]]) { const k = `${x}|${y}`; (h2h[k] ||= { s: 0, n: 0 }); h2h[k].s += r; h2h[k].n++; }
+                for (const [x, y, r] of [[g.p1, g.p2, sa], [g.p2, g.p1, 1 - sa]]) { const c = ((h2h[x] ??= dict())[y] ??= { s: 0, n: 0 }); c.s += r; c.n++; }
                 history[g.p1].push([n, Math.round(rating[g.p1])]); history[g.p2].push([n, Math.round(rating[g.p2])]);
                 recent.push({ run: t.id, id: g.id, p1: g.p1, p2: g.p2, winner: draw ? 'draw' : sa ? g.p1 : g.p2, rounds: g.rounds, n, ...(forfeit ? { failed: by === 'p1' ? g.p1 : g.p2, error: g.error || null } : {}) });
             }
         }
-        const metaBy = Object.fromEntries((meta || []).map(m => [m.id, m]));
+        const metaBy = dict((meta || []).map(m => [m.id, m]));
         const lastBots = runs.at(-1)?.bots || [];
         const standings = Object.keys(rating).map(id => {
             const s = stats[id], hist = history[id];
@@ -144,7 +147,7 @@
             .sort((a, b) => (b.rating != null) - (a.rating != null) || (b.rating ?? 0) - (a.rating ?? 0) || b.elo - a.elo);
         for (const id in history) { const h = history[id]; if (h.length > 500) { const st = Math.ceil(h.length / 500); history[id] = h.filter((_, i) => i % st === 0 || i === h.length - 1); } }
         const ids = standings.map(s => s.id);
-        const cell = (a, b) => { const c = h2h[`${a}|${b}`]; return a === b || !c ? null : { rate: +(c.s / c.n).toFixed(3), n: c.n }; };
+        const cell = (a, b) => { const c = h2h[a]?.[b]; return a === b || !c ? null : { rate: +(c.s / c.n).toFixed(3), n: c.n }; };
         const last = runs.at(-1);
         return { games: n, errors, running, firstSeatWinRate: decided ? +(p1Wins / decided).toFixed(3) : null,
             runs: runs.map(t => ({ id: t.id, createdAt: t.createdAt, games: t.games.length, bots: t.bots })),
@@ -158,8 +161,8 @@
     // Per-bot decision speed. Prefers harness timing (index entry `timing.p1/p2` = {n, ms, p50, p95, max}),
     // falls back to a bot's self-reported botStats {windows, ms} (search bots), else nothing.
     function computePerf(runs, meta, ladderBots) {
-        const metaBy = Object.fromEntries((meta || []).map(m => [m.id, m]));
-        const per = Object.create(null);
+        const metaBy = dict((meta || []).map(m => [m.id, m]));
+        const per = dict();
         const add = (bot, s, source) => { const b = (per[bot] ||= { id: bot, games: 0, n: 0, ms: 0, p50s: [], p95s: [], max: 0, sources: new Set(), samples: [] });
             b.games++; b.n += s.n; b.ms += s.ms; if (s.p50 != null) b.p50s.push(s.p50); if (s.p95 != null) b.p95s.push(s.p95); b.max = Math.max(b.max, s.max ?? 0); b.sources.add(source); b.samples.push(+(s.ms / s.n).toFixed(3)); };
         for (const r of runs) for (const g of r.games) {
@@ -173,7 +176,7 @@
             });
         }
         const pct = (a, q) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
-        return Object.values(per).map(b => ({ id: b.id, lang: metaBy[b.id]?.lang || ladderBots?.[b.id]?.lang || 'js', kind: ladderBots?.[b.id]?.kind || metaBy[b.id]?.family || null,
+        return Object.values(per).map(b => ({ id: b.id, lang: metaBy[b.id]?.lang || own(ladderBots, b.id)?.lang || 'js', kind: own(ladderBots, b.id)?.kind || metaBy[b.id]?.family || null,
             games: b.games, decisions: b.n, mean: b.n ? b.ms / b.n : null, p50: b.p50s.length ? pct(b.p50s, 0.5) : pct(b.samples, 0.5), p95: b.p95s.length ? pct(b.p95s, 0.95) : null,
             max: b.max || null, source: [...b.sources].join(' + '), samples: b.samples.slice(-200) })).sort((a, b) => (a.mean ?? 1e9) - (b.mean ?? 1e9));
     }
