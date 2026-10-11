@@ -2,7 +2,7 @@
 // node bot/learn/eval.js --bots rust-learned,random-a --games 200 [--seed 500000] [--workers 4] [--out results/learned-vs-random] [--record]
 //
 // Head-to-head match between two bots, games split over worker processes, seats alternating by seed.
-// Prints the win rate with a 95% interval and, with --out, writes a tournament index.json (the format
+// Prints the win rate over decided games (draws count half) with a 95% interval and, with --out, writes a tournament index.json (the format
 // bot/tournament.js writes, so the viewer and the research dashboard read it unchanged), plus replays
 // with --record.
 const fs = require('fs');
@@ -14,20 +14,7 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-function makeBot(name) {
-    const reg = JSON.parse(fs.readFileSync(process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json'), 'utf8'));
-    if (reg[name]) {
-        const { ExternalBot } = require('../players/external');
-        return new ExternalBot(name, reg[name]);
-    }
-    if (/^heuristic/.test(name)) {
-        const { HeuristicBot } = require('../players/heuristic');
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    // random*, rush, aggro, tempo, control, ... from the shared registry
-    return require('../players').makeBot(name);
-}
+const { makeBot } = require('../players');
 
 async function worker() {
     const { Env } = require('../env');
@@ -51,7 +38,7 @@ async function worker() {
         process.send({ start: { id, seed, p1: names[seats[0]], p2: names[seats[1]] } });
         const r = await playGame(env, { seed, bots: seats.map((k) => bots[k]), record: !!onEvent, snapshot, onEvent });
         const winner = r.winner === 'p1' ? names[seats[0]] : r.winner === 'p2' ? names[seats[1]] : r.winner;
-        process.send({ done: { id, seed, p1: names[seats[0]], p2: names[seats[1]], winner, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms } });
+        process.send({ done: { id, seed, p1: names[seats[0]], p2: names[seats[1]], winner, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing } });
     }
     process.exit(0);
 }
@@ -92,6 +79,13 @@ async function main() {
     const wins = Object.fromEntries(names.map((n) => [n, 0]));
     let done = 0;
     let other = 0;
+    let draws = 0;
+    // win rate over decided games only (ERROR / STUCK / STEP_CAP left out), a draw counting half
+    const rate = () => {
+        const decided = wins[names[0]] + wins[names[1]] + draws;
+        const score = wins[names[0]] + draws / 2;
+        return { decided, score, p: score / Math.max(1, decided), ci: wilson(score, decided) };
+    };
     const t0 = Date.now();
     const procs = [];
     for (let k = 0; k < workers; k++) {
@@ -120,19 +114,21 @@ async function main() {
             done++;
             if (g.winner in wins) {
                 wins[g.winner]++;
+            } else if (g.winner === 'draw') {
+                draws++;
             } else {
                 other++;
             }
             if (done % 10 === 0 || done === games) {
-                const [lo, hi] = wilson(wins[names[0]], done);
-                console.log(`${done}/${games}  ${names[0]} ${wins[names[0]]} - ${wins[names[1]]} ${names[1]} (${other} other)  win rate ${(wins[names[0]] / done).toFixed(3)} [${lo.toFixed(3)}, ${hi.toFixed(3)}]  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+                const r = rate();
+                console.log(`${done}/${games}  ${names[0]} ${wins[names[0]]} - ${wins[names[1]]} ${names[1]} (${draws} draws, ${other} unfinished)  win rate ${r.p.toFixed(3)} [${r.ci[0].toFixed(3)}, ${r.ci[1].toFixed(3)}]  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
             }
         });
-        procs.push(new Promise((res) => p.on('exit', res)));
+        procs.push(new Promise((res, rej) => p.on('exit', (code) => (code === 0 ? res() : rej(new Error(`eval worker for seeds ${first}.. exited with code ${code}`))))));
     }
     await Promise.all(procs);
-    const [lo, hi] = wilson(wins[names[0]], done);
-    const summary = { bots: names, games: done, wins, other, winRate: wins[names[0]] / Math.max(1, done), ci95: [lo, hi], secs: (Date.now() - t0) / 1000 };
+    const r = rate();
+    const summary = { bots: names, games: done, decided: r.decided, wins, draws, unfinished: other, winRate: r.p, ci95: r.ci, secs: (Date.now() - t0) / 1000 };
     console.log(JSON.stringify(summary));
     if (out) {
         fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(summary, null, 2));

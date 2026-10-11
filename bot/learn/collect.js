@@ -23,23 +23,7 @@ function decideBody(eg, pid, actions) {
     return { you: seatOf(eg, eg.player(pid)), prompt: promptView(eg, pid), state: observe(eg, pid), actions: actions.map((a, i) => actionView(eg, a, i)) };
 }
 
-function makeBot(name) {
-    if (/^heuristic/.test(name)) {
-        const { HeuristicBot } = require('../players/heuristic');
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    if (/^random/.test(name)) {
-        return require('../players/random').createRandomBot(name);
-    }
-    const reg = JSON.parse(fs.readFileSync(process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json'), 'utf8'));
-    if (!reg[name]) {
-        // rush, aggro, tempo, control, ... from the shared registry
-        return require('../players').makeBot(name);
-    }
-    const { ExternalBot } = require('../players/external');
-    return new ExternalBot(name, reg[name]);
-}
+const { makeBot } = require('../players');
 
 /** Wraps a bot so every choice it makes is written as a trajectory line. */
 function recording(bot, write, all) {
@@ -70,6 +54,8 @@ async function worker(first, count, out, botNames, all) {
     const { Env } = require('../env');
     const { playGame } = require('../match');
     const env = new Env();
+    // a rerun of the same seed range replaces the shard instead of appending duplicate games
+    fs.writeFileSync(out, '');
     // one gzip member per game, appended synchronously: the file is readable while it grows,
     // and nothing piles up in memory (the engine rarely yields to the event loop)
     let lines = [];
@@ -133,7 +119,7 @@ async function main() {
                 console.log(`${done}/${games} games, ${(done / s).toFixed(2)} games/s, ${JSON.stringify(outcomes)}`);
             }
         });
-        procs.push(new Promise((res) => p.on('exit', res)));
+        procs.push(new Promise((res, rej) => p.on('exit', (code) => (code === 0 ? res() : rej(new Error(`collect worker for seeds ${first}.. exited with code ${code}`))))));
     }
     await Promise.all(procs);
     console.log(`wrote ${out} in ${((Date.now() - t0) / 1000).toFixed(0)}s ${JSON.stringify(outcomes)}`);
