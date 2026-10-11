@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { listTournaments, loadGame, loadIndex } from '../core/api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { listTournaments, loadIndex } from '../core/api';
+import { useGame } from '../core/useGame';
 import { Replay } from '../core/Replay';
 import { standings, headToHead } from '../core/stats';
 import { hrefGame, hrefTournament, usePolled } from '../core/useRoute';
@@ -35,12 +36,12 @@ export function HomePage() {
 }
 
 export function GamePage({ tid, gid, step }: { tid: string; gid: string; step: number }) {
-    const { data, error } = usePolled(() => loadGame(tid, gid), [tid, gid]);
+    const { game, error, live } = useGame(tid, gid);
     return (
         <section className="page wide">
             <nav className="crumbs"><a href="#/">Tournaments</a> / <a href={hrefTournament(tid)}>{tid}</a> / <span className="mono">{gid}</span></nav>
-            <Status error={error} loading={!data} what="game" />
-            {data && <Replay game={data} startStep={step} />}
+            <Status error={error} loading={!game} what="game" />
+            {game && <Replay game={game} startStep={step} live={live} />}
         </section>
     );
 }
@@ -50,10 +51,22 @@ function pct(wins: number, n: number): string {
 }
 
 export function TournamentPage({ tid, initialGame }: { tid: string; initialGame: string | null }) {
-    const { data: index, error } = usePolled(() => loadIndex(tid), [tid], 4000);
+    const { data: index, error } = usePolled(() => loadIndex(tid), [tid], 2000);
     const [pair, setPair] = useState<[string, string] | null>(null);
     const [selected, setSelected] = useState<string | null>(initialGame);
-    const game = usePolled(() => (selected ? loadGame(tid, selected) : Promise.resolve(null)), [tid, selected]);
+    const game = useGame(tid, selected);
+    // when a tournament is still being played, open the game in progress so there is something to watch right away
+    const autoPicked = useRef(false);
+    useEffect(() => {
+        if (autoPicked.current || selected || !index) {
+            return;
+        }
+        const running = index.games.find((g) => g.outcome === 'running');
+        if (running) {
+            autoPicked.current = true;
+            setSelected(running.id);
+        }
+    }, [index, selected]);
     const rows = useMemo(() => (index ? standings(index.bots, index.games) : []), [index]);
     const shown: IndexGame[] = useMemo(() => {
         if (!index) {
@@ -136,7 +149,7 @@ export function TournamentPage({ tid, initialGame }: { tid: string; initialGame:
                                         <button className={selected === g.id ? 'on' : ''} onClick={() => setSelected(g.id)}>
                                             <span className="mono">seed {g.seed}</span>
                                             <span>{g.p1} vs {g.p2}</span>
-                                            <span className={g.outcome === 'won' ? '' : 'bad'}>{g.outcome === 'won' ? `${g.winner} · R${g.rounds}` : g.outcome}</span>
+                                            <span className={g.outcome === 'running' ? 'live-tag' : g.outcome === 'won' ? '' : 'bad'}>{g.outcome === 'won' ? `${g.winner} · R${g.rounds}` : g.outcome === 'running' ? '● live' : g.outcome}</span>
                                         </button>
                                     </li>
                                 ))}
@@ -150,8 +163,8 @@ export function TournamentPage({ tid, initialGame }: { tid: string; initialGame:
                                         <h2 className="mono">{selected}</h2>
                                         <a className="btn small" href={hrefGame(tid, selected)}>Open full page</a>
                                     </div>
-                                    <Status error={game.error} loading={!game.data} what="game" />
-                                    {game.data && <Replay game={game.data} />}
+                                    <Status error={game.error} loading={!game.game} what="game" />
+                                    {game.game && <Replay game={game.game} live={game.live} />}
                                 </>
                             )}
                         </div>

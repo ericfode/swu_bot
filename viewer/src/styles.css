@@ -143,3 +143,7 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .log .n { font-family: var(--f-mono); color: var(--muted); }
 .log .pk { display: block; font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .hp-bar i { transition: none; } }
+
+.btn.live { color: var(--muted); }
+.btn.live.on { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+.live-tag { color: var(--bad); font-weight: 600; }

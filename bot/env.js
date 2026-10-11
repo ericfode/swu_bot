@@ -210,7 +210,7 @@ class EnvGame {
                 if (selected.has(c.uuid)) {
                     continue;
                 }
-                out.push({ kind: 'card', label: c.internalName ?? c.name, cardUuid: c.uuid });
+                out.push({ kind: 'card', label: c.internalName ?? c.name, cardUuid: c.uuid, card: c });
             }
         }
 
@@ -238,6 +238,30 @@ class EnvGame {
             }
         }
         return out;
+    }
+
+    /** True when pid is at the top-level "choose an action" prompt of the action phase (the only place rollback is exact). */
+    isActionWindow(pid) {
+        return this.phase === 'action' && this.promptSignature(pid).startsWith('actionWindow');
+    }
+
+    /** Take a manual snapshot to roll back to (needs newGame({undo: true})). Returns an id, or -1 when undo is off. */
+    mark(pid) {
+        return this.game.takeManualSnapshot(this.player(pid));
+    }
+
+    /** Roll back to a mark taken at an action window. Clears any engine error left over from a failed playout. */
+    restore(pid, id) {
+        this.sink.error = null;
+        const ok = this.game.rollbackToSnapshotInternal({ type: 'manual', playerId: this.player(pid).id, snapshotId: id });
+        if (!ok) {
+            throw new EngineError('rollback failed');
+        }
+    }
+
+    /** Prompt uuids change across a rollback, so a stale action object is rejected. Find the live equivalent of `a`. */
+    refetch(pid, a) {
+        return this.legalActions(pid).find((x) => x.kind === a.kind && x.label === a.label && x.cardUuid === a.cardUuid && x.arg === a.arg) ?? null;
     }
 
     /** Apply one action, then let the engine run until it needs input again. */

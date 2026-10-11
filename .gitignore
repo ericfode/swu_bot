@@ -1,4 +1,4 @@
 node_modules/
 replays/
-replays-sweep-*.log
+replays-*.log
 viewer/dist/

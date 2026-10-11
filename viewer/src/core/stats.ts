@@ -11,6 +11,9 @@ export function standings(bots: string[], games: IndexGame[]): BotRow[] {
         if (!a || !b) {
             continue;
         }
+        if (g.outcome === 'running') {
+            continue;
+        }
         if (g.outcome !== 'won' || !g.winner) {
             a.errors++;
             b.errors++;

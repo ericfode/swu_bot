@@ -10,19 +10,31 @@ import type { Game, Seat } from './types';
 const SPEEDS = [{ label: 'slow', ms: 1000 }, { label: 'normal', ms: 400 }, { label: 'fast', ms: 120 }, { label: 'turbo', ms: 30 }];
 
 /** The shared replay view: board, transport controls, decision log and card preview. The tournament page embeds this too. */
-export function Replay({ game, startStep = 0 }: { game: Game; startStep?: number }) {
+export function Replay({ game, startStep = 0, live = false }: { game: Game; startStep?: number; live?: boolean }) {
     const { cardMode, setCardMode, perspective, setPerspective } = useSettings();
     const last = game.steps.length - 1;
-    const [step, setStep] = useState(Math.min(startStep, last));
+    const [step, setStep] = useState(live ? last : Math.min(startStep, last));
     const [playing, setPlaying] = useState(false);
+    const [follow, setFollow] = useState(live);
     const [speed, setSpeed] = useState(1);
     const [focus, setFocus] = useState<Focus | null>(null);
     const logRef = useRef<HTMLOListElement>(null);
+    // a live game is re-delivered as a new object every second, so only a different game resets the view
+    const gameKey = `${game.header.seed}:${game.header.players.map((p) => p.bot).join('/')}`;
 
     useEffect(() => {
-        setStep(Math.min(startStep, last));
+        setStep(live ? last : Math.min(startStep, last));
+        setFollow(live);
         setPlaying(false);
-    }, [game, startStep, last]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gameKey, startStep]);
+
+    useEffect(() => {
+        if (follow) {
+            setPlaying(false);
+            setStep(last);
+        }
+    }, [follow, last]);
 
     useEffect(() => {
         if (!playing) {
@@ -32,18 +44,23 @@ export function Replay({ game, startStep = 0 }: { game: Game; startStep?: number
             setStep((s) => {
                 if (s >= last) {
                     setPlaying(false);
+                    if (live) {
+                        setFollow(true);
+                    }
                     return s;
                 }
                 return s + 1;
             });
         }, SPEEDS[speed].ms);
         return () => clearInterval(t);
-    }, [playing, speed, last]);
+    }, [playing, speed, last, live]);
 
     const go = useCallback((n: number) => {
         setPlaying(false);
-        setStep(Math.max(0, Math.min(last, n)));
-    }, [last]);
+        const target = Math.max(0, Math.min(last, n));
+        setFollow(live && target === last);
+        setStep(target);
+    }, [last, live]);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -77,7 +94,9 @@ export function Replay({ game, startStep = 0 }: { game: Game; startStep?: number
     }, [step]);
 
     const togglePlay = () => {
-        if (step >= last) {
+        if (step >= last && live) {
+            setFollow(true);
+        } else if (step >= last) {
             setStep(0);
             setPlaying(true);
         } else {
@@ -122,6 +141,11 @@ export function Replay({ game, startStep = 0 }: { game: Game; startStep?: number
                     <button className="btn" onClick={() => go(step + 1)} aria-label="Next step">&rarr;</button>
                     <button className="btn" onClick={() => go(last)} aria-label="Last step">&#x23ED;</button>
                     <span className="mono step-n">{step} / {last}</span>
+                    {live && (
+                        <button className={`btn live${follow ? ' on' : ''}`} onClick={() => setFollow(true)} aria-pressed={follow}>
+                            {follow ? 'LIVE' : 'Jump to live'}
+                        </button>
+                    )}
                     <label className="field">Speed
                         <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
                             {SPEEDS.map((s, i) => <option key={s.label} value={i}>{s.label}</option>)}
