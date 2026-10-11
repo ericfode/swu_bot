@@ -1,3 +1,4 @@
 {
-    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" }
+    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
+    "wasm": { "cmd": "node", "args": ["bot/wasm/host.js"], "lang": "wasm" }
 }

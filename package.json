@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "setup": "npm --prefix forceteki install && npm --prefix forceteki run get-cards && npm --prefix forceteki run build && npm --prefix viewer install",
+    "setup": "npm install && npm --prefix forceteki install && npm --prefix forceteki run get-cards && npm --prefix forceteki run build && npm --prefix viewer install",
     "gate": "node bot/gate.js",
     "random": "node bot/random-run.js",
     "demo": "node bot/tournament.js --bots random-a,random-b,random-c --games 4 --out replays/demo",
@@ -13,5 +13,8 @@
     "viewer:dev": "npm --prefix viewer run dev",
     "ladder": "node bot/ladder.js",
     "test": "node --test bot/test/*.test.js"
+  },
+  "devDependencies": {
+    "wabt": "1.0.39"
   }
 }
