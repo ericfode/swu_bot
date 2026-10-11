@@ -275,10 +275,12 @@ const api = {
             }
             if (upload) {
                 // the live folder follows what was uploaded, so eval of the live bot plays it; only the newest version
-                // may write it, so a slower concurrent submit cannot overwrite a newer one
+                // may write it, so a slower concurrent submit cannot overwrite a newer one. It becomes a copy of that
+                // version, not the live folder plus this upload: a concurrent submit may have written the live folder
+                // after this one copied it.
                 home.withLock(path.join(home.HOME, 'locks', `live-${name}.lock`), () => {
                     if ((home.versionsOf(name).pop() ?? -1) === n) {
-                        home.writeFiles(live, upload);
+                        home.mirror(path.join(home.VERSIONS, `${name}-v${n}`), live);
                     }
                 });
             }

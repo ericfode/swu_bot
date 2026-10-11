@@ -140,6 +140,35 @@ function writeFiles(dir, entries) {
     }
 }
 
+/**
+ * Makes dst (a live folder) hold the files of src (a submitted version, its SUBMISSION.json aside): removes what src does
+ * not have, then copies src over. .git, node_modules and a SUBMISSION.json at the top of dst are left alone; a symlink
+ * in dst is replaced, never written through.
+ */
+function mirror(src, dst) {
+    const prune = (s, d, top) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            if (e.name === '.git' || e.name === 'node_modules' || (top && e.name === 'SUBMISSION.json')) {
+                continue;
+            }
+            let st = null;
+            try {
+                st = fs.lstatSync(path.join(s, e.name));
+            } catch {
+                // not in src
+            }
+            if (e.isDirectory() && st?.isDirectory()) {
+                prune(path.join(s, e.name), path.join(d, e.name), false);
+            } else if (!st || e.isSymbolicLink() || e.isDirectory() !== st.isDirectory()) {
+                fs.rmSync(path.join(d, e.name), { recursive: true, force: true });
+            }
+        }
+    };
+    fs.mkdirSync(dst, { recursive: true });
+    prune(src, dst, true);
+    fs.cpSync(src, dst, { recursive: true, force: true, filter: (f) => path.relative(src, f) !== 'SUBMISSION.json' });
+}
+
 function removeDir(dir) {
     fs.rmSync(dir, { recursive: true, force: true });
 }
@@ -204,5 +233,5 @@ function readJsonl(file) {
 
 module.exports = {
     HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, updateRoster, versionsOf,
-    exists, claimDir, writeFiles, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
+    exists, claimDir, writeFiles, mirror, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
 };

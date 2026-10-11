@@ -112,6 +112,8 @@ function loadExternalBots() {
 }
 const externalBots = loadExternalBots();
 const programOf = (name) => (Object.hasOwn(externalBots, name.split('#')[0]) ? externalBots[name.split('#')[0]] : null);
+/** A copy of the bot program entry for `name` ({cmd, args, cwd, adapter, ...}), or null when it is not a bot program. */
+const programSpec = (name) => (programOf(name) ? structuredClone(programOf(name)) : null);
 
 const running = new Map();
 /** The program client for `name` that is not one of `taken` (the bots already seated in this game). */
@@ -250,4 +252,4 @@ function makeBot(name, taken) {
     return createRandomBot(name);
 }
 
-module.exports = { makeBot, closeBots, describeBot, parseName, parseIsmcts, parseOmni };
+module.exports = { makeBot, closeBots, describeBot, programSpec, parseName, parseIsmcts, parseOmni };

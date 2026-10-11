@@ -206,6 +206,58 @@ test('an in-process protocol client passes the load check and plays as one', () 
     assert.throws(() => api.submit({ name: 'clie', note: 'neither' }), (e) => e.code === 'bad_bot' && /choose\(\) method .* decide\(\) method/.test(e.message));
 });
 
+test('mirror makes a live folder a copy of a version: stale files go, .git and node_modules stay, symlinks are replaced', () => {
+    const { mirror } = require('../arena/home');
+    const d = fs.mkdtempSync(path.join(tmp, 'mirror-'));
+    const put = (f, text) => {
+        fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true });
+        fs.writeFileSync(path.join(d, f), text);
+    };
+    put('src/bot.js', 'B');
+    put('src/foo.txt', 'old');
+    put('src/sub/x.txt', 'x');
+    put('src/link.txt', 'mine');
+    put('src/SUBMISSION.json', '{}');
+    put('dst/foo.txt', 'newer, from another submit');
+    put('dst/extra.txt', 'not in the version');
+    put('dst/sub', 'a file where the version has a folder');
+    put('dst/.git/HEAD', 'ref');
+    put('dst/node_modules/m.js', 'm');
+    put('outside.txt', 'untouched');
+    fs.symlinkSync(path.join(d, 'outside.txt'), path.join(d, 'dst/link.txt'));
+    mirror(path.join(d, 'src'), path.join(d, 'dst'));
+    const files = (dir) => fs.readdirSync(dir, { recursive: true }).filter((f) => fs.statSync(path.join(dir, f)).isFile()).sort();
+    assert.deepStrictEqual(files(path.join(d, 'dst')), ['.git/HEAD', 'bot.js', 'foo.txt', 'link.txt', 'node_modules/m.js', 'sub/x.txt']);
+    assert.strictEqual(fs.readFileSync(path.join(d, 'dst/foo.txt'), 'utf8'), 'old');
+    assert.ok(!fs.lstatSync(path.join(d, 'dst/link.txt')).isSymbolicLink());
+    assert.strictEqual(fs.readFileSync(path.join(d, 'outside.txt'), 'utf8'), 'untouched');
+});
+
+test('an upload leaves the live folder a copy of the version it made', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'upl', start: 'rush' });
+    const live = path.join(HOME, 'agents', 'upl');
+    const bot = fs.readFileSync(path.join(live, 'bot.js'), 'utf8');
+    // another submit wrote the live folder after this one copied it (simulated: the live folder changes under the copy)
+    const { copyBot } = require('../arena/home');
+    const home = require('../arena/home');
+    home.copyBot = (src, dst) => {
+        copyBot(src, dst);
+        fs.writeFileSync(path.join(src, 'foo.txt'), 'written by the other submit');
+    };
+    let v;
+    try {
+        v = api.submit({ name: 'upl', note: 'upload', bot: { kind: 'js', files: { 'bot.js': bot, 'bar.txt': 'mine' } } }).version;
+    } finally {
+        home.copyBot = copyBot;
+    }
+    const files = (dir) => fs.readdirSync(dir).filter((f) => f !== 'SUBMISSION.json').sort();
+    assert.deepStrictEqual(files(live), files(path.join(HOME, 'versions', v)));
+    assert.ok(!fs.existsSync(path.join(live, 'foo.txt')));
+    assert.strictEqual(fs.readFileSync(path.join(live, 'bar.txt'), 'utf8'), 'mine');
+});
+
 test('registrations in a row all stay in the roster (roster updates are serialized)', () => {
     setRoster([]);
     const { api } = require('../arena/api');

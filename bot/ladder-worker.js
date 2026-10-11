@@ -40,6 +40,10 @@ const capMs = workerData.capMs ?? Infinity;
 const limits = Number.isFinite(capMs) ? { hello: capMs + 5000, decide: capMs + 5000, over: 10000 } : {};
 const ctl = workerControl(workerData.control, workerData.base);
 const firstLine = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 200);
+// bound before any bot loads (a bot may replace the global)
+const later = setTimeout;
+// how long the worker waits for a bot's close() after the game (a bot program gets EOF and is killed 2 s later)
+const CLOSE_MS = 3000;
 const r3 = (x) => Math.round(x * 1000) / 1000;
 // bound before any bot loads, so a bot that replaces process.threadCpuUsage while it loads cannot shrink its load time
 const threadCpu = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage.bind(process) : null;
@@ -195,7 +199,7 @@ parentPort.on('message', async (job) => {
         r = await playGame(env, { seed: job.seed, bots, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
         // let the timers and promise callbacks a bot left that are due now run while this game is still the current one
         // (a throw there is that bot's loss, see origin)
-        await new Promise((resolve) => setTimeout(resolve, 1));
+        await new Promise((resolve) => later(resolve, 1));
         delete r.events;
         r.winnerSeat = r.winner;
         r.winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
@@ -207,8 +211,11 @@ parentPort.on('message', async (job) => {
             fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind, ...(r.key ? { key: r.key } : {}) })}\n`);
         }
     }
-    // bots built for this game end here (a program sees the end of its input); programs kept between games stay up
-    await Promise.all(loaded.map((x, i) => (x.bot && describeBot(names[i])?.kind !== 'external' ? x.bot.close() : null)));
+    // bots built for this game end here (a program sees the end of its input); programs kept between games stay up.
+    // The result is in already: a close() that never settles is not waited for, so it cannot hold the result back until
+    // the watchdog takes the game for a hang (a close() whose own code never returns is that bot's hang, see within).
+    const closing = Promise.all(loaded.map((x, i) => (x.bot && describeBot(names[i])?.kind !== 'external' ? x.bot.close() : null)));
+    await Promise.race([closing, new Promise((resolve) => later(resolve, CLOSE_MS).unref())]);
     guards = [];
     thisGame = null;
     ctl.set(PHASE.idle);

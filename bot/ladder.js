@@ -7,7 +7,8 @@
  *       [--resume] [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine,
  * uncommitted engine source changes included (config.engineDiff), and same bot code and models: config.harness is the
- * git trees of bot/ and models/, plus a hash of uncommitted changes there and of the $SWU_LEARNED_MODEL file when set). Without the earlier run's --key, the rest is dealt from a
+ * git trees of bot/ and models/, plus a hash of uncommitted changes there and of the $SWU_LEARNED_MODEL file when set;
+ * config.programs hashes the bot programs' entries and the files they name). Without the earlier run's --key, the rest is dealt from a
  * new run key; the games kept have their own keys in their entries.
  * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot loses. --hang-ms is the
  * watchdog (game-pool.js): one bot call running longer than that (wall clock) loses the game, and its worker is
@@ -31,7 +32,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
-const { describeBot } = require('./players');
+const { describeBot, programSpec } = require('./players');
 const { runKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
@@ -105,6 +106,38 @@ function harnessRev() {
     }
 }
 
+/**
+ * A hash of the bot programs in this ladder ($SWU_EXTERNAL_BOTS or bot/external-bots.json): each one's entry and the
+ * files it names (its program, the scripts and model files in its arguments, its adapter), which may be built files git
+ * does not track (bot/c/swu-c) or live outside the repo. null when no bot program plays.
+ */
+function programsRev(names) {
+    const root = path.join(__dirname, '..');
+    const h = crypto.createHash('sha256');
+    let any = false;
+    for (const n of [...new Set(names.map((x) => x.split('#')[0]))].sort()) {
+        const spec = programSpec(n);
+        if (!spec) {
+            continue;
+        }
+        any = true;
+        h.update(`\0${n}\0${JSON.stringify(spec)}`);
+        const cwd = path.resolve(root, spec.cwd ?? '.');
+        const named = [spec.cmd, ...(Array.isArray(spec.args) ? spec.args : [])].filter((a) => typeof a === 'string').flatMap((a) => a.split('='));
+        const files = [...named.map((a) => path.resolve(cwd, a)), ...(typeof spec.adapter === 'string' ? [path.join(root, spec.adapter)] : [])];
+        for (const f of files) {
+            try {
+                if (fs.statSync(f).isFile()) {
+                    h.update(`\0${f}\0`).update(fs.readFileSync(f));
+                }
+            } catch {
+                // not a file (a program on PATH, a flag, a word)
+            }
+        }
+    }
+    return any ? h.digest('hex').slice(0, 12) : null;
+}
+
 function writeJson(file, data) {
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(data));
@@ -135,8 +168,9 @@ function readPrevious(file, config, engine) {
     // and the harness code (guard, game runner, env, built-in bots)
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
         || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
-        || (c.harness ?? null) !== (config.harness ?? null) || (c.engineDiff ?? null) !== (config.engineDiff ?? null) || (c.keyId === null) !== (config.keyId === null)) {
-        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code or seeding (--key none), starting over');
+        || (c.harness ?? null) !== (config.harness ?? null) || (c.engineDiff ?? null) !== (config.engineDiff ?? null) || (c.programs ?? null) !== (config.programs ?? null)
+        || (c.keyId === null) !== (config.keyId === null)) {
+        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs or seeding (--key none), starting over');
         return null;
     }
     if (c.keyId !== config.keyId) {
@@ -184,7 +218,7 @@ async function main() {
     const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
-                     harness: harnessRev(), engineDiff: engineDiff(), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
+                     harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
