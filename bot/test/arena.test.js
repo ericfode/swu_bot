@@ -324,3 +324,23 @@ test('runner: the usage brake holds while a window is over its limit, until that
     noteLimits(lastLimits(`${event(0.1, 0.1)}\n`));
     assert.strictEqual(braked(), null);
 });
+
+test('runner: the usage brake stops Claude sessions only, and the runner starts only harnesses it knows', () => {
+    const { noteLimits, running, runnable } = require('../arena/runner');
+    const stopped = [];
+    running.set('a-r1', { stop: () => stopped.push('a-r1'), claude: true });
+    running.set('opt-r1', { stop: () => stopped.push('opt-r1'), claude: false });
+    try {
+        noteLimits({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.99, resetsAt: Math.floor(Date.now() / 1000) + 3600 } } });
+        assert.deepStrictEqual(stopped, ['a-r1']);
+    } finally {
+        running.clear();
+        noteLimits({ status: 'allowed', unifiedWindows: {} });
+    }
+    assert.ok(runnable({ kind: 'claude-code', model: 'opus' }));
+    assert.ok(runnable({ kind: 'script', cmd: 'node bot/arena/optimizer.js' }));
+    assert.ok(runnable({ kind: 'command', cmd: ['prog', '{prompt_file}'] }));
+    for (const h of [{ kind: 'script' }, { kind: 'command', cmd: [] }, { kind: 'codex' }, { kind: 'Claude Code' }, null]) {
+        assert.ok(!runnable(h), JSON.stringify(h));
+    }
+});

@@ -121,7 +121,7 @@ function stopAll(pgid, tag, sig) {
 
 // the newest usage limits claude reported: {five_hour: {utilization, resetsAt}, seven_day: ..., status, at}
 let limits = null;
-const running = new Map(); // tag -> stop(), for the brake and for the runner's own exit
+const running = new Map(); // tag -> {stop(), claude}: for the brake (claude sessions only) and the runner's own exit
 
 function noteLimits(info) {
     if (!info) {
@@ -129,10 +129,12 @@ function noteLimits(info) {
     }
     limits = { ...info.unifiedWindows, status: info.status, at: new Date().toISOString() };
     const why = braked();
-    if (why && running.size) {
-        log(`usage brake: ${why}; stopping ${[...running.keys()].join(', ')}`);
-        for (const stop of running.values()) {
-            stop();
+    const sessions = [...running].filter(([, r]) => r.claude);
+    if (why && sessions.length) {
+        // scripts use no Claude usage, so they keep their window
+        log(`usage brake: ${why}; stopping ${sessions.map(([tag]) => tag).join(', ')}`);
+        for (const [, r] of sessions) {
+            r.stop();
         }
     }
 }
@@ -200,7 +202,7 @@ async function probeLimits() {
     const out = path.join(dir, 'probe.jsonl');
     fs.writeFileSync(out, '');
     await runUntil('claude', ['-p', 'Reply with the single word ok.', '--model', 'haiku', '--tools', '', '--strict-mcp-config', '--disable-slash-commands',
-        '--output-format', 'stream-json', '--verbose', '--max-turns', '1'], { cwd: dir, env: cleanEnv('_probe', 'probe'), out, stopAt: Date.now() + 120000, tag: 'probe' });
+        '--output-format', 'stream-json', '--verbose', '--max-turns', '1'], { cwd: dir, env: cleanEnv('_probe', 'probe'), out, stopAt: Date.now() + 120000, tag: 'probe', claude: true });
     noteLimits(lastLimits(fs.readFileSync(out, 'utf8')));
 }
 
@@ -289,10 +291,10 @@ function readSession(file) {
 
 /**
  * Runs cmd in its own process group until it exits or `stopAt`, then stops the group and every process tagged `tag`
- * (SIGTERM, SIGKILL 15 s later). While it runs, `running` holds a stop() for it, and tick() (if given) is called every
- * few seconds. Resolves {code, signal, stopped, error}.
+ * (SIGTERM, SIGKILL 15 s later). While it runs, `running` holds a stop() for it (`claude`: the usage brake may stop it),
+ * and tick() (if given) is called every few seconds. Resolves {code, signal, stopped, error}.
  */
-function runUntil(cmd, args, { cwd, env, out, stopAt, tag, tick }) {
+function runUntil(cmd, args, { cwd, env, out, stopAt, tag, tick, claude = false }) {
     return new Promise((resolve) => {
         const fd = fs.openSync(out, 'a');
         const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', fd, fd], detached: true });
@@ -305,7 +307,7 @@ function runUntil(cmd, args, { cwd, env, out, stopAt, tag, tick }) {
                 setTimeout(() => stopAll(child.pid, tag, 'SIGKILL'), 15000).unref();
             }
         };
-        running.set(tag, stop);
+        running.set(tag, { stop, claude });
         const timer = setTimeout(stop, Math.max(0, stopAt - Date.now()));
         const ticker = tick ? setInterval(tick, POLL_MS) : null;
         const done = (r) => {
@@ -385,7 +387,7 @@ async function work(c, st) {
             const t0 = Date.now();
             const follow = follower(out);
             const res = await runUntil('claude', claudeArgs(c, prompt, { sessionId, budget, system: memory || null }),
-                { cwd: path.join(home.AGENTS, c.name), env, out, stopAt, tag, tick: () => noteLimits(lastLimits(follow())) });
+                { cwd: path.join(home.AGENTS, c.name), env, out, stopAt, tag, claude: true, tick: () => noteLimits(lastLimits(follow())) });
             const s = readSession(out);
             sessionId = s.sessionId ?? sessionId;
             spent += s.costUSD;
@@ -454,11 +456,22 @@ function mirror(from, to) {
     }
 }
 
+/** Whether the runner can start this harness: claude-code, a script with a command line, or a command array. */
+function runnable(h) {
+    return h?.kind === 'claude-code' || (h?.kind === 'script' && typeof h.cmd === 'string' && h.cmd.trim() !== '')
+        || (h?.kind === 'command' && Array.isArray(h.cmd) && h.cmd.length > 0);
+}
+
 async function main() {
     const roster = home.roster();
-    const runners = roster.agents.filter((a) => a.harness && (!ONLY || ONLY.includes(a.name)));
+    const chosen = roster.agents.filter((a) => a.harness && (!ONLY || ONLY.includes(a.name)));
+    for (const a of chosen.filter((x) => !runnable(x.harness))) {
+        // e.g. a Codex or human competitor registered through the web form: it runs itself
+        log(`${a.name}: harness ${JSON.stringify(a.harness)} is not one the runner starts (claude-code, script with cmd, command), skipping it`);
+    }
+    const runners = chosen.filter((a) => runnable(a.harness));
     if (!runners.length) {
-        throw new Error('no competitor with a harness to run (roster.json agents[].harness)');
+        throw new Error('no competitor with a harness the runner can start (roster.json agents[].harness)');
     }
     const mi = process.argv.indexOf('--mirror');
     const mirrorPair = mi > 0 ? [path.resolve(process.argv[mi + 1]), path.resolve(process.argv[mi + 2])] : null;
@@ -468,8 +481,8 @@ async function main() {
     for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
         process.on(sig, () => {
             log(`runner: ${sig}, stopping ${[...running.keys()].join(', ') || 'nothing'}`);
-            for (const stop of running.values()) {
-                stop();
+            for (const r of running.values()) {
+                r.stop();
             }
             setTimeout(() => process.exit(1), 16000);
         });
@@ -543,4 +556,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runUntil, cleanEnv, tagged, lastLimits, braked, noteLimits, mirror };
+module.exports = { runUntil, cleanEnv, tagged, lastLimits, braked, noteLimits, mirror, runnable, running };

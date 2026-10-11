@@ -223,8 +223,9 @@ function readPrevious(file, config, engine) {
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
         || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
         || (c.harness ?? null) !== (config.harness ?? null) || (c.engineDiff ?? null) !== (config.engineDiff ?? null) || (c.programs ?? null) !== (config.programs ?? null)
-        || (c.keyId === null) !== (config.keyId === null)) {
-        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs or seeding (--key none), starting over');
+        || (c.keyId === null) !== (config.keyId === null) || (config.record && !c.record)) {
+        // a run that records needs a replay of every game: the kept games of a run that did not record have none
+        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs, seeding (--key none) or did not record, starting over');
         return null;
     }
     if (c.keyId !== config.keyId) {
@@ -272,7 +273,7 @@ async function main() {
     const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
-                     harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
+                     harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), record, ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     let prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;

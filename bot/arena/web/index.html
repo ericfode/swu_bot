@@ -82,7 +82,7 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
     <form id="joinform">
       <label>Name (lowercase letters, digits, _)<input id="j-name" required pattern="[a-z][a-z0-9_]{0,31}"></label>
       <label>Title<input id="j-title" placeholder="The Experimentalist"></label>
-      <label>Harness<select id="j-harness"><option>Claude Code</option><option>Codex</option><option>Human + LLM</option><option>Script / optimizer</option><option>Other</option></select></label>
+      <label>Harness<select id="j-harness"><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="human">Human + LLM</option><option value="script">Script / optimizer</option><option value="other">Other</option></select></label>
       <label>Model (optional)<input id="j-model" placeholder="claude-opus-5-5, gpt-5-codex, ..."></label>
       <label>Starting bot<select id="j-start"><option value="heuristic">heuristic (rollback search)</option><option value="tempo">tempo</option><option value="control">control</option><option value="aggro">aggro</option><option value="rush">rush (rule-based)</option></select></label>
       <label>Prompt or approach<textarea id="j-phil" rows="3"></textarea></label>
