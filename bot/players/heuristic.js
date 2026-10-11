@@ -22,31 +22,39 @@ const HELP = /heal|shield|give|ready|attach|experience|restore|buff|\+\d/i;
 
 const W = { power: 1.3, hp: 0.9, cost: 0.25, shield: 2.2, upgrade: 0.6, sentinel: 1.0, exhaustedMult: 0.85, hand: 1.8, resource: 1.4, initiative: 2.5, baseHp: 0.9 };
 
-function unitValue(u) {
-    let v = u.getPower() * W.power + Math.max(0, u.remainingHp) * W.hp + (u.cost ?? 0) * W.cost;
+/**
+ * Side multipliers on top of W, so profiles can value the two sides differently (an aggressive bot cares more
+ * about the opponent's base than its own). All 1.5/1/1 reproduces the original evaluation exactly.
+ * baseDangerHp: base HP below which the quadratic "danger" term kicks in; dangerScale divides that term.
+ */
+const SIDE = { myBase: 1.5, oppBase: 1.5, myUnits: 1, oppUnits: 1, baseDangerHp: 12, dangerScale: 6 };
+
+function unitValue(u, w = W) {
+    let v = u.getPower() * w.power + Math.max(0, u.remainingHp) * w.hp + (u.cost ?? 0) * w.cost;
     for (const up of u.upgrades ?? []) {
-        v += up.internalName === 'shield' ? W.shield : W.upgrade;
+        v += up.internalName === 'shield' ? w.shield : w.upgrade;
     }
     if (u.hasSomeKeyword?.('sentinel')) {
-        v += W.sentinel;
+        v += w.sentinel;
     }
-    return u.exhausted ? v * W.exhaustedMult : v;
+    return u.exhausted ? v * w.exhaustedMult : v;
 }
 
 /** Base HP matters more the lower it gets. */
-function baseTerm(base) {
+function baseTerm(base, w = W, s = SIDE) {
     const hp = Math.max(0, base.getHp() - base.damage);
-    return hp * W.baseHp + (hp <= 12 ? ((12 - hp) ** 2) / 6 : 0);
+    return hp * w.baseHp + (hp <= s.baseDangerHp ? ((s.baseDangerHp - hp) ** 2) / s.dangerScale : 0);
 }
 
-function sideValue(p) {
-    let v = baseTerm(p.base) * 1.5;
+function sideValue(p, w = W, s = SIDE, mine = true) {
+    let v = baseTerm(p.base, w, s) * (mine ? s.myBase : s.oppBase);
+    const um = mine ? s.myUnits : s.oppUnits;
     for (const u of p.getArenaUnits()) {
-        v += unitValue(u);
+        v += unitValue(u, w) * um;
     }
-    v += p.hand.length * W.hand + p.resources.length * W.resource;
+    v += p.hand.length * w.hand + p.resources.length * w.resource;
     if (p.hasInitiative()) {
-        v += W.initiative;
+        v += w.initiative;
     }
     return v;
 }
@@ -71,15 +79,20 @@ function fingerprint(eg) {
 
 const isPass = (a) => a.kind === 'button' && /^pass$/i.test(a.label);
 
-/** Score the position for `pid` (higher is better). Only public information is read for hidden zones. */
-function evaluate(eg, pid) {
+/**
+ * Score the position for `pid` (higher is better). Only public information is read for hidden zones.
+ * `profile` ({weights, side}) overrides W/SIDE; omitted, this is the original heuristic evaluation.
+ */
+function evaluate(eg, pid, profile = null) {
     if (eg.over) {
         const me = eg.names[eg.ids.indexOf(pid)];
         const w = eg.winners;
         return w.length === 1 ? (w[0] === me ? 10000 : -10000) : 0;
     }
+    const w = profile?.weights ? { ...W, ...profile.weights } : W;
+    const sd = profile?.side ? { ...SIDE, ...profile.side } : SIDE;
     const me = eg.player(pid);
-    return sideValue(me) - sideValue(me.opponent);
+    return sideValue(me, w, sd, true) - sideValue(me.opponent, w, sd, false);
 }
 
 // ---------- rule-based choices (everything outside the action window, and playout continuations) ----------
@@ -189,8 +202,9 @@ class HeuristicBot {
      * Between my actions the opponent is modelled as passing, so a plan is "what I can do with my next few turns";
      * only the first action is played and the rest is re-planned at the next window. beam: how many first actions get the deeper look.
      */
-    constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12 } = {}) {
+    constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12, profile = null } = {}) {
         this.name = name;
+        this.profile = profile;
         this.depth = depth;
         this.beam = beam;
         this.maxFollowUps = maxFollowUps;
@@ -358,7 +372,7 @@ class HeuristicBot {
                 }
                 eg.apply(actor, choice, this.rng);
             }
-            score = evaluate(eg, pid);
+            score = evaluate(eg, pid, this.profile);
             fp = fingerprint(eg);
             if (extra > 0 && !eg.over && this.advanceToMyWindow(eg, pid)) {
                 const next = this.bestFrom(eg, pid, extra);
@@ -375,4 +389,4 @@ class HeuristicBot {
     }
 }
 
-module.exports = { HeuristicBot, evaluate, defaultChoose };
+module.exports = { HeuristicBot, evaluate, defaultChoose, unitValue, keepScore, targetScore, W, SIDE };

@@ -7,21 +7,11 @@ const { execFileSync } = require('child_process');
 const { Env } = require('./env');
 const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
-const { createRandomBot } = require('./players/random');
-const { HeuristicBot } = require('./players/heuristic');
+const { makeBot } = require('./players');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
-}
-
-// bot registry: every name resolves to a factory so heuristic/search bots can be added here later
-function makeBot(name) {
-    if (/^heuristic/.test(name)) {
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    return createRandomBot(name);
 }
 
 function statLine(r) {
