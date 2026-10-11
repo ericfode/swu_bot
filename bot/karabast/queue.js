@@ -21,7 +21,7 @@
  *   the queue, a wait with no match included, keeps the place counted: only the server knows whether it matched us.
  *   `--max-people none` keeps counting with no cap.
  * - One game at a time on a machine (Eric, 2026-10-11 22:16: the budget is one concurrent game): a non-local run holds
- *   playing.pid next to the ledger while it runs, and refuses to start while another live run holds it.
+ *   ~/karabast/playing.pid while it runs, and refuses to start while another live run holds it.
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -40,6 +40,7 @@ const { KarabastSocket, post } = require('./socket');
 const { KarabastSeat, loadClient } = require('./seat');
 const { makeScrubber } = require('./frame');
 const { PeopleLedger } = require('./ledger');
+const { LOOP_PATTERN } = require('./watchdog');
 
 /** Cards whose abilities throw in our engine pin (CLAUDE.md, known engine bugs). */
 const KNOWN_ERRORS = { ASH_044: 'Barriss Offee, Redeeming Herself' };
@@ -147,6 +148,13 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
 }
 
 /** Whether `pid` is a live bot run. A pid reused by another program (after the machine restarted) is not one. */
+/** One game at a time on this machine (Eric, 2026-10-11 22:16), whichever ledger a run counts people in. */
+const PLAY_LOCK = path.join(require('os').homedir(), 'karabast', 'playing.pid');
+
+/**
+ * Whether `pid` is a live bot run: node running queue.js as its script (watchdog.js's LOOP_PATTERN). A pid reused by
+ * another program after a restart is not one, nor is a process that merely names queue.js in its arguments.
+ */
 const playing = (pid) => {
     try {
         process.kill(pid, 0);
@@ -159,20 +167,41 @@ const playing = (pid) => {
         return true; // no /proc (macOS): trust the pid
     }
     try {
-        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('queue.js');
+        return new RegExp(LOOP_PATTERN).test(fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' '));
     } catch {
         return false; // gone since the check above
     }
 };
 
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
 /**
  * Writes our pid to `file` so only one run plays at a time, or throws while another live run holds it. The check and
- * the write happen under the people ledger's lock, which every run on the machine shares, so two starters cannot both
- * take it. A file left by a run that died (killed, or the machine restarted) is taken over, also when its pid now
- * belongs to another program. Released at exit; a killed run leaves it for the next one to take over.
+ * the write happen while holding `<file>.lock` (created exclusively, held for a moment), so two starters cannot both
+ * take it. Like the ledger's, that lock is never taken over: one left by a run that died says which file to remove. A
+ * `file` left by a run that died (killed, or the machine restarted) is taken over, also when its pid now belongs to
+ * another program. Released at exit; a killed run leaves it for the next one to take over.
  */
-function holdPlayLock(file, ledger) {
-    ledger.locked(() => {
+function holdPlayLock(file, { lockWaitMs = 10000 } = {}) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const lock = `${file}.lock`;
+    const t0 = Date.now();
+    let fd;
+    for (;;) {
+        try {
+            fd = fs.openSync(lock, 'wx');
+            break;
+        } catch (e) {
+            if (e.code !== 'EEXIST') {
+                throw e;
+            }
+        }
+        if (Date.now() - t0 > lockWaitMs) {
+            throw new Error(`${lock} stayed locked for ${lockWaitMs / 1000} s; if no other run is starting, remove it`);
+        }
+        sleepSync(50);
+    }
+    try {
         let pid = 0;
         try {
             pid = Number(fs.readFileSync(file, 'utf8'));
@@ -185,7 +214,10 @@ function holdPlayLock(file, ledger) {
         const tmp = `${file}.${process.pid}.tmp`;
         fs.writeFileSync(tmp, String(process.pid));
         fs.renameSync(tmp, file);
-    });
+    } finally {
+        fs.closeSync(fd);
+        fs.rmSync(lock, { force: true });
+    }
     process.on('exit', () => {
         // nobody replaces the file while our pid is alive, so read-then-remove cannot remove another run's
         try {
@@ -209,7 +241,7 @@ async function main() {
     const maxPeople = arg('max-people', '10');
     const ledger = ledgerFile ? new PeopleLedger(ledgerFile, maxPeople === 'none' ? Infinity : Number(maxPeople)) : null;
     if (!local) {
-        holdPlayLock(path.join(path.dirname(path.resolve(ledgerFile)), 'playing.pid'), ledger);
+        holdPlayLock(PLAY_LOCK);
     }
     const decks = JSON.parse(fs.readFileSync(arg('decks', path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json')), 'utf8'));
     const name = arg('deck');

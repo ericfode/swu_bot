@@ -156,8 +156,8 @@ people. Before any live run:
   recorder that joined a game and saw no frame. `--max-people none` keeps counting with no cap: since 2026-10-11 22:16
   Eric's budget for the bot is one game at a time, not a number of people. `--stop-file <file>` stops a run before the
   next game.
-- One game at a time: a non-local `queue.js` holds `playing.pid` next to the ledger while it runs and refuses to start
-  while another live run holds it; a file left by a run that was killed is taken over.
+- One game at a time on a machine: a non-local `queue.js` holds `~/karabast/playing.pid` while it runs, whatever its
+  ledger, and refuses to start while another live run holds it; a file left by a run that was killed is taken over.
 - Karabast logs every engine error and sends severe ones to its developers' Discord (Lobby `handleError`), so
   `queue.js` refuses decks with cards that are known to throw (Barriss Offee, ASH_044).
 - Spectating needs a login (anonymous spectators are a development-only setting): a session token in the variable

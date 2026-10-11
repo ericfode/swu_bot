@@ -705,43 +705,54 @@ test('the window feed hides our hand while live, holds back the newest step, and
 
 test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', async () => {
     const { holdPlayLock } = require('../karabast/queue');
+    const { spawn } = require('child_process');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'play-lock-'));
     const file = path.join(dir, 'playing.pid');
-    const ledger = new PeopleLedger(path.join(dir, 'people.json'), Infinity, { lockWaitMs: 200 });
-    // a stand-in bot run: a live process whose command line names queue.js
-    const run = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'bot/karabast/queue.js'], { stdio: 'ignore' });
-    try {
-        for (let i = 0; i < 100 && fs.existsSync('/proc/self/cmdline'); i++) {
-            const cmd = (() => {
-                try {
-                    return fs.readFileSync(`/proc/${run.pid}/cmdline`, 'utf8');
-                } catch {
-                    return '';
+    const proc = fs.existsSync('/proc/self/cmdline');
+    // a live process with this in its command line (wait out the moment between fork and exec)
+    const started = async (child, text) => {
+        for (let i = 0; i < 100 && proc; i++) {
+            try {
+                if (fs.readFileSync(`/proc/${child.pid}/cmdline`, 'utf8').includes(text)) {
+                    return child;
                 }
-            })();
-            if (cmd.includes('queue.js')) {
-                break;
+            } catch {
+                // not there yet
             }
             await new Promise((r) => setTimeout(r, 20));
         }
+        return child;
+    };
+    // a stand-in bot run: node running a script at bot/karabast/queue.js
+    const script = path.join(dir, 'bot', 'karabast', 'queue.js');
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, 'setInterval(() => {}, 1000);\n');
+    const run = await started(spawn(process.execPath, [script], { stdio: 'ignore' }), 'queue.js');
+    // a watchdog-like process that only names queue.js in its arguments
+    const namer = await started(spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'node bot/karabast/queue.js'], { stdio: 'ignore' }), 'queue.js');
+    try {
         fs.writeFileSync(file, String(run.pid));
-        assert.throws(() => holdPlayLock(file, ledger), /one game at a time/);
+        assert.throws(() => holdPlayLock(file), /one game at a time/);
+        if (proc) {
+            for (const pid of [namer.pid, process.ppid]) { // alive, but another program (a pid reused after a restart)
+                fs.writeFileSync(file, String(pid));
+                holdPlayLock(file);
+                assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
+            }
+        }
     } finally {
         run.kill();
-    }
-    if (fs.existsSync('/proc/self/cmdline')) {
-        fs.writeFileSync(file, String(process.ppid)); // alive, but another program (a pid reused after a restart)
-        holdPlayLock(file, ledger);
-        assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
-        fs.unlinkSync(file);
+        namer.kill();
     }
     fs.writeFileSync(file, '999999999'); // no such process
-    fs.writeFileSync(`${ledger.file}.lock`, ''); // another starter is checking: wait for it, never take over beside it
-    assert.throws(() => holdPlayLock(file, ledger), /stayed locked/);
+    fs.writeFileSync(`${file}.lock`, ''); // another starter is checking: wait for it, never take over beside it
+    assert.throws(() => holdPlayLock(file, { lockWaitMs: 200 }), /stayed locked/);
     assert.strictEqual(fs.readFileSync(file, 'utf8'), '999999999');
-    fs.unlinkSync(`${ledger.file}.lock`);
-    holdPlayLock(file, ledger);
+    fs.unlinkSync(`${file}.lock`);
+    holdPlayLock(file);
     assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
+    assert.ok(!fs.existsSync(`${file}.lock`), 'the starter lock is let go');
+    const ledger = new PeopleLedger(path.join(dir, 'people.json'), Infinity);
     for (let i = 0; i < 40; i++) {
         ledger.add([`u${i}`], 'played', ledger.reserve(1));
     }
