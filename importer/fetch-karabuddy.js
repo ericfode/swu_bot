@@ -94,15 +94,22 @@ async function payloadJson(res) {
 }
 
 async function run(args, fetchImpl = fetch, log = console.log) {
+    // network failures in a row, per host: a blocked or down host should not cost the site 200 more requests, and a
+    // request that reaches a host clears only that host's count (the metadata host answering says nothing about blobs)
+    const streak = new Map();
     const get = async (url) => {
+        const host = new URL(url).host;
         let res;
         try {
             res = await fetchImpl(url, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' } });
         } catch (e) {
-            const err = new Error(`${new URL(url).host}: ${e.cause?.message ?? e.message}`);
+            streak.set(host, (streak.get(host) ?? 0) + 1);
+            const err = new Error(`${host}: ${e.cause?.message ?? e.message}`);
             err.network = true;
+            err.streak = streak.get(host);
             throw err;
         }
+        streak.set(host, 0);
         if (!res.ok) {
             throw new Error(`${url}: HTTP ${res.status}`);
         }
@@ -122,7 +129,6 @@ async function run(args, fetchImpl = fetch, log = console.log) {
     const todo = list.filter((r) => r?.slug && /^[A-Za-z0-9_-]+$/.test(r.slug) && !r.encrypted && !have.has(r.slug)).slice(0, args.limit);
     log(`${list.length} public replays listed, ${have.size} already imported, fetching ${todo.length}`);
     const counts = { imported: 0, pruned: 0, failed: 0 };
-    let networkFailures = 0; // in a row; a blocked or down host should not cost the site 200 more requests
     if (args.dryRun) {
         return { listed: list.length, todo: todo.map((r) => r.slug), ...counts };
     }
@@ -159,13 +165,12 @@ async function run(args, fetchImpl = fetch, log = console.log) {
             }
             fs.writeFileSync(indexFile, JSON.stringify(index, null, 2) + '\n');
             counts.imported++;
-            networkFailures = 0;
             log(`${r.slug}: ${events.length - 2} steps, pov ${events[0].source.pov}, winner ${entry.winnerSeat ?? '-'}`);
         } catch (e) {
             counts.failed++;
             log(`${r.slug}: ${e.message}`);
-            if (e.network && ++networkFailures >= MAX_NETWORK_FAILURES) {
-                log(`${networkFailures} network failures in a row; stopping`);
+            if (e.network && e.streak >= MAX_NETWORK_FAILURES) {
+                log(`${e.streak} network failures in a row; stopping`);
                 return { listed: list.length, ...counts, stopped: e.message };
             }
         }

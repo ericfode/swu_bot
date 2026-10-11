@@ -326,6 +326,41 @@ test('KaraBuddy public fetch stops after three network failures in a row, naming
     }
 });
 
+test('KaraBuddy public fetch: only failures with no success on the same host in between count toward the stop', async () => {
+    const os = require('os');
+    const { run } = require('../fetch-karabuddy');
+    // a: blob fails; b: pruned (no blob request); c: blob answers but is not JSON; d, e: blob fails; f: a good game
+    const slugs = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const blob = (s) => `https://flaky.r2.dev/${s}`;
+    const site = fakeKaraBuddy({
+        list: slugs.map((slug) => ({ slug })),
+        replays: Object.fromEntries(slugs.map((s) => [s, s === 'b' ? { payloadBlobUrl: blob(s), payloadPrunedAt: '2026-10-05T00:00:00Z' } : { payloadBlobUrl: blob(s) }])),
+        blobs: { [blob('c')]: 'not json', [blob('f')]: JSON.stringify(toKaraBuddy(game())) }
+    });
+    const fetchImpl = (url, opts) => (/flaky\.r2\.dev\/[ade]$/.test(url) ? Promise.reject(new TypeError('fetch failed')) : site.fetchImpl(url, opts));
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-public-'));
+    try {
+        const r = await run({ out, limit: 200, delay: 0 }, fetchImpl, () => {});
+        assert.deepStrictEqual(r, { listed: 6, imported: 1, pruned: 1, failed: 4 });
+    } finally {
+        fs.rmSync(out, { recursive: true, force: true });
+    }
+});
+
+test('patches from published files cannot reach Object.prototype', () => {
+    const { applyPatch, mergePatch } = require('../sources');
+    for (const key of ['__proto__/polluted', 'players/__proto__/polluted', 'constructor/prototype/polluted']) {
+        assert.throws(() => applyPatch({ players: {} }, { [key]: 1 }), /unsafe key/);
+    }
+    assert.throws(() => mergePatch({ players: {} }, JSON.parse('{"__proto__": {"polluted": 1}}')), /unsafe key/);
+    assert.throws(() => mergePatch({ players: {} }, JSON.parse('{"players": {"__proto__": {"polluted": 1}}}')), /unsafe key/);
+    assert.strictEqual({}.polluted, undefined);
+    const st = { players: { a: { hp: 1 } } };
+    applyPatch(st, { 'players/a/hp': 2 });
+    mergePatch(st, { players: { b: { hp: 3 } } });
+    assert.deepStrictEqual(st, { players: { a: { hp: 2 }, b: { hp: 3 } } });
+});
+
 test('compact snapshot of a deployed leader', () => {
     const s = game()[4];
     s.players.u1.leaders[0] = { ...s.players.u1.leaders[0], zone: 'groundArena', type: 'leaderUnit', power: 6, hp: 7, damage: 0, exhausted: true };
