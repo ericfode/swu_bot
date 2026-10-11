@@ -5,12 +5,14 @@ const assert = require('node:assert');
 const { canonical, view, fitLogistic, SITUATIONS } = require('../../meta/analyze');
 const { grade } = require('../../meta/grade');
 
-test('canonical merges random seeds and marks fixed heuristic profiles', () => {
+test('canonical merges random seeds and moves pre-fix heuristic games to legacy', () => {
     assert.strictEqual(canonical('random-b', {}), 'random');
-    assert.strictEqual(canonical('legacy', { fixedEra: true }), 'heuristic');
-    assert.strictEqual(canonical('tempo', { fixedEra: true }), 'tempo+fix');
-    assert.strictEqual(canonical('tempo', { fixedEra: false }), 'tempo');
-    assert.strictEqual(canonical('rush', { fixedEra: true }), 'rush');
+    assert.strictEqual(canonical('legacy', { fixedEra: true }), 'legacy');
+    assert.strictEqual(canonical('heuristic', { fixedEra: true }), 'heuristic');
+    assert.strictEqual(canonical('tempo', { fixedEra: true }), 'tempo');
+    assert.strictEqual(canonical('heuristic', { fixedEra: false }), 'legacy');
+    assert.strictEqual(canonical('tempo', { fixedEra: false }), 'legacy-tempo');
+    assert.strictEqual(canonical('rush', { fixedEra: false }), 'rush');
 });
 
 test('view reads a snapshot from one player', () => {

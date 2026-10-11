@@ -24,7 +24,15 @@ variables, so call `AtlasKit.injectCss()` once (or `injectCss({ base: false })` 
 
 Exports: `SPOTS` (list) and `SPOT` (by id: `say`, `focus`, `board` = the final state, `rule`, `short`, `label`, `group`),
 `GROUPS`/`GROUP`, `drawBoard(id, k, { mini, glow })`, `miniBoard(id, cls)`, `spotSvg`, `animate`, `STYLES`, `TRAITS`,
-`FAMILIES`/`FAMLABEL`/`famKey`, `TERMS`, `MIN_GAMES` (8), `THIN` (5), `EDGE_STEPS`, `edgeColor`, `pp`, `css`, `injectCss`.
+`FAMILIES`/`FAMLABEL`/`famKey`, `TERMS`, `MIN_GAMES` (8), `THIN` (5), `EDGE_STEPS`, `edgeColor`, `pp`, `css`, `injectCss`,
+`STYLE_KEY` (style one-liners). Spot rules run too: `view(state, pid)` reads a replay snapshot from one side, `SPOT[id].test(view)`
+says if the spot holds, `spotsAt(state, pid)` lists the spots that hold. Ranking: `mappedOf(meta)` (bots with 8+ games and 5+
+replays), `rankIn(bots, spotId)`, `standouts(bots)` (the Atlas's one-line summary).
+
+Family colours match the console: Search blue, Rules (heuristic) orange, Learned purple, LLM teal, Random grey.
+
+Heuristic bots: games from before the heuristic fix (PR #10, 2026-10-11 11:37 UTC) are named `legacy` and
+`legacy-<profile>` (e.g. `legacy-tempo`); plain `heuristic`, `aggro`, `tempo`, `control` mean the fixed code.
 
 ## The words
 

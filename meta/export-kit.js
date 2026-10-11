@@ -84,4 +84,4 @@ $('terms').innerHTML = Object.entries(K.TERMS).map(([k, v]) => '<dt>' + k + '</d
 K.animate($('g'), { onSpot: (s) => { $('gt').textContent = s.label; $('gs').textContent = s.say; $('gr').textContent = 'counts when, at the start of a round: ' + s.short; } });
 </script></body></html>
 `);
-console.log(`kit: ${out} (${K.SPOTS.length} spots x 4 SVGs, atlas-kit.js, kit.json, demo.html, README.md)`);
+console.log(`kit: ${out} (${K.SPOTS.length} spots x 4 SVGs, atlas-kit.js, kit.json, kit.css, demo.html, README.md)`);
