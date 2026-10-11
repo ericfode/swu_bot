@@ -7,8 +7,8 @@
  * table is its only card knowledge. Only facts are extracted here (stats, keywords, aspects, and a few effect tags
  * found by regular expressions in the card text); every decision is made in Bend.
  *
- *   node bot/bend/tools/gen-cards.js [cardDir] [out]
- *   defaults: forceteki/test/json/Card  bot/bend/cards.tsv
+ *   node bot/bend/tools/gen-cards.js [cardDir] [out] [textOut]
+ *   defaults: forceteki/test/json/Card  bot/bend/cards.tsv  bot/bend/cards-text.tsv
  *
  * Columns (all numbers except code):
  *   code kind cost power hp arena vig cmd agg cun her vil kw raid restore upPower upHp unique fx fxN
@@ -17,6 +17,8 @@
  * vig..vil: how many of each aspect icon the card has
  * kw: keyword bits (KW below); raid/restore: their amounts from the text
  * fx: effect tag bits (FX below); fxN: the largest "deal N damage" amount in the text
+ *
+ * cards-text.tsv has `code internalName title text` per line (display prompts name cards by internal name only), folded to ASCII on one line, for the TypeSafe questions the bot asks.
  */
 const fs = require('fs');
 const path = require('path');
@@ -24,6 +26,12 @@ const path = require('path');
 const root = path.join(__dirname, '..', '..', '..');
 const cardDir = process.argv[2] ?? path.join(root, 'forceteki', 'test', 'json', 'Card');
 const out = process.argv[3] ?? path.join(__dirname, '..', 'cards.tsv');
+const textOut = process.argv[4] ?? path.join(__dirname, '..', 'cards-text.tsv');
+
+// one ASCII line: accents dropped, curly quotes straightened, tabs and newlines turned into separators
+const ascii = (s) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/\u2026/g, '...').replace(/\t/g, ' ')
+    .replace(/\s*\n\s*/g, ' / ').replace(/[^\x20-\x7e]/g, '');
 
 const KW = ['sentinel', 'raid', 'overwhelm', 'ambush', 'restore', 'saboteur', 'hidden', 'shielded', 'grit', 'piloting',
     'smuggle', 'bounty', 'plot', 'support', 'coordinate', 'exploit', 'fortify'];
@@ -79,6 +87,7 @@ const amount = (text, word) => {
 };
 
 const rows = new Map();
+const texts = new Map();
 for (const file of fs.readdirSync(cardDir).filter((f) => f.endsWith('.json')).sort()) {
     const c = JSON.parse(fs.readFileSync(path.join(cardDir, file), 'utf8'));
     const text = [c.text, c.deployBox, c.epicAction].filter(Boolean).join('\n');
@@ -111,10 +120,15 @@ for (const file of fs.readdirSync(cardDir).filter((f) => f.endsWith('.json')).so
         const code = `${sc.set}_${String(sc.number).padStart(3, '0')}`;
         if (!rows.has(code)) {
             rows.set(code, row);
+            const title = ascii(c.subtitle ? `${c.title}, ${c.subtitle}` : c.title);
+            const parts = [c.text, c.deployBox && `Deployed: ${c.deployBox}`, c.epicAction].filter(Boolean).map(ascii);
+            texts.set(code, `${c.internalName ?? ''}\t${title}\t${parts.join(' / ')}`);
         }
     }
 }
 
 const lines = [...rows.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([code, r]) => [code, ...r].join('\t'));
 fs.writeFileSync(out, lines.join('\n') + '\n');
+const textLines = [...texts.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([code, t]) => `${code}\t${t}`);
+fs.writeFileSync(textOut, textLines.join('\n') + '\n');
 console.error(`wrote ${lines.length} cards to ${path.relative(process.cwd(), out)}`);
