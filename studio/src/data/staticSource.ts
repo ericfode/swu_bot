@@ -19,7 +19,17 @@ function get(rel: string): Promise<string | null> {
     }
     let p = fetched.get(rel);
     if (!p) {
-        p = fetch(`data/${rel}`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+        // a missing file (404) stays missing; a network error or server error is tried again next time
+        const url = `data/${rel.split('/').map(encodeURIComponent).join('/')}`;
+        p = fetch(url).then((r) => {
+            if (!r.ok && r.status >= 500) {
+                fetched.delete(rel);
+            }
+            return r.ok ? r.text() : null;
+        }).catch(() => {
+            fetched.delete(rel);
+            return null;
+        });
         fetched.set(rel, p);
     }
     return p;

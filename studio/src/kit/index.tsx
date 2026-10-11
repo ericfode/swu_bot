@@ -19,7 +19,7 @@ import { createSettingsStore, releaseSettingsStore, setEverywhere, SettingsProvi
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
 import { cardTextBySet, loadCardText, type CardText, type CardTextFile } from '../lib/cardText';
 import { parseGame } from '../data/source';
-import type { EvalFile } from '../data/evals';
+import type { EvalFile, EvalPoint } from '../data/evals';
 import { estimateLens, lensAt, lensByIndex, OMNI_WEIGHTS, type LensFile, type LensStep, type LensView } from '../data/lens';
 import type { Game, Seat, Snapshot } from '../data/types';
 
@@ -313,12 +313,13 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
  * Every decision of a game grouped into actions. Pass the game's evals file (dashboard/evals) and lens file (swu-lens/1)
  * when there are any: swings then come from the evaluations, or from the omni bot's exact board score.
  */
-function classify(game: Game, evals?: EvalFile | null, lens?: LensFile | null): Action[] {
-    return classifyGame(game, evalsByIndex(game, evals), lensByIndex(game, lens));
+/** Takes the evals and lens files; Maps by step index (what earlier kit builds took) still work. */
+function classify(game: Game, evals?: EvalFile | Map<number, EvalPoint> | null, lens?: LensFile | Map<number, LensStep> | null): Action[] {
+    return classifyGame(game, evals instanceof Map ? evals : evalsByIndex(game, evals), lens instanceof Map ? lens : lensByIndex(game, lens));
 }
 
 /** The k most game-changing actions, using the evaluations' swing when given, else the omni board score's (exact with a lens file). */
-export function pivotal(game: Game, evals?: EvalFile | null, k = 8, lens?: LensFile | null): Action[] {
+export function pivotal(game: Game, evals?: EvalFile | Map<number, EvalPoint> | null, k = 8, lens?: LensFile | Map<number, LensStep> | null): Action[] {
     return pivotalActions(classify(game, evals, lens), k);
 }
 
