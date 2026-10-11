@@ -37,7 +37,8 @@ function isTest(id, testShare = 0.2) {
 
 /**
  * Positions from one or more dataset dirs, each tagged with its source name (the dir's basename).
- * Returns [{ source, id, n, round, toAct, winner, state, decks, test }] for decided games only.
+ * Returns [{ source, id, n, round, toAct, winner, state, hidden, decks, test }] for decided games only. `hidden` lists
+ * seats whose hand the recording never saw (imported one-seat games); they are not valid judges.
  */
 function loadPositions(dirs, { testShare = 0.2 } = {}) {
     const out = [];
@@ -48,7 +49,7 @@ function loadPositions(dirs, { testShare = 0.2 } = {}) {
             if (p.outcome !== 'won' || (p.winner !== 'p1' && p.winner !== 'p2')) {
                 continue;
             }
-            out.push({ source, id: p.id, n: p.n, round: p.round, toAct: p.toAct, winner: p.winner, state: p.state, decks: decks.get(p.id) ?? null, test: isTest(p.id, testShare) });
+            out.push({ source, id: p.id, n: p.n, round: p.round, toAct: p.toAct, winner: p.winner, state: p.state, hidden: p.hidden ?? [], decks: decks.get(p.id) ?? null, test: isTest(p.id, testShare) });
         }
     }
     return out;
