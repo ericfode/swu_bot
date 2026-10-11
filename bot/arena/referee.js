@@ -10,7 +10,7 @@
  * pair, every seed from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live).
  * Round seeds and keys are secret until the ladder starts: they come from a 32-byte secret outside the arena folder
  * (roundSeed, roundKey; the key deals every game, rng.js).
- * Every bot plays under the same rules (ladder.js --cap-ms roster.thinkCapMs, --hang-ms 30 s more): a bot that thinks
+ * Every bot plays under the same rules (ladder.js --cap-ms roster.thinkCapMs, --hang-ms 30 s past the 2x wall cap): a bot that thinks
  * more than the cap in a game, throws, answers wrong, hangs or fails to load loses it (the game is an ERROR with `by`
  * = its seat; cappedScore). Ratings are Bradley-Terry with the baselines' mean pinned to 1500, per round and
  * over all rounds (so versions compare across rounds). Writes, all in ARENA_HOME:
@@ -355,7 +355,8 @@ function releaseLock() {
 async function runRound(round, bots, { games = Number(arg('games', 4)), seed, key, t = null } = {}) {
     const dir = path.join(RESULTS, `arena-r${round}`);
     const cap = Number(roster.thinkCapMs);
-    const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(cap + 30000)] : [];
+    // the watchdog waits 30 s past the wall cap (guard.js: 2 x cap), so a call the guard allows is never taken for a hang
+    const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(2 * cap + 30000)] : [];
     const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed), '--key', key,
         '--id', `arena-r${round}`, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, '--record', '--resume'];
     takeLock(dir);

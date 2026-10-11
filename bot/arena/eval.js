@@ -55,9 +55,9 @@ async function runEval({ me, opps, seeds = 3, first = 20001, workers = 1, recDir
     }
     const t0 = Date.now();
     const rows = [];
-    // same rules as a rated round (referee.js): the cap, and the watchdog 30 s past it
+    // same rules as a rated round (referee.js): the cap, and the watchdog 30 s past the 2x wall cap
     await runJobs(jobs, {
-        workers, capMs, hangMs: Number.isFinite(capMs) ? capMs + 30000 : 600000,
+        workers, capMs, hangMs: Number.isFinite(capMs) ? 2 * capMs + 30000 : 600000,
         onResult: ({ job, result: r }) => {
             const mySeat = `p${job.seat}`;
             const t = r.timing?.[mySeat] ?? { n: 0, ms: 0 };

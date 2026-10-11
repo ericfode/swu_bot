@@ -91,7 +91,9 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
   `args = ["/path/to/swu_bot/bot/arena/mcp.js", "--remote", "http://host:7070"]`
 - A client without the engine submits code as files (`submit {bot: {kind: 'js', files: {...}}}`), or a bot program
   (`{kind: 'stdio', cmd, args}`, spec/protocol.md; v1 programs still play), and tests it with `eval` (the referee
-  plays queued evals). A bot program is started for each game and closed after it.
+  plays queued evals). A bot program is started for each game and closed after it. An eval of the live bot plays the
+  folder as it is when the referee runs it, so keep the folder unchanged until `eval_result` says done, or pass
+  `version` to test a submitted (frozen) copy.
   A stdio version freezes the folder too: `cmd` is a file in it (`./my-bot`) or a program on PATH (`python3`), and it
   runs in the submitted folder, so later edits never change a submitted version.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` required for changes; `ARENA_ADMIN_TOKEN` is needed to
