@@ -50,7 +50,10 @@ node bot/karabast/fidelity.js --games 20                                        
 - A bot that fails (error, bad answer, no answer before the prompt timer) gets a random legal action played for it and
   is restarted. After 2 failures in a game the seat concedes, so a human is never left waiting on a dead bot's clock.
 - The server ignores an answer it cannot take (a third card in "select 2"). After 1 s with no change the seat asks the
-  bot again without that action.
+  bot again without that action. Each ignored answer is an error in the server's log, so after 4 in a row at one
+  decision (a game the server can no longer move) the seat concedes.
+- Two players with the same name break a game: the engine finds a player's opponent by name
+  (`Game.getOtherPlayer`), and the first frame fails to serialize. Give each local bot run its own `--username`.
 
 ## What a bot sees (`fidelity.js`)
 

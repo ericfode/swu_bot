@@ -283,6 +283,21 @@ test('a bad split is a bot failure, and the seat concedes at maxFailures', async
     assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
 });
 
+test('a seat concedes when the server keeps ignoring its answers at one decision', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0 }), over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client, { retryMs: 50, maxIgnored: 3 });
+    const done = seat.play();
+    // the server never moves on from this frame, as when it can no longer serialize the game
+    sock.emit('gamestate', frame({ promptUuid: 'P1', menuTitle: 'Choose an action', buttons: ['Pass', 'Claim'].map((t) => ({ text: t, arg: t, uuid: 'P1', command: 'menuButton' })) }));
+    const timer = setTimeout(() => seat.done('none', 'the seat did not concede'), 5000);
+    const r = await done;
+    clearTimeout(timer);
+    assert.strictEqual(r.result, 'loss');
+    assert.strictEqual(r.stats.rejected, 3);
+    assert.match(r.reason, /ignored 3 answers/);
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
+});
+
 test('a reservation holds places until it is used or released', () => {
     const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
     const a = new PeopleLedger(file, 3);

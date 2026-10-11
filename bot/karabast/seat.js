@@ -15,7 +15,9 @@
  *   random legal action is played for it. At `maxFailures` failures in one game the seat concedes instead of letting
  *   the clock run out on the other player.
  * - The server ignores an answer it cannot take (no new decision follows). After `retryMs` the seat asks the bot
- *   again without that action; when every action was tried, it plays a random one.
+ *   again without that action; when every action was tried, it plays a random one. Each ignored answer is an error in
+ *   the server's log, so after `maxIgnored` ignored answers in a row at one decision (a game the server can no longer
+ *   move, say) the seat concedes rather than keep sending them.
  *
  * play() resolves when the game has a winner, the socket closes or the seat concedes: { result: 'win'|'loss'|'none',
  * reason, stats }.
@@ -51,13 +53,14 @@ class KarabastSeat {
     /**
      * sock: a connected KarabastSocket in the lobby; me: this seat's user id; client: a protocol client
      * ({ name, hello?, decide, over?, close? }, e.g. a StdioClient). opts: deck (our deck list, for hello), seed,
-     * decideMs (10000), allowUndos (2), retryMs (1000), maxFailures (2), chat (a line to send once, or null), log.
+     * decideMs (10000), allowUndos (2), retryMs (1000), maxFailures (2), maxIgnored (4), chat (a line to send once, or
+     * null), log.
      */
     constructor(sock, me, client, opts = {}) {
         this.sock = sock;
         this.me = me;
         this.client = client;
-        this.opts = { decideMs: 10000, allowUndos: 2, retryMs: 1000, maxFailures: 2, chat: null, log: () => undefined, seed: 1, ...opts };
+        this.opts = { decideMs: 10000, allowUndos: 2, retryMs: 1000, maxFailures: 2, maxIgnored: 4, chat: null, log: () => undefined, seed: 1, ...opts };
         this.rng = seededRng(`karabast-seat-${this.opts.seed}`);
         this.obs = new Observer(me);
         this.latest = null;
@@ -67,6 +70,7 @@ class KarabastSeat {
         this.busy = false;
         this.sent = null; // { key, action, at } of the last answer, until the decision changes
         this.tried = new Map(); // decision key -> Set of action keys the server ignored
+        this.ignored = null; // { key, n }: answers ignored in a row at decision `key`
         this.seq = 0;
         this.stats = { decisions: 0, botMs: [], rejected: 0, failures: [], fallbacks: 0, undoAllowed: 0, undoDenied: 0, payRecovery: [], waitMs: [], conceded: false };
     }
@@ -128,6 +132,9 @@ class KarabastSeat {
             return; // checkIgnored decides when the server ignored it
         }
         this.sent = null;
+        if (this.ignored && this.ignored.key !== key) {
+            this.ignored = null; // the game moved on
+        }
         this.busy = true;
         const seen = Date.now();
         this.answer(gs, key)
@@ -151,8 +158,19 @@ class KarabastSeat {
             return;
         }
         this.stats.rejected++;
+        this.ignored = this.ignored?.key === s.key ? { key: s.key, n: this.ignored.n + 1 } : { key: s.key, n: 1 };
         const p = this.latest.players[this.me].promptState ?? {};
         this.opts.log(`server ignored ${s.action.kind} ${short(s.action.label)}${s.action.card ? ` in ${s.action.card.zone}` : ''} at "${p.menuTitle ?? p.promptTitle ?? ''}"`);
+        if (this.ignored.n >= this.opts.maxIgnored) {
+            this.stats.conceded = true;
+            try {
+                this.send('concede');
+            } catch {
+                // the socket is gone: nothing more to send
+            }
+            this.done('loss', `conceded after the server ignored ${this.ignored.n} answers in a row`);
+            return;
+        }
         if (!this.tried.has(s.key)) {
             this.tried.set(s.key, new Set());
         }
