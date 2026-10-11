@@ -170,7 +170,7 @@
     vsOwn: 'The same, measured against the bot\'s own level. A bot\'s best and worst spot use this, so a strong bot still has a weak spot.',
     best: 'The bot with the highest edge in a spot, among bots with 8+ games there.',
     rating: 'Overall strength from every finished game (Bradley-Terry, 1500 = average). Counts all games; a spot counts only games that reach it.',
-    clock: '⏱ = games lost by a late or broken reply (a timeout, or a protocol error by that bot). Each one counts as a loss.',
+    clock: '⏱ = games lost by timing out or a broken reply (a timeout, or a protocol error by that bot). Each one counts as a loss.',
     thin: 'Hollow dot or hatched cell = fewer than 5 games in that spot: treat it as a hint.',
     style: 'How a bot plays, from its own moves: base damage, units removed and where its attacks go (see STYLES).',
     star: '★ = the best bot in that spot.',
@@ -267,17 +267,29 @@
    * rankIn(bots, spot) orders them in one spot (MIN_GAMES+ games there); its first is the spot's ★ best.
    */
   const mappedOf = (meta) => meta.bots.filter((b) => b.games >= MIN_GAMES && b.replayGames >= 5).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-  const rankIn = (bots, sid) => bots.filter((b) => b.situations[sid] && b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
-  /** The labelled extremes the Atlas shows first: most base-focused, removes the most units, lost games on the clock. */
+  const rankIn = (bots, sid) => bots.filter((b) => b.situations && b.situations[sid] && b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
+  /**
+   * The labelled extremes the Atlas shows first: top rating next to the bot best in the most spots (they often differ),
+   * most base-focused, removes the most units, lost games on the clock.
+   */
   function standouts(bots) {
-    const styled = bots.filter((b) => b.style && b.style.kills != null);
     const out = [];
+    const bot = bots.filter((b) => b.family !== 'human' && b.rating != null);
+    if (bot.length) {
+      const top = bot.reduce((a, b) => (b.rating > a.rating ? b : a));
+      out.push({ kind: 'top', text: 'top rating (all games)', bot: top.id, value: String(top.rating) });
+      const wins = {};
+      for (const s of SPOTS) { const r = rankIn(bot, s.id)[0]; if (r) wins[r.id] = (wins[r.id] || 0) + 1; }
+      const [most, n] = Object.entries(wins).sort((a, b) => b[1] - a[1])[0] || [];
+      if (most) out.push({ kind: 'spots', text: 'best in the most spots', bot: most, value: `${n} of ${SPOTS.length}` });
+    }
+    const styled = bots.filter((b) => b.style && b.style.kills != null);
     if (!styled.length) return out;
     const maxBy = (k) => styled.reduce((a, b) => (b.style[k] > a.style[k] ? b : a), styled[0]);
     const racer = maxBy('baseShare'), killer = maxBy('kills'), clock = bots.filter((b) => b.forfeits).sort((a, b) => b.forfeits - a.forfeits);
     out.push({ kind: 'racer', text: 'most base-focused', bot: racer.id, value: `${Math.round(racer.style.baseShare * 100)}% of attacks at the base` });
     out.push({ kind: 'killer', text: 'removes the most units', bot: killer.id, value: `${killer.style.kills.toFixed(2)} a round` });
-    if (clock.length) out.push({ kind: 'clock', text: 'lost games by a late or broken reply', bots: clock.map((b) => [b.id, b.forfeits]) });
+    if (clock.length) out.push({ kind: 'clock', text: 'lost games by timing out or a broken reply', bots: clock.map((b) => [b.id, b.forfeits]) });
     return out;
   }
 
