@@ -4,18 +4,23 @@
  * Knowledge dial: a position's score as a distribution, at several levels of knowledge about hidden cards.
  *
  * At a checkpoint (an action window of the side to move, "me") the game is snapshotted. For each knowledge level we
- * sample N hidden worlds that fit what that level knows, play each one out to the end with fixed policy bots, and
- * record the result. The spread of results at a level is "what the score can be, given this much knowledge".
+ * sample worlds that fit what that level knows, play each one out to the end with fixed policy bots, and record the
+ * result. The spread of results at a level is "what the outcome can be, given this much knowledge, for these players".
  *
- *   L0 all-seeing   nothing resampled, real engine RNG: one world, the real future (for these policies)
- *   L1 fresh luck   every card and deck order known; future shuffles and random picks resampled (engine RNG reseeded)
+ *   L0 all-seeing   nothing resampled, real engine RNG: one world, the real future (exact for deterministic bots)
+ *   L1 engine luck  engine RNG reseeded (mid-game shuffles and random picks). In practice equal to L0: after setup the
+ *                   engine RNG is almost never used, and draw luck lives in deck order (L2). Run with a small --l1n.
  *   L2 both hands   both hands known; both deck orders shuffled
- *   L3 my view      my hand known; opponent's hand redealt from (their hand + their deck); both decks shuffled
- *   L4 public       both hands redealt from (hand + deck); both decks shuffled
+ *   L3 my view      my hand known; opponent's hand redealt uniformly from (their hand + their deck); decks shuffled
+ *   L4 public       both hands redealt uniformly; decks shuffled
  *
- * Face-down resources are never resampled (their identity rarely matters; Smuggle is the exception).
- * The averages are consistent across levels by construction (each level averages over the level above), so the
- * gap between two levels is the value of the knowledge one has and the other lacks, for these policies.
+ * Approximations (see /mnt/project-files/research/optimal-play/README.md):
+ *   - the L3/L4 redeal is a uniform prior over hands, not the posterior given what the opponent has done (real hands
+ *     are filtered by the policy: cheaper, castable), and it knows the opponent's remaining decklist;
+ *   - face-down resources, cards revealed by search or hand-peek effects, and known deck-bottom cards are not tracked.
+ * The playout bots act only on their own cards and public state, so there is no strategy fusion here. The level means
+ * are the expected outcome of these bots under each sampler. A gap between levels says how much the outcome depends
+ * on that hidden information (predictive value), not what knowing it is worth to a player who could act on it.
  *
  *   node bot/info/dial.js <seed> [--bots rush,rush] [--n 48] [--at 0.25,0.5,0.75,0.9] [--out file.json]
  */
@@ -28,11 +33,12 @@ const { makeBot } = require('../players');
 const LEVELS = ['L0', 'L1', 'L2', 'L3', 'L4'];
 
 function parseArgs(argv) {
-    const o = { seed: Number(argv[0] ?? 1), bots: ['rush', 'rush'], n: 48, at: [0.25, 0.5, 0.75, 0.9], out: null, maxSteps: 4000 };
+    const o = { seed: Number(argv[0] ?? 1), bots: ['rush', 'rush'], n: 48, l1n: 8, at: [0.25, 0.5, 0.75, 0.9], out: null, maxSteps: 4000 };
     for (let i = 1; i < argv.length; i++) {
         const k = argv[i], v = argv[i + 1];
         if (k === '--bots') { o.bots = v.split(','); i++; }
         else if (k === '--n') { o.n = Number(v); i++; }
+        else if (k === '--l1n') { o.l1n = Number(v); i++; }
         else if (k === '--at') { o.at = v.split(',').map(Number); i++; }
         else if (k === '--out') { o.out = v; i++; }
     }
@@ -100,11 +106,15 @@ function resample(eg, me, level, rng) {
         shuffleDeck(P(opp), rng);
     }
     eg.game.setRandomSeed(`dial-${Math.floor(rng() * 1e9)}`);
+    // the action window's offer list was built from the old hand when the snapshot was restored: rebuild it
+    eg.game.resolveGameState();
+    eg.game.continue();
 }
 
 /** Play from the current state to the end. Returns {winner: 'me'|'opp'|'draw'|null, margin, rounds}. */
 function playout(eg, me, botNames, rng, maxSteps) {
     const bots = botNames.map((b) => makeBot(b));
+    const opp = eg.ids.find((id) => id !== me);
     let n = 0;
     while (!eg.over && n < maxSteps) {
         if (!step(eg, bots, rng)) {
@@ -112,17 +122,31 @@ function playout(eg, me, botNames, rng, maxSteps) {
         }
         n++;
     }
-    const opp = eg.ids.find((id) => id !== me);
     let winner = null;
     if (eg.over) {
         const w = eg.winners;
         winner = w.length !== 1 ? 'draw' : (w[0] === eg.names[eg.ids.indexOf(me)] ? 'me' : 'opp');
+        if (hpLeft(eg, me) === 0 && hpLeft(eg, opp) === 0) {
+            winner = 'draw';
+        }
     }
     return { winner, margin: hpLeft(eg, me) - hpLeft(eg, opp), rounds: eg.round, steps: n };
 }
 
 async function main() {
     const o = parseArgs(process.argv.slice(2));
+    try {
+        await run(o);
+    } catch (e) {
+        const msg = String((e && e.message) || e).split('\n')[0].slice(0, 300);
+        console.error(`seed ${o.seed} FAILED: ${msg}`);
+        if (o.out) {
+            fs.writeFileSync(o.out, JSON.stringify({ seed: o.seed, error: msg, checkpoints: [] }));
+        }
+    }
+}
+
+async function run(o) {
     const env = new Env();
     env.index();
 
@@ -176,7 +200,7 @@ async function main() {
             const t0 = Date.now();
             for (const L of LEVELS) {
                 const res = [];
-                const reps = L === 'L0' ? 1 : o.n;
+                const reps = L === 'L0' ? 1 : L === 'L1' ? o.l1n : o.n;
                 for (let i = 0; i < reps; i++) {
                     g.eg.restore(me, mark);
                     const r = seededRng(`dial-${o.seed}-${steps}-${L}-${i}`);
@@ -194,9 +218,10 @@ async function main() {
             out.checkpoints.push(cp);
             const summ = LEVELS.map((L) => {
                 const ok = cp.levels[L].filter((x) => x.winner === 'me' || x.winner === 'opp');
-                return `${L} ${ok.length ? (ok.filter((x) => x.winner === 'me').length / ok.length).toFixed(2) : '-'}`;
+                const bad = cp.levels[L].length - ok.length;
+                return `${L} ${ok.length ? (ok.filter((x) => x.winner === 'me').length / ok.length).toFixed(2) : '-'}${bad ? ` (${bad} err/draw)` : ''}`;
             }).join(' | ');
-            console.error(`seed ${o.seed} step ${steps} r${cp.round} ${meName}: ${summ}  (${cp.ms} ms, real ${cp.meWonReal ? 'win' : 'loss'})`);
+            console.error(`seed ${o.seed} step ${steps} r${cp.round} ${meName}: ${summ}  (${cp.ms} ms, real ${cp.meWonReal == null ? 'n/a' : cp.meWonReal ? 'win' : 'loss'})`);
         }
         if (!step(g.eg, bots, g.rng)) {
             break;
