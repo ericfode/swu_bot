@@ -116,6 +116,27 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(moves[0][1], "wall")
         self.assertEqual(moves[1][1], planner.BASE)
 
+    def test_saboteur_defeats_shields_before_damage(self):
+        me = side("p1", ground=[unit("a1", 4, 6)], mine=True)
+        opp = side("p2", ground=[unit("e1", 2, 3, u=[{"id": "s1", "n": "Shield", "s": None, "t": 1}])])
+        b = Board(msg(WINDOW, me, opp, []), DB)
+        a = b.units["a1"]
+        a.saboteur = True
+        _, d, _ = planner.strike(a, b.units["e1"])
+        self.assertEqual((d.shields, d.remaining), (0, -1))
+
+    def test_restore_heals_once_per_damage(self):
+        me = side("p1", base_d=2, ground=[unit("a1", 1, 9), unit("a2", 1, 9)], mine=True)
+        b = Board(msg(WINDOW, me, side("p2"), []), DB)
+        for u in b.me.units:
+            u.restore = 2
+        w = b.weights()
+        sim = planner.Sim({u.id: u for u in b.me.units}, {}, frozenset(["a1", "a2"]), 30, 2)
+        s1, d1 = planner.apply(sim, "a1", planner.BASE, b.unit_value, w)
+        s2, d2 = planner.apply(s1, "a2", planner.BASE, b.unit_value, w)
+        self.assertEqual(s2.my_base_dmg, 0)
+        self.assertLess(d2, d1)
+
     def test_lethal(self):
         me = side("p1", ground=[unit("a1", 4, 6), unit("a2", 4, 5)], mine=True)
         opp = side("p2", base_d=23, ground=[unit("e1", 6, 6)])
@@ -196,6 +217,16 @@ class PolicyTest(unittest.TestCase):
         second, _ = self.pick(m)
         self.assertEqual(first["label"], "wampa")
         self.assertNotEqual(second["label"], "wampa")
+
+    def test_display_pick_count_resets_for_a_new_occurrence(self):
+        prompt = {"type": "displayCards", "signature": "displayCards|-", "title": "Select up to 1 card", "promptTitle": "Scout",
+                  "selectCardMode": None, "selected": [], "actionWindow": False}
+        acts = [button("Done"), {"kind": "displayCard", "label": "wampa", "cardUuid": "d1"}]
+        me, opp = side("p1", mine=True), side("p2")
+        first, _ = self.pick(msg(prompt, me, opp, [dict(a) for a in acts]))
+        self.pick(msg(WINDOW, me, opp, [button("Pass")], rnd=4))
+        again, _ = self.pick(msg(prompt, me, opp, [dict(a) for a in acts], rnd=5))
+        self.assertEqual((first["kind"], again["kind"]), ("displayCard", "displayCard"))
 
     def test_damage_split_kills_then_goes_face(self):
         me = side("p1", mine=True)

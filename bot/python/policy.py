@@ -97,6 +97,8 @@ class Policy:
     def rank(self, msg, b, p, acts):
         ptype = p.get("type")
         title = (p.get("title") or "").lower()
+        if not any(a["kind"] == "displayCard" for a in acts):
+            self.display_picks.clear()  # the next display prompt is a new occurrence: count picks from 0
         if p.get("actionWindow"):
             return self.action_window(b, acts)
         if ptype == "initiative" or "initiative player" in (p.get("promptTitle") or "").lower():

@@ -43,6 +43,8 @@ def strike(attacker, defender):
     dealt = max(a.attack_power, 0)
     back = max(d.power, 0)
     excess = 0
+    if a.saboteur:
+        d.shields = 0  # Saboteur defeats the defender's shields before damage
     if d.shields and dealt > 0:
         d.shields -= 1
     else:
@@ -63,8 +65,9 @@ def apply(sim, aid, tgt, value, w):
     my = dict(sim.my)
     opp = sim.opp
     delta = 0.0
-    if a.restore and sim.my_base_dmg:
-        delta += min(a.restore, sim.my_base_dmg) * w_me * 0.8
+    healed = min(a.restore, sim.my_base_dmg)
+    if healed > 0:
+        delta += healed * w_me * 0.8
     if tgt == BASE:
         dealt = max(a.attack_power, 0)
         base = sim.opp_base - dealt
@@ -91,7 +94,7 @@ def apply(sim, aid, tgt, value, w):
         delta += dealt * w_opp
         if base <= 0 < sim.opp_base:
             delta += LETHAL
-    return Sim(my, opp, sim.ready - {aid}, base, sim.my_base_dmg), delta
+    return Sim(my, opp, sim.ready - {aid}, base, sim.my_base_dmg - max(healed, 0)), delta
 
 
 def plan(board, ready_ids, w=None, width=16):
