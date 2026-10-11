@@ -164,10 +164,15 @@ async function main() {
     const log = (line) => console.error(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
     const bot = arg('bot', 'c-clock');
     const gapS = Number(arg('gap', 60));
+    const waitMinutes = Number(arg('wait-minutes', 10));
     const maxErrors = Number(arg('max-errors', 3));
-    // NaN would pass every comparison below and loop without a stop
-    if (!(gapS >= MIN_GAP_S)) {
-        throw new Error(`--gap must be at least ${MIN_GAP_S} seconds: a finished lobby keeps its users ~20 s`);
+    // NaN would pass every comparison below and loop without a stop; a delay past setTimeout's limit (~24.8 days)
+    // fires after 1 ms, which would queue again at once (gap) or give up at once and spend a place (wait)
+    if (!(gapS >= MIN_GAP_S && gapS <= 3600)) {
+        throw new Error(`--gap must be ${MIN_GAP_S} to 3600 seconds: a finished lobby keeps its users ~20 s`);
+    }
+    if (!(waitMinutes > 0 && waitMinutes <= 60)) {
+        throw new Error('--wait-minutes must be above 0 and at most 60');
     }
     if (!Number.isInteger(games) || games < 1 || !Number.isInteger(maxErrors) || maxErrors < 1) {
         throw new Error('--games and --max-errors must be whole numbers of 1 or more');
@@ -176,7 +181,7 @@ async function main() {
         games, gapS, maxErrors, stopFile, ledger, out, bot, deck: name, log,
         play: (g, hooks) => queueOnce({
             server, user, deck, bot, format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
-            waitMs: Number(arg('wait-minutes', 10)) * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
+            waitMs: waitMinutes * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
             seed: `${seed}-${g}`, out, log, ...hooks
         })
     });
