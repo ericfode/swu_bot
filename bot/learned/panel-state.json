@@ -1,0 +1,92 @@
+{
+ "status": "running",
+ "now": "Training v2 on 861 teacher/DAgger games; new DAgger games with feature version 2 are generating.",
+ "plan": [
+  {
+   "text": "Features from the stdio/replay observation (no hidden info)",
+   "state": "done"
+  },
+  {
+   "text": "Teacher-labelled games: heuristic search labels at a third of action windows",
+   "state": "done"
+  },
+  {
+   "text": "Train encoder + value + policy + dynamics heads in tinygrad",
+   "state": "done"
+  },
+  {
+   "text": "Beat random with the pure policy (learned-pi)",
+   "state": "done"
+  },
+  {
+   "text": "DAgger round: v0 plays, teacher labels its positions; retrain",
+   "state": "done"
+  },
+  {
+   "text": "Retrain on DAgger data (v2) and rerun the ladder with more games",
+   "state": "doing"
+  },
+  {
+   "text": "Use the dynamics head for lookahead without the engine",
+   "state": "todo"
+  }
+ ],
+ "thoughts": [
+  {
+   "t": "2026-10-11T07:20:00Z",
+   "text": "The heuristic teacher costs 1-3 s per searched decision, so only a third of action windows get a search label; other prompts use its cheap rule-based choice."
+  },
+  {
+   "t": "2026-10-11T07:25:00Z",
+   "text": "Switched training from JAX to tinygrad. The JS forward pass matches tinygrad to 1e-5 on held-out decisions."
+  },
+  {
+   "t": "2026-10-11T07:58:00Z",
+   "text": "v0 (141 training games): copies the teacher on 50% of held-out action windows (chance 18%) and 78% of other prompts (chance 28%). Value head overfits: held-out MSE 1.33 vs 1.0 for always guessing 0."
+  },
+  {
+   "t": "2026-10-11T08:05:00Z",
+   "text": "learned-pi v0 beats random 29-11 (73%, 95% CI 59-86%) with no search, ~1 ms a decision."
+  },
+  {
+   "t": "2026-10-11T08:10:00Z",
+   "text": "Fixes: 3x more teacher games, random games for the value head, stronger weight decay, and DAgger data so the policy learns from its own mistakes."
+  },
+  {
+   "t": "2026-10-11T08:26:00Z",
+   "text": "v1 (411 teacher games + 197 random games for value): copies the teacher on 60% of held-out action windows and 82% of other prompts. Still 29-10 vs random: better copying did not add wins, so the gap to the teacher is in target choice, not in when to pass."
+  },
+  {
+   "t": "2026-10-11T08:27:00Z",
+   "text": "The value head still overfits after ~1000 steps (held-out MSE 0.82 at best). Value data is a few hundred games, and positions inside one game are near copies: it needs many more games, not more steps."
+  },
+  {
+   "t": "2026-10-11T09:40:00Z",
+   "text": "Ladder learned-v1 (4 games per pair): learned-v 11-1, heuristic 8-4, learned-pi 4-8, random 1-11. The value head plus one-ply engine search beat the hand-written evaluation 3-1 head to head, and took 30-90 s a game vs 100-270 s for the heuristic. Small sample: the 95% interval is wide."
+  }
+ ],
+ "history": [
+  {
+   "name": "learned-pi vs random",
+   "points": [
+    [
+     0,
+     0.725
+    ],
+    [
+     1,
+     0.744
+    ]
+   ]
+  },
+  {
+   "name": "learned-v, all games",
+   "points": [
+    [
+     1,
+     0.917
+    ]
+   ]
+  }
+ ]
+}

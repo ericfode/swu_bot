@@ -11,6 +11,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 - `forceteki/` — **git submodule** of `SWU-Karabast/forceteki`, pinned to upstream `2be4fcd`. It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
 - `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.
 
 **Do not modify anything inside `forceteki/` without asking the user first.** Bug workarounds belong in `bot/`. Upgrading the engine means moving the submodule pin and committing it in this repo.
@@ -32,7 +33,7 @@ node bot/random-run.js [games] [startSeed] [maxSteps]   # e.g. node bot/random-r
 node bot/debug-seed.js <seed>                           # replay one seed, dump last actions + prompt state on error
 ```
 
-There is no test suite or linter for `bot/` of its own; the sanity check is the random-run command above (seeds 1-3 give 594/342/486 steps, p2/p2/p2 winners — runs are deterministic).
+`npm test` covers the pure parts (ratings, report, bot choices on mock boards); the end-to-end sanity check is the random-run command above (seeds 1-3 give 594/342/486 steps, p2/p2/p2 winners — runs are deterministic).
 
 ## Recording and viewing
 
@@ -41,12 +42,39 @@ npm run demo                 # 3 random bots, 4 games per pairing -> replays/dem
 npm run viewer               # build viewer/, serve on http://localhost:5180 (PORT, REPLAYS_DIR to override)
 npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
+npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
+npm test                     # unit tests (ratings, ladder report, bot logic on mock boards, importer); no card data needed
+node importer/import.js <capture>... --out replays/human   # import human Karabast games
+npm run lint                 # Perch semantic lint with Jev (see "Linting" below)
 ```
 
-- Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format and snapshot fields: `bot/recorder.js`, types in `viewer/src/core/types.ts`.
+- Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format: `spec/replay-format.md`; snapshot fields: `bot/view.js`, types in `viewer/src/core/types.ts`.
 - `viewer/src/core/` (Board, CardView, Replay, api, stats) is shared by the tournament page and the single-game page; both embed the same `<Replay game={...} />`.
 - Card art comes from `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png` (`-b` suffix = deployed leader side). Tokens and unreleased sets (e.g. TS26) have no art and fall back to stat tiles automatically; Card art can also be toggled off.
 - Deep link to a step: `#/t/<tournament>/g/<game>?step=300`.
+
+## Linting (Perch + Jev)
+
+[Perch](https://github.com/lakeday-org/perch) (`@lakeday/perch`, a root devDependency) is a semantic linter: it asks TypeSafe's Jev model about each method and reports likely defects with a confidence.
+
+```bash
+npm install                  # once, at the repo root (or the cloud setup script installs perch globally)
+npm run lint                 # core code changed since origin/main (committed only); exit 3 = findings
+npm run lint:full            # all core code; only when there is a reason
+npm run lint:shared          # code in the shared project folder: dashboard, viewer kit, research, env scripts
+npm run perch -- issues      # any perch command: issues, check <file::method>, close <id> --reason ...
+npm run perch -- usage 7     # Jev requests per day, from the shared ledger
+```
+
+Usage rule for every thread. Perch (semantic lint with Jev) is advisory, never a gate, and reads only the project's shared core, never bot code (`tools/perch/scope.js`, Eric's call). Run `npm run lint` once per PR, after committing and before you open the PR or mark it ready; it reads only committed core code changed since origin/main and says so when a change touches only bots. If you changed code in the shared project folder (dashboard, viewer kit, research or env scripts), run `npm run lint:shared` once. Run either again only after substantial new code, never to get different answers. Do not run `npm run lint:full`, a raw `perch scan`, or `--force`, and do not raise the `PERCH_*` limits or widen the scope, unless Eric or the task asks. If `npm run perch -- usage` says "unknown command", your branch predates these limits: merge origin/main first. Findings are leads, not facts: read the code, fix real ones in the same PR when they are small and in scope, close false positives with `npm run perch -- close <id> --reason "..."` (add `shared` before `close` for shared-folder code), and list real ones you leave in the PR description. If perch hits its budget, is turned off, or fails, carry on without it and say so in one line.
+
+- `tools/bin/perch` sets `PERCH_BASE_URL` to TypeSafe System One (model `jev-latest`) and turns on `NODE_USE_ENV_PROXY` when `HTTPS_PROXY` is set. Locally, export `PERCH_API_KEY` or `TYPESAFE_API_KEY`. In Claude Code cloud sessions the egress proxy injects the Jev key, so no key is needed.
+- Scope (`tools/perch/scope.js`, an allow-list): Perch reads the shared core, meaning the runners, recorder, ratings, bot protocol and registry, the arena, the evaluation study, the knowledge dial, viewers, analysis, meta, importers and tools. It never reads the code of specific bots (`bot/players/*` except the registry and stdio adapter, `bot/<language>/`, `bot/examples/`, arena starters, checks and panels for one bot) or tests: Eric's call, 2026-10-11. A new folder of core code must be added to `include`. Named paths outside the scope are refused, and built bundles (over 256 KB or minified) are skipped. Every perch command that reads code or findings (scan, check, issues, close, reopen, doctor) runs in a git snapshot that holds only the in-scope files at HEAD (`.perch/core`), so Jev never sees bot or test code, not even as a caller or callee. `check` also sees uncommitted in-scope changes. Closed issues are added back to `.perch/closed.jsonl`; `rules` and `setup` run in the repo itself. `perch shared <command>` does the same for the code in `/mnt/project-files` (`.perch/shared`); its closed issues live in the shared folder.
+- Limits in the wrapper (`tools/perch/policy.js`): `scan` needs a scope (a path, `--since` or `--paths`); all core code needs `--full`. `coverage` is refused, since it measures tests and tests are out of scope. `--parallel` defaults to 8, one perch command at a time per checkout, and a 15 minute timeout (`PERCH_TIMEOUT_MIN`).
+- `tools/perch/jev-cache.mjs` caches Jev answers by request content, so unchanged code is free and gets the same verdict every run (fresh answers vary by up to ±0.06). `--force` asks again; use it after Jev changes model, since requests name `jev-latest` and entries live 30 days (`PERCH_CACHE_DAYS`). It also enforces budgets: `PERCH_RUN_REQUESTS` (default 250) per run and `PERCH_DAILY_REQUESTS` (default 1000) per UTC day for the whole project. Over budget, methods without a cached answer fail (HTTP 409) and the run exits 1; perch itself stops after 16 such failures in a row. A limit of 0 means cached answers only.
+- The cache, the usage ledger and the off switch live in `/mnt/project-files/perch/` when that folder exists (shared by all threads), else in `.perch/jev/` (`PERCH_JEV_DIR` overrides). `PERCH_DISABLED=1` or a `DISABLED` file there turns off every Jev command (exit 0).
+- Config is `perch.yaml` (ignores `forceteki/` and generated output; no custom rules yet). Results go to `.perch/` (gitignored, except `.perch/rules/` and `.perch/closed.jsonl`, which are committed).
+- Findings are probabilities, not facts. Read the code before changing it, and `perch close <id> --reason "..."` false positives. `perch ci`, `perch cloud` and `perch login` need Perch Cloud, which this repo does not use.
 
 ## Architecture of `bot/env.js`
 
@@ -71,5 +99,10 @@ Engine input is always followed by `game.continue()`. Prompt-handling rules alre
 
 1. `TakeCover.ts`: `.card` read from an undefined heal event throws, even during playability checks. Repro: `node bot/debug-seed.js 8`.
 2. Maul, Master of the Shadow Collective: choosing "Choose nothing" threw `Expected exactly one target for delayed effect but found 0`. Not reproducible by seed yet.
+3. `TriggerWindowBase.js:141`: a null contract failure on "Resolve all" when both players have triggers and an Advantage token was defeated (seen in a simulation: Han Solo, It'll Work attacks Mandalorian Scout, then Opponent, then Resolve all).
+4. Sundari Palace: its "resource up to 1 card from your hand" prompt also offers the opponent's hand cards. The referee sends those to bots as hidden cards (`bot/view.js` `hiddenFrom`). Repro: `playGame` seed 22, key `6f7edba65b86e374e9df5b8ba5ca3719eb57dc9d1fb10f09301d213e5e8dce6c`, bots `heuristic` vs `py-clock`, p2's decision 59.
+5. Mystic Monastery: its action stays legal while the player already has the Force; used then, it changes nothing and does not count toward its 3 uses. When the opponent is out for the phase, the player gets the same action window again, so a bot that prefers the action over passing loops until the step cap (found by `bot/examples/search-bot.js` before its loop guard).
+6. Rollback (`UndoMode.Full`) does not restore everything: the order of simultaneous triggers, token ids made in one step, and whether an action ability "will have no effect" can come out differently after a rollback than in a game never rolled back. So the referee never rolls back the real game: every lookahead runs on a copy (`Shadow` in `bot/protocol.js`) that is rebuilt when it drifts. Seen in an ISMCTS game (seed 3005, rust-search vs ismcts-vlinear-deck).
+7. `ItBindsAllThings.ts`: its `then` reads `thenContext.events[0].totalDistributed`, which throws `Cannot read properties of undefined (reading 'totalDistributed')` when the heal made no event, also during playability checks (`hasAnyLegalEffects`). Same shape as #1. Seen once: seed 1, key `e1540cffc63f5e63cc6cd8dad8a8f96a77f8ee3dd05da42d6c5c45747e82afc7`, a Jev look test bot vs `node-search`, step 22.
 
 Treat engine errors during random play as findings to report, not something to patch in `forceteki/`.

@@ -1,5 +1,8 @@
 import type { IndexGame } from './types';
 
+/** A game with a result: won, or an ERROR a bot caused (`by`), which that bot loses. */
+const decided = (g: IndexGame) => !!g.winner && (g.outcome === 'won' || (g.outcome === 'ERROR' && !!g.by));
+
 export interface BotRow { bot: string; games: number; wins: number; losses: number; draws: number; errors: number; elo: number }
 
 /** Win/loss table plus a simple sequential Elo (K=24) in play order. */
@@ -14,9 +17,15 @@ export function standings(bots: string[], games: IndexGame[]): BotRow[] {
         if (g.outcome === 'running') {
             continue;
         }
-        if (g.outcome !== 'won' || !g.winner) {
-            a.errors++;
-            b.errors++;
+        if (g.outcome === 'ERROR') {
+            // charged to the bot that caused it, or to both when the engine did
+            for (const [seat, row] of [['p1', a], ['p2', b]] as const) {
+                if (!g.by || g.by === seat) {
+                    row.errors++;
+                }
+            }
+        }
+        if (!decided(g)) {
             continue;
         }
         a.games++;
@@ -45,7 +54,7 @@ export function headToHead(games: IndexGame[], row: string, col: string): { wins
     let n = 0;
     for (const g of games) {
         const pair = (g.p1 === row && g.p2 === col) || (g.p1 === col && g.p2 === row);
-        if (!pair || g.outcome !== 'won' || !g.winner) {
+        if (!pair || !decided(g)) {
             continue;
         }
         n++;
