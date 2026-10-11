@@ -194,6 +194,9 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
 .hum-row th, .hum-row td { border-bottom: 2px solid var(--line-2); }
 .runner.hum { color: var(--ink); font-weight: 600; }
 .runner.hum .dot { margin-right: 4px; }
+.standouts { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 13.5px; color: var(--ink-2); }
+.standouts > span { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+.standouts b { color: var(--ink); }
 .verdict { margin: 12px 0 0; font-size: 15px; max-width: 80ch; }
 .fo-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
 .fo-key i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid; vertical-align: -2px; margin-right: 5px; box-sizing: border-box; }
@@ -234,6 +237,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
     <div class="eyebrow">SWU bot research · meta-analyzer</div>
     <h1>Strategy Atlas</h1>
     <p class="lede" id="lede"></p>
+    <p class="standouts" id="standouts"></p>
     <div class="meta-line"><span id="stamp"></span><span class="live" id="live"><i></i><span>snapshot</span></span></div>
   </header>
 
@@ -491,7 +495,20 @@ function renderHeader(M) {
   $('stamp').textContent = `updated ${new Date(M.generatedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${M.sources.length} runs · ${t.replays} replays · ${t.snapshots.toLocaleString()} round starts`;
 }
 
+// Standouts: the labelled extremes a reader asks for first, on the first screen.
+function renderStandouts() {
+  const styled = mapped.filter((b) => b.style.kills != null);
+  const maxBy = (k) => styled.reduce((a, b) => (b.style[k] > a.style[k] ? b : a), styled[0]);
+  const racer = maxBy('baseShare'), killer = maxBy('kills'), clock = mapped.filter((b) => b.forfeits).sort((a, b) => b.forfeits - a.forfeits);
+  const out = [];
+  if (racer) out.push(`<span>most base-focused: <b>${esc(racer.id)}</b> ${Math.round(racer.style.baseShare * 100)}% of attacks at the base</span>`);
+  if (killer) out.push(`<span>removes the most units: <b>${esc(killer.id)}</b> ${killer.style.kills.toFixed(2)} a round</span>`);
+  if (clock.length) out.push(`<span><span class="clock">⏱</span> lost games by a late or broken reply: ${clock.map((b) => `<b>${esc(b.id)}</b> ${b.forfeits}`).join(', ')}</span>`);
+  $('standouts').innerHTML = out.join('');
+}
+
 function renderSpots(M) {
+  renderStandouts();
   const won = {};
   for (const s of M.situations) { const b = rankIn(s.id)[0]; if (b) won[b.id] = (won[b.id] || 0) + 1; }
   const most = Object.entries(won).sort((a, b) => b[1] - a[1])[0], top = mapped[0];
