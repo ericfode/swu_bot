@@ -61,7 +61,9 @@ def main():
     if b:
         g, pr = b["groups"], b["paired"]
         order = sorted(g.items(), key=lambda kv: -kv[1]["score"])
-        lin = pr.get("built-linear-minus-real")
+        loops = sorted(k for k in g if k.startswith("loop") and k.endswith("-linear"))
+        best = loops[-1] if loops else "built-linear"
+        lin = pr.get(f"{best}-minus-real")
         write(a.dash, {
             "schema": 1, "id": "deckbuild-builder", "title": "Deck model builder vs real decks", "owner": OWNER,
             "hypothesis": "A deck model trained on bot games builds decks that score as well as real tournament lists against the field.",
@@ -69,7 +71,7 @@ def main():
             "progress": {"done": sum(v["games"] for v in g.values()), "total": sum(v["games"] for v in g.values()), "unit": "games"},
             "metrics": [{"label": f"{k} vs the field", "value": v["score"], "format": "pct"} for k, v in order],
             "conclusion": None if not lin else
-            f"Yes for the bot pilot. Decks built with the linear card-value model score {g['built-linear']['score']:.0%} against "
+            f"Yes for the bot pilot. Decks built with the linear card-value model ({best}) score {g[best]['score']:.0%} against "
             f"{g['real']['score']:.0%} for real lists on the same seeds (gap {lin['mean'] * 100:+.1f} points). Deep and JEPA models "
             f"build weaker decks because the builder finds decks they overrate.",
         })
@@ -89,8 +91,9 @@ def main():
             "status": "done" if "model" in scores else "running", "startedAt": "2026-10-11T18:10:00Z", "updatedAt": now(),
             "metrics": metrics,
             "conclusion": None if "model" not in scores else
-            f"Not yet. Picking by printed stats beats random and rarity-first picks; the JEPA drafter ties the stat drafter "
-            f"({scores['model'][-1]:.0%} vs {scores['stat'][-1]:.0%} in shared pods).",
+            ("Yes, after training on its own pods. " if scores["model"][-1] > 0.53 else "Not yet. ")
+            + f"Picking by printed stats beats random and rarity-first picks; the JEPA drafter scores {scores['model'][-1]:.0%} "
+            f"against the stat drafter's {scores['stat'][-1]:.0%} in shared pods (latest run).",
         })
 
 
