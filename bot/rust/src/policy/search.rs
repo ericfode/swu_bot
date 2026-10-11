@@ -8,22 +8,36 @@ use std::time::{Duration, Instant};
 ///
 /// At each decision with simulations it takes greedy2's best few actions, and for each one: starts a simulation (hidden
 /// cards dealt again at random, the same deals for every candidate), plays the action, then lets greedy2 play both seats
-/// until the round's action phase ends or a step cap, and scores the board from its own seat. It plays the action with
+/// until the round's action phase ends (or `rounds` more rounds) or a step cap, and scores the board from its own seat. It plays the action with
 /// the best average score; greedy2's own order breaks near-ties. Without simulations (a v1 referee, or any error) it is
 /// greedy2.
 pub struct Search {
     g: Greedy2,
     seed: u64,
     me: String,
-    /// Candidates per window, deals per candidate, simulated steps per playout.
+    /// Candidates per decision, deals per candidate, simulated steps per playout, extra rounds per playout.
     pub width: usize,
     pub deals: usize,
     pub max_steps: usize,
+    pub rounds: u32,
+}
+
+/// `$name` as a number, or `default` (for experiments: `env` in `bot/external-bots.json`).
+fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
+    std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
 }
 
 impl Search {
     pub fn new(db: &'static CardDb) -> Self {
-        Search { g: Greedy2::new(db), seed: 0, me: String::new(), width: 6, deals: 1, max_steps: 60 }
+        Search {
+            g: Greedy2::new(db),
+            seed: 0,
+            me: String::new(),
+            width: env_or("SWU_SEARCH_WIDTH", 6),
+            deals: env_or("SWU_SEARCH_DEALS", 1),
+            max_steps: env_or("SWU_SEARCH_STEPS", 60),
+            rounds: env_or("SWU_SEARCH_ROUNDS", 0),
+        }
     }
 }
 
@@ -67,7 +81,8 @@ impl Search {
                 return Some(self.outcome(over));
             }
             let state = pos.state.take()?;
-            if state.round != round || state.phase.as_deref().is_some_and(|ph| ph != "action") {
+            let last = round + self.rounds;
+            if state.round > last || (state.round == last && state.phase.as_deref().is_some_and(|ph| ph != "action")) {
                 return Some(evaluate(&state, &self.me));
             }
             let actor = pos.actor.take()?;
