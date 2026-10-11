@@ -154,6 +154,7 @@ function main() {
     const seen = new Set();
     const gameKeys = new Set();
     let games = 0,
+        unreadable = 0,
         dupes = 0,
         n = 0,
         withDecks = 0;
@@ -174,7 +175,9 @@ function main() {
             try {
                 r = replayPositions(path.join(g, f), id, every);
             } catch {
-                // a replay still being written ends in a partial line; it has no result yet anyway
+                // a replay still being written ends in a partial line; it has no result yet anyway (counted, so a
+                // corrupt file does not vanish silently)
+                unreadable++;
             }
             if (!r || !r.positions.length) {
                 continue;
@@ -197,7 +200,7 @@ function main() {
     }
     pos.end();
     dk.end();
-    console.log(`${n} positions from ${games} games (${withDecks} with decklists; ${dupes} duplicate games skipped) -> ${out}`);
+    console.log(`${n} positions from ${games} games (${withDecks} with decklists; ${dupes} duplicate games skipped${unreadable ? `; ${unreadable} unreadable files skipped` : ''}) -> ${out}`);
 }
 
 if (require.main === module) {
