@@ -53,13 +53,13 @@ function snapshotEvaluate(ev) {
 }
 
 /** `h@linear`, `h2@race`, ... -> a HeuristicBot that scores positions with that evaluator. */
-function makeEvalBot(name) {
+function makeEvalBot(name, displayName = name) {
     const m = /^h(\d)?@(.+)$/.exec(name);
     if (!m) {
         return null;
     }
     const ev = loadEvaluator(m[2]);
-    const bot = new HeuristicBot(name, { depth: m[1] ? Number(m[1]) : 1, evaluate: snapshotEvaluate(ev) });
+    const bot = new HeuristicBot(displayName, { depth: m[1] ? Number(m[1]) : 1, evaluate: snapshotEvaluate(ev) });
     bot.evaluator = ev.name;
     return bot;
 }

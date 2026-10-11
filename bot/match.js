@@ -17,6 +17,8 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
     const eg = env.newGame({ seed, deck1, deck2, undo: bots.some((b) => b.needsUndo) });
     const res = { seed, steps: 0, outcome: '?', winner: null, round: 0, ms: 0, events: [] };
     const botFor = { p1: bots[0], p2: bots[1] };
+    // harness-measured time inside bot.choose() per decision (engine apply excluded); never touches the rng
+    const choiceMs = { p1: [], p2: [] };
     // every recorded event is also handed to onEvent as it happens, so a viewer can follow the game live
     const emit = (e) => {
         res.events.push(e);
@@ -44,7 +46,9 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
                 }
                 const prompt = eg.promptSignature(pid);
                 const title = eg.player(pid).currentPrompt().menuTitle ?? null;
+                const t = process.hrtime.bigint();
                 const action = botFor[pidName(pid)].choose({ game: eg, pid, actions, rng });
+                choiceMs[pidName(pid)].push(Number(process.hrtime.bigint() - t) / 1e6);
                 eg.apply(pid, action, rng);
                 res.steps++;
                 acted = true;
@@ -74,11 +78,24 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
         res.error = String((e && e.message) || e).split('\n')[0].slice(0, 200);
     }
     res.ms = Date.now() - t0;
+    // end bot processes whatever the outcome (stdio bots keep a child process and thread until closed)
+    for (const b of bots) {
+        b.close?.();
+    }
     res.botStats = bots.map((b) => b.stats ?? null);
+    res.timing = { p1: timingSummary(choiceMs.p1), p2: timingSummary(choiceMs.p2) };
     if (record) {
         emit({ t: 'end', winner: res.winner, round: res.round, steps: res.steps, outcome: res.outcome, error: res.error ?? null });
     }
     return res;
 }
 
-module.exports = { playGame };
+/** {n, ms (total), p50, p95, max} of per-decision milliseconds. */
+function timingSummary(xs) {
+    const s = [...xs].sort((a, b) => a - b);
+    const q = (f) => (s.length ? s[Math.min(s.length - 1, Math.floor(f * s.length))] : 0);
+    const r = (x) => Math.round(x * 1000) / 1000;
+    return { n: s.length, ms: r(s.reduce((a, b) => a + b, 0)), p50: r(q(0.5)), p95: r(q(0.95)), max: r(s.length ? s[s.length - 1] : 0) };
+}
+
+module.exports = { playGame, timingSummary };

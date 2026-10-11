@@ -47,19 +47,7 @@ function schedule(names, perPair, seed0) {
     return jobs;
 }
 
-function makeBot(name) {
-    const { createRandomBot } = require('../players/random');
-    const { HeuristicBot } = require('../players/heuristic');
-    const { makeEvalBot } = require('./bot');
-    if (/^h\d?@/.test(name)) {
-        return makeEvalBot(name);
-    }
-    if (/^heuristic/.test(name)) {
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    return createRandomBot(name);
-}
+const makeBot = (name) => require('../players').makeBot(name);
 
 async function worker(out, shard, shards, jobs, record, maxSteps, every) {
     const { Env, seededRng } = require('../env');

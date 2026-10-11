@@ -15,8 +15,10 @@ const KEYWORDS = ['sentinel', 'raid', 'overwhelm', 'saboteur', 'restore', 'grit'
 class CardDb {
     constructor(dir = process.env.SWU_CARD_JSON ?? DEFAULT_DIR) {
         this.dir = dir;
-        this.bySet = JSON.parse(fs.readFileSync(path.join(dir, '_setCodeMap.json'), 'utf8'));
-        this.idToName = new Map(JSON.parse(fs.readFileSync(path.join(dir, '_cardMap.json'), 'utf8')).map((c) => [c.id, c.internalName]));
+        // without card data every lookup returns null (stats then come from the snapshot alone)
+        const read = (f, dflt) => (fs.existsSync(path.join(dir, f)) ? JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) : dflt);
+        this.bySet = read('_setCodeMap.json', {});
+        this.idToName = new Map(read('_cardMap.json', []).map((c) => [c.id, c.internalName]));
         this.cache = new Map();
     }
 

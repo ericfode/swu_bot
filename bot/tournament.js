@@ -7,25 +7,11 @@ const { execFileSync } = require('child_process');
 const { Env } = require('./env');
 const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
-const { createRandomBot } = require('./players/random');
-const { HeuristicBot } = require('./players/heuristic');
+const { makeBot } = require('./players');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
-}
-
-// bot registry: every name resolves to a factory so heuristic/search bots can be added here later
-function makeBot(name) {
-    if (/^h\d?@/.test(name)) {
-        // lookahead bot with a swappable position evaluator, e.g. h@linear (see bot/eval/)
-        return require('./eval/bot').makeEvalBot(name);
-    }
-    if (/^heuristic/.test(name)) {
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    return createRandomBot(name);
 }
 
 function statLine(r) {
@@ -68,7 +54,7 @@ async function main() {
                 write();
                 const r = await playGame(env, { seed, bots: seats.map(makeBot), record: true, snapshot, onEvent: (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) });
                 const winnerBot = r.winner === 'p1' ? seats[0] : r.winner === 'p2' ? seats[1] : r.winner;
-                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms });
+                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing });
                 write();
                 console.log(`${id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''}${statLine(r)}`);
             }

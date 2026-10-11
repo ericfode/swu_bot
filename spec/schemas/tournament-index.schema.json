@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/tournament-index.schema.json",
+  "title": "SWU bot tournament index (replays/<id>/index.json), format v1",
+  "description": "Rewritten whole after every game starts and finishes. Unknown fields must be ignored. See spec/replay-format.md.",
+  "type": "object",
+  "required": ["id", "createdAt", "engine", "bots", "gamesPerPairing", "games"],
+  "properties": {
+    "id": { "type": "string", "description": "Tournament id = directory name." },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "engine": { "type": ["string", "null"] },
+    "bots": { "type": "array", "items": { "type": "string" } },
+    "gamesPerPairing": { "type": "integer", "minimum": 0 },
+    "games": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "seed", "p1", "p2", "winner", "winnerSeat", "rounds", "steps", "outcome", "error", "ms"],
+        "properties": {
+          "id": { "type": "string", "description": "<p1>-vs-<p2>-<seed>; the game file is games/<id>.jsonl." },
+          "seed": { "type": "number" },
+          "p1": { "type": "string", "description": "Bot name in seat p1." },
+          "p2": { "type": "string" },
+          "winner": { "type": ["string", "null"], "description": "Winning bot name, 'draw', or null." },
+          "winnerSeat": { "enum": ["p1", "p2", "draw", null] },
+          "rounds": { "type": "integer", "minimum": 0 },
+          "steps": { "type": "integer", "minimum": 0 },
+          "outcome": { "enum": ["running", "won", "STEP_CAP", "STUCK", "ERROR"] },
+          "error": { "type": ["string", "null"] },
+          "ms": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
