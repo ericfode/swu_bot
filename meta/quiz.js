@@ -38,7 +38,7 @@ if (pair) {
 // Spot guide: can a reader who never played SWU decode the little table pictures?
 qs.push(
     { id: 'icon_tower', q: 'In the small table pictures, what does the tall box at the left of each half show?', key: ['base', 'hp', 'health'], kind: 'one-of' },
-    { id: 'icon_round', q: 'In the small table pictures, what does the circle marked R4 or R8 mean?', key: ['round'], kind: 'one-of' },
+    { id: 'icon_round', q: 'In the small table pictures, what does the small tag marked R4 or R8 mean?', key: ['round'], kind: 'one-of' },
     { id: 'icon_near', q: 'One spot picture shows the bottom (your) tower almost empty and red. What does that spot mean in the game?', key: ['8 hp', '8 or less', 'near death', 'low base', 'about to lose', 'almost dead'], kind: 'one-of' },
 );
 // Face-off: the page opens on the top two bots; can the reader say which one is better in more spots?

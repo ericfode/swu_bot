@@ -3,9 +3,8 @@
 // No engine, no card data and no server needed.
 const test = require('node:test');
 const assert = require('node:assert');
-const { legalActions, gameMessage, decisionKey, makeScrubber } = require('../karabast/frame');
+const { legalActions, gameMessage, decisionKey, makeScrubber, randomSplit } = require('../karabast/frame');
 const { checkHost } = require('../karabast/socket');
-const { randomSplit } = require('../karabast/selfplay');
 const { seededRng } = require('../rng');
 
 const unit = (uuid, extra = {}) => ({ uuid, name: uuid, zone: 'groundArena', hp: 4, damage: 1, ...extra });
@@ -122,9 +121,119 @@ test('the scrub removes ids, names, user objects, spectators and chat text', () 
     assert.deepStrictEqual(Object.keys(scrub(frame({})).players), ['player1', 'player2']);
 });
 
-test('checkHost allows localhost and refuses other hosts unless named', () => {
+test('checkHost allows localhost, refuses other hosts unless named, and needs NODE_USE_ENV_PROXY behind a proxy', () => {
     assert.strictEqual(checkHost('http://127.0.0.1:9500').hostname, '127.0.0.1');
     assert.strictEqual(checkHost('http://localhost:9500').hostname, 'localhost');
     assert.throws(() => checkHost('https://karabast.net'), /refusing to connect to karabast.net/);
-    assert.strictEqual(checkHost('https://example.org', ['example.org']).hostname, 'example.org');
+    const saved = { ...process.env };
+    try {
+        delete process.env.https_proxy;
+        process.env.HTTPS_PROXY = 'http://127.0.0.1:1';
+        delete process.env.NODE_USE_ENV_PROXY;
+        assert.throws(() => checkHost('https://example.org', ['example.org']), /NODE_USE_ENV_PROXY=1/);
+        assert.strictEqual(checkHost('http://127.0.0.1:9500').hostname, '127.0.0.1');
+        process.env.NODE_USE_ENV_PROXY = '1';
+        assert.strictEqual(checkHost('https://example.org', ['example.org']).hostname, 'example.org');
+    } finally {
+        for (const k of ['HTTPS_PROXY', 'https_proxy', 'NODE_USE_ENV_PROXY']) {
+            if (k in saved) {
+                process.env[k] = saved[k];
+            } else {
+                delete process.env[k];
+            }
+        }
+    }
+});
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { EventEmitter } = require('events');
+const { Observer } = require('../karabast/observe');
+const { KarabastSeat } = require('../karabast/seat');
+const { PeopleLedger } = require('../karabast/ledger');
+
+const noCards = { internal: new Map(), title: new Map() };
+
+test('observe builds the protocol state: own hand open, the other hidden, upgrades under their unit', () => {
+    const f = frame({ promptUuid: 'P1', promptType: 'actionWindow', menuTitle: 'Choose an action', buttons: [{ text: 'Pass', arg: 'pass', uuid: 'P1', command: 'menuButton' }] }, {
+        hand: [{ uuid: 'H1', name: 'Wampa', setId: { set: 'SOR', number: 42 }, zone: 'hand', controllerId: 'user-a', selectable: true }],
+        resources: [{ uuid: 'R1', name: 'Ruin', setId: { set: 'SOR', number: 1 }, zone: 'resource', exhausted: true }]
+    });
+    f.players['user-a'].forceToken = { active: true, uuid: 'F1', selectionState: { selectable: true } };
+    f.players['user-b'].cardPiles.groundArena[0].type = 'basicUnit';
+    f.players['user-b'].cardPiles.groundArena.push({ uuid: 'UP', name: 'Shield', setId: { set: 'SOR', number: 9 }, type: 'tokenUpgrade', parentCardId: 'U9', zone: 'groundArena' });
+    const obs = new Observer('user-a', { cards: noCards });
+    const d = obs.decision(f);
+    assert.strictEqual(d.prompt.actionWindow, true);
+    assert.strictEqual(d.state.players.p1.handCount, 1);
+    assert.deepStrictEqual(d.state.players.p1.hand, [{ id: 'c1', n: 'Wampa', s: 'SOR_042' }]);
+    assert.deepStrictEqual(d.state.players.p1.resources[0].x, 1);
+    assert.strictEqual(d.state.players.p1.force, 1);
+    assert.strictEqual(d.state.players.p2.hand, undefined);
+    assert.strictEqual(d.state.players.p2.handCount, 1);
+    assert.deepStrictEqual(d.state.players.p2.ground[0].u, [{ id: obs.id('UP'), n: 'Shield', s: 'SOR_009', t: 1 }]);
+    // the Force token is clickable through its selectionState
+    assert.ok(d.actions.some((a) => a.kind === 'card' && a.cardUuid === obs.id('F1')));
+    assert.deepStrictEqual(d.actions[0], { i: 0, kind: 'button', label: 'Pass', arg: 'pass' });
+});
+
+test('observe checks a bot split against targets, caps and the amount', () => {
+    const obs = new Observer('user-a', { cards: noCards });
+    const a = { kind: 'distribute', spec: { amount: 3, maxTargets: null }, targets: ['U1', 'B1'], caps: [2, Infinity] };
+    const [u, b] = [obs.id('U1'), obs.id('B1')];
+    assert.deepStrictEqual(obs.split(a, [{ id: u, amount: 2 }, { id: b, amount: 1 }]), [{ id: 'U1', amount: 2 }, { id: 'B1', amount: 1 }]);
+    assert.strictEqual(obs.split(a, [{ id: u, amount: 3 }]), null); // over the cap
+    assert.strictEqual(obs.split(a, [{ id: b, amount: 2 }]), null); // short of the amount
+    assert.strictEqual(obs.split(a, [{ id: 'c99', amount: 3 }]), null); // not a target
+});
+
+function fakeSeat(client = { name: 'fake', decide: () => ({ t: 'act', i: 0 }) }, opts = {}) {
+    const sock = new EventEmitter();
+    sock.sent = [];
+    sock.send = (...m) => sock.sent.push(m);
+    return { sock, seat: new KarabastSeat(sock, 'user-a', client, { seed: 't', ...opts }) };
+}
+
+test('a seat never sends undo and answers undo requests itself: allow twice, then deny, never block', () => {
+    const { seat } = fakeSeat();
+    assert.throws(() => seat.send('rollbackToSnapshot', { type: 'quick' }), /refusing/);
+    assert.throws(() => seat.send('resetActionTimer'), /refusing/);
+    const ask = frame({
+        promptUuid: 'U', menuTitle: 'Your opponent would like to undo their previous action',
+        buttons: ['Allow', 'Deny', 'Deny and Block Requests'].map((t) => ({ text: t, arg: t, uuid: 'U', command: 'menuButton' }))
+    });
+    ask.players['user-a'].leaders[0].selectable = false;
+    assert.deepStrictEqual([1, 2, 3, 4].map(() => seat.rule(ask).label), ['Allow', 'Allow', 'Deny', 'Deny']);
+    const pay = frame({ promptUuid: 'Q', menuTitle: 'You can no longer pay the cost for Wampa', buttons: ['Request undo', 'Abandon'].map((t) => ({ text: t, arg: t, uuid: 'Q', command: 'menuButton' })) });
+    assert.strictEqual(seat.rule(pay).label, 'Abandon');
+});
+
+test('a seat plays the bot answer, hides undo buttons from it, and reports the result', async () => {
+    let seen = null;
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: (msg) => { seen = msg; return { t: 'act', i: msg.actions.findIndex((a) => a.label === 'Pass') }; }, over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client);
+    const done = seat.play();
+    const f = frame({ promptUuid: 'P1', menuTitle: 'Choose an action', buttons: ['Undo', 'Pass'].map((t) => ({ text: t, arg: t.toLowerCase(), uuid: 'P1', command: 'menuButton' })) });
+    sock.emit('gamestate', f);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(seen && !seen.actions.some((a) => /undo/i.test(a.label)));
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'menuButton', 'pass', 'P1']);
+    sock.emit('gamestate', { ...frame({}), winners: ['Alice'] });
+    const r = await done;
+    assert.strictEqual(r.result, 'win');
+    assert.strictEqual(r.stats.decisions, 1);
+});
+
+test('the people ledger caps distinct people and keeps no ids', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const l = new PeopleLedger(file, 3);
+    assert.strictEqual(l.add(['user-a', 'user-b'], 'watched'), 2);
+    assert.strictEqual(l.add(['user-a'], 'played'), 0);
+    assert.ok(l.room(1) && !l.room(2));
+    assert.throws(() => l.add(['user-c', 'user-d'], 'watched'), /cap/);
+    const again = new PeopleLedger(file, 3);
+    assert.strictEqual(again.count, 2);
+    assert.ok(again.has('user-b'));
+    assert.ok(!fs.readFileSync(file, 'utf8').includes('user-'));
 });
