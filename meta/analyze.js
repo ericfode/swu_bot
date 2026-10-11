@@ -24,6 +24,7 @@ const RESULTS = args.results || '/mnt/project-files/results';
 const OUT = args.out || 'meta.json';
 const PANELS = args.panels || '/mnt/project-files/dashboard/panels';
 const BOTS_META = args.bots || '/mnt/project-files/dashboard/league/bots.json';
+const CARDS = args.cards || '/mnt/project-files/dashboard/bots'; // dashboard bot cards: their `family` wins, so both pages agree
 const HUMAN = args.human || '/mnt/project-files/human-games'; // imported karabast.net games (importer/import.js)
 const CACHE = args.cache || null; // replay features keyed by path, size and mtime, so refreshes only read new games
 
@@ -344,6 +345,11 @@ function main() {
 
     // 6. Per-bot summaries.
     const metaBots = readJson(BOTS_META, { bots: [] }).bots;
+    const cardFamily = {};
+    for (const f of fs.existsSync(CARDS) ? fs.readdirSync(CARDS).filter((x) => x.endsWith('.json')) : []) {
+        const c = readJson(path.join(CARDS, f), null);
+        if (c && c.id && c.family) for (const name of [c.id, ...(c.aliases || [])]) cardFamily[name] = c.family;
+    }
     const panels = {};
     try {
         for (const f of fs.readdirSync(PANELS)) {
@@ -396,7 +402,7 @@ function main() {
         const situations = cellsOf(sit[id] || {});
         const m = metaBots.find((b) => b.id === id) || metaBots.find((b) => b.id === id.replace(/^legacy-/, '')) || {};
         return {
-            id, family: m.family && m.family !== 'other' ? m.family : guessFamily(id), lang: m.lang || 'js', owner: m.owner || null, notes: m.notes || null,
+            id, family: cardFamily[id] || cardFamily[id.replace(/^legacy-/, '')] || (m.family && m.family !== 'other' ? m.family : guessFamily(id)), lang: m.lang || 'js', owner: m.owner || null, notes: m.notes || null,
             panel: panels[id] || panels[id.replace(/^legacy-/, '')] || null,
             rating: Math.round(rating[id]), games: mine.length, wins, winRate: +(wins / mine.length).toFixed(3), forfeits,
             replayGames: sr.length, msP50: ms.length ? +ms[Math.floor(ms.length / 2)].toFixed(2) : null,
