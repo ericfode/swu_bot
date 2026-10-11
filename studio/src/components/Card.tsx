@@ -1,5 +1,6 @@
-import { useState, type CSSProperties, type FocusEvent, type MouseEvent } from 'react';
+import { useState, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from 'react';
 import { cardImageUrl, tileLook } from '../lib/cards';
+import { isToken } from '../lib/cardText';
 import { useSettings } from '../lib/settings';
 import type { CardRef, Seat, UnitRef, UpgradeRef } from '../data/types';
 import { TERM_COLOR, type TermKey } from '../data/lens';
@@ -50,6 +51,8 @@ interface Props {
     value?: CardValue | null;
     /** a deployed leader on the board: gets a LEADER badge */
     leader?: boolean;
+    /** drawn instead of the generated tile when there is no image (the inspector's text face) */
+    face?: ReactNode;
     onFocus?: (f: Focus | null) => void;
     onLeave?: () => void;
 }
@@ -103,7 +106,7 @@ function upgradeTags(ups: UpgradeRef[]) {
  * Board-size cards stack their facts from the bottom up so nothing covers anything: name bar, then power/HP, then the
  * lens chip; marks (LEADER, Sentinel) sit top left and upgrades top right.
  */
-export function Card({ card, size = 'md', shape = 'tall', back = false, unit, exhausted = false, note, kind = 'unit', hpLeft, width, value, leader = false, onFocus, onLeave }: Props) {
+export function Card({ card, size = 'md', shape = 'tall', back = false, unit, exhausted = false, note, kind = 'unit', hpLeft, width, value, leader = false, face, onFocus, onLeave }: Props) {
     const art = useSettings((s) => s.art);
     useSettings((s) => s.artVersion);
     const [failed, setFailed] = useState<string | null>(null);
@@ -111,7 +114,7 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     const [mismatch, setMismatch] = useState<string | null>(null);
     const url = art ? cardImageUrl(card.s, back) : null;
     const showImg = url !== null && failed !== url;
-    const look = tileLook(card.n);
+    const look = tileLook(card.n, card.s);
     const hp = unit ? unit.h - unit.d : null;
     const focusOf = (el: HTMLElement): Focus => {
         const r = el.getBoundingClientRect();
@@ -132,6 +135,8 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     const named = size === 'md';
     const stats = !!unit && size !== 'sm';
     const ups = !!unit?.u?.length && size !== 'sm';
+    // tokens (Battle Droid, Shield…) have no set number; a text face that says "Token unit" makes the tag redundant
+    const token = isToken(card) && (showImg || !face);
     const cls = ['card', size !== 'md' ? size : '', shape === 'wide' ? 'wide' : '', exhausted ? 'exh' : '', lensed ? 'lensed' : '', showImg ? 'art' : '', named ? 'named' : ''].filter(Boolean).join(' ');
     const style = {
         ...(width ? { '--w': `${width}px` } : {}),
@@ -155,17 +160,18 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
                             }
                         }} />
                 </>
-            ) : (
-                <div className="tile" style={{ '--a': look.a, '--b': look.b, '--ang': `${look.angle}deg` } as CSSProperties}>
+            ) : face ?? (
+                <div className="tile" style={{ '--a': look.a, '--b': look.b, '--ang': `${look.angle}deg`, ...(look.grad ? { background: `radial-gradient(circle at 30% 20%, #ffffff22, transparent 55%), ${look.grad}` } : {}) } as CSSProperties}>
                     <span className="mono">{look.mono}</span>
                     <span className="nm">{card.n}</span>
                 </div>
             )}
-            {(leader || unit?.sn || ups) && (
+            {(leader || unit?.sn || token || ups) && (
                 <div className="top">
-                    {(leader || unit?.sn) && (
+                    {(leader || unit?.sn || token) && (
                         <span className="marks">
                             {leader && <span className="mark leader" title="This player's leader, deployed">Leader</span>}
+                            {token && <span className="mark token" title="Token: created during play, not a card from a deck">TOKEN</span>}
                             {unit?.sn ? <span className="mark sentinel" title="Sentinel">SEN</span> : null}
                         </span>
                     )}

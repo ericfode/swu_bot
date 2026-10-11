@@ -7,9 +7,12 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
+const DEFAULT_CARD_TEXT = '/mnt/project-files/viewer-kit/card-text.json';
+
 /**
  * Serves the same two routes as viewer/server.cjs (GET /api/tournaments and /replays/*), straight from a replays
- * folder, so `npm run dev` and `npm run preview` need no second server. REPLAYS_DIR overrides <repo>/replays.
+ * folder, so `npm run dev` and `npm run preview` need no second server. REPLAYS_DIR overrides <repo>/replays. Also
+ * /evals/<gameId>.json, /lens/<gameId>.json and /card-text.json (CARD_TEXT, default DEFAULT_CARD_TEXT when it exists).
  */
 function replays(): Plugin {
     const root = path.resolve(process.env.REPLAYS_DIR ?? path.join(__dirname, '..', 'replays'));
@@ -17,6 +20,9 @@ function replays(): Plugin {
     const evalsDir = path.resolve(process.env.EVALS_DIR ?? path.join(__dirname, '..', 'evals'));
     // the omni bot's card values, one <gameId>.json per game (swu-lens/1, see bot/omni/lens.js)
     const lensDir = path.resolve(process.env.LENS_DIR ?? path.join(__dirname, '..', 'lens'));
+    // printed card data (swu-card-text/1), served as /card-text.json for text faces and aspect colours on cards without
+    // art; CARD_TEXT overrides the path, CARD_TEXT= (empty) turns it off
+    const cardText = process.env.CARD_TEXT ?? DEFAULT_CARD_TEXT;
     const send = (req: IncomingMessage, res: ServerResponse, status: number, body: Buffer, type: string) => {
         const gz = /json|ndjson/.test(type) && body.length > 1024 && String(req.headers['accept-encoding'] ?? '').includes('gzip');
         res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-cache', ...(gz ? { 'Content-Encoding': 'gzip' } : {}) });
@@ -45,6 +51,9 @@ function replays(): Plugin {
         const p = new URL(req.url ?? '/', 'http://x').pathname;
         if (p === '/api/tournaments') {
             return send(req, res, 200, Buffer.from(JSON.stringify(list())), 'application/json');
+        }
+        if (p === '/card-text.json') {
+            return cardText && fs.existsSync(cardText) ? send(req, res, 200, fs.readFileSync(cardText), 'application/json') : send(req, res, 404, Buffer.from('no card text'), 'text/plain');
         }
         const ev = p.match(/^\/(evals|lens)\/([^/]+\.json)$/);
         if (ev) {

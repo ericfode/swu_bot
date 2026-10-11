@@ -17,6 +17,7 @@ import { Board } from '../components/Board';
 import { evalsByIndex } from '../data/evals';
 import { createSettingsStore, releaseSettingsStore, setEverywhere, SettingsProvider } from '../lib/settings';
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
+import { cardTextBySet, loadCardText, type CardText, type CardTextFile } from '../lib/cardText';
 import { parseGame } from '../data/source';
 import type { EvalFile } from '../data/evals';
 import { estimateLens, lensAt, lensByIndex, OMNI_WEIGHTS, type LensFile, type LensStep, type LensView } from '../data/lens';
@@ -41,6 +42,11 @@ export interface MountOptions {
     showLens?: boolean;
     /** start with card art (true, default) or generated tiles (false) */
     art?: boolean;
+    /**
+     * printed card data (swu-card-text/1, viewer-kit/card-text.json), or a URL to fetch it from: cards without an image get
+     * a readable text face in the inspector and tiles in their real aspect colours. Page-wide, like loadCardText().
+     */
+    cardText?: CardTextFile | string;
     /** save this viewer's switches (art, lens, speed, hand perspective) in localStorage under this key; default: not saved */
     persist?: string;
     /** first step to show (index into the game's steps); or stepN to give it as Step.n */
@@ -99,6 +105,9 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
     host.className = 'swuv-root';
     shadow.append(style, host);
     const root: Root = createRoot(host);
+    if (opts.cardText) {
+        loadCardText(opts.cardText).catch(() => undefined);
+    }
 
     const toText = (ls: (string | object)[]) => ls.map((l) => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n') + '\n';
     let raw: string | null = opts.jsonl ?? (opts.lines ? toText(opts.lines) : null);
@@ -261,9 +270,12 @@ export function mountActionIcon(el: HTMLElement, props: ActionIconProps) {
  * Draw one position (a recorder Snapshot, i.e. a step's `state`) as the full animated board. update() animates to the next one.
  * `lens`: true draws card values estimated from the board; a lens step (one entry of a swu-lens/1 file's steps) draws the omni bot's own.
  */
-export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep } = {}) {
+export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep; cardText?: CardTextFile | string } = {}) {
     if (opts.fonts !== false) {
         ensureFonts();
+    }
+    if (opts.cardText) {
+        loadCardText(opts.cardText).catch(() => undefined);
     }
     const shadow = el.shadowRoot ?? el.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<style>${shadowCss}</style><div class="swuv-root"></div>`;
@@ -320,7 +332,7 @@ export function setCardArt(on: boolean) {
     setEverywhere({ art: on });
 }
 
-export { setArtResolver, loadArtPack };
-export type { ArtResolver };
+export { setArtResolver, loadArtPack, loadCardText, cardTextBySet as cardText };
+export type { ArtResolver, CardText, CardTextFile };
 export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classify as classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES, estimateLens, lensAt, lensByIndex };
 export type { EvalFile, Game, Action, ActionClass, ActionIconProps, LensFile, LensStep };

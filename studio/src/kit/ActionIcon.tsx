@@ -62,9 +62,9 @@ function Face({ card, back = false, mono }: { card: CardRef; back?: boolean; mon
     if (url && failed !== url) {
         return <img src={url} alt="" draggable={false} onError={() => setFailed(url)} className="absolute inset-0 size-full object-cover object-[50%_18%]" />;
     }
-    const look = tileLook(card.n);
+    const look = tileLook(card.n, card.s);
     return (
-        <span className="absolute inset-0" style={{ background: `radial-gradient(circle at 0 0, #000a, #0000 62%), linear-gradient(${look.angle}deg, ${look.a}, ${look.b})` }}>
+        <span className="absolute inset-0" style={{ background: `radial-gradient(circle at 0 0, #000a, #0000 62%), ${look.grad ?? `linear-gradient(${look.angle}deg, ${look.a}, ${look.b})`}` }}>
             <span className="absolute font-display font-extrabold text-white leading-none tracking-tight" style={{ textShadow: '0 1px 2px #000c, 0 0 6px #0009', ...mono }}>{monogram(card.n)}</span>
         </span>
     );

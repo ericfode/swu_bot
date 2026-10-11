@@ -1,5 +1,6 @@
 import type { EvalFile } from './evals';
 import type { LensFile } from './lens';
+import type { CardTextFile } from '../lib/cardText';
 import type { End, Game, Header, Step, TournamentIndex, TournamentSummary } from './types';
 
 /** Where replays come from: the replays server (same routes as viewer/server.cjs) or fixtures baked into the build. */
@@ -13,6 +14,8 @@ export interface DataSource {
     loadEvals(tid: string, gid: string): Promise<EvalFile | null>;
     /** The omni bot's card values for a game (swu-lens/1), or null when it has none. */
     loadLens(tid: string, gid: string): Promise<LensFile | null>;
+    /** Printed card data (swu-card-text/1) for cards without art, or null when the server or preview has none. */
+    loadCardText(): Promise<CardTextFile | null>;
 }
 
 async function get(url: string): Promise<Response> {
@@ -35,6 +38,15 @@ const httpSource: DataSource = {
     loadLens: async (_tid, gid) => {
         const r = await fetch(`/lens/${encodeURIComponent(gid)}.json`);
         return r.ok ? r.json() : null;
+    },
+    loadCardText: async () => {
+        try {
+            const r = await fetch('/card-text.json');
+            return r.ok ? await r.json() : null;
+        } catch {
+            // a server without the route (viewer/server.cjs) may answer with the app's HTML
+            return null;
+        }
     }
 };
 

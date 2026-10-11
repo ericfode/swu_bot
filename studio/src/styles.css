@@ -396,6 +396,12 @@ h3 {
     background: var(--seat, var(--color-fg));
     color: #06101f;
 }
+/* a token unit (no set number), so a real card without art doesn't read as one */
+.mark.token {
+    background: #0b1220d9;
+    color: #dce6fb;
+    box-shadow: inset 0 0 0 1px #dce6fb73;
+}
 .ups {
     margin-left: auto;
     min-width: 0;

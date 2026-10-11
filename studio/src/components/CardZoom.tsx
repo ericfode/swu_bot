@@ -3,6 +3,20 @@ import { BrainCircuit } from 'lucide-react';
 import { Card, type Focus } from './Card';
 import { baseValue, TERM_COLOR, unitTerms, type LensView } from '../data/lens';
 import { TermIcon } from './TermIcon';
+import { CardTextFace } from './CardFace';
+import { cardTextOf } from '../lib/cardText';
+import { useSettings } from '../lib/settings';
+
+/** The inspected card's printed data when card data is loaded (re-read when a card-data file or art pack arrives). */
+function useFocusText(focus: Focus) {
+    useSettings((s) => s.artVersion);
+    return cardTextOf(focus.card);
+}
+
+/** The text face to draw when the inspected card has no image, or undefined (Card then draws its tile). */
+function faceOf(focus: Focus, text: ReturnType<typeof cardTextOf>) {
+    return text ? <CardTextFace text={text} back={focus.back} shape={focus.shape} /> : undefined;
+}
 
 const sg = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`;
 
@@ -66,15 +80,16 @@ function ValueBreakdown({ focus, lens }: { focus: Focus; lens: LensView }) {
 /** Name, stats, upgrades and (under the lens) the value breakdown of the inspected card. */
 export function CardFacts({ focus, lens, compact = false }: { focus: Focus; lens: LensView | null; compact?: boolean }) {
     const u = focus.unit;
+    const text = useFocusText(focus);
     return (
         <div className="min-w-0 flex flex-col gap-1">
-            <div className="font-display font-semibold leading-tight text-[15px]">{focus.card.n}</div>
+            <div className="font-display font-semibold leading-tight text-[15px]">{focus.card.n}{text?.st ? <span className="text-dim font-normal text-[13px]"> · {text.st}</span> : null}</div>
             <div className="flex flex-wrap gap-x-2 text-xs text-dim">
                 {focus.note && <span>{focus.note}</span>}
                 {u && <span className="num">{u.p} power · {u.h - u.d}/{u.h} HP{u.x ? ' · exhausted' : ''}{u.sn ? ' · Sentinel' : ''}</span>}
                 <span className="num text-faint">{focus.card.s ?? 'token'}</span>
             </div>
-            {u?.u?.length ? <div className="flex flex-wrap gap-1">{u.u.map((x, i) => <span key={i} className={`up !static${x.t ? ' token' : ''}`}>{x.n}</span>)}</div> : null}
+            {u?.u?.length ? <div className="flex flex-wrap gap-1">{u.u.map((x, i) => <span key={i} className={`up !static${x.t ? ' token' : ''}`} title={x.t ? `${x.n} (token upgrade)` : x.n}>{x.n}</span>)}</div> : null}
             {lens && !compact && <ValueBreakdown focus={focus} lens={lens} />}
             {lens && compact && focus.value?.v != null && <span className="text-xs text-dim inline-flex items-center gap-1">Omni value <TermIcon term={focus.value.term ?? 'ground'} /><b className="num" style={{ color: TERM_COLOR[focus.value.term ?? 'ground'] }}>{focus.value.v.toFixed(1)}</b></span>}
         </div>
@@ -83,11 +98,12 @@ export function CardFacts({ focus, lens, compact = false }: { focus: Focus; lens
 
 /** The inspected card as large as the side panel allows, with its facts underneath. */
 export function CardInspector({ focus, lens }: { focus: Focus; lens: LensView | null }) {
+    const text = useFocusText(focus);
     return (
         <div className="flex flex-col gap-3">
             <div className="grid place-items-center" style={{ height: 'min(350px, 44vh)' }}>
                 <motion.div key={`${focus.card.s}:${focus.back}`} initial={{ opacity: 0.3, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.18 }}>
-                    <Card card={focus.card} back={focus.back} shape={focus.shape} size="xl" kind={focus.kind} />
+                    <Card card={focus.card} back={focus.back} shape={focus.shape} size="xl" kind={focus.kind} face={faceOf(focus, text)} />
                 </motion.div>
             </div>
             <CardFacts focus={focus} lens={lens} />
@@ -100,6 +116,7 @@ export function CardInspector({ focus, lens }: { focus: Focus; lens: LensView | 
  * compact embeds, phones). Fixed to the viewport and click-through.
  */
 export function FloatingZoom({ focus, lens }: { focus: Focus; lens: LensView | null }) {
+    const text = useFocusText(focus);
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const wide = focus.shape === 'wide';
@@ -120,7 +137,7 @@ export function FloatingZoom({ focus, lens }: { focus: Focus; lens: LensView | n
     return (
         <motion.div className="panel !bg-panel fixed z-50 p-3 flex flex-col gap-2 pointer-events-none shadow-2xl" style={{ left, top, width: W }}
             initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.12 }} aria-hidden="true">
-            <Card card={focus.card} back={focus.back} shape={focus.shape} size="xl" kind={focus.kind} width={cw} />
+            <Card card={focus.card} back={focus.back} shape={focus.shape} size="xl" kind={focus.kind} width={cw} face={faceOf(focus, text)} />
             <CardFacts focus={focus} lens={lens} compact />
         </motion.div>
     );
