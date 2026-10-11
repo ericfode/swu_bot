@@ -1,4 +1,5 @@
 node_modules/
+/target/
 replays/
 replays-*.log
 viewer/dist/
@@ -12,6 +13,7 @@ analysis/node_modules/
 analysis/.cache/
 analysis/out/
 results/
+arena-home/
 data/
 __pycache__/
 .perch/*
@@ -22,3 +24,9 @@ __pycache__/
 .claude/worktrees/
 bot/c/swu-c
 bot/c/*.o
+
+# compiled bot bundles and their tools (bot/compiled)
+/build/
+
+# SWU Arena app builds (app/build.mjs)
+app/dist/

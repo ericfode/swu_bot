@@ -101,8 +101,31 @@ class Env {
     }
 
     /** Random legal-ish 50-card deck. `rng` is a function returning [0,1). */
-    randomDeck(rng, { size = 50, maxCopies = 3 } = {}) {
-        const { leaders, bases, pool } = this.index();
+    randomDeck(rng, { size = 50, maxCopies = 3, pool: subset = null } = {}) {
+        let { leaders, bases, pool } = this.index();
+        if (subset) {
+            // Resolve through the authoritative card getter: keyword-only cards may have no explicit engine class.
+            if (!Array.isArray(subset.cards)) throw new Error('Pool must have a cards array');
+            const seen = new Set();
+            const entries = subset.cards.filter((c) => !c.types.includes('token')).map((entry) => {
+                if (seen.has(entry.setCode)) throw new Error(`Duplicate pool card ${entry.setCode}`);
+                seen.add(entry.setCode);
+                const data = this.cardDataGetter.getCardSync(entry.id);
+                if (!data || !this.isImplemented(data) || setCodeToString(data.setId) !== entry.setCode) {
+                    throw new Error(`Unsupported pool card ${entry.setCode} (${entry.internalName})`);
+                }
+                return { ...data, setCode: entry.setCode };
+            });
+            leaders = entries.filter((c) => c.types.includes('leader'));
+            bases = entries.filter((c) => c.types.includes('base'));
+            pool = entries.filter((c) => c.types.some((t) => ['unit', 'event', 'upgrade'].includes(t)) && !c.types.includes('leader'));
+            if (!leaders.length || !bases.length) throw new Error('Pool must contain leaders and bases');
+            for (const l of leaders) for (const b of bases) {
+                const icons = new Set([...l.aspects, ...b.aspects]);
+                const capacity = pool.filter((c) => c.aspects.every((a) => icons.has(a))).reduce((n, c) => n + (c.unique ? 1 : maxCopies), 0);
+                if (capacity < size) throw new Error(`Pool cannot fill ${size}-card deck for ${l.setCode}/${b.setCode} (capacity ${capacity})`);
+            }
+        }
         const pick = (a) => a[Math.floor(rng() * a.length)];
         const leader = pick(leaders),
             base = pick(bases);
@@ -120,6 +143,7 @@ class Env {
             counts.set(c.setCode, n + 1);
             deck.push(c.setCode);
         }
+        if (subset && deck.length !== size) throw new Error(`Pool deal produced ${deck.length}, expected ${size} cards`);
         const tally = {};
         deck.forEach((s) => {
             tally[s] = (tally[s] ?? 0) + 1;

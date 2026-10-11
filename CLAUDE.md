@@ -11,6 +11,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 - `forceteki/` — **git submodule** of `SWU-Karabast/forceteki`, pinned to upstream `2be4fcd`. It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `app/` — the SWU Arena app (watch the arena, read the research): one HTML file built from the shared project folder by `app/build.mjs`; see `app/README.md` and `app/DESIGN.md`.
 - `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
 - `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.
 
@@ -40,12 +41,14 @@ node bot/debug-seed.js <seed>                           # replay one seed, dump 
 ```bash
 npm run demo                 # 3 random bots, 4 games per pairing -> replays/demo
 npm run viewer               # build viewer/, serve on http://localhost:5180 (PORT, REPLAYS_DIR to override)
+npm run app                  # SWU Arena app -> app/dist/app.html (--public for the friends build, --data DIR)
 npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
 npm test                     # unit tests (ratings, ladder report, bot logic on mock boards, importer); no card data needed
 node importer/import.js <capture>... --out replays/human   # import human Karabast games
 npm run lint                 # Perch semantic lint with Jev (see "Linting" below)
+python3 bot/compiled/build.py   # 9 bots as sandboxed WebAssembly bundles in build/compiled, played as <name>-wasm (bot/compiled/README.md)
 ```
 
 - Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format: `spec/replay-format.md`; snapshot fields: `bot/view.js`, types in `viewer/src/core/types.ts`.

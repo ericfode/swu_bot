@@ -1,0 +1,4470 @@
+{
+  "schema": "omni-rs-pool-v1",
+  "description": "Strict keyword-unit subset with three explicit leader implementations.",
+  "excluded": [
+    "non-keyword unit text",
+    "events",
+    "non-token upgrades",
+    "Piloting",
+    "Bounty",
+    "Smuggle",
+    "Exploit",
+    "Coordinate",
+    "random effects",
+    "shuffle effects",
+    "capture",
+    "control changes",
+    "lasting effects"
+  ],
+  "cards": [
+    {
+      "title": "Fortress of the Great Mothers",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7349221421",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "peridea"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 19
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 19
+        }
+      ],
+      "internalName": "fortress-of-the-great-mothers",
+      "setCode": "ASH_019",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Nevarro City, Restored",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3973342702",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "nevarro"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 20
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 20
+        }
+      ],
+      "internalName": "nevarro-city-restored",
+      "setCode": "ASH_020",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Emperor's Throne Room",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2012318453",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "death star"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 21
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 21
+        }
+      ],
+      "internalName": "emperors-throne-room",
+      "setCode": "ASH_021",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Kryze Castle",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9742372393",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "kalevala"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 22
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 22
+        }
+      ],
+      "internalName": "kryze-castle",
+      "setCode": "ASH_022",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Ancient Henge",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5672134899",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "seatos"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 23
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 23
+        }
+      ],
+      "internalName": "ancient-henge",
+      "setCode": "ASH_023",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Dragonsnake Bog",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9756609647",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "dagobah"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 24
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 24
+        }
+      ],
+      "internalName": "dragonsnake-bog",
+      "setCode": "ASH_024",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Emperor's Observatory",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6815244860",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "pillio"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 25
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 25
+        }
+      ],
+      "internalName": "emperors-observatory",
+      "setCode": "ASH_025",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Freetown",
+      "subtitle": "",
+      "cost": null,
+      "hp": 30,
+      "power": null,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8082875787",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "tatooine"
+      ],
+      "keywords": [],
+      "types": [
+        "base"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 26
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 26
+        }
+      ],
+      "internalName": "freetown",
+      "setCode": "ASH_026",
+      "keywordValues": {},
+      "reason": "Plain 30 HP base without abilities."
+    },
+    {
+      "title": "Sabine Wren",
+      "subtitle": "Galvanized Revolutionary",
+      "cost": 4,
+      "hp": 5,
+      "power": 2,
+      "text": "Action [exhaust]: Deal 1 damage to each base.",
+      "deployBox": "On Attack: Deal 1 damage to each enemy base.",
+      "epicAction": "Epic Action: If you control 4 or more resources, deploy this leader.",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4841169874",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "traits": [
+        "mandalorian",
+        "rebel",
+        "spectre"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "leader"
+      ],
+      "setId": {
+        "set": "SOR",
+        "number": 14
+      },
+      "setCodes": [
+        {
+          "set": "SOR",
+          "number": 14
+        }
+      ],
+      "internalName": "sabine-wren#galvanized-revolutionary",
+      "setCode": "SOR_014",
+      "keywordValues": {},
+      "reason": "Explicitly implemented leader and deployed side."
+    },
+    {
+      "title": "Darth Vader",
+      "subtitle": "Don't Fail Me Again",
+      "cost": 6,
+      "hp": 8,
+      "power": 3,
+      "text": "Action [1 resource, Exhaust]: Deal 1 damage to a base.",
+      "deployBox": "On Attack: Deal 2 damage to a base.",
+      "epicAction": "Epic Action: If you control 6 or more resources, deploy this leader. (Flip him, ready him, and move him to the ground arena.)",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9389694773",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "force",
+        "imperial",
+        "sith"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "leader"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 53
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 53
+        }
+      ],
+      "internalName": "darth-vader#dont-fail-me-again",
+      "setCode": "IBH_053",
+      "keywordValues": {},
+      "reason": "Explicitly implemented leader and deployed side."
+    },
+    {
+      "title": "Satine Kryze",
+      "subtitle": "Standing on Principles",
+      "cost": 5,
+      "hp": 8,
+      "power": 0,
+      "text": "Action [Exhaust]: Heal up to 2 damage from a unit. If you do, deal that much damage to your base.",
+      "deployBox": "Restore 4",
+      "epicAction": "Epic Action: If you control 5 or more resources, deploy this leader.",
+      "unique": true,
+      "rules": "You can use Satine's leader ability and choose to heal 0 damage from a unit, but if you do, you are not considered to have healed any damage.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2070613552",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "traits": [
+        "mandalorian",
+        "official"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "leader"
+      ],
+      "setId": {
+        "set": "SEC",
+        "number": 5
+      },
+      "setCodes": [
+        {
+          "set": "SEC",
+          "number": 5
+        }
+      ],
+      "internalName": "satine-kryze#standing-on-principles",
+      "setCode": "SEC_005",
+      "keywordValues": {},
+      "reason": "Explicitly implemented leader and deployed side."
+    },
+    {
+      "title": "Noti Mobile Pod",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 4,
+      "power": 3,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5556203656",
+      "aspects": [],
+      "traits": [
+        "vehicle",
+        "transport"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 261
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 261
+        }
+      ],
+      "internalName": "noti-mobile-pod",
+      "setCode": "ASH_261",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Offworld Jawa",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 1,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2221742966",
+      "aspects": [],
+      "traits": [
+        "jawa"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 268
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 268
+        }
+      ],
+      "internalName": "offworld-jawa",
+      "setCode": "HMW_268",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Friendly Eopie",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 0,
+      "text": "Restore 2 (When this unit attacks, heal 2 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5297853994",
+      "aspects": [],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 269
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 269
+        }
+      ],
+      "internalName": "friendly-eopie",
+      "setCode": "HMW_269",
+      "keywordValues": {
+        "restore": 2
+      },
+      "reason": "Keywords only: restore 2."
+    },
+    {
+      "title": "Corellian Freighter",
+      "subtitle": null,
+      "cost": 5,
+      "hp": 4,
+      "power": 4,
+      "text": "Sentinel (Units in this arena can't attack your non-Sentinel units or your base.)",
+      "deployBox": null,
+      "epicAction": null,
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6385228745",
+      "aspects": [],
+      "traits": [
+        "vehicle",
+        "transport"
+      ],
+      "arena": "space",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "JTL",
+        "number": 258
+      },
+      "setCodes": [
+        {
+          "set": "SOR",
+          "number": 250
+        },
+        {
+          "set": "JTL",
+          "number": 258
+        }
+      ],
+      "internalName": "corellian-freighter",
+      "setCode": "JTL_258",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Cartel Heavy Fighter",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 2,
+      "power": 3,
+      "text": "Overwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2608322291",
+      "aspects": [],
+      "traits": [
+        "underworld",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "LAW",
+        "number": 259
+      },
+      "setCodes": [
+        {
+          "set": "LAW",
+          "number": 259
+        }
+      ],
+      "internalName": "cartel-heavy-fighter",
+      "setCode": "LAW_259",
+      "keywordValues": {
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: overwhelm."
+    },
+    {
+      "title": "Kessel Hulk",
+      "subtitle": "",
+      "cost": 7,
+      "hp": 7,
+      "power": 5,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1961735633",
+      "aspects": [],
+      "traits": [
+        "underworld",
+        "vehicle",
+        "transport"
+      ],
+      "arena": "space",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "LAW",
+        "number": 263
+      },
+      "setCodes": [
+        {
+          "set": "LAW",
+          "number": 263
+        }
+      ],
+      "internalName": "kessel-hulk",
+      "setCode": "LAW_263",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Porg",
+      "subtitle": "",
+      "cost": 0,
+      "hp": 1,
+      "power": 1,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2971660620",
+      "aspects": [],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "LOF",
+        "number": 254
+      },
+      "setCodes": [
+        {
+          "set": "LOF",
+          "number": 254
+        }
+      ],
+      "internalName": "porg",
+      "setCode": "LOF_254",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Gifted Urchin",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 1,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9014610567",
+      "aspects": [],
+      "traits": [
+        "force",
+        "fringe"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "LOF",
+        "number": 256
+      },
+      "setCodes": [
+        {
+          "set": "LOF",
+          "number": 256
+        }
+      ],
+      "internalName": "gifted-urchin",
+      "setCode": "LOF_256",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Kowakian Monkey-Lizard",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 1,
+      "power": 2,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as \"When Played\" abilities. If there is no enemy unit that can be attacked, the unit does not ready.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9893266972",
+      "aspects": [],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "LOF",
+        "number": 257
+      },
+      "setCodes": [
+        {
+          "set": "LOF",
+          "number": 257
+        }
+      ],
+      "internalName": "kowakian-monkeylizard",
+      "setCode": "LOF_257",
+      "keywordValues": {
+        "ambush": 1
+      },
+      "reason": "Keywords only: ambush."
+    },
+    {
+      "title": "ASP Laborer",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 1,
+      "text": "Restore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7399279394",
+      "aspects": [],
+      "traits": [
+        "droid"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "SEC",
+        "number": 259
+      },
+      "setCodes": [
+        {
+          "set": "SEC",
+          "number": 259
+        }
+      ],
+      "internalName": "asp-laborer",
+      "setCode": "SEC_259",
+      "keywordValues": {
+        "restore": 1
+      },
+      "reason": "Keywords only: restore."
+    },
+    {
+      "title": "Ando Commission",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 3,
+      "power": 4,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2642304891",
+      "aspects": [],
+      "traits": [
+        "separatist",
+        "official"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "SEC",
+        "number": 262
+      },
+      "setCodes": [
+        {
+          "set": "SEC",
+          "number": 262
+        }
+      ],
+      "internalName": "ando-commission",
+      "setCode": "SEC_262",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Underworld Thug",
+      "subtitle": null,
+      "cost": 2,
+      "hp": 3,
+      "power": 2,
+      "text": null,
+      "deployBox": null,
+      "epicAction": null,
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1598425314",
+      "aspects": [],
+      "traits": [
+        "underworld"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "SHD",
+        "number": 257
+      },
+      "setCodes": [
+        {
+          "set": "SOR",
+          "number": 247
+        },
+        {
+          "set": "SHD",
+          "number": 257
+        }
+      ],
+      "internalName": "underworld-thug",
+      "setCode": "SHD_257",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Twin Pod Cloud Car",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 2,
+      "power": 2,
+      "text": "Restore 2 (When this unit attacks, heal 2 damage from your base.)",
+      "deployBox": null,
+      "epicAction": null,
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6870437193",
+      "aspects": [],
+      "traits": [
+        "fringe",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "SHD",
+        "number": 259
+      },
+      "setCodes": [
+        {
+          "set": "SHD",
+          "number": 259
+        }
+      ],
+      "internalName": "twin-pod-cloud-car",
+      "setCode": "SHD_259",
+      "keywordValues": {
+        "restore": 2
+      },
+      "reason": "Keywords only: restore 2."
+    },
+    {
+      "title": "Headhunter Squadron",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 1,
+      "text": "",
+      "deployBox": null,
+      "epicAction": null,
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2574847177",
+      "aspects": [],
+      "traits": [
+        "republic",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "TWI",
+        "number": 253
+      },
+      "setCodes": [
+        {
+          "set": "TWI",
+          "number": 253
+        }
+      ],
+      "internalName": "headhunter-squadron",
+      "setCode": "TWI_253",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Scorpenek Annihilator Droid",
+      "subtitle": "",
+      "cost": 6,
+      "hp": 5,
+      "power": 5,
+      "text": "Sentinel\nShielded\nOverwhelm",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8601456110",
+      "aspects": [
+        "vigilance",
+        "command"
+      ],
+      "traits": [
+        "underworld",
+        "droid"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel",
+        "shielded",
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 29
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 29
+        }
+      ],
+      "internalName": "scorpenek-annihilator-droid",
+      "setCode": "ASH_029",
+      "keywordValues": {
+        "sentinel": 1,
+        "shielded": 1,
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: sentinel, shielded, overwhelm."
+    },
+    {
+      "title": "Secessionist Convert",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 3,
+      "power": 2,
+      "text": "Raid 1 (This unit gets +1/+0 while attacking.)\nRestore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7426739034",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
+      "traits": [
+        "separatist",
+        "official"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid",
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 106
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 106
+        }
+      ],
+      "internalName": "secessionist-convert",
+      "setCode": "HMW_106",
+      "keywordValues": {
+        "raid": 1,
+        "restore": 1
+      },
+      "reason": "Keywords only: raid, restore."
+    },
+    {
+      "title": "Forest Patroller",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 4,
+      "power": 3,
+      "text": "Overwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)\nRestore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0538592539",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "overwhelm",
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 96
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 96
+        }
+      ],
+      "internalName": "forest-patroller",
+      "setCode": "ASH_096",
+      "keywordValues": {
+        "overwhelm": 1,
+        "restore": 1
+      },
+      "reason": "Keywords only: overwhelm, restore."
+    },
+    {
+      "title": "TIE Striker",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 1,
+      "power": 2,
+      "text": "Saboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9922783781",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 141
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 141
+        }
+      ],
+      "internalName": "tie-striker",
+      "setCode": "ASH_141",
+      "keywordValues": {
+        "saboteur": 1
+      },
+      "reason": "Keywords only: saboteur."
+    },
+    {
+      "title": "Remnant Official",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 3,
+      "power": 3,
+      "text": "Restore 2 (When this unit attacks, heal 2 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9848866699",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "imperial",
+        "official"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 76
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 76
+        }
+      ],
+      "internalName": "remnant-official",
+      "setCode": "ASH_076",
+      "keywordValues": {
+        "restore": 2
+      },
+      "reason": "Keywords only: restore 2."
+    },
+    {
+      "title": "Pathfinder Sergeant",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 3,
+      "power": 2,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)\nRestore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6032443673",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 106
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 106
+        }
+      ],
+      "internalName": "pathfinder-sergeant",
+      "setCode": "ASH_106",
+      "keywordValues": {
+        "ambush": 1,
+        "restore": 1
+      },
+      "reason": "Keywords only: ambush, restore."
+    },
+    {
+      "title": "Praetorian Elite",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 4,
+      "power": 5,
+      "text": "Grit (This unit gets +1/+0 for each damage on it.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4351608029",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "imperial"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "grit"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 145
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 145
+        }
+      ],
+      "internalName": "praetorian-elite",
+      "setCode": "ASH_145",
+      "keywordValues": {
+        "grit": 1
+      },
+      "reason": "Keywords only: grit."
+    },
+    {
+      "title": "Imperial Armored Commando",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 3,
+      "power": 4,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)\nShielded (When you play this unit, give a Shield token to it.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3962920521",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel",
+        "shielded"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 48
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 48
+        }
+      ],
+      "internalName": "imperial-armored-commando",
+      "setCode": "ASH_048",
+      "keywordValues": {
+        "sentinel": 1,
+        "shielded": 1
+      },
+      "reason": "Keywords only: sentinel, shielded."
+    },
+    {
+      "title": "Strike Team Vanguard",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 5,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1029172801",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 61
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 61
+        }
+      ],
+      "internalName": "strike-team-vanguard",
+      "setCode": "ASH_061",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Noti Nomad",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 2,
+      "power": 1,
+      "text": "Shielded (When you play this unit, give a Shield token to it.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3444968285",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "fringe"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "shielded"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 69
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 69
+        }
+      ],
+      "internalName": "noti-nomad",
+      "setCode": "ASH_069",
+      "keywordValues": {
+        "shielded": 1
+      },
+      "reason": "Keywords only: shielded."
+    },
+    {
+      "title": "Outland Protector",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 2,
+      "power": 1,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7969469465",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "imperial",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 117
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 117
+        }
+      ],
+      "internalName": "outland-protector",
+      "setCode": "ASH_117",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Survivors' Langskib",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 4,
+      "power": 4,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3777155291",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "mandalorian",
+        "vehicle",
+        "speeder"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 126
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 126
+        }
+      ],
+      "internalName": "survivors-langskib",
+      "setCode": "ASH_126",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Defenders of the Forest",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 3,
+      "power": 5,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)\nOverwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\nAmbush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7572957828",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "ewok"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 129
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 129
+        }
+      ],
+      "internalName": "defenders-of-the-forest",
+      "setCode": "ASH_129",
+      "keywordValues": {
+        "ambush": 1,
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: ambush, overwhelm."
+    },
+    {
+      "title": "Dinosaur Turtle",
+      "subtitle": "",
+      "cost": 6,
+      "hp": 7,
+      "power": 7,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9890561214",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 131
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 131
+        }
+      ],
+      "internalName": "dinosaur-turtle",
+      "setCode": "ASH_131",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Tempest Lieutenant",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 2,
+      "power": 3,
+      "text": "Overwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5202422065",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 143
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 143
+        }
+      ],
+      "internalName": "tempest-lieutenant",
+      "setCode": "ASH_143",
+      "keywordValues": {
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: overwhelm."
+    },
+    {
+      "title": "Alamite Hunter",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 4,
+      "power": 1,
+      "text": "Overwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6073451706",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "fringe"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 164
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 164
+        }
+      ],
+      "internalName": "alamite-hunter",
+      "setCode": "ASH_164",
+      "keywordValues": {
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: overwhelm."
+    },
+    {
+      "title": "Shydopp Pirate Skiff",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 4,
+      "text": "Saboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4513422222",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "underworld",
+        "vehicle",
+        "transport"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 173
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 173
+        }
+      ],
+      "internalName": "shydopp-pirate-skiff",
+      "setCode": "ASH_173",
+      "keywordValues": {
+        "saboteur": 1
+      },
+      "reason": "Keywords only: saboteur."
+    },
+    {
+      "title": "Wookiee Chieftain",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 6,
+      "power": 4,
+      "text": "Grit (This unit gets +1/+0 for each damage on it.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9129123892",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "wookiee"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "grit"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 175
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 175
+        }
+      ],
+      "internalName": "wookiee-chieftain",
+      "setCode": "ASH_175",
+      "keywordValues": {
+        "grit": 1
+      },
+      "reason": "Keywords only: grit."
+    },
+    {
+      "title": "Peridea Bandit",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 1,
+      "power": 4,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4344365271",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "traits": [
+        "fringe"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 190
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 190
+        }
+      ],
+      "internalName": "peridea-bandit",
+      "setCode": "ASH_190",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Fennec Shand",
+      "subtitle": "The Galaxy Is Dangerous",
+      "cost": 3,
+      "hp": 3,
+      "power": 3,
+      "text": "Ambush (When you play this unit, she may attack an enemy unit.)\nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1127236116",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "traits": [
+        "underworld",
+        "bounty hunter"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 192
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 192
+        }
+      ],
+      "internalName": "fennec-shand#the-galaxy-is-dangerous",
+      "setCode": "ASH_192",
+      "keywordValues": {
+        "ambush": 1,
+        "saboteur": 1
+      },
+      "reason": "Keywords only: ambush, saboteur."
+    },
+    {
+      "title": "Emperor's Champion",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 3,
+      "text": "Shielded (When you play this unit, give a Shield token to it.)\nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7066493287",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "traits": [
+        "imperial"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "shielded",
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 193
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 193
+        }
+      ],
+      "internalName": "emperors-champion",
+      "setCode": "ASH_193",
+      "keywordValues": {
+        "shielded": 1,
+        "saboteur": 1
+      },
+      "reason": "Keywords only: shielded, saboteur."
+    },
+    {
+      "title": "Open Circle Ace",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 2,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9620848758",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "traits": [
+        "republic",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 201
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 201
+        }
+      ],
+      "internalName": "open-circle-ace",
+      "setCode": "ASH_201",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Imperial Loyalist",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 2,
+      "power": 2,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1379910767",
+      "aspects": [
+        "villainy"
+      ],
+      "traits": [
+        "imperial"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 239
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 239
+        }
+      ],
+      "internalName": "imperial-loyalist",
+      "setCode": "ASH_239",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Death Trooper Squad",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 4,
+      "power": 5,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9011599796",
+      "aspects": [
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 242
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 242
+        }
+      ],
+      "internalName": "death-trooper-squad",
+      "setCode": "ASH_242",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "N5 Sentry Droid",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 2,
+      "power": 4,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1501081173",
+      "aspects": [
+        "heroism"
+      ],
+      "traits": [
+        "new republic",
+        "droid"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 252
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 252
+        }
+      ],
+      "internalName": "n5-sentry-droid",
+      "setCode": "ASH_252",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Rebel Infiltrators",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 6,
+      "power": 4,
+      "text": "Restore 1 (When this unit attacks, heal 1 damage from your base.)\nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0144344845",
+      "aspects": [
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "restore",
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "ASH",
+        "number": 256
+      },
+      "setCodes": [
+        {
+          "set": "ASH",
+          "number": 256
+        }
+      ],
+      "internalName": "rebel-infiltrators",
+      "setCode": "ASH_256",
+      "keywordValues": {
+        "restore": 1,
+        "saboteur": 1
+      },
+      "reason": "Keywords only: restore, saboteur."
+    },
+    {
+      "title": "Mae",
+      "subtitle": "Kill the Dream",
+      "cost": 3,
+      "hp": 4,
+      "power": 2,
+      "text": "Ambush\nShielded\nGrit",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3192928418",
+      "aspects": [
+        "cunning",
+        "vigilance",
+        "villainy"
+      ],
+      "traits": [
+        "force",
+        "sith"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "shielded",
+        "grit"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 55
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 55
+        }
+      ],
+      "internalName": "mae#kill-the-dream",
+      "setCode": "HMW_055",
+      "keywordValues": {
+        "ambush": 1,
+        "shielded": 1,
+        "grit": 1
+      },
+      "reason": "Keywords only: ambush, shielded, grit."
+    },
+    {
+      "title": "Imperial Venator",
+      "subtitle": "",
+      "cost": 7,
+      "hp": 6,
+      "power": 7,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)\nGrit (This unit gets +1/+0 for each damage on it.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5923525862",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "vehicle",
+        "capital ship"
+      ],
+      "arena": "space",
+      "keywords": [
+        "sentinel",
+        "grit"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 69
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 69
+        }
+      ],
+      "internalName": "imperial-venator",
+      "setCode": "HMW_069",
+      "keywordValues": {
+        "sentinel": 1,
+        "grit": 1
+      },
+      "reason": "Keywords only: sentinel, grit."
+    },
+    {
+      "title": "Wookiee Protector",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 4,
+      "power": 3,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7623376050",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "traits": [
+        "wookiee"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 75
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 75
+        }
+      ],
+      "internalName": "wookiee-protector",
+      "setCode": "HMW_075",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Yanna",
+      "subtitle": "Sanctuary Elder",
+      "cost": 3,
+      "hp": 4,
+      "power": 3,
+      "text": "Grit (This unit gets +1/+0 for each damage on her.)\nRestore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1137833146",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "traits": [
+        "wookiee"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "grit",
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 76
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 76
+        }
+      ],
+      "internalName": "yanna#sanctuary-elder",
+      "setCode": "HMW_076",
+      "keywordValues": {
+        "grit": 1,
+        "restore": 1
+      },
+      "reason": "Keywords only: grit, restore."
+    },
+    {
+      "title": "Nala Se",
+      "subtitle": "Silent Survivor",
+      "cost": 2,
+      "hp": 7,
+      "power": 1,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5691187672",
+      "aspects": [
+        "vigilance",
+        "vigilance"
+      ],
+      "traits": [
+        "kaminoan"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 82
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 82
+        }
+      ],
+      "internalName": "nala-se#silent-survivor",
+      "setCode": "HMW_082",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Territorial Mudhorn",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 3,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7799449944",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 89
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 89
+        }
+      ],
+      "internalName": "territorial-mudhorn",
+      "setCode": "HMW_089",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Coastal Catamarans",
+      "subtitle": "",
+      "cost": 7,
+      "hp": 8,
+      "power": 8,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1226993616",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "vehicle",
+        "transport"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 93
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 93
+        }
+      ],
+      "internalName": "coastal-catamarans",
+      "setCode": "HMW_093",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Ewok Brigade",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8382448205",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "ewok"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 116
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 116
+        }
+      ],
+      "internalName": "ewok-brigade",
+      "setCode": "HMW_116",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Auzituck Avenger",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 4,
+      "power": 4,
+      "text": "Raid 2 (This unit gets +2/+0 while attacking.)\nRestore 2 (When this unit attacks, heal 2 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9432909087",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [
+        "raid",
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 120
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 120
+        }
+      ],
+      "internalName": "auzituck-avenger",
+      "setCode": "HMW_120",
+      "keywordValues": {
+        "raid": 2,
+        "restore": 2
+      },
+      "reason": "Keywords only: raid 2, restore 2."
+    },
+    {
+      "title": "Mace Windu",
+      "subtitle": "Austere Centrist",
+      "cost": 3,
+      "hp": 5,
+      "power": 4,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0886129762",
+      "aspects": [
+        "command",
+        "command"
+      ],
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 128
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 128
+        }
+      ],
+      "internalName": "mace-windu#austere-centrist",
+      "setCode": "HMW_128",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Tibidee Mate",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 2,
+      "power": 2,
+      "text": "Restore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3701028968",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "space",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 132
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 132
+        }
+      ],
+      "internalName": "tibidee-mate",
+      "setCode": "HMW_132",
+      "keywordValues": {
+        "restore": 1
+      },
+      "reason": "Keywords only: restore."
+    },
+    {
+      "title": "Arena Reek",
+      "subtitle": "Fixture of Ceremony",
+      "cost": 3,
+      "hp": 4,
+      "power": 4,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0212754007",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 135
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 135
+        }
+      ],
+      "internalName": "arena-reek#fixture-of-ceremony",
+      "setCode": "HMW_135",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Flock of Mynocks",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 4,
+      "power": 4,
+      "text": "Overwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6110403018",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "space",
+      "keywords": [
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 139
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 139
+        }
+      ],
+      "internalName": "flock-of-mynocks",
+      "setCode": "HMW_139",
+      "keywordValues": {
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: overwhelm."
+    },
+    {
+      "title": "Assault Frigate",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 5,
+      "power": 2,
+      "text": "Raid 4 (This unit gets +4/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0864685458",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "rebel",
+        "vehicle",
+        "capital ship"
+      ],
+      "arena": "space",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 140
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 140
+        }
+      ],
+      "internalName": "assault-frigate",
+      "setCode": "HMW_140",
+      "keywordValues": {
+        "raid": 4
+      },
+      "reason": "Keywords only: raid 4."
+    },
+    {
+      "title": "Banking Clan Warship",
+      "subtitle": "",
+      "cost": 6,
+      "hp": 5,
+      "power": 6,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4373011733",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "separatist",
+        "vehicle",
+        "capital ship"
+      ],
+      "arena": "space",
+      "keywords": [
+        "ambush"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 143
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 143
+        }
+      ],
+      "internalName": "banking-clan-warship",
+      "setCode": "HMW_143",
+      "keywordValues": {
+        "ambush": 1
+      },
+      "reason": "Keywords only: ambush."
+    },
+    {
+      "title": "Outer Rim Garrison",
+      "subtitle": "",
+      "cost": 7,
+      "hp": 6,
+      "power": 6,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)\nOverwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\nShields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1931559358",
+      "aspects": [
+        "command"
+      ],
+      "traits": [
+        "republic",
+        "clone",
+        "twi'lek",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "overwhelm"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 146
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 146
+        }
+      ],
+      "internalName": "outer-rim-garrison",
+      "setCode": "HMW_146",
+      "keywordValues": {
+        "ambush": 1,
+        "overwhelm": 1
+      },
+      "reason": "Keywords only: ambush, overwhelm."
+    },
+    {
+      "title": "Filthy Dianoga",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 5,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7827651708",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 155
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 155
+        }
+      ],
+      "internalName": "filthy-dianoga",
+      "setCode": "HMW_155",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Corpo Thugs",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 5,
+      "power": 5,
+      "text": "Raid 2 (This unit gets +2/+0 while attacking.)\nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2072423003",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid",
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 157
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 157
+        }
+      ],
+      "internalName": "corpo-thugs",
+      "setCode": "HMW_157",
+      "keywordValues": {
+        "raid": 2,
+        "saboteur": 1
+      },
+      "reason": "Keywords only: raid 2, saboteur."
+    },
+    {
+      "title": "Champions of Endor",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 3,
+      "power": 3,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4516882765",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "traits": [
+        "ewok"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 163
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 163
+        }
+      ],
+      "internalName": "champions-of-endor",
+      "setCode": "HMW_163",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Dune Sea Nomads",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 3,
+      "text": "Raid 3 (This unit gets +3/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4633910717",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "traits": [
+        "tusken"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 167
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 167
+        }
+      ],
+      "internalName": "dune-sea-nomads",
+      "setCode": "HMW_167",
+      "keywordValues": {
+        "raid": 3
+      },
+      "reason": "Keywords only: raid 3."
+    },
+    {
+      "title": "Maul",
+      "subtitle": "Only Revenge Remains",
+      "cost": 4,
+      "hp": 6,
+      "power": 6,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3460896271",
+      "aspects": [
+        "aggression",
+        "aggression"
+      ],
+      "traits": [
+        "force",
+        "underworld"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 174
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 174
+        }
+      ],
+      "internalName": "maul#only-revenge-remains",
+      "setCode": "HMW_174",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Fennec Shand",
+      "subtitle": "A Ship For A Life",
+      "cost": 1,
+      "hp": 4,
+      "power": 0,
+      "text": "Raid 2 (This unit gets +1/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6726014005",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "underworld"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 175
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 175
+        }
+      ],
+      "internalName": "fennec-shand#a-ship-for-a-life",
+      "setCode": "HMW_175",
+      "keywordValues": {
+        "raid": 2
+      },
+      "reason": "Keywords only: raid 2."
+    },
+    {
+      "title": "Desperate Nantex",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 3,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5508530442",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "separatist",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 178
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 178
+        }
+      ],
+      "internalName": "desperate-nantex",
+      "setCode": "HMW_178",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Feisty Blurrg",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 1,
+      "text": "Grit (This unit gets +1/+0 for each damage on it.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7870176658",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "creature"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "grit"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 179
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 179
+        }
+      ],
+      "internalName": "feisty-blurrg",
+      "setCode": "HMW_179",
+      "keywordValues": {
+        "grit": 1
+      },
+      "reason": "Keywords only: grit."
+    },
+    {
+      "title": "Tusken Bantha Rider",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 5,
+      "power": 0,
+      "text": "Raid 4 (This unit gets +4/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9640177423",
+      "aspects": [
+        "aggression"
+      ],
+      "traits": [
+        "creature",
+        "tusken"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 181
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 181
+        }
+      ],
+      "internalName": "tusken-bantha-rider",
+      "setCode": "HMW_181",
+      "keywordValues": {
+        "raid": 4
+      },
+      "reason": "Keywords only: raid 4."
+    },
+    {
+      "title": "Treacherous Pyke",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 1,
+      "power": 3,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)\nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8767838857",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "traits": [
+        "underworld"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 198
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 198
+        }
+      ],
+      "internalName": "treacherous-pyke",
+      "setCode": "HMW_198",
+      "keywordValues": {
+        "ambush": 1,
+        "saboteur": 1
+      },
+      "reason": "Keywords only: ambush, saboteur."
+    },
+    {
+      "title": "Sandtrooper Squad",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 4,
+      "power": 3,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)\nRaid 1 (This unit gets +1/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5756928198",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush",
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 201
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 201
+        }
+      ],
+      "internalName": "sandtrooper-squad",
+      "setCode": "HMW_201",
+      "keywordValues": {
+        "ambush": 1,
+        "raid": 1
+      },
+      "reason": "Keywords only: ambush, raid."
+    },
+    {
+      "title": "Tribubble Bongo Sub",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 3,
+      "power": 1,
+      "text": "Shielded (When you play this unit, give a Shield token to it.)\nRaid 3 (This unit gets +3/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5153918340",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "traits": [
+        "vehicle"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "shielded",
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 213
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 213
+        }
+      ],
+      "internalName": "tribubble-bongo-sub",
+      "setCode": "HMW_213",
+      "keywordValues": {
+        "shielded": 1,
+        "raid": 3
+      },
+      "reason": "Keywords only: shielded, raid 3."
+    },
+    {
+      "title": "Jaxxon",
+      "subtitle": "I Can Hear You Breathing!",
+      "cost": 1,
+      "hp": 3,
+      "power": 3,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9427322990",
+      "aspects": [
+        "cunning",
+        "cunning"
+      ],
+      "traits": [
+        "underworld"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 219
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 219
+        }
+      ],
+      "internalName": "jaxxon#i-can-hear-you-breathing",
+      "setCode": "HMW_219",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Clever Trapper",
+      "subtitle": "",
+      "cost": 1,
+      "hp": 1,
+      "power": 2,
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3154092454",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "ewok"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "ambush"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 220
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 220
+        }
+      ],
+      "internalName": "clever-trapper",
+      "setCode": "HMW_220",
+      "keywordValues": {
+        "ambush": 1
+      },
+      "reason": "Keywords only: ambush."
+    },
+    {
+      "title": "Tusken Raider",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 4,
+      "power": 0,
+      "text": "Raid 3 (This unit gets +3/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "7185113179",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "tusken"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 224
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 224
+        }
+      ],
+      "internalName": "tusken-raider",
+      "setCode": "HMW_224",
+      "keywordValues": {
+        "raid": 3
+      },
+      "reason": "Keywords only: raid 3."
+    },
+    {
+      "title": "Gungan Battle Wagon",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 3,
+      "power": 3,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "2947510914",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "creature",
+        "gungan"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 226
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 226
+        }
+      ],
+      "internalName": "gungan-battle-wagon",
+      "setCode": "HMW_226",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Horizon Chaser",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 3,
+      "power": 2,
+      "text": "Raid 2 (This unit gets +2/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4692138431",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "fringe",
+        "vehicle",
+        "transport"
+      ],
+      "arena": "space",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 227
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 227
+        }
+      ],
+      "internalName": "horizon-chaser",
+      "setCode": "HMW_227",
+      "keywordValues": {
+        "raid": 2
+      },
+      "reason": "Keywords only: raid 2."
+    },
+    {
+      "title": "Trandoshan Collaborator",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 4,
+      "power": 1,
+      "text": "Raid 3 (This unit gets +3/+0 while attacking.)\nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8043986246",
+      "aspects": [
+        "villainy"
+      ],
+      "traits": [
+        "imperial"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid",
+        "saboteur"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 245
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 245
+        }
+      ],
+      "internalName": "trandoshan-collaborator",
+      "setCode": "HMW_245",
+      "keywordValues": {
+        "raid": 3,
+        "saboteur": 1
+      },
+      "reason": "Keywords only: raid 3, saboteur."
+    },
+    {
+      "title": "Captain Tarpals",
+      "subtitle": "Grand Army Captain",
+      "cost": 1,
+      "hp": 2,
+      "power": 0,
+      "text": "Shielded (When you play this unit, give a Shield token to him.)\nRaid 2 (This unit gets +2/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9307938996",
+      "aspects": [
+        "heroism"
+      ],
+      "traits": [
+        "gungan",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "shielded",
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 254
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 254
+        }
+      ],
+      "internalName": "captain-tarpals#grand-army-captain",
+      "setCode": "HMW_254",
+      "keywordValues": {
+        "shielded": 1,
+        "raid": 2
+      },
+      "reason": "Keywords only: shielded, raid 2."
+    },
+    {
+      "title": "Ryloth Revolutionary Rider",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 3,
+      "power": 4,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9859570567",
+      "aspects": [
+        "heroism"
+      ],
+      "traits": [
+        "creature",
+        "twi'lek",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "HMW",
+        "number": 258
+      },
+      "setCodes": [
+        {
+          "set": "HMW",
+          "number": 258
+        }
+      ],
+      "internalName": "ryloth-revolutionary-rider",
+      "setCode": "HMW_258",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Chewbacca",
+      "subtitle": "Rrruuuurrr",
+      "cost": 5,
+      "hp": 6,
+      "power": 3,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "1112130807",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "wookiee"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 3
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 3
+        },
+        {
+          "set": "IBH",
+          "number": 46
+        }
+      ],
+      "internalName": "chewbacca#rrruuuurrr",
+      "setCode": "IBH_003",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "Rogue Squadron Speeder",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 3,
+      "text": "Raid 1 (This unit gets +1/+0 while attacking.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8332320550",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "vehicle",
+        "speeder"
+      ],
+      "arena": "ground",
+      "keywords": [
+        "raid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 4
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 4
+        },
+        {
+          "set": "IBH",
+          "number": 17
+        },
+        {
+          "set": "IBH",
+          "number": 34
+        }
+      ],
+      "internalName": "rogue-squadron-speeder",
+      "setCode": "IBH_004",
+      "keywordValues": {
+        "raid": 1
+      },
+      "reason": "Keywords only: raid."
+    },
+    {
+      "title": "Echo Coordinator",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 5,
+      "power": 1,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "8073149642",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "rebel"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 7
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 7
+        },
+        {
+          "set": "IBH",
+          "number": 43
+        },
+        {
+          "set": "IBH",
+          "number": 47
+        }
+      ],
+      "internalName": "echo-coordinator",
+      "setCode": "IBH_007",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Trench Defender",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 4,
+      "power": 3,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "6699126595",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 8
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 8
+        },
+        {
+          "set": "IBH",
+          "number": 29
+        },
+        {
+          "set": "IBH",
+          "number": 50
+        }
+      ],
+      "internalName": "trench-defender",
+      "setCode": "IBH_008",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Evacuation Escort",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 2,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9489761564",
+      "aspects": [
+        "cunning"
+      ],
+      "traits": [
+        "rebel",
+        "vehicle",
+        "fighter"
+      ],
+      "arena": "space",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 12
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 12
+        },
+        {
+          "set": "IBH",
+          "number": 35
+        },
+        {
+          "set": "IBH",
+          "number": 44
+        }
+      ],
+      "internalName": "evacuation-escort",
+      "setCode": "IBH_012",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Bright Hope",
+      "subtitle": "Narrow Escape",
+      "cost": 6,
+      "hp": 6,
+      "power": 4,
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": true,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "5509338180",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "vehicle",
+        "transport"
+      ],
+      "arena": "space",
+      "keywords": [
+        "sentinel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 14
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 14
+        },
+        {
+          "set": "IBH",
+          "number": 26
+        }
+      ],
+      "internalName": "bright-hope#narrow-escape",
+      "setCode": "IBH_014",
+      "keywordValues": {
+        "sentinel": 1
+      },
+      "reason": "Keywords only: sentinel."
+    },
+    {
+      "title": "GR-75 Medium Transport",
+      "subtitle": "",
+      "cost": 5,
+      "hp": 4,
+      "power": 5,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0446985285",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "vehicle",
+        "transport"
+      ],
+      "arena": "space",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 22
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 22
+        },
+        {
+          "set": "IBH",
+          "number": 33
+        },
+        {
+          "set": "IBH",
+          "number": 40
+        }
+      ],
+      "internalName": "gr75-medium-transport",
+      "setCode": "IBH_022",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Hoth Trooper",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 3,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "4808981574",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "traits": [
+        "rebel",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 37
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 37
+        },
+        {
+          "set": "IBH",
+          "number": 38
+        },
+        {
+          "set": "IBH",
+          "number": 48
+        }
+      ],
+      "internalName": "hoth-trooper",
+      "setCode": "IBH_037",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "First Legion Trooper",
+      "subtitle": "",
+      "cost": 3,
+      "hp": 4,
+      "power": 3,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0875657287",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 55
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 55
+        },
+        {
+          "set": "IBH",
+          "number": 73
+        },
+        {
+          "set": "IBH",
+          "number": 101
+        }
+      ],
+      "internalName": "first-legion-trooper",
+      "setCode": "IBH_055",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Ground Assault AT-AT",
+      "subtitle": "",
+      "cost": 6,
+      "hp": 7,
+      "power": 5,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "9655836052",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "vehicle",
+        "walker"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 56
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 56
+        },
+        {
+          "set": "IBH",
+          "number": 67
+        }
+      ],
+      "internalName": "ground-assault-atat",
+      "setCode": "IBH_056",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Snowtrooper Vanguard",
+      "subtitle": "",
+      "cost": 2,
+      "hp": 3,
+      "power": 2,
+      "text": "",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "3768891856",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "arena": "ground",
+      "keywords": [],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 57
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 57
+        },
+        {
+          "set": "IBH",
+          "number": 80
+        },
+        {
+          "set": "IBH",
+          "number": 96
+        }
+      ],
+      "internalName": "snowtrooper-vanguard",
+      "setCode": "IBH_057",
+      "keywordValues": {},
+      "reason": "Unit without rules text."
+    },
+    {
+      "title": "Lambda Shuttle",
+      "subtitle": "",
+      "cost": 4,
+      "hp": 5,
+      "power": 2,
+      "text": "Restore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "deployBox": null,
+      "epicAction": "",
+      "unique": false,
+      "rules": null,
+      "upgradePower": null,
+      "upgradeHp": null,
+      "id": "0008529481",
+      "aspects": [
+        "vigilance"
+      ],
+      "traits": [
+        "imperial",
+        "vehicle",
+        "transport"
+      ],
+      "arena": "space",
+      "keywords": [
+        "restore"
+      ],
+      "types": [
+        "unit"
+      ],
+      "setId": {
+        "set": "IBH",
+        "number": 58
+      },
+      "setCodes": [
+        {
+          "set": "IBH",
+          "number": 58
+        },
+        {
+          "set": "IBH",
+          "number": 84
+        },
+        {
+          "set": "IBH",
+          "number": 90
+        }
+      ],
+      "internalName": "lambda-shuttle",
+      "setCode": "IBH_058",
+      "keywordValues": {
+        "restore": 1
+      },
+      "reason": "Keywords only: restore."
+    },
+    {
+      "title": "Shield",
+      "subtitle": null,
+      "cost": 0,
+      "hp": 0,
+      "power": 0,
+      "text": "If damage would be dealt to attached unit, prevent that damage. If you do, defeat a Shield token on it.",
+      "deployBox": null,
+      "epicAction": null,
+      "unique": false,
+      "rules": null,
+      "upgradePower": 0,
+      "upgradeHp": 0,
+      "id": "8752877738",
+      "aspects": [],
+      "traits": [
+        "armor"
+      ],
+      "keywords": [],
+      "types": [
+        "token",
+        "upgrade"
+      ],
+      "setId": {
+        "set": "SOR"
+      },
+      "internalName": "shield",
+      "setCode": "TOKEN_SHIELD",
+      "keywordValues": {},
+      "reason": "Shield token needed by Shielded."
+    }
+  ]
+}

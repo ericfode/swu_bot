@@ -82,6 +82,11 @@ Reply `{"t":"ready","v":2,"name":"rust-mcts","sim":true}`. `v` is the version yo
 1, anything not offered is an error. `sim: true` asks for simulations (the referee then keeps a copy of the game to
 run them on). `name` is informational. Reset any per-game state here: one program plays many games.
 
+`version` (optional, a string of at most 200 characters, for example a git commit or a bundle id `sha256:...`) names
+the build of the bot that plays this game. The referee records it with the game result (`versions` by seat). It
+matters for a bot that changes between games, such as one an agent updates between rounds on a server it runs
+itself: the arena can tie results to the version that earned them and keep one version per round.
+
 ### `decide` → `act`
 
 ```json
@@ -209,7 +214,8 @@ to finish before the next game is done. A failure here changes no result; the pr
 - **A key hides the hidden cards.** The referee derives every random stream (decks, engine shuffles, `hello.seed`,
   simulations) from the game seed and a secret key (`playGame({ key })`). `bot/tournament.js` draws a key per run and
   writes each game's own key (derived from the run key) to its index entry and replay when the game ends, so every
-  game can be played again. Without a key the streams follow from the seed alone: that suits development and
+  game can be played again. `bot/ladder.js` plays each seed from both seats with the same key, so it writes the key
+  once both games (in a gauntlet, every game on that seed) have ended. Without a key the streams follow from the seed alone: that suits development and
   `npm run gate`, but a bot can find a small seed from `hello.seed` or the deck lists and rebuild the hidden cards.
   Use a key whenever a bot is not trusted.
 - **Programs in other languages need a sandbox to be held to these rules.** A program on the referee's machine, as the
@@ -224,7 +230,7 @@ in `node bot/tournament.js --bots ...` like any other bot.
 
 ```json
 {
-  "rust-mcts": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
+  "rust-mcts": { "cmd": "target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
   "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore", "lang": "python" }
 }
 ```
@@ -236,6 +242,8 @@ in `node bot/tournament.js --bots ...` like any other bot.
 | `stderr` | `inherit` | `inherit` shows the program's stderr, `ignore` drops it. |
 | `timeoutMs`, `startTimeoutMs` | 10000, 30000 | This bot's `ms` for `decide`/`over` and for `hello`. A game's own `limits` (`playGame`) override them. |
 | `lang` | none | Language label for replays and the dashboard (`rust`, `python`, ...). |
+| `stateful` | `false` | `true` when the program learns from game to game (after `over`): `bot/ladder.js --resume` then plays the run again from the start, as a resumed run would start the program fresh. |
+| `inputs` | none | Other files or folders the program reads (from `cwd`), so `bot/ladder.js --resume` notices when they change. Files named in `cmd`/`args`, and the files next to one outside the repo, already count. |
 
 A tournament keeps one process per bot for the whole run (two when a game needs the same bot in both seats). From
 JavaScript: `new StdioClient(name, options)` from `bot/stdio.js`, passed to `playGame` like any bot.

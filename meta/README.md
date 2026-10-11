@@ -27,6 +27,7 @@ each one plays. It reads only recorded results, so it needs no engine or card da
 - **Style**: per round, from board changes during the bot's own decisions: base damage, units removed, units added,
   attacks and the share aimed at the base, passes, initiative claims.
 - **Ratings**: Bradley-Terry over every finished game (`bot/ratings.js`); a `TIME_FORFEIT`, or a protocol v2 `ERROR` with `by` set, is a loss for that bot.
+  Every bot's rating, mapped or not, is also written to `ratings.json` next to `meta.json` (`swu-ratings/1`: `{generatedAt, rules, bots: {id: {rating, se, games}}}`, `se` in rating points), the one rating the app, console, arena and Atlas all read.
 - **Names**: `random-a/b/c` are one bot; `legacy` is the old heuristic; in runs that include `legacy`, the heuristic
   profiles carry the base-danger sign fix and get a `+fix` suffix. So do runs listed in `FIXED_ERA_RUNS` or marked
   `fixedEra: true` in index.json or ladder.json config (fixed-profile runs made without `legacy`).
