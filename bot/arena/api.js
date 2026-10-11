@@ -234,10 +234,11 @@ const api = {
             });
         }
         const { files, ...botMeta } = bot;
-        const submittedAt = new Date().toISOString();
         const round = clock().round;
+        // stamped just before the version is renamed into place, after its load check: a submit that finishes after the
+        // round's deadline is late (lineup() rates it next round), however early it started
         const meta = (n) => ({ name: `${name}-v${n}`, agent: name, version: n, note: note.trim(), bot: botMeta, files: files ? Object.keys(files) : undefined,
-                               submittedAt, round, checked: bot.kind === 'js' });
+                               submittedAt: new Date().toISOString(), round, checked: bot.kind === 'js' });
         const staging = home.stagingDir(name);
         try {
             if (home.exists(live)) {
@@ -256,16 +257,18 @@ const api = {
                 need(home.exists(path.join(staging, bot.cmd)), 'bad_request', `bot.cmd ${bot.cmd} is not in your folder`);
             }
             let n = (home.versionsOf(name).pop() ?? -1) + 1;
-            home.writeJson(path.join(staging, 'SUBMISSION.json'), meta(n));
             if (bot.kind === 'js') {
                 loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
             }
             // a concurrent submit may take the number first: then take the next free one (and load-check under that
             // name, since createBot gets the version name)
-            for (let retry = 0; !home.promote(staging, path.join(home.VERSIONS, `${name}-v${n}`)); retry++) {
+            for (let retry = 0; ; retry++) {
+                home.writeJson(path.join(staging, 'SUBMISSION.json'), meta(n));
+                if (home.promote(staging, path.join(home.VERSIONS, `${name}-v${n}`))) {
+                    break;
+                }
                 need(retry < 5, 'conflict', 'too many concurrent submits; submit again');
                 n = Math.max(n + 1, (home.versionsOf(name).pop() ?? -1) + 1);
-                home.writeJson(path.join(staging, 'SUBMISSION.json'), meta(n));
                 if (bot.kind === 'js') {
                     loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
                 }

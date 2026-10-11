@@ -5,9 +5,9 @@
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
  *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--key K|none]
  *       [--resume] [--cap-ms 60000] [--hang-ms 600000]
- * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine
- * and same bot code and models too: config.harness is the git trees of bot/ and models/, plus a hash of uncommitted
- * changes there and of the $SWU_LEARNED_MODEL file when set). Without the earlier run's --key, the rest is dealt from a
+ * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine,
+ * uncommitted engine source changes included (config.engineDiff), and same bot code and models: config.harness is the
+ * git trees of bot/ and models/, plus a hash of uncommitted changes there and of the $SWU_LEARNED_MODEL file when set). Without the earlier run's --key, the rest is dealt from a
  * new run key; the games kept have their own keys in their entries.
  * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot loses. --hang-ms is the
  * watchdog (game-pool.js): one bot call running longer than that (wall clock) loses the game, and its worker is
@@ -45,6 +45,30 @@ function arg(name, dflt) {
 function engineRev() {
     try {
         return execFileSync('git', ['-C', path.join(__dirname, '..', 'forceteki'), 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * A hash of the engine's uncommitted source changes and new files (forceteki/ is read-only here, but a local edit and
+ * rebuild would change games without moving its HEAD), or null when it is clean or has no git. Its build/ is
+ * generated from that source, so it is not hashed.
+ */
+function engineDiff() {
+    const dir = path.join(__dirname, '..', 'forceteki');
+    const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    try {
+        const diff = git('diff', 'HEAD');
+        const extra = git('ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean).sort();
+        if (!diff && !extra.length) {
+            return null;
+        }
+        const h = crypto.createHash('sha256').update(diff);
+        for (const f of extra) {
+            h.update(`\0${f}\0`).update(fs.readFileSync(path.join(dir, f)));
+        }
+        return h.digest('hex').slice(0, 10);
     } catch {
         return null;
     }
@@ -111,7 +135,7 @@ function readPrevious(file, config, engine) {
     // and the harness code (guard, game runner, env, built-in bots)
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
         || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
-        || (c.harness ?? null) !== (config.harness ?? null) || (c.keyId === null) !== (config.keyId === null)) {
+        || (c.harness ?? null) !== (config.harness ?? null) || (c.engineDiff ?? null) !== (config.engineDiff ?? null) || (c.keyId === null) !== (config.keyId === null)) {
         console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code or seeding (--key none), starting over');
         return null;
     }
@@ -160,7 +184,7 @@ async function main() {
     const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
-                     harness: harnessRev(), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
+                     harness: harnessRev(), engineDiff: engineDiff(), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
