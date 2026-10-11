@@ -123,9 +123,25 @@ export function Replay({ game, startStep = 0, live = false }: { game: Game; star
     }, [game]);
     const atEnd = step === last && game.end;
 
+    const decks = game.header.players;
     return (
+        <div className="replay-wrap">
         <div className="replay">
             <div className="replay-main">
+                <div className="replay-head">
+                    <div className="vs">
+                        <span className="p1c">{bots.p1}</span>
+                        <span className="muted"> vs </span>
+                        <span className="p2c">{bots.p2}</span>
+                        <span className="muted mono"> · seed {game.header.seed} · round {cur.state.round} · {cur.state.phase}</span>
+                    </div>
+                    <div className="now" aria-live="polite">
+                        {cur.pid ? <b className={`${cur.pid}c`}>{bots[cur.pid]}</b> : null}{' '}
+                        {cur.action ? humanize(cur.action.label) : cur.label}
+                        {cur.title ? <span className="muted"> · {cur.title}</span> : null}
+                    </div>
+                    <div className="muted small decks">{decks.map((p) => `${p.id.toUpperCase()}: ${p.deck}`).join('  ·  ')}</div>
+                </div>
                 <Board state={cur.state} bots={bots} actor={nextActor} onFocus={setFocus} />
                 {atEnd && (
                     <div className="result" role="status">
@@ -195,6 +211,7 @@ export function Replay({ game, startStep = 0, live = false }: { game: Game; star
                     ))}
                 </ol>
             </aside>
+        </div>
         </div>
     );
 }

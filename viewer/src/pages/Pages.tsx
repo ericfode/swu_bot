@@ -57,6 +57,11 @@ export function TournamentPage({ tid, initialGame }: { tid: string; initialGame:
     const game = useGame(tid, selected);
     // when a tournament is still being played, open the game in progress so there is something to watch right away
     const autoPicked = useRef(false);
+    const viewerRef = useRef<HTMLDivElement>(null);
+    const selectGame = (id: string) => {
+        setSelected(id);
+        viewerRef.current?.scrollIntoView({ block: 'start' });
+    };
     useEffect(() => {
         if (autoPicked.current || selected || !index) {
             return;
@@ -84,6 +89,20 @@ export function TournamentPage({ tid, initialGame }: { tid: string; initialGame:
             <Status error={error} loading={!index} what="tournament" />
             {index && (
                 <>
+                    <div className="panel preview-panel" ref={viewerRef}>
+                        {!selected && <p className="muted">Choose a game from the list below to watch it here.</p>}
+                        {selected && (
+                            <>
+                                <div className="row-between">
+                                    <h2 className="mono">{selected}</h2>
+                                    <a className="btn small" href={hrefGame(tid, selected)}>Open full page</a>
+                                </div>
+                                <Status error={game.error} loading={!game.game} what="game" />
+                                {game.game && <Replay game={game.game} live={game.live} />}
+                            </>
+                        )}
+                    </div>
+
                     <div className="grid2">
                         <div className="panel">
                             <h2>Head to head</h2>
@@ -139,35 +158,20 @@ export function TournamentPage({ tid, initialGame }: { tid: string; initialGame:
                         </div>
                     </div>
 
-                    <div className="grid2 games-split">
-                        <div className="panel">
-                            <h2>Games{pair ? `: ${pair[0]} vs ${pair[1]}` : ''} <span className="muted small">({shown.length})</span></h2>
-                            {pair && <button className="btn small" onClick={() => setPair(null)}>Show all</button>}
-                            <ul className="game-list">
-                                {shown.map((g) => (
-                                    <li key={g.id}>
-                                        <button className={selected === g.id ? 'on' : ''} onClick={() => setSelected(g.id)}>
-                                            <span className="mono">seed {g.seed}</span>
-                                            <span>{g.p1} vs {g.p2}</span>
-                                            <span className={g.outcome === 'running' ? 'live-tag' : g.outcome === 'won' ? '' : 'bad'}>{g.outcome === 'won' ? `${g.winner} · R${g.rounds}` : g.outcome === 'running' ? '● live' : g.outcome}</span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="panel preview-panel">
-                            {!selected && <p className="muted">Choose a game to watch it here.</p>}
-                            {selected && (
-                                <>
-                                    <div className="row-between">
-                                        <h2 className="mono">{selected}</h2>
-                                        <a className="btn small" href={hrefGame(tid, selected)}>Open full page</a>
-                                    </div>
-                                    <Status error={game.error} loading={!game.game} what="game" />
-                                    {game.game && <Replay game={game.game} live={game.live} />}
-                                </>
-                            )}
-                        </div>
+                    <div className="panel games-panel">
+                        <h2>Games{pair ? `: ${pair[0]} vs ${pair[1]}` : ''} <span className="muted small">({shown.length})</span></h2>
+                        {pair && <button className="btn small" onClick={() => setPair(null)}>Show all</button>}
+                        <ul className="game-list">
+                            {shown.map((g) => (
+                                <li key={g.id}>
+                                    <button className={selected === g.id ? 'on' : ''} onClick={() => selectGame(g.id)}>
+                                        <span className="mono">seed {g.seed}</span>
+                                        <span>{g.p1} vs {g.p2}</span>
+                                        <span className={g.outcome === 'running' ? 'live-tag' : g.outcome === 'won' ? '' : 'bad'}>{g.outcome === 'won' ? `${g.winner} · R${g.rounds}` : g.outcome === 'running' ? '● live' : g.outcome}</span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </>
             )}
