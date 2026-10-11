@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { run, summarize, robotsAllows, USER_AGENT } = require('../swustats/fetch');
-const { compare, fitModel, weightedCorr } = require('../swustats/compare');
+const { compare, fitModel, weightedCorr, ranks } = require('../swustats/compare');
 
 (async () => {
     // robots: no rules allows; a matching Disallow stops; our own group wins over *
@@ -82,6 +82,9 @@ const { compare, fitModel, weightedCorr } = require('../swustats/compare');
     assert.strictEqual(weightedCorr([], []), null);
     assert.strictEqual(weightedCorr([1, 2, 3], [5, 5, 5]), null);
     assert(Math.abs(weightedCorr([1, 2, 3], [2, 4, 7]) - 0.9934) < 1e-3);
+    // Spearman ranks: ties share their average rank, so all-tied values have no spread and give no correlation
+    assert.deepStrictEqual(ranks([10, 20, 20, 5]), [1, 2.5, 2.5, 0]);
+    assert.strictEqual(weightedCorr(ranks([1, 1, 1, 1]), ranks([4, 3, 2, 1])), null);
     console.log('ok: swustats robots, summary, fetch, model, compare');
 })().catch((e) => {
     console.error(e);

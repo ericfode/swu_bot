@@ -255,6 +255,18 @@ test('swupgn: a keyframe missing a count the board needs is damaged, and folding
     }
 });
 
+test('swupgn: a keyframe without a round, phase or initiative is damaged too', () => {
+    const { isCompleteKeyframe } = require('../swupgn');
+    const kf = parseSwuPgn(read('minimal')).events.find((e) => e.seq === 'R1.end').keyframe;
+    assert.ok(isCompleteKeyframe(kf));
+    for (const key of ['round', 'phase', 'initiative']) {
+        const { [key]: _, ...rest } = kf;
+        assert.ok(!isCompleteKeyframe(rest), `no ${key}`);
+    }
+    assert.ok(isCompleteKeyframe({ ...kf, initiative: null }), 'null initiative is allowed');
+    assert.ok(!isCompleteKeyframe({ ...kf, initiative: 3 }));
+});
+
 test('swupgn: reader errors and leniency follow the spec', () => {
     const text = read('minimal');
     assert.ok(isSwuPgn(text));

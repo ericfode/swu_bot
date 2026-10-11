@@ -515,12 +515,13 @@ const CARD_NUMBERS = ['damage', 'shields', 'experience'];
 const numbers = (o, keys) => keys.every((k) => Number.isFinite(o[k]));
 
 /**
- * A keyframe a reader may snap to: both seats, with every field the fold and the snapshot read (array
- * cards/hand/discard, the counts in PLAYER_NUMBERS, and on every card an id, a zone, CARD_NUMBERS, upgrades and
- * status tokens). Snapping replaces the whole board, so a keyframe missing one of these is treated as damaged.
+ * A keyframe a reader may snap to: a numeric round, a phase, an initiative (a seat or null) and both seats, with every
+ * field the fold and the snapshot read (array cards/hand/discard, the counts in PLAYER_NUMBERS, and on every card an
+ * id, a zone, CARD_NUMBERS, upgrades and status tokens). Snapping replaces the whole board, so a keyframe missing one
+ * of these is treated as damaged.
  */
 function isCompleteKeyframe(k) {
-    if (!isObj(k) || !isObj(k.players)) {
+    if (!isObj(k) || !isObj(k.players) || !Number.isFinite(k.round) || typeof k.phase !== 'string' || !(k.initiative === null || isSeat(k.initiative))) {
         return false;
     }
     return [1, 2].every((seat) => {

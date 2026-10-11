@@ -22,7 +22,6 @@ node analysis/swustats/compare.js --human /mnt/project-files/human-meta/swustats
 
 Result on 2026-10-11 (2,000 decided games, 28 runs, 46 bots): κ = 0.31 ± 0.09, but shuffled human values reach that
 11% of the time, and the leader rank correlation is −0.04. Human leader strength does not carry over, most likely because
-most ladder decks are random (`bot/env.js` `randomDeck`) while a human's leader comes with a deck built around it. The
-one ladder with real decks (`real-ladder-1`, 143 decided games) is too small to tell: κ = 0.08 ± 0.35. Humans going
-first win 56.2%; our bots going first win 54.2%, but that edge goes away once bot strength is taken out
-(−0.01 ± 0.07 logit).
+ladder decks are random (`bot/env.js` `randomDeck`: a random leader and base plus random cards of their aspects) while a
+human's leader comes with a deck built around it. Humans going first win 56.2%; our bots going first win 54.2%, but that
+edge goes away once bot strength is taken out (−0.01 ± 0.07 logit).

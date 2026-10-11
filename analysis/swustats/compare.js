@@ -242,9 +242,20 @@ function weightedCorr(xs, ys, ws = xs.map(() => 1)) {
     const r = sxy / Math.sqrt(sxx * syy);
     return Number.isFinite(r) ? r : null;
 }
+/** Ranks for Spearman: tied values share the average of the ranks they span. */
 const ranks = (a) => {
     const r = new Array(a.length);
-    a.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]).forEach(([, i], k) => (r[i] = k));
+    const order = a.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]);
+    for (let lo = 0; lo < order.length;) {
+        let hi = lo;
+        while (hi + 1 < order.length && order[hi + 1][0] === order[lo][0]) {
+            hi++;
+        }
+        for (let k = lo; k <= hi; k++) {
+            r[order[k][1]] = (lo + hi) / 2;
+        }
+        lo = hi + 1;
+    }
     return r;
 };
 
@@ -325,4 +336,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { compare, fitModel, fitLogistic, humanStrength, readLadderGames, weightedCorr };
+module.exports = { compare, fitModel, fitLogistic, humanStrength, readLadderGames, weightedCorr, ranks };
