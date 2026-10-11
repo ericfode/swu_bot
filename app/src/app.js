@@ -686,10 +686,11 @@ function setupTable() {
 
 // ---------- pages: arena ----------
 /** The run of arena round n: tournament rounds record into <tournament id>-r<K> (the round's ladderId in standings, its
- *  ladder in tournament.json); other rounds into arena-r<K>. */
+ *  ladder in tournament.json); rounds that name no ladder into arena-r<K>. A named ladder not mirrored yet gives null,
+ *  never an older arena-r<K> run from before the tournament. */
 function roundRun(n) {
   const A = M.arena, id = A.standings?.rounds?.find(r => r.round === n)?.ladderId ?? A.tournament?.rounds?.find(r => r?.n === n)?.ladder;
-  return (id && runById(id)) || runById(`arena-r${n}`);
+  return runById(id || `arena-r${n}`);
 }
 function arenaRun() {
   const ids = M.arena.runs; const cur = M.arena.current?.n != null ? roundRun(M.arena.current.n) : null;
