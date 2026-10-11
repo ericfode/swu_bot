@@ -176,6 +176,10 @@ async function main() {
     merge();
     const won = index.games.filter((g) => g.outcome === 'won').length;
     console.log(`wrote ${index.games.length} games (${won} decided) to ${out}`);
+    if (index.games.length < jobs.length) {
+        // a part file that never appeared or could not be read (merge skips those while workers run)
+        failures.push(`${jobs.length - index.games.length} of ${jobs.length} games missing from parts/`);
+    }
     if (failures.length) {
         console.error(`incomplete run: ${failures.join('; ')}`);
         process.exitCode = 1;
