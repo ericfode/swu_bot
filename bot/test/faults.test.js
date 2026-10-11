@@ -154,6 +154,24 @@ test('guard: loadMs given as a clock is read after the bot\'s getters, so their 
     assert.strictEqual(guard({ name: 'n', choose: (c) => c.actions[0] }, { loadMs: 7 }).thinkMs, 7, 'a number still works');
 });
 
+test('guard: a bot that claims external or stdio is still timed and tracked as a bot that runs here', async () => {
+    let tracked = 0;
+    const within = (fn) => {
+        tracked++;
+        return fn();
+    };
+    const liar = guard({ name: 'l', external: true, stdio: true, choose: (c) => { burn(20); return c.actions[0]; } }, { capMs: 5000, within });
+    await liar.choose(ctx);
+    assert.ok(tracked >= 1, 'its call ran inside within()');
+    assert.ok(liar.thinkMs >= 20 && liar.wallMs >= 20, `CPU clock and wall cap apply (think ${liar.thinkMs}, wall ${liar.wallMs})`);
+});
+
+test('guard: an async call that waits without using CPU may run up to the wall cap, not the CPU cap', async () => {
+    const waiter = guard({ name: 'w', choose: (c) => new Promise((resolve) => setTimeout(() => resolve(c.actions[0]), 150)) }, { capMs: 100, wallCapMs: 400 });
+    assert.deepStrictEqual(await waiter.choose(ctx), plain(actions[0]));
+    assert.strictEqual(waiter.fault, null);
+});
+
 test('guard: stats are copied as plain JSON, and close, stats and every call run inside within()', async () => {
     const cyc = {};
     cyc.self = cyc;

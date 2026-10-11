@@ -2,7 +2,7 @@
 /**
  * Time cap and fault tracking around a bot, the same for every bot (baselines included).
  *
- *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, enter, leave, within }) -> what match.js plays instead:
+ *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, program, enter, leave, within }) -> what match.js plays instead:
  *     a native bot ({ name, choose })      { name, lang, needsUndo, stats, choose, close, thinkMs, wallMs, fault }
  *     a protocol client ({ name, decide }) { name, lang, stats, hello, decide, over, close, thinkMs, wallMs, fault }
  *   plus charge(used) and excuse(used) for the game runner (below). Getters and the guard's own functions: the bot never
@@ -10,7 +10,7 @@
  *
  * Thinking time is every choose(), hello and decide call. It is this thread's CPU time (process.threadCpuUsage, user
  * + system) for bots that run here, so a busy engine on another worker does not count against them, and wall time
- * for bot programs (bot/stdio.js StdioClient, or a bot that sets external or stdio). Wall time is also capped for
+ * for bot programs (bot/stdio.js StdioClient, or a bot the caller marks with program: true). Wall time is also capped for
  * bots that run here, at wallCapMs (default 2 x capMs), so work moved off this thread (worker threads, Atomics.wait,
  * child processes, waiting on a timer) is not free. loadMs (the time createBot took, or a function giving it, read
  * after the bot's properties) starts the CPU counter.
@@ -74,7 +74,7 @@ function plainAction(a) {
 /** A client's reply as plain JSON data. */
 const plainReply = (r) => (r === undefined ? undefined : JSON.parse(JSON.stringify(r) ?? 'null'));
 
-function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, enter = () => {}, leave = () => {}, within = (fn) => fn() } = {}) {
+function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, program: isProgram = false, enter = () => {}, leave = () => {}, within = (fn) => fn() } = {}) {
     // read once, now (while the bot loads): these may be getters, and the game runner reads them outside any bot call
     const fns = {};
     for (const k of ['choose', 'hello', 'decide', 'over', 'close']) {
@@ -89,7 +89,9 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, enter
     const name = String(bot.name);
     const lang = bot.lang == null ? undefined : String(bot.lang);
     const needsUndo = bot.needsUndo === true;
-    const program = bot instanceof StdioClient || bot.external === true || bot.stdio === true;
+    // the bot's class or the caller decide this, never a property the bot sets: a program's calls are not tracked as the
+    // bot's own code (own, below), so a bot here that claimed to be one would escape that tracking
+    const program = bot instanceof StdioClient || isProgram === true;
     const limit = (v) => (typeof v === 'number' && v > 0 ? v : undefined);
     const timeoutMs = limit(bot.timeoutMs);
     const startTimeoutMs = limit(bot.startTimeoutMs);
@@ -123,7 +125,9 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, enter
         call = mine;
         const t0 = clock();
         const w0 = wallClock();
-        const budget = left();
+        // the timer measures wall time: for a program its cap, for a bot that runs here its wall cap (its CPU is checked
+        // when the call returns, so a call that waits without using CPU may run up to the wall cap)
+        const budget = program ? capMs - thinkMs : wallCapMs - wallMs;
         let timer = null;
         let out;
         try {
