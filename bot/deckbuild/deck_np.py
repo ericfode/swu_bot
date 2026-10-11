@@ -94,9 +94,13 @@ class CardIndex:
         return np.concatenate([[(c["hp"] or 0) / 30, float(c["text"])], self._aspects(c)])
 
     def penalty_icons(self, L, B):
-        """Missing aspect icons per main card for this leader and base."""
-        prov = self.AL[L] + self.AB[B]
-        return np.maximum(self.A - prov, 0).sum(1)
+        """Missing aspect icons per main card for this leader and base (cached)."""
+        key = (int(L), int(B))
+        cache = self.__dict__.setdefault("_pen", {})
+        if key not in cache:
+            prov = self.AL[L] + self.AB[B]
+            cache[key] = np.maximum(self.A - prov, 0).sum(1)
+        return cache[key]
 
     def extras(self, counts, L, B):
         """counts: (rows, n) copies; L, B: (rows,) indexes -> (x = counts/50, extra)."""
