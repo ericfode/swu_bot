@@ -12,36 +12,46 @@ import { Spine } from './Spine';
 import { ActionIcon, tierFor, type ActionIconProps } from './ActionIcon';
 import { EdgeBreakdown } from './EdgeBreakdown';
 import { ACTION_CLASSES, classifyGame, describe, pivotalActions, type Action, type ActionClass } from '../data/actions';
-import { edgeTerms } from '../data/derive';
+import { edgeTerms, trackUnits } from '../data/derive';
+import { Board } from '../components/Board';
 import { evalsByIndex } from '../data/evals';
 import { useSettings } from '../lib/settings';
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
 import { parseGame } from '../data/source';
 import type { EvalFile } from '../data/evals';
-import type { Game } from '../data/types';
+import type { Game, Seat, Snapshot } from '../data/types';
 
 export interface MountOptions {
     /** the game: a parsed Game, the .jsonl text, or a URL to fetch it from (exactly one) */
     game?: Game;
     jsonl?: string;
+    /** recorder lines (each one JSON object, or already-parsed objects) */
+    lines?: (string | object)[];
     url?: string;
     /** re-fetch `url` every second while the game has no end record (a game still being played); default true */
     follow?: boolean;
     /** position evaluations (dashboard/evals/<gameId>.json contract), or a URL to fetch them from */
     evals?: EvalFile | null;
     evalsUrl?: string;
-    /** first step to show (index into the game's steps) */
+    /** first step to show (index into the game's steps); or stepN to give it as Step.n */
     step?: number;
+    stepN?: number;
     /** 'full' (default) adds the card inspector and decision log; 'compact' is board + timeline + spine */
     layout?: 'full' | 'compact';
-    /** called with the step index whenever the playhead moves */
-    onStep?: (step: number) => void;
+    /** called whenever the playhead moves, with the step index and that step's Step.n */
+    onStep?: (step: number, n: number) => void;
     /** load the viewer's Google fonts into the host document (default true; fonts can't load from inside a shadow root) */
     fonts?: boolean;
 }
 
 export interface ViewerHandle {
+    /** jump to a step index */
     seek(step: number): void;
+    /** jump to the step whose Step.n is n (or the last one before it) */
+    seekStepN(n: number): void;
+    /** add recorder lines as a live game is tailed (JSONL text, or an array of lines/objects); the view follows if it was at the end */
+    append(lines: string | (string | object)[]): void;
+    getGame(): Game | null;
     play(): void;
     pause(): void;
     setGame(game: Game | string): void;
@@ -78,7 +88,21 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
     shadow.append(style, host);
     const root: Root = createRoot(host);
 
-    let game: Game | null = opts.game ?? (opts.jsonl ? parseGame(opts.jsonl, true) : null);
+    const toText = (ls: (string | object)[]) => ls.map((l) => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n') + '\n';
+    let raw: string | null = opts.jsonl ?? (opts.lines ? toText(opts.lines) : null);
+    let game: Game | null = opts.game ?? (raw ? parseGame(raw, true) : null);
+    const indexOfN = (n: number) => {
+        if (!game) {
+            return 0;
+        }
+        let best = 0;
+        game.steps.forEach((st, i) => {
+            if (st.n <= n) {
+                best = i;
+            }
+        });
+        return best;
+    };
     let evals: EvalFile | null = opts.evals ?? null;
     let ctl: ViewerControl | null = null;
     let pending: number | null = null;
@@ -96,7 +120,7 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
         const key = `${game.header.seed}:${game.header.players.map((p) => p.bot).join('/')}`;
         root.render(
             <MotionConfig reducedMotion="user">
-                <GameViewer key={key} game={game} live={!game.end} startStep={opts.step ?? 0} evals={evals} layout={opts.layout ?? 'full'} onStep={opts.onStep}
+                <GameViewer key={key} game={game} live={!game.end} startStep={opts.step ?? (opts.stepN != null ? indexOfN(opts.stepN) : 0)} evals={evals} layout={opts.layout ?? 'full'} onStep={opts.onStep}
                     control={(c) => {
                         ctl = c;
                         if (pending != null) {
@@ -113,7 +137,8 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
             if (!r.ok) {
                 throw new Error(`${opts.url}: ${r.status}`);
             }
-            const g = parseGame(await r.text(), true);
+            raw = await r.text();
+            const g = parseGame(raw, true);
             if (g && !dead) {
                 game = g;
                 render();
@@ -141,9 +166,31 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
 
     return {
         seek: (n) => (ctl ? ctl.seek(n) : (pending = n)),
+        seekStepN: (n) => {
+            const i = indexOfN(n);
+            if (ctl) {
+                ctl.seek(i);
+            } else {
+                pending = i;
+            }
+        },
+        append: (lines) => {
+            const text = typeof lines === 'string' ? (lines.endsWith('\n') ? lines : lines + '\n') : toText(lines);
+            if (raw == null && game) {
+                raw = toText([game.header, ...game.steps, ...(game.end ? [game.end] : [])]);
+            }
+            raw = (raw ?? '') + text;
+            const g = parseGame(raw, true);
+            if (g) {
+                game = g;
+                render();
+            }
+        },
+        getGame: () => game,
         play: () => ctl?.play(),
         pause: () => ctl?.pause(),
         setGame: (g) => {
+            raw = typeof g === 'string' ? g : null;
             game = typeof g === 'string' ? parseGame(g, true) : g;
             render();
         },
@@ -179,6 +226,37 @@ export function mountActionIcon(el: HTMLElement, props: ActionIconProps) {
     const root = createRoot(shadow.lastElementChild as HTMLElement);
     root.render(<ActionIcon {...props} />);
     return { update: (p: Partial<ActionIconProps>) => root.render(<ActionIcon {...props} {...p} />), destroy: () => root.unmount() };
+}
+
+/** Draw one position (a recorder Snapshot, i.e. a step's `state`) as the full animated board. update() animates to the next one. */
+export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean } = {}) {
+    if (opts.fonts !== false) {
+        ensureFonts();
+    }
+    const shadow = el.shadowRoot ?? el.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `<style>${shadowCss}</style><div class="swuv-root"></div>`;
+    const root = createRoot(shadow.lastElementChild as HTMLElement);
+    const bots = opts.bots ?? { p1: state.players.p1.name, p2: state.players.p2.name };
+    let prev: Snapshot | null = null;
+    let n = 0;
+    const draw = (cur: Snapshot) => {
+        const steps = (prev ? [prev, cur] : [cur]).map((st, i) => ({ t: 'step' as const, n: i, state: st }));
+        const ids = trackUnits({ header: { t: 'header', v: 1, seed: 0, engine: null, players: [] }, steps, end: null });
+        root.render(
+            <MotionConfig reducedMotion="user">
+                <Board state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} />
+            </MotionConfig>
+        );
+    };
+    draw(state);
+    return {
+        update: (next: Snapshot) => {
+            prev = state;
+            state = next;
+            draw(next);
+        },
+        destroy: () => root.unmount()
+    };
 }
 
 /** The k most game-changing actions, using the evaluations' swing when given, else the board score's. */

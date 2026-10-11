@@ -28,7 +28,8 @@ export interface GameViewerProps {
     startStep?: number;
     /** dashboard evals contract (dashboard/evals/<gameId>.json): adds evaluation curves, the analyst note and spine tints */
     evals?: EvalFile | null;
-    onStep?: (step: number) => void;
+    /** playhead moved: step index, and that step's Step.n (the id evaluations and other data key on) */
+    onStep?: (step: number, n: number) => void;
     /** 'window' listens for arrow keys everywhere (a full page); 'focus' only while the viewer has focus (embedded) */
     keyboard?: 'window' | 'focus';
     /** 'full' adds the card inspector and decision log beside the board */
@@ -95,7 +96,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
     }, [follow, last]);
 
     useEffect(() => {
-        onStep?.(step);
+        onStep?.(step, game.steps[step]?.n ?? step);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [step]);
 
