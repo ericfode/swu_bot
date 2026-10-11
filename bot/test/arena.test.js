@@ -294,3 +294,33 @@ test('panel is composed from the arena\'s own halves, with or without the dashbo
     fs.rmSync(dashPanel, { force: true });
     assert.strictEqual(api.panel({ name: 'pan' }).now, 'Tuning');
 });
+
+test('runner: a harness is stopped at its deadline with everything it started, in any process group', async () => {
+    const { runUntil, tagged } = require('../arena/runner');
+    const tag = `test-${process.pid}`;
+    const out = path.join(tmp, 'harness.log');
+    const t0 = Date.now();
+    const res = await runUntil('bash', ['-c', 'setsid sleep 913 & sleep 914 & sleep 915'], { cwd: tmp, env: { ...process.env, ARENA_RUN: tag }, out, stopAt: Date.now() + 1500, tag });
+    assert.strictEqual(res.stopped, true);
+    assert.ok(Date.now() - t0 < 5000, 'stopped at the deadline');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.deepStrictEqual(tagged(tag), [], 'nothing it started is left, the setsid child included');
+});
+
+test('runner: the usage brake holds while a window is over its limit, until that window resets', () => {
+    const { lastLimits, noteLimits, braked } = require('../arena/runner');
+    const soon = Math.floor(Date.now() / 1000) + 3600;
+    const event = (u5, u7, status = 'allowed') => JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status, unifiedWindows: { five_hour: { utilization: u5, resetsAt: soon }, seven_day: { utilization: u7, resetsAt: soon } } } });
+    assert.strictEqual(lastLimits('{"type":"system"}\n'), null);
+    noteLimits(lastLimits(`${event(0.9, 0.5)}\n{"type":"assistant"}\n${event(0.2, 0.5)}\n`));
+    assert.strictEqual(braked(), null, 'the newest event counts');
+    noteLimits(lastLimits(`${event(0.85, 0.5)}\n`));
+    assert.match(braked(), /five_hour usage 85%/);
+    assert.strictEqual(braked(soon * 1000 + 1), null, 'over once the window resets');
+    noteLimits(lastLimits(`${event(0.1, 0.96)}\n`));
+    assert.match(braked(), /seven_day/);
+    noteLimits(lastLimits(`${event(0.1, 0.1, 'rejected')}\n`));
+    assert.match(braked(), /over its limit/);
+    noteLimits(lastLimits(`${event(0.1, 0.1)}\n`));
+    assert.strictEqual(braked(), null);
+});

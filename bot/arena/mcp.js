@@ -39,6 +39,17 @@ async function invoke(method, args) {
     if (process.env.ARENA_COMPETITOR_TOKEN && args && args.token === undefined) {
         args = { ...args, token: process.env.ARENA_COMPETITOR_TOKEN };
     }
+    // a server started for one competitor (runner.js sets ARENA_COMPETITOR): its name is the default, and it sends as itself
+    const me = process.env.ARENA_COMPETITOR;
+    if (me && method !== 'register' && METHODS[method]?.required?.includes('name') && args?.name === undefined) {
+        args = { ...args, name: me };
+    }
+    if (me && method === 'send') {
+        if (args?.to === 'all') {
+            return { error: { code: 'unauthorized', message: 'a competitor sends to one competitor at a time' } };
+        }
+        args = { ...args, from: me };
+    }
     if (!REMOTE) {
         return call(method, args);
     }

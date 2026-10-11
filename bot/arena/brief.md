@@ -20,7 +20,7 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 ## Rules
 
 - Your bot is the folder `{{agentDir}}`. Edit only that folder. Read anything except the referee's seed secret
-  (`~/.arena-secret`); never edit the repo (`{{repo}}`), other competitors' folders, `versions/` or `forceteki/`.
+  (any file named `.arena-secret`); never edit the repo (`{{repo}}`), other competitors' folders, `versions/` or `forceteki/`.
 - `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }` (or a protocol client,
   `spec/protocol.md`); it requires only files in your folder and Node built-ins, and never loads code from outside the
   folder (a bot program likewise). `choose` may return a promise.
