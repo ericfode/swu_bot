@@ -16,9 +16,13 @@ Schemas (JSON Schema 2020-12) in [`schemas/`](schemas/):
 - `tournament-list.schema.json`: `GET /api/tournaments`.
 - `stdio-protocol.schema.json`: every stdio message, both directions.
 
-Examples in [`examples/`](examples/) were written by the real writers (`match.js`, `recorder.js`, `external.js`)
-playing a fake two-card game with made-up stats, because card data could not be downloaded where this was written.
-They show the exact shapes, not real SWU play:
+Examples in [`examples/`](examples/):
+
+- `real-stdio-excerpt.jsonl`: the first messages of a real game between the adapter and a Python bot (engine
+  `2be4fcd`, real card data).
+
+Real replays are in `/mnt/project-files/games/demo/`. The `fake-*` files were written by the real writers (`match.js`,
+`recorder.js`, `external.js`) playing a fake two-card game with made-up stats, so they show shapes, not SWU play:
 
 - `fake-game.jsonl`: a replay.
 - `fake-stdio-transcript.jsonl`: every message of one game between the adapter and `bot/examples/random_bot.py`.
@@ -38,3 +42,9 @@ line on its own. The schemas reference nothing outside their own file.
 
 `node bot/stdio-smoke.js -- <cmd> [args...]` plays a fake game against your bot through the real `match.js`, recorder
 and adapter (it needs `forceteki/build`, not card data), and `--out dir` saves the replays and a transcript.
+
+## Verified against real games
+
+With real card data (2026-10-11): `npm run gate` still gives 594/342/486 steps (p2 wins) on this branch. The 12 demo
+replays (4,870 lines) and a 12-game tournament of the stdio bot against random and heuristic bots (4,315 replay lines,
+2,152 stdio messages) all validate. Every `card` action's target can be found by `id` in the observation.
