@@ -3,13 +3,14 @@
  * Round-robin ladder with ratings, run on worker threads.
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
- *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--replays <dir>]
+ *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record]
  *
  * Each pair plays `--games` games (rounded up to even): every seed twice, once from each seat, so random-deck luck
- * cancels out. Writes <out>/<id>.json (schema "swu-ladder/1", see ladder-report.js) after every finished game, and
- * keeps <out>/index.json listing all runs. Files are replaced atomically, so a dashboard can poll them safely.
+ * cancels out. Everything goes in <out>/<id>/, rewritten atomically after every finished game:
+ *   index.json   the same tournament index tournament.js writes (viewer and dashboard read it as is)
+ *   ladder.json  the full report (schema "swu-ladder/1", see ladder-report.js): ratings, CIs, pair matrix, Elo history
+ *   games/       per-game recordings (<id>.jsonl, same format as tournament.js), only with --record
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
- * --replays writes viewer-compatible recordings (index.json + games/<id>.jsonl, same format as tournament.js).
  */
 const fs = require('fs');
 const os = require('os');
@@ -43,19 +44,6 @@ function defaultOut() {
     return fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', 'results');
 }
 
-function updateRunIndex(out, doc) {
-    const file = path.join(out, 'index.json');
-    let idx = { schema: 'swu-ladder-index/1', runs: [] };
-    try {
-        idx = JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch {
-        // first run in this folder
-    }
-    const entry = { id: doc.id, file: `${doc.id}.json`, status: doc.status, createdAt: doc.createdAt, updatedAt: doc.updatedAt, bots: doc.config.bots, scheduled: doc.progress.scheduled, finished: doc.progress.finished, leader: doc.bots[0]?.name ?? null };
-    idx.runs = [entry, ...idx.runs.filter((r) => r.id !== doc.id)];
-    writeJson(file, idx);
-}
-
 async function main() {
     const names = arg('bots', 'rush,aggro,tempo,control,heuristic,random').split(',');
     if (new Set(names).size !== names.length) {
@@ -75,9 +63,9 @@ async function main() {
     const workers = Math.max(1, Number(arg('workers', Math.max(1, os.cpus().length - 1))));
     const createdAt = new Date().toISOString();
     const id = arg('id', `ladder-${createdAt.replace(/[:.]/g, '-').slice(0, 19)}`);
-    const out = path.resolve(arg('out', defaultOut()));
-    const replays = arg('replays', null) && path.resolve(arg('replays'));
-    fs.mkdirSync(out, { recursive: true });
+    const out = path.join(path.resolve(arg('out', defaultOut())), id);
+    const record = process.argv.includes('--record');
+    fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
     const schedule = roundRobin(names, perPair, firstSeed);
@@ -86,20 +74,14 @@ async function main() {
     let status = 'running';
     const save = () => {
         const doc = summarize({ id, createdAt, status, engine, config, botInfo, games, scheduled: schedule.length });
-        writeJson(path.join(out, `${id}.json`), doc);
-        updateRunIndex(out, doc);
+        writeJson(path.join(out, 'ladder.json'), doc);
+        writeJson(path.join(out, 'index.json'), tIndex);
         return doc;
     };
-
-    // viewer-compatible tournament index, if recording
-    const tIndex = replays && { id: path.basename(replays), createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
-    const saveReplays = () => replays && writeJson(path.join(replays, 'index.json'), tIndex);
-    if (replays) {
-        fs.mkdirSync(path.join(replays, 'games'), { recursive: true });
-        saveReplays();
-    }
+    // tournament.js-format index (TournamentIndex in viewer/src/core/types.ts)
+    const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
     save();
-    console.log(`${id}: ${schedule.length} games, ${names.length} bots, ${workers} workers -> ${path.join(out, `${id}.json`)}`);
+    console.log(`${id}: ${schedule.length} games, ${names.length} bots, ${workers} workers -> ${out}`);
 
     const queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     const t0 = Date.now();
@@ -113,11 +95,11 @@ async function main() {
             }
             const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null };
             games.push(entry);
-            if (replays) {
-                job.replayFile = path.join(replays, 'games', `${job.id}.jsonl`);
-                tIndex.games.push({ ...entry, botStats: undefined });
-                saveReplays();
+            tIndex.games.push({ ...entry });
+            if (record) {
+                job.replayFile = path.join(out, 'games', `${job.id}.jsonl`);
             }
+            save();
             w.postMessage(job);
         };
         for (let i = 0; i < Math.min(workers, queue.length); i++) {
@@ -132,10 +114,7 @@ async function main() {
                 const winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
                 const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null };
                 Object.assign(games.find((g) => g.id === job.id), done, { botStats: r.botStats });
-                if (replays) {
-                    Object.assign(tIndex.games.find((g) => g.id === job.id), done);
-                    saveReplays();
-                }
+                Object.assign(tIndex.games.find((g) => g.id === job.id), done);
                 const doc = save();
                 const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
                 console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome} ${winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
