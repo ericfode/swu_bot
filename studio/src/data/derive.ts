@@ -123,14 +123,44 @@ export function metrics(game: Game, lensSteps?: Map<number, LensStep>): Metrics[
 }
 
 export interface Delta {
+    /** the side it happened on: for 'steal', the side the unit went over to */
     seat: Seat;
-    kind: 'enter' | 'defeat' | 'base' | 'heal' | 'deploy' | 'resource';
+    kind: 'enter' | 'defeat' | 'base' | 'heal' | 'deploy' | 'flip' | 'steal' | 'bounce' | 'resource';
     text: string;
 }
 
-/** What visibly changed between two consecutive snapshots, for the log and the board's pop-ups. */
+/**
+ * What visibly changed between two consecutive snapshots, for the log and the board's pop-ups. Units are matched by
+ * name: one that leaves a side while a same-named unit arrives on the other changed control ('steal'), one whose name
+ * turns up in a hand was returned ('bounce'). A leader whose unit enters an arena deploys; one that only changes face flips.
+ */
 export function deltas(a: Snapshot, b: Snapshot): Delta[] {
     const out: Delta[] = [];
+    const names = (p: PlayerSnap) => units(p).map((u) => u.n);
+    const gone = {} as Record<Seat, string[]>;
+    const came = {} as Record<Seat, string[]>;
+    for (const seat of SEATS) {
+        const rest = names(b.players[seat]);
+        gone[seat] = names(a.players[seat]).filter((n) => {
+            const i = rest.indexOf(n);
+            return i >= 0 ? (rest.splice(i, 1), false) : true;
+        });
+        came[seat] = rest;
+    }
+    // control changes, before anything is read as a defeat or an arrival
+    const stolen: Delta[] = [];
+    for (const seat of SEATS) {
+        gone[seat] = gone[seat].filter((n) => {
+            const i = came[other(seat)].indexOf(n);
+            if (i < 0) {
+                return true;
+            }
+            came[other(seat)].splice(i, 1);
+            stolen.push({ seat: other(seat), kind: 'steal', text: `${n} changes sides` });
+            return false;
+        });
+    }
+    const inHands = (s: Snapshot, n: string) => SEATS.reduce((k, seat) => k + s.players[seat].hand.filter((c) => c.n === n).length, 0);
     for (const seat of SEATS) {
         const pa = a.players[seat];
         const pb = b.players[seat];
@@ -140,24 +170,26 @@ export function deltas(a: Snapshot, b: Snapshot): Delta[] {
         } else if (dmg < 0) {
             out.push({ seat, kind: 'heal', text: `${pb.base.n} heals ${-dmg}` });
         }
-        if (pb.leader?.dep && !pa.leader?.dep) {
-            out.push({ seat, kind: 'deploy', text: `${pb.leader.n.split(',')[0]} deploys` });
-        }
-        const before = units(pa).map((u) => u.n);
-        const after = units(pb).map((u) => u.n);
-        const rest = [...after];
-        for (const n of before) {
-            const i = rest.indexOf(n);
-            if (i >= 0) {
-                rest.splice(i, 1);
+        if (pb.leader && pa.leader && ((pb.leader.dep && !pa.leader.dep) || pb.leader.n !== pa.leader.n)) {
+            const i = came[seat].indexOf(pb.leader.n);
+            const ups = (p: PlayerSnap) => units(p).flatMap((u) => u.u ?? []).filter((u) => u.n === pb.leader!.n).length;
+            if (pb.leader.dep && i >= 0) {
+                came[seat].splice(i, 1);
+                out.push({ seat, kind: 'deploy', text: `${pb.leader.n.split(',')[0]} deploys` });
+            } else if (pb.leader.dep && ups(pb) > ups(pa)) {
+                out.push({ seat, kind: 'deploy', text: `${pb.leader.n.split(',')[0]} deploys as a pilot` });
             } else {
-                out.push({ seat, kind: 'defeat', text: `${n} defeated` });
+                out.push({ seat, kind: 'flip', text: pb.leader.n !== pa.leader.n ? `${pa.leader.n} flips to ${pb.leader.n}` : `${pb.leader.n} flips` });
             }
         }
-        for (const n of rest) {
-            if (!(pb.leader?.dep && !pa.leader?.dep && n === pb.leader.n)) {
-                out.push({ seat, kind: 'enter', text: `${n} enters` });
-            }
+        for (const n of gone[seat]) {
+            // more copies of it in the hands than before (and than bounces already counted): it went back to a hand
+            const back = inHands(b, n) - inHands(a, n) - out.filter((d) => d.kind === 'bounce' && d.text === `${n} returns to hand`).length;
+            out.push(back > 0 ? { seat, kind: 'bounce', text: `${n} returns to hand` } : { seat, kind: 'defeat', text: `${n} defeated` });
+        }
+        out.push(...stolen.filter((d) => d.seat === seat));
+        for (const n of came[seat]) {
+            out.push({ seat, kind: 'enter', text: `${n} enters` });
         }
         if (pb.res.total > pa.res.total) {
             out.push({ seat, kind: 'resource', text: `resource ${pb.res.total}` });
