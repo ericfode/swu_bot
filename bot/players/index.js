@@ -5,7 +5,8 @@
  *
  *   random, random-a, ...       uniform random
  *   rush                        rule-based, no lookahead
- *   heuristic[-dN]              one-ply rollback search, original ("balanced") evaluation
+ *   heuristic[-dN]              one-ply rollback search, "balanced" evaluation (original weights, danger sign fixed)
+ *   legacy[-dN]                 same search with the original evaluation exactly, inverted danger term included
  *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
  *   ismcts[-bB][-hH][-nN][-eP][-vV] known-decklist ISMCTS (players/ismcts.js): belief sharpness B (default 1, 0 = uniform),
  *                               horizon H exchanges (default 1), N iterations per legal action (default 6).
@@ -13,6 +14,10 @@
  *                               `-e<profile>` scores leaves with an evaluation profile (`-etempo`, `-eaggro`, ...).
  *                               `-peek` is an UNFAIR control that searches the real hidden cards (no sampling), to
  *                               measure what hidden information is worth; keep it out of competitive ladders.
+ *
+ *   omni[-dN][-nN][-blind]      UNFAIR reference bot (players/omniscient.js): full-information alpha-beta, depth N windows
+ *                               (default 2), -n node budget per window, -blind hides future draws from its search.
+ *                               Keep it out of competitive ladders.
  *
  * `-dN` sets search depth (my next N actions). Anything after `#` is ignored, so the same bot can be entered twice
  * (`aggro#1,aggro#2`) as a sanity check: the two copies should rate about equal.
@@ -28,6 +33,28 @@ const { HeuristicBot } = require('./heuristic');
 const { ExternalBot } = require('./external');
 const { PROFILES } = require('./profiles');
 const { IsmctsBot } = require('./ismcts');
+const { OmniscientBot } = require('./omniscient');
+
+/** omni-d1-n300-blind -> {depth: 1, budget: 300, blind: true}; null when the name is not an omni name. Plain letter
+ * tags (omni-a, omni-b) only tell copies apart. */
+function parseOmni(kindAndOpts) {
+    const [head, ...parts] = kindAndOpts.split('-');
+    if (head !== 'omni') {
+        return null;
+    }
+    const opts = { depth: 2, blind: false };
+    for (const p of parts) {
+        const m = /^([dn])(\d+)$/.exec(p);
+        if (m) {
+            opts[m[1] === 'd' ? 'depth' : 'budget'] = Number(m[2]);
+        } else if (p === 'blind') {
+            opts.blind = true;
+        } else if (!/^[a-z]+$/.test(p)) {
+            return null;
+        }
+    }
+    return opts;
+}
 
 /**
  * `-v<name>`: score ISMCTS leaves with an evaluator from the position-evaluation bench (bot/eval/evaluators.js:
@@ -109,6 +136,10 @@ function thoughtsWriter(name) {
 }
 
 function describeBot(name) {
+    const omni = parseOmni(name.split('#')[0]);
+    if (omni) {
+        return { name, kind: 'omniscient', profile: omni.blind ? 'omni-blind' : 'omni', depth: omni.depth, lang: 'js' };
+    }
     const ism = parseIsmcts(name.split('#')[0]);
     if (ism) {
         return { name, kind: 'search', profile: (ism.peek ? 'ismcts-peek' : `ismcts-b${ism.beta}`) + (ism.evalProfile ? `-${ism.evalProfile}` : '') + (ism.evaluator ? `-v${ism.evaluator}` : ''), depth: ism.horizon, lang: 'js', beta: ism.beta };
@@ -133,7 +164,7 @@ function describeBot(name) {
 function makeBot(name) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
@@ -141,6 +172,9 @@ function makeBot(name) {
         // an entry may name its own adapter class (an ExternalBot subclass), e.g. bot/jev/look.js
         const Adapter = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : ExternalBot;
         return new Adapter(name, spec);
+    }
+    if (info.kind === 'omniscient') {
+        return new OmniscientBot(name, parseOmni(name.split('#')[0]));
     }
     const ism = parseIsmcts(name.split('#')[0]);
     if (ism) {
@@ -156,4 +190,4 @@ function makeBot(name) {
     return createRandomBot(name);
 }
 
-module.exports = { makeBot, describeBot, parseName, parseIsmcts };
+module.exports = { makeBot, describeBot, parseName, parseIsmcts, parseOmni };
