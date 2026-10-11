@@ -121,11 +121,28 @@ test('the scrub removes ids, names, user objects, spectators and chat text', () 
     assert.deepStrictEqual(Object.keys(scrub(frame({})).players), ['player1', 'player2']);
 });
 
-test('checkHost allows localhost and refuses other hosts unless named', () => {
+test('checkHost allows localhost, refuses other hosts unless named, and needs NODE_USE_ENV_PROXY behind a proxy', () => {
     assert.strictEqual(checkHost('http://127.0.0.1:9500').hostname, '127.0.0.1');
     assert.strictEqual(checkHost('http://localhost:9500').hostname, 'localhost');
     assert.throws(() => checkHost('https://karabast.net'), /refusing to connect to karabast.net/);
-    assert.strictEqual(checkHost('https://example.org', ['example.org']).hostname, 'example.org');
+    const saved = { ...process.env };
+    try {
+        delete process.env.https_proxy;
+        process.env.HTTPS_PROXY = 'http://127.0.0.1:1';
+        delete process.env.NODE_USE_ENV_PROXY;
+        assert.throws(() => checkHost('https://example.org', ['example.org']), /NODE_USE_ENV_PROXY=1/);
+        assert.strictEqual(checkHost('http://127.0.0.1:9500').hostname, '127.0.0.1');
+        process.env.NODE_USE_ENV_PROXY = '1';
+        assert.strictEqual(checkHost('https://example.org', ['example.org']).hostname, 'example.org');
+    } finally {
+        for (const k of ['HTTPS_PROXY', 'https_proxy', 'NODE_USE_ENV_PROXY']) {
+            if (k in saved) {
+                process.env[k] = saved[k];
+            } else {
+                delete process.env[k];
+            }
+        }
+    }
 });
 
 const fs = require('fs');

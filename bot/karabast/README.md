@@ -82,6 +82,8 @@ Not used yet. Eric picked public games, recording public games politely and aski
 friend (2026-10-11, [decision page](https://claude.ai/artifact/MEsM6CB2hyK8Azrj2ajJ5K)), with a limit of 10 real
 people. Before any live run:
 
+- Behind an HTTPS proxy (Claude Code cloud sessions) run it with `NODE_USE_ENV_PROXY=1`, or Node's fetch and
+  WebSocket go around the proxy and fail; `socket.js` refuses a non-local host without it.
 - A run against a non-local host needs `--allow-host <host>` and `--ledger <file>`. The ledger stops a run before a
   game that would pass `--max-people` (default 10). `--stop-file <file>` stops it before the next game.
 - Engine errors on karabast.net are reported to its developers (Lobby `handleError`), so `queue.js` refuses decks with
