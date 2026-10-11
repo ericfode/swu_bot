@@ -392,11 +392,11 @@ window.__guide = { show(id, k = 1) { cancelAnimationFrame(GUIDE.raf); GUIDE.raf 
 
 function prepare(M) {
   SIT = Object.fromEntries(M.situations.map((s) => [s.id, s]));
-  mapped = M.bots.filter((b) => b.games >= MIN_GAMES && b.replayGames >= 5);
+  mapped = K.mappedOf(M);
   few = M.bots.filter((b) => !mapped.includes(b));
   HUM = M.humans && M.humans.replayGames >= 5 ? M.humans : null;
 }
-const rankIn = (sid) => mapped.filter((b) => b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
+const rankIn = (sid) => K.rankIn(mapped, sid);
 
 function renderHeader(M) {
   const t = M.totals;
@@ -404,16 +404,11 @@ function renderHeader(M) {
   $('stamp').textContent = `updated ${new Date(M.generatedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${M.sources.length} runs · ${t.replays} replays · ${t.snapshots.toLocaleString()} round starts`;
 }
 
-// Standouts: the labelled extremes a reader asks for first, on the first screen.
+// Standouts: the labelled extremes a reader asks for first, on the first screen (rules in the Atlas kit).
 function renderStandouts() {
-  const styled = mapped.filter((b) => b.style.kills != null);
-  const maxBy = (k) => styled.reduce((a, b) => (b.style[k] > a.style[k] ? b : a), styled[0]);
-  const racer = maxBy('baseShare'), killer = maxBy('kills'), clock = mapped.filter((b) => b.forfeits).sort((a, b) => b.forfeits - a.forfeits);
-  const out = [];
-  if (racer) out.push(`<span>most base-focused: <b>${esc(racer.id)}</b> ${Math.round(racer.style.baseShare * 100)}% of attacks at the base</span>`);
-  if (killer) out.push(`<span>removes the most units: <b>${esc(killer.id)}</b> ${killer.style.kills.toFixed(2)} a round</span>`);
-  if (clock.length) out.push(`<span><span class="clock">⏱</span> lost games by a late or broken reply: ${clock.map((b) => `<b>${esc(b.id)}</b> ${b.forfeits}`).join(', ')}</span>`);
-  $('standouts').innerHTML = out.join('');
+  $('standouts').innerHTML = K.standouts(mapped).map((x) => x.kind === 'clock'
+    ? `<span><span class="clock">⏱</span> ${x.text}: ${x.bots.map(([id, n]) => `<b>${esc(id)}</b> ${n}`).join(', ')}</span>`
+    : `<span>${x.text}: <b>${esc(x.bot)}</b> ${x.value}</span>`).join('');
 }
 
 function renderSpots(M) {

@@ -32,35 +32,69 @@
    * `board` is the icon's final frame; `focus` is the part of the table the spot is about.
    */
   const SPOTS = [
-    { id: 'base_behind', group: 'Behind', label: 'Base behind', short: 'your base 5+ HP lower', rule: 'round 2 or later and your base has 5+ HP less than theirs',
+    { id: 'base_behind', group: 'Behind', label: 'Base behind', short: 'your base 5+ HP lower', test: (x) => x.round >= 2 && x.baseLead <= -5, rule: 'round 2 or later and your base has 5+ HP less than theirs',
       say: 'Your base has 5 or more HP less left than theirs.', focus: 'base', gap: true,
       board: { you: { base: 12, units: [3, 2], hand: 3 }, them: { base: 21, units: [2, 3], hand: 3 }, round: 4 } },
-    { id: 'board_behind', group: 'Behind', label: 'Board behind', short: '4+ less power on board', rule: 'round 2 or later and your units have 4+ less total power than theirs',
+    { id: 'board_behind', group: 'Behind', label: 'Board behind', short: '4+ less power on board', test: (x) => x.round >= 2 && x.boardLead <= -4, rule: 'round 2 or later and your units have 4+ less total power than theirs',
       say: 'Their units on the table have 4 or more power more than yours.', focus: 'units', gap: true,
       board: { you: { base: 24, units: [2, 1], hand: 3 }, them: { base: 24, units: [3, 4, 2, 3], hand: 3 }, round: 3 } },
-    { id: 'low_base', group: 'Behind', label: 'Near death', short: 'your base at 8 HP or less', rule: 'your base has 8 HP or less',
+    { id: 'low_base', group: 'Behind', label: 'Near death', short: 'your base at 8 HP or less', test: (x) => x.myBase <= 8, rule: 'your base has 8 HP or less',
       say: 'Your base is down to 8 HP or less. One or two more hits and you lose.', focus: 'base', only: 'you',
       board: { you: { base: 7, units: [2], hand: 2 }, them: { base: 18, units: [3, 2], hand: 3 }, round: 6 } },
-    { id: 'cards_behind', group: 'Behind', label: 'Fewer cards', short: '2+ fewer cards in hand', rule: 'round 2 or later and you hold 2+ fewer cards than they do',
+    { id: 'cards_behind', group: 'Behind', label: 'Fewer cards', short: '2+ fewer cards in hand', test: (x) => x.round >= 2 && x.handLead <= -2, rule: 'round 2 or later and you hold 2+ fewer cards than they do',
       say: 'You hold 2 or more fewer cards than they do, so you have fewer options.', focus: 'hand', gap: true,
       board: { you: { base: 26, units: [2, 3], hand: 1 }, them: { base: 26, units: [2, 3], hand: 5 }, round: 3 } },
-    { id: 'close_mid', group: 'Even', label: 'Close at R4', short: 'even at round 4', rule: 'round 4 and both base HP and board power are within 3',
+    { id: 'close_mid', group: 'Even', label: 'Close at R4', short: 'even at round 4', test: (x) => x.round === 4 && Math.abs(x.baseLead) <= 3 && Math.abs(x.boardLead) <= 3, rule: 'round 4 and both base HP and board power are within 3',
       say: 'Round 4 starts and both sides are level: base and board within 3.', focus: 'round', even: true,
       board: { you: { base: 22, units: [3, 2, 3], hand: 3 }, them: { base: 21, units: [2, 3, 3], hand: 3 }, round: 4 } },
-    { id: 'long_game', group: 'Even', label: 'Long game', short: 'round 8 or later', rule: 'round 8 or later',
+    { id: 'long_game', group: 'Even', label: 'Long game', short: 'round 8 or later', test: (x) => x.round >= 8, rule: 'round 8 or later',
       say: 'The game reaches round 8. Most games are over by then.', focus: 'round', late: true,
       board: { you: { base: 13, units: [4, 2], hand: 2 }, them: { base: 15, units: [3, 3], hand: 2 }, round: 8 } },
-    { id: 'base_ahead', group: 'Ahead', label: 'Base ahead', short: 'your base 5+ HP higher', rule: 'round 2 or later and your base has 5+ HP more than theirs',
+    { id: 'base_ahead', group: 'Ahead', label: 'Base ahead', short: 'your base 5+ HP higher', test: (x) => x.round >= 2 && x.baseLead >= 5, rule: 'round 2 or later and your base has 5+ HP more than theirs',
       say: 'Your base has 5 or more HP more left than theirs.', focus: 'base', gap: true,
       board: { you: { base: 21, units: [2, 3], hand: 3 }, them: { base: 12, units: [3, 2], hand: 3 }, round: 4 } },
-    { id: 'board_ahead', group: 'Ahead', label: 'Board ahead', short: '4+ more power on board', rule: 'round 2 or later and your units have 4+ more total power than theirs',
+    { id: 'board_ahead', group: 'Ahead', label: 'Board ahead', short: '4+ more power on board', test: (x) => x.round >= 2 && x.boardLead >= 4, rule: 'round 2 or later and your units have 4+ more total power than theirs',
       say: 'Your units on the table have 4 or more power more than theirs.', focus: 'units', gap: true,
       board: { you: { base: 24, units: [3, 4, 2, 3], hand: 3 }, them: { base: 24, units: [2, 1], hand: 3 }, round: 3 } },
-    { id: 'kill_range', group: 'Ahead', label: 'Lethal range', short: 'their base at 8 HP or less', rule: 'their base has 8 HP or less',
+    { id: 'kill_range', group: 'Ahead', label: 'Lethal range', short: 'their base at 8 HP or less', test: (x) => x.oppBase <= 8, rule: 'their base has 8 HP or less',
       say: 'Their base is down to 8 HP or less. You can finish them soon.', focus: 'base', only: 'them',
       board: { you: { base: 18, units: [3, 2], hand: 3 }, them: { base: 6, units: [2], hand: 2 }, round: 6 } },
   ];
+  for (const s of SPOTS) s.end = s.board; // older name for the final state
   const SPOT = Object.fromEntries(SPOTS.map((s) => [s.id, s]));
+
+  /** One player's side of a recorder snapshot (bot/view.js shape): base HP left, board power, unit HP, hand, resources. */
+  function sideOf(state, pid) {
+    const p = state.players[pid];
+    const units = [...(p.ground || []), ...(p.space || [])];
+    return {
+      base: p.base.hp - p.base.d,
+      power: units.reduce((s, u) => s + (u.p || 0), 0),
+      hpLeft: units.reduce((s, u) => s + Math.max(0, (u.h || 0) - (u.d || 0)), 0),
+      units: units.length,
+      hand: Array.isArray(p.hand) ? p.hand.length : (p.hand || 0),
+      res: p.res ? p.res.total : 0,
+    };
+  }
+  /** The features every spot rule and the average-bot fit read, for `pid` at a round-start snapshot. */
+  function view(state, pid) {
+    const me = sideOf(state, pid), them = sideOf(state, pid === 'p1' ? 'p2' : 'p1');
+    return {
+      round: state.round,
+      myBase: me.base,
+      oppBase: them.base,
+      baseLead: me.base - them.base,
+      boardLead: me.power - them.power,
+      hpLead: me.hpLeft - them.hpLeft,
+      handLead: me.hand - them.hand,
+      resLead: me.res - them.res,
+      initiative: state.initiative === pid ? 1 : 0,
+    };
+  }
+  /** Spot ids whose rule holds for `pid` in a round-start snapshot. */
+  function spotsAt(state, pid) {
+    try { const x = view(state, pid); return SPOTS.filter((s) => s.test(x)).map((s) => s.id); } catch { return []; }
+  }
   const GROUP = Object.fromEntries(GROUPS.map((g) => [g.id, g.label]));
 
   /** The even opening every animated icon starts from. */
@@ -89,6 +123,9 @@
     { id: 'Random', quadrant: null, test: 'the random bot family', text: 'plays random legal moves' },
   ];
 
+  /** [style, meaning] pairs for a legend. */
+  const STYLE_KEY = STYLES.filter((x) => x.id !== 'Random').map((x) => [x.id, x.text]);
+
   /** Style traits, per round of the bot's own decisions. */
   const TRAITS = [
     { id: 'baseDmg', label: 'Base damage / round', fmt: 'num' },
@@ -102,19 +139,23 @@
   ];
 
   /** Bot families: colour = family everywhere (dashboard bot cards use the same `family` values). */
+  // The research console's family bands (Eric's audit picks), so every page uses one colour per family.
+  // `hue` is the console's oklch hue band (per-bot shades spread across it), `chroma` its chroma; light and dark
+  // are the band's middle as hex (oklch L 0.55, or 0.60 for warm hues, in light mode; L 0.76 in dark mode).
   const FAMILIES = [
-    { id: 'heur', family: 'heuristic', label: 'Rules', light: '#2a78d6', dark: '#3987e5' },
-    { id: 'search', family: 'search', label: 'Search', light: '#eb6834', dark: '#d95926' },
-    { id: 'llm', family: 'llm', label: 'LLM', light: '#1baf7a', dark: '#199e70' },
-    { id: 'learned', family: 'learned', label: 'Learned', light: '#c98500', dark: '#c98500' },
-    { id: 'arena', family: 'other', label: 'Arena entrant', light: '#d55181', dark: '#d55181' },
-    { id: 'random', family: 'random', label: 'Random', light: '#8a90a0', dark: '#7d8494' },
-    { id: 'human', family: 'human', label: 'Humans', light: '#0f1420', dark: '#eef0f4' },
+    { id: 'search', family: 'search', label: 'Search', desc: 'simulates futures (MCTS, alpha-beta, PIMC)', hue: [236, 254], chroma: 0.17, light: '#0076cc', dark: '#3ab9ff' },
+    { id: 'learned', family: 'learned', label: 'Learned', desc: 'a trained model picks or scores moves', hue: [290, 306], chroma: 0.17, light: '#7f55c6', dark: '#bf96ff' },
+    { id: 'llm', family: 'llm', label: 'LLM', desc: 'a language model picks moves', hue: [188, 200], chroma: 0.17, light: '#008d8e', dark: '#00d1d0' },
+    { id: 'heur', family: 'heuristic', label: 'Heuristic', desc: 'scores moves with a hand-written evaluation', hue: [40, 56], chroma: 0.17, light: '#cd5800', dark: '#ff8b44' },
+    { id: 'rules', family: 'rules', label: 'Rules', desc: 'fixed priority list, no position score', hue: [88, 98], chroma: 0.17, light: '#a37a00', dark: '#d6ac00' },
+    { id: 'random', family: 'random', label: 'Random', desc: 'uniform random choice', hue: [250, 250], chroma: 0.025, light: '#677380', dark: '#a6b3c1' },
+    { id: 'arena', family: 'other', label: 'Other', desc: 'not classified yet (most arena entrants)', hue: [70, 80], chroma: 0.035, light: '#8d7e69', dark: '#bfae99' },
+    { id: 'human', family: 'human', label: 'Humans', desc: 'real karabast.net players', hue: null, chroma: 0, light: '#0f1420', dark: '#eef0f4' },
   ];
   const FAM_BY_FAMILY = Object.fromEntries(FAMILIES.map((f) => [f.family, f]));
-  /** Family key -> label, e.g. FAMLABEL.heur = 'Rules'. */
+  /** Family key -> label, e.g. FAMLABEL.heur = 'Heuristic'. */
   const FAMLABEL = Object.fromEntries(FAMILIES.map((f) => [f.id, f.label]));
-  /** Family key ('heur', 'search', ...) for a bot's `family` field; anything unknown is an arena entrant. */
+  /** Family key ('heur', 'search', ...) for a bot's `family` field; anything unknown counts as 'other'. */
   const famKey = (family) => (FAM_BY_FAMILY[family] || FAM_BY_FAMILY.other).id;
   const famLabel = (family) => (FAM_BY_FAMILY[family] || FAM_BY_FAMILY.other).label;
   const famColor = (family) => `var(--f-${famKey(family)})`;
@@ -218,6 +259,25 @@
     return g;
   }
 
+  /**
+   * Bots shown on the Atlas from a meta.json (`swu-meta/1`): MIN_GAMES+ games and 5+ replays, strongest first.
+   * rankIn(bots, spot) orders them in one spot (MIN_GAMES+ games there); its first is the spot's ★ best.
+   */
+  const mappedOf = (meta) => meta.bots.filter((b) => b.games >= MIN_GAMES && b.replayGames >= 5).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  const rankIn = (bots, sid) => bots.filter((b) => b.situations[sid] && b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
+  /** The labelled extremes the Atlas shows first: most base-focused, removes the most units, lost games on the clock. */
+  function standouts(bots) {
+    const styled = bots.filter((b) => b.style && b.style.kills != null);
+    const out = [];
+    if (!styled.length) return out;
+    const maxBy = (k) => styled.reduce((a, b) => (b.style[k] > a.style[k] ? b : a), styled[0]);
+    const racer = maxBy('baseShare'), killer = maxBy('kills'), clock = bots.filter((b) => b.forfeits).sort((a, b) => b.forfeits - a.forfeits);
+    out.push({ kind: 'racer', text: 'most base-focused', bot: racer.id, value: `${Math.round(racer.style.baseShare * 100)}% of attacks at the base` });
+    out.push({ kind: 'killer', text: 'removes the most units', bot: killer.id, value: `${killer.style.kills.toFixed(2)} a round` });
+    if (clock.length) out.push({ kind: 'clock', text: 'lost games by a late or broken reply', bots: clock.map((b) => [b.id, b.forfeits]) });
+    return out;
+  }
+
   /** The small final-frame icon, as the Atlas uses it in tiles and grid headers. */
   const miniBoard = (id, cls = 'pict') => `<svg class="${cls}" viewBox="0 0 240 150" aria-hidden="true">${drawBoard(id, 1, { mini: true })}</svg>`;
 
@@ -297,7 +357,8 @@
     document.head.appendChild(st);
   }
 
-  return { VERSION, MIN_GAMES, THIN, GROUPS, GROUP, SPOTS, SPOT, OPEN, ICON_PARTS, STYLES, TRAITS, FAMILIES, FAMLABEL, TERMS, TIMING,
+  return { VERSION, MIN_GAMES, THIN, GROUPS, GROUP, SPOTS, SPOT, OPEN, ICON_PARTS, STYLES, STYLE_KEY, TRAITS, FAMILIES, FAMLABEL, TERMS, TIMING,
+    sideOf, view, spotsAt, mappedOf, rankIn, standouts,
     famKey, famLabel, famColor, pp, EDGE_STEPS, edgeColor, ease, drawBoard, miniBoard, spotSvg, animate,
     TOKENS, CSS_VARS, CSS_CLASSES, css, injectCss };
 });
