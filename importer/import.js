@@ -11,7 +11,8 @@
  *
  * Every input file becomes <out>/games/<id>.jsonl (spec/replay-format.md: header, steps, end) and <out>/index.json
  * is rewritten in the tournament format, so the viewer, analysis/ and bot/omni/lens.js read the folder unchanged.
- * Inputs: see importer/sources.js (KaraBuddy replay files, Karabast gamestate lists, socket.io dumps, capture.js).
+ * Inputs: see importer/sources.js (KaraBuddy replay files, Karabast gamestate lists, socket.io dumps, capture.js), and
+ * SWU-PGN game files (.swupgn, importer/swupgn.js), detected from their [Game "SWU-PGN/1.x"] tag.
  * <id> is g-<hash> for a file and <hash>.both for a pair, the first 10 hex digits of the SHA-1 of the input bytes, so
  * file names (KaraBuddy names downloads after both players) are never written. --keep-file-names uses the file name
  * without its extension instead, and also writes source.file / source.pairedWith (for files you named yourself).
@@ -25,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const { readText } = require('./sources');
 const { convertFrames, splitGames } = require('./karabast');
+const { isSwuPgn, convertSwuPgn } = require('./swupgn');
 const { mergeCaptures } = require('./merge');
 
 function parseArgs(argv) {
@@ -52,7 +54,7 @@ function expand(inputs) {
     const files = [];
     for (const p of inputs) {
         if (fs.statSync(p).isDirectory()) {
-            files.push(...fs.readdirSync(p).filter((f) => /\.(json|jsonl|txt|log|karareplay)$/.test(f) && !/\.truth\.jsonl$/.test(f)).sort().map((f) => path.join(p, f)));
+            files.push(...fs.readdirSync(p).filter((f) => /\.(json|jsonl|txt|log|karareplay|swupgn)$/.test(f) && !/\.truth\.jsonl$/.test(f)).sort().map((f) => path.join(p, f)));
         } else {
             files.push(p);
         }
@@ -67,9 +69,14 @@ const gameId = (file, bytes, keepFileNames) => (keepFileNames ? nameId(file) : `
 /** One capture file -> one replay per game in it. */
 function importFile(file, { names, source, keepFileNames }) {
     const bytes = fs.readFileSync(file);
-    const cap = readText(bytes.toString('utf8'));
-    const seats = cap.meta.capture?.seats;
+    const text = bytes.toString('utf8');
     const id = gameId(file, bytes, keepFileNames);
+    if (isSwuPgn(text)) {
+        const { events, report } = convertSwuPgn(text, { names: names ?? undefined, source: { kind: source ?? 'swu-pgn', ...(keepFileNames ? { file: path.basename(file) } : {}) } });
+        return [{ id, events, report, reader: `swu-pgn (${report.keyframes} keyframes, ${report.keyframeMismatches.length} mismatches)` }];
+    }
+    const cap = readText(text);
+    const seats = cap.meta.capture?.seats;
     const games = splitGames(cap.frames);
     return games.map((frames, k) => {
         const { events, report } = convertFrames(frames, {
@@ -146,7 +153,8 @@ function main() {
                         index.bots.push(b);
                     }
                 }
-                console.log(`${id}: ${reader}, ${report.frames} frames -> ${report.steps} steps, pov ${report.pov}, winner ${entry.winnerSeat ?? '-'}, ${report.messages} log lines${report.chatDropped ? `, ${report.chatDropped} chat lines dropped` : ''}`);
+                const input = report.records != null ? `${report.records} records` : `${report.frames} frames`;
+                console.log(`${id}: ${reader}, ${input} -> ${report.steps} steps, pov ${report.pov}, winner ${entry.winnerSeat ?? '-'}, ${report.messages} log lines${report.chatDropped ? `, ${report.chatDropped} chat lines dropped` : ''}`);
             }
         } catch (e) {
             console.error(`${job.name}: ${e.message}`);
