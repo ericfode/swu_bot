@@ -91,7 +91,9 @@ python3 theory/measure/pimc_bias.py pimc.jsonl
 
 2026-10-11, 120 games (heuristic/heuristic, aggro/control, tempo/rush, random/heuristic; seeds
 201-230), 960 windows: 740 had a proven move on the real deal; in 529 the gap is pinned down, and
-it is 0 in all of them, so the sum along every game (163 player-games) is 0. Hidden cards changed
+it is 0 in all of them, so the sum over each game's settled windows is 0 (163 player-games).
+With the unsettled windows counted too, the sum is pinned to 0 for only 42 of 240 player-games;
+the rest have a nonzero upper bound or a window with no move proven. Hidden cards changed
 some move's value in 3 of the 740 windows; in the two that settled, a move that wins in every deal
 existed. The other 211 windows are not settled within the budget (gap between 0 and its upper bound). Limits:
 the subset has units only (no events, no leader actions), the windows that settle are mostly the

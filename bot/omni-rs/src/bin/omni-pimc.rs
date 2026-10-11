@@ -6,7 +6,8 @@
 //! every visible fact. Deal 0 is the real one.
 //!
 //! For every deal w and every legal move a, the prover solves the position after a and gives
-//! f(w, a) = 1 (mover forces a win), 0 (opponent forces a win) or null (not proven in budget).
+//! f(w, a) = 1 (mover forces a win), 0 (opponent forces a win), 1/2 (the move ends the game in a
+//! draw) or null (not proven in budget).
 //! A decision is complete when every f is known. Its PIMC gap is
 //!     E_w[max_a f(w, a)] - max_a E_w[f(w, a)]
 //! which `pimc_choice_loss` in theory/SwuTheory/Hidden.lean equates with the expected loss of the
@@ -136,13 +137,12 @@ fn value_for(result: Option<Seat>, mover: Seat) -> Value {
 
 fn run_trace(engine: &Engine, path: &Path, o: &Opts, out: &mut impl Write) -> Result<(), String> {
     let (meta, states, winner) = traces(path)?;
-    if let Some(hash) = meta["pool"]["sha256"].as_str() {
-        if hash != engine.pool_hash() {
-            return Err(format!(
-                "{}: trace pool hash differs from loaded pool",
-                path.display()
-            ));
-        }
+    // As in check::check: a trace without the hash of the loaded pool may use other card rules.
+    if meta["pool"]["sha256"].as_str() != Some(engine.pool_hash()) {
+        return Err(format!(
+            "{}: trace pool hash missing or different from the loaded pool",
+            path.display()
+        ));
     }
     let n = states.len();
     let mut search = Search::new(engine);
@@ -188,6 +188,11 @@ fn run_trace(engine: &Engine, path: &Path, o: &Opts, out: &mut impl Write) -> Re
                         continue;
                     }
                 };
+                // A move that ends the game in a draw is settled at 1/2; the prover would call it unproven.
+                if child.is_terminal() && child.winner().is_none() {
+                    row.push(json!(0.5));
+                    continue;
+                }
                 let r = search.solve(child, o.limits)?;
                 nodes += r.nodes;
                 ms += r.ms;
@@ -220,6 +225,7 @@ fn run_trace(engine: &Engine, path: &Path, o: &Opts, out: &mut impl Write) -> Re
         rec.insert("moves", json!(keys));
         rec.insert("values", json!(values));
         rec.insert("complete", json!(complete));
+        rec.insert("deals", json!(o.deals));
         rec.insert("distinctDeals", json!(hashes.len()));
         rec.insert("nodes", json!(nodes));
         rec.insert("ms", json!(ms));
