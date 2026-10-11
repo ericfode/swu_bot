@@ -74,6 +74,7 @@ const STYLE = KIT.TRAITS;
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '');
 
 const view = KIT.view;
+const sideOf = KIT.sideOf;
 
 /** Reads one replay: round-start snapshots per player and per-player style counters. */
 function readReplay(file) {
@@ -274,6 +275,7 @@ function main() {
     const styleRows = []; // one per (game, player)
     const cache = CACHE ? readJson(CACHE, {}) : {};
     const fresh = {};
+    const unreadable = []; // a replay that throws is skipped, but said out loud: a silent skip once hid a reader bug
     for (const g of games) {
         if (!g.replay) continue;
         let r;
@@ -283,7 +285,7 @@ function main() {
             r = cache[key] || readReplay(g.replay);
             delete r.header;
             fresh[key] = r;
-        } catch { continue; }
+        } catch (e) { unreadable.push(`${g.replay}: ${e.message}`); continue; }
         if (!r.end) continue; // still being written
         for (const pid of ['p1', 'p2']) {
             const bot = pid === 'p1' ? g.p1 : g.p2;
@@ -309,7 +311,7 @@ function main() {
             r = cache[key] || readReplay(g.replay);
             delete r.header;
             fresh[key] = r;
-        } catch { continue; }
+        } catch (e) { unreadable.push(`${g.replay}: ${e.message}`); continue; }
         if (!r.end) continue;
         for (const pid of ['p1', 'p2']) {
             const won = g.winner === pid ? 1 : 0;
@@ -318,6 +320,7 @@ function main() {
         }
     }
 
+    if (unreadable.length) console.warn(`meta: ${unreadable.length} replays could not be read, e.g. ${unreadable[0]}`);
     if (CACHE) { fs.writeFileSync(CACHE + '.tmp', JSON.stringify(fresh)); fs.renameSync(CACHE + '.tmp', CACHE); }
 
     // 4. Baseline: P(win | position, rating gap). Everything below is measured against it.
