@@ -7,12 +7,13 @@
 // min at player 2's (theory/SwuTheory/Value.lean). Features are from player 1's side, so any linear evaluator
 // (the heuristic, its sign-fixed version, or a fitted one) can be scored offline.
 //
-// Recording reads only getters and uses no randomness, so each seed plays out exactly as a plain
-// heuristic-vs-heuristic game on the same code (the omni thread's solve-hh labels line up by step).
+// Recording reads only getters and uses no randomness, so each seed plays out exactly as a plain game between two
+// bots with the same evaluation profile (default `legacy`, the evaluation the omni solver's solve-hh games used).
 const fs = require('fs');
 const { Env } = require('./env');
 const { playGame } = require('./match');
-const { HeuristicBot, evaluate, fingerprint } = require('./players/heuristic');
+const { HeuristicBot, evaluate, fingerprint, arenaUnits } = require('./players/heuristic');
+const { PROFILES } = require('./players/profiles');
 
 const UNIT_KEYS = ['units', 'power', 'hp', 'cost', 'shields', 'upgrades', 'sentinels', 'exhausted', 'unitValue'];
 
@@ -23,7 +24,7 @@ function sideFeatures(p) {
     for (const k of UNIT_KEYS) {
         f[k] = 0;
     }
-    for (const u of p.getArenaUnits()) {
+    for (const u of arenaUnits(p)) {
         const power = u.getPower();
         const left = Math.max(0, u.remainingHp);
         let shields = 0;
@@ -64,8 +65,8 @@ function features(eg) {
 }
 
 class RecordingBot extends HeuristicBot {
-    constructor(name, log) {
-        super(name);
+    constructor(name, log, profile) {
+        super(name, { profile });
         this.log = log;
         this.children = null;
     }
@@ -79,7 +80,7 @@ class RecordingBot extends HeuristicBot {
         this.children = [];
         this.baseFp = fingerprint(eg);
         const before = features(eg);
-        before.check = evaluate(eg, eg.ids[0]);
+        before.check = evaluate(eg, eg.ids[0], PROFILES.legacy);
         const pick = super.choose(ctx);
         this.log.windows.push({
             step: this.log.step, round: eg.round, actor: pid === eg.ids[0] ? 'p1' : 'p2',
@@ -120,11 +121,14 @@ async function main() {
     const first = Number(process.argv[2] ?? 1001);
     const count = Number(process.argv[3] ?? 1);
     const out = process.argv[4] ?? 'td.jsonl';
+    // the omni solver's games (and the data in research/eval-theory) were played by the original evaluation,
+    // which is now the `legacy` profile; set TD_PROFILE=balanced for the sign-fixed bot instead
+    const profile = PROFILES[process.env.TD_PROFILE ?? 'legacy'];
     const env = new Env();
     for (let seed = first; seed < first + count; seed++) {
         const log = { step: 0, windows: [] };
         const t0 = Date.now();
-        const r = await playGame(env, { seed, bots: [new RecordingBot('heuristic', log), new RecordingBot('heuristic', log)] });
+        const r = await playGame(env, { seed, bots: [new RecordingBot('legacy', log, profile), new RecordingBot('legacy', log, profile)] });
         fs.appendFileSync(out, `${JSON.stringify({ seed, outcome: r.outcome, winner: r.winner, steps: r.steps, rounds: r.round, ms: Date.now() - t0, windows: log.windows })}\n`);
         console.log(`seed ${seed}: ${r.outcome} ${r.winner} ${r.steps} steps, ${log.windows.length} windows, ${Date.now() - t0} ms`);
     }

@@ -42,7 +42,7 @@ function originalEvaluate() {
     return m.exports.evaluate;
 }
 
-test('balanced profile reproduces the original evaluation exactly', () => {
+test('legacy profile reproduces the original evaluation exactly', () => {
     const orig = originalEvaluate();
     const boards = [
         [player({ units: [unit(3, 4)], baseDamage: 20 }), player({ hand: 5 })],
@@ -51,9 +51,22 @@ test('balanced profile reproduces the original evaluation exactly', () => {
     ];
     for (const [me, opp] of boards) {
         const eg = game(me, opp);
-        assert.strictEqual(evaluate(eg, 'me'), orig(eg, 'me'));
-        assert.strictEqual(evaluate(eg, 'me', PROFILES.balanced), orig(eg, 'me'));
-        assert.strictEqual(evaluate(eg, 'opp', PROFILES.balanced), orig(eg, 'opp'));
+        assert.strictEqual(evaluate(eg, 'me', PROFILES.legacy), orig(eg, 'me'));
+        assert.strictEqual(evaluate(eg, 'opp', PROFILES.legacy), orig(eg, 'opp'));
+    }
+    // above the danger zone the fix changes nothing
+    const safe = game(player({ units: [unit(3, 4)], baseDamage: 5 }), player({ hand: 5, baseDamage: 10 }));
+    assert.strictEqual(evaluate(safe, 'me'), orig(safe, 'me'));
+});
+
+test('every profile scores more damage to the enemy base as better, at every HP', () => {
+    for (const [name, profile] of Object.entries(PROFILES).filter(([n]) => n !== 'legacy')) {
+        let prev = -Infinity;
+        for (let dmg = 0; dmg <= 30; dmg++) {
+            const v = evaluate(game(player(), player({ baseDamage: dmg })), 'me', profile);
+            assert.ok(v > prev, `${name} at ${dmg} damage`);
+            prev = v;
+        }
     }
 });
 
@@ -139,4 +152,16 @@ test('defaultChoose presses Done once a multi-select display prompt is at its li
     assert.strictEqual(defaultChoose(eg, 'me', [done, more]), more);
     me.currentPrompt = () => prompt(2);
     assert.strictEqual(defaultChoose(eg, 'me', [done, more]), done);
+});
+
+test('arena units that throw on unit properties (attached pilots) are skipped, not fatal', () => {
+    const { arenaUnits } = require('../players/heuristic');
+    const pilot = { get exhausted() {
+        throw new Error('Contract assertion failure');
+    } };
+    const u = unit(2, 2);
+    const p = player({ units: [u] });
+    p.getArenaUnits = () => [u, pilot];
+    assert.deepStrictEqual(arenaUnits(p), [u]);
+    assert.ok(Number.isFinite(evaluate(game(p, player()), 'me')));
 });

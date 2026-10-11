@@ -94,4 +94,23 @@ function roundRobin(names, perPair, firstSeed = 1) {
     return out;
 }
 
-module.exports = { sequentialElo, bradleyTerry, wilson, roundRobin };
+/**
+ * Gauntlet: every challenger plays every opponent (not each other), same seeds and seat swaps as roundRobin.
+ * Seeds are reused across challengers, so all challengers face the same decks: their results compare directly.
+ */
+function gauntlet(challengers, opponents, perPair, firstSeed = 1) {
+    const out = [];
+    const even = perPair + (perPair % 2);
+    for (const a of challengers) {
+        let seed = firstSeed;
+        for (const b of opponents) {
+            for (let k = 0; k < even; k += 2, seed++) {
+                out.push({ seed, p1: a, p2: b });
+                out.push({ seed, p1: b, p2: a });
+            }
+        }
+    }
+    return out;
+}
+
+module.exports = { sequentialElo, bradleyTerry, wilson, roundRobin, gauntlet };
