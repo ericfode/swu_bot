@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "setup": "npm --prefix forceteki install && npm --prefix forceteki run get-cards && npm --prefix forceteki run build && npm --prefix viewer install && npm --prefix analysis install",
+    "setup": "npm install && npm --prefix forceteki install && npm --prefix forceteki run get-cards && npm --prefix forceteki run build && npm --prefix viewer install && npm --prefix analysis install",
     "gate": "node bot/gate.js",
     "random": "node bot/random-run.js",
     "demo": "node bot/tournament.js --bots random-a,random-b,random-c --games 4 --out replays/demo",
@@ -16,6 +16,12 @@
     "analysis:fitness": "node analysis/fitness.js",
     "analysis:test": "node analysis/test/mock-llm.test.js",
     "ladder": "node bot/ladder.js",
-    "test": "node --test bot/test/*.test.js"
+    "test": "node --test bot/test/*.test.js",
+    "lint": "node tools/bin/perch scan",
+    "lint:changed": "node tools/bin/perch scan --since origin/main",
+    "perch": "node tools/bin/perch"
+  },
+  "devDependencies": {
+    "@lakeday/perch": "0.4.3"
   }
 }
