@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Prints the path of a flyctl binary, or exits 1 if there is none.
+for f in "$(command -v flyctl || true)" "$(command -v fly || true)" "$HOME/.fly/bin/flyctl" "$HOME/go/bin/flyctl"; do
+    if [ -n "$f" ] && [ -x "$f" ]; then
+        echo "$f"
+        exit 0
+    fi
+done
+exit 1
