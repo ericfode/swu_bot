@@ -26,6 +26,7 @@ const { convertFrames } = require('./karabast');
 const { indexEntry } = require('./import');
 
 const BASE = 'https://karabuddy.app';
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const MAX_NETWORK_FAILURES = 3;
 const USER_AGENT = 'swu_bot-research/0.1 (+https://github.com/ericfode/swu_bot; slow, public replays only)';
 
@@ -140,9 +141,12 @@ async function run(args, fetchImpl = fetch, log = console.log) {
             }
             await sleep(args.delay);
             const payload = await payloadJson(await get(meta.payloadBlobUrl));
-            delete payload.decks; // KaraBuddy shows strangers no deck lists; keep it that way
+            // KaraBuddy shows strangers no deck lists; keep it that way, but still hide the lobby usernames in log text
+            const hideNames = Object.entries(isObj(payload.decks) ? payload.decks : {}).map(([id, d]) => ({ name: d?.username, id }));
+            delete payload.decks;
             const cap = readKaraBuddy(payload);
             const { events } = convertFrames(cap.frames, {
+                hideNames,
                 source: { kind: 'karabuddy-public', slug: r.slug, url: `${BASE}/r/${r.slug}`, credit: 'KaraBuddy (karabuddy.app)', publishedAt: r.publicAt ?? meta.publicAt ?? null }
             });
             fs.writeFileSync(path.join(gamesDir, `${r.slug}.jsonl`), events.map((e) => JSON.stringify(e)).join('\n') + '\n');

@@ -332,7 +332,7 @@ function splitGames(frames) {
  * Shared by convertFrames and importer/verify.js. One game: see splitGames for captures holding several.
  *
  * Usernames are replaced in log text by seats ('a spectator' for spectators); opts.hideNames adds names to replace,
- * as [{name, seat?}], and opts.decks (KaraBuddy's lobby lists, keyed by player id) adds their usernames.
+ * as [{name, seat?, id?}] (id: the player id, giving the seat), and opts.decks (KaraBuddy's lobby lists, keyed by player id) adds their usernames.
  */
 function readFrames(frames, opts = {}) {
     frames = frames.filter(isGameFrame);
@@ -343,7 +343,7 @@ function readFrames(frames, opts = {}) {
     const seatOf = new Map(Object.entries(seatIds).map(([seat, id]) => [id, seat]));
     const extraNames = [
         ...Object.entries(isObj(opts.decks) ? opts.decks : {}).map(([id, d]) => ({ name: d?.username, seat: seatOf.get(id) })),
-        ...(opts.hideNames ?? []).map((x) => (typeof x === 'string' ? { name: x } : x))
+        ...(opts.hideNames ?? []).map((x) => (typeof x === 'string' ? { name: x } : { name: x?.name, seat: x?.seat ?? seatOf.get(x?.id) }))
     ];
     const scrub = nameScrubber(frames, seatOf, extraNames);
     const items = [];
@@ -452,7 +452,7 @@ function readFrames(frames, opts = {}) {
  * @param {{p1: string, p2: string}} [opts.seats] player ids for p1 and p2
  * @param {object} [opts.source] provenance written to header.source (kind, site, id, url, ...)
  * @param {string[]} [opts.names] display names for p1, p2 (default: the seat names; Karabast usernames are dropped)
- * @param {Array<string|{name: string, seat?: string}>} [opts.hideNames] more usernames to replace in log text
+ * @param {Array<string|{name: string, seat?: string, id?: string}>} [opts.hideNames] more usernames to replace in log text
  * @param {number} [opts.seed] header.seed (default 0: a human game has no replayable seed)
  * @returns {{events: object[], report: object}}
  */

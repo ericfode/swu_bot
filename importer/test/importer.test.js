@@ -251,7 +251,9 @@ test('KaraBuddy public fetch: polite, credited, no names or deck lists, skips wh
     const os = require('os');
     const { run, USER_AGENT } = require('../fetch-karabuddy');
     const kb = toKaraBuddy(game());
-    kb.decks = { u1: { username: 'alice', name: 'my secret deck', leader: { id: 'SOR_005' }, base: { id: 'SOR_023' }, deck: [{ id: 'SOR_042', count: 3 }] } };
+    kb.decks = { u2: { username: 'zed', name: null }, u1: { username: 'alice', name: 'my secret deck', leader: { id: 'SOR_005' }, base: { id: 'SOR_023' }, deck: [{ id: 'SOR_042', count: 3 }] } };
+    // a lobby username only KaraBuddy's deck entry knows, written by the engine as plain text
+    kb.events[2].args[0].patch = { ...kb.events[2].args[0].patch, newMessages: [{ date: '2026-10-01T12:00:01.900Z', message: [{ type: 'player', id: 'u1', name: 'alice' }, ' asks zed to give 2 Advantage tokens'] }] };
     const blob = 'https://x.public.blob.vercel-storage.com/a.json.gz';
     const plain = 'https://pub.r2.dev/b.json';
     const site = fakeKaraBuddy({
@@ -279,7 +281,8 @@ test('KaraBuddy public fetch: polite, credited, no names or deck lists, skips wh
         assert.ok(!site.calls.some((c) => /locked|etc/.test(c.url)), 'encrypted and odd slugs are never requested');
 
         const text = fs.readFileSync(path.join(out, 'games', 'gz-game.jsonl'), 'utf8');
-        assert.ok(!/alice|bob|secret/.test(text), 'no usernames or deck names');
+        assert.ok(!/alice|bob|zed|secret/.test(text), 'no usernames or deck names');
+        assert.match(text, /asks p2 to give 2 Advantage tokens/);
         const h = JSON.parse(text.split('\n')[0]);
         assert.strictEqual(h.source.credit, 'KaraBuddy (karabuddy.app)');
         assert.strictEqual(h.source.url, 'https://karabuddy.app/r/gz-game');
