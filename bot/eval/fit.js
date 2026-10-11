@@ -3,7 +3,7 @@
  * Fit every candidate evaluator on recorded positions and write bot/eval/models/<name>.json.
  *
  *   node bot/eval/fit.js --data <dir>[,<dir>...] [--out bot/eval/models] [--only linear,mlp] [--hidden 8] [--l2 1e-3] [--epochs 30]
- *                        [--drop deckLow,...] [--suffix -g4]
+ *                        [--drop deckLow,toAct,...] [--suffix -g4]
  *
  * Training rows: the train split (by game) of every decided checkpoint, seen subjectively by each player in turn,
  * labelled with whether that player won. Hand-made evaluators get only their logistic scale fitted.
@@ -140,7 +140,7 @@ function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 
     const rng = seededRng(seed);
     const gauss = () => Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng());
     const keep = SIDE_KEYS.map((k) => (drop.includes(k) ? 0 : 1));
-    const inMask = [...keep, ...keep, 1, 1];
+    const inMask = [...keep, ...keep, drop.includes('round') ? 0 : 1, drop.includes('toAct') ? 0 : 1];
     const m = {
         kind: 'mlp', hidden, std, names: SIDE_KEYS,
         W1: Array.from({ length: hidden }, () => Array.from({ length: inp }, (_, i) => (inMask[i] * gauss()) / Math.sqrt(inp))),
@@ -154,8 +154,8 @@ function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 
             x[i] = (keep[i] * a[i]) / std[i];
             x[n + i] = (keep[i] * b[i]) / std[i];
         }
-        x[2 * n] = round / 10;
-        x[2 * n + 1] = toAct;
+        x[2 * n] = (inMask[2 * n] * round) / 10;
+        x[2 * n + 1] = inMask[2 * n + 1] * toAct;
         return x;
     };
     const data = rows.map((r) => {
@@ -250,7 +250,8 @@ function main() {
     const only = arg('only', null)?.split(',');
     // features the fitted models leave out (weight 0), and a suffix for the model file names
     const drop = arg('drop', '').split(',').filter(Boolean);
-    const unknown = drop.filter((k) => !SIDE_KEYS.includes(k));
+    // per-side features, plus the global inputs: round (net only) and who acts next
+    const unknown = drop.filter((k) => !SIDE_KEYS.includes(k) && k !== 'round' && k !== 'toAct');
     if (unknown.length) {
         console.error(`unknown feature(s) in --drop: ${unknown.join(', ')}`);
         process.exit(2);
