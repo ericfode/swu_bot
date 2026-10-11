@@ -246,7 +246,7 @@ export function mountGlyph(el: HTMLElement, state: Game['steps'][number]['state'
 }
 
 /**
- * Draw one action icon (see ActionIcon: glyph < 22px, chip < 48px, card < 96px, card + caption above) into an element.
+ * Draw one action icon (see ActionIcon: glyph < 32px, chip < 48px, card < 96px, card + caption above) into an element.
  * Get actions from classifyGame(game) or pivotal(game, evals).
  */
 export function mountActionIcon(el: HTMLElement, props: ActionIconProps) {

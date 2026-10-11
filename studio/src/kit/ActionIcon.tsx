@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { Activity, ArrowLeftRight, BrickWall, ChevronsUp, CornerUpLeft, Crosshair, Crown, Database, Flag, Hand, Layers, Skull, Swords, Undo2, UserPlus, Wand, Zap, type LucideIcon } from 'lucide-react';
 import { classInfo, type ActionClass, type Outcome } from '../data/actions';
 import type { CardRef, Seat } from '../data/types';
-import { cardImageUrl, tileLook } from '../lib/cards';
+import { cardImageUrl, monogram, tileLook } from '../lib/cards';
 import { useSettings } from '../lib/settings';
 
 /**
@@ -52,23 +52,6 @@ const INK = '#0b1220';
 /** glyphs smaller than this are drawn bare: a ring and disc would leave too few pixels for the pictogram */
 const BARE = 24;
 
-const MINOR = new Set(['the', 'a', 'an', 'of', 'to', 'for', 'in', 'on', 'and', 'or', 'from', 'with', 'by', 'at', 'is']);
-
-/**
- * Two letters for a card, from its distinct words: initials of the first two that aren't "the", "of"…, else the first
- * letter and the next consonant or digit (Maul ML, The Mandalorian MN, Mandalorian Warrior MW, R2-D2 R2).
- */
-function monogram(name: string): string {
-    const words = name.split(',')[0].split(/\s+/).map((w) => w.replace(/^[^a-z0-9]+/i, '')).filter(Boolean);
-    const sig = words.filter((w) => !MINOR.has(w.toLowerCase()));
-    const use = sig.length ? sig : words;
-    if (use.length > 1) {
-        return (use[0][0] + use[1][0]).toUpperCase();
-    }
-    const w = use[0] ?? '?';
-    const next = w.slice(1).match(/[b-df-hj-np-tv-z0-9]/i)?.[0] ?? w[1] ?? '';
-    return (w[0] + next).toUpperCase();
-}
 
 /** The card's art, or a generated tile with its monogram at `mono` (top-left) when the art can't be shown. */
 function Face({ card, back = false, mono }: { card: CardRef; back?: boolean; mono: CSSProperties }) {

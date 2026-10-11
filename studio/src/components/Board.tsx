@@ -1,6 +1,6 @@
 import { memo, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BrainCircuit, Crown, Layers, Library, Skull } from 'lucide-react';
+import { BrainCircuit, Flag, Layers, Library, Skull } from 'lucide-react';
 import { Card, CardBack, type CardValue, type Focus } from './Card';
 import { useSettings } from '../lib/settings';
 import { humanize } from '../lib/cards';
@@ -183,7 +183,7 @@ function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens
                 {hasInit && (
                     <motion.div layoutId="initiative" transition={spring} title={sl ? `Initiative: ${fmt(sl.side.initiative)} points` : 'Initiative'}
                         className="absolute -left-1 top-1 flex flex-col items-center gap-0.5">
-                        <span className="size-7 rounded-full grid place-items-center bg-gold text-ink shadow-[0_0_18px_-2px_var(--color-gold)]"><Crown size={15} strokeWidth={2.5} /></span>
+                        <span className="size-7 rounded-full grid place-items-center bg-gold text-ink shadow-[0_0_18px_-2px_var(--color-gold)]"><Flag size={14} strokeWidth={2.5} /></span>
                         {sl && <span className="lens-chip !text-[10px]" style={termStyle('initiative')}>{fmt(sl.side.initiative)}</span>}
                     </motion.div>
                 )}

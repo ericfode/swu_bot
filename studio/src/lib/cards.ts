@@ -12,16 +12,28 @@ export function setArtResolver(r: ArtResolver | null) {
     resolver = r ?? ((s, b) => swuDbImageUrl(s, b));
 }
 
+// every image from the packs loaded so far: packs add to each other
+const packed: Record<string, string> = {};
+
 /**
  * Use a pack of images ({"SOR_010": "data:...", "SOR_010-b": ...}, or a URL to one) instead of the CDN; cards not in
- * the pack fall back to tiles. Made by studio/scripts/art-pack.py.
+ * the pack fall back to tiles. A pack can also be {"parts": ["a.json", "b.json"]} (URLs relative to it), for packs too
+ * big for one file. Made by studio/scripts/art-pack.py.
  */
 export async function loadArtPack(pack: string | Record<string, string>): Promise<number> {
-    const map: Record<string, string> = typeof pack === 'string' ? await (await fetch(pack)).json() : pack;
-    setArtResolver((code, back) => map[back ? `${code}-b` : code] ?? (back ? map[code] : null) ?? null);
+    const read = async (url: string): Promise<Record<string, string>> => {
+        const j = await (await fetch(url)).json();
+        if (Array.isArray(j?.parts)) {
+            const parts = await Promise.all((j.parts as string[]).map((p) => read(new URL(p, new URL(url, location.href)).href)));
+            return Object.assign({}, ...parts);
+        }
+        return j;
+    };
+    Object.assign(packed, typeof pack === 'string' ? await read(pack) : pack);
+    setArtResolver((code, back) => packed[back ? `${code}-b` : code] ?? (back ? packed[code] : null) ?? null);
     const { bumpArtVersion } = await import('./settings');
     bumpArtVersion();
-    return Object.keys(map).length;
+    return Object.keys(packed).length;
 }
 
 export function cardImageUrl(setCode: string | null, back = false): string | null {
@@ -57,12 +69,28 @@ const TILE_TONES = [
     { a: '#6f6470', b: '#1f1a21' }
 ];
 
+const MINOR = new Set(['the', 'a', 'an', 'of', 'to', 'for', 'in', 'on', 'and', 'or', 'from', 'with', 'by', 'at', 'is']);
+
+/**
+ * Two letters for a card, from its distinct words: initials of the first two that aren't "the", "of"…, else the first
+ * letter and the next consonant or digit (Maul ML, The Mandalorian MN, Mandalorian Warrior MW, R2-D2 R2).
+ */
+export function monogram(name: string): string {
+    const words = name.split(',')[0].split(/\s+/).map((w) => w.replace(/^[^a-z0-9]+/i, '')).filter(Boolean);
+    const sig = words.filter((w) => !MINOR.has(w.toLowerCase()));
+    const use = sig.length ? sig : words;
+    if (use.length > 1) {
+        return (use[0][0] + use[1][0]).toUpperCase();
+    }
+    const w = use[0] ?? '?';
+    const next = w.slice(1).match(/[b-df-hj-np-tv-z0-9]/i)?.[0] ?? w[1] ?? '';
+    return (w[0] + next).toUpperCase();
+}
+
 export function tileLook(name: string) {
     const h = hash(name);
     const asp = TILE_TONES[h % TILE_TONES.length];
-    const words = name.split(',')[0].split(/\s+/).filter((w) => /^[A-Z0-9]/i.test(w));
-    const mono = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase();
-    return { ...asp, mono, angle: 120 + (h % 90) };
+    return { ...asp, mono: monogram(name), angle: 120 + (h % 90) };
 }
 
 // tournament colours per bot: none is a seat colour (p1 blue, p2 red), gold or the omni score's violet, so a bot's colour never reads as a seat

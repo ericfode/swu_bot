@@ -1,7 +1,8 @@
-import { Castle, Crown, Gem, Layers, Mountain, Rocket, type LucideIcon } from 'lucide-react';
+import { BrickWall, Database, Flag, Layers, Mountain, Rocket, type LucideIcon } from 'lucide-react';
 import { TERM_COLOR, type TermKey } from '../data/lens';
 
-const ICONS: Record<TermKey, LucideIcon> = { base: Castle, ground: Mountain, space: Rocket, hand: Layers, resources: Gem, initiative: Crown };
+// base, resources and initiative use the action icons' pictograms (ActionIcon ACTION_GLYPHS), so one picture means one thing
+const ICONS: Record<TermKey, LucideIcon> = { base: BrickWall, ground: Mountain, space: Rocket, hand: Layers, resources: Database, initiative: Flag };
 
 /** The small icon for one part of the omni board score, in that part's colour: on the board's totals and the breakdown's rows. */
 export function TermIcon({ term, size = 11, colored = true }: { term: TermKey; size?: number; colored?: boolean }) {

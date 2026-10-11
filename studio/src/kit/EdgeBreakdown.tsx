@@ -58,9 +58,9 @@ export function EdgeBreakdown({ state, prev, bots, lens = null, prevLens = null,
             </div>
             <div className={`${cols} text-[10px] text-faint`}>
                 <span className="hidden @md:block" />
-                <span className="text-right">{bots.p2.length <= 7 ? name('p2') : 'p2'}</span>
+                <span className="text-right" style={{ color: 'var(--color-p2)' }} title={`${bots.p2} (p2)`}>p2</span>
                 <span className="flex justify-between gap-2 px-1 min-w-0"><span className="flex gap-1 min-w-0">◀ {name('p2')}</span><span className="flex gap-1 min-w-0 justify-end">{name('p1')} ▶</span></span>
-                <span>{bots.p1.length <= 7 ? name('p1') : 'p1'}</span>
+                <span style={{ color: 'var(--color-p1)' }} title={`${bots.p1} (p1)`}>p1</span>
                 <span className="text-right">edge</span>
             </div>
             <div className={`${cols} gap-y-1 text-[12px]`}>
@@ -90,7 +90,7 @@ export function EdgeBreakdown({ state, prev, bots, lens = null, prevLens = null,
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-dim">
                 <span>On the Omni score curve: tanh({sgn(sum)} / {LENS_SCALE}) = <b className="num" style={{ color: 'var(--color-edge)' }}>{sgn(edge, 2)}</b></span>
-                <span className="relative h-2 w-40 rounded-full bg-ink/80 shrink-0" aria-hidden="true">
+                <span className="relative h-2 w-40 rounded-full bg-line shrink-0" aria-hidden="true">
                     <span className="absolute left-1/2 -top-0.5 -bottom-0.5 w-px bg-line" />
                     <motion.span className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-bg" initial={false} transition={spring}
                         animate={{ left: `${50 + edge * 50}%` }} style={{ background: 'var(--color-edge)' }} />
