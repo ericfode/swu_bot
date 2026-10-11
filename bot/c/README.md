@@ -4,7 +4,7 @@ A Star Wars Unlimited bot in C (C11 plus POSIX `getline`, libc only). The engine
 runs forceteki and talks to this process over the stdio JSON Lines protocol in `spec/stdio-protocol.md`.
 
     make -C bot/c                                   # builds bot/c/swu-c
-    node bot/stdio-smoke.js -- bot/c/swu-c          # fake game, no card data needed
+    node bot/tournament.js --bots c-clock,node-random --games 2 --out replays/c-check   # protocol check
     node bot/ladder.js --bots c-clock,rush --games 10
     SWU_C_DEBUG=1 node bot/tournament.js --bots c-clock,rush --games 1 --out replays/c   # decisions on stderr
 

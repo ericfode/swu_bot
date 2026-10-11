@@ -250,6 +250,11 @@ function main() {
                 const who = canonical(RegExp.$1, run);
                 winner = who === p1 ? 'p2' : 'p1';
                 forfeit = who === p1 ? 'p1' : 'p2';
+            } else if (g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2')) {
+                // Protocol v2: any bot failure (late, malformed or illegal reply, crash) ends the game as ERROR with
+                // `by` = the failing seat, and the other seat wins (spec/MIGRATION.md).
+                forfeit = g.by;
+                winner = g.by === 'p1' ? 'p2' : 'p1';
             } else {
                 skipped[g.outcome] = (skipped[g.outcome] || 0) + 1;
                 continue;

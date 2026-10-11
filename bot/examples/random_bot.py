@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Reference client for the stdio bot protocol (spec/stdio-protocol.md). Standard library only.
+"""Reference client for the bot protocol v2 (spec/protocol.md). Standard library only.
 
-Reads one JSON message per line on stdin and answers each with one line on stdout.
-Logs go to stderr; stdout carries protocol lines only.
+Reads one JSON message per line on stdin and answers each with one line on stdout; logs go to stderr.
 
     node bot/tournament.js --bots py-random,random-a --games 2 --out replays/py-test
 """
@@ -12,7 +11,7 @@ import sys
 
 
 def split(dist, rng):
-    """Pick a legal split for a distribute action: fill targets in random order up to their caps."""
+    """A legal split for a distribute action: fill targets in random order up to their caps (None: let the referee pick)."""
     targets = list(dist["targets"])
     rng.shuffle(targets)
     if dist["maxTargets"] is not None:
@@ -23,30 +22,37 @@ def split(dist, rng):
         if give > 0:
             out.append({"id": t["id"], "amount": give})
             left -= give
-    if left and not dist["canDistributeLess"]:
-        return None  # not enough capacity in the targets we kept: let the engine side split it
-    return out
+    return None if left and not dist["canDistributeLess"] else out
+
+
+def reply(msg, rng):
+    if msg["t"] == "hello":
+        rng.seed(msg["seed"])
+        print(f"[py-random] new game as {msg['you']}", file=sys.stderr)
+        return {"t": "ready", "v": 2, "name": "py-random"}
+    if msg["t"] == "decide":
+        action = rng.choice(msg["actions"])
+        out = {"t": "act", "i": action["i"]}
+        if action["kind"] == "distribute":
+            s = split(action["distribute"], rng)
+            if s is not None:
+                out["split"] = s
+        return out
+    if msg["t"] == "over":
+        print(f"[py-random] game over: {msg['winner']} ({msg['outcome']})", file=sys.stderr)
+        return {"t": "ok"}
+    if msg["t"] == "bye":
+        return None  # the session is over; no reply
+    return {"t": "error", "error": f"unknown message {msg['t']}"}
 
 
 def main():
     rng = random.Random(0)
     for line in sys.stdin:
-        msg = json.loads(line)
-        if msg["t"] == "hello":
-            rng = random.Random(msg["seed"])
-            print(f"[py-random] new game as {msg['you']}", file=sys.stderr)
-            reply = {"t": "ready", "v": 1, "name": "py-random"}
-        elif msg["t"] == "decide":
-            action = rng.choice(msg["actions"])
-            reply = {"t": "act", "i": action["i"]}
-            if action["kind"] == "distribute":
-                d = split(action["distribute"], rng)
-                if d is not None:
-                    reply["distribution"] = d
-        else:
-            reply = {"t": "error", "error": f"unknown message {msg['t']}"}
-        sys.stdout.write(json.dumps(reply) + "\n")
-        sys.stdout.flush()
+        out = reply(json.loads(line), rng) if line.strip() else None
+        if out is not None:
+            sys.stdout.write(json.dumps(out) + "\n")
+            sys.stdout.flush()
 
 
 if __name__ == "__main__":

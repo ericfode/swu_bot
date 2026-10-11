@@ -3,14 +3,17 @@
 /**
  * Builds the ladder results document (schema "swu-ladder/1") from finished games. Pure, no engine dependency.
  *
- * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, botStats }
- * where winner is a bot name, 'draw' or null. Only outcome 'won' counts towards ratings; ERROR / STUCK / STEP_CAP
- * games are kept in the list and counted under `incomplete` so engine bugs stay visible.
+ * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, by, botStats }
+ * where winner is a bot name, 'draw' or null. Won games count towards ratings, and so do ERROR games a bot caused
+ * (`by` set), which that bot loses. Other ERROR, STUCK and STEP_CAP games are kept in the list and counted under
+ * `incomplete` so engine bugs stay visible.
  */
 const { sequentialElo, bradleyTerry, wilson } = require('./ratings');
 
+const rated = (g) => !!g.winner && (g.outcome === 'won' || (g.outcome === 'ERROR' && !!g.by));
+
 function scoreOf(g) {
-    if (g.outcome !== 'won') {
+    if (!rated(g)) {
         return null;
     }
     if (g.winner === 'draw') {
@@ -47,7 +50,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
                 ms += st.ms;
                 windows += st.windows;
             }
-            if (g.outcome !== 'won') {
+            if (!rated(g)) {
                 row.incomplete++;
             } else if (g.winner === 'draw') {
                 row.draws++;
@@ -77,7 +80,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
             const gs = finished.filter((g) => (g.p1 === a && g.p2 === b) || (g.p1 === b && g.p2 === a));
             const p = { a, b, games: gs.length, aWins: 0, bWins: 0, draws: 0, incomplete: 0 };
             for (const g of gs) {
-                if (g.outcome !== 'won') {
+                if (!rated(g)) {
                     p.incomplete++;
                 } else if (g.winner === 'draw') {
                     p.draws++;

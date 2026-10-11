@@ -5,11 +5,7 @@
 const path = require('path');
 const { Env } = require('../env');
 const { playGame } = require('../match');
-const { createRandomBot } = require('../players/random');
-const { ExternalBot } = require('../players/external');
-const registry = require('../external-bots.json');
-
-const make = (name) => (registry[name] ? new ExternalBot(name, registry[name]) : createRandomBot(name));
+const { makeBot, closeBots } = require('../players');
 
 (async () => {
     const n = Number(process.argv[2] ?? 5);
@@ -20,7 +16,9 @@ const make = (name) => (registry[name] ? new ExternalBot(name, registry[name]) :
     for (const bot of ['rust-random', 'rust-greedy']) {
         for (let seed = start; seed < start + n; seed++) {
             for (const seats of [[bot, 'random-a'], ['random-a', bot]]) {
-                const r = await playGame(env, { seed, bots: seats.map(make) });
+                const bots = [];
+                seats.forEach((name) => bots.push(makeBot(name, bots)));
+                const r = await playGame(env, { seed, bots });
                 const w = r.winner === 'p1' ? seats[0] : r.winner === 'p2' ? seats[1] : r.outcome;
                 const key = `${bot} vs random-a`;
                 tally[key] ??= { [bot]: 0, 'random-a': 0, other: 0 };
@@ -31,5 +29,6 @@ const make = (name) => (registry[name] ? new ExternalBot(name, registry[name]) :
         }
     }
     console.log(JSON.stringify(tally));
-    process.exit(bad ? 1 : 0);
+    await closeBots();
+    process.exitCode = bad ? 1 : 0;
 })();

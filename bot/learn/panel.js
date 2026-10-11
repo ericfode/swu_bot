@@ -29,12 +29,15 @@ const widgets = [];
 const gens = st.generations ?? [];
 if (gens.length) {
     widgets.push({
-        type: 'table', title: 'Model generations', columns: ['model', 'trained on', 'vs random-a', 'vs rust-greedy'],
-        rows: gens.map((g) => [g.name, g.data, g.vsRandom ?? '-', g.vsGreedy ?? '-'])
+        type: 'table', title: 'Model generations', columns: ['model', 'trained on', 'vs random-a', 'vs rust-greedy', 'vs rust-greedy2'],
+        rows: gens.map((g) => [g.name, g.data, g.vsRandom ?? '-', g.vsGreedy ?? '-', g.vsGreedy2 ?? '-'])
     });
-    const pts = gens.filter((g) => g.vsRandomRate != null).map((g, k) => [k + 1, g.vsRandomRate]);
-    if (pts.length) {
-        widgets.push({ type: 'line', title: 'Win rate vs random by generation', x: 'generation', yFormat: 'pct', series: [{ name: 'rust-learned', points: pts }] });
+    // one point per generation that was measured against that opponent
+    const series = [['vs random-a', 'vsRandomRate'], ['vs rust-greedy2', 'vsGreedy2Rate']]
+        .map(([name, key]) => ({ name, points: gens.map((g, k) => [k + 1, g[key]]).filter((p) => p[1] != null) }))
+        .filter((s) => s.points.length);
+    if (series.length) {
+        widgets.push({ type: 'line', title: 'Win rate by generation', x: 'generation', yFormat: 'pct', series });
     }
 }
 const logs = (st.trainLogs ?? []).map((p) => ({ p, j: readJson(p) })).filter((x) => x.j);

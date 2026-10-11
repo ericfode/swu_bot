@@ -21,18 +21,22 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - Undo/snapshots are disabled by default (`newGame({ undo: true })` enables `UndoMode.Free` for search experiments).
 
 ## Recording and tournaments
-- `recorder.js` — read-only per-step board snapshots (`snapshot(envGame)`); `match.js` — `playGame(env, {seed, bots, record, snapshot})`.
-- `players/random.js` — bots are `{name, choose({game, pid, actions, rng}) -> action}`; register new ones in `tournament.js` `makeBot`.
-- `node bot/tournament.js --bots a,b,c --games 10 --out replays/my-run [--seed 1]` writes `index.json` + `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
-- `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording. Run it after touching `recorder.js` or `match.js`.
+- `match.js` — `playGame(env, {seed, bots, record, snapshot, key, limits})` plays one game; `view.js` — the board snapshots replays record (`recorder.js` is an alias).
+- `node bot/tournament.js --bots a,b,c --games 10 --out replays/my-run [--seed 1] [--key K|none]` writes `index.json` + `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
+- `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording. Run it after touching `view.js` or `match.js`.
 - View results with `npm run viewer` (see viewer/ in the repo CLAUDE.md).
 
+## Bots
+Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, over stdio for a program in any language or as plain objects in process.
+- `stdio.js` — `StdioClient` runs a bot program; `serve(client)` runs an in-process client as a program. No engine dependency. `players/external.js` still exports it as `ExternalBot`.
+- `protocol.js` — the referee: hello/decide/over, time limits, blame (a bot that breaks a game loses it), simulations (`sim` requests) on a separate copy of the engine with hidden cards dealt again.
+- `rng.js` — seeded and keyed random streams; `view.js` — what a seat sees (board, prompt, actions).
+- `examples/random_bot.py`, `examples/random-bot.js`, `examples/search-bot.js` — reference clients (the last one searches with simulations). Register programs by name in `external-bots.json` (or `$SWU_EXTERNAL_BOTS`); the registry in `players/index.js` picks them up, so the name works in `--bots` for `tournament.js` and `ladder.js`.
+- `node bot/protocol-test.js` — protocol conformance checks (determinism, stdio/in-process parity, simulations leave no trace, bot failures).
+
 ## Bots in other languages
-- `players/external.js` — `ExternalBot`: runs any program that speaks the stdio JSON Lines protocol in `spec/stdio-protocol.md`, as an ordinary bot. Register programs by name in `external-bots.json` (or `$SWU_EXTERNAL_BOTS`); the registry in `players/index.js` picks them up, so the name works in `--bots` for `tournament.js` and `ladder.js`.
-- `observe.js` — the plain-JSON board/prompt/action view those bots receive (replay snapshot plus card uuids, opponent hand hidden).
 - `wasm/` — a bot written by hand in WebAssembly text (`bot.wat`) behind a thin stdio shim (`host.js`), registered as `wasm`. See `wasm/README.md`.
 - `python/` — `py-clock`, a Python bot (race-clock evaluation, beam search over attack sequences, card data from the engine JSON); see `python/README.md`.
-- `examples/random_bot.py` — reference client. `node bot/stdio-smoke.js -- <cmd> [args]` checks a bot against a fake game (needs `forceteki/build`, no card data).
 - `c/` — `c-clock`, a bot in C on that protocol (`make -C bot/c` first). See `c/README.md`.
 - The full interface and replay format are written up in `spec/`.
 - `jev/jev_bot.py` — `jev`: each move is picked by TypeSafe's Jev model (a Choice over the legal actions). See `jev/README.md`.
@@ -56,8 +60,10 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
     `node bot/ismcts-panel.js --runs <ladder dir> --thoughts <dir> --watch 10` turns that into the dashboard panel.
     `node bot/determinize-check.js` checks that world sampling keeps zone sizes and that rollback restores exactly.
   - `name#tag` enters the same bot twice (`aggro#1,aggro#2`) as a sanity check.
-- `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record]`
+- `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record] [--key K|none]`
   runs a round robin on worker threads. Each seed is played once from each seat (random decks follow the seat, so deck luck cancels).
+  Decks come from a random run key, as in `tournament.js`; it is saved in `ladder.json` (`config.key`) when the run is done.
+  Pass it as `--key` to give a second run the same games, or use `--key none` to deal from the seed alone.
   After every game it rewrites `<out>/<id>/index.json` (same tournament index as `tournament.js`, so the viewer and the
   research dashboard read it unchanged) and `<out>/<id>/ladder.json` (schema `swu-ladder/1`: per-bot W/L/D, win rate with
   95% CI, sequential Elo, Bradley-Terry Elo, pair matrix, Elo history). Writes are atomic. `--record` also saves `games/<id>.jsonl`

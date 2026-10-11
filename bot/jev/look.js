@@ -3,8 +3,10 @@
 /**
  * Lookahead adapter for stdio bots: the bot can ask to "imagine" a situation before it acts.
  *
- * It is an ExternalBot (spec/stdio-protocol.md) with one additive message pair. At an action window the bot may answer
- * `decide` with
+ * A native bot (spec/bot-interface.md#native-bots) that runs a v1 bot program (spec/stdio-protocol.md) and adds one
+ * message pair: it imagines on the game it is given and rolls back, so it needs engine access (`needsUndo`: the
+ * referee hands it a copy, never the real game). At an action window the
+ * program may answer `decide` with
  *
  *   {"t":"imagine","situation":{"kind":"after"|"reply"|"round","i":<action index>}}
  *
@@ -22,16 +24,17 @@
  *   round  `after`, then both sides keep playing like that until the round ends (or 40 actions)
  *
  * Hidden information: the opponent never plays a card from its hand (or resources/discard) at its action windows in
- * an imagined line, the engine RNG is reseeded from a bot-private stream and both decks are shuffled with it (so draws
- * and reveals do not follow the real deck order), `state` is observe() from the bot's own seat
- * (the opponent's hand stays a count), and any card that was hidden before (the opponent's hand, resources and deck,
- * and the bot's own deck) is blanked to "hidden card" in `state` and `steps` if the simulation moves it into view.
+ * an imagined line, every card hidden from the bot is dealt again from a bot-private stream first (determinize, so
+ * nothing follows the real hidden cards), `state` is view() from the bot's own seat (the opponent's hand stays a
+ * count), and any card that was hidden before (the opponent's hand, resources and deck, and the bot's own deck) is
+ * blanked to "hidden card", without its id, in `state` and `steps` if the simulation moves it into view.
  *
  * Registered in external-bots.json with "adapter": "bot/jev/look.js".
  */
 
-const { ExternalBot, forcedDistribution } = require('../players/external');
-const { observe, promptView, actionView, seatOf } = require('../observe');
+const { StdioClient } = require('../stdio');
+const { view, promptView, actionView } = require('../view');
+const { LIMITS, PROTOCOL, determinize } = require('../protocol');
 const { defaultChoose } = require('../players/heuristic');
 const { attackChoice } = require('../players/rush');
 const { seededRng } = require('../env');
@@ -70,8 +73,7 @@ function boardReply(eg, pid, acts) {
  * defaultChoose would rank them by their real cost and type, which the bot must not learn from.
  */
 function followUp(eg, pid, acts, hidden, rng) {
-    const isHidden = (a) => (a.kind === 'card' && a.card && hidden.has(a.card.uuid)) || (a.kind === 'displayCard' && hidden.has(a.arg)) ||
-        (a.kind === 'perCardButton' && hidden.has(a.cardUuid));
+    const isHidden = (a) => hidden.has(eg.cardId(a.card?.uuid ?? a.cardUuid ?? (a.kind === 'displayCard' ? a.arg : null)));
     if (acts.some(isHidden)) {
         return acts[Math.floor(rng() * acts.length)];
     }
@@ -88,25 +90,23 @@ function followUp(eg, pid, acts, hidden, rng) {
 
 /** `at`: "action" for a move at an action window, "choice" for a follow-up pick (a target, an option). */
 function describeStep(eg, actor, a, hidden) {
-    const who = seatOf(eg, eg.player(actor));
+    const who = eg.seatOf(actor);
     const at = eg.isActionWindow(actor) ? 'action' : 'choice';
-    if (a.kind === 'card' && a.card) {
-        return hidden.has(a.card.uuid) ? { who, at, what: 'a hidden card', zone: null } : { who, at, what: a.card.title ?? a.label, zone: a.card.zoneName ?? null };
+    const id = eg.cardId(a.card?.uuid ?? a.cardUuid ?? (a.kind === 'displayCard' ? a.arg : null));
+    if (hidden.has(id)) {
+        return { who, at, what: 'a hidden card', ...(a.kind === 'card' ? { zone: null } : {}) };
     }
-    if ((a.kind === 'displayCard' && hidden.has(a.arg)) || (a.kind === 'perCardButton' && hidden.has(a.cardUuid))) {
-        return { who, at, what: 'a hidden card' };
-    }
-    return { who, at, what: String(a.label) };
+    return a.kind === 'card' && a.card ? { who, at, what: a.card.title ?? a.label, zone: a.card.zoneName ?? null } : { who, at, what: String(a.label) };
 }
 
-/** Cards the bot could not see before imagining: the opponent's hand, resources and deck, and its own deck. */
+/** Ids of the cards the bot could not see before imagining: the opponent's hand, resources and deck, and its own deck. */
 function hiddenCards(eg, pid) {
     const ids = new Set();
     const zone = (pl, z) => pl.getCardsInZone(z) ?? [];
     const me = eg.player(pid);
     const opp = eg.player(eg.ids.find((id) => id !== pid));
     for (const c of [...zone(opp, 'hand'), ...zone(opp, 'resource'), ...(opp.drawDeck ?? []), ...(me.drawDeck ?? [])]) {
-        ids.add(c.uuid);
+        ids.add(eg.cardId(c.uuid));
     }
     return ids;
 }
@@ -119,8 +119,8 @@ function maskHidden(o, hidden) {
     }
     if (o && typeof o === 'object') {
         if (typeof o.id === 'string' && hidden.has(o.id)) {
-            // keep only where it is: stats, keywords and upgrades would narrow down which card it is
-            const r = { id: o.id, n: 'hidden card', s: null, hidden: 1 };
+            // keep only where it is: its id, stats, keywords and upgrades would narrow down which card it is
+            const r = { id: 'hidden', n: 'hidden card', s: null, hidden: 1 };
             for (const k of ['zone', 'ctl']) {
                 if (k in o) {
                     r[k] = o[k];
@@ -137,57 +137,103 @@ function maskHidden(o, hidden) {
     return o;
 }
 
-class LookaheadBot extends ExternalBot {
+/** A reply within `ms`, or an error. */
+async function within(p, ms, what) {
+    let timer;
+    try {
+        return await Promise.race([p, new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`no reply to '${what}' within ${ms} ms`)), ms);
+        })]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+class LookaheadBot {
     constructor(name, opts = {}) {
-        super(name, opts);
+        this.name = name;
+        this.lang = opts.lang;
+        this.client = new StdioClient(name, opts);
         this.needsUndo = true;
         this.maxImagine = opts.maxImagine ?? 4;
+        this.ms = { hello: opts.startTimeoutMs ?? LIMITS.hello, decide: opts.timeoutMs ?? LIMITS.decide };
         this.look = { asked: 0, failed: 0, ms: 0 };
+        this.game = null;
+        this.seq = 0;
         this.lookRng = null;
     }
 
-    beginGame(eg, pid, rng) {
-        super.beginGame(eg, pid, rng);
-        // one draw from the shared rng, so the match's later coin flips don't depend on how much the bot imagines
-        this.lookRng = seededRng(`look${Math.floor(rng() * 1e9)}`);
+    get stats() {
+        return { look: this.look };
     }
 
-    choose({ game: eg, pid, actions, rng }) {
-        if (eg !== this.game) {
-            this.beginGame(eg, pid, rng);
+    /** One message to the program. */
+    call(msg, what = msg.t) {
+        return within(what === 'hello' ? this.client.hello(msg) : this.client.request(msg), this.ms[what === 'hello' ? 'hello' : 'decide'], what);
+    }
+
+    async beginGame(eg, pid, rng) {
+        // one draw from the match rng, so its later draws do not depend on how much the bot imagines
+        const seed = Math.floor(rng() * 4294967296);
+        this.lookRng = seededRng(`look${seed}`);
+        this.seq = 0;
+        const r = await this.call({
+            t: 'hello', protocol: PROTOCOL, v: 1, bot: this.name, you: eg.seatOf(pid), seed,
+            players: eg.ids.map((id, i) => ({ id: `p${i + 1}`, name: eg.names[i] }))
+        });
+        if (r?.t !== 'ready') {
+            throw new Error(`expected ready, got ${JSON.stringify(r)?.slice(0, 120)}`);
         }
-        const t0 = Date.now();
+        this.game = eg;
+    }
+
+    /** Any failure, the program's or one found here, ends the program, so the next game starts it again. */
+    async choose(ctx) {
+        try {
+            return await this.chooseOnce(ctx);
+        } catch (e) {
+            this.close();
+            throw e;
+        }
+    }
+
+    async chooseOnce({ game: eg, pid, actions, rng }) {
+        if (eg !== this.game) {
+            await this.beginGame(eg, pid, rng);
+        }
         const seq = ++this.seq;
-        let reply = this.call({
-            t: 'decide', seq, you: seatOf(eg, eg.player(pid)), prompt: promptView(eg, pid),
-            state: observe(eg, pid), actions: actions.map((a, i) => actionView(eg, a, i)),
+        let reply = await this.call({
+            t: 'decide', seq, you: eg.seatOf(pid), prompt: promptView(eg, pid), state: view(eg, eg.seatOf(pid)),
+            actions: actions.map((a, i) => actionView(eg, a, i, pid)),
             imagine: eg.isActionWindow(pid) ? { kinds: [...KINDS], left: this.maxImagine } : null
-        }, this.timeoutMs);
+        });
         let imagined = 0;
-        for (let n = 0; reply.t === 'imagine'; n++, imagined++) {
-            if (n >= this.maxImagine) {
-                throw new Error(`external bot ${this.name}: asked to imagine more than ${this.maxImagine} times in one decision`);
+        for (; reply?.t === 'imagine'; imagined++) {
+            if (imagined >= this.maxImagine) {
+                throw new Error(`asked to imagine more than ${this.maxImagine} times in one decision`);
             }
             const answer = this.imagine(eg, pid, actions, reply.situation);
-            reply = this.call({ t: 'imagined', seq, situation: reply.situation ?? null, left: Math.max(0, this.maxImagine - n - 1), ...answer }, this.timeoutMs);
+            reply = await this.call({ t: 'imagined', seq, situation: reply.situation ?? null, left: this.maxImagine - imagined - 1, ...answer });
         }
-        this.timing.decisions++;
-        this.timing.ms += Date.now() - t0;
-        if (reply.t !== 'act' || !Number.isInteger(reply.i) || reply.i < 0 || reply.i >= actions.length) {
-            throw new Error(`external bot ${this.name}: expected {t:'act', i: 0..${actions.length - 1}}, got ${JSON.stringify(reply).slice(0, 120)}`);
+        if (reply?.t !== 'act' || !Number.isInteger(reply.i) || reply.i < 0 || reply.i >= actions.length) {
+            throw new Error(`expected {t:'act', i: 0..${actions.length - 1}}, got ${JSON.stringify(reply)?.slice(0, 120)}`);
         }
-        let action = actions[reply.i];
-        if (imagined) {
-            // prompt uuids change across a rollback: a button from before the imagination would be rejected by the engine
-            action = eg.refetch(pid, action) ?? action;
+        // prompt uuids change across a rollback: a button from before the imagination would be rejected by the engine
+        const action = imagined ? (eg.refetch(pid, actions[reply.i]) ?? actions[reply.i]) : actions[reply.i];
+        // a split names cards by id; NativeSeat checks it
+        const split = reply.split ?? reply.distribution;
+        if (action.kind !== 'distribute' || split === undefined) {
+            return action;
         }
-        if (action.kind === 'distribute' && reply.distribution) {
-            return forcedDistribution(this.name, action, reply.distribution);
-        }
-        return action;
+        return { ...action, split: Array.isArray(split) ? split.map((e) => ({ id: eg.uuidOf(e?.id), amount: e?.amount })) : split };
     }
 
-    /** Play one situation out on the real engine and roll back. Only exact at an action window. */
+    close() {
+        this.game = null;
+        return this.client.close();
+    }
+
+    /** Play one situation out on the game and roll back. Only exact at an action window. */
     imagine(eg, pid, actions, situation) {
         const t0 = Date.now();
         this.look.asked++;
@@ -212,11 +258,8 @@ class LookaheadBot extends ExternalBot {
         const startRound = eg.round;
         let out;
         try {
-            eg.game.setRandomSeed(String(Math.floor(this.lookRng() * 1e9)));
-            // the real deck order is hidden from the bot: imagine with both decks shuffled (the rollback restores them)
-            for (const id of eg.ids) {
-                eg.player(id).shuffleDeck();
-            }
+            // imagine on a fresh deal of every card hidden from the bot (the rollback restores the real ones)
+            determinize(eg, pid, this.lookRng);
             const first = eg.refetch(pid, actions[i]);
             if (!first) {
                 throw new Error('action vanished');
@@ -252,10 +295,9 @@ class LookaheadBot extends ExternalBot {
                 }
                 eg.apply(actor, a, this.lookRng);
             }
-            const w = eg.over ? eg.winners : [];
             out = {
-                ok: true, over: eg.over, winner: w.length === 1 ? seatOf(eg, eg.player(eg.ids[eg.names.indexOf(w[0])])) : (w.length ? 'draw' : null),
-                state: maskHidden(observe(eg, pid), hidden), steps
+                ok: true, over: eg.over, winner: eg.winner,
+                state: maskHidden(view(eg, eg.seatOf(pid)), hidden), steps
             };
         } catch (e) {
             this.look.failed++;

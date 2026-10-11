@@ -63,6 +63,9 @@ test('summarize counts wins, draws and incomplete games and rates only finished 
     assert.deepStrictEqual(doc.pairs[0], { a: 'a', b: 'b', games: 4, aWins: 2, bWins: 0, draws: 1, incomplete: 1, aScore: 2.5 / 3 });
     assert.strictEqual(doc.eloHistory.length, 3);
     assert.strictEqual(scoreOf(games[1]), 0);
+    // a bot that breaks the game loses it; an engine error stays unrated
+    assert.strictEqual(scoreOf({ p1: 'a', p2: 'b', winner: 'b', outcome: 'ERROR', by: 'p1' }), 0);
+    assert.strictEqual(scoreOf({ p1: 'a', p2: 'b', winner: null, outcome: 'ERROR', by: null }), null);
 });
 
 test('timingSummary reports count, total and percentiles', () => {
