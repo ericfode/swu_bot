@@ -19,6 +19,7 @@ K = 24  # max legal actions per decision kept for policy training (larger prompt
 
 def load(dirs):
     parts = []
+    versions = set()
     for d in dirs:
         for w in sorted(glob.glob(os.path.join(d, 'w*'))) or [d]:
             if not os.path.exists(os.path.join(w, 'meta.i32')):
@@ -29,14 +30,18 @@ def load(dirs):
             n = len(meta)
             m = int(meta[:, 4].sum())
             acts = np.fromfile(os.path.join(w, 'A.f32'), dtype=np.float32)
-            # a worker killed mid-write can leave a partial game at the end: keep complete rows only
+            # a worker still writing (or killed mid-write) can leave a partial game at the end: keep complete rows only.
+            # gen.js cuts such a tail when it restarts, so extra rows can only be at the end, never in the middle.
             s = np.fromfile(os.path.join(w, 'S.f32'), dtype=np.float32)[: n * S].reshape(n, S)
             sn = np.fromfile(os.path.join(w, 'Sn.f32'), dtype=np.float32)[: n * S].reshape(n, S)
             p = np.fromfile(os.path.join(w, 'P.f32'), dtype=np.float32)[: n * P].reshape(n, P)
             acts = acts[: m * A].reshape(m, A)
             gid = meta[:, 0].astype(np.int64) + 1_000_000 * len(parts)  # unique game id across worker dirs
             parts.append(dict(S=s, Sn=sn, P=p, A=acts, meta=meta, gid=gid, dims=(S, P, A)))
+            versions.add(f.get('version'))
     assert parts, 'no data found'
+    if len(versions) > 1:
+        print(f'warning: data mixes feature versions {sorted(versions, key=str)}')
     dims = parts[0]['dims']
     off = 0
     out = {k: [] for k in ['S', 'Sn', 'P', 'A', 'meta', 'gid', 'aoff']}

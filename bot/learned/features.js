@@ -10,9 +10,9 @@
  * Everything is computed from the stdio observation, so a Python or Rust bot can reproduce it from the protocol.
  * Values are scaled to roughly 0..1. Changing anything here changes the model input: bump VERSION and retrain.
  */
-const { cardDb } = require('./cards');
+const { cardDb, cardByName } = require('./cards');
 
-const VERSION = 1;
+const VERSION = 2; // 2: displayCard / perCardButton actions carry their card's printed stats
 
 const n = (x, d) => (Number.isFinite(x) ? x / d : 0);
 
@@ -120,7 +120,9 @@ function action(a, obs) {
     f.push(...BUTTONS.map((r) => (a.kind === 'button' || a.kind === 'perCardButton') && r.test(label) ? 1 : 0));
     // card
     const c = a.card;
-    const d = c ? cardDb().get(c.s) : null;
+    // display prompts (search the deck, pick one) name their card only in the label: "<internal name>" or "<button>:<internal name>"
+    const shown = !c && (a.kind === 'displayCard' || a.kind === 'perCardButton') ? cardByName(String(a.label).slice(String(a.label).indexOf(':') + 1)) : null;
+    const d = c ? cardDb().get(c.s) : shown;
     const u = c ? findUnit(obs, c.id) : null;
     const isLeader = !!c && Object.values(obs.players).some((ps) => ps.leader?.id === c.id);
     const ready = obs.players[obs.you].res.ready;

@@ -126,12 +126,54 @@ function write(out, { recs, res, info }) {
     fs.appendFileSync(path.join(out, 'games.jsonl'), JSON.stringify({ ...info, decisions: N }) + '\n');
 }
 
+/**
+ * Make a restarted worker safe: a worker killed while appending one game can leave rows in the early files (S, Sn, P, A)
+ * whose meta row was never written. Cut every file back to the last game that has a meta row, and return the next
+ * game number. meta.i32 is written after the arrays, so it is the record of complete games.
+ */
+function repair(out) {
+    const metaFile = path.join(out, 'meta.i32');
+    if (!fs.existsSync(metaFile)) {
+        return 0;
+    }
+    const raw = fs.readFileSync(metaFile);
+    const n = Math.floor(raw.length / 32);
+    const meta = new Int32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + n * 32));
+    let M = 0, games = 0;
+    for (let i = 0; i < n; i++) {
+        M += meta[i * 8 + 4];
+        games = Math.max(games, meta[i * 8] + 1);
+    }
+    const want = { 'S.f32': n * F.S * 4, 'Sn.f32': n * F.S * 4, 'P.f32': n * F.P * 4, 'A.f32': M * F.A * 4, 'meta.i32': n * 32 };
+    for (const [f, bytes] of Object.entries(want)) {
+        const file = path.join(out, f);
+        const have = fs.existsSync(file) ? fs.statSync(file).size : 0;
+        if (have < bytes) {
+            throw new Error(`${file} is shorter than its meta rows say (${have} < ${bytes} bytes): data is damaged`);
+        }
+        if (have > bytes) {
+            console.log(`${file}: dropping ${have - bytes} bytes of an unfinished game`);
+            fs.truncateSync(file, bytes);
+        }
+    }
+    const gl = path.join(out, 'games.jsonl');
+    if (fs.existsSync(gl)) {
+        const lines = fs.readFileSync(gl, 'utf8').split('\n').filter(Boolean).filter((l) => JSON.parse(l).game < games);
+        fs.writeFileSync(gl, lines.map((l) => l + '\n').join(''));
+    }
+    return games;
+}
+
 async function main() {
     const out = path.resolve(arg('out', 'data/learned/run/w0'));
     fs.mkdirSync(out, { recursive: true });
     const meta = path.join(out, 'features.json');
     if (!fs.existsSync(meta)) {
         fs.writeFileSync(meta, JSON.stringify({ version: F.VERSION, S: F.S, P: F.P, A: F.A }));
+    }
+    const have = JSON.parse(fs.readFileSync(meta, 'utf8'));
+    if (have.version !== F.VERSION || have.S !== F.S || have.P !== F.P || have.A !== F.A) {
+        throw new Error(`${out} holds feature version ${have.version}, this code writes ${F.VERSION}: use a new --out folder`);
     }
     const studentFile = arg('student', null);
     const opts = {
@@ -141,7 +183,7 @@ async function main() {
     const games = Number(arg('games', 10));
     const seed0 = Number(arg('seed', 1));
     const env = new Env();
-    const done = fs.existsSync(path.join(out, 'games.jsonl')) ? fs.readFileSync(path.join(out, 'games.jsonl'), 'utf8').trim().split('\n').filter(Boolean).length : 0;
+    const done = repair(out);
     for (let k = 0; k < games; k++) {
         const t0 = Date.now();
         const r = await playOne(env, seed0 + k, opts, done + k);

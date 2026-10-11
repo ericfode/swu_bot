@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 let db = null;
+let byName = null;
 
 const code = (s) => `${s.set}_${String(s.number).padStart(3, '0')}`;
 
@@ -16,6 +17,7 @@ function cardDb(dir = path.join(__dirname, '..', '..', 'forceteki', 'test', 'jso
         return db;
     }
     db = new Map();
+    byName = new Map();
     for (const f of fs.readdirSync(dir)) {
         if (!f.endsWith('.json')) {
             continue;
@@ -25,6 +27,7 @@ function cardDb(dir = path.join(__dirname, '..', '..', 'forceteki', 'test', 'jso
             cost: c.cost ?? 0, power: c.power ?? 0, hp: c.hp ?? 0, types: c.types ?? [], keywords: c.keywords ?? [],
             arena: c.arena ?? null, unique: !!c.unique, upgradePower: c.upgradePower ?? 0, upgradeHp: c.upgradeHp ?? 0
         };
+        byName.set(c.internalName, entry);
         for (const s of c.setCodes ?? (c.setId ? [c.setId] : [])) {
             db.set(code(s), entry);
         }
@@ -32,4 +35,10 @@ function cardDb(dir = path.join(__dirname, '..', '..', 'forceteki', 'test', 'jso
     return db;
 }
 
-module.exports = { cardDb };
+/** Printed data by internal name ("atst", "luke-skywalker#faithful-friend"). */
+function cardByName(name) {
+    cardDb();
+    return byName.get(name) ?? null;
+}
+
+module.exports = { cardDb, cardByName };
