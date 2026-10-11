@@ -160,8 +160,8 @@ async function main() {
             }
         }
         index.games = jobs.filter((j) => byId.has(j.id)).map((j) => byId.get(j.id));
-        // games without a winner (engine ERROR with no forfeiting seat, step cap); training and ratings skip them
-        index.undecided = index.games.filter((g) => g.outcome !== 'won' && !g.by).map((g) => ({ id: g.id, outcome: g.outcome, error: g.error }));
+        // finished games without a winner (engine ERROR with no forfeiting seat, step cap); training and ratings skip them
+        index.undecided = index.games.filter((g) => g.outcome !== 'won' && g.outcome !== 'running' && !g.by).map((g) => ({ id: g.id, outcome: g.outcome, error: g.error }));
         writeJson(path.join(out, 'index.json'), index);
     };
     merge();
