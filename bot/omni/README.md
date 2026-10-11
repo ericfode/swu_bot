@@ -35,3 +35,7 @@ score won 15/15; omni beat that 1-ply bot 32/48 (67% +/- 13). The first blind ru
 reseeded the RNG, so they still saw the deck order. With decks shuffled too, omni-blind and omni both won 14/16 against
 `legacy` on seeds 101-116 (results/omni-ref-7, -8; 10 of 16 games identical): at depth 2, knowing the draws is worth
 little next to the position score.
+
+Labelled positions: `/mnt/project-files/omni/positions-hh.jsonl` (1,568 windows, 72 proven after relabelling with the
+current prover; 4 of the first prover's 76 labels were dropped). The omni score picks the proven winner in 55 of 72
+(76%).
