@@ -131,21 +131,23 @@ function fitLinear(rows, std, { l2 = 1e-4, iters = 600, drop = [] } = {}) {
 
 /**
  * Antisymmetric one-hidden-layer net, logit = g(me, opp) - g(opp, me), trained with Adam on the log loss.
- * drop: feature names the net never sees (inputs zeroed in training, their weights zeroed after).
+ * drop: feature names the net never sees (their inputs are zeroed and their first-layer weights start at 0 and stay
+ * there, so validation and the saved model see the same net).
  */
 function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 256, l2 = 1e-4, seed = 'mlp', drop = [] } = {}) {
     const n = SIDE_KEYS.length;
     const inp = 2 * n + 2;
     const rng = seededRng(seed);
     const gauss = () => Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng());
+    const keep = SIDE_KEYS.map((k) => (drop.includes(k) ? 0 : 1));
+    const inMask = [...keep, ...keep, 1, 1];
     const m = {
         kind: 'mlp', hidden, std, names: SIDE_KEYS,
-        W1: Array.from({ length: hidden }, () => Array.from({ length: inp }, () => gauss() / Math.sqrt(inp))),
+        W1: Array.from({ length: hidden }, () => Array.from({ length: inp }, (_, i) => (inMask[i] * gauss()) / Math.sqrt(inp))),
         b1: Array.from({ length: hidden }, () => 0.1 * gauss()),
         W2: Array.from({ length: hidden }, () => gauss() / Math.sqrt(hidden)),
         b2: 0
     };
-    const keep = SIDE_KEYS.map((k) => (drop.includes(k) ? 0 : 1));
     const enc = (a, b, round, toAct) => {
         const x = new Float64Array(inp);
         for (let i = 0; i < n; i++) {
@@ -238,14 +240,6 @@ function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 
         flat[i] = x;
     });
     unflat();
-    for (const row of m.W1) {
-        keep.forEach((k, i) => {
-            if (!k) {
-                row[i] = 0;
-                row[n + i] = 0;
-            }
-        });
-    }
     m.epochs = best.epoch + 1;
     return m;
 }
