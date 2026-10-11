@@ -703,12 +703,37 @@ test('the window feed hides our hand while live, holds back the newest step, and
     assert.deepStrictEqual([row.outcome, row.winnerSeat, row.winner], ['won', 'p1', 'opponent']);
 });
 
-test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', () => {
+test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', async () => {
     const { holdPlayLock } = require('../karabast/queue');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'play-lock-'));
     const file = path.join(dir, 'playing.pid');
-    fs.writeFileSync(file, String(process.ppid)); // our parent: alive
-    assert.throws(() => holdPlayLock(file), /one game at a time/);
+    // a stand-in bot run: a live process whose command line names queue.js
+    const run = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'bot/karabast/queue.js'], { stdio: 'ignore' });
+    try {
+        for (let i = 0; i < 100 && fs.existsSync('/proc/self/cmdline'); i++) {
+            const cmd = (() => {
+                try {
+                    return fs.readFileSync(`/proc/${run.pid}/cmdline`, 'utf8');
+                } catch {
+                    return '';
+                }
+            })();
+            if (cmd.includes('queue.js')) {
+                break;
+            }
+            await new Promise((r) => setTimeout(r, 20));
+        }
+        fs.writeFileSync(file, String(run.pid));
+        assert.throws(() => holdPlayLock(file), /one game at a time/);
+    } finally {
+        run.kill();
+    }
+    if (fs.existsSync('/proc/self/cmdline')) {
+        fs.writeFileSync(file, String(process.ppid)); // alive, but another program (a pid reused after a restart)
+        holdPlayLock(file);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
+        fs.unlinkSync(file);
+    }
     fs.writeFileSync(file, '999999999'); // no such process
     holdPlayLock(file);
     assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));

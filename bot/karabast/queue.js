@@ -146,19 +146,29 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
     }
 }
 
-const alive = (pid) => {
+/** Whether `pid` is a live bot run. A pid reused by another program (after the machine restarted) is not one. */
+const playing = (pid) => {
     try {
         process.kill(pid, 0);
-        return true;
     } catch (e) {
-        return e.code === 'EPERM';
+        if (e.code !== 'EPERM') {
+            return false;
+        }
+    }
+    if (!fs.existsSync('/proc/self/cmdline')) {
+        return true; // no /proc (macOS): trust the pid
+    }
+    try {
+        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('queue.js');
+    } catch {
+        return false; // gone since the check above
     }
 };
 
 /**
  * Takes `file` (our pid in it, created exclusively) so only one run plays at a time, or throws while another live run
- * holds it. A file left by a run that died (killed, or the machine paused and restarted) is taken over. Released at
- * exit; a killed run leaves it for the next one to take over.
+ * holds it. A file left by a run that died (killed, or the machine restarted) is taken over, also when its pid now
+ * belongs to another program. Released at exit; a killed run leaves it for the next one to take over.
  */
 function holdPlayLock(file) {
     for (let tries = 0; tries < 3; tries++) {
@@ -185,7 +195,7 @@ function holdPlayLock(file) {
         } catch {
             continue; // released between our write and our read: try again
         }
-        if (pid > 0 && pid !== process.pid && alive(pid)) {
+        if (pid > 0 && pid !== process.pid && playing(pid)) {
             throw new Error(`another bot run (pid ${pid}) is playing: one game at a time (${file})`);
         }
         try {
