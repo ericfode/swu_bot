@@ -28,6 +28,15 @@ function decideBody(eg, pid, actions) {
 const { makeBot, closeBots } = require('../players');
 const { gameKey, runKey } = require('../rng');
 
+/**
+ * Index of the chosen action in the legal list. Search bots (heuristic) roll the game back and return a refetched copy,
+ * so match by actionKey (the fields EnvGame.refetch compares, with stable card ids), as the referee does, not by object
+ * identity.
+ */
+function indexOfAction(game, actions, a) {
+    return a ? actions.findIndex((x) => x === a || actionKey(game, x) === actionKey(game, a)) : -1;
+}
+
 /** Wraps a bot (native or protocol client) so every choice it makes is written as a trajectory line. */
 function recording(bot, write, all) {
     let seq = 0;
@@ -45,8 +54,8 @@ function recording(bot, write, all) {
         get stats() {
             return bot.stats;
         },
-        reset() {
-            seq = 0;
+        close() {
+            return bot.close?.();
         }
     };
     if (typeof bot.decide === 'function') {
@@ -66,7 +75,7 @@ function recording(bot, write, all) {
             const { game, pid, actions } = ctx;
             const obs = all || actions.length > 1 ? decideBody(game, pid, actions) : null;
             const a = await bot.choose(ctx);
-            log(obs, actions.findIndex((x) => x === a || actionKey(game, x) === actionKey(game, a)));
+            log(obs, indexOfAction(game, actions, a));
             return a;
         }
     });
@@ -88,14 +97,15 @@ async function worker(first, count, out, botNames, all) {
         fs.appendFileSync(out, zlib.gzipSync(`${lines.join('\n')}\n`));
         lines = [];
     };
-    const raw = [];
-    botNames.forEach((n) => raw.push(makeBot(n, raw)));
-    const bots = raw.map((b) => recording(b, write, all));
     let wins = { p1: 0, p2: 0 };
     for (let seed = first; seed < first + count; seed++) {
+        // fresh bots every game, as tournament.js does: bots like heuristic keep state (loop guard, plan) that must not
+        // carry over; a bot program stays the same process (makeBot), and hello starts its new game
+        const raw = [];
+        botNames.forEach((n) => raw.push(makeBot(n, raw)));
+        const bots = raw.map((b) => recording(b, write, all));
         // alternate seats so each bot plays both sides
         const seats = (seed % 2 === 0) ? [bots[0], bots[1]] : [bots[1], bots[0]];
-        seats.forEach((b) => b.reset());
         write({ t: 'game', seed, bots: seats.map((b) => b.name) });
         const r = await playGame(env, { seed, bots: seats, key: key && gameKey(key, seed) });
         // a forfeit (ERROR, `by` the seat that broke it) was not played out, so it has no winner here

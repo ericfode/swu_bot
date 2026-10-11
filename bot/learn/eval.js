@@ -30,9 +30,10 @@ async function worker() {
     const count = Number(arg('count'));
     const out = arg('out', null);
     const env = new Env();
-    const bots = [];
-    names.forEach((n) => bots.push(makeBot(n, bots)));
     for (let seed = first; seed < first + count; seed++) {
+        // fresh bots every game, as tournament.js does: bots like heuristic keep state that must not carry over
+        const bots = [];
+        names.forEach((n) => bots.push(makeBot(n, bots)));
         const seats = seed % 2 === 0 ? [0, 1] : [1, 0];
         const id = `${names[seats[0]]}-vs-${names[seats[1]]}-${seed}`;
         let onEvent = null;

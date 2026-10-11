@@ -24,6 +24,15 @@ recorded games from any source (including upstream tournaments) and positions in
 | `mlp` | fitted | tiny net, logit = g(me, opp) - g(opp, me) so both players' views agree |
 | `mlp-deck` | fitted | same, with known decklists |
 
+Generation 3 (`linear-g3`, `linear-deck-g3`, `mlp-g3`, `mlp-deck-g3`) adds strong-play data: omni's games (`replays.js`
+below) and ISMCTS search leaves. Gen 2 keeps the default names until gen 3 is tested in play.
+
+Generation 4 (`*-g4`) is gen 3's data without the `deckLow` feature (`fit.js --drop deckLow --suffix -g4`). Gen 3 put
+about 4 base HP on each card below 5 left in the deck, learned mostly from long random games. In omni's 72
+solver-proven endgames that weight picked the losing side, so gen 3 got only 46-49 of them right. Gen 4 gets 55-57,
+and its held-out Brier is the same for linear (0.157) and better for the net (0.153 vs 0.156). Base HP alone still
+gets 63.
+
 Hand-made evaluators get one fitted number, the logistic scale, so all of them output calibrated probabilities.
 Features are in `features.js` (base HP, board power/HP, keywords, shields, leader, resources, hand size and
 quality, deck, initiative, a damage-pressure ratio, round, who acts next).
@@ -55,6 +64,15 @@ node bot/eval/publish.js --brier brier.json --ladder results/eval-ladder-1/index
 `arena.js` writes the same `index.json` / `games/<id>.jsonl` as `tournament.js` (viewer and dashboard read them
 unchanged), and adds `decks/` and `positions/` next to them.
 
+### Using games recorded by other bots
+
+`replays.js` turns any tournament folder (`games/*.jsonl` replays) into a position dataset for `fit.js` and `score.js`.
+Decklists are redrawn from the seed, as `match.js` draws them:
+
+```bash
+node bot/eval/replays.js --from /mnt/project-files/results/omni-ref-1,/mnt/project-files/results/omni-ref-2 --out data/omni --every 2
+```
+
 ### Scoring another bot's lens scores
 
 `lensfit.js` takes the per-step score from swu-lens/1 files (`dashboard/lens/<gameId>.json`, default field `edge`) and
@@ -63,4 +81,5 @@ on the same positions:
 
 ```bash
 node bot/eval/lensfit.js --lens /mnt/project-files/dashboard/lens --replays /mnt/project-files/results --json omni-lens-fit.json
+# --evals a,b,c picks the bench evaluators; only the fold-0 column is fair for models trained on these games
 ```
