@@ -117,13 +117,16 @@ function ruleChoice(eg, pid, acts) {
  * Everything the rest of the game depends on: public board, both hands, both deck orders, resources, pass state,
  * whose window it is, and the engine RNG. Two positions with the same key play out the same.
  * (Per-card "used this round" flags are not read, so very rarely two different positions share a key.)
- * withRng = false leaves the RNG out: for searches that reseed it (blind mode), where it carries no information.
+ * withRng = false leaves the RNG and the deck orders out (each deck counts as a sorted list of cards): for blind
+ * searches, which reseed the RNG and shuffle both decks before every move, so neither carries information there.
  */
 function stateKey(eg, withRng = true) {
     const parts = [JSON.stringify(snapshot(eg))];
     for (const id of eg.ids) {
         const p = eg.player(id);
-        parts.push(p.drawDeck.map((c) => c.internalName).join(','));
+        const deck = p.drawDeck.map((c) => c.internalName);
+        // blind: the order is hidden but which cards are left still matters
+        parts.push((withRng ? deck : deck.sort()).join(','));
         parts.push(p.resources.map((c) => `${c.internalName}${c.exhausted ? '*' : ''}`).join(','));
         parts.push(p.passedActionPhase ? 'P' : '-', eg.isActionWindow(id) ? 'W' : '-');
     }
@@ -148,8 +151,11 @@ class OmniSearch {
         this.snapshots = snapshots;
         // the maximizing side; values are from its point of view (p1 unless `side` says otherwise)
         this.p1 = side ?? eg.ids[0];
-        // optional () => string: reseed the engine RNG before every move, so the search cannot see real future draws
+        // optional () => string: reseed the engine RNG and shuffle both decks before every move, so the search
+        // cannot see the real deck order (future draws) or the real random results. Called once for a salt; the seed
+        // of each move is a hash of salt, position and move, so replaying a child gives the same sample.
         this.reseed = reseed;
+        this.salt = reseed ? reseed() : null;
         this.followUps = followUps;
         this.maxMoves = maxMoves;
         this.budget = budget;
@@ -196,7 +202,11 @@ class OmniSearch {
         const eg = this.eg;
         const rng = seededRng('omni-move');
         if (this.reseed) {
-            eg.game.setRandomSeed(this.reseed());
+            const basis = `${this.salt}|${this.key()}|${JSON.stringify(seq.map(strip))}`;
+            eg.game.setRandomSeed(crypto.createHash('sha1').update(basis).digest('hex'));
+            for (const id of eg.ids) {
+                eg.player(id).shuffleDeck();
+            }
         }
         const first = eg.refetch(pid, seq[0]);
         if (!first) {
@@ -240,9 +250,9 @@ class OmniSearch {
 
     /**
      * First actions in a useful order: units and leaders on the board (attacks, abilities) first, then cards from
-     * hand, then buttons (pass, take the initiative). Capped at `maxMoves`, buttons always kept.
+     * hand, then buttons (pass, take the initiative). Capped at `cap` (default `maxMoves`), buttons always kept.
      */
-    orderedActions(pid) {
+    orderedActions(pid, cap = this.maxMoves) {
         const rank = (a) => {
             if (a.kind === 'button') {
                 return 3;
@@ -251,11 +261,11 @@ class OmniSearch {
             return /arena/i.test(zone) ? 0 : /base|leader/i.test(zone) ? 1 : 2;
         };
         const acts = this.eg.legalActions(pid).map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).map((x) => x.a);
-        if (acts.length <= this.maxMoves) {
+        if (acts.length <= cap) {
             return acts;
         }
         const buttons = acts.filter((a) => a.kind === 'button');
-        return [...acts.filter((a) => a.kind !== 'button').slice(0, this.maxMoves - buttons.length), ...buttons];
+        return [...acts.filter((a) => a.kind !== 'button').slice(0, cap - buttons.length), ...buttons];
     }
 
     /**
@@ -263,13 +273,16 @@ class OmniSearch {
      * the engine sitting in the position after the move, so it can search deeper from there without replaying it;
      * returning true stops the enumeration. kid = {seq, key, value, over, stuck, winners}. No-ops (same position)
      * and transpositions (two moves, same position) are skipped. The engine is left at `m`.
+     * `all`: ignore the maxMoves and followUps caps (the prover needs every reply of the defending side).
+     * Returns the number of moves that threw in the engine and were skipped.
      */
-    forEachMove(pid, m, ply, visit) {
-        const followUps = typeof this.followUps === 'function' ? this.followUps(pid, ply) : this.followUps;
+    forEachMove(pid, m, ply, visit, all = false) {
+        const followUps = all ? Infinity : typeof this.followUps === 'function' ? this.followUps(pid, ply) : this.followUps;
         const eg = this.eg;
         const seen = new Set([this.key()]);
         const bases = new Set(eg.ids.map((id) => eg.player(id).base.internalName));
         let dirty = false;
+        let failed = 0;
         const tryMove = (seq) => {
             if (dirty) {
                 eg.restore(pid, m);
@@ -284,6 +297,7 @@ class OmniSearch {
                     throw e;
                 }
                 this.failed++;
+                failed++;
                 return null;
             }
             const key = this.key();
@@ -300,7 +314,7 @@ class OmniSearch {
             return r;
         };
         try {
-            for (const a of this.orderedActions(pid)) {
+            for (const a of this.orderedActions(pid, all ? Infinity : this.maxMoves)) {
                 const r = tryMove([a]);
                 if (r?.branch) {
                     // bases first among targets: that is where lethal damage goes
@@ -319,6 +333,7 @@ class OmniSearch {
                 eg.restore(pid, m);
             }
         }
+        return failed;
     }
 
     /** All distinct moves (see forEachMove), each tried once; `stop(kid)` may end the list early. */
@@ -403,7 +418,7 @@ class OmniSearch {
 
     /**
      * Can `target` (engine player id) force a win within `depth` windows, whatever the other player does?
-     * Exact for the move model above. Throws BudgetExceeded when out of budget.
+     * Exact for the move model above: the defending side's replies are never capped. Throws BudgetExceeded when out of budget.
      * Moves are searched as they are generated (no second apply), with a transposition table.
      */
     prove(target, depth, ply = 0) {
@@ -433,7 +448,9 @@ class OmniSearch {
         const m = eg.mark(pid);
         let any = false;
         let found = false;
-        this.forEachMove(pid, m, ply, (kid) => {
+        // AND node: every reply of the defender must be checked, so no move caps there. At an OR node the caps only
+        // make the search incomplete (a missed win), never wrong.
+        const failed = this.forEachMove(pid, m, ply, (kid) => {
             any = true;
             let good;
             if (kid.over) {
@@ -446,8 +463,9 @@ class OmniSearch {
             // OR node: one good move is enough. AND node: one bad reply refutes.
             found = orNode ? good : !good;
             return found;
-        });
-        const result = orNode ? found : any && !found;
+        }, !orNode);
+        // a defender move that threw in the engine was not checked, so it cannot count as refuted
+        const result = orNode ? found : any && !found && failed === 0;
         this.tt.set(key, result ? { ...hit, proved: depth } : { ...hit, disproved: Math.max(depth, hit?.disproved ?? 0) });
         return result;
     }
