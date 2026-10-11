@@ -10,6 +10,8 @@ encoder learn from two batches per step:
                 part (most of a future does not depend on my move)
   recorded rows the original JEPA loss on recorded games, so prompts that branches cannot cover (targets, cards,
                 resources: the engine rolls back only at action windows) keep their predictions
+  terminal moves a move that ends the game before its target has no latent to reach; V(ẑ_h(a)) (V frozen) is pulled
+                toward its result instead, weighted by --w-terminal
 Before and after, on held-out games: how well V(ẑ_h(a)) ranks the moves of a position against V(z(x_h(a))) of the real
 futures (top-1 agreement, median Spearman, spread), the yardstick of the oracle test in README.md.
 """
@@ -75,7 +77,7 @@ def load_branches(dirs, net, db):
         for (p, k), zz in zip(at, z):
             out[t][p, k] = zz
             out[m][p, k] = 1.0
-    # a move that ends the game before the target has no latent to reach; its outcome is still a fact
+    # a move that ends the game before the target has no latent to reach; its result in `over` stands in (terminal_loss)
     return out
 
 
@@ -102,17 +104,18 @@ def spearman(a, b):
 
 
 def yardstick(net, B, idx):
-    """Imagined V(ẑ_h(a)) against real V(z(x_h(a))) over the moves of each held-out branch point."""
+    """Imagined V(ẑ_h(a)) against real V(z(x_h(a))) over the moves of each held-out branch point; a move that ends the
+    game before the target counts with its result (1 win, 0 loss)."""
     res = {}
     for h, t, m in ((1, "t1", "m1"), (4, "t4", "m4")):
         top, chance, rho, sp_im, sp_re = [], [], [], [], []
         for p in idx:
-            ok = np.flatnonzero(B[m][p] > 0)
+            ok = np.flatnonzero((B[m][p] > 0) | (B["over"][p] >= 0))
             if len(ok) < 2:
                 continue
             av = net.action(B["act"][p, ok], B["aid"][p, ok])
             im = M.sigmoid(net.value(net.predict(B["z"][p:p + 1], av, h)))
-            re = M.sigmoid(net.value(B[t][p, ok]))
+            re = np.where(B[m][p, ok] > 0, M.sigmoid(net.value(B[t][p, ok])), B["over"][p, ok])
             best_re = set(np.flatnonzero(re >= re.max() - 1e-6))
             best_im = np.flatnonzero(im >= im.max() - 1e-6)
             top.append(np.mean([i in best_re for i in best_im]))
@@ -145,6 +148,7 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--w-diff", type=float, default=4.0)
     ap.add_argument("--w-recorded", type=float, default=1.0)
+    ap.add_argument("--w-terminal", type=float, default=1.0, help="moves that end the game before the target: V(ẑ) toward the result")
     ap.add_argument("--holdout", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--cache", help="npz cache of the encoded branches (built when missing)")
@@ -183,6 +187,7 @@ def main():
     heads = ["act1.w", "act1.b", "act2.w", "act2.b", "p1.w", "p1.b", "p2.w", "p2.b", "p3.w", "p3.b"]
     P = {k: Tensor(w[k].copy()) for k in heads}
     E = {k: Tensor(w[k]) for k in M.EMB_TABLES}  # card embedding tables stay frozen
+    V = {k: Tensor(w[k]) for k in ("v1.w", "v1.b", "v2.w", "v2.b")}  # value head stays frozen
     opt = nn.optim.AdamW([P[k] for k in heads], lr=a.lr, weight_decay=1e-3)
     G, Bn = a.groups, a.batch
     lin = lambda name, x: x.matmul(P[name + ".w"]) + P[name + ".b"]
@@ -197,6 +202,14 @@ def main():
         return Tensor(x)
 
     hb1, hb4, hr1, hr4 = hot(G * K, 1), hot(G * K, 4), hot(Bn, 1), hot(Bn, 4)
+
+    def terminal_loss(pred, m, over):
+        # moves with no target latent but a result: BCE of the frozen V on the prediction
+        t = (m <= 0).float() * (over >= 0).float()
+        logit = (pred.matmul(V["v1.w"]) + V["v1.b"]).relu().matmul(V["v2.w"]).reshape(G, K) + V["v2.b"]
+        y = over.maximum(0.0)
+        bce = logit.maximum(0) - logit * y + (-(logit.abs())).exp().add(1).log()
+        return (bce * t).sum() / t.sum().maximum(1.0)
 
     def branch_loss(pred, tgt, m):
         # pred, tgt [G*K, D]; m [G, K]
@@ -214,9 +227,12 @@ def main():
     def losses(b):
         z = b["z"].unsqueeze(1).expand(G, K, M.D).reshape(G * K, M.D)
         act, aid = b["act"].reshape(G * K, F.ACTION_DIM), b["aid"].reshape(G * K)
-        p1, d1 = branch_loss(predict(z, act, aid, hb1), b["t1"].reshape(G * K, M.D), b["m1"])
-        p4, d4 = branch_loss(predict(z, act, aid, hb4), b["t4"].reshape(G * K, M.D), b["m4"])
+        f1, f4 = predict(z, act, aid, hb1), predict(z, act, aid, hb4)
+        p1, d1 = branch_loss(f1, b["t1"].reshape(G * K, M.D), b["m1"])
+        p4, d4 = branch_loss(f4, b["t4"].reshape(G * K, M.D), b["m4"])
         total = p1 + p4 + a.w_diff * (d1 + d4)
+        if a.w_terminal > 0:
+            total = total + a.w_terminal * (terminal_loss(f1, b["m1"], b["over"]) + terminal_loss(f4, b["m4"], b["over"]))
         rec = Tensor(0.0)
         if R is not None:
             q1 = predict(b["rz"], b["ract"], b["raid"], hr1)
@@ -235,7 +251,7 @@ def main():
             return parts.realize()
 
     def batch(ps):
-        b = {k: Tensor(B[k][ps]) for k in ("z", "act", "t1", "t4", "m1", "m4")}
+        b = {k: Tensor(B[k][ps]) for k in ("z", "act", "t1", "t4", "m1", "m4", "over")}
         b["aid"] = Tensor(B["aid"][ps].astype(np.int32))
         if R is not None:
             r = rng.choice(len(R["z"]), Bn, replace=False)

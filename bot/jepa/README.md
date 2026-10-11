@@ -163,7 +163,9 @@ python3 bot/jepa/branch_train.py --model bot/jepa/models/jepa-v1.safetensors --b
 ```
 
 1,800 games gave 30,417 branch points (about 5 moves each) in 40 minutes; 1% of games ended early on engine errors
-after a rollback (known engine bug 6 in the repo CLAUDE.md, plus bug 7). On 2,983 held-out branch points the
+after a rollback (known engine bug 6 in the repo CLAUDE.md, plus bug 7). v1b and the numbers below predate
+`--w-terminal`: moves that end the game before their target (2% before the next decision, 8% before the 4th) were
+left out of training and of the held-out comparison; both now use the result. On 2,983 held-out branch points the
 imagined ranking of moves got much closer to the real one:
 
 | Score of a move vs the real future | v1 | v1b |

@@ -23,7 +23,7 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-const { view, promptView, actionView } = require('../view');
+const { view, promptView, actionView, actionKey } = require('../view');
 
 function decideBody(eg, pid, actions) {
     return { you: eg.seatOf(pid), prompt: promptView(eg, pid), state: view(eg, eg.seatOf(pid)), actions: actions.map((a, i) => actionView(eg, a, i, pid)) };
@@ -104,7 +104,8 @@ async function worker(first, count, file, botNames, p, maxBranch) {
                 let a = actions.length === 1 ? actions[0] : bot.choose({ game: eg, pid, actions, rng });
                 if (actions.length > 1 && eg.isActionWindow(pid) && rng() < p) {
                     const root = decideBody(eg, pid, actions);
-                    const main = actions.indexOf(a);
+                    // search bots (heuristic) return a refetched copy after their own rollback, so match by actionKey as collect.js does
+                    const main = actions.findIndex((x) => x === a || actionKey(eg, x) === actionKey(eg, a));
                     const mark = eg.mark(pid);
                     // up to maxBranch moves, always including the main-line move
                     let idx = actions.map((_, i) => i);
@@ -164,6 +165,12 @@ async function main() {
     if (process.argv.includes('--worker')) {
         await worker(Number(arg('first')), Number(arg('count')), arg('file'), botNames, p, maxBranch);
         process.exit(0);
+    }
+    // shards from an earlier run with other seeds or worker counts would be mixed into this one by branch_train.py
+    for (const f of fs.readdirSync(out)) {
+        if (/^shard-\d+\.jsonl\.gz$/.test(f)) {
+            fs.unlinkSync(path.join(out, f));
+        }
     }
     const per = Math.ceil(games / workers);
     const t0 = Date.now();
