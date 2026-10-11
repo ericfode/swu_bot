@@ -33,7 +33,8 @@
         };
         s += row(ps.space, 5.2, 4.6);
         s += row(ps.ground, 11.2, 9.6);
-        const hand = Math.min(6, ps.hand?.length || 0);
+        const hc = ps.handCount != null && Number.isFinite(+ps.handCount) ? +ps.handCount : ps.hand?.length || 0; // handCount also covers a hidden hand (protocol-v2 point-of-view states)
+        const hand = Math.max(0, Math.min(6, hc));
         for (let i = 0; i < hand; i++) s += `<circle cx="2.3" cy="${Y(6 + i * 2.7).toFixed(2)}" r=".9" fill="${C.ink}" opacity=".55"/>`;
         const tot = Math.min(8, ps.res?.total || 0), rdy = Math.min(tot, ps.res?.ready || 0);
         for (let i = 0; i < tot; i++) s += `<circle cx="37.7" cy="${Y(5.5 + i * 2.15).toFixed(2)}" r=".85" ${i < rdy ? `fill="${col}"` : `fill="none" stroke="${col}" stroke-width=".5"`}/>`;
