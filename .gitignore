@@ -9,3 +9,6 @@ results/
 .perch/*
 !.perch/closed.jsonl
 !.perch/rules/
+
+# Claude Code agent worktrees
+.claude/worktrees/
