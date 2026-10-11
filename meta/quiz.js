@@ -35,6 +35,24 @@ if (pair) {
     const winner = pair.aWins / pair.games > 0.5 ? pair.a : pair.b;
     qs.push({ id: 'h2h', q: `Head to head: who usually wins, ${pair.a} or ${pair.b}?`, key: [winner], kind: 'one-of' });
 }
+// Spot guide: can a reader who never played SWU decode the little table pictures?
+qs.push(
+    { id: 'icon_tower', q: 'In the small table pictures, what does the tall box at the left of each half show?', key: ['base', 'hp', 'health'], kind: 'one-of' },
+    { id: 'icon_round', q: 'In the small table pictures, what does the circle marked R4 or R8 mean?', key: ['round'], kind: 'one-of' },
+    { id: 'icon_near', q: 'One spot picture shows the bottom (your) tower almost empty and red. What does that spot mean in the game?', key: ['8 hp', '8 or less', 'near death', 'low base', 'about to lose', 'almost dead'], kind: 'one-of' },
+);
+// Face-off: the page opens on the top two bots; can the reader say which one is better in more spots?
+const [fa, fb] = mapped;
+if (fa && fb) {
+    let aw = 0, bw = 0;
+    for (const S of M.situations) {
+        const ca = fa.situations[S.id], cb = fb.situations[S.id];
+        if (!(ca && ca.n > 0 && cb && cb.n > 0)) continue;
+        const d = ca.edge - cb.edge;
+        if (d >= 0.03) aw++; else if (d <= -0.03) bw++;
+    }
+    if (aw !== bw) qs.push({ id: 'faceoff', q: `In the Face-off section, which of the two bots compared is better in more spots?`, key: [aw > bw ? fa.id : fb.id], kind: 'one-of' });
+}
 // Essence check: does the reader's one-line takeaway name the bot to back in each kind of spot?
 const champions = {};
 for (const S of M.situations) { const top = bestIn(S.id, 1)[0]; if (top) (champions[S.group] ||= new Set()).add(top); }

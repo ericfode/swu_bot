@@ -40,10 +40,15 @@ function unitValue(u, w = W) {
     return u.exhausted ? v * w.exhaustedMult : v;
 }
 
-/** Base HP matters more the lower it gets. */
+/**
+ * Base HP matters more the lower it gets: below baseDangerHp each point lost costs extra.
+ * (Until 2026-10-11 the danger term was added instead of subtracted, so below ~9 HP more damage raised a side's
+ * score and the bots avoided pushing the enemy base low. `legacyDanger: true` in a profile's side restores that.)
+ */
 function baseTerm(base, w = W, s = SIDE) {
     const hp = Math.max(0, base.getHp() - base.damage);
-    return hp * w.baseHp + (hp <= s.baseDangerHp ? ((s.baseDangerHp - hp) ** 2) / s.dangerScale : 0);
+    const danger = hp <= s.baseDangerHp ? ((s.baseDangerHp - hp) ** 2) / s.dangerScale : 0;
+    return hp * w.baseHp + (s.legacyDanger ? danger : -danger);
 }
 
 function sideValue(p, w = W, s = SIDE, mine = true) {
@@ -398,4 +403,4 @@ class HeuristicBot {
     }
 }
 
-module.exports = { HeuristicBot, evaluate, defaultChoose, unitValue, keepScore, targetScore, W, SIDE };
+module.exports = { HeuristicBot, evaluate, defaultChoose, fingerprint, unitValue, keepScore, targetScore, W, SIDE };

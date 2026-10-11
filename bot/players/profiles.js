@@ -6,8 +6,11 @@
  * what the bot thinks a "good position" is changes, which is what makes the play styles differ.
  */
 const PROFILES = {
-    // the original evaluation, unchanged
+    // the original evaluation weights (with the base-danger sign fixed)
     balanced: {},
+
+    // the original evaluation exactly as first written, including the inverted base-danger term, for comparison
+    legacy: { side: { legacyDanger: true } },
 
     // race the opponent's base: their base damage counts double, board presence matters less, own base is spent freely
     aggro: {
