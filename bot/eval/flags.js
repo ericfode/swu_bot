@@ -52,7 +52,7 @@ function flagGame(ps, pOf, { drop = 0.25, ahead = 0.5, lethal = 0 } = {}) {
         }
     }
     return {
-        id: last.id, winner: last.winner, rounds: last.round, ending, loserBaseLeft: left, pLoserAtEnd: r3(pLoserAtEnd),
+        id: last.id, source: last.source, winner: last.winner, rounds: last.round, ending, loserBaseLeft: left, pLoserAtEnd: r3(pLoserAtEnd),
         concededAhead: ending === 'concession' && pLoserAtEnd >= ahead, lastStep: last.n, blunders
     };
 }
@@ -69,7 +69,9 @@ function main() {
     const tournament = arg('tournament', null);
     const games = new Map();
     for (const p of loadPositions(dirs, { testShare: 0 })) {
-        (games.get(p.id) ?? games.set(p.id, []).get(p.id)).push(p);
+        // the same game id can appear in two datasets (same bot names and seeds), so key by source too
+        const key = `${p.source}\u0000${p.id}`;
+        (games.get(key) ?? games.set(key, []).get(key)).push(p);
     }
     const pOf = (p, seat) => ev.predict(p.state, seat, { view: 'spectator', decks: p.decks, toAct: p.toAct });
     const link = (id, n) => (tournament ? `#/t/${tournament}/g/${id}?step=${n}` : undefined);
@@ -87,11 +89,11 @@ function main() {
     }
     const conceded = out.filter((g) => g.ending === 'concession');
     const ahead = conceded.filter((g) => g.concededAhead);
-    const blunders = out.flatMap((g) => g.blunders.map((b) => ({ id: g.id, ...b })));
+    const blunders = out.flatMap((g) => g.blunders.map((b) => ({ id: g.id, winner: g.winner, ...b })));
     const summary = {
         evaluator: evName, view: 'spectator', ...opts, games: out.length, concessions: conceded.length, concededAhead: ahead.length,
         blunderCandidates: blunders.length, gamesWithBlunder: out.filter((g) => g.blunders.length).length,
-        blundersByLoser: blunders.filter((b) => out.find((g) => g.id === b.id).winner !== b.actor).length
+        blundersByLoser: blunders.filter((b) => b.winner !== b.actor).length
     };
     console.log(`${summary.games} games: ${summary.concessions} end by concession, ${summary.concededAhead} of them while the board favoured the player who conceded`);
     console.log(`${summary.blunderCandidates} blunder candidates (drop >= ${opts.drop}) in ${summary.gamesWithBlunder} games; ${summary.blundersByLoser} by the player who lost`);
