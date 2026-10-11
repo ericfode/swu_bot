@@ -1,13 +1,21 @@
-import { BrickWall, Database, Flag, Layers, Mountain, Rocket, type LucideIcon } from 'lucide-react';
-import { TERM_COLOR, type TermKey } from '../data/lens';
+import { Asterisk, BrickWall, CircleDot, Crown, Database, Flag, Layers, Library, Mountain, Rocket, Scale, Skull, type LucideIcon } from 'lucide-react';
+import { rowColor, rowIcon, type RowDef } from '../data/terms';
 
-// base, resources and initiative use the action icons' pictograms (ActionIcon ACTION_GLYPHS), so one picture means one thing
-const ICONS: Record<TermKey, LucideIcon> = { base: BrickWall, ground: Mountain, space: Rocket, hand: Layers, resources: Database, initiative: Flag };
+// base, resources and initiative use the action icons' pictograms (ActionIcon ACTION_GLYPHS), and deck and discard the
+// board's own counters, so one picture means one thing; CircleDot is any other extra term
+const ICONS: Record<string, LucideIcon> = {
+    base: BrickWall, ground: Mountain, space: Rocket, hand: Layers, resources: Database, initiative: Flag,
+    deck: Library, discard: Skull, leader: Crown, joint: Scale, other: Asterisk, extra: CircleDot
+};
 
-/** The small icon for one part of the omni board score, in that part's colour: on the board's totals and the breakdown's rows. */
-export function TermIcon({ term, size = 11, colored = true }: { term: TermKey; size?: number; colored?: boolean }) {
-    const I = ICONS[term];
-    return <I size={size} strokeWidth={2.4} aria-hidden="true" style={colored ? { color: TERM_COLOR[term] } : undefined} />;
+/**
+ * The small icon for one part of a score, in that part's colour: on the board's totals, the breakdown's rows and the
+ * inspector. `row` is a RowDef or a row id ('base', 'ground', 'side.hand', 'extra.deck', ...; a bare 'hand' works too).
+ */
+export function PartIcon({ row, size = 11, colored = true }: { row: RowDef | string; size?: number; colored?: boolean }) {
+    const id = typeof row === 'string' ? row : row.id;
+    const I = ICONS[typeof row === 'string' ? rowIcon(id) : row.icon] ?? CircleDot;
+    return <I size={size} strokeWidth={2.4} aria-hidden="true" style={colored ? { color: typeof row === 'string' ? rowColor(id) : row.color } : undefined} />;
 }
 
 /**
@@ -15,7 +23,7 @@ export function TermIcon({ term, size = 11, colored = true }: { term: TermKey; s
  * base), i.e. "show what each card is worth". In colour while the values are on, plain while they're off.
  */
 export function ValuesIcon({ on, size = 18 }: { on: boolean; size?: number }) {
-    const bar = (term: TermKey) => (on ? TERM_COLOR[term] : 'currentColor');
+    const bar = (row: string) => (on ? rowColor(row) : 'currentColor');
     return (
         <svg width={size} height={size} viewBox="0 0 18 18" fill="none" aria-hidden="true">
             <rect x="1.75" y="1.75" width="9.5" height="13" rx="1.6" stroke="currentColor" strokeWidth="1.5" />
