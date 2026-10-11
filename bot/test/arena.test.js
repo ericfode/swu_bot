@@ -387,3 +387,25 @@ test('register on a hosted arena: only the admin token keeps a harness the runne
     assert.ok(!runnable(pub));
     assert.ok(runnable(agents.find((a) => a.name === 'adm').harness), 'the admin may register one the runner starts');
 });
+
+test('server: a queued eval\'s lost-game replay is served, and eval_result names its URL', async () => {
+    const http = require('http');
+    const { handler } = require('../arena/server');
+    const { RESULTS } = require('../arena/home');
+    const dir = path.join(RESULTS, 'arena-evals', 'me-v1-abc');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'me-v1-vs-rush-20001-s1.jsonl'), '{"t":"header"}\n');
+    writeJson(path.join(HOME, 'queue', 'me-v1-abc.json'), { id: 'me-v1-abc', state: 'done', summary: { losses: [{ id: 'g', replay: path.join(dir, 'me-v1-vs-rush-20001-s1.jsonl') }] } });
+    const out = await require('../arena/api').call('eval_result', { id: 'me-v1-abc' });
+    const url = out.result.summary.losses[0].replayUrl;
+    assert.strictEqual(url, 'replays/arena-evals/me-v1-abc/me-v1-vs-rush-20001-s1.jsonl');
+    const srv = http.createServer(handler).listen(0, '127.0.0.1');
+    await new Promise((r) => srv.once('listening', r));
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    try {
+        assert.strictEqual(await (await fetch(`${base}/${url}`)).text(), '{"t":"header"}\n');
+        assert.strictEqual((await fetch(`${base}/replays/arena-evals/..%2F..%2Fsecret/x.jsonl`)).status, 404);
+    } finally {
+        srv.close();
+    }
+});

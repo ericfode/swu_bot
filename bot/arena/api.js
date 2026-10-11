@@ -364,6 +364,12 @@ const api = {
         need(safe, 'bad_request', 'id: the id eval returned');
         const j = home.readJson(path.join(home.HOME, 'queue', `${safe}.json`), null);
         need(j, 'not_found', `no eval "${safe}"`);
+        // each lost game's replay also as the path the HTTP server serves it under (GET /<replayUrl>), for clients on
+        // another machine: `replay` is a path on the referee's disk
+        const url = (p) => /(arena-evals\/[\w-]+\/[\w.#@-]+\.jsonl)$/.exec(String(p ?? ''))?.[1];
+        if (Array.isArray(j.summary?.losses)) {
+            j.summary.losses = j.summary.losses.map((l) => (url(l.replay) ? { ...l, replayUrl: `replays/${url(l.replay)}` } : l));
+        }
         return j;
     },
 

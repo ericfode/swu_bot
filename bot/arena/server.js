@@ -62,7 +62,9 @@ function handler(req, res) {
     if (req.method === 'GET' && url.pathname === '/kit.js') {
         return serveFile(res, KIT, 'text/javascript');
     }
-    const rep = /^\/replays\/(arena-r\d+)\/((?:games\/[\w.#@-]+\.jsonl)|index\.json)$/.exec(url.pathname);
+    // a round's replays (arena-r<K>/games/<id>.jsonl, index.json) and a queued eval's (arena-evals/<eval id>/<game>.jsonl)
+    const rep = /^\/replays\/(arena-r\d+)\/((?:games\/[\w.#@-]+\.jsonl)|index\.json)$/.exec(url.pathname)
+        ?? /^\/replays\/(arena-evals\/[\w-]+)\/([\w.#@-]+\.jsonl)$/.exec(url.pathname);
     if (req.method === 'GET' && rep) {
         return serveFile(res, path.join(RESULTS, rep[1], rep[2]), rep[2].endsWith('.json') ? 'application/json' : 'application/x-ndjson');
     }
