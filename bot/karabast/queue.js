@@ -147,19 +147,26 @@ async function main() {
             break;
         }
         let row;
+        let matched = false;
         try {
             row = await queueOnce({
                 server, user, deck, bot: arg('bot', 'c-clock'), format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
                 waitMs: Number(arg('wait-minutes', 10)) * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
                 seed: `${seed}-${g}`, out, log,
                 onMatched: async (opponent) => {
+                    matched = true;
                     if (ledger) {
                         ledger.add([opponent], 'played', hold);
                     }
                 }
             });
         } finally {
-            ledger?.release(hold);
+            // matched but not counted (add() failed): the place stays counted
+            if (matched) {
+                ledger?.spend(hold, 'played');
+            } else {
+                ledger?.release(hold);
+            }
         }
         console.log(JSON.stringify(row));
         if (out) {
