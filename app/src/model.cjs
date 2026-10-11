@@ -125,17 +125,17 @@
             const kind = typeof r.feed === 'string' && r.feed ? 'people' : runKind(r.id), people = kind === 'people';
             for (const g of r.games) {
                 const p1 = can(g.p1), p2 = can(g.p2);
-                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated
+                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned (people only)
                 if (g.outcome === 'running') { res = 3; running++; }
                 else if (g.outcome === 'won' && (g.winnerSeat === 'p1' || g.winnerSeat === 'p2')) res = g.winnerSeat === 'p1' ? 0 : 1;
                 else if (g.outcome === 'ERROR' && /^TIME_FORFEIT (\S+)/.test(g.error || '')) { forfeit = canonical(RegExp.$1, fixed) === p1 ? 'p1' : 'p2'; res = forfeit === 'p1' ? 1 : 0; }
                 else if (g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2')) { forfeit = g.by; res = g.by === 'p1' ? 1 : 0; }
                 else if (g.winnerSeat === 'draw') { res = 2; errors++; }
                 else { res = 4; errors++; }
+                // a game against people that never started or went silent is abandoned, not an engine error
+                if (people && res === 4 && g.outcome === 'abandoned') { res = 5; errors--; abandoned++; }
                 games.push([ri, g.id, bi(p1), bi(p2), res, g.rounds ?? null, g.steps ?? null, forfeit ? 1 : 0]);
                 if (people) {
-                    // a game that never started or went silent is abandoned, not an engine error
-                    if (res === 4 && g.outcome === 'abandoned') { errors--; abandoned++; }
                     // a finished game against a person, a draw included, counts in the run's own table only
                     if (res <= 2 && p1 && p2) {
                         decided++;
@@ -157,7 +157,8 @@
                 if (forfeit) R(forfeit === 'p1' ? p1 : p2).faults++;
             }
             const table = Object.entries(st).map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
-            const bots = [...new Set([...(r.bots || []).map(can), ...table.map(t => t.id)])];
+            // a people run names everyone who sat down, so its grid shows before any game ends
+            const bots = [...new Set([...(people ? [...names] : r.bots || []).map(can), ...table.map(t => t.id)])];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
             return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });

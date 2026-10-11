@@ -105,7 +105,7 @@ test('buildModel: games against people on Karabast show as their own run and sta
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
     assert.ok(!M.bots.opponent, 'people are not bots');
     assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 5, 'every game stays listed');
-    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 4, 'an abandoned game has no result, so the grid leaves it out');
+    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');
 });
 
 test('buildModel: a run any outside feed sent is never rated, whatever its name', () => {
@@ -114,6 +114,8 @@ test('buildModel: a run any outside feed sent is never rated, whatever its name'
     const M = model.buildModel(src, null, null);
     assert.equal(M.runs.find(x => x.id === 'sprite').kind, 'people');
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'records unchanged');
+    src.runs.push({ id: 'sprite-2', feed: 'sprite', createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-2', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] });
+    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-2').bots, ['c-clock', 'opponent'], 'a run with no bots list and no finished game still names its seats');
 });
 
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {

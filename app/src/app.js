@@ -150,6 +150,7 @@ function resText(g) {
   const x = gameRow(g);
   if (x.res === 3) return '<span class="pill live">playing</span>';
   if (x.res === 4) return '<span class="res faint">not rated</span>';
+  if (x.res === 5) return '<span class="res faint" title="the game never started or went silent">abandoned</span>';
   if (x.res === 2) return '<span class="res">draw</span>';
   return `${botLink(x.res === 0 ? x.p1 : x.p2)}${x.forfeit ? ' <span class="res warn" title="the other bot failed (late, illegal or broken reply)">by forfeit</span>' : ''}`;
 }
@@ -171,7 +172,7 @@ function gameGrid(run, { maxBots = 14 } = {}) {
     for (const b of bots) {
       if (a === b) { h += '<td><div class="cell self"></div></td>'; continue; }
       const gs = by[`${a}|${b}`] || [];
-      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res === 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${x.p1} vs ${x.p2}: ${k === 'w' ? a + ' won' : k === 'l' ? b + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : 'not rated'}`)}"></a>`; });
+      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${x.p1} vs ${x.p2}: ${k === 'w' ? a + ' won' : k === 'l' ? b + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'abandoned' : 'not rated'}`)}"></a>`; });
       for (let k = gs.length; k < per; k++) sq.push('<span title="not played yet"></span>');
       h += `<td><div class="cell">${sq.join('')}</div></td>`;
     }
@@ -984,13 +985,13 @@ function pageGames(r) {
     const g = M.games[i];
     if (runIx >= 0 && g[0] !== runIx) continue;
     if (botI >= 0 && g[2] !== botI && g[3] !== botI) continue;
-    if (F.res === 'decided' && g[4] > 2) continue; if (F.res === 'playing' && g[4] !== 3) continue; if (F.res === 'forfeit' && !g[7]) continue; if (F.res === 'error' && g[4] !== 4) continue;
+    if (F.res === 'decided' && g[4] > 2) continue; if (F.res === 'playing' && g[4] !== 3) continue; if (F.res === 'forfeit' && !g[7]) continue; if (F.res === 'error' && g[4] !== 4) continue; if (F.res === 'abandoned' && g[4] !== 5) continue;
     if (F.replay && !hasReplay(i)) continue;
     rows.push(i);
   }
   const per = 40, pages = Math.max(1, Math.ceil(rows.length / per)), p = Math.min(S.gamesPage, pages - 1);
   return `<div class="phead"><h1>Games</h1><p class="lede">${int(M.games.length)} games in ${M.runs.length} runs; ${int([...M.games.keys()].filter(hasReplay).length)} have a replay you can watch.</p></div>
-  <div class="filters"><select data-input="gamesF" data-k="bot" aria-label="Bot"><option value="">Any bot</option>${[...M.order, ...Object.keys(M.bots).filter(x => !M.bots[x].rating)].map(x => `<option ${x === F.bot ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select><select data-input="gamesF" data-k="run" aria-label="Run"><option value="">Any run</option>${[...M.runs].reverse().map(x => `<option ${x.id === F.run ? 'selected' : ''}>${esc(x.id)}</option>`).join('')}</select><select data-input="gamesF" data-k="res" aria-label="Result">${[['all', 'Any result'], ['decided', 'Decided'], ['playing', 'Playing now'], ['forfeit', 'Won by forfeit'], ['error', 'Not rated (engine error)']].map(([k, l]) => `<option value="${k}" ${k === F.res ? 'selected' : ''}>${l}</option>`).join('')}</select><label class="row" style="font-size:var(--fs-md);gap:5px"><input type="checkbox" data-input="gamesF" data-k="replay" ${F.replay ? 'checked' : ''}>Has replay</label><span class="muted" style="font-size:var(--fs-md)">${int(rows.length)} games</span></div>
+  <div class="filters"><select data-input="gamesF" data-k="bot" aria-label="Bot"><option value="">Any bot</option>${[...M.order, ...Object.keys(M.bots).filter(x => !M.bots[x].rating)].map(x => `<option ${x === F.bot ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select><select data-input="gamesF" data-k="run" aria-label="Run"><option value="">Any run</option>${[...M.runs].reverse().map(x => `<option ${x.id === F.run ? 'selected' : ''}>${esc(x.id)}</option>`).join('')}</select><select data-input="gamesF" data-k="res" aria-label="Result">${[['all', 'Any result'], ['decided', 'Decided'], ['playing', 'Playing now'], ['forfeit', 'Won by forfeit'], ['error', 'Not rated (engine error)'], ['abandoned', 'Abandoned (vs people)']].map(([k, l]) => `<option value="${k}" ${k === F.res ? 'selected' : ''}>${l}</option>`).join('')}</select><label class="row" style="font-size:var(--fs-md);gap:5px"><input type="checkbox" data-input="gamesF" data-k="replay" ${F.replay ? 'checked' : ''}>Has replay</label><span class="muted" style="font-size:var(--fs-md)">${int(rows.length)} games</span></div>
   <section class="box">${gamesTable(rows.slice(p * per, p * per + per))}<div class="pager" style="margin-top:8px"><button type="button" data-act="gamesPage" data-d="-1" ${p === 0 ? 'disabled' : ''}>Newer</button><span class="mono">${p + 1} / ${pages}</span><button type="button" data-act="gamesPage" data-d="1" ${p >= pages - 1 ? 'disabled' : ''}>Older</button></div></section>`;
 }
 const KIND = { arena: ['Arena round', 'llm'], ladder: ['Ladder', 'heuristic'], study: ['Study', 'learned'], people: ['Vs people', 'search'], test: ['Test', 'random'] };
@@ -1014,7 +1015,7 @@ function pageGame(r) {
   const sib = []; M.games.forEach((g, j) => { if (g[0] === ri) sib.push(j); }); const at = sib.indexOf(i);
   const nav = (j, l) => j != null && sib[j] != null ? `<a href="${href('games', run.id, M.games[sib[j]][1])}">${l}</a>` : `<span class="faint">${l}</span>`;
   const both = atl(x.p1) && atl(x.p2);
-  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${botLink(x.p1)}${styleTag(atl(x.p1)?.summary?.style)}<span class="faint" style="font-size:var(--fs-base)">vs</span>${botLink(x.p2)}${styleTag(atl(x.p2)?.summary?.style)}</h1></div><p class="lede">${x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 2 ? 'Draw.' : `${esc(x.res === 0 ? x.p1 : x.p2)} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}</span></div>
+  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${botLink(x.p1)}${styleTag(atl(x.p1)?.summary?.style)}<span class="faint" style="font-size:var(--fs-base)">vs</span>${botLink(x.p2)}${styleTag(atl(x.p2)?.summary?.style)}</h1></div><p class="lede">${x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 5 ? 'Abandoned: the game never started or went silent.' : x.res === 2 ? 'Draw.' : `${esc(x.res === 0 ? x.p1 : x.p2)} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}</span></div>
   ${spotBarHtml(key)}
   <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" style="margin-top:8px"></div>
   <section class="box"><div class="bh"><h3>Pivotal plays</h3><span class="sub">the actions that moved the game most; click to jump</span></div><div id="pivotal" class="comps" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"><p class="muted">Loading…</p></div></section>`;
