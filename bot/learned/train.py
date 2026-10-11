@@ -38,12 +38,19 @@ def load(dirs):
             acts = acts[: m * A].reshape(m, A)
             # gen.js before the resume fix replayed its first seeds after a restart: drop a game that repeats an earlier one
             # (same seed, length, winner and rounds; games from other sources can share a seed but not all of these)
-            seen = {}
-            for line in open(os.path.join(w, 'games.jsonl')):
-                g = json.loads(line)
-                seen.setdefault((g.get('seed'), g.get('decisions'), g.get('winner'), g.get('round')), g['game'])
-            first = set(seen.values())
-            keep = np.array([g in first for g in meta[:, 0]], dtype=bool)
+            # a missing journal or a torn last line (worker still writing or killed) only means fewer games are checked
+            seen, repeats = set(), set()
+            journal = os.path.join(w, 'games.jsonl')
+            for line in open(journal) if os.path.exists(journal) else []:
+                try:
+                    g = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                key = (g.get('seed'), g.get('decisions'), g.get('winner'), g.get('round'))
+                if key in seen:
+                    repeats.add(g['game'])
+                seen.add(key)
+            keep = np.array([g not in repeats for g in meta[:, 0]], dtype=bool)
             if not keep.all():
                 print(f'{w}: dropping {len(set(meta[~keep, 0]))} games that repeat an earlier game')
                 s, sn, p, meta, acts = s[keep], sn[keep], p[keep], meta[keep], acts[np.repeat(keep, meta[:, 4])]
