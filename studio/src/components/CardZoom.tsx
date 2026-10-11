@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
 import { BrainCircuit } from 'lucide-react';
 import { Card, type Focus } from './Card';
-import { baseValue, unitTerms, type LensView } from '../data/lens';
+import { baseValue, TERM_COLOR, unitTerms, type LensView } from '../data/lens';
+import { TermIcon } from './TermIcon';
 
 const sg = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`;
 
@@ -21,11 +22,11 @@ function ValueBreakdown({ focus, lens }: { focus: Focus; lens: LensView }) {
         if (hp != null) {
             rows.push({ label: `${hp} HP left × ${w.baseHp}`, points: hp * w.baseHp });
             if (hp <= 12) {
-                rows.push({ label: `low-base term (12 − ${hp})² / 6`, points: (12 - hp) ** 2 / 6 });
+                rows.push({ label: `low-base penalty (12 − ${hp})² / 6`, points: -((12 - hp) ** 2) / 6 });
             }
             rows.push({ label: `all × ${w.baseMult}`, points: baseValue(hp, w) - baseValue(hp, w) / w.baseMult });
-            if (hp <= 9) {
-                note = 'Under about 9 HP the low-base term grows faster than the HP term shrinks, so this score rates a lower base as worth more. That looks like a sign error in the shared formula (baseTerm in bot/players/heuristic.js).';
+            if (hp <= 12) {
+                note = 'Under 12 HP the penalty makes a base lose worth faster the closer it gets to 0.';
             }
         }
     } else if (focus.kind === 'hand' && v != null) {
@@ -38,7 +39,7 @@ function ValueBreakdown({ focus, lens }: { focus: Focus; lens: LensView }) {
         <div className="flex flex-col gap-1 rounded-lg bg-ink/70 border border-line px-2.5 py-2">
             <div className="flex items-baseline gap-2">
                 <span className="eyebrow">Omni value</span>
-                {v != null && <span className="num font-semibold" style={{ color: `var(--color-${focus.value!.seat})` }}>{v.toFixed(1)}</span>}
+                {v != null && <span className="num font-semibold inline-flex items-center gap-1" style={{ color: TERM_COLOR[focus.value!.term ?? 'ground'] }}><TermIcon term={focus.value!.term ?? 'ground'} />{v.toFixed(1)}</span>}
                 <span className="text-faint text-[10px] ml-auto">{lens.exact ? 'lens file' : 'estimate'}</span>
             </div>
             {rows.length > 0 && (
@@ -52,10 +53,10 @@ function ValueBreakdown({ focus, lens }: { focus: Focus; lens: LensView }) {
             {note && <p className="m-0 text-faint text-[11px] leading-snug">{note}</p>}
             {regret != null && (
                 <p className="m-0 text-[11px] leading-snug flex gap-1.5 items-start">
-                    <BrainCircuit size={13} className="text-gold shrink-0 mt-px" />
+                    <BrainCircuit size={13} className="text-fg shrink-0 mt-px" />
                     {regret >= -0.05
-                        ? <span className="text-gold">The omni bot's chosen move (or one just as good) starts with this card.</span>
-                        : <span className="text-dim">The omni bot's best move with this card scored <b className="text-p2">{Math.abs(regret).toFixed(1)}</b> points below the move it played.</span>}
+                        ? <span className="text-fg">★ The omni bot's chosen move (or one just as good) starts with this card.</span>
+                        : <span className="text-dim">The omni bot's best move with this card scored <b className="text-fg">{Math.abs(regret).toFixed(1)}</b> points below the move it played.</span>}
                 </p>
             )}
         </div>
@@ -75,7 +76,7 @@ export function CardFacts({ focus, lens, compact = false }: { focus: Focus; lens
             </div>
             {u?.u?.length ? <div className="flex flex-wrap gap-1">{u.u.map((x, i) => <span key={i} className={`up !static${x.t ? ' token' : ''}`}>{x.n}</span>)}</div> : null}
             {lens && !compact && <ValueBreakdown focus={focus} lens={lens} />}
-            {lens && compact && focus.value?.v != null && <span className="text-xs text-dim">Omni value <b className="num" style={{ color: `var(--color-${focus.value.seat})` }}>{focus.value.v.toFixed(1)}</b></span>}
+            {lens && compact && focus.value?.v != null && <span className="text-xs text-dim inline-flex items-center gap-1">Omni value <TermIcon term={focus.value.term ?? 'ground'} /><b className="num" style={{ color: TERM_COLOR[focus.value.term ?? 'ground'] }}>{focus.value.v.toFixed(1)}</b></span>}
         </div>
     );
 }

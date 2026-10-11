@@ -72,10 +72,28 @@ const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 const r2 = (v: number) => Math.round(v * 100) / 100;
 export const isShield = (u: { n: string }) => u.n === 'Shield';
 
+/** The omni score's base term: it falls faster near 0 HP (the heuristic bot adds the low-base term instead, a bug the omni score fixes). */
 export function baseValue(hpLeft: number, w: LensWeights = OMNI_WEIGHTS): number {
     const hp = Math.max(0, hpLeft);
-    return w.baseMult * (hp * w.baseHp + (hp <= 12 ? (12 - hp) ** 2 / 6 : 0));
+    return w.baseMult * (hp * w.baseHp - (hp <= 12 ? (12 - hp) ** 2 / 6 : 0));
 }
+
+/** The parts of the score, in the order the breakdown lists them. */
+export type TermKey = 'base' | 'ground' | 'space' | 'hand' | 'resources' | 'initiative';
+
+/**
+ * One colour per part of the score, used everywhere the lens shows a number: the chip on a card, the lane and HQ totals,
+ * the breakdown row and the card inspector. Seat is shown by where a number sits (and by the totals' outline), never by
+ * these colours, so a green number is always a ground unit's worth, whoever owns it.
+ */
+export const TERM_COLOR: Record<TermKey, string> = {
+    base: 'var(--color-v-base)',
+    ground: 'var(--color-v-ground)',
+    space: 'var(--color-v-space)',
+    hand: 'var(--color-v-hand)',
+    resources: 'var(--color-v-res)',
+    initiative: 'var(--color-v-init)'
+};
 
 /** A unit's value without its cost term (the replay has no costs). */
 export function unitValueNoCost(u: UnitRef, w: LensWeights = OMNI_WEIGHTS): number {

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Eye, Image, Pause, Play, Radio, ScanEye, Shapes, SkipBack, SkipForward, Sparkles, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Image, Pause, Play, Radio, Shapes, SkipBack, SkipForward, Sparkles, Trophy } from 'lucide-react';
 import { Board } from '../components/Board';
 import type { Focus } from '../components/Card';
 import { CardInspector, FloatingZoom } from '../components/CardZoom';
 import { Log } from '../components/Log';
-import { LANES, Momentum, type LaneKey } from '../components/Momentum';
+import { EVAL_LINES, LANES, LaneSwatch, Momentum, evalLabels, type LaneKey } from '../components/Momentum';
+import { ValuesIcon } from '../components/TermIcon';
 import { Spine } from './Spine';
 import { ActionIcon } from './ActionIcon';
 import { EdgeBreakdown } from './EdgeBreakdown';
 import { classifyGame, describe, pivotalActions } from '../data/actions';
 import { deltas as diff, metrics, roundStarts, trackUnits } from '../data/derive';
-import { EVAL_KEYS, evalAt, evalsByIndex, type EvalFile } from '../data/evals';
+import { EVAL_KEYS, evalAt, evalsByIndex, type EvalFile, type EvalPoint } from '../data/evals';
 import { lensAt, lensByIndex, type LensFile } from '../data/lens';
 import type { Game, Seat } from '../data/types';
 import { humanize } from '../lib/cards';
@@ -57,6 +58,14 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     const [hideResult, setHideResult] = useState(false);
     const ev = useMemo(() => evalsByIndex(game, evals), [game, evals]);
     const [lanes, setLanes] = useState<LaneKey[]>(() => (evals?.points?.length ? ['llm', 'base'] : ['base', 'edge']));
+    // once the reader picks lanes, evals arriving late don't override the pick
+    const userLanes = useRef(false);
+    const toggleLane = (k: LaneKey) => {
+        userLanes.current = true;
+        setLanes((ls) => (ls.includes(k) ? ls.filter((x) => x !== k) : [...ls, k]));
+    };
+    // the timeline step under the pointer: the board score panel previews it
+    const [hoverStep, setHoverStep] = useState<number | null>(null);
     const { speed, setSpeed, perspective, setPerspective, art, setArt, lens: lensOn, setLens } = useSettings();
     const root = useRef<HTMLDivElement>(null);
     const lensSteps = useMemo(() => lensByIndex(game, lens), [game, lens]);
@@ -93,9 +102,12 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     }, []);
     const onCardLeave = useCallback(() => setHovering(false), []);
 
+    // an annotated game opens on its evaluations and base HP, whenever its evals file arrives
     useEffect(() => {
         if (evals?.points?.length) {
-            setLanes((ls) => (ls.includes('llm') ? ls : ['llm', ...ls]));
+            if (!userLanes.current) {
+                setLanes(['llm', 'base']);
+            }
             setWhy('analyst');
         }
     }, [evals]);
@@ -206,7 +218,23 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     const winner = game.end?.winner;
     const analysis = ev.size ? evalAt(ev, step) : null;
     const view = useMemo(() => lensAt(game, step, lensSteps, lens), [game, step, lensSteps, lens]);
-    const prevView = useMemo(() => (step > 0 ? lensAt(game, step - 1, lensSteps, lens) : null), [game, step, lensSteps, lens]);
+    // the board score panel shows the playhead's step, or the one under the pointer on the timeline
+    const shown = hoverStep != null && hoverStep >= 0 && hoverStep <= last ? hoverStep : step;
+    const shownView = useMemo(() => (shown === step ? view : lensAt(game, shown, lensSteps, lens)), [game, shown, step, view, lensSteps, lens]);
+    const shownPrev = useMemo(() => (shown > 0 ? lensAt(game, shown - 1, lensSteps, lens) : null), [game, shown, lensSteps, lens]);
+    const stepN = useCallback((i: number) => game.steps[i]?.n ?? i, [game]);
+    const prevCheckpoint = useMemo(() => {
+        if (!analysis) {
+            return null;
+        }
+        let best = -1;
+        for (const k of ev.keys()) {
+            if (k < analysis.index && k > best) {
+                best = k;
+            }
+        }
+        return best >= 0 ? ev.get(best) ?? null : null;
+    }, [ev, analysis]);
     const lastAction = useMemo(() => {
         for (let i = step; i > 0; i--) {
             const a = actionAt.get(i);
@@ -251,9 +279,9 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                         <button className="btn !h-7 !border-0 !bg-transparent aria-pressed:!bg-raise aria-pressed:!text-fg text-dim" aria-pressed={!art} onClick={() => setArt(false)} title="Generated tiles: always available, light"><Shapes size={14} />Vector</button>
                         <button className="btn !h-7 !border-0 !bg-transparent aria-pressed:!bg-raise aria-pressed:!text-fg text-dim" aria-pressed={art} onClick={() => setArt(true)} title="Card images; cards without art fall back to tiles"><Image size={14} />Card art</button>
                     </div>
-                    <button className="btn !h-8" aria-pressed={lensOn} onClick={() => setLens(!lensOn)}
-                        title="Lens: write on every card what it is worth to the omniscient bot (its board score), and mark the cards its search liked">
-                        <ScanEye size={14} />Lens
+                    <button className="btn !h-8 !px-2" aria-pressed={lensOn} onClick={() => setLens(!lensOn)} aria-label="Card values"
+                        title="Card values: write on every card what it is worth to the omniscient bot, coloured by the row of its board score it counts in (ground, space, base, hand, resources, initiative), and mark the cards its search liked">
+                        <ValuesIcon on={lensOn} />
                     </button>
                     <span className="chip num">seed {game.header.seed}</span>
                     {game.end && <span className="chip num">{game.end.steps} decisions · R{endRound}</span>}
@@ -303,25 +331,38 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                                 {SPEEDS.map((s, i) => <button key={s.label} className="btn !h-7 !px-2 num text-xs" aria-pressed={speed === i} onClick={() => setSpeed(i)}>{s.label}</button>)}
                             </div>
                         </div>
-                        <Momentum data={series} rounds={rounds} step={step} lanes={lanes} bots={bots} onSeek={seek} evals={ev} height={ev.size ? 190 : 160} markers={pivotal} />
+                        <Momentum data={series} rounds={rounds} step={step} lanes={lanes} bots={bots} onSeek={seek} onHover={setHoverStep} stepN={stepN} evals={ev} height={ev.size ? 190 : 160} markers={pivotal} />
                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                            {LANES.filter((l) => l.key !== 'llm' || ev.size).map((l) => (
-                                <button key={l.key} className="chip hover:text-fg" title={l.hint} aria-pressed={lanes.includes(l.key)}
-                                    style={lanes.includes(l.key) ? { borderColor: 'var(--color-gold)', color: 'var(--color-gold)' } : undefined}
-                                    onClick={() => setLanes((ls) => (ls.includes(l.key) ? ls.filter((x) => x !== l.key) : [...ls, l.key]))}>{l.label}</button>
-                            ))}
+                            {LANES.filter((l) => l.key !== 'llm' || ev.size).map((l) => {
+                                const on = lanes.includes(l.key);
+                                return (
+                                    <button key={l.key} className={`chip hover:text-fg ${on ? '!text-fg !border-fg/50 !bg-raise' : 'opacity-70'}`} title={l.hint} aria-pressed={on} onClick={() => toggleLane(l.key)}>
+                                        <LaneSwatch lane={l.key} />{l.label}
+                                    </button>
+                                );
+                            })}
                             <span className="ml-auto text-faint hidden @3xl:inline">← → step · shift ×10 · [ ] round · space play</span>
                         </div>
-                        <div className="rounded-lg bg-ink/70 border border-line">
-                            <div className="flex items-center gap-1 px-2 pt-1.5" role="tablist" aria-label="Why the curves look this way">
-                                {ev.size > 0 && <button role="tab" aria-selected={why === 'analyst'} className={`chip ${why === 'analyst' ? '!text-gold !border-gold/60' : ''}`} onClick={() => setWhy('analyst')}><Sparkles size={11} />Analyst</button>}
-                                <button role="tab" aria-selected={why === 'board'} className={`chip ${why === 'board' ? '!text-gold !border-gold/60' : ''}`} onClick={() => setWhy('board')}>Board score</button>
-                                {!ev.size && <span className="text-faint text-[11px] ml-2">No analysis for this game yet; evaluations show up here when its evals file exists.</span>}
-                            </div>
-                            <div className="px-3 py-2">
-                                {why === 'analyst' && ev.size > 0
-                                    ? (analysis ? <Analysis point={analysis.point} at={game.steps[analysis.index].n} evaluator={evals?.evaluator?.model} /> : <span className="text-faint text-sm">The analysis starts at step {game.steps[Math.min(...ev.keys())].n}.</span>)
-                                    : <EdgeBreakdown state={cur.state} prev={prev?.state ?? null} bots={bots} lens={view.exact ? view : null} prevLens={prevView?.exact ? prevView : null} />}
+                        <div className="@container rounded-lg bg-ink/70 border border-line">
+                            {ev.size > 0 && (
+                                <div className="flex items-center gap-1 px-2 pt-1.5 @3xl:hidden" role="tablist" aria-label="Why the curves look this way">
+                                    <button role="tab" aria-selected={why === 'analyst'} className={`chip ${why === 'analyst' ? '!text-fg !border-fg/50 !bg-raise' : ''}`} onClick={() => setWhy('analyst')}><Sparkles size={11} />Analyst</button>
+                                    <button role="tab" aria-selected={why === 'board'} className={`chip ${why === 'board' ? '!text-fg !border-fg/50 !bg-raise' : ''}`} onClick={() => setWhy('board')}>Board score</button>
+                                </div>
+                            )}
+                            {/* with evaluations: the analyst and the board score side by side when there is room, tabs when there isn't */}
+                            <div className={ev.size ? 'grid @3xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @3xl:divide-x divide-line' : ''}>
+                                {ev.size > 0 && (
+                                    <div className={`px-3 py-2 min-w-0 ${why === 'analyst' ? '' : 'hidden'} @3xl:block`}>
+                                        {analysis
+                                            ? <Analysis point={analysis.point} prev={prevCheckpoint} at={game.steps[analysis.index].n} ago={step - analysis.index} bots={bots} evaluator={evals?.evaluator?.model} />
+                                            : <span className="text-faint text-sm">The analysis starts at step {game.steps[Math.min(...ev.keys())].n}.</span>}
+                                    </div>
+                                )}
+                                <div className={`px-3 py-2 min-w-0 ${!ev.size || why === 'board' ? '' : 'hidden'} @3xl:block`}>
+                                    <EdgeBreakdown state={game.steps[shown].state} prev={shown > 0 ? game.steps[shown - 1].state : null} bots={bots}
+                                        lens={shownView.exact ? shownView : null} prevLens={shownPrev?.exact ? shownPrev : null} previewN={shown !== step ? game.steps[shown].n : null} />
+                                </div>
                             </div>
                         </div>
                         <Spine game={game} step={step} evals={ev} onSeek={seek} />
@@ -368,19 +409,37 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
 }
 
 const pct = (v: number | undefined) => (v == null ? '–' : `${Math.round(v * 100)}%`);
-const KEY_COLOR: Record<string, string> = { p1_subjective: 'var(--color-p1)', p2_subjective: 'var(--color-p2)', objective_state: 'var(--color-fg)', objective_hindsight: 'var(--color-gold)' };
 
-/** The analyst's read at the playhead: the four P(p1 wins) numbers and the note for the latest evaluated step. */
-function Analysis({ point, at, evaluator }: { point: import('../data/evals').EvalPoint; at: number; evaluator?: string }) {
+/**
+ * The analyst's read at the playhead: the chance player 1 wins from each viewpoint at the latest checkpoint, how much
+ * each moved since the checkpoint before, and the note. Swatches match the timeline's curves.
+ */
+function Analysis({ point, prev, at, ago, bots, evaluator }: { point: EvalPoint; prev: EvalPoint | null; at: number; ago: number; bots: Record<Seat, string>; evaluator?: string }) {
+    const labels = evalLabels(bots);
     return (
-        <motion.div key={at} initial={{ opacity: 0.4, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-start gap-x-4 gap-y-1">
-            <span className="eyebrow flex items-center gap-1.5 pt-0.5"><Sparkles size={12} />P(p1 wins) at step {at}</span>
-            <span className="flex gap-3 num text-sm">
-                {EVAL_KEYS.map((k) => (
-                    <span key={k.key} title={k.hint}><span className="text-faint text-[11px] mr-1">{k.label}</span><b style={{ color: KEY_COLOR[k.key] }}>{pct(point[k.key])}</b></span>
-                ))}
+        <motion.div key={at} initial={{ opacity: 0.4, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-1.5">
+            <span className="text-[12px] text-dim flex items-center gap-1.5" title={evaluator ? `Evaluator: ${evaluator}` : undefined}>
+                <Sparkles size={12} className="shrink-0" />
+                <span>Chance <b style={{ color: 'var(--color-p1)' }}>{bots.p1}</b> (p1) wins · checkpoint at step {at}{ago > 0 ? ` (${ago} step${ago === 1 ? '' : 's'} ago)` : ''}</span>
             </span>
-            {point.note && <span className="basis-full text-dim text-[13px] leading-snug">{point.note}{evaluator ? <span className="text-faint"> · {evaluator}</span> : null}</span>}
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-0.5 text-[12px]">
+                {EVAL_LINES.map((l) => {
+                    const v = point[l.key];
+                    const p = prev?.[l.key];
+                    const d = v != null && p != null ? Math.round((v - p) * 100) : null;
+                    const hint = EVAL_KEYS.find((k) => k.key === l.key)?.hint;
+                    return [
+                        <span key={`${l.key}s`} className="inline-block w-4 border-t-2" style={{ borderColor: l.color, borderTopStyle: l.dash ? 'dashed' : 'solid' }} />,
+                        <span key={`${l.key}l`} className="text-dim truncate" title={hint}>{labels[l.key]}</span>,
+                        <b key={`${l.key}v`} className="num text-fg text-right">{pct(v)}</b>,
+                        <span key={`${l.key}d`} className="num text-[11px] w-10 text-right" title="change since the previous checkpoint"
+                            style={{ color: d == null || d === 0 ? 'var(--color-faint)' : d > 0 ? 'var(--color-p1)' : 'var(--color-p2)' }}>
+                            {d == null ? '' : d === 0 ? '±0' : `${d > 0 ? '▲' : '▼'}${Math.abs(d)}`}
+                        </span>
+                    ];
+                })}
+            </div>
+            {point.note && <p className="m-0 text-dim text-[12.5px] leading-snug">{point.note}</p>}
         </motion.div>
     );
 }

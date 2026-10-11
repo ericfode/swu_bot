@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type FocusEvent, type MouseEvent } from '
 import { cardImageUrl, tileLook } from '../lib/cards';
 import { useSettings } from '../lib/settings';
 import type { CardRef, Seat, UnitRef } from '../data/types';
+import { TERM_COLOR, type TermKey } from '../data/lens';
 
 /** Leader fronts and bases are printed landscape ('wide'); everything else, a deployed leader included, is portrait ('tall'). */
 export type CardShape = 'tall' | 'wide';
@@ -11,6 +12,8 @@ export interface CardValue {
     /** points for the card's owner; null for cards the score doesn't count on their own (an undeployed leader) */
     v: number | null;
     seat: Seat;
+    /** which part of the score the card counts in: sets the chip's colour, the same as that part's total and breakdown row */
+    term?: TermKey;
     /** 0..1: how this card compares with the most valuable unit on the table (drives the glow) */
     heat?: number;
     /** the omni bot's search on this board: 0 = the card it picked, negative = how much worse its best move with this card was */
@@ -57,7 +60,7 @@ export function LensMarks({ value, size }: { value: CardValue; size: 'sm' | 'md'
     return (
         <span className="lens">
             {value.v != null && (
-                <span className={`lensv${small ? ' sm' : ''}`} style={{ '--seat': `var(--color-${value.seat})` } as CSSProperties} title="What this card is worth to its owner in the omni bot's board score">
+                <span className={`lensv${small ? ' sm' : ''}`} style={{ '--term': TERM_COLOR[value.term ?? 'ground'] } as CSSProperties} title="What this card is worth to its owner in the omni bot's board score">
                     {fmt(value.v)}
                 </span>
             )}
@@ -100,7 +103,11 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     const cls = ['card', size !== 'md' ? size : '', shape === 'wide' ? 'wide' : '', exhausted ? 'exh' : '', lensed ? 'lensed' : ''].filter(Boolean).join(' ');
     const style = {
         ...(width ? { '--w': `${width}px` } : {}),
-        ...(lensed && heat > 0.05 ? { boxShadow: `0 0 0 2px rgba(246,196,84,${(0.25 + heat * 0.75).toFixed(2)}), 0 0 ${Math.round(6 + heat * 22)}px -2px rgba(246,196,84,${(heat * 0.8).toFixed(2)})` } : {})
+        // the glow: the card's score colour, stronger the closer it is to the most valuable unit on the table
+        ...(lensed && heat > 0.05 ? {
+            '--term': TERM_COLOR[value?.term ?? 'ground'],
+            boxShadow: `0 0 0 2px color-mix(in oklab, var(--term) ${Math.round(25 + heat * 75)}%, transparent), 0 0 ${Math.round(6 + heat * 22)}px -2px color-mix(in oklab, var(--term) ${Math.round(heat * 80)}%, transparent)`
+        } : {})
     } as CSSProperties;
     return (
         <div className={cls} style={style} title={card.n} {...focus}

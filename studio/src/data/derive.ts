@@ -1,5 +1,5 @@
 import type { Game, PlayerSnap, Seat, Snapshot } from './types';
-import { estimateLens, LENS_SCALE, OMNI_WEIGHTS, type LensStep } from './lens';
+import { estimateLens, LENS_SCALE, OMNI_WEIGHTS, type LensStep, type TermKey } from './lens';
 
 export const SEATS: Seat[] = ['p1', 'p2'];
 export const other = (s: Seat): Seat => (s === 'p1' ? 'p2' : 'p1');
@@ -56,7 +56,7 @@ export interface Metrics {
 }
 
 export interface EdgeTerm {
-    key: 'base' | 'ground' | 'space' | 'hand' | 'resources' | 'initiative';
+    key: TermKey;
     label: string;
     /** each side's points for this term (good for that side) */
     p1: number;
@@ -65,6 +65,9 @@ export interface EdgeTerm {
     points: number;
     /** what each side's points are made of, e.g. "3 units" */
     what: Record<Seat, string>;
+    /** the rule in a few words, shown under the row */
+    rule: string;
+    /** the rule in full (tooltip) */
     how: string;
 }
 
@@ -81,15 +84,17 @@ export function edgeTerms(s: Snapshot, lens?: LensStep | null): { terms: EdgeTer
     const w = OMNI_WEIGHTS;
     const { p1, p2 } = s.players;
     const hp = (p: PlayerSnap) => Math.max(0, p.base.hp - p.base.d);
-    const t = (key: EdgeTerm['key'], label: string, a: number, b: number, what: Record<Seat, string>, how: string): EdgeTerm =>
-        ({ key, label, p1: Math.round(a * 10) / 10, p2: Math.round(b * 10) / 10, points: a - b, what, how });
+    const t = (key: EdgeTerm['key'], label: string, a: number, b: number, what: Record<Seat, string>, rule: string, how: string): EdgeTerm =>
+        ({ key, label, p1: Math.round(a * 10) / 10, p2: Math.round(b * 10) / 10, points: a - b, what, rule, how });
+    const unitRule = `power × ${w.power} + HP × ${w.hp} + cost × ${w.cost} + upgrades, × ${w.exhaustedMult} if exhausted`;
+    const unitHow = `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per other upgrade + ${w.sentinel} if Sentinel, all × ${w.exhaustedMult} if exhausted`;
     const terms: EdgeTerm[] = [
-        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left, plus (12 − HP)² / 6 when 12 HP or less)`),
-        t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per upgrade + ${w.sentinel} if Sentinel, × ${w.exhaustedMult} if exhausted`),
-        t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, 'same rule as ground units'),
-        t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`),
-        t('resources', 'Resources', v.p1.resources, v.p2.resources, { p1: `${p1.res.total}`, p2: `${p2.res.total}` }, `${w.resource} per resource`),
-        t('initiative', 'Initiative', v.p1.initiative, v.p2.initiative, { p1: s.initiative === 'p1' ? 'has it' : '–', p2: s.initiative === 'p2' ? 'has it' : '–' }, `${w.initiative} for the player holding it`)
+        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left − (12 − HP)² / 6 under 12)`, `${w.baseMult} × (${w.baseHp} per HP left, minus (12 − HP)² / 6 when 12 HP or less, so a base near 0 HP falls fast)`),
+        t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, unitRule, unitHow),
+        t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, unitRule, unitHow),
+        t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`, `${w.hand} per card in hand`),
+        t('resources', 'Resources', v.p1.resources, v.p2.resources, { p1: count(p1.res.total, 'resource'), p2: count(p2.res.total, 'resource') }, `${w.resource} per resource`, `${w.resource} per resource, ready or not`),
+        t('initiative', 'Initiative', v.p1.initiative, v.p2.initiative, { p1: s.initiative === 'p1' ? 'has it' : 'no', p2: s.initiative === 'p2' ? 'has it' : 'no' }, `${w.initiative} for whoever holds it`, `${w.initiative} for the player holding the initiative`)
     ];
     const total = v.p1.total - v.p2.total;
     return { terms, sum: total, edge: Math.tanh(total / LENS_SCALE), exact: !!lens };
@@ -118,14 +123,44 @@ export function metrics(game: Game, lensSteps?: Map<number, LensStep>): Metrics[
 }
 
 export interface Delta {
+    /** the side it happened on: for 'steal', the side the unit went over to */
     seat: Seat;
-    kind: 'enter' | 'defeat' | 'base' | 'heal' | 'deploy' | 'resource';
+    kind: 'enter' | 'defeat' | 'base' | 'heal' | 'deploy' | 'flip' | 'steal' | 'bounce' | 'resource';
     text: string;
 }
 
-/** What visibly changed between two consecutive snapshots, for the log and the board's pop-ups. */
+/**
+ * What visibly changed between two consecutive snapshots, for the log and the board's pop-ups. Units are matched by
+ * name: one that leaves a side while a same-named unit arrives on the other changed control ('steal'), one whose name
+ * turns up in a hand was returned ('bounce'). A leader whose unit enters an arena deploys; one that only changes face flips.
+ */
 export function deltas(a: Snapshot, b: Snapshot): Delta[] {
     const out: Delta[] = [];
+    const names = (p: PlayerSnap) => units(p).map((u) => u.n);
+    const gone = {} as Record<Seat, string[]>;
+    const came = {} as Record<Seat, string[]>;
+    for (const seat of SEATS) {
+        const rest = names(b.players[seat]);
+        gone[seat] = names(a.players[seat]).filter((n) => {
+            const i = rest.indexOf(n);
+            return i >= 0 ? (rest.splice(i, 1), false) : true;
+        });
+        came[seat] = rest;
+    }
+    // control changes, before anything is read as a defeat or an arrival
+    const stolen: Delta[] = [];
+    for (const seat of SEATS) {
+        gone[seat] = gone[seat].filter((n) => {
+            const i = came[other(seat)].indexOf(n);
+            if (i < 0) {
+                return true;
+            }
+            came[other(seat)].splice(i, 1);
+            stolen.push({ seat: other(seat), kind: 'steal', text: `${n} changes sides` });
+            return false;
+        });
+    }
+    const inHands = (s: Snapshot, n: string) => SEATS.reduce((k, seat) => k + s.players[seat].hand.filter((c) => c.n === n).length, 0);
     for (const seat of SEATS) {
         const pa = a.players[seat];
         const pb = b.players[seat];
@@ -135,24 +170,26 @@ export function deltas(a: Snapshot, b: Snapshot): Delta[] {
         } else if (dmg < 0) {
             out.push({ seat, kind: 'heal', text: `${pb.base.n} heals ${-dmg}` });
         }
-        if (pb.leader?.dep && !pa.leader?.dep) {
-            out.push({ seat, kind: 'deploy', text: `${pb.leader.n.split(',')[0]} deploys` });
-        }
-        const before = units(pa).map((u) => u.n);
-        const after = units(pb).map((u) => u.n);
-        const rest = [...after];
-        for (const n of before) {
-            const i = rest.indexOf(n);
-            if (i >= 0) {
-                rest.splice(i, 1);
+        if (pb.leader && pa.leader && ((pb.leader.dep && !pa.leader.dep) || pb.leader.n !== pa.leader.n)) {
+            const i = came[seat].indexOf(pb.leader.n);
+            const ups = (p: PlayerSnap) => units(p).flatMap((u) => u.u ?? []).filter((u) => u.n === pb.leader!.n).length;
+            if (pb.leader.dep && i >= 0) {
+                came[seat].splice(i, 1);
+                out.push({ seat, kind: 'deploy', text: `${pb.leader.n.split(',')[0]} deploys` });
+            } else if (pb.leader.dep && ups(pb) > ups(pa)) {
+                out.push({ seat, kind: 'deploy', text: `${pb.leader.n.split(',')[0]} deploys as a pilot` });
             } else {
-                out.push({ seat, kind: 'defeat', text: `${n} defeated` });
+                out.push({ seat, kind: 'flip', text: pb.leader.n !== pa.leader.n ? `${pa.leader.n} flips to ${pb.leader.n}` : `${pb.leader.n} flips` });
             }
         }
-        for (const n of rest) {
-            if (!(pb.leader?.dep && !pa.leader?.dep && n === pb.leader.n)) {
-                out.push({ seat, kind: 'enter', text: `${n} enters` });
-            }
+        for (const n of gone[seat]) {
+            // more copies of it in the hands than before (and than bounces already counted): it went back to a hand
+            const back = inHands(b, n) - inHands(a, n) - out.filter((d) => d.kind === 'bounce' && d.text === `${n} returns to hand`).length;
+            out.push(back > 0 ? { seat, kind: 'bounce', text: `${n} returns to hand` } : { seat, kind: 'defeat', text: `${n} defeated` });
+        }
+        out.push(...stolen.filter((d) => d.seat === seat));
+        for (const n of came[seat]) {
+            out.push({ seat, kind: 'enter', text: `${n} enters` });
         }
         if (pb.res.total > pa.res.total) {
             out.push({ seat, kind: 'resource', text: `resource ${pb.res.total}` });
