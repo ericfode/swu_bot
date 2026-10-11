@@ -6,3 +6,5 @@ results/
 .perch/*
 !.perch/closed.jsonl
 !.perch/rules/
+bot/c/swu-c
+bot/c/*.o
