@@ -45,6 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 WASI = "wasi_snapshot_preview1"
 EBADF = 8
+EFAULT = 21
 
 
 def die(msg):
@@ -69,7 +70,8 @@ def main():
     except bundle.BundleError as e:
         die("%s (build bundles with: python3 bot/compiled/build.py)" % e)
     name = m.get("name") or os.path.basename(folder)
-    toolchain = json.load(open(os.path.join(HERE, "toolchain.json")))
+    with open(os.path.join(HERE, "toolchain.json")) as f:
+        toolchain = json.load(f)
     tools = os.path.join(ROOT, "build", "compiled", ".tools")
     preopens = [(folder, "/bot")]
     env = dict(m["run"].get("env", {}))
@@ -109,10 +111,14 @@ def main():
     os.makedirs(cache_dir, exist_ok=True)
     key = hashlib.sha256(wasm_bytes + repr((wasmtime.__name__, o.fuel > 0, o.wall_s > 0)).encode()).hexdigest()
     cpath = os.path.join(cache_dir, key + ".cwasm")
-    cached = os.path.exists(cpath)
-    if cached:
-        module = wasmtime.Module.deserialize_file(engine, cpath)
-    else:
+    module = None
+    if os.path.exists(cpath):
+        try:
+            module = wasmtime.Module.deserialize_file(engine, cpath)
+        except wasmtime.WasmtimeError:
+            pass  # cut short or from another wasmtime: compile again, and replace it below
+    cached = module is not None
+    if not cached:
         module = wasmtime.Module(engine, wasm_bytes)
         tmp = cpath + ".%d.tmp" % os.getpid()
         with open(tmp, "wb") as f:
@@ -165,13 +171,19 @@ def main():
         if fd not in (1, 2):
             return EBADF
         mem = caller["memory"]
+        # Memory.read clamps to the memory's size like a slice, so a pointer or length past the end is checked here
         raw = mem.read(caller, iovs, iovs + 8 * iovs_len)
+        if len(raw) != 8 * iovs_len:
+            return EFAULT
         chunks = []
         for k in range(iovs_len):
             ptr = int.from_bytes(raw[8 * k:8 * k + 4], "little")
             n = int.from_bytes(raw[8 * k + 4:8 * k + 8], "little")
             if n:
-                chunks.append(bytes(mem.read(caller, ptr, ptr + n)))
+                chunk = bytes(mem.read(caller, ptr, ptr + n))
+                if len(chunk) != n:
+                    return EFAULT
+                chunks.append(chunk)
         data = b"".join(chunks)
         if fd == 1:
             out.write(data)

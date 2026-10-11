@@ -84,7 +84,8 @@ def load(folder):
     path = os.path.join(folder, "arena.json")
     if not os.path.isfile(path):
         raise BundleError("no arena.json in %s" % folder)
-    m = json.load(open(path))
+    with open(path) as f:
+        m = json.load(f)
     if m.get("schema") != SCHEMA:
         raise BundleError("%s: schema must be %r, got %r" % (path, SCHEMA, m.get("schema")))
     for field in ("protocol", "kind", "platform", "runtime", "run"):
@@ -99,12 +100,13 @@ def load(folder):
         if k.startswith(FORBIDDEN_ENV):
             raise BundleError("%s: run.env may not set %s" % (path, k))
     entry = entry_file(m)
-    if entry is not None:
-        full = os.path.join(folder, entry)
-        if not os.path.isfile(full):
-            raise BundleError("%s: entry %s is not in the bundle" % (path, entry))
-        if m.get("entry_sha256") and sha256_file(full) != m["entry_sha256"]:
-            raise BundleError("%s: %s does not match entry_sha256" % (path, entry))
+    if entry is None:
+        raise BundleError("%s: no entry file (run.cmd ./<file>, or the script as run.args[0])" % path)
+    full = os.path.join(folder, entry)
+    if not os.path.isfile(full):
+        raise BundleError("%s: entry %s is not in the bundle" % (path, entry))
+    if m.get("entry_sha256") and sha256_file(full) != m["entry_sha256"]:
+        raise BundleError("%s: %s does not match entry_sha256" % (path, entry))
     if m.get("network", "none") != "none":
         raise BundleError("%s: a wasm bundle has no network" % path)
     return m
