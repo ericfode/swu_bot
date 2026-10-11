@@ -9,8 +9,9 @@ Losses (see model.py for the layers):
   pred  ||ẑ_h - sg(Ē(x_{t+h}))||^2 for h in {1, 4} own decisions ahead      the JEPA objective
   var   hinge on the batch std of each latent dim (VICReg), keeps z from collapsing to a point
   cov   off-diagonal covariance of z (VICReg), spreads information over dims
-  value BCE of V(z) and V(sg(ẑ_h)) against "the deciding seat won"         grounds the latent, scores plans
 The target encoder Ē is an EMA of the online encoder and gets no gradient.
+Stage 2 then fits the value head V (BCE against "the deciding seat won") on frozen latents z, ẑ_1, ẑ_4,
+early-stopped on held-out games; it is what scores imagined futures at play time (see train_value).
 """
 import argparse
 import json
@@ -94,6 +95,80 @@ def batch_arrays(d, idx):
     return out
 
 
+def latent_rows(npj, d, rows, chunk=4096):
+    """numpy: (z, ẑ_1, ẑ_4) for rows, using the chosen action."""
+    zs, p1s, p4s = [], [], []
+    for k in range(0, len(rows), chunk):
+        r = rows[k:k + chunk]
+        z = npj.encode(d["state"][r], d["tok_ids"][r].astype(np.int64), d["tok_feats"][r].astype(np.float32), d["tok_mask"][r].astype(np.float32))
+        av = npj.action(d["act"][r], d["aid"][r].astype(np.int64))
+        for h, out in ((1, p1s), (4, p4s)):
+            hz = np.zeros((len(r), len(M.HORIZONS)), np.float32)
+            hz[:, M.HORIZONS.index(h)] = 1.0
+            out.append(z + npj.lin("p3", M.relu(npj.lin("p2", M.relu(npj.lin("p1", np.concatenate([z, av, hz], -1)))))))
+        zs.append(z)
+    return np.concatenate(zs), np.concatenate(p1s), np.concatenate(p4s)
+
+
+def train_value(a, d, npj, w, train_idx, held_idx, rng):
+    """Stage 2: the value head V on frozen latents, early-stopped on held-out games.
+
+    Training V together with the encoder let it memorise game outcomes (a deck's leader and base nearly name a
+    training game): held-out value loss was best after 500 steps and then rose, while the JEPA loss kept
+    improving. So the encoder learns only from the self-supervised JEPA loss, and V is fitted afterwards on
+    current latents and on the predictor's imagined ones (what it scores at play time).
+    """
+    t0 = time.time()
+    tr = rng.choice(train_idx, min(300000, len(train_idx)), replace=False)
+    he = rng.choice(held_idx, min(60000, len(held_idx)), replace=False)
+    zt = np.concatenate(latent_rows(npj, d, tr))
+    yt = np.tile(d["win"][tr].astype(np.float32), 3)
+    zh = np.concatenate(latent_rows(npj, d, he))
+    yh = np.tile(d["win"][he].astype(np.float32), 3)
+    print(f"value stage: {len(zt)} train / {len(zh)} held-out latents in {time.time() - t0:.0f}s", file=sys.stderr)
+    vp = {k: Tensor(w[k]) for k in ("v1.w", "v1.b", "v2.w", "v2.b")}
+    # fresh init
+    vr = np.random.default_rng(a.seed + 7)
+    for k in ("v1.w", "v2.w"):
+        sh = w[k].shape
+        vp[k] = Tensor((vr.uniform(-1, 1, sh) * np.sqrt(6.0 / (sh[0] + sh[1]))).astype(np.float32))
+    for k in ("v1.b", "v2.b"):
+        vp[k] = Tensor(np.zeros_like(w[k]))
+    opt = nn.optim.AdamW(list(vp.values()), lr=1e-3, weight_decay=1e-2)
+    V = lambda z: (z.matmul(vp["v1.w"]) + vp["v1.b"]).relu().matmul(vp["v2.w"])[:, 0] + vp["v2.b"][0]
+    B = 2048
+
+    @TinyJit
+    def vstep(z, y):
+        with Context(TRAINING=1):
+            opt.zero_grad()
+            l = bce(V(z.dropout(0.1)), y)
+            l.backward()
+            opt.step()
+            return l.realize()
+
+    def held_metrics():
+        logit = (np.maximum(zh @ vp["v1.w"].numpy() + vp["v1.b"].numpy(), 0) @ vp["v2.w"].numpy())[:, 0] + vp["v2.b"].numpy()[0]
+        loss = float(np.mean(np.maximum(logit, 0) - logit * yh + np.log1p(np.exp(-np.abs(logit)))))
+        n = len(he)
+        acc = [float(((logit[k * n:(k + 1) * n] > 0) == (yh[k * n:(k + 1) * n] > 0.5)).mean()) for k in range(3)]
+        return loss, acc
+
+    best, curve = None, []
+    for it in range(1, a.value_steps + 1):
+        idx = rng.integers(0, len(zt), B)
+        vstep(Tensor(zt[idx]), Tensor(yt[idx])).numpy()
+        if it % 100 == 0:
+            loss, acc = held_metrics()
+            curve.append({"step": it, "held_bce": loss, "acc_z": acc[0], "acc_pred1": acc[1], "acc_pred4": acc[2]})
+            if best is None or loss < best[0]:
+                best = (loss, it, {k: v.numpy().copy() for k, v in vp.items()}, acc)
+    w.update(best[2])
+    print(f"value head: best held-out BCE {best[0]:.4f} at step {best[1]}, accuracy on z / ẑ1 / ẑ4: "
+          + " / ".join(f"{x:.3f}" for x in best[3]) + f" ({time.time() - t0:.0f}s)", file=sys.stderr)
+    return {"best_step": best[1], "held_bce": best[0], "acc_z": best[3][0], "acc_pred1": best[3][1], "acc_pred4": best[3][2], "curve": curve}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
@@ -104,7 +179,8 @@ def main():
     ap.add_argument("--ema", type=float, default=0.995)
     ap.add_argument("--w-var", type=float, default=1.0)
     ap.add_argument("--w-cov", type=float, default=0.04)
-    ap.add_argument("--w-value", type=float, default=0.5)
+    ap.add_argument("--w-value", type=float, default=0.0, help="value loss during stage 1 (0 = pure self-supervised encoder)")
+    ap.add_argument("--value-steps", type=int, default=3000, help="stage 2: value head on frozen latents")
     ap.add_argument("--token-dropout", type=float, default=0.15)
     ap.add_argument("--holdout", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
@@ -175,7 +251,10 @@ def main():
         distc = (z.unsqueeze(1) - y1.unsqueeze(0)).square().sum(-1)
         top1c = (distc.argmin(axis=1) == Tensor.arange(a.batch)).float().mean()
         vacc = ((net.value(z) > 0).float() == b["win"]).float().mean()
-        return Tensor.stack(total, *parts, top1, top1c, vacc).realize()
+        # "nothing changes" baseline measured in the target space: how far apart Ē(now) and Ē(next) are
+        y0 = net.encode(net.t, b["x_state"], b["x_tid"], b["x_tf"], b["x_tm"])
+        copyt = ((y0 - y1) ** 2).mean()
+        return Tensor.stack(total, *parts, top1, top1c, vacc, copyt).realize()
 
     def to_t(b):
         return {k: Tensor(v) for k, v in b.items()}
@@ -186,7 +265,6 @@ def main():
     eval_batches = [erng.choice(held_idx, a.batch, replace=False) for _ in range(8)]
     t1 = time.time()
     acc = np.zeros(len(names))
-    best = None
     for it in range(1, a.steps + 1):
         idx = rng.choice(train_idx, a.batch, replace=False)
         b = batch_arrays(d, idx)
@@ -201,18 +279,14 @@ def main():
             print(f"step {it} {el:.0f}s ({it / el:.1f} it/s) " + " ".join(f"{k}={row[k]:.4f}" for k in names), file=sys.stderr)
         if it % a.eval_every == 0 or it == a.steps:
             vals = np.mean([evaluate(to_t(batch_arrays(d, eb))).numpy() for eb in eval_batches], axis=0)
-            row = {"step": it, **{k: float(v) for k, v in zip(names + ["retrieval_top1", "retrieval_top1_copy", "value_acc"], vals)}}
+            row = {"step": it, **{k: float(v) for k, v in zip(names + ["retrieval_top1", "retrieval_top1_copy", "value_acc", "copy1_target"], vals)}}
             evals.append(row)
             print("  held-out " + " ".join(f"{k}={v:.4f}" for k, v in row.items() if k != "step"), file=sys.stderr)
-            # keep the checkpoint with the best held-out value loss: the value head is what scores plans, and it
-            # can memorise game outcomes from the decks (leaders and bases nearly identify a training game)
-            if best is None or row["value"] < best[0]:
-                best = (row["value"], it, {k: v.numpy().copy() for k, v in net.p.items()})
 
-    # linear probes on target-encoder latents of held-out-free training rows (readable meaning of z)
-    w = best[2]
-    print(f"using the step {best[1]} checkpoint (held-out value loss {best[0]:.4f})", file=sys.stderr)
+    w = {k: v.numpy().copy() for k, v in net.p.items()}
     npj = M.NumpyJepa(w)
+    value_info = train_value(a, d, npj, w, train_idx, held_idx, rng)
+
     pidx = rng.choice(train_idx, min(20000, len(train_idx)), replace=False)
     hidx = rng.choice(held_idx, min(5000, len(held_idx)), replace=False)
 
@@ -255,7 +329,7 @@ def main():
     M.save_safetensors(a.out + ".safetensors", w, meta)
     info = {**meta, "data": a.data, "decisions": int(n), "games": int(len(games)), "train_rows": int(len(train_idx)), "held_rows": int(len(held_idx)),
             "bots": sorted(set(bots.tolist())) if bots is not None else None, "args": vars(a), "seconds": round(time.time() - t0),
-            "curve": curve, "evals": evals, "probes": probes, "map": latent_map, "best_step": best[1], "framework": "tinygrad"}
+            "curve": curve, "evals": evals, "probes": probes, "map": latent_map, "value": value_info, "framework": "tinygrad"}
     with open(a.out + ".train.json", "w") as fh:
         json.dump(info, fh, indent=1)
     print(f"wrote {a.out}.safetensors in {time.time() - t0:.0f}s", file=sys.stderr)

@@ -25,7 +25,8 @@ function makeBot(name) {
         const d = /-d(\d)/.exec(name);
         return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
     }
-    return require('../players/random').createRandomBot(name);
+    // random*, rush, aggro, tempo, control, ... from the shared registry
+    return require('../players').makeBot(name);
 }
 
 async function worker() {
