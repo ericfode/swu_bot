@@ -685,14 +685,22 @@ function setupTable() {
 }
 
 // ---------- pages: arena ----------
+/** The run of arena round n: tournament rounds record into <tournament id>-r<K> (the round's ladderId in standings, its
+ *  ladder in tournament.json); other rounds into arena-r<K>. */
+function roundRun(n) {
+  const A = M.arena, id = A.standings?.rounds?.find(r => r.round === n)?.ladderId ?? A.tournament?.rounds?.find(r => r?.n === n)?.ladder;
+  return (id && runById(id)) || runById(`arena-r${n}`);
+}
 function arenaRun() {
-  const ids = M.arena.runs; const cur = M.arena.current?.n != null ? runById(`arena-r${M.arena.current.n}`) : null;
+  const ids = M.arena.runs; const cur = M.arena.current?.n != null ? roundRun(M.arena.current.n) : null;
   return cur || (ids.length ? runById(ids.at(-1)) : null);
 }
 function phaseBanner() {
   const A = M.arena, T = A.tournament, plan = T?.plannedRounds || 3, mins = T?.roundMinutes || 60;
-  const rounds = T?.rounds || [];
+  const rounds = T?.rounds || [], ho = rounds.find(r => r?.kind === 'holdout');
   const steps = []; for (let n = 1; n <= plan; n++) { const r = rounds[n - 1]; const st = !r ? '' : r.ladderEnd ? 'done' : 'on'; steps.push(`<span class="${st}">R${n} work ${mins} min</span><span class="${!r ? '' : r.ladderEnd ? 'done' : r.ladderStart ? 'on' : ''}">R${n} ladder</span>`); }
+  // a card-pool holdout tournament ends with one more ladder, on the held-out cards and with no work window
+  if (ho || T?.rules?.holdout) steps.push(`<span class="${!ho ? '' : ho.ladderEnd ? 'done' : 'on'}">Held-out cards ladder</span>`);
   const clockTxt = A.phase === 'work' ? `${Math.max(0, Math.round((Date.parse(A.deadline) - NOW()) / 60000))} min` : A.phase === 'ladder' ? 'Ladder' : A.phase === 'done' ? 'Finished' : 'Not started';
   const what = A.phase === 'idle' ? `${A.competitors.length} builders registered, ${A.baselines.join(' and ')} as baselines. When the referee starts tournament 1, every round opens a ${mins}-minute work window where each builder improves its bot, then every builder's newest bot plays every other.` :
     A.phase === 'work' ? `Builders are improving their bots. Submissions close at ${clock(A.deadline)}.` : A.phase === 'ladder' ? 'The newest versions are playing each other now. Games appear in the grid as they finish.' : 'All rounds are rated.';
@@ -700,8 +708,13 @@ function phaseBanner() {
 }
 function roundStandings(st, roundIx, { fp = false } = {}) {
   const r = st?.rounds?.[roundIx]; if (!r) return '<p class="muted">No rated round yet.</p>';
-  const rows = [...r.bots].sort((a, b) => (st.global?.[b.name] ?? 0) - (st.global?.[a.name] ?? 0));
-  return `<div class="scroll"><table><thead><tr><th>#</th><th>Builder <span class="faint" style="font-weight:400">· its bot</span></th><th class="hide-sm">Style</th>${fp ? '<th class="hide-sm">Nine spots</th>' : ''}<th class="n">Rating</th><th class="n">W-L</th><th class="n hide-sm">ms/dec</th><th class="n" title="lost games by a late or broken reply">⏱</th></tr></thead><tbody>${rows.map((b, i) => `<tr><td class="rank">${i + 1}</td><td>${b.agent ? `<a href="${href('arena', 'builders', b.agent)}" class="bot" style="--c:${famColor(builderOf(b.agent)?.harness?.kind === 'script' ? 'search' : 'llm')}"><i></i><span><b>${esc(b.agent)}</b></span></a> <span class="mono faint" style="font-size:var(--fs-sm)">${esc(b.name)}</span>` : `${botLink(b.name)} <span class="tag-base">baseline</span>`}</td><td class="hide-sm">${styleTag(atl(b.name)?.summary?.style)}</td>${fp ? `<td class="hide-sm">${fingerprint(b.name)}</td>` : ''}<td class="n">${st.global?.[b.name] ?? '-'}</td><td class="n">${b.wins}-${b.losses}</td><td class="n hide-sm">${ms(b.thinkMs)}</td><td class="n ${b.forfeits ? 'mk clock' : 'faint'}">${b.forfeits || '-'}</td></tr>`).join('')}</tbody></table></div>`;
+  // the held-out round is left out of the all-round rating: rank it by its own rating, next to the rank on training cards
+  const ho = r.pool === 'holdout', train = ho ? st.rounds.slice(0, roundIx).filter(x => x.pool !== 'holdout').at(-1) : null;
+  const trainRank = Object.fromEntries((train?.bots || []).map(b => [b.name, b.rank]));
+  const rating = b => (ho ? b.btElo : st.global?.[b.name]);
+  const rows = [...r.bots].sort((a, b) => (rating(b) ?? 0) - (rating(a) ?? 0));
+  const moved = (b, i) => { const t = trainRank[b.name]; if (t == null) return '<span class="faint">-</span>'; const d = t - (i + 1); return `#${t}${d ? ` <span class="mk ${d > 0 ? 'up' : 'down'}" title="${d > 0 ? 'better' : 'worse'} on held-out cards">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>` : ''}`; };
+  return `<div class="scroll"><table><thead><tr><th>#</th><th>Builder <span class="faint" style="font-weight:400">· its bot</span></th><th class="hide-sm">Style</th>${fp ? '<th class="hide-sm">Nine spots</th>' : ''}${ho ? '<th class="n" title="rank in the last round on the training cards">Training</th>' : ''}<th class="n">${ho ? 'Held-out rating' : 'Rating'}</th><th class="n">W-L</th><th class="n hide-sm">ms/dec</th><th class="n" title="lost games by a late or broken reply">⏱</th></tr></thead><tbody>${rows.map((b, i) => `<tr><td class="rank">${i + 1}</td><td>${b.agent ? `<a href="${href('arena', 'builders', b.agent)}" class="bot" style="--c:${famColor(builderOf(b.agent)?.harness?.kind === 'script' ? 'search' : 'llm')}"><i></i><span><b>${esc(b.agent)}</b></span></a> <span class="mono faint" style="font-size:var(--fs-sm)">${esc(b.name)}</span>` : `${botLink(b.name)} <span class="tag-base">baseline</span>`}</td><td class="hide-sm">${styleTag(atl(b.name)?.summary?.style)}</td>${fp ? `<td class="hide-sm">${fingerprint(b.name)}</td>` : ''}${ho ? `<td class="n">${moved(b, i)}</td>` : ''}<td class="n">${rating(b) ?? '-'}</td><td class="n">${b.wins}-${b.losses}</td><td class="n hide-sm">${ms(b.thinkMs)}</td><td class="n ${b.forfeits ? 'mk clock' : 'faint'}">${b.forfeits || '-'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function thoughtsFeed(panels, n = 14) {
   const all = [];
@@ -733,11 +746,11 @@ function pageArenaStandings() {
   const st = M.arena.standings;
   if (!st?.rounds?.length) return `${phaseBanner()}<div class="notice">No rated round yet.</div>`;
   const names = Object.keys(st.global || {});
-  const series = names.map(n => ({ name: n, color: /-v\d+$/.test(n) ? famColor('llm') : botColor(n), points: st.rounds.map(r => [r.round, st.global[n]]).filter(p => p[1] != null) }));
-  const runOf = (r, i) => runById(`arena-r${r.round}`) || (i === st.rounds.length - 1 ? arenaRun() : null);
+  const series = names.map(n => ({ name: n, color: /-v\d+$/.test(n) ? famColor('llm') : botColor(n), points: st.rounds.filter(r => r.pool !== 'holdout').map(r => [r.round, st.global[n]]).filter(p => p[1] != null) }));
+  const runOf = (r, i) => roundRun(r.round) || (i === st.rounds.length - 1 ? arenaRun() : null);
   return `<div class="phead"><h1>Arena standings</h1><p class="lede">Bradley-Terry ratings with the baselines' mean pinned at 1500. Each round: its standings with every bot's Atlas style and nine spots, and the grid of every game it played. ${M.arena.archived ? `<span class="archived">archived</span> ${esc(M.arena.archived)}` : ''}</p></div>
-  ${st.rounds.length > 1 ? `<section class="box"><div class="bh"><h3>Rating by round</h3></div>${lineChart(series, { xLabel: 'round', xFmt: v => `R${v}` })}</section>` : ''}
-  ${st.rounds.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => { const run = runOf(r, i); return `<div class="grid" style="margin-top:12px"><div class="c7 box"><div class="bh"><h3>Round ${r.round}</h3><span class="sub">${r.games} games · leader ${esc(r.leader)}</span></div>${roundStandings(st, i, { fp: true })}</div><div class="c5 box"><div class="bh"><h3>Who beat whom</h3><span class="sub">${run ? `<a class="mono" href="${href('runs', run.id)}">${esc(run.id)}</a>` : `round ${r.round}`}</span></div>${run ? gameGrid(run) : '<p class="muted">No game list kept for this round.</p>'}</div></div>`; }).join('')}`;
+  ${st.rounds.filter(r => r.pool !== 'holdout').length > 1 ? `<section class="box"><div class="bh"><h3>Rating by round</h3></div>${lineChart(series, { xLabel: 'round', xFmt: v => `R${v}` })}</section>` : ''}
+  ${st.rounds.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => { const run = runOf(r, i); return `<div class="grid" style="margin-top:12px"><div class="c7 box"><div class="bh"><h3>Round ${r.round}${r.pool === 'holdout' ? ' · held-out cards' : ''}</h3><span class="sub">${r.games} games · leader ${esc(r.leader)}</span></div>${roundStandings(st, i, { fp: true })}</div><div class="c5 box"><div class="bh"><h3>Who beat whom</h3><span class="sub">${run ? `<a class="mono" href="${href('runs', run.id)}">${esc(run.id)}</a>` : `round ${r.round}`}</span></div>${run ? gameGrid(run) : '<p class="muted">No game list kept for this round.</p>'}</div></div>`; }).join('')}`;
 }
 function compCard(c) {
   const p = c.panel, st = M.arena.standings, h = c.harness || {}, v = compVersion(c);

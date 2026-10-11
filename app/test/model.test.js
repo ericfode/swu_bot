@@ -125,3 +125,14 @@ test('publicModel: no threads, owners or thread names; the input is not changed'
     assert.equal(M.panels[0].thread, 'C bot');
     assert.ok(!JSON.stringify(P).includes('Position evaluation research'));
 });
+
+test('buildModel: a tournament keeps its round ladders and its rules (from tournament.json, else standings)', () => {
+    const rounds = [{ n: 1, ladder: 'arena-t1-r1', workStart: 'a', workEnd: 'b' }, { n: 2, kind: 'holdout', ladder: 'arena-t1-r2' }];
+    const own = model.buildModel(tinySources(), { arena: { tournament: { id: 'arena-t1', rounds, rules: { holdout: { fraction: 0.3 } } } } }, null);
+    assert.equal(own.arena.tournament.rounds[1].ladder, 'arena-t1-r2');
+    assert.equal(own.arena.tournament.rules.holdout.fraction, 0.3);
+    const fromStandings = model.buildModel(tinySources(), { arena: { tournament: { id: 'arena-t1', rounds }, standings: { rounds: [], tournament: { rules: { holdout: { fraction: 0.25 } } } } } }, null);
+    assert.equal(fromStandings.arena.tournament.rules.holdout.fraction, 0.25);
+    const plain = model.buildModel(tinySources(), { arena: { tournament: { id: 'x', rounds: [] } } }, null);
+    assert.equal(plain.arena.tournament.rules, null);
+});
