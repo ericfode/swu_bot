@@ -33,6 +33,10 @@ function randomDeck(cardDir, rng) {
     const leaders = cards.filter((c) => c.types.includes('leader'));
     const bases = cards.filter((c) => c.types.includes('base'));
     const pool = cards.filter((c) => !c.types.some((t) => ['leader', 'base', 'token'].includes(t) || t.includes('Token')));
+    // 50 cards at 3 copies each need 17 different cards
+    if (!leaders.length || !bases.length || new Set(pool.map(code)).size < 17) {
+        throw new Error(`${dir} has too few cards for a deck (${leaders.length} leaders, ${bases.length} bases, ${pool.length} others)`);
+    }
     const counts = new Map();
     let n = 0;
     while (n < 50) {
@@ -128,51 +132,59 @@ async function main() {
     if (!made.body?.success) {
         throw new Error(`create-lobby failed: ${JSON.stringify(made.body)}`);
     }
-    const host = await new KarabastSocket(server, { user: users[0] }).connect();
-    const lobby = await host.next('lobbystate');
-    if (!isPrivate) {
-        const joined = await post(server, '/api/join-lobby', { lobbyId: lobby.id, user: users[1] });
-        if (!joined.body?.success) {
-            throw new Error(`join-lobby failed: ${JSON.stringify(joined.body)}`);
-        }
-    }
-    const guest = await new KarabastSocket(server, { user: users[1], lobbyId: isPrivate ? lobby.id : null }).connect();
-    await guest.next('lobbystate');
-    guest.send('lobby', 'changeDeck', decks[1]);
-    guest.send('lobby', 'setReadyStatus', true);
-    host.send('lobby', 'setReadyStatus', true);
-    if (isPrivate) {
-        host.send('lobby', 'updateSetting', 'allowSpectators', true);
-    }
-    console.log(`lobby ${lobby.id}; spectate with: node bot/karabast/spectate.js --lobby ${lobby.id} --out <dir>`);
-    await sleep(Number(arg('start-after-ms', 500)));
-
-    let steps = 0;
+    // sockets and seat watchdogs, closed on every exit path
+    const socks = [];
     let stops = [];
-    const result = new Promise((resolve) => {
-        const onStep = () => {
-            if (++steps >= maxSteps) {
-                resolve({ winners: [], reason: 'step cap' });
+    try {
+        const host = await new KarabastSocket(server, { user: users[0] }).connect();
+        socks.push(host);
+        const lobby = await host.next('lobbystate');
+        if (!isPrivate) {
+            const joined = await post(server, '/api/join-lobby', { lobbyId: lobby.id, user: users[1] });
+            if (!joined.body?.success) {
+                throw new Error(`join-lobby failed: ${JSON.stringify(joined.body)}`);
             }
-        };
-        stops = [
-            randomSeat(host, users[0].id, rng, { delayMs, onStep }),
-            randomSeat(guest, users[1].id, rng, { delayMs, onStep })
-        ];
-        host.on('gamestate', (gs) => {
-            if (gs.winners?.length) {
-                resolve({ winners: gs.winners, reason: 'game over' });
-            }
+        }
+        const guest = await new KarabastSocket(server, { user: users[1], lobbyId: isPrivate ? lobby.id : null }).connect();
+        socks.push(guest);
+        await guest.next('lobbystate');
+        guest.send('lobby', 'changeDeck', decks[1]);
+        guest.send('lobby', 'setReadyStatus', true);
+        host.send('lobby', 'setReadyStatus', true);
+        if (isPrivate) {
+            host.send('lobby', 'updateSetting', 'allowSpectators', true);
+        }
+        console.log(`lobby ${lobby.id}; spectate with: node bot/karabast/spectate.js --lobby ${lobby.id} --out <dir>`);
+        await sleep(Number(arg('start-after-ms', 500)));
+
+        let steps = 0;
+        const result = new Promise((resolve) => {
+            const onStep = () => {
+                if (++steps >= maxSteps) {
+                    resolve({ winners: [], reason: 'step cap' });
+                }
+            };
+            stops = [
+                randomSeat(host, users[0].id, rng, { delayMs, onStep }),
+                randomSeat(guest, users[1].id, rng, { delayMs, onStep })
+            ];
+            host.on('gamestate', (gs) => {
+                if (gs.winners?.length) {
+                    resolve({ winners: gs.winners, reason: 'game over' });
+                }
+            });
+            host.on('disconnect', (why) => resolve({ winners: [], reason: why }));
         });
-        host.on('disconnect', (why) => resolve({ winners: [], reason: why }));
-    });
-    host.send('lobby', 'startGameAsync');
-    const r = await result;
-    stops.forEach((s) => s());
-    console.log(`${r.reason}: ${steps} actions, winner ${r.winners.join(', ') || 'none'}`);
-    await sleep(1500);
-    host.close();
-    guest.close();
+        host.send('lobby', 'startGameAsync');
+        const r = await result;
+        stops.forEach((s) => s());
+        console.log(`${r.reason}: ${steps} actions, winner ${r.winners.join(', ') || 'none'}`);
+        // let a spectator receive the last frames before the lobby closes
+        await sleep(1500);
+    } finally {
+        stops.forEach((s) => s());
+        socks.forEach((s) => s.close());
+    }
 }
 
 if (require.main === module) {
