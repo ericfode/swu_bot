@@ -25,6 +25,7 @@
     "perch": "node tools/bin/perch"
   },
   "devDependencies": {
-    "@lakeday/perch": "0.4.3"
+    "@lakeday/perch": "0.4.3",
+    "wabt": "1.0.39"
   }
 }
