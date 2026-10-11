@@ -72,7 +72,7 @@ function lookup(db, { s, n, label } = {}) {
     return (s && db.bySet.get(s)) || (label && db.byName.get(label)) || (n && db.byTitle.get(n)) || null;
 }
 
-/** Card uuid ("Card_293") to a small integer that stays the same for the whole game. */
+/** Card id ("c293") to a small integer that stays the same for the whole game. */
 function uid(id) {
     if (id == null) {
         return -1;

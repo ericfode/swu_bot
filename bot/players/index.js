@@ -25,15 +25,17 @@
  * `-dN` sets search depth (my next N actions). Anything after `#` is ignored, so the same bot can be entered twice
  * (`aggro#1,aggro#2`) as a sanity check: the two copies should rate about equal.
  *
- * Out-of-process bots (spec/stdio-protocol.md) are listed by name in $SWU_EXTERNAL_BOTS or bot/external-bots.json
- * and take precedence over the built-in names.
+ * Bot programs (spec/protocol.md) are listed by name in $SWU_EXTERNAL_BOTS or bot/external-bots.json and take
+ * precedence over the built-in names. A program serves game after game until closeBots(); a second copy is started
+ * only when one game needs two. `js-random` and `js-search` are the in-process example clients (bot/examples).
  */
 const fs = require('fs');
 const path = require('path');
 const { createRandomBot } = require('./random');
 const { createRushBot } = require('./rush');
 const { HeuristicBot } = require('./heuristic');
-const { ExternalBot } = require('./external');
+const { StdioClient } = require('../stdio');
+const examples = { 'js-random': require('../examples/random-bot').create, 'js-search': require('../examples/search-bot').create };
 const { PROFILES } = require('./profiles');
 const { describeArenaBot, makeArenaBot } = require('../arena/registry');
 const { IsmctsBot } = require('./ismcts');
@@ -102,9 +104,37 @@ function parseIsmcts(kindAndOpts) {
 // name -> {cmd, args, ...}
 function loadExternalBots() {
     const file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json');
-    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    try {
+        return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    } catch (e) {
+        throw new Error(`${file}: ${e.message}`);
+    }
 }
 const externalBots = loadExternalBots();
+const programOf = (name) => (Object.hasOwn(externalBots, name.split('#')[0]) ? externalBots[name.split('#')[0]] : null);
+
+const running = new Map();
+/** The program client for `name` that is not one of `taken` (the bots already seated in this game). */
+function program(name, taken) {
+    const pool = running.get(name) ?? [];
+    running.set(name, pool);
+    let c = pool.find((x) => !taken.includes(x));
+    if (!c) {
+        const spec = programOf(name);
+        // an entry may name its own bot class, built as new Class(name, entry) (bot/jev/look.js)
+        const Client = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : StdioClient;
+        c = new Client(name, spec);
+        pool.push(c);
+    }
+    return c;
+}
+
+/** Ends every bot program started by makeBot. Resolves once they have exited; await it before process.exit(). */
+function closeBots() {
+    const all = [...running.values()].flat();
+    running.clear();
+    return Promise.all(all.map((c) => c.close()));
+}
 
 function parseName(name) {
     const base = name.split('#')[0];
@@ -153,9 +183,12 @@ function describeBot(name) {
         return { name, kind: 'search', profile: (ism.peek ? 'ismcts-peek' : `ismcts-b${ism.beta}`) + (ism.evalProfile ? `-${ism.evalProfile}` : '') + (ism.evaluator ? `-v${ism.evaluator}` : ''), depth: ism.horizon, lang: 'js', beta: ism.beta };
     }
     const { kind, depth } = parseName(name);
-    const ext = externalBots[name.split('#')[0]];
+    const ext = programOf(name);
     if (ext) {
         return { name, kind: 'external', profile: null, depth: 0, lang: ext.lang ?? 'external' };
+    }
+    if (Object.hasOwn(examples, kind)) {
+        return { name, kind: 'client', profile: null, depth: 0, lang: 'js' };
     }
     if (kind === 'heuristic' || PROFILES[kind]) {
         return { name, kind: 'search', profile: kind === 'heuristic' ? 'balanced' : kind, depth, lang: 'js' };
@@ -174,17 +207,21 @@ function describeBot(name) {
     return describeArenaBot(name);
 }
 
-function makeBot(name) {
+/**
+ * A bot for `name`. `taken`: the bots already seated in this game, so a program is not handed out twice (anything
+ * else, such as the index from `names.map(makeBot)`, counts as none).
+ */
+function makeBot(name, taken) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
-        const spec = externalBots[name.split('#')[0]];
-        // an entry may name its own adapter class (an ExternalBot subclass), e.g. bot/jev/look.js
-        const Adapter = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : ExternalBot;
-        return new Adapter(name, spec);
+        return program(name, Array.isArray(taken) ? taken : []);
+    }
+    if (info.kind === 'client') {
+        return examples[parseName(name).kind](name);
     }
     if (info.profile?.startsWith('eval:')) {
         return require('../eval/bot').makeEvalBot(name.split('#')[0], name);
@@ -213,4 +250,4 @@ function makeBot(name) {
     return createRandomBot(name);
 }
 
-module.exports = { makeBot, describeBot, parseName, parseIsmcts, parseOmni };
+module.exports = { makeBot, closeBots, describeBot, parseName, parseIsmcts, parseOmni };

@@ -4,30 +4,194 @@
   "title": "SWU bot tournament index (replays/<id>/index.json), format v1",
   "description": "Rewritten whole after every game starts and finishes. Unknown fields must be ignored. See spec/replay-format.md.",
   "type": "object",
-  "required": ["id", "createdAt", "engine", "bots", "gamesPerPairing", "games"],
+  "required": [
+    "id",
+    "createdAt",
+    "engine",
+    "bots",
+    "gamesPerPairing",
+    "games"
+  ],
   "properties": {
-    "id": { "type": "string", "description": "Tournament id = directory name." },
-    "createdAt": { "type": "string", "format": "date-time" },
-    "engine": { "type": ["string", "null"] },
-    "bots": { "type": "array", "items": { "type": "string" } },
-    "gamesPerPairing": { "type": "integer", "minimum": 0 },
+    "id": {
+      "type": "string",
+      "description": "Tournament id = directory name."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "engine": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "bots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gamesPerPairing": {
+      "type": "integer",
+      "minimum": 0
+    },
     "games": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "seed", "p1", "p2", "winner", "winnerSeat", "rounds", "steps", "outcome", "error", "ms"],
+        "required": [
+          "id",
+          "seed",
+          "p1",
+          "p2",
+          "winner",
+          "winnerSeat",
+          "rounds",
+          "steps",
+          "outcome",
+          "error",
+          "ms"
+        ],
         "properties": {
-          "id": { "type": "string", "description": "<p1>-vs-<p2>-<seed>; the game file is games/<id>.jsonl." },
-          "seed": { "type": "number" },
-          "p1": { "type": "string", "description": "Bot name in seat p1." },
-          "p2": { "type": "string" },
-          "winner": { "type": ["string", "null"], "description": "Winning bot name, 'draw', or null." },
-          "winnerSeat": { "enum": ["p1", "p2", "draw", null] },
-          "rounds": { "type": "integer", "minimum": 0 },
-          "steps": { "type": "integer", "minimum": 0 },
-          "outcome": { "enum": ["running", "won", "STEP_CAP", "STUCK", "ERROR"] },
-          "error": { "type": ["string", "null"] },
-          "ms": { "type": "number", "minimum": 0 }
+          "id": {
+            "type": "string",
+            "description": "<p1>-vs-<p2>-<seed>; the game file is games/<id>.jsonl."
+          },
+          "seed": {
+            "type": "number"
+          },
+          "p1": {
+            "type": "string",
+            "description": "Bot name in seat p1."
+          },
+          "p2": {
+            "type": "string"
+          },
+          "winner": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Winning bot name, 'draw', or null."
+          },
+          "winnerSeat": {
+            "enum": [
+              "p1",
+              "p2",
+              "draw",
+              null
+            ]
+          },
+          "rounds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "outcome": {
+            "enum": [
+              "running",
+              "won",
+              "STEP_CAP",
+              "STUCK",
+              "ERROR"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "by": {
+            "enum": [
+              "p1",
+              "p2",
+              null
+            ],
+            "description": "For ERROR: the seat whose bot caused it, which loses; null = engine or referee (added)."
+          },
+          "faultKind": {
+            "enum": [
+              "load",
+              "error",
+              "time",
+              "hang",
+              null
+            ],
+            "description": "With by, in runs on bot/game-pool.js: how the bot failed (load, error, time cap, watchdog hang); null otherwise (added, optional)."
+          },
+          "ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "timing": {
+            "type": "object",
+            "description": "Referee-timed decision milliseconds per seat (added).",
+            "required": [
+              "p1",
+              "p2"
+            ],
+            "properties": {
+              "p1": {
+                "$ref": "#/$defs/Timing"
+              },
+              "p2": {
+                "$ref": "#/$defs/Timing"
+              }
+            }
+          },
+          "key": {
+            "type": "string",
+            "description": "The game's own secret key, written when the game ends; absent in runs seeded from the seed alone (added)."
+          }
+        }
+      }
+    },
+    "key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Older indexes only: one secret for the whole run. Newer runs record each game's own key in games[].key."
+    }
+  },
+  "$defs": {
+    "Timing": {
+      "type": "object",
+      "required": [
+        "n",
+        "ms",
+        "p50",
+        "p95",
+        "max"
+      ],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Decisions."
+        },
+        "ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total."
+        },
+        "p50": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p95": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0
         }
       }
     }

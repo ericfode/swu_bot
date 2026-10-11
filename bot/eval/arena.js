@@ -47,7 +47,13 @@ function schedule(names, perPair, seed0) {
     return jobs;
 }
 
-const makeBot = (name) => require('../players').makeBot(name);
+/** The bots for one game; a bot program is handed out once per seat (see makeBot in bot/players/index.js). */
+function seatBots(names) {
+    const { makeBot } = require('../players');
+    const bots = [];
+    names.forEach((n) => bots.push(makeBot(n, bots)));
+    return bots;
+}
 
 async function worker(out, shard, shards, jobs, record, maxSteps, every) {
     const { Env, seededRng } = require('../env');
@@ -86,10 +92,10 @@ async function worker(out, shard, shards, jobs, record, maxSteps, every) {
             }
             prev = e;
         };
-        const r = await playGame(env, { seed: job.seed, bots: job.seats.map(makeBot), record: record !== 'none', snapshot, maxSteps, onEvent: record === 'none' ? null : onEvent });
+        const r = await playGame(env, { seed: job.seed, bots: seatBots(job.seats), record: record !== 'none', snapshot, maxSteps, onEvent: record === 'none' ? null : onEvent });
         r.events = null;
         const winnerBot = r.winner === 'p1' ? job.seats[0] : r.winner === 'p2' ? job.seats[1] : r.winner;
-        Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms });
+        Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by ?? null, ms: r.ms });
         if (r.botStats?.some(Boolean)) {
             entry.botStats = r.botStats;
         }
@@ -102,6 +108,7 @@ async function worker(out, shard, shards, jobs, record, maxSteps, every) {
         }
         console.log(`[${shard}] ${job.id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''}`);
     }
+    await require('../players').closeBots();
 }
 
 function engineRev() {

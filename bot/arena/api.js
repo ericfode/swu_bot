@@ -6,8 +6,8 @@
  *   mcp.js     MCP:   tool arena_<method>                  (Claude Code, Codex and other LLM harnesses)
  *   cli.js     CLI:   node bot/arena/cli.js <method> '{json}'
  * Storage is ARENA_HOME (see home.js): the project's shared folder, so every thread's container sees the same arena.
- * How a bot plays a game (observations, actions, timing) is not defined here: a submitted bot is a JS folder
- * (createBot, spec/bot-interface.md) or a program speaking spec/stdio-protocol.md.
+ * How a bot plays a game (observations, actions, timing) is not defined here: a submitted bot is a JS folder whose
+ * createBot returns a native bot or a protocol client (spec/bot-interface.md), or a bot program (spec/protocol.md).
  *
  * Methods (args -> result):
  *   status {}                                   tournament, current round (+ roundIndex of plannedRounds) + phase +
@@ -124,7 +124,7 @@ const fail = (msg) => { process.stderr.write(msg + '\\n'); process.exit(1); };
 const m = require(file);
 if (typeof m?.createBot !== 'function') fail('bot.js must export createBot(name)');
 const bot = m.createBot(name);
-if (!bot || typeof bot.choose !== 'function') fail('createBot(name) must return an object with a choose() method');
+if (!bot || (typeof bot.choose !== 'function' && typeof bot.decide !== 'function')) fail('createBot(name) must return an object with a choose() method (native bot) or a decide() method (protocol client)');
 process.exit(0);
 `;
 
@@ -140,15 +140,6 @@ function loadCheck(dir, version, shownAs) {
     const why = r.error?.code === 'ETIMEDOUT' ? `took more than ${LOAD_CHECK_MS / 1000} s` : r.error ? r.error.message : r.signal ? `killed by ${r.signal}` : `exit code ${r.status}`;
     const lines = String(r.stderr ?? '').split(dir).join(shownAs).split('\n').filter((l) => l.trim()).slice(0, 8);
     throw new ArenaError('bad_bot', `${version} failed the load check (require bot.js, call createBot): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}`);
-}
-
-function stdioSupported() {
-    try {
-        require.resolve('../players/external');
-        return true;
-    } catch {
-        return false;
-    }
 }
 
 /** Whether `o` may be an eval opponent: a built-in bot, a baseline, or an existing <agent>-v<N> of any competitor. */
@@ -222,11 +213,10 @@ const api = {
         const live = path.join(home.AGENTS, name);
         let upload = null;
         if (bot.kind === 'stdio') {
-            need(stdioSupported(), 'unsupported', 'this arena cannot run stdio bots (bot/players/external.js, the stdio adapter, is not in its checkout); submit a JS bot');
             // the program is frozen with the version: cmd is a file in the folder (./bot) or a program on PATH (python3),
             // and it runs in the version's folder, so editing the live folder later cannot change a submitted version
             need(typeof bot.cmd === 'string' && bot.cmd && !path.isAbsolute(bot.cmd) && !bot.cmd.split(/[\\/]/).includes('..'), 'bad_request',
-                'bot.cmd: the program to run (spec/stdio-protocol.md), a path inside your folder (./my-bot) or a program on PATH (python3); it runs in your submitted folder');
+                'bot.cmd: the program to run (spec/protocol.md), a path inside your folder (./my-bot) or a program on PATH (python3); it runs in your submitted folder');
             // an argument may not name a file outside the folder either (/abs/live/bot.py would read the live copy)
             const inside = (a) => a.split('=').every((p) => !path.isAbsolute(p) && !p.split(/[\\/]/).includes('..'));
             need(bot.args === undefined || (Array.isArray(bot.args) && bot.args.every((a) => typeof a === 'string' && inside(a))), 'bad_request',
@@ -427,7 +417,7 @@ async function call(method, args = {}) {
 const METHODS = {
     status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo.', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string' }, required: ['name'] },
-    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a program speaking the stdio protocol. The bot must load (require bot.js, createBot) or the submit fails with code bad_bot and the first lines of the error.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
+    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout). The bot must load (require bot.js, createBot) or the submit fails with code bad_bot and the first lines of the error.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
     standings: { readOnly: true, desc: 'Every rated round so far with per-bot results and the all-round Elo.', props: {} },
     report: { readOnly: true, desc: 'A round report in markdown: standings, results per opponent, lost games with replay paths. Default: latest round.', props: { round: 'integer' } },

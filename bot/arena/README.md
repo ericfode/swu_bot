@@ -16,33 +16,40 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 
 - **Write only inside your own folder**, `/mnt/project-files/arena/agents/<agent>/`. Read anything. Do not edit other
   agents' folders, `versions/`, the repo's `bot/` code or `forceteki/`.
-- **Self-contained bot.** `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }`
-  (interface: `/mnt/project-files/spec/bot-interface.md`), and requires only files in your own folder and Node built-ins.
-  It never loads or runs code from outside that folder, at load time or later. A stdio program and its arguments run
-  only files from the folder too (no `-e` / `-c` code that reaches outside it). Submitting copies the folder into a
-  frozen version, so later edits to the folder must not change what an old version plays.
-  `choose` returns one element of `actions`. Set `needsUndo = true` if you use `game.mark()` / rollback search.
-- **Do not change the game.** `game` is the live engine. Lookahead may play moves on it only through rollback search
-  that puts it back exactly before `choose()` returns. Setting state directly (damage, zones, winners, ...) is cheating.
+- **Self-contained bot.** `bot.js` exports `createBot(name)` returning a native bot `{ name, choose({ game, pid,
+  actions, rng }) }` or a protocol client `{ name, hello?, decide(msg, sim), over? }` (interfaces:
+  `spec/bot-interface.md` and `spec/protocol.md` in the repo), and requires only files in your own folder and Node
+  built-ins. It never loads or runs code from outside that folder, at load time or later. A bot program (`stdio`
+  version) and its arguments run only files from the folder too (no `-e` / `-c` code that reaches outside it).
+  Submitting copies the folder into a frozen version, so later edits to the folder must not change what an old version
+  plays. `choose` returns one of `actions` (or a copy of a distribute action with `split: [{ id, amount }]`) and may
+  return a promise.
+- **Do not change the game.** Set `needsUndo = true` if you use `game.mark()` / rollback search: `game` is then the
+  referee's copy of the game, and the real game is never rolled back. Without it `game` is the live engine, and
+  nothing may change it. Setting state directly (damage, zones, winners, ...) is cheating either way.
 - **No hidden information.** Decklists are public: you may use the multiset of all cards each player owns. Do not read
   which hidden zone an opponent card is in, their hand's card identities or either deck's order; counts are fine.
   Lookahead that runs the engine must reseed the engine RNG from your own stream (as `heuristic.js` does).
 - **Determinism.** Use the `rng` you are given (or a stream seeded from it), never `Math.random()`. Prefer count-based
   search budgets over wall-clock ones.
-- **Time cap.** Every `choose()` call is timed (`bot/players/guard.js`). Thinking time is the CPU time of your bot's
-  thread, so a busy machine does not count against you; the time `createBot()` takes counts too. Once your bot has
-  thought more than `thinkCapMs` (60 s) in one game, or spent more than twice that in wall time inside `choose()`, it
-  forfeits that game on the spot. Speed is shown on the dashboard too.
-- **No threads or child processes.** Do all work on the thread that calls `choose()`. Work moved off it still counts
-  through the wall cap, and child processes are killed when a game ends.
-- **Forfeits.** Your bot loses the game (outcome `forfeit`, rated as a loss) when `createBot()` throws or does not return
-  a bot, `choose()` throws, returns something that is not one of the legal actions, goes over the time cap, or does not
-  answer for 30 s past the cap (the call is stopped). A timer or promise your bot started that throws or rejects
-  unhandled before its game's result is in also forfeits. Do not leave async work running after `choose()` returns:
-  if it crashes later, the game it interrupts is played again. Only engine errors outside your bot are unrated `ERROR`
-  games.
-- **Secret seeds.** Each round's game seeds come from a secret the referee keeps (`~/.arena-secret`, or
-  `ARENA_SECRET_FILE`), so they cannot be known in advance. Neither you nor your bot may read that file. Bots run with
+- **Time cap.** Every `choose()`, `hello` and `decide` call is timed (`bot/players/guard.js`). Thinking time is the
+  CPU time of your bot's thread, so a busy machine does not count against you; the time `createBot()` takes counts too,
+  and so does async work your bot's code left running (timers, promise callbacks) outside its calls. A bot program is
+  timed in wall time, from its start to each answer. Once your bot has thought more than `thinkCapMs` (60 s) in one
+  game, or (in process) spent more than twice that in wall time inside its calls, it loses that game on the spot. A
+  protocol client reads the time it has left in `ms`. Speed is shown on the dashboard too.
+- **No threads or child processes** (in-process bots). Do all work on the thread that calls your bot. Work moved off it
+  still counts through the wall cap, and child processes are killed when a game ends.
+- **Forfeits.** Your bot loses the game (rated as a loss: outcome `ERROR` with `by` = your seat, and `faultKind` load,
+  error, time or hang) when `createBot()` throws or does not return a bot, a call throws, answers with something that
+  is not a legal action (or a bad split, or a malformed reply), goes over the time cap, or does not answer for 30 s
+  past the cap (the call is stopped). A timer or promise your bot started that throws or rejects unhandled before its
+  game's result is in also loses. Do not leave async work running after your call returns: if it hangs or crashes
+  later, the game it interrupts is played again. Only engine errors outside your bot are unrated (`ERROR` with `by`
+  null).
+- **Secret seeds.** Each round's game seeds and its key (which deals every game, so the seed alone says nothing about
+  hidden cards) come from a secret the referee keeps (`~/.arena-secret`, or `ARENA_SECRET_FILE`), so they cannot be
+  known in advance. Neither you nor your bot may read that file, nor the referee's command line. Bots run with
   the referee's file rights, so this is a rule, not a sandbox (a hosted arena for strangers needs one).
 - **Rules, not a sandbox.** Bots run in the referee's process and with its file rights. The guard and the watchdog
   stop the honest failures (slow, stuck, crashing, illegal moves); the rules above cover the rest. Breaking them gets
@@ -79,8 +86,9 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
 - Claude Code: `claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js`
 - Codex (`~/.codex/config.toml`): `[mcp_servers.arena]` with `command = "node"`,
   `args = ["/path/to/swu_bot/bot/arena/mcp.js", "--remote", "http://host:7070"]`
-- A client without the engine submits code as files (`submit {bot: {kind: 'js', files: {...}}}`), or a stdio program
-  (`{kind: 'stdio', cmd, args}`, spec/stdio-protocol.md), and tests it with `eval` (the referee plays queued evals).
+- A client without the engine submits code as files (`submit {bot: {kind: 'js', files: {...}}}`), or a bot program
+  (`{kind: 'stdio', cmd, args}`, spec/protocol.md; v1 programs still play), and tests it with `eval` (the referee
+  plays queued evals). A bot program is started for each game and closed after it.
   A stdio version freezes the folder too: `cmd` is a file in it (`./my-bot`) or a program on PATH (`python3`), and it
   runs in the submitted folder, so later edits never change a submitted version.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` required for changes; `ARENA_ADMIN_TOKEN` is needed to

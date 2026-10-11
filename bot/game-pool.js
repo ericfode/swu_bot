@@ -7,29 +7,33 @@
  *
  * `queue` is consumed (shifted) as games start. onStart runs just before a job is posted to a worker, onResult once per
  * job with its finished result (fields: ladder-worker.js). Each worker shares a small control array with the parent
- * (SharedArrayBuffer, layout SLOT) where it keeps what it is doing: idle, engine, loading a bot or inside a bot's
- * choose(), for which seat, and since when. Every 2 s the parent looks at it:
- *   - one choose() call (or one bot load) has run longer than hangMs of wall time: that seat forfeits, faultKind 'hang'
- *     ('load' while loading). The worker is terminated and replaced, and the queue carries on.
- *   - the engine has gone hangMs without asking either bot anything: the game is an ERROR (no fault), same treatment.
+ * (SharedArrayBuffer, layout SLOT) where it keeps what it is doing: idle, engine, loading a bot, running a bot's code
+ * (a call, or async work the bot started) for which seat, or running work left from an earlier game (stale), and since
+ * when. Every 2 s the parent looks at it:
+ *   - one bot call (or one bot load) has run longer than hangMs of wall time: that seat loses, faultKind 'hang' ('load'
+ *     while loading). The worker is terminated and replaced, and the queue carries on.
+ *   - the engine has gone hangMs without asking either bot anything: the game is an ERROR (`by` null), same treatment.
  *   - the game has run longer than gameMs (default 4 x workerData.capMs + 10 min when there is a cap, else no limit),
- *     by the parent's own clock: whoever the control array says is thinking forfeits (faultKind 'hang'), else ERROR.
+ *     by the parent's own clock: whoever the control array says is thinking loses (faultKind 'hang'), else ERROR.
  *     This one holds even when a bot fakes its `since` from inside the worker.
+ *   - work left from an earlier game has run longer than hangMs: the worker is replaced and its job played again.
+ * A lost game is an ERROR with `by` = that seat and the other bot as winner, as match.js reports a bot's failure.
  * A worker that dies mid-game (crash, out of memory, a bot calling process.exit) is replaced the same way; the game is
- * that seat's forfeit (faultKind 'error') when a bot was running, else an ERROR (ladder-worker.js also names the seat
- * when a timer or promise a bot started kills it). A worker that dies between games (async work a bot left behind) has
- * not started the job it was sent, so that job goes back to the front of the queue (twice at most) instead of getting
- * a result. Only a worker that dies before it has loaded the engine fails the whole run.
+ * that seat's loss (faultKind 'error') when its bot's code was running, else an ERROR. A worker that dies between
+ * games, or of work left from an earlier game, has not finished a game of the bots it was playing, so its job goes
+ * back to the front of the queue (twice at most) instead of getting a result. Only a worker that dies before it has
+ * loaded the engine fails the whole run. Results carry each game's key (rng.js gameKey) when workerData.key is set.
  */
 const fs = require('fs');
 const path = require('path');
 const { Worker } = require('worker_threads');
 const { spawnSync } = require('child_process');
+const { gameKey } = require('./rng');
 
 const WORKER = path.join(__dirname, 'ladder-worker.js');
 const SLOT = { phase: 0, seat: 1, since: 2, steps: 3, round: 4, think1: 5, think2: 6 };
 const SLOTS = 7;
-const PHASE = { idle: 0, engine: 1, load: 2, choose: 3 };
+const PHASE = { idle: 0, engine: 1, load: 2, choose: 3, stale: 4 };
 const CHECK_MS = 2000;
 const KILL_AFTER_MS = 5000;
 const MAX_REQUEUE = 2;
@@ -49,6 +53,18 @@ function workerControl(sab, base = clockNow()) {
         // `since` first and `phase` last, so a reader that sees a stale `since` also sees the stale phase and seat
         set(phase, seat = 0) {
             put(SLOT.since, clockNow() - base);
+            put(SLOT.seat, seat);
+            put(SLOT.phase, phase);
+        },
+        /** The phase, seat and since now, to put back later with restore() (when same() says nothing moved since). */
+        get() {
+            return [load(a, SLOT.phase), load(a, SLOT.seat), load(a, SLOT.since)];
+        },
+        same([phase, seat, since]) {
+            return load(a, SLOT.phase) === phase && load(a, SLOT.seat) === seat && load(a, SLOT.since) === since;
+        },
+        restore([phase, seat, since]) {
+            put(SLOT.since, since);
             put(SLOT.seat, seat);
             put(SLOT.phase, phase);
         },
@@ -74,22 +90,22 @@ function readControl(a) {
     };
 }
 
-/** Result fields of a game that seat index i (0 = p1, 1 = p2) forfeits. */
+/** Result fields of a game that seat index i (0 = p1, 1 = p2) loses by its bot's failure (match.js reports it the same way). */
 function forfeit(job, i, kind) {
-    return { outcome: 'forfeit', fault: `p${i + 1}`, faultKind: kind, winner: [job.p1, job.p2][1 - i], winnerSeat: `p${2 - i}` };
+    return { outcome: 'ERROR', by: `p${i + 1}`, faultKind: kind, winner: [job.p1, job.p2][1 - i], winnerSeat: `p${2 - i}` };
 }
 
 /** The result of a game the worker could not finish: seat 1|2 forfeits with `kind`, or 0 = nobody's fault (ERROR). */
-function stoppedResult(job, st, { seat, kind, error, ms }) {
+function stoppedResult(job, st, { seat, kind, error, ms, key = null }) {
     const r = {
         seed: job.seed, steps: st.steps, outcome: 'ERROR', winner: null, winnerSeat: null, round: st.round, ms, error,
-        fault: null, faultKind: null, timing: null, think: { p1: st.think[0], p2: st.think[1] }, botStats: [null, null]
+        by: null, faultKind: null, timing: null, think: { p1: st.think[0], p2: st.think[1] }, botStats: [null, null], ...(key ? { key } : {})
     };
     if (seat) {
         Object.assign(r, forfeit(job, seat - 1, kind));
     }
     if (job.replayFile && fs.existsSync(job.replayFile)) {
-        fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error, fault: r.fault, faultKind: r.faultKind })}\n`);
+        fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error, by: r.by, faultKind: r.faultKind, ...(key ? { key } : {}) })}\n`);
     }
     return r;
 }
@@ -169,7 +185,20 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             }
             s.w.postMessage(job);
         };
-        // records the game a worker could not finish and retires that worker; a replacement takes over the queue
+        const keyOf = (job) => (workerData.key ? gameKey(workerData.key, job.seed) : null);
+        // puts the worker's job back at the front of the queue (twice at most per job): it was not the bots' doing
+        const retry = (s, why) => {
+            if (!s.job || (requeued.get(s.job) ?? 0) >= MAX_REQUEUE) {
+                return false;
+            }
+            console.error(`game-pool: ${why}; playing ${s.job.id ?? 'its job'} again`);
+            requeued.set(s.job, (requeued.get(s.job) ?? 0) + 1);
+            queue.unshift(s.job);
+            s.job = null;
+            return true;
+        };
+        // records the game a worker could not finish (result null: the job went back to the queue) and retires that
+        // worker; a replacement takes over the queue
         const stop = (s, result) => {
             const job = s.job;
             s.job = null;
@@ -178,7 +207,9 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             // child process), the run still finishes, and unref() lets the process exit without waiting for it
             slots.delete(s);
             s.w.unref();
-            onResult({ job, result });
+            if (result) {
+                onResult({ job, result });
+            }
             if (queue.length && !ended) {
                 spawn();
             } else if (!slots.size) {
@@ -210,21 +241,16 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 slots.delete(s);
                 if (!s.retired) {
                     const st = readControl(s.ctl);
-                    if (s.job && st.phase === PHASE.idle && (requeued.get(s.job) ?? 0) < MAX_REQUEUE) {
-                        // it died before starting this job: play the job again on a fresh worker
-                        const why = String(s.error?.message ?? `exit code ${code}`).split('\n')[0].slice(0, 160);
-                        console.error(`game-pool: a worker died between games (${why}); playing ${s.job.id ?? 'its job'} again`);
-                        requeued.set(s.job, (requeued.get(s.job) ?? 0) + 1);
-                        queue.unshift(s.job);
-                        s.job = null;
+                    const why = String(s.error?.message ?? `exit code ${code}`).split('\n')[0].slice(0, 160);
+                    // between games, or killed by async work left from an earlier game: this job's bots did nothing wrong
+                    if ((st.phase === PHASE.idle || st.phase === PHASE.stale) && retry(s, `a worker died ${st.phase === PHASE.idle ? 'between games' : 'of work left from an earlier game'} (${why})`)) {
                         if (!ended) {
                             spawn();
                         }
                     } else if (s.job) {
                         const seat = st.phase === PHASE.choose || st.phase === PHASE.load ? st.seat : 0;
-                        const why = String(s.error?.message ?? `exit code ${code}`).split('\n')[0].slice(0, 160);
                         const error = seat ? `CRASH ${nameOf(s.job, seat)}: worker died (${why})` : `worker died (${why})`;
-                        stop(s, stoppedResult(s.job, st, { seat, kind: st.phase === PHASE.load ? 'load' : 'error', error, ms: Date.now() - s.jobStart }));
+                        stop(s, stoppedResult(s.job, st, { seat, kind: st.phase === PHASE.load ? 'load' : 'error', error, ms: Date.now() - s.jobStart, key: keyOf(s.job) }));
                     } else if (!s.ready) {
                         finish(s.error ?? new Error(`game worker exited with code ${code} before it was ready`));
                         return;
@@ -240,11 +266,23 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
         timer = setInterval(() => {
             const now = Date.now() - base;
             for (const s of slots) {
-                if (!s.job || s.retired) {
+                if (s.retired) {
                     continue;
                 }
                 const st = readControl(s.ctl);
                 const ms = now - st.since;
+                if (st.phase === PHASE.stale && ms > hangMs) {
+                    // async work a bot left from an earlier game does not end: play this worker's job again elsewhere
+                    const why = `work left from an earlier game ran ${Math.round(ms / 1000)} s`;
+                    const job = s.job;
+                    stop(s, retry(s, why) || !job ? null : stoppedResult(job, st, { seat: 0, error: `STALE ${why}`, ms: Date.now() - s.jobStart, key: keyOf(job) }));
+                    s.w.terminate();
+                    setTimeout(() => killChildren(s.id), KILL_AFTER_MS).unref();
+                    continue;
+                }
+                if (!s.job) {
+                    continue;
+                }
                 const gameTime = Date.now() - s.jobStart;
                 const hung = st.phase !== PHASE.idle && ms > hangMs;
                 // the parent's own clock only, so a worker that reports a wrong `since` (or idle) cannot run forever
@@ -259,14 +297,14 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 let result;
                 if (!seat) {
                     const error = hung ? `ENGINE_HANG no decision asked for ${sec} s` : `GAME_TIMEOUT ${late} (no bot was thinking)`;
-                    result = stoppedResult(job, st, { seat: 0, error, ms: gameTime });
+                    result = stoppedResult(job, st, { seat: 0, error, ms: gameTime, key: keyOf(job) });
                 } else {
                     const loading = st.phase === PHASE.load;
                     // the hung call's own time counts too (its worker is about to be stopped, so it never reports it)
                     st.think[seat - 1] += Math.max(0, ms);
-                    const doing = loading ? 'still loading' : 'no answer from choose()';
+                    const doing = loading ? 'still loading' : 'its code still running';
                     result = stoppedResult(job, st, {
-                        seat, kind: loading ? 'load' : 'hang', ms: gameTime,
+                        seat, kind: loading ? 'load' : 'hang', ms: gameTime, key: keyOf(job),
                         error: hung ? `HANG ${nameOf(job, seat)} ${doing} after ${sec} s (limit ${Math.round(hangMs / 1000)} s)` : `GAME_TIMEOUT ${nameOf(job, seat)} ${doing} when ${late}`
                     });
                 }

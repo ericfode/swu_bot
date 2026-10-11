@@ -5,9 +5,10 @@
  *   runJobs(jobs, { workers, maxSteps, capMs, hangMs, onResult }) -> Promise<[{ job, result }]>
  *
  * Same rules as ladder.js (bot/game-pool.js does the work): every bot is guarded with capMs of thinking per game
- * (default roster.thinkCapMs), a choose() call that runs longer than hangMs (default capMs + 30 s) is stopped by the
- * watchdog, and a bot that fails to load, throws, goes over the cap or hangs forfeits. result has winner (bot name),
- * winnerSeat, outcome ('won', 'forfeit', 'ERROR', ...), fault (null | 'p1' | 'p2') and faultKind; see ladder-worker.js.
+ * (default roster.thinkCapMs), a bot call that runs longer than hangMs (default capMs + 30 s) is stopped by the
+ * watchdog, and a bot that fails to load, throws, answers wrong, goes over the cap or hangs loses. result has winner
+ * (bot name), winnerSeat, outcome ('won', 'ERROR', ...), by (null | 'p1' | 'p2': the seat whose bot broke the game)
+ * and faultKind; see ladder-worker.js. Games are seeded from the seed alone (no key), so practice runs repeat exactly.
  */
 const { runPool } = require('../game-pool');
 const { roster } = require('./home');

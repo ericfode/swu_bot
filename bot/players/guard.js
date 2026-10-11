@@ -1,33 +1,41 @@
 'use strict';
 /**
- * Time cap and fault tracking around a bot's choose(), the same for every bot (baselines included).
+ * Time cap and fault tracking around a bot, the same for every bot (baselines included).
  *
- *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, onEnter, onExit, around }) -> a new object for the game runner:
- *       { name, needsUndo, stats, choose, close, thinkMs, wallMs, fault }   (getters; the bot cannot reach or change them)
+ *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, enter, leave, within }) -> what match.js plays instead:
+ *     a native bot ({ name, choose })      { name, lang, needsUndo, stats, choose, close, thinkMs, wallMs, fault }
+ *     a protocol client ({ name, decide }) { name, lang, stats, hello, decide, over, close, thinkMs, wallMs, fault }
+ *   plus charge(used) and excuse(used) for the game runner (below). Getters and the guard's own functions: the bot never
+ *   sees this object, so it cannot unwrap the guard or reset its counters.
  *
- * The game runner hands the engine this object, never the bot, so a bot cannot unwrap its own guard or reset its
- * counters. Thinking time is this thread's CPU time (process.threadCpuUsage, user + system) for in-process bots, so a
- * busy engine on another worker does not count against them, and wall time for bots that run a child process
- * (bot.external or bot.stdio). Wall time inside choose() is also capped, at wallCapMs (default 2 x capMs), so work
- * moved off this thread (worker threads, Atomics.wait, child processes) is not free. loadMs (the time createBot took)
- * starts the CPU counter.
+ * Thinking time is every choose(), hello and decide call. It is this thread's CPU time (process.threadCpuUsage, user
+ * + system) for bots that run here, so a busy engine on another worker does not count against them, and wall time
+ * for bot programs (bot/stdio.js StdioClient, or a bot that sets external or stdio). Wall time is also capped for
+ * bots that run here, at wallCapMs (default 2 x capMs), so work moved off this thread (worker threads, Atomics.wait,
+ * child processes, waiting on a timer) is not free. loadMs (the time createBot took) starts the CPU counter.
  *
- * A throw from the bot (also from reading the object it returned, which may have getters), or a return value that is
- * not a legal action now (matched on kind, label, cardUuid and arg by env.refetch; a distribute action's own split is
- * kept, see narrowed), sets fault = { kind: 'error', message } and throws. Going over a cap sets
- * fault = { kind: 'time', ms } and throws TIME_FORFEIT. Either way the game ends there, and the game runner reads
- * fault (never the error text) to decide who forfeits. The engine's own live action (not the bot's object) is played.
- * A throw from close() is ignored: the game is over by then and its result stands. stats is read as plain JSON data
- * (at most 64 KB; anything else reads as null), so it can always go into the game's result. around(fn) runs the bot's
- * code outside choose() (close, stats); the ladder worker uses it to tell its watchdog that seat is running.
+ * A call ends the game as the bot's loss (match.js makes a throw from it an ERROR with `by` = the bot's seat) when
+ *   - the bot throws or its promise rejects: fault = { kind: 'error', message };
+ *   - it goes over a cap: fault = { kind: 'time', ms, wallMs } and TIME_FORFEIT. A call that returns a promise is
+ *     stopped when the wall time it has left runs out; the CPU cap is checked when it returns. The match runner
+ *     closing a client during a call (its own reply limit, protocol.js) also counts as time.
+ * A wrong answer (an action that is not legal, a bad split, a malformed reply) is also the bot's loss; match.js
+ * (protocol.js) decides it and fault stays null. What match.js reads afterwards is data the guard copied inside the
+ * bot's call, never the bot's own object (which may have getters): a native bot's action as kind, label, cardUuid,
+ * arg and split, each a primitive; a client's reply as JSON. A client is told the time it has left in `ms`.
  *
- * The clocks are bound when this module loads, before any bot code runs, so a bot that replaces
- * process.threadCpuUsage or performance.now later does not change them.
+ * enter(round) and leave() mark the start and end of each timed call (the ladder worker tells its watchdog who is
+ * thinking); within(fn) runs the bot's own code, every call and also close, stats and over, as this bot's seat (not
+ * for programs, whose code runs in their own process).
+ * charge(used) adds the time of the bot's own async work that ran outside its calls (timers and promise callbacks it
+ * left, { cpu, wall } in ms); excuse(used) takes the other bot's async work out of the call in progress.
+ * stats is read as plain JSON data (at most 64 KB; anything else reads as null), so it can always go in the result.
+ * A throw from close() is ignored: the game is over by then and its result stands.
  *
- * onEnter(ctx) / onExit() run around every call; the ladder worker uses them to show its watchdog who is thinking.
- * A choose() that calls this.choose() (e.g. to model the opponent) reaches the bot's own method and is timed as part
- * of the outer call.
+ * The clocks and timer functions are bound when this module loads, before any bot code runs, so a bot that replaces
+ * process.threadCpuUsage, performance.now or setTimeout later does not change them.
  */
+const { StdioClient } = require('../stdio');
 
 const wallClock = performance.now.bind(performance);
 const threadCpu = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage.bind(process) : null;
@@ -37,135 +45,114 @@ const cpuClock = threadCpu
         return (u.user + u.system) / 1000;
     }
     : wallClock;
+const later = setTimeout;
+const cancel = clearTimeout;
 
 const firstLine = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 200);
-const same = (a, b) => a.kind === b.kind && a.label === b.label && a.cardUuid === b.cardUuid && a.arg === b.arg;
+const LATE = Symbol('late');
+const MAX_TIMER = 2 ** 31 - 2;
+const STATS_MAX = 65536;
 
-/**
- * The fields of the bot's returned object that pick an action, each read once into a plain value: the object may have
- * getters, so what is checked is what is played. null for a value that is not an object.
- */
-function plain(a) {
+/** A primitive in place of what the bot gave (its own toString, if any, runs here, inside its call). */
+const prim = (v) => ((v !== null && typeof v === 'object') || typeof v === 'function' || typeof v === 'symbol' ? String(v) : v);
+
+/** The fields of a native bot's answer that pick an action and its split, each read once as a primitive. */
+function plainAction(a) {
     if (!a || typeof a !== 'object') {
         return null;
     }
-    const { kind, label, cardUuid, arg } = a;
-    const p = { kind, label, cardUuid, arg };
-    if (kind === 'distribute') {
-        const { targets, caps } = a;
-        p.targets = Array.isArray(targets) ? Array.from(targets) : null;
-        p.caps = Array.isArray(caps) ? Array.from(caps) : null;
+    const { kind, label, cardUuid, arg, split } = a;
+    const p = { kind: prim(kind), label: prim(label), cardUuid: prim(cardUuid), arg: prim(arg) };
+    if (split !== undefined) {
+        // anything but an array is refused by env.splitError, so it need not be read
+        p.split = Array.isArray(split) ? Array.from(split, (e) => ({ id: prim(e?.id), amount: prim(e?.amount) })) : 'not an array';
     }
     return p;
 }
 
-/**
- * A distribute action may carry the bot's own split as narrowed targets and caps (players/external.js
- * forcedDistribution: each chosen target with its exact amount); env.apply then plays that split. Keep it on the live
- * action when every target is a live one, no cap grows past the live cap, no more than maxTargets targets get any
- * amount and the caps can still hold the amount; null when they cannot (an illegal split). `a` is plain(bot's action).
- */
-function narrowed(live, a) {
-    if (live.kind !== 'distribute') {
-        return live;
-    }
-    const { targets, caps } = a;
-    if (!Array.isArray(targets) || !Array.isArray(caps) || targets.length !== caps.length || new Set(targets).size !== targets.length) {
-        return null;
-    }
-    if (targets.length === live.targets.length && targets.every((t, i) => t === live.targets[i] && caps[i] === live.caps[i])) {
-        return live; // the bot left the split to the engine
-    }
-    let sum = 0;
-    for (let i = 0; i < targets.length; i++) {
-        const k = live.targets.indexOf(targets[i]);
-        // live caps are Infinity where the amount is uncapped (env.js), so a copy of the live action passes too
-        if (k < 0 || !(Number.isInteger(caps[i]) || caps[i] === Infinity) || caps[i] < 0 || caps[i] > live.caps[k]) {
-            return null;
-        }
-        sum += caps[i];
-    }
-    const spec = live.spec;
-    // env.apply skips targets with cap 0, so only the others count against maxTargets
-    if (spec.maxTargets != null && caps.filter((c) => c > 0).length > spec.maxTargets) {
-        return null;
-    }
-    if (sum < spec.amount && !spec.canDistributeLess && !(sum === 0 && spec.canChooseNoTargets)) {
-        return null;
-    }
-    return { ...live, targets: [...targets], caps: [...caps], spec: { ...spec, maxTargets: Math.min(targets.length, spec.maxTargets ?? targets.length) } };
-}
+/** A client's reply as plain JSON data. */
+const plainReply = (r) => (r === undefined ? undefined : JSON.parse(JSON.stringify(r) ?? 'null'));
 
-const STATS_MAX = 65536;
-
-function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnter = null, onExit = null, around = (fn) => fn() } = {}) {
-    const inner = bot.choose.bind(bot);
+function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, enter = () => {}, leave = () => {}, within = (fn) => fn() } = {}) {
     // read once, now (while the bot loads): these may be getters, and the game runner reads them outside any bot call
+    const fns = {};
+    for (const k of ['choose', 'hello', 'decide', 'over', 'close']) {
+        const f = bot[k];
+        if (typeof f === 'function') {
+            fns[k] = f.bind(bot);
+        }
+    }
+    if (!fns.choose && !fns.decide) {
+        throw new Error('a bot needs choose() (native bot) or decide() (protocol client)');
+    }
     const name = String(bot.name);
+    const lang = bot.lang == null ? undefined : String(bot.lang);
     const needsUndo = bot.needsUndo === true;
-    const external = bot.external === true || bot.stdio === true;
-    const clock = external ? wallClock : cpuClock;
-    let thinkMs = external ? 0 : loadMs;
+    const program = bot instanceof StdioClient || bot.external === true || bot.stdio === true;
+    const limit = (v) => (typeof v === 'number' && v > 0 ? v : undefined);
+    const timeoutMs = limit(bot.timeoutMs);
+    const startTimeoutMs = limit(bot.startTimeoutMs);
+    const clock = program ? wallClock : cpuClock;
+    // a program's code runs in its own process: what runs here for it (bot/stdio.js) is the referee's transport, which
+    // must not pass for the bot's own async work (a program may also serve game after game)
+    const own = program ? (fn) => fn() : within;
+    let thinkMs = program ? 0 : loadMs;
     let wallMs = 0;
     let fault = null;
-    const fail = (f, msg) => {
-        fault = f;
-        throw new Error(msg);
+    // the call in progress: what other bots' async work took from it (ms), so it can be given back
+    let call = null;
+
+    const overCap = () => thinkMs > capMs || wallMs > wallCapMs;
+    const timeFault = () => {
+        fault = { kind: 'time', ms: Math.round(thinkMs), wallMs: Math.round(wallMs) };
+        const ms = Math.round(thinkMs);
+        return new Error(`TIME_FORFEIT ${name} thought ${program ? `${ms} ms (cap ${capMs})` : `${ms} ms CPU, ${Math.round(wallMs)} ms wall (caps ${capMs} / ${wallCapMs})`}`);
     };
-    const choose = (ctx) => {
-        onEnter?.(ctx);
+    // what is left of the binding budget: the cap on this bot's own clock, and for bots that run here the wall cap too
+    const left = () => Math.min(capMs - thinkMs, program ? Infinity : wallCapMs - wallMs);
+
+    /** One timed call: fn() may return a value or a promise; copy(result) runs inside the call too. */
+    async function timed(round, fn, copy) {
+        if (overCap()) {
+            throw timeFault(); // async work it left outside its calls already took it past the cap
+        }
+        enter(round);
+        const mine = { cpu: 0, wall: 0 };
+        call = mine;
         const t0 = clock();
         const w0 = wallClock();
-        let action;
-        let p;
-        let what;
+        const budget = left();
+        let timer = null;
+        let out;
         try {
-            action = inner(ctx);
-            // still the bot's call (timed, and a throw is its fault): reading its object can run its getters
-            p = plain(action);
-            what = p ? `${String(p.kind)} "${String(p.label)}"` : String(action);
+            const answer = own(async () => copy(await fn()));
+            const late = budget < MAX_TIMER ? new Promise((resolve) => (timer = later(resolve, Math.max(0, Math.ceil(budget)) + 1, LATE))) : null;
+            out = late ? await Promise.race([answer, late]) : await answer;
         } catch (e) {
-            fault = { kind: 'error', message: firstLine(e) };
+            fault ??= { kind: 'error', message: firstLine(e) };
             throw e;
         } finally {
-            thinkMs += clock() - t0;
-            wallMs += wallClock() - w0;
-            onExit?.();
+            cancel(timer);
+            call = null;
+            thinkMs += Math.max(0, clock() - t0 - (program ? mine.wall : mine.cpu));
+            wallMs += Math.max(0, wallClock() - w0 - mine.wall);
+            leave();
         }
-        // A search bot rolls back and re-fetches, so its action can carry newer prompt uuids than ctx.actions: ask the
-        // engine for the live legal action with the same fields (env.refetch) and play that one.
-        let legal = null;
-        if (p) {
-            legal = typeof ctx.game?.refetch === 'function' ? ctx.game.refetch(ctx.pid, p) : ctx.actions.find((a) => a === action || same(a, p)) ?? null;
-            legal = legal && narrowed(legal, p);
+        if (out === LATE || overCap()) {
+            throw timeFault();
         }
-        if (!legal) {
-            fail({ kind: 'error', message: `choose() returned ${what}, not one of the legal actions` }, `${name}: choose() returned ${what}, not one of the legal actions`);
-        }
-        if (thinkMs > capMs || wallMs > wallCapMs) {
-            fail({ kind: 'time', ms: Math.round(thinkMs), wallMs: Math.round(wallMs) }, `TIME_FORFEIT ${name} thought ${Math.round(thinkMs)} ms CPU, ${Math.round(wallMs)} ms wall (caps ${capMs} / ${wallCapMs})`);
-        }
-        return legal;
-    };
-    return {
+        return out;
+    }
+
+    /** The bot's code outside the timed calls (close, stats, over): its seat's, untimed, failures its own business. */
+    const untimed = (fn) => own(fn);
+
+    const g = {
         get name() {
             return name;
         },
-        get needsUndo() {
-            return needsUndo;
-        },
-        get stats() {
-            // optional numbers for the record: a getter that throws, or a value that cannot be copied into the result
-            // (functions, cycles, BigInt, huge), must not cost the finished game its result
-            return around(() => {
-                try {
-                    const s = bot.stats;
-                    const j = s === undefined || s === null ? null : JSON.stringify(s);
-                    return typeof j === 'string' && j.length <= STATS_MAX ? JSON.parse(j) : null;
-                } catch {
-                    return null;
-                }
-            });
+        get lang() {
+            return lang;
         },
         get thinkMs() {
             return thinkMs;
@@ -176,16 +163,78 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnt
         get fault() {
             return fault;
         },
-        choose,
-        // match.js closes bots after every game (stdio bots end their process and thread)
-        close: () => around(() => {
-            try {
-                bot.close?.();
-            } catch {
-                // cleanup only: the game is over and its result stands
+        get stats() {
+            // optional numbers for the record: a getter that throws, or a value that cannot be copied into the result
+            // (functions, cycles, BigInt, huge), must not cost the finished game its result
+            return untimed(() => {
+                try {
+                    const s = bot.stats;
+                    const j = s === undefined || s === null ? null : JSON.stringify(s);
+                    return typeof j === 'string' && j.length <= STATS_MAX ? JSON.parse(j) : null;
+                } catch {
+                    return null;
+                }
+            });
+        },
+        /** Time of this bot's own async work that ran outside its calls. */
+        charge({ cpu, wall }) {
+            if (!call) {
+                thinkMs += program ? wall : cpu;
+                wallMs += wall;
             }
-        })
+        },
+        /** Time of the other bot's async work that ran during this bot's call. */
+        excuse({ cpu, wall }) {
+            if (call) {
+                call.cpu += cpu;
+                call.wall += wall;
+            }
+        },
+        // match.js does not close bots; the game runner does, after the game. A client closed during one of its calls was
+        // stopped by protocol.js for taking too long.
+        close: () => {
+            if (call && !fault) {
+                fault = { kind: 'time', ms: Math.round(thinkMs), wallMs: Math.round(wallMs) };
+            }
+            return untimed(() => {
+                try {
+                    return Promise.resolve(fns.close?.()).catch(() => undefined);
+                } catch {
+                    return Promise.resolve(); // cleanup only: the game is over and its result stands
+                }
+            });
+        }
     };
+    if (fns.choose) {
+        Object.defineProperty(g, 'needsUndo', { get: () => needsUndo, enumerable: true });
+        g.choose = (ctx) => timed(ctx?.game?.round, () => fns.choose(ctx), plainAction);
+        return g;
+    }
+    // a protocol client: hello and over are optional (bot/stdio.js answer() replies for a client without them)
+    const told = (msg) => {
+        const ms = Math.floor(left());
+        return Number.isFinite(ms) && msg && typeof msg === 'object' ? { ...msg, ms: Math.max(1, msg.ms == null ? ms : Math.min(msg.ms, ms)) } : msg;
+    };
+    g.hello = (msg) => timed(0, () => (fns.hello ? fns.hello(told(msg)) : { t: 'ready', v: 2, name }), plainReply);
+    g.decide = (msg, sim) => {
+        // every `simulated` reply also says how much of this bot's own budget is left
+        const t0 = clock();
+        const before = left();
+        const simTold = async (req) => {
+            const r = await sim(req);
+            const ms = Math.floor(before - (clock() - t0));
+            return Number.isFinite(ms) && r && typeof r === 'object' ? { ...r, ms: Math.max(0, r.ms == null ? ms : Math.min(r.ms, ms)) } : r;
+        };
+        return timed(msg?.state?.round, () => fns.decide(told(msg), simTold), plainReply);
+    };
+    g.over = (msg) => untimed(async () => plainReply(await (fns.over ? fns.over(msg) : { t: 'ok' })));
+    if (timeoutMs !== undefined) {
+        g.timeoutMs = timeoutMs;
+    }
+    if (startTimeoutMs !== undefined) {
+        g.startTimeoutMs = startTimeoutMs;
+    }
+    return g;
 }
 
-module.exports = { guard };
+module.exports = { guard, plainAction };

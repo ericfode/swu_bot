@@ -8,10 +8,11 @@
  *
  * A round is a round robin (bot/ladder.js) of <agent>-v<latest> for every roster agent plus roster.baselines: --games per
  * pair, every seed from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live).
- * Round seeds are secret until the ladder starts: they come from a 32-byte secret outside the arena folder (roundSeed).
+ * Round seeds and keys are secret until the ladder starts: they come from a 32-byte secret outside the arena folder
+ * (roundSeed, roundKey; the key deals every game, rng.js).
  * Every bot plays under the same rules (ladder.js --cap-ms roster.thinkCapMs, --hang-ms 30 s more): a bot that thinks
- * more than the cap in a game, throws, hangs or fails to load forfeits it, which is a loss for that bot (the game
- * record's fault seat; cappedScore). Ratings are Bradley-Terry with the baselines' mean pinned to 1500, per round and
+ * more than the cap in a game, throws, answers wrong, hangs or fails to load loses it (the game is an ERROR with `by`
+ * = its seat; cappedScore). Ratings are Bradley-Terry with the baselines' mean pinned to 1500, per round and
  * over all rounds (so versions compare across rounds). Writes, all in ARENA_HOME:
  *   standings.json     every round so far
  *   rounds/r<K>.md     what competitors read: standings, results per opponent, lost games with replay paths
@@ -50,11 +51,12 @@ let roster = loadRoster();
 const agentOf = (bot) => roster.agents.find((a) => bot === a.name || bot.startsWith(`${a.name}-v`))?.name ?? null;
 
 /**
- * Score of a finished game for p1, or null (unrated). The game runner decides faults (fault = the seat whose bot failed
- * to load, threw, went over the time cap or hung): that seat loses. Otherwise only a played-out game ('won') counts.
+ * Score of a finished game for p1, or null (unrated). A game a bot broke (outcome ERROR, `by` = the seat whose bot
+ * failed to load, threw, answered wrong, went over the time cap or hung) is that seat's loss. Otherwise only a
+ * played-out game ('won') counts.
  */
 function cappedScore(g) {
-    const forfeit = [g.fault === 'p1', g.fault === 'p2'];
+    const forfeit = [g.outcome === 'ERROR' && g.by === 'p1', g.outcome === 'ERROR' && g.by === 'p2'];
     if (forfeit[0] || forfeit[1]) {
         return { score: forfeit[0] ? 0 : 1, forfeit };
     }
@@ -84,6 +86,14 @@ function loadSecret(file = process.env.ARENA_SECRET_FILE ?? path.join(os.homedir
 /** First ladder seed of round k of the tournament with this id ('watch' outside tournaments). */
 function roundSeed(secret, id, k) {
     return parseInt(crypto.createHash('sha256').update(`${secret}:${id}:${k}`).digest('hex').slice(0, 8), 16);
+}
+
+/**
+ * The run key (ladder.js --key, rng.js) of round k: every game's deal comes from it, so the hidden cards cannot be
+ * rebuilt from the seed. The same for a resumed round; ladder.json has it (config.key) once the round is done.
+ */
+function roundKey(secret, id, k) {
+    return crypto.createHash('sha256').update(`${secret}:key:${id}:${k}`).digest('hex').slice(0, 32);
 }
 
 /** The SUBMISSION.json of a version. */
@@ -341,11 +351,11 @@ function releaseLock() {
     }
 }
 
-async function runRound(round, bots, { games = Number(arg('games', 4)), seed, t = null } = {}) {
+async function runRound(round, bots, { games = Number(arg('games', 4)), seed, key, t = null } = {}) {
     const dir = path.join(RESULTS, `arena-r${round}`);
     const cap = Number(roster.thinkCapMs);
     const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(cap + 30000)] : [];
-    const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed),
+    const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed), '--key', key,
         '--id', `arena-r${round}`, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, '--record', '--resume'];
     takeLock(dir);
     console.log(`round ${round}: ${bots.join(', ')}`);
@@ -520,7 +530,7 @@ async function tournament() {
         }
         // a ladder started before seeds were kept in tournament.json resumes with the seed it was started with
         const seed = r.seed ?? readJson(path.join(RESULTS, `arena-r${r.n}`, 'ladder.json'), null)?.config?.firstSeed ?? roundSeed(secret, t.id, r.n);
-        await runRound(r.n, r.bots ?? lineup(r.workEnd), { games: t.gamesPerPair, seed, t });
+        await runRound(r.n, r.bots ?? lineup(r.workEnd), { games: t.gamesPerPair, seed, key: roundKey(secret, t.id, r.n), t });
         r.ladderEnd = new Date().toISOString();
         save();
     }
@@ -545,10 +555,10 @@ async function main() {
     }
     const st = () => readJson(STANDINGS, { rounds: [] });
     const nextRound = () => (st().rounds.map((r) => r.round).pop() ?? -1) + 1;
-    const watchSeed = (k) => roundSeed(loadSecret(), 'watch', k);
+    const watchSeed = (k) => ({ seed: roundSeed(loadSecret(), 'watch', k), key: roundKey(loadSecret(), 'watch', k) });
     if (!process.argv.includes('--watch')) {
         const k = arg('round') !== undefined ? Number(arg('round')) : nextRound();
-        await runRound(k, lineup(), { seed: watchSeed(k) });
+        await runRound(k, lineup(), watchSeed(k));
         return;
     }
     const interval = Number(arg('interval', 600)) * 1000;
@@ -560,7 +570,7 @@ async function main() {
         const changed = bots.filter((b) => !prevBots.includes(b));
         if (changed.length && bots.length > roster.baselines.length) {
             const k = nextRound();
-            await runRound(k, bots, { seed: watchSeed(k) });
+            await runRound(k, bots, watchSeed(k));
             n++;
         } else {
             await sleep(interval);
@@ -575,4 +585,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, roundSeed, loadSecret, report, playQueuedEval, requeueRunning };
+module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning };

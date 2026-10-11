@@ -21,16 +21,17 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 
 - Your bot is the folder `{{agentDir}}`. Edit only that folder. Read anything except the referee's seed secret
   (`~/.arena-secret`); never edit the repo (`{{repo}}`), other competitors' folders, `versions/` or `forceteki/`.
-- `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }`; it requires only files in
-  your folder and Node built-ins, and never loads code from outside the folder (a stdio program likewise). Set
-  `needsUndo = true` on the bot if you use rollback search.
-- `game` is the live engine: lookahead may change it only through rollback search that restores it before `choose()`
-  returns. Setting game state directly is cheating. These are rules, not a sandbox; breaking them gets you removed.
+- `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }` (or a protocol client,
+  `spec/protocol.md`); it requires only files in your folder and Node built-ins, and never loads code from outside the
+  folder (a bot program likewise). `choose` may return a promise.
+- Set `needsUndo = true` on the bot if you use rollback search: `game` is then the referee's copy of the game, never
+  the real one. Without it `game` is the live engine and must not change. Setting game state directly is cheating.
+  These are rules, not a sandbox; breaking them gets you removed.
 - **Hidden information:** the decklists are public, so you may use the multiset of all cards each player owns. You may
   not read which hidden zone an opponent card is in, the cards in their hand, or either deck's order. Lookahead must
   reseed the engine RNG from your own stream (as `heuristic.js` does) and redeal hidden cards in sampled worlds.
 - **Time cap:** {{capSeconds}} s of thinking (CPU time on your bot's thread, `createBot()` included) per game, and twice
-  that in wall time inside `choose()`. Over it, your bot forfeits that game. The stock search budget already overruns
+  that in wall time inside `choose()`; async work your bot leaves running counts too. Over it, your bot loses that game. The stock search budget already overruns
   it in some games, so measure `ms/decision` and stay well inside the cap. No worker threads or child processes.
 - **Forfeits:** a throw, an illegal return value, a failed load or a hang loses the game for your bot.
 - Use the `rng` you are given, never `Math.random()`. Prefer count-based budgets over wall-clock ones.

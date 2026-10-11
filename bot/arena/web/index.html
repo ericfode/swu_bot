@@ -214,8 +214,9 @@ async function loadGames() {
   if (!$('roundsel').value) { list.append(mk('p', 'muted', 'No rounds yet.')); return; }
   const g = await api('games', { round: Number($('roundsel').value) });
   for (const x of [...g.games].reverse()) {
-    const tf = /TIME_FORFEIT (\S+)/.exec(x.error || ''); // rounds played before games carried fault
-    const by = x.fault === 'p1' ? x.p1 : x.fault === 'p2' ? x.p2 : null;
+    const tf = /TIME_FORFEIT (\S+)/.exec(x.error || ''); // rounds played before games named the seat at fault
+    const seat = x.outcome === 'ERROR' ? x.by : null;
+    const by = seat === 'p1' ? x.p1 : seat === 'p2' ? x.p2 : null;
     const res = x.outcome === 'running' ? 'LIVE' : by ? `${by} forfeits (${x.faultKind || 'fault'})` : tf ? `${tf[1]} out of time` : x.winner ?? x.outcome;
     const b = mk('button', '', `${x.p1} vs ${x.p2} · ${res}`);
     b.addEventListener('click', () => openGame(g.replayBase + x.id + '.jsonl'));

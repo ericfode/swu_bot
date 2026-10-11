@@ -3,18 +3,19 @@
 /**
  * Builds the ladder results document (schema "swu-ladder/1") from finished games. Pure, no engine dependency.
  *
- * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, fault, faultKind, botStats }
- * where winner is a bot name, 'draw' or null. Outcomes 'won' and 'forfeit' (one seat's bot failed to load, threw, went
- * over the time cap or hung: fault is that seat, winner the other bot) count towards ratings; ERROR / STUCK / STEP_CAP
- * games are kept in the list and counted under `incomplete` so engine bugs stay visible. Each bot row also counts the
- * games it forfeited (`forfeits`, included in its losses).
+ * A game record: { id, seed, p1, p2, winner, winnerSeat, outcome, rounds, steps, ms, error, by, faultKind, botStats }
+ * where winner is a bot name, 'draw' or null. Won games count towards ratings, and so do ERROR games a bot caused
+ * (`by` set: its bot failed to load, threw, answered wrong, went over the time cap or hung; faultKind says which, when
+ * the game ran on game-pool.js), which that bot loses. Other ERROR, STUCK and STEP_CAP games are kept in the list and
+ * counted under `incomplete` so engine bugs stay visible. Each bot row also counts the games it lost that way
+ * (`forfeits`, included in its losses).
  */
 const { sequentialElo, bradleyTerry, wilson } = require('./ratings');
 
-const isDecided = (g) => g.outcome === 'won' || g.outcome === 'forfeit';
+const rated = (g) => !!g.winner && (g.outcome === 'won' || (g.outcome === 'ERROR' && !!g.by));
 
 function scoreOf(g) {
-    if (!isDecided(g)) {
+    if (!rated(g)) {
         return null;
     }
     if (g.winner === 'draw') {
@@ -51,10 +52,10 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
                 ms += st.ms;
                 windows += st.windows;
             }
-            if (g.fault === (seat === 0 ? 'p1' : 'p2')) {
+            if (rated(g) && g.outcome === 'ERROR' && g.by === (seat === 0 ? 'p1' : 'p2')) {
                 row.forfeits++;
             }
-            if (!isDecided(g)) {
+            if (!rated(g)) {
                 row.incomplete++;
             } else if (g.winner === 'draw') {
                 row.draws++;
@@ -84,7 +85,7 @@ function summarize({ id, createdAt, status, engine, config, botInfo, games, sche
             const gs = finished.filter((g) => (g.p1 === a && g.p2 === b) || (g.p1 === b && g.p2 === a));
             const p = { a, b, games: gs.length, aWins: 0, bWins: 0, draws: 0, incomplete: 0 };
             for (const g of gs) {
-                if (!isDecided(g)) {
+                if (!rated(g)) {
                     p.incomplete++;
                 } else if (g.winner === 'draw') {
                     p.draws++;

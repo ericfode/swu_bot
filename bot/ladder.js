@@ -3,14 +3,16 @@
  * Round-robin ladder with ratings, run on worker threads.
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
- *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--resume]
- *       [--cap-ms 60000] [--hang-ms 600000]
+ *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--key K|none]
+ *       [--resume] [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine
  * and same bot code and models too: config.harness is the git trees of bot/ and models/, plus a hash of uncommitted
- * changes there and of the $SWU_LEARNED_MODEL file when set).
- * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot forfeits. --hang-ms is the
- * watchdog (game-pool.js): one choose() call running longer than that (wall clock) forfeits the game, and its worker is
- * replaced. A bot that fails to load or throws also forfeits; ladder.json games carry fault / faultKind.
+ * changes there and of the $SWU_LEARNED_MODEL file when set). Without the earlier run's --key, the rest is dealt from a
+ * new run key; the games kept have their own keys in their entries.
+ * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot loses. --hang-ms is the
+ * watchdog (game-pool.js): one bot call running longer than that (wall clock) loses the game, and its worker is
+ * replaced. A bot that fails to load, throws or answers wrong also loses. Such a game is an ERROR with `by` set to the
+ * bot's seat (as match.js reports one), and `faultKind` says how it failed: load, error, time or hang.
  *
  * Each pair plays `--games` games (rounded up to even): every seed twice, once from each seat, so random-deck luck
  * cancels out. Everything goes in <out>/<id>/, rewritten atomically after every finished game:
@@ -19,6 +21,9 @@
  *   games/       per-game recordings (<id>.jsonl, same format as tournament.js), only with --record
  * --vs a,b,c makes it a gauntlet: each --bots entry plays each --vs entry (and --bots entries do not play each
  * other). Every challenger gets the same seeds, so a parameter sweep compares variants on the same decks.
+ * Games are dealt from a secret run key (rng.js runKey), so bots cannot rebuild hidden cards from their seed. Each
+ * game's key goes into its index entry when it ends, and the run key into ladder.json when the run is done: give it as
+ * --key to play the same games again (two runs with the same --key and --seed get the same decks). --key none: seed alone.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
  */
 const fs = require('fs');
@@ -27,6 +32,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { describeBot } = require('./players');
+const { runKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 const { runPool, killChildren } = require('./game-pool');
@@ -81,6 +87,12 @@ function writeJson(file, data) {
     fs.renameSync(tmp, file);
 }
 
+/**
+ * Names the run key without giving it away (ladder.json is written during the run, where bots can read it): null for
+ * --key none, else 12 hex digits of its SHA-256.
+ */
+const keyId = (key) => (key === null ? null : crypto.createHash('sha256').update(key).digest('hex').slice(0, 12));
+
 /** The games of an earlier run in the same folder, when its bots, schedule, limits and engine match this one; else null. */
 function readPrevious(file, config, engine) {
     if (!fs.existsSync(file)) {
@@ -99,9 +111,12 @@ function readPrevious(file, config, engine) {
     // and the harness code (guard, game runner, env, built-in bots)
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
         || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
-        || (c.harness ?? null) !== (config.harness ?? null)) {
-        console.log('resume: the earlier run used other bots, seeds, format, limits, engine or bot/ code, starting over');
+        || (c.harness ?? null) !== (config.harness ?? null) || (c.keyId === null) !== (config.keyId === null)) {
+        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code or seeding (--key none), starting over');
         return null;
+    }
+    if (c.keyId !== config.keyId) {
+        console.log('resume: the earlier run had another key, so the games left are dealt from this run\'s key (kept games keep theirs)');
     }
     return { games: Array.isArray(doc.games) ? doc.games : [] };
 }
@@ -138,13 +153,14 @@ async function main() {
     const id = arg('id', `ladder-${createdAt.replace(/[:.]/g, '-').slice(0, 19)}`);
     const out = path.join(path.resolve(arg('out', defaultOut())), id);
     const record = process.argv.includes('--record');
+    const key = runKey(arg('key', null));
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
     const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
-                     harness: harnessRev(), ...(vs ? { format: 'gauntlet', vs } : {}) };
+                     harness: harnessRev(), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
@@ -160,7 +176,7 @@ async function main() {
     if (prev) {
         const kept = prev.games.filter((g) => g?.id && g.outcome !== 'running' && queue.some((q) => q.id === g.id));
         games.push(...kept);
-        tIndex.games.push(...kept.map(({ botStats, timing, think, ...g }) => g));
+        tIndex.games.push(...kept.map(({ botStats, think, ...g }) => g));
         queue = queue.filter((q) => !kept.some((g) => g.id === q.id));
         console.log(`${id}: resuming, ${kept.length} games already played`);
     }
@@ -171,9 +187,9 @@ async function main() {
     await runPool(queue, {
         workers,
         hangMs,
-        workerData: { maxSteps, engineRev: engine, capMs },
+        workerData: { maxSteps, engineRev: engine, capMs, key },
         onStart: (job) => {
-            const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, fault: null, faultKind: null };
+            const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, by: null, faultKind: null };
             games.push(entry);
             tIndex.games.push({ ...entry });
             if (record) {
@@ -184,17 +200,20 @@ async function main() {
         onResult: ({ job, result: r }) => {
             const done = {
                 winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null,
-                fault: r.fault ?? null, faultKind: r.faultKind ?? null
+                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, ...(r.key ? { key: r.key } : {})
             };
-            Object.assign(games.find((g) => g.id === job.id), done, { timing: r.timing ?? null, think: r.think ?? null, botStats: r.botStats });
+            Object.assign(games.find((g) => g.id === job.id), done, { think: r.think ?? null, botStats: r.botStats });
             Object.assign(tIndex.games.find((g) => g.id === job.id), done);
             const doc = save();
             const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
-            const fault = r.fault ? ` (${r.fault} ${r.faultKind})` : '';
+            const fault = r.by ? ` (${r.by} ${r.faultKind})` : '';
             console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome}${fault} ${r.winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
         }
     });
     status = 'done';
+    if (key) {
+        config.key = key;
+    }
     const doc = save();
     console.log(`done in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     for (const b of doc.bots) {

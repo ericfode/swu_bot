@@ -12,7 +12,8 @@ export const listTournaments = () => getJson<TournamentSummary[]>('/api/tourname
 export const loadIndex = (tid: string) => getJson<TournamentIndex>(`/replays/${encodeURIComponent(tid)}/index.json`);
 
 /**
- * A game file is JSON Lines: one header, one step per decision (step 0 is the opening board), one end.
+ * A game file is JSON Lines: one header, one step per decision (step 0 is the opening board), one end. A game that
+ * failed at hello has only the header and the end.
  * With `allowPartial`, a game that is still being written is fine: an unfinished last line is ignored and a file
  * with no complete step yet returns null.
  */
@@ -43,6 +44,10 @@ export async function loadGame(tid: string, gid: string, allowPartial = false): 
         } else if (e.t === 'end') {
             end = e;
         }
+    }
+    if (header && end && steps.length === 0) {
+        // a bot failed before the game began (at hello)
+        throw new Error(`game ${gid} ended before it began: ${end.error ?? end.outcome}`);
     }
     if (!header || steps.length === 0) {
         if (allowPartial) {

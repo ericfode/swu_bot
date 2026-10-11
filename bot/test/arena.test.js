@@ -26,23 +26,23 @@ function setRoster(agents, baselines = ['rush', 'heuristic']) {
     writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines, agents: agents.map((name) => ({ name, title: name, start: 'rush', philosophy: `${name}'s prompt` })) });
 }
 
-test('a fault seat loses whatever else the record says; the rest scores only when played out', () => {
+test('the seat that broke the game loses whatever else the record says; the rest scores only when played out', () => {
     const g = { p1: 'a-v1', p2: 'rush', timing: t(5, 5) };
-    assert.deepStrictEqual(cappedScore({ ...g, outcome: 'forfeit', fault: 'p1', faultKind: 'time', winner: 'rush', winnerSeat: 'p2' }), { score: 0, forfeit: [true, false] });
-    assert.deepStrictEqual(cappedScore({ ...g, outcome: 'forfeit', fault: 'p2', faultKind: 'hang', winner: 'a-v1', winnerSeat: 'p1' }), { score: 1, forfeit: [false, true] });
-    assert.strictEqual(cappedScore({ ...g, outcome: 'forfeit', fault: 'p2', faultKind: 'load' }).score, 1);
-    assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'a-v1', winnerSeat: 'p1', fault: null }).score, 1);
-    assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'rush', winnerSeat: 'p2', fault: null }).score, 0);
+    assert.deepStrictEqual(cappedScore({ ...g, outcome: 'ERROR', by: 'p1', faultKind: 'time', winner: 'rush', winnerSeat: 'p2' }), { score: 0, forfeit: [true, false] });
+    assert.deepStrictEqual(cappedScore({ ...g, outcome: 'ERROR', by: 'p2', faultKind: 'hang', winner: 'a-v1', winnerSeat: 'p1' }), { score: 1, forfeit: [false, true] });
+    assert.strictEqual(cappedScore({ ...g, outcome: 'ERROR', by: 'p2', faultKind: 'load' }).score, 1);
+    assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'a-v1', winnerSeat: 'p1', by: null }).score, 1);
+    assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'rush', winnerSeat: 'p2', by: null }).score, 0);
     assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'draw', winnerSeat: 'draw' }).score, 0.5);
     assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'a-v1' }).score, 1, 'records without winnerSeat');
     // both seats at fault, or an engine error: unrated, nobody forfeits
-    assert.deepStrictEqual(cappedScore({ ...g, outcome: 'ERROR', fault: null, error: 'engine' }), { score: null, forfeit: [false, false] });
+    assert.deepStrictEqual(cappedScore({ ...g, outcome: 'ERROR', by: null, error: 'engine' }), { score: null, forfeit: [false, false] });
 });
 
-test('the cap comes from the fault, not from timing or error text', () => {
+test('the cap comes from by, not from timing or error text', () => {
     const g = { p1: 'a', p2: 'b', timing: t(10 * 60000, 5) };
-    assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'a', winnerSeat: 'p1', fault: null }).score, 1);
-    assert.strictEqual(cappedScore({ ...g, outcome: 'ERROR', error: 'TIME_FORFEIT a thought 70000 ms (cap 60000)', fault: null }).score, null);
+    assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'a', winnerSeat: 'p1', by: null }).score, 1);
+    assert.strictEqual(cappedScore({ ...g, outcome: 'ERROR', error: 'TIME_FORFEIT a thought 70000 ms (cap 60000)', by: null }).score, null);
 });
 
 test('scoreRound counts results, forfeits, lost games and pins the baselines to 1500', () => {
@@ -51,7 +51,7 @@ test('scoreRound counts results, forfeits, lost games and pins the baselines to 
         { id: 'g1', p1: 'x-v0', p2: 'rush', outcome: 'won', winner: 'x-v0', winnerSeat: 'p1', timing: t(5, 5), rounds: 5 },
         { id: 'g2', p1: 'rush', p2: 'x-v0', outcome: 'won', winner: 'rush', winnerSeat: 'p1', timing: t(5, 5), rounds: 6 },
         { id: 'g3', p1: 'x-v0', p2: 'heuristic', outcome: 'won', winner: 'x-v0', winnerSeat: 'p1', timing: t(5, 5), rounds: 7 },
-        { id: 'g4', p1: 'heuristic', p2: 'x-v0', outcome: 'forfeit', fault: 'p2', faultKind: 'time', winner: 'heuristic', winnerSeat: 'p1', timing: t(5, 5), rounds: 3 },
+        { id: 'g4', p1: 'heuristic', p2: 'x-v0', outcome: 'ERROR', by: 'p2', faultKind: 'time', winner: 'heuristic', winnerSeat: 'p1', timing: t(5, 5), rounds: 3 },
         { id: 'g5', p1: 'rush', p2: 'heuristic', outcome: 'running' }
     ];
     const rd = scoreRound(3, ladderOf(['x-v0', 'rush', 'heuristic'], games));
@@ -68,7 +68,7 @@ test('scoreRound counts results, forfeits, lost games and pins the baselines to 
 
 test('a round without rated games has no Elo, ranks or leader', () => {
     setRoster(['x']);
-    const rd = scoreRound(1, ladderOf(['x-v0', 'rush'], [{ id: 'g1', p1: 'x-v0', p2: 'rush', outcome: 'running' }, { id: 'g2', p1: 'rush', p2: 'x-v0', outcome: 'ERROR', fault: null }]));
+    const rd = scoreRound(1, ladderOf(['x-v0', 'rush'], [{ id: 'g1', p1: 'x-v0', p2: 'rush', outcome: 'running' }, { id: 'g2', p1: 'rush', p2: 'x-v0', outcome: 'ERROR', by: null }]));
     assert.strictEqual(rd.leader, null);
     assert.strictEqual(rd.rated, 0);
     assert.ok(rd.bots.every((b) => b.btElo === null && b.rank === null));
@@ -161,13 +161,13 @@ test('dashboard: say and the referee write separate halves, so neither loses the
     assert.ok(fs.existsSync(path.join(HOME, 'panels', 'half.say.json')) && fs.existsSync(path.join(HOME, 'panels', 'half.rated.json')));
 });
 
-test('eval reads results from fault and winnerSeat', () => {
+test('eval reads results from by and winnerSeat', () => {
     const { resultFor } = require('../arena/eval');
-    assert.strictEqual(resultFor({ outcome: 'forfeit', fault: 'p1', winnerSeat: 'p2' }, 'p1'), 'loss');
-    assert.strictEqual(resultFor({ outcome: 'forfeit', fault: 'p1', winnerSeat: 'p2' }, 'p2'), 'win');
-    assert.strictEqual(resultFor({ outcome: 'won', winner: 'me', winnerSeat: 'p2', fault: null }, 'p2'), 'win');
+    assert.strictEqual(resultFor({ outcome: 'ERROR', by: 'p1', winnerSeat: 'p2' }, 'p1'), 'loss');
+    assert.strictEqual(resultFor({ outcome: 'ERROR', by: 'p1', winnerSeat: 'p2' }, 'p2'), 'win');
+    assert.strictEqual(resultFor({ outcome: 'won', winner: 'me', winnerSeat: 'p2', by: null }, 'p2'), 'win');
     assert.strictEqual(resultFor({ outcome: 'won', winner: 'draw', winnerSeat: 'draw' }, 'p1'), 'draw');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', fault: null, error: 'TIME_FORFEIT me' }, 'p1'), 'ERROR');
+    assert.strictEqual(resultFor({ outcome: 'ERROR', by: null, error: 'TIME_FORFEIT me' }, 'p1'), 'ERROR');
 });
 
 test('a stdio submission freezes its folder: cmd is a file in it or a program on PATH, and later edits do not reach it', () => {
@@ -185,6 +185,25 @@ test('a stdio submission freezes its folder: cmd is a file in it or a program on
         { kind: 'stdio', cmd: 'python3', args: [path.join(live, 'bot.py')] }, { kind: 'stdio', cmd: 'python3', args: ['--model=../x'] }]) {
         assert.throws(() => api.submit({ name: 'pyb', note: 'bad', bot }), (e) => e.code === 'bad_request', JSON.stringify(bot));
     }
+    // it plays as a protocol v2 client (bot/stdio.js), started in its version folder
+    const { makeArenaBot } = require('../arena/registry');
+    const { StdioClient } = require('../stdio');
+    const prog = makeArenaBot(v);
+    assert.ok(prog instanceof StdioClient);
+    assert.deepStrictEqual([prog.name, prog.opts.cmd, prog.opts.args, prog.opts.cwd], [v, 'python3', ['bot.py'], path.join(HOME, 'versions', v)]);
+});
+
+test('an in-process protocol client passes the load check and plays as one', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'clie', start: 'rush' });
+    fs.writeFileSync(path.join(HOME, 'agents', 'clie', 'bot.js'), "exports.createBot = (name) => ({ name, decide: () => ({ t: 'act', i: 0 }) });\n");
+    const v = api.submit({ name: 'clie', note: 'client' }).version;
+    const bot = require('../arena/registry').makeArenaBot(v);
+    assert.strictEqual(typeof bot.decide, 'function');
+    assert.strictEqual(bot.name, v);
+    fs.writeFileSync(path.join(HOME, 'agents', 'clie', 'bot.js'), 'exports.createBot = (name) => ({ name });\n');
+    assert.throws(() => api.submit({ name: 'clie', note: 'neither' }), (e) => e.code === 'bad_bot' && /choose\(\) method .* decide\(\) method/.test(e.message));
 });
 
 test('registrations in a row all stay in the roster (roster updates are serialized)', () => {

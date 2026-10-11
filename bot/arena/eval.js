@@ -31,8 +31,8 @@ function arg(name, dflt) {
 
 /** Result of a finished game for the bot in mySeat: win / loss / draw, or the outcome when it is unrated (ERROR, ...). */
 function resultFor(r, mySeat) {
-    if (r.fault === 'p1' || r.fault === 'p2') {
-        return r.fault === mySeat ? 'loss' : 'win';
+    if (r.outcome === 'ERROR' && (r.by === 'p1' || r.by === 'p2')) {
+        return r.by === mySeat ? 'loss' : 'win';
     }
     if (r.outcome !== 'won') {
         return r.outcome;
@@ -61,7 +61,7 @@ async function runEval({ me, opps, seeds = 3, first = 20001, workers = 1, recDir
         onResult: ({ job, result: r }) => {
             const mySeat = `p${job.seat}`;
             const t = r.timing?.[mySeat] ?? { n: 0, ms: 0 };
-            const forfeit = r.fault ? { seat: r.fault === mySeat ? 'me' : 'opponent', kind: r.faultKind ?? null } : null;
+            const forfeit = r.outcome === 'ERROR' && r.by ? { seat: r.by === mySeat ? 'me' : 'opponent', kind: r.faultKind ?? null } : null;
             const row = { id: job.id, opp: job.opp, seed: job.seed, seat: job.seat, result: resultFor(r, mySeat), forfeit, rounds: r.round, steps: r.steps, myMs: t.ms ?? 0, myDecisions: t.n ?? 0,
                           myP95: t.p95, myThinkMs: r.think?.[mySeat] ?? null, error: r.error ?? null, replay: job.replayFile ?? null };
             rows.push(row);

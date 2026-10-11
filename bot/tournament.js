@@ -1,13 +1,17 @@
 'use strict';
-// node bot/tournament.js [--bots random-a,random-b] [--games 4] [--out replays/demo] [--seed 1]
+// node bot/tournament.js [--bots random-a,random-b] [--games 4] [--out replays/demo] [--seed 1] [--key K|none]
 // Round-robin; first seat alternates each game. Writes <out>/index.json and <out>/games/<id>.jsonl.
+// Games are seeded from a secret key (random unless given) so bots cannot rebuild hidden cards from the seed; each
+// game's own key (rng.js gameKey) goes into its index entry and replay when it ends. --key none: seed alone. Bot programs
+// can read the referee's command line, so give --key only to play a finished run again.
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { Env } = require('./env');
 const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
-const { makeBot } = require('./players');
+const { gameKey, runKey } = require('./rng');
+const { makeBot, closeBots } = require('./players');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -15,7 +19,7 @@ function arg(name, dflt) {
 }
 
 function statLine(r) {
-    const s = (r.botStats ?? []).filter(Boolean);
+    const s = (r.botStats ?? []).filter((x) => x?.windows !== undefined);
     return s.map((x) => ` [${x.windows} windows, ${x.noops ?? 0} noops, ${x.loopPasses ?? 0} loop-passes, ${(x.ms / Math.max(1, x.windows)).toFixed(0)}ms/window, ${x.playouts} playouts, ${x.failedPlayouts} failed]`).join('');
 }
 
@@ -32,6 +36,7 @@ async function main() {
     const perPair = Number(arg('games', 4));
     const out = path.resolve(arg('out', 'replays/demo'));
     let seed = Number(arg('seed', 1));
+    const key = runKey(arg('key', null));
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const env = new Env();
@@ -52,9 +57,11 @@ async function main() {
                 const entry = { id, seed, p1: seats[0], p2: seats[1], winner: null, winnerSeat: null, rounds: 0, steps: 0, outcome: 'running', error: null, ms: 0 };
                 index.games.push(entry);
                 write();
-                const r = await playGame(env, { seed, bots: seats.map(makeBot), record: true, snapshot, onEvent: (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) });
+                const bots = [];
+                seats.forEach((n) => bots.push(makeBot(n, bots)));
+                const r = await playGame(env, { seed, bots, key: key && gameKey(key, seed), record: true, snapshot, onEvent: (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) });
                 const winnerBot = r.winner === 'p1' ? seats[0] : r.winner === 'p2' ? seats[1] : r.winner;
-                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing });
+                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by ?? null, ms: r.ms, timing: r.timing, ...(r.key ? { key: r.key } : {}) });
                 write();
                 console.log(`${id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''}${statLine(r)}`);
             }
@@ -63,5 +70,6 @@ async function main() {
     console.log(`wrote ${index.games.length} games to ${out}`);
 }
 main().catch((e) => {
-    console.error(e); process.exit(1);
-});
+    console.error(e);
+    process.exitCode = 1;
+}).finally(closeBots);
