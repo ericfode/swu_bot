@@ -7,7 +7,7 @@
 //! then argmax (or softmax sampling with `temp` > 0). The three knobs are command-line flags.
 
 use crate::cards::CardDb;
-use crate::features::{encode, heuristic, ACTION_DIM, STATE_DIM, WORLD_DIM};
+use crate::features::{encode, heuristic, ACTION_DIM, SIDE, STATE_DIM, WORLD_DIM};
 use crate::model::Net;
 use burn::prelude::*;
 use burn::tensor::TensorData;
@@ -66,6 +66,9 @@ impl Brain {
             for j in 0..WORLD_DIM {
                 st[j] += delta[k * WORLD_DIM + j];
             }
+            // the two derived board features follow the predicted board; hand and prompt features stay as they are now
+            st[STATE_DIM - 2] = st[0] - st[SIDE];
+            st[STATE_DIM - 1] = st[12] - st[SIDE + 12] + st[10] + st[11] - st[SIDE + 10] - st[SIDE + 11];
             h_next.push(heuristic(&st[..WORLD_DIM]));
             next.extend(st);
         }
