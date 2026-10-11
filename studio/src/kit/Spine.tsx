@@ -48,7 +48,7 @@ export function Spine({ game, step, evals, onSeek }: { game: Game; step: number;
                         className={`relative shrink-0 flex flex-col items-center gap-0.5 rounded-md px-0.5 pt-0.5 transition-opacity ${m.i > step ? 'opacity-45 hover:opacity-90' : ''}`}>
                         {on && <motion.span layoutId="spine-cursor" className="absolute inset-0 rounded-md bg-raise" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
                         <span className="relative"><Glyph state={game.steps[m.i].state} size={30} value={value} selected={on} /></span>
-                        <span className={`relative num text-[9px] ${on ? 'text-gold' : 'text-faint'}`}>{m.label}</span>
+                        <span className={`relative num text-[9px] ${on ? 'text-fg' : 'text-faint'}`}>{m.label}</span>
                     </button>
                 );
             })}

@@ -1,5 +1,5 @@
 import type { Game, PlayerSnap, Seat, Snapshot } from './types';
-import { estimateLens, LENS_SCALE, OMNI_WEIGHTS, type LensStep } from './lens';
+import { estimateLens, LENS_SCALE, OMNI_WEIGHTS, type LensStep, type TermKey } from './lens';
 
 export const SEATS: Seat[] = ['p1', 'p2'];
 export const other = (s: Seat): Seat => (s === 'p1' ? 'p2' : 'p1');
@@ -56,7 +56,7 @@ export interface Metrics {
 }
 
 export interface EdgeTerm {
-    key: 'base' | 'ground' | 'space' | 'hand' | 'resources' | 'initiative';
+    key: TermKey;
     label: string;
     /** each side's points for this term (good for that side) */
     p1: number;
@@ -89,7 +89,7 @@ export function edgeTerms(s: Snapshot, lens?: LensStep | null): { terms: EdgeTer
     const unitRule = `power × ${w.power} + HP × ${w.hp} + cost × ${w.cost} + upgrades, × ${w.exhaustedMult} if exhausted`;
     const unitHow = `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per other upgrade + ${w.sentinel} if Sentinel, all × ${w.exhaustedMult} if exhausted`;
     const terms: EdgeTerm[] = [
-        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left + (12 − HP)² / 6 under 12)`, `${w.baseMult} × (${w.baseHp} per HP left, plus (12 − HP)² / 6 when 12 HP or less)`),
+        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left − (12 − HP)² / 6 under 12)`, `${w.baseMult} × (${w.baseHp} per HP left, minus (12 − HP)² / 6 when 12 HP or less, so a base near 0 HP falls fast)`),
         t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, unitRule, unitHow),
         t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, unitRule, unitHow),
         t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`, `${w.hand} per card in hand`),

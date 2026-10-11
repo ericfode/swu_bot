@@ -46,23 +46,25 @@ function hash(s: string): number {
     return h >>> 0;
 }
 
-// The six SWU aspects. The replay format has no aspect data, so a tile borrows one from its name: it only has to be stable.
-const ASPECTS = [
-    { name: 'vigilance', a: '#2f6fe0', b: '#0d2350' },
-    { name: 'command', a: '#2fae62', b: '#0b3320' },
-    { name: 'aggression', a: '#d8434b', b: '#45101a' },
-    { name: 'cunning', a: '#e0b63a', b: '#4a3608' },
-    { name: 'heroism', a: '#c9d6ea', b: '#2c3a52' },
-    { name: 'villainy', a: '#8a5cf0', b: '#1c1040' }
+// Tile colours: muted, non-aspect tones. The replay format has no aspect data, so faking one misled (a villain shown as
+// heroism silver); these only need to be stable per name, and none is a seat colour, gold or a lens score colour.
+const TILE_TONES = [
+    { a: '#5b6b86', b: '#161d2c' },
+    { a: '#4d756d', b: '#12221d' },
+    { a: '#76694f', b: '#252014' },
+    { a: '#6a5b7c', b: '#1d1727' },
+    { a: '#5c744c', b: '#182212' },
+    { a: '#6f6470', b: '#1f1a21' }
 ];
 
 export function tileLook(name: string) {
     const h = hash(name);
-    const asp = ASPECTS[h % ASPECTS.length];
+    const asp = TILE_TONES[h % TILE_TONES.length];
     const words = name.split(',')[0].split(/\s+/).filter((w) => /^[A-Z0-9]/i.test(w));
     const mono = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase();
     return { ...asp, mono, angle: 120 + (h % 90) };
 }
 
-const BOT_COLORS = ['#56c8ff', '#ff6b78', '#f6c454', '#a48bff', '#4fe0a8', '#ff9d5c', '#7fd1d8', '#e58bd8'];
+// tournament colours per bot: none is a seat colour (p1 blue, p2 red), gold or the omni score's violet, so a bot's colour never reads as a seat
+const BOT_COLORS = ['#4fe0a8', '#ff9d5c', '#e58bd8', '#c9d36a', '#d6b48a', '#9ad0e0'];
 export const botColor = (bots: string[], bot: string) => BOT_COLORS[Math.max(0, bots.indexOf(bot)) % BOT_COLORS.length];

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ActionIcon } from '../kit/ActionIcon';
 import { classInfo, describe, type Action } from '../data/actions';
@@ -20,7 +20,7 @@ const P1 = '#56c8ff';
 const P2 = '#ff5f6d';
 const FG = '#dce6fb';
 const GOLD = '#f6c454';
-const EDGE = '#c4b2ff';
+const EDGE = '#c4b2ff'; // --color-edge
 const PLAYHEAD = '#ffffff';
 
 /** A 14px drawing of what a lane looks like on the chart, for its toggle chip. */
@@ -53,7 +53,8 @@ interface Props {
     onHover?: (step: number | null) => void;
 }
 
-const EVAL_LINES = [
+/** How each evaluation curve is drawn; the analyst panel's swatches use the same. */
+export const EVAL_LINES = [
     { key: 'p1_subjective', dash: '5 3', color: P1, width: 1.6 },
     { key: 'p2_subjective', dash: '5 3', color: P2, width: 1.6 },
     { key: 'objective_state', dash: undefined, color: FG, width: 2.2 },
@@ -65,7 +66,7 @@ export function evalLabels(bots: Record<Seat, string>): Record<string, string> {
     return { p1_subjective: `${bots.p1}'s own view`, p2_subjective: `${bots.p2}'s own view`, objective_state: 'sees both hands', objective_hindsight: 'hindsight' };
 }
 
-function useWidth(ref: React.RefObject<HTMLElement | null>) {
+function useWidth(ref: RefObject<HTMLElement | null>) {
     const [w, setW] = useState(800);
     useEffect(() => {
         const el = ref.current;
