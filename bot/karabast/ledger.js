@@ -25,9 +25,11 @@ function sleepSync(ms) {
 
 class PeopleLedger {
     constructor(file, max = 10, { lockWaitMs = 10000 } = {}) {
-        // a typo in --max-people gives NaN, and every check against NaN passes: refuse it rather than run uncapped
-        if (!Number.isInteger(max) || max < 0) {
-            throw new Error(`people cap must be a whole number of 0 or more, got ${max}`);
+        // a typo in --max-people gives NaN, and every check against NaN passes: refuse it rather than run uncapped.
+        // Infinity is an explicit "no cap" (still counting people): Eric's budget since 2026-10-11 22:16 is one game at
+        // a time, not a number of people.
+        if (max !== Infinity && (!Number.isInteger(max) || max < 0)) {
+            throw new Error(`people cap must be a whole number of 0 or more, or Infinity for none, got ${max}`);
         }
         this.file = file;
         this.max = max;

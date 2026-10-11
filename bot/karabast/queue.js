@@ -7,7 +7,7 @@
  *   node bot/karabast/queue.js --bot c-clock --decks bot/decks/ash-meta-2026-09.json --deck <name> [--games 1]
  *        [--server http://127.0.0.1:9500] [--allow-host <host>] [--username "swu-bot (bot)"]
  *        [--format premier] [--card-pool current] [--wait-minutes 10] [--chat "<line>"] [--out <dir>]
- *        [--ledger <file> --max-people 10] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
+ *        [--ledger <file> --max-people 10|none] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
  *        [--max-waits 6]
  *
  * With --games above 1 it is a loop: after each game it waits --gap seconds (at least 25: a finished lobby keeps its
@@ -19,6 +19,9 @@
  * - A non-local run needs --ledger: before entering the queue the run reserves one place under --max-people, or stops
  *   (ledger.js). The opponent is counted in that place as soon as the match is made. A run that fails after entering
  *   the queue, a wait with no match included, keeps the place counted: only the server knows whether it matched us.
+ *   `--max-people none` keeps counting with no cap.
+ * - One game at a time on a machine (Eric, 2026-10-11 22:16: the budget is one concurrent game): a non-local run holds
+ *   playing.pid next to the ledger while it runs, and refuses to start while another live run holds it.
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -143,6 +146,57 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
     }
 }
 
+const alive = (pid) => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return e.code === 'EPERM';
+    }
+};
+
+/**
+ * Takes `file` (our pid in it, created exclusively) so only one run plays at a time, or throws while another live run
+ * holds it. A file left by a run that died (killed, or the machine paused and restarted) is taken over. Released at
+ * exit; a killed run leaves it for the next one to take over.
+ */
+function holdPlayLock(file) {
+    for (let tries = 0; tries < 3; tries++) {
+        try {
+            fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+            process.on('exit', () => {
+                try {
+                    if (fs.readFileSync(file, 'utf8') === String(process.pid)) {
+                        fs.unlinkSync(file);
+                    }
+                } catch {
+                    // already gone
+                }
+            });
+            return;
+        } catch (e) {
+            if (e.code !== 'EEXIST') {
+                throw e;
+            }
+        }
+        let pid = 0;
+        try {
+            pid = Number(fs.readFileSync(file, 'utf8'));
+        } catch {
+            continue; // released between our write and our read: try again
+        }
+        if (pid > 0 && pid !== process.pid && alive(pid)) {
+            throw new Error(`another bot run (pid ${pid}) is playing: one game at a time (${file})`);
+        }
+        try {
+            fs.unlinkSync(file); // left by a run that died
+        } catch {
+            // another starter took it over first: try again
+        }
+    }
+    throw new Error(`could not take ${file}`);
+}
+
 async function main() {
     const server = arg('server', 'http://127.0.0.1:9500');
     const allowHosts = arg('allow-host') ? [arg('allow-host')] : [];
@@ -151,7 +205,11 @@ async function main() {
     if (!local && !ledgerFile) {
         throw new Error('a run against a non-local server needs --ledger <file> (the people cap)');
     }
-    const ledger = ledgerFile ? new PeopleLedger(ledgerFile, Number(arg('max-people', 10))) : null;
+    const maxPeople = arg('max-people', '10');
+    const ledger = ledgerFile ? new PeopleLedger(ledgerFile, maxPeople === 'none' ? Infinity : Number(maxPeople)) : null;
+    if (!local) {
+        holdPlayLock(path.join(path.dirname(path.resolve(ledgerFile)), 'playing.pid'));
+    }
     const decks = JSON.parse(fs.readFileSync(arg('decks', path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json')), 'utf8'));
     const name = arg('deck');
     const deck = checkDeck(decks.find((d) => d.metadata?.name === name) ?? (() => {
@@ -322,4 +380,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { queueOnce, runLoop, checkDeck, KNOWN_ERRORS, MIN_GAP_S };
+module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, KNOWN_ERRORS, MIN_GAP_S };
