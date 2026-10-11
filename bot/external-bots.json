@@ -15,5 +15,6 @@
     "rust-learned": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--name", "rust-learned"], "stderr": "ignore" },
     "rust-learned-world": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--world", "1", "--name", "rust-learned-world"], "stderr": "ignore" },
     "rust-learned-heur": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--heur", "1", "--name", "rust-learned-heur"], "stderr": "ignore" },
-    "rust-learned-explore": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--temp", "0.3", "--epsilon", "0.05", "--name", "rust-learned-explore"], "stderr": "ignore" }
+    "rust-learned-explore": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--temp", "0.3", "--epsilon", "0.05", "--name", "rust-learned-explore"], "stderr": "ignore" },
+    "rust-learned-bc": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/bc-g2.safetensors", "--prior", "100", "--prior-all", "--name", "rust-learned-bc"], "stderr": "ignore" }
 }
