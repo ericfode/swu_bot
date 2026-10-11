@@ -8,6 +8,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 
 OWNER = "JEPA deck building and drafting"
 
@@ -61,7 +62,7 @@ def main():
     if b:
         g, pr = b["groups"], b["paired"]
         order = sorted(g.items(), key=lambda kv: -kv[1]["score"])
-        loops = sorted(k for k in g if k.startswith("loop") and k.endswith("-linear"))
+        loops = sorted((k for k in g if re.fullmatch(r"loop\d+-linear", k)), key=lambda k: int(k[4:-7]))
         best = loops[-1] if loops else "built-linear"
         lin = pr.get(f"{best}-minus-real")
         write(a.dash, {

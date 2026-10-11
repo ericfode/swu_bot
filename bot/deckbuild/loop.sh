@@ -15,23 +15,34 @@ FIRST=${2:-1}
 LAST=${3:-3}
 D=${DECKBUILD_DIR:-/mnt/project-files/deckbuild}
 PY=python3
-mkdir -p "$D/loop"
+mkdir -p "$D/loop" "$D/models" "$D/built" "$D/eval" "$D/draft"
+
+# wait for each given pid and fail if any of them failed (a bare `wait` always returns 0)
+wait_all() {
+    local rc=0
+    for p in "$@"; do wait "$p" || rc=$?; done
+    return "$rc"
+}
 
 if [ "$MODE" = constructed ]; then
     for r in $(seq "$FIRST" "$LAST"); do
         runs="$D/exp1-c-clock $D/data/gen1 $(ls -d "$D"/eval/con1-*)"
         for k in $(seq 1 $((r - 1))); do runs="$runs $D/eval/loop$k"; done
         echo "round $r: training on $runs"
+        pids=()
         for m in linear sup; do
             $PY bot/deckbuild/deck_jepa.py --runs $runs --mode $m --steps 2000 --batch 512 \
                 --out "$D/models/loop$r-$m.npz" > "$D/loop/train-$r-$m.log" 2>&1 &
+            pids+=($!)
         done
-        wait
+        wait_all "${pids[@]}"
+        pids=()
         for m in linear sup; do
             $PY bot/deckbuild/build.py --model "$D/models/loop$r-$m.npz" --starts "$D/starts/stat.json" --random-starts 1 \
                 --seed "$r" --tag "loop$r-$m" --out "$D/built/loop$r-$m.json" > "$D/loop/build-$r-$m.log" 2>&1 &
+            pids+=($!)
         done
-        wait
+        wait_all "${pids[@]}"
         node bot/deckbuild/field-eval.js --candidates "$D/built/loop$r-linear.json,$D/built/loop$r-sup.json" \
             --out "$D/eval/loop$r" --workers 3 > "$D/loop/eval-$r.log" 2>&1
         $PY bot/deckbuild/report.py "$D/eval/con1-a" "$D"/eval/loop* | tee "$D/loop/report-$r.txt"
