@@ -48,7 +48,9 @@ export interface GameViewerProps {
 /** The whole replay experience in one component: Holotable's game page and every embed (dashboard, analysis pages) use it. */
 export function GameViewer({ game, live = false, startStep = 0, evals = null, lens = null, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control }: GameViewerProps) {
     const last = game.steps.length - 1;
-    const [step, setStep] = useState(() => (live && !startStep ? last : Math.min(startStep, last)));
+    const [stepState, setStep] = useState(() => (live && !startStep ? last : Math.min(startStep, last)));
+    // a live file can be rewritten with fewer steps (a re-run into the same folder): never read past the end
+    const step = Math.max(0, Math.min(stepState, last));
     const [playing, setPlaying] = useState(false);
     const [follow, setFollow] = useState(live && !startStep);
     const [focus, setFocus] = useState<Focus | null>(null);
