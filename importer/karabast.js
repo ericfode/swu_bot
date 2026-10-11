@@ -96,8 +96,10 @@ function playerSnapshot(p, seat, ups) {
 /**
  * Flatten a chat message (string, fragment array or { alert }) into parts: strings, {player: seat} and {card: name}.
  * Karabast formats each line on the server as an array of strings and short summaries of players and cards.
+ * `scrub` rewrites plain text, where a username can sit inside a string (lobby alerts, flattened SWU Forge alerts,
+ * card effects that print a player's name).
  */
-function messageParts(msg, seatOf) {
+function messageParts(msg, seatOf, scrub = (s) => s) {
     const m = isObj(msg) && 'message' in msg && !('alert' in msg) ? msg.message : msg;
     const body = isObj(m) && m.alert ? m.alert.message : m;
     const out = [];
@@ -111,14 +113,15 @@ function messageParts(msg, seatOf) {
             if (x.type === 'player' || x.type === 'playerChat' || (x.id != null && seatOf.has(x.id) && !x.setId)) {
                 out.push({ player: seatOf.get(x.id) ?? 'a player' });
             } else if ('name' in x) {
-                out.push({ card: String(x.name), owner: seatOf.get(x.controllerId) ?? null });
+                // a real card has a set id; a name without one may be a person (a spectator summary, an odd token)
+                out.push({ card: x.setId ? String(x.name) : scrub(String(x.name)), owner: seatOf.get(x.controllerId) ?? null });
             } else if ('message' in x) {
                 walk(x.message);
             } else if ('format' in x) {
-                out.push(String(x.format));
+                out.push(scrub(String(x.format)));
             }
         } else {
-            out.push(String(x));
+            out.push(scrub(String(x)));
         }
     };
     walk(body);
@@ -127,16 +130,51 @@ function messageParts(msg, seatOf) {
 
 const partText = (x) => (typeof x === 'string' ? x : x.player ?? x.card ?? '');
 
+/**
+ * Every name a capture shows (players, their accounts, spectators, and `extra` from the caller, such as KaraBuddy's
+ * lobby usernames) -> a function replacing each whole-word match in a string with the seat, or 'a spectator'.
+ */
+function nameScrubber(frames, seatOf, extra = []) {
+    const as = new Map();
+    const add = (name, label) => {
+        if (typeof name === 'string' && name.trim() && !as.has(name)) {
+            as.set(name, label);
+        }
+    };
+    for (const f of frames) {
+        for (const [id, p] of Object.entries(f.state.players)) {
+            add(p?.name, seatOf.get(id) ?? 'a player');
+            add(p?.user?.username, seatOf.get(id) ?? 'a player');
+        }
+    }
+    for (const f of frames) {
+        const sp = f.state.spectators;
+        for (const s of Array.isArray(sp) ? sp : isObj(sp) ? Object.values(sp) : []) {
+            add(isObj(s) ? s.name ?? s.username : s, 'a spectator');
+        }
+    }
+    for (const x of extra) {
+        add(x.name, x.seat ?? 'a player');
+    }
+    if (!as.size) {
+        return (s) => s;
+    }
+    // one pass, longest first, so 'bob' inside 'bobby' and a seat-like name swapped with another are not rewritten twice
+    const alts = [...as.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const re = new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alts.join('|')})(?![\\p{L}\\p{N}_])`, 'gu');
+    return (s) => s.replace(re, (n) => as.get(n));
+}
+
 /** One chat line: its text (players shown as seats), the seat it starts with, and its parts. */
-function parseMessage(msg, seatOf) {
-    const parts = messageParts(msg, seatOf);
+function parseMessage(msg, seatOf, scrub) {
+    const parts = messageParts(msg, seatOf, scrub);
     const text = parts.map(partText).join('').replace(/\s+/g, ' ').trim();
     const seat = parts[0]?.player && parts[0].player !== 'a player' ? parts[0].player : null;
     return { text, seat, parts };
 }
 
 /** Kept for callers that only want text. */
-const messageText = (msg, seatOf) => parseMessage(msg, seatOf).text;
+const messageText = (msg, seatOf, scrub) => parseMessage(msg, seatOf, scrub).text;
 
 const isPlayerChat = (msg) => {
     const m = isObj(msg) && 'message' in msg ? msg.message : msg;
@@ -145,11 +183,15 @@ const isPlayerChat = (msg) => {
 
 const TOP = { prompt: 'actionWindow|-', title: 'Choose an action' };
 
+/** Lines that start with a player but are no decision: clock warnings, undo requests and replies, connections. */
+const META = /^(has \d+ seconds of main time remaining|has requested to undo|has denied the undo request|has rolled back to|could not pay the cost for|has (dis|re)connected|has failed to connect|wants to continue)/;
+const isMetaLine = (line) => META.test(line.parts.slice(1).map(partText).join('').trim());
+
 /**
  * Map a log line to recorder-style decisions so tools written for bot replays (the viewer kit's action classes, the
  * LLM log window) read it the same way. A bot replay records each click: an attack is the attacker, then the target
  * ("Choose a target for attack"); a deploy is the leader, then "Deploy <leader>". Returns 1-2 decisions, or null for
- * lines that are not a player's decision (triggers, damage, draws).
+ * lines that are not a player's decision (damage, draws, other effects).
  */
 function decisionsFromLine(line, baseNameOf) {
     if (!line.seat) {
@@ -204,7 +246,12 @@ function decisionsFromLine(line, baseNameOf) {
                 { prompt: '-|-', title: 'Choose an ability', action: { kind: 'button', label: `Deploy ${cards[0].card}` } }
             ];
         }
-        return [{ ...TOP, action: { kind: 'card', label: cards[0].card } }];
+        // An action ability logs its cost (', exhausting X', ', paying N resources'). Without one it is a triggered
+        // ability (When Played, On Attack, ...): a choice inside an action, not a new one.
+        if (/^(?:'s gained ability from [^,]*)?,/.test(textAfter(2))) {
+            return [{ ...TOP, action: { kind: 'card', label: cards[0].card } }];
+        }
+        return [{ prompt: '-|-', title: 'Resolve an ability', action: { kind: 'card', label: cards[0].card } }];
     }
     return null;
 }
@@ -253,23 +300,61 @@ function compactSnapshot(gs, seatIds, round) {
     return { round, phase: gs.phase ?? null, initiative: init, players };
 }
 
+const isGameFrame = (f) => isObj(f?.state) && isObj(f.state.players) && Object.keys(f.state.players).length >= 2;
+
+/**
+ * Split a capture into games. A rematch or the next game of a best-of-three is a new Game on the same socket, so a
+ * socket dump or a JSON-lines file can hold several: a new game starts where the game id changes, where the chat log
+ * starts over (each Game has its own), or where a finished game is followed by a setup phase.
+ */
+function splitGames(frames) {
+    const games = [[]];
+    let prev = null;
+    for (const f of frames) {
+        if (isGameFrame(f)) {
+            const gs = f.state;
+            const fresh = prev && (
+                (gs.id != null && prev.id != null && gs.id !== prev.id) ||
+                (typeof gs.totalMessages === 'number' && typeof prev.totalMessages === 'number' && gs.totalMessages < prev.totalMessages) ||
+                (prev.winners?.length > 0 && !gs.winners?.length && gs.phase === 'setup'));
+            if (fresh) {
+                games.push([]);
+            }
+            prev = gs;
+        }
+        games[games.length - 1].push(f);
+    }
+    return games;
+}
+
 /**
  * Walk the frames once: per frame, the compact snapshot, the new log lines and the action-phase player.
- * Shared by convertFrames and importer/verify.js.
+ * Shared by convertFrames and importer/verify.js. One game: see splitGames for captures holding several.
+ *
+ * Usernames are replaced in log text by seats ('a spectator' for spectators); opts.hideNames adds names to replace,
+ * as [{name, seat?}], and opts.decks (KaraBuddy's lobby lists, keyed by player id) adds their usernames.
  */
 function readFrames(frames, opts = {}) {
-    frames = frames.filter((f) => isObj(f?.state) && isObj(f.state.players) && Object.keys(f.state.players).length >= 2);
+    frames = frames.filter(isGameFrame);
     if (!frames.length) {
         throw new Error('no game-state frames with two players');
     }
     const seatIds = assignSeats(frames, opts.seats);
     const seatOf = new Map(Object.entries(seatIds).map(([seat, id]) => [id, seat]));
+    const extraNames = [
+        ...Object.entries(isObj(opts.decks) ? opts.decks : {}).map(([id, d]) => ({ name: d?.username, seat: seatOf.get(id) })),
+        ...(opts.hideNames ?? []).map((x) => (typeof x === 'string' ? { name: x } : x))
+    ];
+    const scrub = nameScrubber(frames, seatOf, extraNames);
     const items = [];
     const views = new Set();
-    // The engine counts setup as round 0 and announces 'Round: N - <Phase> Phase' when a phase starts. Alerts are only
-    // trusted when the frame's phase changes: undo and rollback search leave stale alerts in the chat log.
+    // The engine counts setup as round 0 and announces 'Round: N - <Phase> Phase' when a phase starts. Alerts are
+    // trusted when the frame's phase changes: undo and rollback search leave stale alerts in the chat log. Within a
+    // phase, an alert is taken only when it moves the round back or comes with a rollback (a rollback to the start of
+    // a phase announces it again), or when the phase started without one (an undo, or SWU Forge chat landing late).
     let round = 0;
     let prevPhase;
+    let unannounced = false;
     const lastAlert = {}; // phase -> round of the latest alert for it
     let lastMsgEnd = -1; // index of the last message consumed (when frames carry messageOffset)
     let prevNewMessages = null;
@@ -296,8 +381,9 @@ function readFrames(frames, opts = {}) {
                 chatDropped++;
                 continue;
             }
-            const line = parseMessage(m, seatOf);
-            const r = line.text.match(/^Round:\s*(\d+)\s*-\s*(?:Additional )?(\w+) Phase/i);
+            const line = parseMessage(m, seatOf, scrub);
+            // read before names are replaced, in case someone is called 'Action'
+            const r = messageText(m, seatOf).match(/^Round:\s*(\d+)\s*-\s*(?:Additional )?(\w+) Phase/i);
             if (r) {
                 alerts.push({ round: Number(r[1]), phase: r[2].toLowerCase() });
             }
@@ -305,8 +391,9 @@ function readFrames(frames, opts = {}) {
                 lines.push(line);
             }
         }
+        const here = alerts.filter((a) => a.phase === gs.phase).pop();
         if (gs.phase !== prevPhase) {
-            const here = alerts.filter((a) => a.phase === gs.phase).pop();
+            unannounced = !here && gs.phase !== 'setup';
             if (here) {
                 round = here.round;
             } else if (gs.phase === 'setup') {
@@ -321,6 +408,9 @@ function readFrames(frames, opts = {}) {
                 round = Math.max(round, 1);
             }
             prevPhase = gs.phase;
+        } else if (here && (unannounced || here.round < round || lines.some((l) => /\brolled back to\b/.test(l.text)))) {
+            round = here.round;
+            unannounced = false;
         }
         for (const a of alerts) {
             lastAlert[a.phase] = a.round;
@@ -331,7 +421,15 @@ function readFrames(frames, opts = {}) {
         }
         const state = compactSnapshot(gs, seatIds, round);
         const active = Object.entries(seatIds).find(([, id]) => gs.players[id]?.isActionPhaseActivePlayer)?.[0] ?? null;
-        items.push({ t: f.t ?? null, state, key: JSON.stringify(state), lines, active, winners: gs.winners ?? [] });
+        // per seat whose prompt the capture shows (the viewer's own, both when merged): 'waiting' for the other, or 'open'
+        const prompt = {};
+        for (const [seat, id] of Object.entries(seatIds)) {
+            const title = gs.players[id]?.promptState?.menuTitle;
+            if (title) {
+                prompt[seat] = /^Waiting for opponent/.test(title) ? 'waiting' : 'open';
+            }
+        }
+        items.push({ t: f.t ?? null, state, key: JSON.stringify(state), lines, active, prompt, winners: gs.winners ?? [] });
     }
     const nameToSeat = new Map();
     for (const f of frames) {
@@ -354,6 +452,7 @@ function readFrames(frames, opts = {}) {
  * @param {{p1: string, p2: string}} [opts.seats] player ids for p1 and p2
  * @param {object} [opts.source] provenance written to header.source (kind, site, id, url, ...)
  * @param {string[]} [opts.names] display names for p1, p2 (default: the seat names; Karabast usernames are dropped)
+ * @param {Array<string|{name: string, seat?: string}>} [opts.hideNames] more usernames to replace in log text
  * @param {number} [opts.seed] header.seed (default 0: a human game has no replayable seed)
  * @returns {{events: object[], report: object}}
  */
@@ -398,7 +497,7 @@ function convertFrames(frames, opts = {}) {
     for (let i = 0; i < items.length; i++) {
         const { state, key, lines, active } = items[i];
         report.messages += lines.length;
-        const actionLines = lines.filter((l) => l.seat);
+        const actionLines = lines.filter((l) => l.seat && !isMetaLine(l));
         if (i === 0) {
             events.push({ t: 'step', n: 0, label: 'Game start', state, ...(lines.length ? { log: lines.map((l) => l.text) } : {}) });
             prevKey = key;
@@ -413,33 +512,35 @@ function convertFrames(frames, opts = {}) {
         // the action-phase player before this frame, else the only side whose board changed.
         const before = JSON.parse(prevKey);
         const baseNameOf = (seat) => state.players[seat]?.base?.n ?? `${seat} base`;
-        let decided = null;
-        for (const l of actionLines) {
-            const d = decisionsFromLine(l, baseNameOf);
-            if (d) {
-                if (decided) {
-                    report.multiDecisionFrames = (report.multiDecisionFrames ?? 0) + 1;
-                    break;
-                }
-                decided = { seat: l.seat, steps: d };
-            }
+        const found = actionLines.map((l) => ({ seat: l.seat, steps: decisionsFromLine(l, baseNameOf) })).filter((x) => x.steps);
+        // The resource step logs both players' choices when the last one confirms (the first confirm changes nothing
+        // and is skipped): one decision per player. Whoever was already waiting the frame before confirmed first.
+        const isResource = (x) => x.steps[0].prompt === 'resource|-';
+        const order = (seat) => ({ waiting: 0, open: 2 })[items[i - 1].prompt[seat]] ?? 1;
+        const decided = found[0] && isResource(found[0])
+            ? found.filter((x, k) => isResource(x) && found.findIndex((y) => y.seat === x.seat) === k).sort((a, b) => order(a.seat) - order(b.seat))
+            : found.slice(0, 1);
+        if (found.length > decided.length) {
+            report.multiDecisionFrames = (report.multiDecisionFrames ?? 0) + 1;
         }
-        let pid = decided?.seat ?? actionLines[0]?.seat ?? prevActive ?? null;
+        let pid = actionLines[0]?.seat ?? lines.find((l) => l.seat)?.seat ?? prevActive ?? null;
         if (!pid) {
             const changed = ['p1', 'p2'].filter((x) => JSON.stringify(before.players[x]) !== JSON.stringify(state.players[x]));
             pid = changed.length === 1 ? changed[0] : 'p1';
             report.guessedActor++;
         }
-        if (!decided && actionLines.length) {
+        if (!decided.length && actionLines.length) {
             report.unparsed++;
         }
         const log = lines.length ? { log: lines.map((l) => l.text) } : {};
-        const subs = decided?.steps ?? [{ prompt: 'log|-', title: null, action: { kind: 'button', label: lines[0]?.text ?? 'Board update' } }];
+        const subs = decided.length
+            ? decided.flatMap((x) => x.steps.map((d) => ({ ...d, pid: x.seat })))
+            : [{ pid, prompt: 'log|-', title: null, action: { kind: 'button', label: lines[0]?.text ?? 'Board update' } }];
         subs.forEach((d, k) => {
             const lastSub = k === subs.length - 1;
             n++;
             // a two-click decision (attacker, then target) shows the old board after the first click, as bot replays do
-            events.push({ t: 'step', n, pid, prompt: d.prompt, title: d.title ?? null, action: d.action, legal: 1, ...(lastSub ? log : {}), state: lastSub ? state : before });
+            events.push({ t: 'step', n, pid: d.pid, prompt: d.prompt, title: d.title ?? null, action: d.action, legal: 1, ...(lastSub ? log : {}), state: lastSub ? state : before });
         });
         prevKey = key;
         prevActive = active ?? prevActive;
@@ -448,18 +549,26 @@ function convertFrames(frames, opts = {}) {
     const winners = items[items.length - 1].winners.map((w) => r.nameToSeat.get(w) ?? null);
     const winner = winners.length === 2 ? 'draw' : winners[0] ?? null;
     const lastState = events[events.length - 1].state;
-    // how it ended: humans concede, leave and time out; the log says which, else the bases do
-    const allLines = items.flatMap((x) => x.lines.map((l) => l.text));
+    // How it ended: humans concede, leave and time out; the log says which, else the bases do. Only the frames up to
+    // the end count: the loser leaving the lobby, or a concede click, after a won game still adds a line.
+    let endAt = items.length - 1;
+    while (winner && endAt > 0 && items[endAt - 1].winners.length) {
+        endAt--;
+    }
+    const endLines = items.slice(0, endAt + 1).flatMap((x) => x.lines.map((l) => l.text));
     const loser = winner === 'p1' ? 'p2' : winner === 'p2' ? 'p1' : null;
+    const who = loser ?? 'p[12]';
+    const said = (re) => endLines.some((l) => re.test(l));
+    const loserBase = loser ? items[endAt].state.players[loser].base : null;
     let how = null;
-    if (allLines.some((l) => / concedes the game/.test(l))) {
-        how = 'concede';
-    } else if (allLines.some((l) => /timing out/.test(l))) {
-        how = 'timeout';
-    } else if (allLines.some((l) => / has left the game/.test(l))) {
-        how = 'left';
-    } else if (loser && lastState.players[loser].base.d >= lastState.players[loser].base.hp) {
+    if (loserBase && loserBase.d >= loserBase.hp) {
         how = 'base destroyed';
+    } else if (said(new RegExp(`^${who} concedes the game`))) {
+        how = 'concede';
+    } else if (said(new RegExp(`due to ${who} timing out`))) {
+        how = 'timeout';
+    } else if (said(new RegExp(`^${who} has left the game`))) {
+        how = 'left';
     } else if (loser) {
         how = 'conceded or left (the loser\'s base was not destroyed; no log to say which)';
     }
@@ -489,4 +598,4 @@ function convertFrames(frames, opts = {}) {
     return { events, report };
 }
 
-module.exports = { convertFrames, readFrames, compactSnapshot, decklistsBySeat, isHidden, assignSeats, parseMessage, messageText, decisionsFromLine, setCode, leadersOf, HIDDEN };
+module.exports = { convertFrames, readFrames, splitGames, nameScrubber, compactSnapshot, decklistsBySeat, isHidden, assignSeats, parseMessage, messageText, decisionsFromLine, setCode, leadersOf, HIDDEN };
