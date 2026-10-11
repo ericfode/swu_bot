@@ -214,7 +214,8 @@ to finish before the next game is done. A failure here changes no result; the pr
 - **A key hides the hidden cards.** The referee derives every random stream (decks, engine shuffles, `hello.seed`,
   simulations) from the game seed and a secret key (`playGame({ key })`). `bot/tournament.js` draws a key per run and
   writes each game's own key (derived from the run key) to its index entry and replay when the game ends, so every
-  game can be played again. Without a key the streams follow from the seed alone: that suits development and
+  game can be played again. `bot/ladder.js` plays each seed from both seats with the same key, so it writes the key
+  once both games (in a gauntlet, every game on that seed) have ended. Without a key the streams follow from the seed alone: that suits development and
   `npm run gate`, but a bot can find a small seed from `hello.seed` or the deck lists and rebuild the hidden cards.
   Use a key whenever a bot is not trusted.
 - **Programs in other languages need a sandbox to be held to these rules.** A program on the referee's machine, as the
@@ -241,6 +242,8 @@ in `node bot/tournament.js --bots ...` like any other bot.
 | `stderr` | `inherit` | `inherit` shows the program's stderr, `ignore` drops it. |
 | `timeoutMs`, `startTimeoutMs` | 10000, 30000 | This bot's `ms` for `decide`/`over` and for `hello`. A game's own `limits` (`playGame`) override them. |
 | `lang` | none | Language label for replays and the dashboard (`rust`, `python`, ...). |
+| `stateful` | `false` | `true` when the program learns from game to game (after `over`): `bot/ladder.js --resume` then plays the run again from the start, as a resumed run would start the program fresh. |
+| `inputs` | none | Other files or folders the program reads (from `cwd`), so `bot/ladder.js --resume` notices when they change. Files named in `cmd`/`args`, and the files next to one outside the repo, already count. |
 
 A tournament keeps one process per bot for the whole run (two when a game needs the same bot in both seats). From
 JavaScript: `new StdioClient(name, options)` from `bot/stdio.js`, passed to `playGame` like any bot.

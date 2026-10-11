@@ -13,6 +13,7 @@ analysis/node_modules/
 analysis/.cache/
 analysis/out/
 results/
+arena-home/
 data/
 __pycache__/
 .perch/*
