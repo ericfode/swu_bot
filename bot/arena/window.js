@@ -513,11 +513,14 @@ function createWindow(opts = {}) {
             need(id, 'bad_request', 'use /api/docs/<collection>/<id>');
             if (req.method === 'PUT') {
                 const body = (await readBody(req, MAX_DOC)).toString('utf8');
+                let doc;
                 try {
-                    JSON.parse(body);
+                    doc = JSON.parse(body);
                 } catch {
                     throw new WindowError('bad_request', 'body is not JSON');
                 }
+                // the loaders name a run by the id inside its index, so a feed's run must carry its own name there too
+                need(who.role !== 'feed' || ns !== 'runs' || doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
                 store.putDoc(ns, id, body);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
             }

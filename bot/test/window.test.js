@@ -215,8 +215,10 @@ test('a feed token writes only what carries its name, and reads like a friend', 
     const w = makeWindow('w5');
     const { go, close } = await serve(w);
     try {
-        const doc = (ns, id, method = 'PUT') => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body: '{"games":[]}' });
+        const doc = (ns, id, method = 'PUT', body = JSON.stringify({ id, games: [] })) => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body });
         assert.strictEqual((await doc('runs', 'karabast')).status, 200);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"arena-t1-r1","games":[]}')).status, 400, 'the run inside must carry the same name');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"games":[]}')).status, 400);
         assert.strictEqual((await doc('lens', 'karabast-g1')).status, 200);
         assert.strictEqual((await doc('runs', 'karabastx')).status, 403, 'a name that only starts the same is not its own');
         assert.strictEqual((await doc('runs', 'arena-t1-r1')).status, 403);

@@ -55,7 +55,7 @@ A machine outside the project, such as the Karabast Sprite that streams c-clock'
 token: the Fly secret `ARENA_FEED_TOKEN_<NAME>` (for example `ARENA_FEED_TOKEN_KARABAST`), stored on that machine and
 never in a thread. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
 
-- `PUT /api/docs/runs/karabast`: the game list, in the tournament index shape (`TournamentIndex`,
+- `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
   viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
   running games; a finished one has `outcome: "won"` and `winnerSeat`. The app lists runs named `karabast*` as games
   against people, keeps them out of bot records and ratings, and calls the human seat whatever the feed names it.
