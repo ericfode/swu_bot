@@ -494,6 +494,22 @@ test('the queue loop keeps going after a wait with no match, and stops after max
     assert.strictEqual(new PeopleLedger(path.join(out, 'people.json'), 10).count, 6);
 });
 
+test('the queue loop counts a game with no result as a failure and says why it stopped', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const results = ['none', 'loss', 'none'];
+    const play = async (g, hooks) => {
+        hooks.onQueued();
+        return { result: results[g], reason: results[g] === 'none' ? 'socket closed: transport close' : 'game over' };
+    };
+    const end = await runLoop({ games: 3, gapS: 25, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([end.played, end.lost, end.errors, end.ok], [1, 1, 2, false]);
+    assert.strictEqual(end.reason, 'the last game failed: socket closed: transport close');
+    // a failure earlier in the run does not stick to a run that ends well
+    const ok = await runLoop({ games: 2, gapS: 25, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([ok.ok, ok.reason], [true, 'played the 2 game(s) asked for']);
+});
+
 test('the queue loop stops at the people cap and on the stop file', async () => {
     const { runLoop } = require('../karabast/queue');
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));

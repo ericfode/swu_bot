@@ -206,7 +206,8 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
     // a reader tells a run that died from one waiting in the queue by this heartbeat
     const beat = setInterval(() => writeStatus(out, status), 30000);
     beat.unref?.();
-    let reason = `played the ${games} game(s) asked for`;
+    let reason = null; // set by whatever stops the loop early
+    let lastFailure = null;
     let failures = 0;
     let ok = true;
     try {
@@ -258,7 +259,9 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
             if (out) {
                 fs.appendFileSync(path.join(out, 'games.jsonl'), JSON.stringify(row) + '\n');
             }
-            if (row.result === 'error') {
+            // 'none' is a game that ended with no result (the socket closed mid-game): a failure, never a game played
+            const failed = row.result === 'error' || row.result === 'none';
+            if (failed) {
                 tally.errors++;
                 failures++;
                 log(`game ${g + 1} failed: ${row.reason}`);
@@ -270,8 +273,9 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
                     tally.lost += row.result === 'loss' ? 1 : 0;
                 }
             }
-            // a run that ends on a failed game reports it (exit code 1), even below maxErrors
-            ok = row.result !== 'error';
+            // a run that ends on a failed game reports it (exit code 1 and the reason), even below maxErrors
+            ok = !failed;
+            lastFailure = failed ? row.reason : null;
             if (ledgerError) {
                 reason = `the people ledger refused the opponent: ${ledgerError.message}`;
                 ok = false;
@@ -289,6 +293,7 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
     } finally {
         clearInterval(beat);
     }
+    reason ??= lastFailure ? `the last game failed: ${lastFailure}` : `played the ${games} game(s) asked for`;
     log(`stopping: ${reason}`);
     set({ state: 'stopped', since: new Date().toISOString(), file: null, reason, ok });
     return status;
