@@ -86,8 +86,11 @@ people. Before any live run:
   WebSocket go around the proxy and fail; `socket.js` refuses a non-local host without it.
 - A run against a non-local host needs `--allow-host <host>` and `--ledger <file>`. The ledger stops a run before a
   game that would pass `--max-people` (default 10). `--stop-file <file>` stops it before the next game.
-- Engine errors on karabast.net are reported to its developers (Lobby `handleError`), so `queue.js` refuses decks with
-  cards that are known to throw (Barriss Offee, ASH_044).
+- Karabast logs every engine error and sends severe ones to its developers' Discord (Lobby `handleError`), so
+  `queue.js` refuses decks with cards that are known to throw (Barriss Offee, ASH_044).
 - Spectating needs a login (anonymous spectators are a development-only setting): a session token in the variable
-  named by `--token-env`. Spectators are named in the game log and shown to both players.
-- Public games and quick match have a 20 s per-prompt timer with a 120 s bank. c-clock answers in under 10 ms.
+  named by `--token-env`. The token is the `jwtToken` field of `https://karabast.net/api/auth/session` while logged in
+  (valid about two months); keep it in an environment secret, never in a file. Spectators are named in the game log
+  and shown to both players.
+- Public games and quick match have a 20 s per-prompt timer with a 120 s bank. c-clock's slowest answer in the local
+  games was 33 ms.

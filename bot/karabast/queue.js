@@ -16,8 +16,8 @@
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
- * - Decks with cards that are known to throw engine errors are refused, since each error is reported to Karabast's
- *   developers (KNOWN_ERRORS).
+ * - Decks with cards that are known to throw engine errors are refused, since Karabast logs each error and sends
+ *   severe ones to its developers (KNOWN_ERRORS).
  *
  * Each game's frames as our seat saw them are saved scrubbed (frame.js makeScrubber) to <out>/frames/<hash>.jsonl,
  * for `node importer/import.js <out>/frames`, and a result line is appended to <out>/games.jsonl.
