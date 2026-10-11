@@ -7,7 +7,7 @@
  *   - KaraBuddy replay file, version 1 (raw gamestate per event) or 2 ({full} / {patch} per event)
  *   - KaraBuddy-style bare event list: { events: [{full} | {patch}] } (as in its karabast-sim fixture)
  *   - a JSON array of gamestate objects, or JSON Lines with one gamestate per line
- *   - socket.io frames as saved from browser devtools: lines like 42["gamestate",{...}]
+ *   - socket.io frames as saved from browser devtools: lines like 42["gamestate",{...}], or a devtools HAR export
  *   - SWU Forge Battle Log "PersistedTimeline" v2/v3: { v, base, steps: [{timestamp, patch}], chat? }
  *   - importer/capture.js output: JSON Lines {t:"gamestate", view, state}
  */
@@ -92,7 +92,37 @@ function forgeCard(c) {
     };
 }
 
-function forgeState(s) {
+/**
+ * Forge cards keep neither zone nor onStartingSide. A leader's type changes when it deploys ('leader' ->
+ * 'nonTokenLeaderUnit', or 'leaderUpgrade' for a pilot), and a double-sided leader shows its other title once flipped
+ * (Chancellor Palpatine -> Darth Sidious), so rebuild both from those: the arena once deployed, else the base.
+ */
+function forgeLeader(c, piles, startTitle) {
+    const out = forgeCard(c);
+    if (isObj(out) && out.zone == null && out.onStartingSide == null && out.type) {
+        const arena = ['groundArena', 'spaceArena'].find((z) => out.uuid != null && (piles[z] ?? []).some((x) => x?.uuid === out.uuid));
+        out.zone = out.type === 'leader' ? 'base' : arena ?? 'groundArena';
+        if (startTitle.has(out.uuid) && startTitle.get(out.uuid) !== out.name) {
+            out.onStartingSide = false;
+        }
+    }
+    return out;
+}
+
+/** Leader uuid -> title in a state (the timeline's base: the side every leader starts on). */
+function leaderTitles(s) {
+    const out = new Map();
+    for (const p of Object.values(s?.players ?? {})) {
+        for (const l of [p?.leader, ...(Array.isArray(p?.leaders) ? p.leaders : [])]) {
+            if (l?.uuid != null && l.name) {
+                out.set(l.uuid, l.name);
+            }
+        }
+    }
+    return out;
+}
+
+function forgeState(s, startTitle) {
     const players = {};
     for (const [pid, p] of Object.entries(s.players ?? {})) {
         const piles = {};
@@ -101,19 +131,32 @@ function forgeState(s) {
         }
         players[pid] = {
             ...p, cardPiles: piles,
-            ...(p.leader ? { leader: forgeCard(p.leader) } : {}),
-            ...(Array.isArray(p.leaders) ? { leaders: p.leaders.map(forgeCard) } : {}),
+            ...(p.leader ? { leader: forgeLeader(p.leader, piles, startTitle) } : {}),
+            ...(Array.isArray(p.leaders) ? { leaders: p.leaders.map((l) => forgeLeader(l, piles, startTitle)) } : {}),
             ...(p.base ? { base: forgeCard(p.base) } : {})
         };
     }
     return { ...s, id: s.gameId ?? s.id, players };
 }
 
-/** v3 chat tokens back to Karabast message fragments; players are matched by name, as the tokens carry no id. */
-function forgeMessage(entry, idByName) {
+/**
+ * Karabast player chat is [{type:'playerChat', name, id}, ' text']. Forge tokens have no chat kind, so writers turn the
+ * speaker into a card token with no card id (KaraBuddy's converter), or could make it a player token without the uuid
+ * every real player token has (only trusted when the timeline's other player tokens carry uuids).
+ */
+const isChatSpeaker = (t, playerUuids) => (t?.kind === 'card' && !t.cardId && !t.setId) || (t?.kind === 'player' && t.uuid == null && playerUuids);
+
+/**
+ * v3 chat tokens back to Karabast message fragments; players are matched by name, as the tokens carry no id. A chat
+ * line becomes a bare playerChat marker, so the converter counts and drops it without ever seeing its text or speaker.
+ */
+function forgeMessage(entry, idByName, playerUuids) {
     const toks = entry.tokens ?? [];
     if (toks.length === 1 && toks[0]?.kind === 'alert') {
         return { date: entry.ts, message: { alert: { type: 'notification', message: [toks[0].text] } } };
+    }
+    if (isChatSpeaker(toks[0], playerUuids)) {
+        return { date: entry.ts, message: [{ type: 'playerChat' }] };
     }
     return {
         date: entry.ts,
@@ -136,7 +179,19 @@ function forgeMessage(entry, idByName) {
     };
 }
 
-/** Median of (alert time - stamp of the frame where that phase starts), pairing alerts and phase changes in order. */
+// ms of push-latency variation allowed when matching server-stamped chat to browser-stamped frames
+const LATENCY_SLACK = 1000;
+// alerts the engine itself raises that the converter reads (Phase.ts round alerts, Game.ts timeout)
+const GAME_ALERT = /^Round:\s*\d+\s*-|^Game ended due to .* timing out/;
+
+/**
+ * Offset between the chat clock and the frame stamps, from (alert time - stamp of a frame where that phase starts).
+ * Every alert is paired with every change to its phase, so an alert with no phase change of its own (an undo across a
+ * phase boundary, a rollback to the start of a phase) only adds scattered values instead of shifting every later pair.
+ * The densest 2 * LATENCY_SLACK window gives a rough offset; each alert's value nearest to it then gives the offset
+ * (median) and `early`, how much sooner than that the fastest of those pushes arrived: the slack an alert needs to stay
+ * in its frame.
+ */
 function chatClockOffset(chat, states, stamps) {
     const alerts = chat
         .map((e) => ({ ts: e.ts, m: /Round:\s*\d+\s*-\s*(?:Additional )?(\w+) Phase/i.exec(e.tokens?.[0]?.text ?? '') }))
@@ -148,22 +203,27 @@ function chatClockOffset(chat, states, stamps) {
             changes.push({ i, phase: states[i].phase });
         }
     }
-    const deltas = [];
-    let j = 0;
-    for (const a of alerts) {
-        while (j < changes.length && changes[j].phase !== a.phase) {
-            j++;
-        }
-        if (j < changes.length) {
-            deltas.push(a.ts - stamps[changes[j].i]);
-            j++;
-        }
-    }
+    const pairs = alerts.map((a) => changes.filter((ch) => ch.phase === a.phase).map((ch) => a.ts - stamps[ch.i]));
+    const deltas = pairs.flat().sort((x, y) => x - y);
     if (!deltas.length) {
-        return 0;
+        return { offset: 0, early: 0 };
     }
-    deltas.sort((x, y) => x - y);
-    return deltas[Math.floor(deltas.length / 2)];
+    let best = { from: 0, to: 0 };
+    for (let from = 0, to = 0; to < deltas.length; to++) {
+        while (deltas[to] - deltas[from] > 2 * LATENCY_SLACK) {
+            from++;
+        }
+        if (to + 1 - from > best.to - best.from) {
+            best = { from, to: to + 1 };
+        }
+    }
+    const rough = deltas[(best.from + best.to) >> 1];
+    const near = pairs
+        .map((ds) => ds.reduce((m, d) => (Math.abs(d - rough) < Math.abs(m - rough) ? d : m), Infinity))
+        .filter((d) => Math.abs(d - rough) <= LATENCY_SLACK)
+        .sort((x, y) => x - y);
+    const offset = near[near.length >> 1];
+    return { offset, early: near[near.length - 1] - offset };
 }
 
 function readPersistedTimeline(tl) {
@@ -183,17 +243,33 @@ function readPersistedTimeline(tl) {
     }
     // Chat is one timeline stamped by the server; frames are stamped by the recording browser. Estimate the clock
     // offset from the 'Round: N - <Phase> Phase' alerts, which land in the frame where the phase changes, then give
-    // each entry to the first frame stamped at or after it (Karabast sends a line with the push that follows it).
+    // each entry to the first frame stamped at or after it (Karabast sends a line with the push that follows it). The
+    // slack for latency is half the gap to the next frame, but at least what the alerts showed: an alert goes out in
+    // its own push (GameChat.addAlert), and the push that ends the input follows within milliseconds.
     const chat = [...(tl.chat ?? [])].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-    const offset = chatClockOffset(chat, states, stamps);
+    const { offset, early } = chatClockOffset(chat, states, stamps);
+    const startTitle = leaderTitles(tl.base);
+    const playerUuids = chat.some((e) => e.tokens?.some((t) => t?.kind === 'player' && t.uuid != null));
     let c = 0;
     states.forEach((s, i) => {
         const msgs = [];
-        const last = i === states.length - 1;
-        while (c < chat.length && (last || (stamps[i] != null && (chat[c].ts ?? 0) - offset <= stamps[i] + 50))) {
-            msgs.push(forgeMessage(chat[c++], idByName));
+        if (stamps[i] != null) {
+            const slack = Math.min(LATENCY_SLACK, Math.max(early, stamps[i + 1] != null ? (stamps[i + 1] - stamps[i]) / 2 : Infinity));
+            while (c < chat.length && (chat[c].ts ?? 0) - offset <= stamps[i] + slack) {
+                msgs.push(forgeMessage(chat[c++], idByName, playerUuids));
+            }
         }
-        frames.push({ t: stamps[i], state: { ...forgeState(s), newMessages: msgs } });
+        if (i === states.length - 1) {
+            // later entries came with pushes the capture does not have (chat, a rematch request, a player leaving the
+            // lobby); keep only the game's own alerts that say how it ended or where a round starts
+            for (; c < chat.length; c++) {
+                const t = chat[c].tokens;
+                if (t?.length === 1 && t[0]?.kind === 'alert' && GAME_ALERT.test(t[0].text ?? '')) {
+                    msgs.push(forgeMessage(chat[c], idByName, playerUuids));
+                }
+            }
+        }
+        frames.push({ t: stamps[i], state: { ...forgeState(s, startTitle), newMessages: msgs } });
     });
     return { frames, meta: { reader: `swuforge-timeline-v${tl.v}`, startedAt: tl.baseCapturedAt ?? null } };
 }
@@ -228,6 +304,22 @@ function parseSocketIoFrame(line) {
     }
 }
 
+/** The gamestate objects in one socket.io text message (engine.io may pack several, separated by \x1e). */
+const socketIoStates = (text) => text.split('\x1e').map(parseSocketIoFrame).filter((f) => f?.event === 'gamestate' && isObj(f.args[0])).map((f) => f.args[0]);
+
+/** A browser devtools HAR export keeps WebSocket frames as entries[]._webSocketMessages[{type, time (s), data}]. */
+function readHar(har) {
+    const frames = [];
+    for (const e of har.log.entries) {
+        for (const m of Array.isArray(e?._webSocketMessages) ? e._webSocketMessages : []) {
+            for (const state of typeof m?.data === 'string' ? socketIoStates(m.data) : []) {
+                frames.push({ t: Number.isFinite(m.time) ? Math.round(m.time * 1000) : null, state });
+            }
+        }
+    }
+    return frames.length ? { frames, meta: { reader: 'har' } } : null;
+}
+
 function readText(text) {
     const trimmed = text.trim();
     // whole-file JSON first
@@ -239,6 +331,12 @@ function readText(text) {
             }
             if (isObj(v) && isObj(v.base) && Array.isArray(v.steps)) {
                 return readPersistedTimeline(v);
+            }
+            if (isObj(v?.log) && Array.isArray(v.log.entries)) {
+                const har = readHar(v);
+                if (har) {
+                    return har;
+                }
             }
             if (Array.isArray(v) && v.some(isGamestate)) {
                 return { frames: v.filter(isGamestate).map((state) => ({ t: null, state })), meta: { reader: 'gamestate-array' } };
@@ -279,12 +377,9 @@ function readText(text) {
             reader ??= 'gamestate-lines';
             frames.push({ t: null, state: v });
         } else {
-            for (const part of line.split('\x1e')) {
-                const f = parseSocketIoFrame(part);
-                if (f?.event === 'gamestate' && isObj(f.args[0])) {
-                    reader ??= 'socket.io';
-                    frames.push({ t: null, state: f.args[0] });
-                }
+            for (const state of socketIoStates(line)) {
+                reader ??= 'socket.io';
+                frames.push({ t: null, state });
             }
         }
     }
