@@ -8,7 +8,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 
 ## Repo layout (tiered git repos)
 
-- `forceteki/` — **git submodule** of `SWU-Karabast/forceteki`, pinned to upstream `2be4fcd`. It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
+- `forceteki/` — **git submodule** of `ericfode/forceteki`, pinned to `2ebed8ca2` (upstream `SWU-Karabast/forceteki` plus the search-engine optimizations). It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
 - `app/` — the SWU Arena app (watch the arena, read the research): one HTML file built from the shared project folder by `app/build.mjs`; see `app/README.md` and `app/DESIGN.md`.
