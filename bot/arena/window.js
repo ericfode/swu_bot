@@ -530,11 +530,14 @@ function createWindow(opts = {}) {
                     throw new WindowError('bad_request', 'body is not JSON');
                 }
                 // the loaders name a run by the id inside its index, so a feed's run must carry its own name there too
+                let text = body;
                 if (who.role === 'feed' && ns === 'runs') {
                     need(doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
                     need(feedRunOk(doc, who.feed), 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, ...}] with seats (and bots, if any) named in plain words`);
+                    // the run keeps which feed sent it, so the app never rates its games (model.cjs)
+                    text = JSON.stringify({ ...doc, feed: who.feed });
                 }
-                store.putDoc(ns, id, body);
+                store.putDoc(ns, id, text);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
             }
             if (req.method === 'DELETE') {

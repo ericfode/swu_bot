@@ -57,8 +57,8 @@ never in a thread. A feed token reads like a friend and writes only what carries
 
 - `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
   viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
-  running games; a finished one has `outcome: "won"` and `winnerSeat`. The app lists runs named `karabast*` as games
-  against people, keeps them out of bot records and ratings, and calls the human seat whatever the feed names it.
+  running games; a finished one has `outcome: "won"` and `winnerSeat`. The window stamps `"feed": "karabast"` on the run,
+  and the app lists every run a feed sent as games against people, kept out of bot records and ratings.
 - `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
   whole file when it ends. `push.js run <folder> --follow` does both for a folder laid out like a ladder run.
 - `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how

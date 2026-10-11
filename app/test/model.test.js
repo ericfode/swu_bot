@@ -108,6 +108,14 @@ test('buildModel: games against people on Karabast show as their own run and sta
     assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 4, 'an abandoned game has no result, so the grid leaves it out');
 });
 
+test('buildModel: a run any outside feed sent is never rated, whatever its name', () => {
+    const src = tinySources();
+    src.runs.push({ id: 'sprite', feed: 'sprite', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'sprite-1', p1: 'c-clock', p2: 'heuristic', outcome: 'won', winnerSeat: 'p1' }] });
+    const M = model.buildModel(src, null, null);
+    assert.equal(M.runs.find(x => x.id === 'sprite').kind, 'people');
+    assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'records unchanged');
+});
+
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {
     const extra = { ratings: { generatedAt: '2026-10-11T19:06:00Z', rules: 'Strategy Atlas', bots: { 'c-clock': { rating: 1874, se: 35, games: 149 }, heuristic: { rating: 1700, se: 20, games: 600 } } } };
     const M = model.buildModel(tinySources(), extra, null);

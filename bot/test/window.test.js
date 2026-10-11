@@ -237,7 +237,7 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await append('arena-t1-r1')).status, 403);
         assert.deepStrictEqual((await (await go('/api/replays/karabast?sizes=1', { token: 'feed-secret' })).json()).result, [{ id: 'g1', size: 15 }]);
         assert.strictEqual((await go('/api/docs/panels', { token: 'feed-secret' })).status, 403, 'reads like a friend');
-        assert.strictEqual((await go('/api/docs/runs/karabast', { token: 'feed-secret' })).status, 200);
+        assert.strictEqual((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result.feed, 'karabast', 'the window stamps which feed sent the run');
     } finally {
         await close();
     }
