@@ -13,8 +13,9 @@ SWU_JEPA_THOUGHTS=<file> writes the latest decision (scores, imagined board read
 2-D latent map coordinates) for the research dashboard panel (bot/jepa/panel.py).
 
 Oracle modes, to find the weak part (each swaps one part for a perfect stand-in; protocol v2 simulations):
-  --score sim-v     play each move on the referee's copy of the game up to my next action window (the opponent plays
-                    like rush) and score that REAL position with the same value head: a perfect predictor.
+  --score sim-v     play each move on the referee's copy of the game, then both seats like rush to the end of this
+                    round's action phase (--judge), and score that REAL position with the same value head: a perfect
+                    predictor.
   --score sim-eval  the same real next positions, scored by a bot/eval evaluator (--evaluator, default
                     linear-deck-g4) through bot/jepa/eval_helper.js: a perfect predictor and a better scorer.
   --log <file>      every decision with more than one move appends one JSON line with all three scores per move
@@ -40,7 +41,7 @@ def log(*a):
 
 
 class JepaPlayer:
-    def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None):
+    def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round"):
         w, self.meta = M.load_safetensors(model_path)
         self.net = M.NumpyJepa(w)
         self.db = db
@@ -52,6 +53,7 @@ class JepaPlayer:
         self.evaluator = evaluator  # EvalHelper, needed by sim-eval and --log
         self.deals = deals
         self.log = log
+        self.judge = judge
         self.decks = None
         self.fallbacks = 0
         self.fail = None  # why the last simulation failed
@@ -81,17 +83,16 @@ class JepaPlayer:
         score = (1 - self.mix) * v1 + self.mix * v4
         return {"z": z[0], "z1": z1, "z4": z4, "v1": v1, "v4": v4, "score": score, "v0": float(M.sigmoid(self.net.value(z))[0])}
 
-    def opponent_move(self, r, me, seen):
-        """The opponent's move inside a simulation, played like bot/players/rush.js (the training data's main opponent):
-        in its action window a card from hand first, then an attack with a ready unit, then the leader, else pass,
-        passing when the same window keeps coming back; attacks go at my base when it can be picked. Other prompts
-        are random. A bot that always passed here made Pass and Claim Initiative look best (they jump to the next
-        round's draw)."""
+    def rush_move(self, r, target, seen):
+        """A move inside a simulation for the seat to act, played like bot/players/rush.js (the training data's main
+        opponent): in its action window a card from hand first, then an attack with a ready unit, then the leader,
+        else pass, passing when the same window keeps coming back; attacks go at `target`'s base when it can be
+        picked. Other prompts are random."""
         acts = r["actions"]
         st = r.get("state") or {}
         players = st.get("players") or {}
         opp = players.get(r["actor"]) or {}
-        mine = players.get(me) or {}
+        mine = players.get(target) or {}
         prompt = r.get("prompt") or {}
         is_pass = lambda a: a.get("kind") == "button" and str(a.get("label", "")).lower() == "pass"
         if prompt.get("actionWindow"):
@@ -133,32 +134,50 @@ class JepaPlayer:
                 return min(mine_units, key=lambda a: hp[a["card"]["id"]])["i"]
         return self.rng.randrange(len(acts))
 
-    def real_next(self, msg, i, deal, sim, steps=200):
-        """Play action i on the referee's copy, then on up to my next action window: my follow-up choices (targets,
-        resources) as the bot would make them, the opponent like rush. Every move is then judged at the same point,
-        after the opponent's reply. (Stopping at my next decision instead favoured moves that open a follow-up
-        prompt: those were judged before the opponent replied.) None when the simulation fails."""
+    def real_next(self, msg, i, deal, sim, steps=400):
+        """Play action i on the referee's copy, then play on to the moment every move is judged at.
+
+        judge "round" (default): both seats play like rush to the end of this round's action phase, and the position
+        is my first decision after it (in the regroup phase, after the draw). Every move is judged at the same moment
+        of the game. judge "window": my next action window, my follow-up prompts chosen as the bot would, the
+        opponent like rush; Pass and Claim Initiative then get judged a round later (after the next draw) than a
+        card played now, and the judges picked them in most windows. None when the simulation fails."""
         me = msg["you"]
+        them = "p2" if me == "p1" else "p1"
+        start_round = (msg.get("state") or {}).get("round")
         r = sim({"t": "sim", "op": "begin", "deal": deal})
         if r.get("error") or len(r.get("actions") or []) != len(msg["actions"]):
             self.fail = f"begin: {r.get('error') or 'actions differ'}"
             return None
         r = sim({"t": "sim", "op": "act", "i": i})
-        seen, guard, trail = {}, {}, []
+        seen, seen_me, guard, trail = {}, {}, {}, []
         for _ in range(steps):
             acts = r.get("actions") or []
             if r.get("error") or not (r.get("over") or acts):
                 self.fail = f"act: {r.get('error') or 'no actions'}"
                 return None
-            if r.get("over") or (r.get("actor") == me and (r.get("prompt") or {}).get("actionWindow")):
+            if r.get("ms") is not None and r["ms"] < 2500:
+                self.fail = "time"  # a request past the decision's time gets no reply and loses the game
+                return None
+            prompt = r.get("prompt") or {}
+            phase = (r.get("state") or {}).get("phase")
+            if self.judge == "window" and not r.get("over") and r.get("actor") == me and prompt.get("actionWindow"):
                 # back in my window with nothing changed (a cancelled click, "will have no effect" answered No):
                 # judged before the opponent moves, such a move would always look best, so it scores lowest
-                r["noop"] = not r.get("over") and r.get("state") == msg.get("state")
+                r["noop"] = r.get("state") == msg.get("state")
+                return r
+            if r.get("over") or (self.judge == "round" and r.get("actor") == me and len(acts) > 1
+                                 and (phase != "action" or (r.get("state") or {}).get("round") != start_round)):
+                return r
+            if self.judge == "round" and r.get("actor") == me and prompt.get("actionWindow") and r.get("state") == msg.get("state") and not trail:
+                r["noop"] = True  # the move changed nothing and left me in the same window
                 return r
             if r.get("actor") != me:
-                j = self.opponent_move(r, me, seen)
+                j = self.rush_move(r, me, seen)
             elif len(acts) == 1:
                 j = 0
+            elif self.judge == "round":
+                j = self.rush_move(r, them, seen_me)
             else:
                 # my own follow-up choice, with the same loop guard as in the real game (a multi-select prompt such
                 # as choosing resources toggles a card on and off forever otherwise)
@@ -186,7 +205,7 @@ class JepaPlayer:
             ends = []
             for i in range(n):
                 r = self.real_next(msg, i, deal, sim)
-                if r is not None and r.get("ms") is not None and r["ms"] < 1500:
+                if r is not None and r.get("ms") is not None and r["ms"] < 2500:
                     self.fail = "time"
                 if r is None or self.fail == "time":
                     sim({"t": "sim", "op": "end"})
@@ -304,6 +323,8 @@ def main():
                     help="what ranks the moves: the imagined next latent (the bot), or the real next position from a simulation")
     ap.add_argument("--evaluator", default="linear-deck-g4", help="bot/eval evaluator for sim-eval and --log")
     ap.add_argument("--deals", type=int, default=1, help="deals of the hidden cards per move in sim modes")
+    ap.add_argument("--judge", choices=["round", "window"], default="round",
+                    help="when a simulated move is judged: after this round's action phase (round) or at my next action window")
     ap.add_argument("--log", default=None, help="append every decision's imagined and simulated scores here (JSON lines)")
     a = ap.parse_args()
 
@@ -311,7 +332,7 @@ def main():
     log(f"{len(db)} card codes, model {a.model}, score {a.score}")
     logf = open(a.log, "a") if a.log else None
     helper = EvalHelper(a.evaluator) if (a.score == "sim-eval" or logf) else None
-    player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf)
+    player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge)
     thoughts = os.environ.get("SWU_JEPA_THOUGHTS")
     stdin = sys.stdin
 
