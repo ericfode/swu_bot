@@ -210,6 +210,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
 .fo-track .gap { position: absolute; top: 14px; height: 6px; border-radius: 3px; opacity: .35; }
 .fo-track .dot { position: absolute; top: 8px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; border: 2.5px solid; box-sizing: border-box; }
 .fo-win { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) { .fo-win { white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.15; } }
 .fo-grp { font-family: var(--display); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid var(--line-2); padding: 8px 0 2px; }
 .fo-style { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; margin-top: 14px; }
 .fo-st h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
