@@ -28,10 +28,14 @@ const CACHE = args.cache || null; // replay features keyed by path, size and mti
 
 /**
  * Bot names are the p1/p2 strings in each index. A few names mean the same bot (random-a/b/c are seeds of one
- * random bot; `legacy` is the heuristic bot before the base-danger sign fix). Runs that list `legacy` are the
- * ones with the fixed heuristic profiles, so those profiles get a `+fix` suffix there.
+ * random bot; `legacy` is the heuristic bot before the base-danger sign fix). Runs that list `legacy`, and the
+ * runs in FIXED_ERA_RUNS, use the fixed heuristic profiles, so those profiles get a `+fix` suffix there.
  */
 const HEURISTIC_PROFILES = new Set(['heuristic', 'aggro', 'tempo', 'control']);
+// Runs made with the fixed profiles but without `legacy` in the field. Their aggro records give them away
+// (wasm-ladder-1 58-12, lisp-ladder-1 40-10, against about 35% wins in the old-profile ladders). New runs can
+// say so themselves with `fixedEra: true` in index.json or in ladder.json's config.
+const FIXED_ERA_RUNS = new Set(['wasm-ladder-1', 'lisp-ladder-1']);
 function canonical(name, run) {
     if (/^random(-[a-z])?$/.test(name)) return 'random';
     if (name === 'legacy') return 'heuristic';
@@ -228,7 +232,8 @@ function main() {
         const idx = readJson(path.join(RESULTS, dir, 'index.json'), null);
         if (!idx || !Array.isArray(idx.games)) continue;
         const names = new Set(idx.bots || idx.games.flatMap((g) => [g.p1, g.p2]));
-        runs.push({ id: dir, createdAt: idx.createdAt, idx, fixedEra: names.has('legacy') });
+        const cfg = readJson(path.join(RESULTS, dir, 'ladder.json'), {}).config || {};
+        runs.push({ id: dir, createdAt: idx.createdAt, idx, fixedEra: names.has('legacy') || FIXED_ERA_RUNS.has(dir) || !!idx.fixedEra || !!cfg.fixedEra });
     }
 
     // 1. Results (all runs, replay or not).
