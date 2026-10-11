@@ -405,7 +405,7 @@ def main():
             "bots": sorted(set(bots.tolist())) if bots is not None else None, "args": vars(a), "seconds": round(time.time() - t0),
             "curve": curve, "evals": evals, "probes": probes, "map": latent_map, "value": value_info, "framework": "tinygrad"}
     with open(a.out + ".train.json", "w") as fh:
-        json.dump(info, fh, indent=1)
+        json.dump(info, fh, separators=(",", ":"))
     print(f"wrote {a.out}.safetensors in {time.time() - t0:.0f}s", file=sys.stderr)
 
 
