@@ -23,6 +23,7 @@ recorded games from any source (including upstream tournaments) and positions in
 | `linear-deck` | fitted | same, opponent's hidden hand valued from their known decklist |
 | `mlp` | fitted | tiny net, logit = g(me, opp) - g(opp, me) so both players' views agree |
 | `mlp-deck` | fitted | same, with known decklists |
+| `anchored-td`, `anchored-hybrid`, `unanchored-hybrid` | fitted | `linear` form fitted to its own one-ply backup (TD), anchored by omni's proven endgames and/or game results; see below |
 
 Generation 3 (`linear-g3`, `linear-deck-g3`, `mlp-g3`, `mlp-deck-g3`) adds strong-play data: omni's games (`replays.js`
 below) and ISMCTS search leaves. Gen 2 keeps the default names until gen 3 is tested in play.
@@ -105,3 +106,19 @@ on the same positions:
 node bot/eval/lensfit.js --lens /mnt/project-files/dashboard/lens --replays /mnt/project-files/results --json omni-lens-fit.json
 # --evals a,b,c picks the bench evaluators; only the fold-0 column is fair for models trained on these games
 ```
+
+### Anchored evaluators (TD + proven endgames)
+
+`anchored-td`, `anchored-hybrid` and `unanchored-hybrid` are `linear` models fitted by
+`theory/measure/anchored_fit.py` (Lean theory thread). The data is different from `fit.js`: `td-frames.js` records,
+at every action window of heuristic games, the actor's frame and the frame of every child its one-ply search scored,
+so a model can be fitted to its own backup (max over children). `proven-frames.js` turns omni's proven positions into
+the same frames. Loss: fitted value iteration on `(1 - mix) * backup + mix * result`, proven positions as exact anchors,
+weights pulled toward the `base` evaluator (ridge), which stops a few hundred games from overfitting 31 weights.
+
+```bash
+node bot/eval/td-frames.js 5001 60 frames/f0.jsonl            # one worker; run several on different seeds
+node bot/eval/proven-frames.js /mnt/project-files/omni/positions-hh.jsonl,...mix.jsonl,...deep.jsonl proven.jsonl
+python3 theory/measure/anchored_fit.py frames proven.jsonl report.json --write anchored-td:0:0.2:0.1
+```
+
