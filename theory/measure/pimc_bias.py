@@ -75,7 +75,10 @@ def summarize(rows, deals):
         'players': len(per),
         'lowerPositive': sum(g[0] > 1e-12 for g in per.values()),
         'upperZero': sum(g[1] < 1e-12 and g[3] == 0 for g in per.values()),
-        'upperMean': sum(g[1] for g in per.values()) / len(per) if per else None,
+        # only players whose every window has a bound; a window with no move proven has none
+        'bounded': sum(g[3] == 0 for g in per.values()),
+        'upperMeanBounded': (sum(g[1] for g in per.values() if g[3] == 0) / sum(g[3] == 0 for g in per.values())
+                             if any(g[3] == 0 for g in per.values()) else None),
         'withUnboundedWindows': sum(g[3] > 0 for g in per.values()),
     }
     base = summarize_complete(rows)
