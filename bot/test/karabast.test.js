@@ -301,4 +301,10 @@ test('a reservation holds places until it is used or released', () => {
     b.release(again);
     assert.ok(b.room(1));
     assert.strictEqual(new PeopleLedger(file, 3).reserved(), 0);
+    // a place held for a game that was joined but never identified stays counted
+    const seen = b.reserve(1);
+    b.spend(seen, 'watched');
+    b.release(seen);
+    assert.strictEqual(new PeopleLedger(file, 3).count, 3);
+    assert.ok(!b.room(1));
 });

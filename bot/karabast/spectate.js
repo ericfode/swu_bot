@@ -81,6 +81,8 @@ async function watch(server, lobbyId, out, opts) {
     if (!res.body?.success) {
         throw new Error(`spectate-game refused: ${res.body?.message ?? res.status}`);
     }
+    // from here on the players may see us in the spectator list
+    opts.onJoined?.();
     const sock = new KarabastSocket(server, { user, spectator: true, token: opts.token, allowHosts: opts.allowHosts });
     const scrub = makeScrubber([user.id, user.username]);
     const frames = [];
@@ -209,10 +211,17 @@ async function main() {
             console.error(`people cap reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max}); stopping`);
             break;
         }
+        let joined = false;
         try {
-            await watch(server, id, out, ledger ? { ...opts, onPlayers: (ids) => ledger.add(ids, 'watched', hold) } : opts);
+            const counted = { onJoined: () => { joined = true; }, onPlayers: (ids) => ledger.add(ids, 'watched', hold) };
+            await watch(server, id, out, ledger ? { ...opts, ...counted } : opts);
         } finally {
-            ledger?.release(hold);
+            // joined but no frame told us who played: the two places stay counted
+            if (joined) {
+                ledger?.spend(hold, 'watched');
+            } else {
+                ledger?.release(hold);
+            }
         }
         if (lobby) {
             break;

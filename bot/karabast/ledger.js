@@ -9,7 +9,8 @@
  *
  * Several runs may share one file (a bot run and a recorder at the same time). A run reserves its places before it
  * contacts anyone (reserve(), 1 for a bot game, 2 for a watched game), counts the people once it knows them
- * (add() with the reservation) and gives back what it did not use (release()). Reservations count against the cap,
+ * (add() with the reservation) and gives back what it did not use (release()), or counts it anyway when it may have
+ * been seen without learning who saw it (spend()). Reservations count against the cap,
  * so two runs cannot both take the last place. Every change reads, checks and writes while holding a lock file, and
  * every check reads the file again. A run that dies keeps its reservation in the file, which only makes the cap
  * stricter; remove it from `held` by hand.
@@ -64,6 +65,27 @@ class PeopleLedger {
             this.data.held[hold] = { n, at: new Date().toISOString() };
             this.save();
             return hold;
+        });
+    }
+
+    /**
+     * Counts what is left of a reservation as people who were contacted but not identified (a game joined before
+     * its players were known), so they stay counted. Nothing happens once add() used it.
+     */
+    spend(hold, what) {
+        if (!hold) {
+            return;
+        }
+        this.locked(() => {
+            const r = this.data.held[hold];
+            if (r) {
+                const at = new Date().toISOString();
+                for (let i = 0; i < r.n; i++) {
+                    this.data.people[`unidentified-${hold}-${i}`] = { at, what: `${what}, not identified` };
+                }
+                delete this.data.held[hold];
+                this.save();
+            }
         });
     }
 
