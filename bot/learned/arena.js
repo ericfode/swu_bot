@@ -21,10 +21,11 @@ async function worker() {
     const { Env } = require('../env');
     const { playGame } = require('../match');
     const { snapshot } = require('../recorder');
-    const { makeBot } = require('./registry');
+    const { makeBot, closeBots } = require('../players');
     const env = new Env();
     process.on('message', async (job) => {
         if (job === 'stop') {
+            await closeBots(); // bot programs see the end of their input and exit
             process.exit(0);
         }
         const file = job.file;
@@ -33,8 +34,10 @@ async function worker() {
         }
         let r;
         try {
+            const bots = [];
+            job.seats.forEach((n) => bots.push(makeBot(n, bots))); // one program per seat when a bot plays itself
             r = await playGame(env, {
-                seed: job.seed, bots: job.seats.map(makeBot), record: !!file, snapshot,
+                seed: job.seed, bots, record: !!file, snapshot,
                 onEvent: file ? (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) : null
             });
             delete r.events;
