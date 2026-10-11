@@ -122,10 +122,13 @@ function searchLens(decision, state) {
             buttons[head] = r2(v - chosen);
         }
     }
+    // |value| >= 9000: the search saw a forced result (9999: `by` wins, -9998: `by` loses)
+    const forced = Math.abs(decision.value ?? 0) >= 9000 ? (decision.value > 0 ? decision.seat : decision.seat === 'p1' ? 'p2' : 'p1') : null;
     return {
         by: decision.seat, value: decision.value, depth: decision.depth, nodes: decision.nodes, ms: decision.ms,
         pv: decision.pv, ground: side.ground.map(rel), space: side.space.map(rel), hand: side.hand.map(rel),
-        leader: side.leader ? rel(side.leader) : null, buttons
+        leader: side.leader ? rel(side.leader) : null, buttons,
+        frame: 'by', kind: 'alpha-beta', unit: 'points', tolerance: 0.05, ...(forced ? { proven: forced } : {})
     };
 }
 
@@ -134,29 +137,52 @@ function searchLens(decision, state) {
  * list: a later evaluator may have other terms, weights that change per step (then `constantWeights` is false and
  * each step carries `weights`), or no weights at all (a learned model: `weights` null, `parts` may be missing).
  */
+// Contract: /mnt/project-files/omni/LENS.md (optional fields from viewer-kit/LENS-proposal.md, section 8 P1).
+// `rule`/`unitNote` are literal text for old readers; `ruleTpl`/`unitNoteTpl` name weight keys in braces.
 const EVALUATOR = {
     id: 'omni-linear-v1',
+    label: 'Omni v1',
     source: 'bot/omni/evaluate.js',
     description: 'Hand-set linear score from the original heuristic bot, with the low-base-HP penalty subtracted. Not fitted to data yet.',
+    sees: 'public',
     constantWeights: true,
-    scale: { unit: 'points', toWinProb: null },
+    // toWinProb is today's (1 + tanh(edge / 25)) / 2 written as a logistic; a hand-set guess, not fitted
+    scale: { unit: 'points', typical: 25, toWinProb: { kind: 'logistic', k: 0.08, b: 0, fitted: false } },
+    // measured by the Holotable thread on the 110 lens games with a winner (2026-10-11); the map was never fitted
+    quality: {
+        data: 'the 110 lens games with a winner (games/demo, results/omni-ref-1..6, results/omni-selfplay); the map was never fitted, so every game is held out',
+        games: 110, n: 16715, heldOut: true, brier: 0.1692, logloss: 0.4972, acc: 0.7294,
+        byRound: [
+            { from: 0, to: 3, n: 4514, brier: 0.2406, logloss: 0.6735 },
+            { from: 4, to: 6, n: 5934, brier: 0.1613, logloss: 0.4837 },
+            { from: 7, to: 9, n: 3609, brier: 0.1181, logloss: 0.3596 },
+            { from: 10, to: 99, n: 2658, brier: 0.1350, logloss: 0.4147 }
+        ],
+        calibration: [
+            { n: 1299, p: 0.043, y: 0.003 }, { n: 982, p: 0.148, y: 0.147 }, { n: 1036, p: 0.251, y: 0.248 },
+            { n: 1351, p: 0.357, y: 0.46 }, { n: 2191, p: 0.455, y: 0.486 }, { n: 2579, p: 0.544, y: 0.562 },
+            { n: 1745, p: 0.646, y: 0.708 }, { n: 1700, p: 0.748, y: 0.709 }, { n: 1483, p: 0.852, y: 0.845 },
+            { n: 2349, p: 0.961, y: 0.971 }
+        ]
+    },
     terms: {
         unit: [
-            { key: 'power', label: 'Power', rule: 'power x 1.3' },
-            { key: 'hp', label: 'HP left', rule: 'remaining HP x 0.9' },
-            { key: 'cost', label: 'Cost', rule: 'printed cost x 0.25' },
-            { key: 'upgrades', label: 'Upgrades', rule: '2.2 per Shield, 0.6 per other upgrade' },
-            { key: 'sentinel', label: 'Sentinel', rule: '+1' }
+            { key: 'power', label: 'Power', rule: 'power x 1.3', ruleTpl: 'power x {power}' },
+            { key: 'hp', label: 'HP left', rule: 'remaining HP x 0.9', ruleTpl: 'remaining HP x {hp}' },
+            { key: 'cost', label: 'Cost', rule: 'printed cost x 0.25', ruleTpl: 'printed cost x {cost}' },
+            { key: 'upgrades', label: 'Upgrades', rule: '2.2 per Shield, 0.6 per other upgrade', ruleTpl: '{shield} per Shield, {upgrade} per other upgrade' },
+            { key: 'sentinel', label: 'Sentinel', rule: '+1', ruleTpl: '+{sentinel}' }
         ],
         unitNote: 'every unit part is multiplied by 0.85 when the unit is exhausted',
+        unitNoteTpl: 'every unit part is multiplied by {exhaustedMult} when the unit is exhausted',
         base: [
-            { key: 'hp', label: 'Base HP', rule: 'HP left x 0.9 x 1.5' },
-            { key: 'danger', label: 'Danger', rule: '-(12 - HP left)^2 / 6 x 1.5 under 12 HP' }
+            { key: 'hp', label: 'Base HP', rule: 'HP left x 0.9 x 1.5', ruleTpl: 'HP left x {baseHp} x {baseMult}' },
+            { key: 'danger', label: 'Danger', rule: '-(12 - HP left)^2 / 6 x 1.5 under 12 HP', ruleTpl: '-({dangerHp} - HP left)^2 x {danger} x {baseMult} under {dangerHp} HP' }
         ],
         side: [
-            { key: 'hand', label: 'Hand', rule: '1.8 per card' },
-            { key: 'resources', label: 'Resources', rule: '1.4 per resource' },
-            { key: 'initiative', label: 'Initiative', rule: '2.5 for the side holding it' }
+            { key: 'hand', label: 'Hand', rule: '1.8 per card', ruleTpl: '{hand} per card' },
+            { key: 'resources', label: 'Resources', rule: '1.4 per resource', ruleTpl: '{resource} per resource' },
+            { key: 'initiative', label: 'Initiative', rule: '2.5 for the side holding it', ruleTpl: '{initiative} for the side holding it', transient: true }
         ]
     }
 };
