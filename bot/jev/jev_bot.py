@@ -42,6 +42,10 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 BASE_URL = os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai").rstrip("/")
 MODEL = os.environ.get("JEV_MODEL", "jev-latest")
 TIMEOUT = float(os.environ.get("JEV_TIMEOUT", "20"))
+# all Jev calls between two messages to the harness share this many seconds (below the harness's own timeout), so a
+# slow API still ends in a fallback move instead of the harness killing the bot
+BUDGET = float(os.environ.get("JEV_BUDGET", "90"))
+_deadline = [float("inf")]
 LOOK = "--look" in sys.argv[1:]
 NAME = "jev-look" if LOOK else "jev"
 LOOK_CONFIDENT = float(os.environ.get("JEV_LOOK_CONFIDENT", "0.8"))  # skip imagining when the top action is this likely
@@ -430,9 +434,12 @@ def ask_jev(state, questions):
     data = json.dumps(body).encode("utf8")
     delay = 0.5
     for attempt in range(4):
+        left = _deadline[0] - time.time()
+        if left < 2:
+            raise RuntimeError("out of time budget")
         req = urllib.request.Request(f"{BASE_URL}/v1/systemone", data=data, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            with urllib.request.urlopen(req, timeout=min(TIMEOUT, left)) as r:
                 return json.loads(r.read().decode("utf8"))
         except urllib.error.HTTPError as e:
             if e.code not in (408, 429) and e.code < 500:
@@ -442,7 +449,7 @@ def ask_jev(state, questions):
             if attempt == 3:
                 raise RuntimeError(f"connection: {e}")
             wait = delay
-        time.sleep(min(wait, 10))
+        time.sleep(max(0, min(wait, 10, _deadline[0] - time.time() - 2)))
         delay *= 2
     raise RuntimeError("no answer after retries")
 
@@ -617,6 +624,7 @@ def decide(msg, rng, guard, panel, logf, io=None):
             send, recv = io
             send({"t": "imagine", "situation": {"kind": kind, "i": allowed[i]["i"]}})
             got = recv()
+            _deadline[0] = time.time() + BUDGET
             if got.get("t") != "imagined":
                 raise RuntimeError(f"expected imagined, got {got.get('t')}")
             left = got.get("left", 0)
@@ -682,6 +690,7 @@ def main():
             panel.game(msg["you"])
             reply = {"t": "ready", "v": 1, "name": NAME}
         elif msg["t"] == "decide":
+            _deadline[0] = time.time() + BUDGET
             try:
                 a, _ = decide(msg, rng, guard, panel, logf, io)
                 reply = {"t": "act", "i": a["i"]}

@@ -65,8 +65,8 @@ function boardReply(eg, pid, acts) {
 
 /**
  * Follow-up prompts: attacks go to the base when allowed (aggressive), the rest use the rule-based defaults.
- * When the opponent must pick among cards hidden from the bot (e.g. from its hand), it picks at random: defaultChoose
- * would rank them by their real cost and type, which the bot must not learn from.
+ * When either side must pick among cards hidden from the bot (the opponent's hand, either deck), it picks at random:
+ * defaultChoose would rank them by their real cost and type, which the bot must not learn from.
  */
 function followUp(eg, pid, acts, hidden, rng) {
     if (acts.some((a) => (a.kind === 'card' && a.card && hidden.has(a.card.uuid)) || (a.kind === 'displayCard' && hidden.has(a.arg)))) {
@@ -108,20 +108,26 @@ function hiddenCards(eg, pid) {
     return ids;
 }
 
-/** Blank out every card ref whose id was hidden before the imagination (a simulated draw or discard must not leak it). */
+/** Replace every card whose id was hidden before the imagination by a bare 'hidden card' (a simulated draw, discard or
+ * play must not leak it, not even through its stats). */
 function maskHidden(o, hidden) {
     if (Array.isArray(o)) {
         return o.map((x) => maskHidden(x, hidden));
     }
     if (o && typeof o === 'object') {
+        if (typeof o.id === 'string' && hidden.has(o.id)) {
+            // keep only where it is: stats, keywords and upgrades would narrow down which card it is
+            const r = { id: o.id, n: 'hidden card', s: null, hidden: 1 };
+            for (const k of ['zone', 'ctl']) {
+                if (k in o) {
+                    r[k] = o[k];
+                }
+            }
+            return r;
+        }
         const r = {};
         for (const k in o) {
             r[k] = maskHidden(o[k], hidden);
-        }
-        if (typeof o.id === 'string' && hidden.has(o.id)) {
-            r.n = 'hidden card';
-            r.s = null;
-            r.hidden = 1;
         }
         return r;
     }
@@ -229,7 +235,7 @@ class LookaheadBot extends ExternalBot {
                     if (kind === 'round' && eg.round !== startRound) {
                         break;
                     }
-                    a = followUp(eg, actor, acts, actor === pid ? new Set() : hidden, this.lookRng);
+                    a = followUp(eg, actor, acts, hidden, this.lookRng);
                 }
                 if (!a) {
                     break;

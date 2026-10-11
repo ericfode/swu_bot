@@ -50,7 +50,8 @@ second Choice: which situation to imagine, from a small vocabulary over its top 
 The adapter marks the game, plays the situation, rolls back, and returns the board from Jev's seat plus the steps
 taken. The bot adds a summary (what happened, what changed, both boards) to the state as `imagined`, asks the action
 question again with it, and repeats until Jev picks `decide` or 3 imaginations are used. Imagined lines never use the
-opponent's hand cards, and draws and shuffles use a private seed, so they reveal nothing hidden.
+opponent's hand cards, picks among unseen cards (either deck, the opponent's hand) are random, draws and shuffles use
+a private seed, and any card that was unseen before shows up only as "hidden card", so they reveal nothing hidden.
 
 Wire format (additive to the stdio protocol): the bot answers `decide` with
 `{"t":"imagine","situation":{"kind":"after","i":3}}`; the adapter answers
@@ -66,6 +67,7 @@ elsewhere. Any stdio bot can use it by setting `"adapter": "bot/jev/look.js"` in
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | API root. |
 | `JEV_MODEL` | `jev-latest` | Model name (`jev-preview` also exists). |
 | `JEV_TIMEOUT` | `20` | Seconds per attempt; 4 attempts with backoff. |
+| `JEV_BUDGET` | `90` | Seconds all Jev calls may take before the bot answers the harness; then it falls back. Keep it below the harness timeout. |
 | `JEV_PANEL` | off | Path of a dashboard strategy panel to keep updated (`dashboard/README.md`, section 5). `{name}` becomes `jev` or `jev-look`. |
 | `JEV_LOOK_CONFIDENT` | `0.8` | `jev-look` imagines only when the top move is less likely than this. |
 | `JEV_LOG` | off | Append one JSON line per decision: options, probabilities, choice, win estimate, latency. `{pid}` in the path becomes the process id. |
