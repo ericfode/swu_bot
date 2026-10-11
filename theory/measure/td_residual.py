@@ -81,7 +81,11 @@ class Evaluator:
         return self.score(f)
 
     def backup(self, w):
-        """One step of perfect play over the recorded children (Value.lean `backup`)."""
+        """One step of perfect play over the recorded children (Value.lean `backup`).
+
+        The children are the moves the bot played out. In large windows (over 40 actions, or target prompts with
+        over 8 choices) the bot samples a random subset, so this is the backup over that subset, not over every
+        legal move; the residual it gives is an estimate of the theorem's residual, not the exact value."""
         vals = [self.value(k) for k in w['kids']]
         if not vals:
             return None
@@ -210,10 +214,13 @@ def measure(ev, games, solve_dir):
             if i >= n:
                 continue
             left = n - i
+            # path estimate only: Value.lean's bound needs eps over EVERY reachable position and a height over every
+            # continuation, but this uses the residuals on the played path and the played length, so it is a
+            # consistency check, not a certificate (an unplayed branch can be longer or have a larger residual)
             tail = [abs(x) for x in resid[i:] if x is not None]
             eps = max(tail) if tail else 0.0
             res['proven'].append({'seed': g['seed'], 'i': i, 'left': left, 'p': vals[i], 'truth': truth,
-                                  'err': abs(vals[i] - truth), 'eps_path': eps, 'bound': min(1.0, eps * (left + 1)),
+                                  'err': abs(vals[i] - truth), 'eps_path': eps, 'path_bound': min(1.0, eps * (left + 1)),
                                   'resid': resid[i]})
     return res
 
@@ -243,8 +250,8 @@ def summarize(res):
         out['proven_n'] = len(pv)
         out['proven_acc'] = float(np.mean([(p['p'] > 0.5) == (p['truth'] > 0.5) for p in pv]))
         out['proven_brier'] = float(np.mean([p['err'] ** 2 for p in pv]))
-        out['proven_bound_holds'] = float(np.mean([p['err'] <= p['bound'] + 1e-12 for p in pv]))
-        out['proven_bound_median'] = float(np.median([p['bound'] for p in pv]))
+        out['proven_path_bound_holds'] = float(np.mean([p['err'] <= p['path_bound'] + 1e-12 for p in pv]))
+        out['proven_path_bound_median'] = float(np.median([p['path_bound'] for p in pv]))
         out['proven_err_median'] = float(np.median([p['err'] for p in pv]))
         out['proven'] = pv
     return out
@@ -281,6 +288,8 @@ def main():
     td_dir, solve_dir, out_path = sys.argv[1:4]
     folds = int(sys.argv[4]) if len(sys.argv) > 4 else 5
     games = load(td_dir)
+    if folds < 2 or len(games) < folds:
+        sys.exit(f'need folds >= 2 and at least one game per fold (got {len(games)} games, {folds} folds)')
     # k-fold by game: every game is scored once by evaluators fitted on the other folds
     per = {}
     params = []
@@ -306,8 +315,8 @@ def main():
     for k, s in report['evaluators'].items():
         print(f"{k:7s} brier {s['brier']:.3f}  td|r| {s['td_mean_abs']:.3f} (p95 {s['td_p95_abs']:.3f})"
               f"  path|r| {s['path_mean_abs']:.3f}  proven {s.get('proven_n', 0)} acc {s.get('proven_acc', float('nan')):.2f}"
-              f" brier {s.get('proven_brier', float('nan')):.3f} bound-holds {s.get('proven_bound_holds', float('nan')):.2f}"
-              f" (median bound {s.get('proven_bound_median', float('nan')):.2f}, err {s.get('proven_err_median', float('nan')):.2f})"
+              f" brier {s.get('proven_brier', float('nan')):.3f} path-bound-holds {s.get('proven_path_bound_holds', float('nan')):.2f}"
+              f" (median path bound {s.get('proven_path_bound_median', float('nan')):.2f}, err {s.get('proven_err_median', float('nan')):.2f})"
               f"  td-loss {s['td_loss']:.4f}")
     print('legacy check max diff', report['legacy_check_max_diff'])
 
