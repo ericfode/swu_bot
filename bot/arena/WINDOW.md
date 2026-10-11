@@ -64,7 +64,8 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
   `steps` and `error` (text). It drops every other field and refuses a document that does not fit with a 400. It stamps `"feed": "karabast"` on the run,
   and the app lists every run a feed sent as games against people, kept out of bot records and ratings.
 - `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
-  whole file when it ends. `push.js run <folder> --follow` does both for a folder laid out like a ladder run.
+  whole file when it ends. `bot/karabast/feed.js` is a working feed that does all three. (`push.js run` is for
+  the project's own runs: it also writes `ladders/<id>`, which a feed token may not.)
 - `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how
   the viewer finds it.
 
