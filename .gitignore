@@ -3,3 +3,6 @@ replays/
 replays-*.log
 viewer/dist/
 results/
+.perch/*
+!.perch/closed.jsonl
+!.perch/rules/
