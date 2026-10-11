@@ -703,46 +703,24 @@ test('the window feed hides our hand while live, holds back the newest step, and
     assert.deepStrictEqual([row.outcome, row.winnerSeat, row.winner], ['won', 'p1', 'opponent']);
 });
 
-test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', async () => {
-    const { holdPlayLock } = require('../karabast/queue');
-    const { spawn } = require('child_process');
+test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', () => {
+    const { holdPlayLock, lockToken } = require('../karabast/queue');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'play-lock-'));
     const file = path.join(dir, 'playing.pid');
-    const proc = fs.existsSync('/proc/self/cmdline');
-    // a live process with this in its command line (wait out the moment between fork and exec)
-    const started = async (child, text) => {
-        for (let i = 0; i < 100 && proc; i++) {
-            try {
-                if (fs.readFileSync(`/proc/${child.pid}/cmdline`, 'utf8').includes(text)) {
-                    return child;
-                }
-            } catch {
-                // not there yet
-            }
-            await new Promise((r) => setTimeout(r, 20));
-        }
-        return child;
-    };
-    // a stand-in bot run: node running a script at bot/karabast/queue.js
-    const script = path.join(dir, 'bot', 'karabast', 'queue.js');
-    fs.mkdirSync(path.dirname(script), { recursive: true });
-    fs.writeFileSync(script, 'setInterval(() => {}, 1000);\n');
-    const run = await started(spawn(process.execPath, [script], { stdio: 'ignore' }), 'queue.js');
-    // a watchdog-like process that only names queue.js in its arguments
-    const namer = await started(spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'node bot/karabast/queue.js'], { stdio: 'ignore' }), 'queue.js');
+    const run = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); // a live bot run
     try {
-        fs.writeFileSync(file, String(run.pid));
+        fs.writeFileSync(file, lockToken(run.pid));
         assert.throws(() => holdPlayLock(file), /one game at a time/);
-        if (proc) {
-            for (const pid of [namer.pid, process.ppid]) { // alive, but another program (a pid reused after a restart)
-                fs.writeFileSync(file, String(pid));
-                holdPlayLock(file);
-                assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
-            }
-        }
+        fs.writeFileSync(file, String(run.pid)); // a token without a start time trusts the pid
+        assert.throws(() => holdPlayLock(file), /one game at a time/);
     } finally {
         run.kill();
-        namer.kill();
+    }
+    if (fs.existsSync('/proc/self/stat')) {
+        fs.writeFileSync(file, `${process.ppid} 1`); // alive, but started later than the run that wrote it: a reused pid
+        holdPlayLock(file);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), lockToken(process.pid));
+        assert.match(lockToken(process.pid), /^\d+ \d+$/);
     }
     fs.writeFileSync(file, '999999999'); // no such process
     fs.writeFileSync(`${file}.lock`, ''); // another starter is checking: wait for it, never take over beside it
@@ -750,7 +728,7 @@ test('one game at a time: a live run holds playing.pid, a dead one is taken over
     assert.strictEqual(fs.readFileSync(file, 'utf8'), '999999999');
     fs.unlinkSync(`${file}.lock`);
     holdPlayLock(file);
-    assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), lockToken(process.pid));
     assert.ok(!fs.existsSync(`${file}.lock`), 'the starter lock is let go');
     const ledger = new PeopleLedger(path.join(dir, 'people.json'), Infinity);
     for (let i = 0; i < 40; i++) {

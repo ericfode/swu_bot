@@ -40,7 +40,6 @@ const { KarabastSocket, post } = require('./socket');
 const { KarabastSeat, loadClient } = require('./seat');
 const { makeScrubber } = require('./frame');
 const { PeopleLedger } = require('./ledger');
-const { LOOP_PATTERN } = require('./watchdog');
 
 /** Cards whose abilities throw in our engine pin (CLAUDE.md, known engine bugs). */
 const KNOWN_ERRORS = { ASH_044: 'Barriss Offee, Redeeming Herself' };
@@ -151,40 +150,48 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
 /** One game at a time on this machine (Eric, 2026-10-11 22:16), whichever ledger a run counts people in. */
 const PLAY_LOCK = path.join(require('os').homedir(), 'karabast', 'playing.pid');
 
-/**
- * Whether `pid` is a live bot run: node running queue.js as its script (watchdog.js's LOOP_PATTERN). A pid reused by
- * another program after a restart is not one, nor is a process that merely names queue.js in its arguments.
- */
-const playing = (pid) => {
+/** What a run writes to the play lock: its pid and, where /proc exists, its start time (ticks since boot). */
+const lockToken = (pid) => {
     try {
-        process.kill(pid, 0);
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        return `${pid} ${stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]}`; // field 22, starttime
+    } catch {
+        return String(pid); // no /proc (macOS)
+    }
+};
+
+/**
+ * Whether the run that wrote `token` still runs. The start time tells it from a later process given the same pid
+ * (after a restart, or a local run); a token without one trusts the pid.
+ */
+const holding = (token) => {
+    const [pid, start] = token.trim().split(' ');
+    if (!(Number(pid) > 0) || Number(pid) === process.pid) {
+        return false;
+    }
+    try {
+        process.kill(Number(pid), 0);
     } catch (e) {
         if (e.code !== 'EPERM') {
             return false;
         }
     }
-    if (!fs.existsSync('/proc/self/cmdline')) {
-        return true; // no /proc (macOS): trust the pid
-    }
-    try {
-        return new RegExp(LOOP_PATTERN).test(fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' '));
-    } catch {
-        return false; // gone since the check above
-    }
+    return start === undefined || lockToken(pid) === token.trim();
 };
 
 const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /**
- * Writes our pid to `file` so only one run plays at a time, or throws while another live run holds it. The check and
- * the write happen while holding `<file>.lock` (created exclusively, held for a moment), so two starters cannot both
- * take it. Like the ledger's, that lock is never taken over: one left by a run that died says which file to remove. A
- * `file` left by a run that died (killed, or the machine restarted) is taken over, also when its pid now belongs to
- * another program. Released at exit; a killed run leaves it for the next one to take over.
+ * Writes our lockToken() to `file` so only one run plays at a time, or throws while another live run holds it. The
+ * check and the write happen while holding `<file>.lock` (created exclusively, held for a moment), so two starters
+ * cannot both take it. Like the ledger's, that lock is never taken over: one left by a run that died says which file
+ * to remove. A `file` left by a run that died (killed, or the machine restarted) is taken over, also when its pid now
+ * belongs to another process (holding()). Released at exit; a killed run leaves it for the next one to take over.
  */
 function holdPlayLock(file, { lockWaitMs = 10000 } = {}) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const lock = `${file}.lock`;
+    const mine = lockToken(process.pid);
     const t0 = Date.now();
     let fd;
     for (;;) {
@@ -202,17 +209,17 @@ function holdPlayLock(file, { lockWaitMs = 10000 } = {}) {
         sleepSync(50);
     }
     try {
-        let pid = 0;
+        let held = '';
         try {
-            pid = Number(fs.readFileSync(file, 'utf8'));
+            held = fs.readFileSync(file, 'utf8');
         } catch {
             // free
         }
-        if (pid > 0 && pid !== process.pid && playing(pid)) {
-            throw new Error(`another bot run (pid ${pid}) is playing: one game at a time (${file})`);
+        if (holding(held)) {
+            throw new Error(`another bot run (pid ${held.trim().split(' ')[0]}) is playing: one game at a time (${file})`);
         }
         const tmp = `${file}.${process.pid}.tmp`;
-        fs.writeFileSync(tmp, String(process.pid));
+        fs.writeFileSync(tmp, mine);
         fs.renameSync(tmp, file);
     } finally {
         fs.closeSync(fd);
@@ -221,7 +228,7 @@ function holdPlayLock(file, { lockWaitMs = 10000 } = {}) {
     process.on('exit', () => {
         // nobody replaces the file while our pid is alive, so read-then-remove cannot remove another run's
         try {
-            if (fs.readFileSync(file, 'utf8') === String(process.pid)) {
+            if (fs.readFileSync(file, 'utf8') === mine) {
                 fs.unlinkSync(file);
             }
         } catch {
@@ -413,4 +420,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, KNOWN_ERRORS, MIN_GAP_S };
+module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, lockToken, KNOWN_ERRORS, MIN_GAP_S };
