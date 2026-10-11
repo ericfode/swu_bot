@@ -50,9 +50,11 @@ const cards = new Map([
     ['SOR_048', { id: '1000000048', types: ['event'] }], // not implemented
     ['SOR_T01', { id: '1000000901', types: ['token', 'upgrade'] }]
 ]);
-for (let k = 0; k < 16; k++) {
-    cards.set(`SHD_${100 + k}`, { id: `20000001${k}`, types: ['upgrade'] });
+for (let k = 0; k < 24; k++) {
+    cards.set(`SHD_${100 + k}`, { id: `2000000${100 + k}`, types: ['upgrade'] });
 }
+// n main deck cards, three copies of each
+const spread = (n) => Array.from({ length: Math.ceil(n / 3) }, (_, k) => ({ id: `SHD_${100 + k}`, count: Math.min(3, n - 3 * k) }));
 
 test('checks catch wrong card types in the leader, base and main deck slots', () => {
     const types = (id) => cards.get(id)?.types ?? null;
@@ -78,7 +80,7 @@ test('checks catch wrong card types in the leader, base and main deck slots', ()
 test('the minimum deck size follows the base', () => {
     const minDeckSize = (base) => (base === 'JTL_024' ? 60 : base === 'JTL_025' ? 45 : 50);
     const sized = (name, base, n) => normalizeDeck({ metadata: { name }, leader: { id: 'SOR_005' }, base: { id: base }, deck: [{ id: 'SOR_046', count: n }] });
-    const problems = checkDecks([sized('vault', 'JTL_024', 52), sized('vault-ok', 'JTL_024', 60), sized('osc', 'JTL_025', 45), sized('plain', 'SOR_029', 49)], { known: () => true, minDeckSize });
+    const problems = checkDecks([sized('vault', 'JTL_024', 52), sized('vault-ok', 'JTL_024', 60), sized('osc', 'JTL_025', 45), sized('plain', 'SOR_029', 49)], { known: () => true, minDeckSize, maxCopies: () => Infinity });
     assert.deepStrictEqual(problems, ['vault: main deck has 52 cards (premier needs 60 with this base)', 'plain: main deck has 49 cards (premier needs 50)']);
 });
 
@@ -90,7 +92,7 @@ test('loadDecks reads the card types and the base size rule from the card data',
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'decklists-'));
     try {
         const file = path.join(dir, 'decks.json');
-        const sized = (name, base, n) => ({ metadata: { name, author: 'a-user' }, leader: { id: 'SOR_005', count: 1 }, base: { id: base, count: 1 }, deck: [{ id: 'SOR_046', count: n }] });
+        const sized = (name, base, n) => ({ metadata: { name, author: 'a-user' }, leader: { id: 'SOR_005', count: 1 }, base: { id: base, count: 1 }, deck: spread(n) });
         fs.writeFileSync(file, JSON.stringify([sized('osc', 'JTL_025', 45), sized('vault', 'JTL_024', 60), deck('plain')]));
         const { decks, sha256 } = loadDecks(file, env);
         assert.deepStrictEqual(decks.map((d) => d.metadata), [{ name: 'osc' }, { name: 'vault' }, { name: 'plain' }]);
@@ -105,6 +107,24 @@ test('loadDecks reads the card types and the base size rule from the card data',
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+test('copy limits: three per card, reprints counted together, card-specific limits', () => {
+    // SHD_100 and SOR_046 are printings of one card here; VUL_001 may have 15 copies
+    const key = (id) => (id === 'SOR_046' ? 'SHD_100' : id);
+    const maxCopies = (k) => (k === 'VUL_001' ? 15 : 3);
+    const base = (name, extra) => ({ metadata: { name }, leader: { id: 'SOR_005' }, base: { id: 'SOR_029' }, deck: [...spread(48), ...extra] });
+    const decks = [
+        base('ok', [{ id: 'VUL_001', count: 15 }]),
+        base('reprint', [{ id: 'SOR_046', count: 1 }, { id: 'SHD_121', count: 1 }]),
+        base('merged', [{ id: 'SHD_120', count: 2 }, { id: 'SHD_120', count: 2 }]),
+        base('vulture', [{ id: 'VUL_001', count: 16 }])
+    ].map(normalizeDeck);
+    assert.deepStrictEqual(checkDecks(decks, { known: () => true, cardKey: key, maxCopies }), [
+        'reprint: 4 copies of SHD_100 + SOR_046 (premier allows 3)',
+        'merged: 4 copies of SHD_120 (premier allows 3)',
+        'vulture: 16 copies of VUL_001 (premier allows 15)'
+    ]);
 });
 
 test('fixture text: comments dropped except the style, sideboard left out', () => {

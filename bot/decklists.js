@@ -61,15 +61,22 @@ const MIN_DECK_SIZE_MODIFIER = new Map([
     ['4301437393', -5], // Thermal Oscillator
     ['4028826022', 10] // Data Vault
 ]);
+/** Premier copy limit per card, and the cards with their own limit, by internal card id (forceteki DeckValidator.ts). */
+const MAX_COPIES = 3;
+const MAX_COPIES_OVERRIDE = new Map([
+    ['2177194044', 15] // Swarming Vulture Droid
+]);
 
 /**
  * Problems that would make games with these decks fail or mislead: repeated names, ids the card data does not know
  * (forceteki throws for those), cards without an implementation (they would play as blank cards), a leader or base
- * slot holding another card type, leaders, bases or tokens in the main deck, and decks below their minimum size.
+ * slot holding another card type, leaders, bases or tokens in the main deck, decks below their minimum size, and more
+ * copies of a card than premier allows (reprints of one card count together).
  * The lookups come from the engine (see loadDecks): `known(id)`, `implemented(id)`, `types(id)` (the card's types, or
- * null to skip the type checks) and `minDeckSize(baseId)`.
+ * null to skip the type checks), `minDeckSize(baseId)`, `cardKey(id)` (one key for every printing of a card) and
+ * `maxCopies(key)`.
  */
-function checkDecks(decks, { known, implemented = () => true, types = () => null, minDeckSize = () => MIN_DECK_SIZE }) {
+function checkDecks(decks, { known, implemented = () => true, types = () => null, minDeckSize = () => MIN_DECK_SIZE, cardKey = (id) => id, maxCopies = () => MAX_COPIES }) {
     const problems = [];
     const seen = new Set();
     const typesOf = (id) => (known(id) ? types(id) : null);
@@ -96,6 +103,19 @@ function checkDecks(decks, { known, implemented = () => true, types = () => null
             const wrong = typesOf(c.id)?.find((t) => ['leader', 'base', 'token'].includes(t));
             if (wrong) {
                 problems.push(`${name}: ${c.id} is a ${wrong}, not a main deck card`);
+            }
+        }
+        const copies = new Map();
+        for (const c of d.deck) {
+            const key = known(c.id) ? cardKey(c.id) : c.id;
+            const e = copies.get(key) ?? { ids: [], count: 0 };
+            e.ids.push(c.id);
+            e.count += c.count;
+            copies.set(key, e);
+        }
+        for (const [key, e] of copies) {
+            if (e.count > maxCopies(key)) {
+                problems.push(`${name}: ${e.count} copies of ${e.ids.join(' + ')} (premier allows ${maxCopies(key)})`);
             }
         }
         const size = d.deck.reduce((a, c) => a + c.count, 0);
@@ -125,7 +145,9 @@ function loadDecks(file, env) {
             return c ? env.isImplemented(c) : true;
         },
         types: (id) => card(id)?.types ?? null,
-        minDeckSize: (id) => MIN_DECK_SIZE + (MIN_DECK_SIZE_MODIFIER.get(card(id)?.id) ?? 0)
+        minDeckSize: (id) => MIN_DECK_SIZE + (MIN_DECK_SIZE_MODIFIER.get(card(id)?.id) ?? 0),
+        cardKey: (id) => card(id)?.id ?? id,
+        maxCopies: (key) => MAX_COPIES_OVERRIDE.get(key) ?? MAX_COPIES
     });
     if (problems.length) {
         throw new Error(`${file}:\n  ${problems.join('\n  ')}`);
