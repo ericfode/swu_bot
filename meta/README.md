@@ -26,7 +26,13 @@ each one plays. It reads only recorded results, so it needs no engine or card da
   attacks and the share aimed at the base, passes, initiative claims.
 - **Ratings**: Bradley-Terry over every finished game (`bot/ratings.js`); a `TIME_FORFEIT` is a loss for the slow bot.
 - **Names**: `random-a/b/c` are one bot; `legacy` is the old heuristic; in runs that include `legacy`, the heuristic
-  profiles carry the base-danger sign fix and get a `+fix` suffix.
+  profiles carry the base-danger sign fix and get a `+fix` suffix. So do runs listed in `FIXED_ERA_RUNS` or marked
+  `fixedEra: true` in index.json or ladder.json config (fixed-profile runs made without `legacy`).
+- **Humans**: real karabast.net games imported by `importer/import.js` into `--human` (default
+  `/mnt/project-files/human-games/<source>/index.json` + `games/<id>.jsonl`). Players are anonymous and only play each
+  other, so they stay out of the ratings and the baseline fit. Both seats count as one competitor, `humans`, scored
+  like an average bot facing an equal opponent (rd 0). The page shows it beside the bots (tiles, grid, face-off),
+  never ranked among them.
 
 ## Review cycle
 

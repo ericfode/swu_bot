@@ -153,3 +153,15 @@ test('defaultChoose presses Done once a multi-select display prompt is at its li
     me.currentPrompt = () => prompt(2);
     assert.strictEqual(defaultChoose(eg, 'me', [done, more]), done);
 });
+
+test('arena units that throw on unit properties (attached pilots) are skipped, not fatal', () => {
+    const { arenaUnits } = require('../players/heuristic');
+    const pilot = { get exhausted() {
+        throw new Error('Contract assertion failure');
+    } };
+    const u = unit(2, 2);
+    const p = player({ units: [u] });
+    p.getArenaUnits = () => [u, pilot];
+    assert.deepStrictEqual(arenaUnits(p), [u]);
+    assert.ok(Number.isFinite(evaluate(game(p, player()), 'me')));
+});
