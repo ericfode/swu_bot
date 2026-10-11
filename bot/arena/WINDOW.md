@@ -49,6 +49,21 @@ Writes need a bearer token (the project token, or the admin token); a session co
   Elsewhere set `SWU_WINDOW_TOKEN`.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
 
+## Outside machines (feeds)
+
+A machine outside the project, such as the Karabast Sprite that streams c-clock's games against people, gets its own
+token: the Fly secret `ARENA_FEED_TOKEN_<NAME>` (for example `ARENA_FEED_TOKEN_KARABAST`), stored on that machine and
+never in a thread. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
+
+- `PUT /api/docs/runs/karabast`: the game list, in the tournament index shape (`TournamentIndex`,
+  viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
+  running games; a finished one has `outcome: "won"` and `winnerSeat`. The app lists runs named `karabast*` as games
+  against people, keeps them out of bot records and ratings, and calls the human seat whatever the feed names it.
+- `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
+  whole file when it ends. `push.js run <folder> --follow` does both for a folder laid out like a ladder run.
+- `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how
+  the viewer finds it.
+
 ## Deploys
 
 Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests, then

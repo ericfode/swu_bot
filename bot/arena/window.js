@@ -28,6 +28,7 @@ const ROOT = path.join(__dirname, '..', '..');
 // the collections a part may push; a friend reads the FRIEND ones raw, and the rest only through the app's public model
 const NS = new Set(['arena', 'runs', 'ladders', 'league', 'experiments', 'evals', 'panels', 'bots', 'threads', 'lens', 'meta', 'research', 'admin']);
 const FRIEND_NS = new Set(['arena', 'runs', 'evals', 'lens', 'meta']);
+const FEED_NS = new Set(['runs', 'lens', 'replays']);
 const ID = /^[A-Za-z0-9][\w.#@+-]{0,159}$/;
 const MAX_DOC = 16e6;
 const MAX_APPEND = 8e6;
@@ -49,8 +50,17 @@ function need(cond, code, msg) {
     }
 }
 
-/** Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. */
-function canWrite(who) {
+/**
+ * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
+ * (an outside machine, auth.js) writes only run documents, lens documents and replays named after it: <feed> or
+ * <feed>-<anything>, so the Karabast Sprite can stream its games and nothing else.
+ */
+function canWrite(who, ns, id) {
+    if (who.via === 'bearer' && who.role === 'feed') {
+        const own = typeof id === 'string' && (id === who.feed || id.startsWith(`${who.feed}-`));
+        need(own && FEED_NS.has(ns), 'forbidden', `the ${who.feed} feed writes only runs, lens documents and replays named ${who.feed} or ${who.feed}-<id>`);
+        return;
+    }
     need(who.via === 'bearer' && atLeast(who.role, 'project'), 'forbidden', 'pushing needs the project token (a bearer token; signing in only reads)');
 }
 
@@ -499,7 +509,7 @@ function createWindow(opts = {}) {
                 need(text != null, 'not_found', `no ${ns}/${id}`);
                 return friend ? sendJson(res, 200, { result: scrub(JSON.parse(text)) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
             }
-            canWrite(who);
+            canWrite(who, ns, id);
             need(id, 'bad_request', 'use /api/docs/<collection>/<id>');
             if (req.method === 'PUT') {
                 const body = (await readBody(req, MAX_DOC)).toString('utf8');
@@ -530,7 +540,7 @@ function createWindow(opts = {}) {
                 const to = q.length ? Math.min(buf.length, from + Math.max(0, Number(q.length) || 0)) : buf.length;
                 return sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from, to), { 'x-size': String(buf.length) });
             }
-            canWrite(who);
+            canWrite(who, 'replays', run);
             need(game, 'bad_request', 'use /api/replays/<run>/<game>');
             const body = await readBody(req, req.method === 'PUT' ? MAX_REPLAY : MAX_APPEND);
             if (req.method === 'POST') {

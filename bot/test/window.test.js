@@ -14,7 +14,7 @@ Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RES
 const { createWindow, Store, storeReader, scrub } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 
-const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
+const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
 
 async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
@@ -208,6 +208,28 @@ test('sign-in: GitHub confirms the login, invited people get a session, others s
         } finally {
             await close();
         }
+    }
+});
+
+test('a feed token writes only what carries its name, and reads like a friend', async () => {
+    const w = makeWindow('w5');
+    const { go, close } = await serve(w);
+    try {
+        const doc = (ns, id, method = 'PUT') => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body: '{"games":[]}' });
+        assert.strictEqual((await doc('runs', 'karabast')).status, 200);
+        assert.strictEqual((await doc('lens', 'karabast-g1')).status, 200);
+        assert.strictEqual((await doc('runs', 'karabastx')).status, 403, 'a name that only starts the same is not its own');
+        assert.strictEqual((await doc('runs', 'arena-t1-r1')).status, 403);
+        assert.strictEqual((await doc('panels', 'karabast')).status, 403, 'only runs, lens and replays');
+        assert.strictEqual((await doc('admin', 'karabast')).status, 403);
+        const append = (run) => go(`/api/replays/${run}/g1?at=0`, { method: 'POST', token: 'feed-secret', body: '{"t":"header"}\n', type: 'application/x-ndjson' });
+        assert.strictEqual((await append('karabast')).status, 200);
+        assert.strictEqual((await append('arena-t1-r1')).status, 403);
+        assert.deepStrictEqual((await (await go('/api/replays/karabast?sizes=1', { token: 'feed-secret' })).json()).result, [{ id: 'g1', size: 15 }]);
+        assert.strictEqual((await go('/api/docs/panels', { token: 'feed-secret' })).status, 403, 'reads like a friend');
+        assert.strictEqual((await go('/api/docs/runs/karabast', { token: 'feed-secret' })).status, 200);
+    } finally {
+        await close();
     }
 });
 

@@ -96,6 +96,7 @@
 
     function runKind(id) {
         if (/^arena-/.test(id)) return 'arena';
+        if (/^karabast(-|$)/.test(id)) return 'people'; // our bots against people on karabast.net (the Karabast Sprite's feed)
         if (/eval|ismcts-evaluators|position|oracle/.test(id)) return 'study';
         if (/ladder|league|^demo$/.test(id)) return 'ladder';
         return 'test';
@@ -119,6 +120,8 @@
             const fixed = metaRaw?.fixedEra?.[r.id] ?? (names.has('legacy') || FIXED_ERA_RUNS.has(r.id) || (typeof r.fixedEra === 'boolean' ? r.fixedEra : Date.parse(r.createdAt) >= FIX_ON_MAIN));
             const can = n => { const c = canonical(n, fixed); (rawOf[c] ||= new Set()).add(n); return c; };
             const st = {}; let decided = 0, running = 0, errors = 0;
+            // games against people show in the grid, the run and the game pages, and stay out of bot records and ratings
+            const people = runKind(r.id) === 'people';
             for (const g of r.games) {
                 const p1 = can(g.p1), p2 = can(g.p2);
                 let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated
@@ -132,6 +135,10 @@
                 if (res > 1 || !p1 || !p2) continue;
                 decided++;
                 const sa = res === 0 ? 1 : 0;
+                if (people) {
+                    for (const [x, s] of [[p1, sa], [p2, 1 - sa]]) { const T = (st[x] ||= { w: 0, l: 0, d: 0 }); s === 1 ? T.w++ : T.l++; }
+                    continue;
+                }
                 results.push({ a: p1, b: p2, score: sa });
                 for (const [x, y, s] of [[p1, p2, sa], [p2, p1, 1 - sa]]) {
                     const q = R(x); q.games++; q.rounds += g.rounds || 0; s === 1 ? q.w++ : q.l++;
@@ -213,7 +220,7 @@
 
         // what's new: one feed from timestamps
         const feed = [];
-        for (const r of runInfo.slice(-12)) feed.push({ t: r.createdAt, kind: 'run', run: r.id, text: `${r.kind === 'arena' ? 'Arena round' : r.kind === 'study' ? 'Study' : r.kind === 'ladder' ? 'Ladder' : 'Test'} ${r.id}: ${r.bots.length} bots, ${r.decided} of ${r.planned || r.n} games rated${r.running ? `, ${r.running} playing` : ''}` });
+        for (const r of runInfo.slice(-12)) feed.push({ t: r.createdAt, kind: 'run', run: r.id, text: r.kind === 'people' ? `Vs people ${r.id}: ${r.decided} games finished${r.running ? `, ${r.running} playing` : ''}` : `${r.kind === 'arena' ? 'Arena round' : r.kind === 'study' ? 'Study' : r.kind === 'ladder' ? 'Ladder' : 'Test'} ${r.id}: ${r.bots.length} bots, ${r.decided} of ${r.planned || r.n} games rated${r.running ? `, ${r.running} playing` : ''}` });
         for (const e of src.experiments || []) feed.push({ t: e.updatedAt || e.startedAt, kind: 'experiment', id: e.id, text: `${e.title}: ${e.status}${e.conclusion ? `. ${String(e.conclusion).slice(0, 140)}` : ''}` });
         for (const p of src.panels || []) { const th = (p.thoughts || []).at(-1); if (th) feed.push({ t: th.t || p.updatedAt, kind: 'thought', panel: p.id, title: p.title, text: th.text }); }
         for (const a of src.about || []) if (a.updatedAt) feed.push({ t: a.updatedAt, kind: 'card', bot: a.id, text: `${a.id}: bot card ${a.source === 'owner' ? 'updated by its builder' : 'drafted'}` });
