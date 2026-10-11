@@ -200,7 +200,15 @@ const api = {
         const token = crypto.randomBytes(18).toString('base64url');
         const entry = { name, title: title ?? name, start, philosophy: philosophy ?? '', harness, owner, tokenHash: hash(token), registeredAt: new Date().toISOString() };
         home.updateRoster((r) => ({ ...r, agents: [...r.agents.filter((a) => a.name !== name), entry] }));
-        const v = api.submit({ name, note: `starting strategy: ${start}`, token });
+        let v;
+        try {
+            v = api.submit({ name, note: `starting strategy: ${start}`, token });
+        } catch (e) {
+            // no token was handed out, so undo the registration: the name can be registered again
+            home.updateRoster((r) => ({ ...r, agents: r.agents.filter((a) => a.name !== name) }));
+            home.removeDir(dir);
+            throw e;
+        }
         dash.updatePanel(name, { now: 'Registered', status: 'running' });
         return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, say, eval and inbox on a hosted arena.' };
     },
@@ -262,11 +270,15 @@ const api = {
             if (bot.kind === 'js') {
                 loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
             }
-            // a concurrent submit may take the number first: then take the next free one
+            // a concurrent submit may take the number first: then take the next free one (and load-check under that
+            // name, since createBot gets the version name)
             for (let retry = 0; !home.promote(staging, path.join(home.VERSIONS, `${name}-v${n}`)); retry++) {
                 need(retry < 5, 'conflict', 'too many concurrent submits; submit again');
                 n = Math.max(n + 1, (home.versionsOf(name).pop() ?? -1) + 1);
                 home.writeJson(path.join(staging, 'SUBMISSION.json'), meta(n));
+                if (bot.kind === 'js') {
+                    loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
+                }
             }
             if (upload) {
                 home.writeFiles(live, upload); // the live folder follows what was uploaded, so eval of the live bot plays it
@@ -342,7 +354,8 @@ const api = {
 
     panel({ name } = {}) {
         competitor(name);
-        return home.readJson(path.join(dash.DASH, 'panels', `arena-${name}.json`), null);
+        // composed from the halves kept in ARENA_HOME, so it works without the research dashboard folder
+        return dash.composePanel(name);
     },
 
     games({ round } = {}) {

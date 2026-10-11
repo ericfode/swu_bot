@@ -207,7 +207,6 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 s.error = e;
             });
             s.w.on('exit', (code) => {
-                s.exited = true;
                 slots.delete(s);
                 if (!s.retired) {
                     const st = readControl(s.ctl);
@@ -273,13 +272,10 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 }
                 stop(s, result);
                 s.w.terminate();
-                // terminate() interrupts JS and Atomics.wait, but not a thread blocked in execSync: then kill the child
-                // processes this worker started (games on other workers keep their stdio bots)
-                setTimeout(() => {
-                    if (!s.exited) {
-                        killChildren(s.id);
-                    }
-                }, KILL_AFTER_MS).unref();
+                // terminate() interrupts JS and Atomics.wait, but neither a thread blocked in execSync nor the processes
+                // the worker started (a hung stdio bot keeps running): kill the child processes this worker started,
+                // whether or not it has exited by then (games on other workers keep their stdio bots)
+                setTimeout(() => killChildren(s.id), KILL_AFTER_MS).unref();
             }
         }, CHECK_MS);
         const n = Math.max(0, Math.min(workers, queue.length));

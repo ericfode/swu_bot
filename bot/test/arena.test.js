@@ -196,3 +196,30 @@ test('registrations in a row all stay in the roster (roster updates are serializ
     assert.deepStrictEqual(readJson(path.join(HOME, 'roster.json'), null).agents.map((a) => a.name), ['ra', 'rb', 'rc']);
     assert.ok(!fs.existsSync(path.join(HOME, 'roster.json.lock')), 'the lock is released');
 });
+
+test('a registration whose first submit fails is undone, so the name can be registered again', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    const submit = api.submit;
+    api.submit = () => {
+        throw new Error('load check failed');
+    };
+    try {
+        assert.throws(() => api.register({ name: 'oops', start: 'rush' }), /load check failed/);
+    } finally {
+        api.submit = submit;
+    }
+    assert.deepStrictEqual(readJson(path.join(HOME, 'roster.json'), null).agents, []);
+    assert.ok(!fs.existsSync(path.join(HOME, 'agents', 'oops')));
+    assert.ok(api.register({ name: 'oops', start: 'rush' }).token);
+});
+
+test('panel is composed from the arena\'s own halves, with or without the dashboard folder', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    const { token } = api.register({ name: 'pan', start: 'rush' });
+    api.say({ name: 'pan', now: 'Tuning', token });
+    const dashPanel = path.join(process.env.ARENA_DASH, 'panels', 'arena-pan.json');
+    fs.rmSync(dashPanel, { force: true });
+    assert.strictEqual(api.panel({ name: 'pan' }).now, 'Tuning');
+});
