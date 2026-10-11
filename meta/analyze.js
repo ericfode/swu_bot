@@ -26,6 +26,7 @@ const PANELS = args.panels || '/mnt/project-files/dashboard/panels';
 const BOTS_META = args.bots || '/mnt/project-files/dashboard/league/bots.json';
 const CARDS = args.cards || '/mnt/project-files/dashboard/bots'; // dashboard bot cards: their `family` wins, so both pages agree
 const HUMAN = args.human || '/mnt/project-files/human-games'; // imported karabast.net games (importer/import.js)
+const RATINGS = args.ratings || path.join(path.dirname(OUT), 'ratings.json'); // one rating per bot for every page (Eric's app pick, 18:21)
 const CACHE = args.cache || null; // replay features keyed by path, size and mtime, so refreshes only read new games
 
 // ---------------------------------------------------------------------------------------------- identities
@@ -468,7 +469,29 @@ function main() {
     };
     fs.writeFileSync(OUT + '.tmp', JSON.stringify(out));
     fs.renameSync(OUT + '.tmp', OUT);
+    writeRatings(botIds, results, rating, out.generatedAt);
     console.log(`meta: ${bots.length} bots, ${games.length} games, ${out.totals.replays} replays, ${snapRows.length} snapshots, ${humanGames.length} human games in ${out.ms} ms -> ${OUT}`);
+}
+
+/**
+ * ratings.json: every bot's Atlas rating (canonical names, Bradley-Terry on decided games, forfeits count as losses),
+ * mapped or not, so the app, console, arena and Atlas show one number. se is the rating's standard error in rating
+ * points (from the Bradley-Terry Fisher information, the prior included).
+ */
+function writeRatings(ids, results, rating, generatedAt) {
+    const g = Object.fromEntries(ids.map((id) => [id, Math.pow(10, (rating[id] - 1500) / 400)]));
+    const info = Object.fromEntries(ids.map((id) => [id, g[id] / (g[id] + 1) ** 2])); // the prior's virtual game
+    const games = Object.fromEntries(ids.map((id) => [id, 0]));
+    for (const r of results) {
+        const v = g[r.a] * g[r.b] / (g[r.a] + g[r.b]) ** 2;
+        info[r.a] += v; info[r.b] += v; games[r.a]++; games[r.b]++;
+    }
+    const bots = Object.fromEntries([...ids].sort((a, b) => rating[b] - rating[a]).map((id) => [id, {
+        rating: Math.round(rating[id]), se: Math.round(400 / Math.LN10 / Math.sqrt(info[id])), games: games[id],
+    }]));
+    const doc = { schema: 'swu-ratings/1', generatedAt, rules: 'Strategy Atlas: canonical names (pre-fix heuristic = legacy), Bradley-Terry with prior 1, decided games only, forfeits are losses', bots };
+    fs.writeFileSync(RATINGS + '.tmp', JSON.stringify(doc, null, 1));
+    fs.renameSync(RATINGS + '.tmp', RATINGS);
 }
 
 /** Short plain-words summary per bot, used by the page and as the answer key for visual review quizzes. */
