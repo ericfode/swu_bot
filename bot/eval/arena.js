@@ -54,6 +54,7 @@ async function worker(out, shard, shards, jobs, record, maxSteps, every) {
     const { playGame } = require('../match');
     const { snapshot } = require('../recorder');
     const env = new Env();
+    env.engineRev = engineRev();
     const mine = jobs.filter((_, i) => i % shards === shard);
     const part = path.join(out, 'parts', `${shard}.json`);
     const done = [];

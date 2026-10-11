@@ -1,7 +1,7 @@
 {
  "kind": "hand",
  "base": "material-fixed",
- "scale": 0.04934872734419556,
+ "scale": 0.049870239309877315,
  "trainedOn": [
   "random",
   "heur",
@@ -9,7 +9,7 @@
  ],
  "trainPositions": 35215,
  "trainGames": 990,
- "fittedAt": "2026-10-11T11:50:54.015Z",
- "trainLogloss": 0.5072,
- "trainBrier": 0.171
+ "fittedAt": "2026-10-11T12:06:38.947Z",
+ "trainLogloss": 0.5077,
+ "trainBrier": 0.1712
 }

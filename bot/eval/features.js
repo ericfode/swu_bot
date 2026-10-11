@@ -77,12 +77,23 @@ function hiddenAverage(deck, ps, db) {
 
 function sideFeatures(ps, opp, state, seat, { handVisible, deck, db }) {
     const f = Object.fromEntries(SIDE_KEYS.map((k) => [k, 0]));
+    // heuristic.js unitValue summed per unit (exhausted units x0.85); used by the hand-made `material` evaluators only,
+    // so it is not in SIDE_KEYS and the fitted models do not see it
+    f.materialUnits = 0;
     const hp = Math.max(0, ps.base.hp - ps.base.d);
     f.baseHp = hp;
     f.baseLow = hp < 10 ? ((10 - hp) ** 2) / 10 : 0;
     for (const u of [...ps.ground, ...ps.space]) {
         const info = db.get(u.s);
         const rem = Math.max(0, u.h - u.d);
+        const sentinel = u.sn || info?.kw.has('sentinel');
+        let shields = 0;
+        for (const up of u.u ?? []) {
+            shields += /^shield$/i.test(up.n) ? 1 : 0;
+        }
+        const ups = (u.u ?? []).length - shields;
+        const value = 1.3 * u.p + 0.9 * rem + 0.25 * (info?.cost ?? 0) + 2.2 * shields + 0.6 * ups + (sentinel ? 1 : 0);
+        f.materialUnits += u.x ? value * 0.85 : value;
         f.units++;
         f.power += u.p;
         f.hp += rem;
@@ -95,7 +106,7 @@ function sideFeatures(ps, opp, state, seat, { handVisible, deck, db }) {
             f.groundPower += u.p;
         }
         f.boardCost += info?.cost ?? 0;
-        if (u.sn || info?.kw.has('sentinel')) {
+        if (sentinel) {
             f.sentinel++;
         }
         for (const k of ['raid', 'overwhelm', 'saboteur', 'restore', 'grit']) {
@@ -103,15 +114,12 @@ function sideFeatures(ps, opp, state, seat, { handVisible, deck, db }) {
                 f[k]++;
             }
         }
-        for (const up of u.u ?? []) {
-            if (/^shield$/i.test(up.n)) {
-                f.shields++;
-            } else {
-                f.upgrades++;
-            }
-        }
+        f.shields += shields;
+        f.upgrades += ups;
     }
     f.leaderDeployed = ps.leader?.dep ? 1 : 0;
+    // 1 when the leader is undeployed and its action is available this round (not exhausted). A deployed leader
+    // is a unit and counts in power/hp instead, so this is 0 for it on purpose.
     f.leaderReady = ps.leader && !ps.leader.dep && !ps.leader.x ? 1 : 0;
     f.resources = ps.res.total;
     f.readyResources = ps.res.ready;

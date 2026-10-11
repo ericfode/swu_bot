@@ -32,9 +32,7 @@ function materialSide(f, fixedBase) {
     const hp = f.baseHp;
     const low = hp <= 12 ? ((12 - hp) ** 2) / 6 : 0;
     const base = (hp * 0.9 + (fixedBase ? -low : low)) * 1.5;
-    const exhausted = 0.15 * (1.3 * (f.power - f.readyPower));
-    const units = 1.3 * f.power + 0.9 * f.hp + 0.25 * f.boardCost + 2.2 * f.shields + 0.6 * f.upgrades + 1.0 * f.sentinel - exhausted;
-    return base + units + 1.8 * f.hand + 1.4 * f.resources + 2.5 * f.initiative;
+    return base + f.materialUnits + 1.8 * f.hand + 1.4 * f.resources + 2.5 * f.initiative;
 }
 
 function raceRate(a, b) {
