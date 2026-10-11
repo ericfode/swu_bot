@@ -2,7 +2,7 @@ use super::greedy2::{unit_value, Greedy2};
 use super::{Policy, SimOp, Simulator};
 use crate::cards::CardDb;
 use crate::protocol::{other, Decide, DistShare, Hello, Over, PlayerView, Simulated, State};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Search: greedy2 plus a look ahead with protocol v2 simulations.
 ///
@@ -53,13 +53,14 @@ impl Search {
         }
     }
 
-    /// Plays the simulation from `pos` with greedy2 on both seats; the score at the end, or None if it failed.
-    fn playout(&self, mut pos: Simulated, sim: &mut dyn Simulator, round: u32) -> Option<f64> {
+    /// Plays the simulation from `pos` with greedy2 on both seats; the score at the end or at the step cap, or None if
+    /// it failed or ran past the deadline (a cut playout is not comparable with full ones).
+    fn playout(&self, mut pos: Simulated, sim: &mut dyn Simulator, round: u32, deadline: Instant) -> Option<f64> {
         let mut mine = self.g.clone();
         let mut theirs = Greedy2::new(self.g.db());
         theirs.new_game(&Hello { protocol: String::new(), v: 1, bot: String::new(), you: other(&self.me).into(), seed: self.seed ^ 0x5eed, versions: vec![] });
         for _ in 0..self.max_steps {
-            if pos.error.is_some() {
+            if pos.error.is_some() || Instant::now() >= deadline {
                 return None;
             }
             if let Some(over) = pos.over.as_ref() {
@@ -114,9 +115,8 @@ impl Policy for Search {
     }
 
     fn choose_sim(&mut self, req: &Decide, sim: &mut dyn Simulator) -> usize {
-        let t0 = Instant::now();
-        // spend at most a third of the time on offer, and never more than 3 s
-        let budget_ms = (req.ms.unwrap_or(10_000) / 3).min(3_000) as u128;
+        // spend at most a third of the time on offer, and never more than 3 s; a playout stops at the deadline
+        let deadline = Instant::now() + Duration::from_millis((req.ms.unwrap_or(10_000) / 3).min(3_000));
         let scores = self.g.scores(req);
         let mut order: Vec<usize> = (0..req.actions.len()).collect();
         order.sort_by(|a, b| scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal));
@@ -126,19 +126,22 @@ impl Policy for Search {
         }
         let mut best: Option<(f64, usize)> = None;
         for (rank, &i) in cands.iter().enumerate() {
-            if t0.elapsed().as_millis() > budget_ms {
+            if Instant::now() >= deadline {
                 break;
             }
             let mut total = 0.0;
             let mut n = 0;
             for deal in 1..=self.deals as u32 {
+                if Instant::now() >= deadline {
+                    break;
+                }
                 let begin = sim.sim(SimOp::Begin(Some(deal)));
                 if begin.error.is_some() {
                     break;
                 }
                 let split = if req.actions[i].kind == "distribute" { self.g.distribution(req, i) } else { None };
                 let pos = sim.sim(SimOp::Act(i, split));
-                if let Some(v) = self.playout(pos, sim, req.state.round) {
+                if let Some(v) = self.playout(pos, sim, req.state.round, deadline) {
                     total += v;
                     n += 1;
                 }
@@ -201,6 +204,40 @@ mod tests {
         let mut sim = Scripted { last: None, calls: vec![] };
         assert_eq!(s.choose_sim(&req, &mut sim), 1);
         assert_eq!(sim.calls, ["begin", "act", "begin", "act", "end"]);
+    }
+
+    #[test]
+    fn stops_simulating_at_the_deadline() {
+        /// A game that never ends, 5 ms per step.
+        struct Slow(usize);
+        impl Simulator for Slow {
+            fn sim(&mut self, op: SimOp) -> Simulated {
+                self.0 += 1;
+                std::thread::sleep(Duration::from_millis(5));
+                serde_json::from_str(&format!(
+                    r#"{{"t":"simulated","op":"{}","actor":"p1","prompt":{{"type":"actionWindow","signature":"a","title":"x","selected":[],"actionWindow":true}},
+                        "state":{{"round":2,"phase":"action","players":{{"p1":{{}},"p2":{{}}}}}},"actions":[{{"i":0,"kind":"button","label":"Pass"}},{{"i":1,"kind":"button","label":"Claim Initiative"}}]}}"#,
+                    op.name()
+                ))
+                .unwrap()
+            }
+        }
+        let db: &'static CardDb = Box::leak(Box::new(CardDb::default()));
+        let mut s = Search::new(db);
+        s.new_game(&serde_json::from_str(r#"{"t":"hello","v":1,"you":"p1","seed":3}"#).unwrap());
+        let req: Decide = serde_json::from_str(
+            r#"{"t":"decide","you":"p1","sim":true,"ms":90,
+                "prompt":{"type":"actionWindow","signature":"actionWindow|-","title":"Choose an action","selected":[],"actionWindow":true},
+                "state":{"round":2,"phase":"action","players":{"p1":{},"p2":{}}},
+                "actions":[{"i":0,"kind":"button","label":"Pass"},{"i":1,"kind":"card","label":"x","card":{"id":"h1","zone":"hand","ctl":"p1"}}]}"#,
+        )
+        .unwrap();
+        let t0 = Instant::now();
+        let mut sim = Slow(0);
+        // 30 ms budget: a few steps of the first playout, which is then dropped, so greedy2 decides
+        assert_eq!(s.choose_sim(&req, &mut sim), 1);
+        assert!(t0.elapsed() < Duration::from_millis(60), "{:?}", t0.elapsed());
+        assert!(sim.0 < 12, "{} sims", sim.0);
     }
 
     #[test]
