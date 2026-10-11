@@ -27,6 +27,12 @@ recorded games from any source (including upstream tournaments) and positions in
 Generation 3 (`linear-g3`, `linear-deck-g3`, `mlp-g3`, `mlp-deck-g3`) adds strong-play data: omni's games (`replays.js`
 below) and ISMCTS search leaves. Gen 2 keeps the default names until gen 3 is tested in play.
 
+Generation 4 (`*-g4`) is gen 3's data without the `deckLow` feature (`fit.js --drop deckLow --suffix -g4`). Gen 3 put
+about 4 base HP on each card below 5 left in the deck, learned mostly from long random games. In omni's 72
+solver-proven endgames that weight picked the losing side, so gen 3 got only 46-49 of them right. Gen 4 gets 55-57,
+and its held-out Brier is the same for linear (0.157) and better for the net (0.153 vs 0.156). Base HP alone still
+gets 63.
+
 Hand-made evaluators get one fitted number, the logistic scale, so all of them output calibrated probabilities.
 Features are in `features.js` (base HP, board power/HP, keywords, shields, leader, resources, hand size and
 quality, deck, initiative, a damage-pressure ratio, round, who acts next).
