@@ -169,8 +169,9 @@ class JepaPlayer:
             if r.get("over") or (self.judge == "round" and r.get("actor") == me and len(acts) > 1
                                  and (phase != "action" or (r.get("state") or {}).get("round") != start_round)):
                 return r
-            if self.judge == "round" and r.get("actor") == me and prompt.get("actionWindow") and r.get("state") == msg.get("state") and not trail:
-                r["noop"] = True  # the move changed nothing and left me in the same window
+            if (self.judge == "round" and r.get("actor") == me and prompt.get("actionWindow") and r.get("state") == msg.get("state")
+                    and all(x.startswith("me:") for x in trail)):
+                r["noop"] = True  # the move changed nothing (maybe after a cancelled follow-up prompt) and left me in the same window
                 return r
             if r.get("actor") != me:
                 j = self.rush_move(r, me, seen)
