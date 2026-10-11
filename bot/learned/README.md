@@ -62,6 +62,13 @@ See `/mnt/project-files/results/learned-v1/` (ladder) and the dashboard panel. W
 copies the teacher on ~60% of held-out action windows (chance 18%) and ~82% of other prompts (chance 28%), and beats
 random 29-10 over 40 games with no search. The value head overfits (held-out MSE ~0.85 vs 1.0 for guessing 0).
 
+`models/learned/current.json` is now v3: feature version 2, trained on 455 DAgger games (the student plays half the
+moves). It copies the teacher on 57% of held-out windows (chance 16%); value MSE 0.99. In two round robins on the same
+seeds (`/mnt/project-files/results/learned-v3-ab/`, 6 games a pair) v3 beats random more often than v1 (`learned-pi`
+5-1 vs 3-3, `learned-v` 6-0 vs 5-1). Both learned bots now lose to `heuristic` (0-6): after the shared evaluation fix
+on main, the hand-written score is better than the learned value head, so the earlier ladder (`learned-v` 3-1 against
+the heuristic) no longer holds.
+
 ## Limits
 
 - Teacher labels are imitation: `learned-pi` can at best copy the heuristic bot, and it is trained on games where
