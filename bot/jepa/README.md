@@ -100,5 +100,49 @@ The eval.js columns are against the handicapped rush (see above): compare rows w
 later version learned "who is ahead" better (up to 74% on unseen games) and played worse. Choosing a move needs
 the difference between moves from one position, and the outcome label says almost nothing about that, least of
 all in lopsided games (adding rust-greedy2 games made it worse). The latent is fine: linear probes read the board
-back with R² 0.95 to 0.99. The weak part is the score on imagined futures. Next: self-play with exploration (same
-kind of position, different moves), search-based move labels, and rolling the predictor more than one step.
+back with R² 0.95 to 0.99. The weak part is the score on imagined futures, and the test below traces that to the predictor.
+
+## Which part is weak (oracle test)
+
+Swap one part for a perfect stand-in and see what changes. Protocol v2 lets a bot play moves on a private copy of
+the game (`sim`), so `jepa_bot.py --score` can replace the predictor's imagined future with the real one:
+
+- `--score sim-v` (`jepa-sim-v`): play each move on the copy, then score the real next position with the same
+  encoder and value head. A perfect predictor.
+- `--score sim-eval` (`jepa-sim-eval`): the same real position, scored by the position-evaluation thread's
+  `linear-deck-g4` (`bot/eval`) through `eval_helper.js`. A perfect predictor and a better judge.
+- `--log <file>` with any score mode writes all three score lists for every action window, and
+  `oracle_report.py` compares them.
+
+Inside a simulation the opponent plays like rush (the training data's main opponent; a stand-in that always
+passed made Pass look best). `--judge round` (default) plays both seats rush-style to the end of the round's action
+phase and scores my first decision after it; `--judge window` scores my next action window, which favours Pass and
+Claim Initiative because they get judged after the next draw. Moves that change nothing (a cancelled click) score 0.
+Simulations are only allowed at action windows, so the other 63% of decisions (targets, cards, resources) still
+use the imagined score, and a 2.5 s guard falls back to it when time runs short.
+
+```bash
+python3 bot/jepa/oracle_report.py jepa-h1.jsonl --json report.json
+```
+
+Results on jepa-h1's own action windows (about 2,600 per run; ladders `jepa-oracle-1-window` and
+`jepa-oracle-2` in `/mnt/project-files/results`):
+
+| Comparison | run 1 (window): agree / chance, ρ | run 2 (round): agree / chance, ρ |
+|---|---|---|
+| imagined vs real, same value head | 16% / 25%, −0.44 | 48% / 38%, 0.46 |
+| imagined vs real, evaluator | 15% / 25%, −0.50 | 31% / 36%, −0.18 |
+| value head vs evaluator, both real | 63% / 25%, 0.97 | 59% / 36%, 0.77 |
+| score spread over a position's moves, imagined / real | 3.3 / 16.9 pts | 3.0 / 4.2 pts |
+
+*Agree* = both rank the same move first; ρ = Spearman over one position's moves, median over positions.
+
+**The predictor is the weak part.** The encoder holds the board and the value head ranks real futures like the
+fitted evaluator. The imagined futures barely differ between moves, and their ranking is near or below chance. The
+likely cause is the data: each game shows one move per position, so the predictor learns roughly the average
+future. A better predictor should raise imagined-vs-real agreement toward the value-head-vs-evaluator level.
+
+Play does not separate the parts yet: the test bots were +83 / +161 Elo over jepa-h1 in run 1 and −110 / −160 in
+run 2, inside the ±100 noise of 10 games per pair, because most of their decisions still come from imagination.
+Next: train the predictor on simulated branches (every legal move from sampled positions) and re-run the
+comparison.
