@@ -54,3 +54,13 @@ node bot/eval/publish.js --brier brier.json --ladder results/eval-ladder-1/index
 
 `arena.js` writes the same `index.json` / `games/<id>.jsonl` as `tournament.js` (viewer and dashboard read them
 unchanged), and adds `decks/` and `positions/` next to them.
+
+### Scoring another bot's lens scores
+
+`lensfit.js` takes the per-step score from swu-lens/1 files (`dashboard/lens/<gameId>.json`, default field `edge`) and
+the matching replays. It fits the score → P(p1 wins) map with 5 folds split by game, and scores the bench evaluators
+on the same positions:
+
+```bash
+node bot/eval/lensfit.js --lens /mnt/project-files/dashboard/lens --replays /mnt/project-files/results --json omni-lens-fit.json
+```
