@@ -30,6 +30,10 @@ Real cards, forceteki 2be4fcd, both seats per seed (`node bot/ladder.js --bots a
 | greedy vs random-a | 19-1 (`check.js 10 1`) |
 | greedy2 vs greedy | 19-1 |
 | greedy2 vs rush (best JS bot) | 29-11; 78-21 over 100 games (seeds 101-150) |
+| Ladder: greedy2, greedy, rush, tempo, random (10 games per pair, seeds 201-250) | greedy2 33-5 (87%, first); rush 65%, tempo 51%, greedy 42% |
+
+Decision time: the Rust policy takes about 30 us; the harness measures about 1 ms per decision because the adapter
+builds and sends the board JSON. The JS search bots (tempo, heuristic) average 170-430 ms.
 
 ## Why a subprocess
 
