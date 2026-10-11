@@ -275,7 +275,13 @@ async function main() {
                      harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
-    const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
+    let prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
+    // a program that learns from game to game would start fresh in a resumed run, not where the kept games left it
+    const stateful = names.filter((n) => programSpec(n)?.stateful === true);
+    if (prev && stateful.length) {
+        console.log(`resume: bot programs that learn from game to game would start fresh ("stateful": ${stateful.join(', ')}), so the run starts over`);
+        prev = null;
+    }
     const save = () => {
         const doc = summarize({ id, createdAt, status, engine, config, botInfo, games, scheduled: schedule.length });
         writeJson(path.join(out, 'ladder.json'), doc);

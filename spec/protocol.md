@@ -237,6 +237,7 @@ in `node bot/tournament.js --bots ...` like any other bot.
 | `stderr` | `inherit` | `inherit` shows the program's stderr, `ignore` drops it. |
 | `timeoutMs`, `startTimeoutMs` | 10000, 30000 | This bot's `ms` for `decide`/`over` and for `hello`. A game's own `limits` (`playGame`) override them. |
 | `lang` | none | Language label for replays and the dashboard (`rust`, `python`, ...). |
+| `stateful` | `false` | `true` when the program learns from game to game (after `over`): `bot/ladder.js --resume` then plays the run again from the start, as a resumed run would start the program fresh. |
 | `inputs` | none | Other files or folders the program reads (from `cwd`), so `bot/ladder.js --resume` notices when they change. Files named in `cmd`/`args`, and the files next to one outside the repo, already count. |
 
 A tournament keeps one process per bot for the whole run (two when a game needs the same bot in both seats). From
