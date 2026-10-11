@@ -6,7 +6,7 @@ const { setCodeToString } = require(path.join(__dirname, '..', 'forceteki', 'bui
 /**
  * Plain-JSON view of an EnvGame from one seat, for bots that cannot hold engine objects (see spec/stdio-protocol.md).
  * Same fields as the replay snapshot in recorder.js, plus an `id` (the engine card uuid, which is what `card` actions
- * and distribute targets refer to) on every card, and the opponent's hand reduced to a count.
+ * and distribute targets refer to) on every card, your own hand and resources listed, and the opponent's hand reduced to a count.
  * Only reads engine state.
  */
 
@@ -58,6 +58,8 @@ function playerView(player, isMe) {
     };
     if (isMe) {
         out.hand = hand.map(cardRef);
+        // own resources are known to their owner and can be played from (Smuggle); the opponent's are face down
+        out.resources = cards(ZONE.resource).map((c) => (c.exhausted ? { ...cardRef(c), x: 1 } : cardRef(c)));
     }
     return out;
 }
