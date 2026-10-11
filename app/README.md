@@ -46,6 +46,23 @@ Ratings: every bot listed in `meta/ratings.json` shows that rating. A bot not li
 analyzer's hourly refresh, or runs it skips) gets the app's own Bradley-Terry fit with the same rules, and Lab > Data
 health lists it.
 
+## Tokens
+
+All in `src/style.css` `:root`; use them, never a raw size or colour.
+
+- Type: eight sizes, `--fs-2xs` 10px, `--fs-xs` 11, `--fs-sm` 12, `--fs-md` 13, `--fs-base` 14, `--fs-lg` 16,
+  `--fs-xl` 20, `--fs-2xl` 26. Text is never smaller than 10px. Pixel sizes remain only inside SVG drawings, where
+  they are drawing units.
+- Spacing: `--sp-2` to `--sp-24` (2, 4, 6, 8, 10, 12, 16, 24px); `--gap` is the grid gap.
+- Corners: `--r-xs` 2px (bars, cells), `--r-sm` 4px (chips, pills), `--r` 6px (boxes), `--r-lg` 12px (tiles,
+  dialogs), `--r-pill`.
+- Colour: page tokens (`--ink`, `--muted`, `--faint`, `--accent`, ...) in light and dark; every text colour passes
+  4.5:1 on the surface. The Atlas colours (spot-edge ramp `--pos-*`/`--neg-*`, `--you`, `--them`, `--clock`,
+  `--mid`, family colours `--f-*`) come from the kit: the build inlines `AtlasKit.css()` ahead of the stylesheet.
+
+Owners' result widgets (dashboard contract section 5) draw with the same pieces: `faceoff` as the face-off bar,
+`score` as the score bar with the 50% line, `spots` as the bots table with each bot's nine spots.
+
 ## Code
 
 - `src/page.html`: the page shell; `build.mjs` inlines everything into it.
