@@ -196,7 +196,7 @@ test('the shared snapshot holds the in-scope source files and nothing of perch\'
   snapshotShared(scope, dir, closures);
   assert.deepStrictEqual(lsTree(dir), ['arena/strategy/diagram.js', 'bend/score.js', 'dashboard/build.mjs']);
   fs.rmSync(path.join(root, 'arena/strategy/diagram.js'));
-  write('closed.jsonl', '{"id":"x"}\n');
+  write('closed.jsonl', '{"id":"x"}\n{"id":"y","reas\n'); // the second line torn, as a synced mount can leave it
   snapshotShared(scope, dir, closures);
   assert.deepStrictEqual(lsTree(dir), ['bend/score.js', 'dashboard/build.mjs']);
   assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/closed.jsonl'), 'utf8'), '{"id":"x"}\n');
