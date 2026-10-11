@@ -93,6 +93,8 @@ node bot/omni/wasm/check.js bot/omni-rs/tests/compiled-fixtures/*.jsonl.gz --cat
 
 # Existing JS match runner, using Wasm for complete endgame searches.
 node bot/omni/solve-games.js --engine wasm --pool bot/omni/rs/pool.json --bots aggro,control --seeds 101 --budget 2000 --depth 12 --sample 0 --out replays/wasm-solves
+# Compiled-card matches use the same runner with the catalogue and its admitted pool.
+node bot/omni/solve-games.js --engine wasm --catalogue bot/card-compiler/generated/catalog.json --pool bot/omni-rs/tests/compiled-fixtures/pool.json --bots heuristic,heuristic --seeds 3001 --budget 100 --depth 2 --sample 0 --stop 1 --out replays/wasm-compiled-solves
 
 # Prove exported positions, with a fixed budget or their measured JS time allowance.
 node bot/omni/wasm/prove.js replays/omni-rs-matched.jsonl --depth 12 --ms-field jsMs
@@ -105,7 +107,9 @@ node bot/omni/wasm/bench.js bot/omni-rs/tests/fixtures/heuristic-vs-heuristic-1.
 
 `solve-games.js` defaults to its existing JavaScript prover. `--engine wasm` requires an explicit pool and retains
 each measured position in Wasm during the game; proving does not roll back the JS engine. Its `--budget` remains
-a cumulative node budget per window solve. The file prover also records import time and caller-observed latency,
+a cumulative node budget per window solve. Optional `--catalogue FILE` is accepted only with `--engine wasm`;
+the catalogue's absolute path and exact file SHA-256 are recorded in each result and its configuration. Omitting
+it preserves the original pool-based loader. The file prover also records import time and caller-observed latency,
 separately from the Rust search time. `bench` executes every rollout transition in Wasm, not in a JS loop.
 
 [Low-level bindings, memory ownership, and exact proof semantics](../../omni-wasm/README.md).
