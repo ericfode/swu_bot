@@ -455,7 +455,13 @@ function createWindow(opts = {}) {
     }
 
     async function api(req, res, url, who) {
-        const parts = url.pathname.split('/').slice(2).map((s) => decodeURIComponent(s));
+        const parts = url.pathname.split('/').slice(2).map((s) => {
+            try {
+                return decodeURIComponent(s);
+            } catch {
+                throw new WindowError('bad_request', 'malformed %-escape in the path');
+            }
+        });
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
@@ -579,9 +585,16 @@ function createWindow(opts = {}) {
                 return serveFile(req, res, kitFile, 'text/javascript');
             }
             // the arena page's replay links (<ladder>/games/<id>.jsonl and <ladder>/index.json), from the window's collections
-            const rep = /^\/replays\/([^/]+)\/(?:games\/([^/]+)\.jsonl|(index)\.json)$/.exec(url.pathname);
+            const rep = /^\/replays\/([\w.%@+-]+)\/(?:games\/([\w.%@+-]+)\.jsonl|(index)\.json)$/.exec(url.pathname);
             if (rep) {
-                const text = rep[3] ? store.getDoc('runs', decodeURIComponent(rep[1])) : store.readReplay(decodeURIComponent(rep[1]), decodeURIComponent(rep[2]));
+                const dec = (x) => {
+                    try {
+                        return decodeURIComponent(x);
+                    } catch {
+                        return '';
+                    }
+                };
+                const text = rep[3] ? store.getDoc('runs', dec(rep[1])) : store.readReplay(dec(rep[1]), dec(rep[2]));
                 return text == null ? sendText(res, req, 404, 'text/plain', 'not found') : sendText(res, req, 200, rep[3] ? 'application/json' : 'application/x-ndjson', text);
             }
             return sendText(res, req, 404, 'text/plain', 'not found');
