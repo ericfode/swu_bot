@@ -22,8 +22,9 @@ node bot/ladder.js --bots bend,rush --games 20         # play
 node bot/stdio-smoke.js -- bot/bend/run.sh             # protocol check against a fake game
 ```
 
-`build.sh` needs node, bun and clang. `run.sh` starts the binary with `cat` in front: Bend reads stdin by opening
-`/dev/stdin`, and that fails (ENXIO) when stdin is a socket, which is what Node's `spawn` gives a child.
+`build.sh` needs node, bun and clang. `run.sh` (bash) execs the binary with its stdin fed through `cat`: Bend reads
+stdin by opening `/dev/stdin`, and that fails (ENXIO) when stdin is a socket, which is what Node's `spawn` gives a child.
+Because of the `exec`, the process the harness starts is the bot itself, so killing it leaves nothing behind.
 
 ## How it decides
 
