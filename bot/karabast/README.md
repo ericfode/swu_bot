@@ -9,7 +9,7 @@ without a browser. Plain CommonJS on Node 22's built-in `WebSocket` and `fetch`,
 | `frame.js` | Reads `gamestate` frames: legal actions for a seat (same kinds as `bot/env.js` legalActions), the `game` message for an action, and the privacy scrub. |
 | `observe.js` | A frame as a protocol bot sees it: the `decide` message's prompt, state and actions (spec/protocol.md). |
 | `seat.js` | One protocol bot playing one seat, with the undo rules and the command allow-list below. |
-| `queue.js` | Quick match as a bot: enter the queue with a deck, play the match, leave. Counts people (`ledger.js`). |
+| `queue.js` | Quick match as a bot: enter the queue with a deck, play the match, leave; with `--games N`, a loop that queues again after each game. Counts people (`ledger.js`) and writes what it is doing to `status.json`. |
 | `spectate.js` | Watches games as a spectator and writes scrubbed frames as JSON Lines, which `importer/import.js` turns into replays. `--predict <evaluator>` prints P(win) as the game goes. |
 | `live-view.js` | Serves recorded games to the Holotable viewer kit while they are played: a game picker, the board following each move, and an evaluator's chance that p1 wins. |
 | `ledger.js` | The people cap: counts each real person a run touches (salted hashes, no ids) and stops at the limit. |
@@ -33,6 +33,7 @@ node bot/karabast/selfplay.js --bots c-clock,c-clock --decks bot/decks/ash-meta-
 node bot/karabast/spectate.js --public --games 1 --gap 1 --out captures --predict mlp-g5   # while a game runs
 node importer/import.js captures --out replays/karabast-local --source karabast-spectate
 node bot/karabast/queue.js --bot c-clock --deck admiral-piett_jtl_blue --out runs/q     # needs a second player in the queue
+node bot/karabast/queue.js --bot c-clock --deck admiral-piett_jtl_blue --games 50 --gap 25 --out runs/q   # a loop
 node bot/karabast/fidelity.js --games 20                                               # needs forceteki/build
 ```
 
@@ -68,8 +69,23 @@ file changed in the last 5 minutes is served without its `end` line, so the kit 
 each move. `--predict` adds the evaluator's P(p1 wins) from the public board (no hands) as a score on the timeline.
 Use the shared kit build (`/mnt/project-files/viewer-kit`, 2026-10-11 evening or later): an older kit, such as one
 built from `studio/` on main before the Holotable branch lands, shows the board without card text or the win chance.
-The server reads only the frame files and the two kit files. It listens on 127.0.0.1 unless `--host` says otherwise;
-on a reachable host, add `--key <secret>` so every route sits under `/<secret>/`.
+The server reads only the frame files, the runs' `games.jsonl` and `status.json`, and the two kit files. It listens on
+127.0.0.1 unless `--host` says otherwise; on a reachable host, add `--key <secret>` so every route sits under `/<secret>/`.
+
+In a bot game (`<run>/frames/`) the frames are our seat's view, so that seat is named after the bot ("c-clock (ours)")
+and the other one "opponent", and the picker says whether our bot won. A watched game is two people and says so.
+The page polls every 2 s, so a game shows up a few seconds after its first board, and shows the newest queue run's
+state from its `status.json`: in the queue since when, playing, between games, or stopped and why. When the bot starts
+a game the page isn't showing, a button opens it.
+
+## Play games back to back (`queue.js --games N`)
+
+With `--games` above 1, `queue.js` queues again `--gap` seconds after each game (at least 25: a finished lobby keeps
+its users ~20 s). A wait with no match queues again; any other failure is a row with `result: "error"`, and
+`--max-errors` failures in a row (default 3) stop the run. It also stops on the people cap, a ledger error or the stop
+file, and exits 1 when it ended on a failure. `<out>/status.json` is rewritten whole every 30 s and at each change
+(`state`: starting, queued, playing with `file`, between games, stopped with `reason`; plus `played`, `won`, `lost`,
+`errors`), so a reader tells a dead run from one waiting in the queue.
 
 ## What a bot sees (`fidelity.js`)
 
@@ -97,7 +113,7 @@ stub so the log positions stay. File names are a hash of the lobby and game ids.
 
 ## The live site
 
-Not used yet. Eric picked public games, recording public games politely and asking Karabast's developers through a
+In use since 2026-10-11: a 4-game pilot (4 losses), then 3 watched games. Eric picked public games, recording public games politely and asking Karabast's developers through a
 friend (2026-10-11, [decision page](https://claude.ai/artifact/MEsM6CB2hyK8Azrj2ajJ5K)), with a limit of 10 real
 people. Before any live run:
 
