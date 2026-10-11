@@ -67,7 +67,7 @@ test('observe: a pass with 3 ready resources adds evidence to cards costing 3 or
 });
 
 test('ismcts names parse into options', () => {
-    assert.deepEqual(parseIsmcts('ismcts'), { beta: 1, horizon: 1, iterPerAction: 8, peek: false });
+    assert.deepEqual(parseIsmcts('ismcts'), { beta: 1, horizon: 1, iterPerAction: 6, peek: false });
     assert.deepEqual(parseIsmcts('ismcts-b2.5-h2-n4'), { beta: 2.5, horizon: 2, iterPerAction: 4, peek: false });
     assert.equal(parseIsmcts('ismcts-peek').peek, true);
     assert.equal(parseIsmcts('ismctsx'), null);

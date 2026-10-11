@@ -91,7 +91,7 @@ class IsmctsBot {
      * scale: evaluation points per logistic unit when squashing scores to 0..1. thoughts: optional callback for the
      * dashboard, called after every search with a summary.
      */
-    constructor(name = 'ismcts', { beta = 1, iterPerAction = 8, minIter = 48, maxIter = 240, horizon = 1, c = 0.7, scale = 8, maxTreeDecisions = 3, peek = false, profile = null, thoughts = null } = {}) {
+    constructor(name = 'ismcts', { beta = 1, iterPerAction = 6, minIter = 32, maxIter = 128, horizon = 1, c = 0.7, scale = 8, maxTreeDecisions = 3, peek = false, profile = null, thoughts = null } = {}) {
         this.name = name;
         this.needsUndo = true;
         this.beta = beta;
