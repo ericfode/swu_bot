@@ -32,6 +32,16 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
   - `random*` — uniform random. `rush` — rule-based, no lookahead: plays its most expensive card, attacks face, then passes.
   - `heuristic`, `aggro`, `tempo`, `control` — the same one-ply rollback search (`players/heuristic.js`) with different
     evaluation profiles (`players/profiles.js`); `heuristic` is the original evaluation, bit-for-bit. Add `-dN` for depth N.
+  - `ismcts[-bB][-hH][-nN]` — known-decklist Information Set MCTS (`players/ismcts.js`, `players/belief.js`). Both
+    decklists are known; each iteration samples one world (my deck order; which unseen opponent cards are in hand,
+    resources or deck), searches my turn with UCB in one shared tree, lets the opponent reply from its sampled hand and
+    scores the result with the heuristic evaluation. `B` = belief sharpness: the weight of a card in the opponent's
+    hand is `exp(-B * evidence)`, where evidence grows each time the opponent could afford the card but spent a window
+    without paying for anything (0 = uniform over the decklist). `H` = exchanges before scoring, `N` = iterations
+    per legal action. `ismcts-peek` searches the real hidden cards: an unfair control that measures what hidden
+    information is worth. `ISMCTS_THOUGHTS=<dir>` makes the bots write their latest search there;
+    `node bot/ismcts-panel.js --runs <ladder dir> --thoughts <dir> --watch 10` turns that into the dashboard panel.
+    `node bot/determinize-check.js` checks that world sampling keeps zone sizes and that rollback restores exactly.
   - `name#tag` enters the same bot twice (`aggro#1,aggro#2`) as a sanity check.
 - `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record]`
   runs a round robin on worker threads. Each seed is played once from each seat (random decks follow the seat, so deck luck cancels).
@@ -39,4 +49,6 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
   research dashboard read it unchanged) and `<out>/<id>/ladder.json` (schema `swu-ladder/1`: per-bot W/L/D, win rate with
   95% CI, sequential Elo, Bradley-Terry Elo, pair matrix, Elo history). Writes are atomic. `--record` also saves `games/<id>.jsonl`
   replays (~1 MB each). `--out` defaults to `/mnt/project-files/results` when it exists, else `results/`.
+- `--vs a,b,c` turns the ladder into a gauntlet: each `--bots` entry plays each `--vs` entry on the same seeds (not each
+  other), which is what a parameter sweep needs: `node bot/ladder.js --bots ismcts-b0,ismcts-b1,ismcts-b4 --vs rush,heuristic --games 8`.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
