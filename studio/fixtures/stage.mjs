@@ -1,6 +1,7 @@
 // Fills studio/static-replays/, which `npm run build:static` bakes into the single-file build.
 //   STATIC_REPLAYS=dirA:dirB  copy every tournament (a folder with index.json) found in those replays folders
 //   STATIC_EVALS=dir          also bundle position evaluations (<gameId>.json, dashboard evals contract) from dir
+//   STATIC_LENS=dir           also bundle the omni bot's card values (<gameId>.json, swu-lens/1) from dir
 //   (unset)                   generate the fixture tournaments (fixtures/generate.mjs) and use those
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,4 +31,11 @@ if (process.env.STATIC_EVALS) {
         fs.copyFileSync(path.join(process.env.STATIC_EVALS, f), path.join(out, '_evals', f));
     }
     console.log(`staged evals from ${process.env.STATIC_EVALS}`);
+}
+if (process.env.STATIC_LENS) {
+    fs.mkdirSync(path.join(out, '_lens'), { recursive: true });
+    for (const f of fs.readdirSync(process.env.STATIC_LENS).filter((f) => f.endsWith('.json'))) {
+        fs.copyFileSync(path.join(process.env.STATIC_LENS, f), path.join(out, '_lens', f));
+    }
+    console.log(`staged lens files from ${process.env.STATIC_LENS}`);
 }

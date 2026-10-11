@@ -1,4 +1,5 @@
-import type { Game, PlayerSnap, Seat, Snapshot, UnitRef } from './types';
+import type { Game, PlayerSnap, Seat, Snapshot } from './types';
+import { estimateLens, LENS_SCALE, OMNI_WEIGHTS, type LensStep } from './lens';
 
 export const SEATS: Seat[] = ['p1', 'p2'];
 export const other = (s: Seat): Seat => (s === 'p1' ? 'p2' : 'p1');
@@ -38,7 +39,6 @@ export function trackUnits(game: Game): UnitIds {
 
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 const units = (p: PlayerSnap) => [...p.ground, ...p.space];
-const hpLeft = (u: UnitRef) => Math.max(0, u.h - u.d);
 
 export interface Metrics {
     step: number;
@@ -51,48 +51,54 @@ export interface Metrics {
     hand2: number;
     res1: number;
     res2: number;
-    /** p1's edge from the board alone, -1..1 (see materialEdge). */
+    /** p1's edge in the omni bot's board score, squashed to -1..1 (see edgeTerms). */
     edge: number;
 }
 
 export interface EdgeTerm {
-    key: 'base' | 'power' | 'toughness' | 'hand' | 'resources';
+    key: 'base' | 'ground' | 'space' | 'hand' | 'resources' | 'initiative';
     label: string;
-    /** what each side has, in the term's own unit */
+    /** each side's points for this term (good for that side) */
     p1: number;
     p2: number;
-    /** points toward p1 (negative = toward p2) before squashing */
+    /** p1 - p2: points toward p1 (negative = toward p2) */
     points: number;
+    /** what each side's points are made of, e.g. "3 units" */
+    what: Record<Seat, string>;
     how: string;
 }
 
-const W = { base: 0.6, power: 1.2, toughness: 0.7, hand: 1.5, resources: 1.1, scale: 18 };
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * A deliberately simple, explainable read of the board, from p1's side: each term is (p1 - p2) times a weight, a low base
- * costs extra (urgency), and the sum is squashed to -1..1 with tanh(sum / 18). It is the built-in placeholder lane;
- * real evaluators (heuristic bots, LLM analysis) arrive as evals.
+ * The board read the way the omniscient bot scores it at its search leaves (bot/omni, same weights as the heuristic
+ * bot): each side's base, units, hand, resources and initiative in points, and p1's edge = p1 total - p2 total,
+ * squashed to -1..1 with tanh(edge / 25) for the curves. With the game's lens file the values are the bot's own;
+ * without it they are computed here and leave out card cost, which replays don't record.
  */
-export function edgeTerms(s: Snapshot): { terms: EdgeTerm[]; sum: number; edge: number } {
+export function edgeTerms(s: Snapshot, lens?: LensStep | null): { terms: EdgeTerm[]; sum: number; edge: number; exact: boolean } {
+    const v = lens ?? estimateLens(s);
+    const w = OMNI_WEIGHTS;
     const { p1, p2 } = s.players;
     const hp = (p: PlayerSnap) => Math.max(0, p.base.hp - p.base.d);
-    const urgency = (p: PlayerSnap) => Math.max(0, 12 - hp(p)) ** 2 / 8;
-    const power = (p: PlayerSnap) => sum(units(p).map((u) => u.p));
-    const tough = (p: PlayerSnap) => sum(units(p).map(hpLeft));
+    const t = (key: EdgeTerm['key'], label: string, a: number, b: number, what: Record<Seat, string>, how: string): EdgeTerm =>
+        ({ key, label, p1: Math.round(a * 10) / 10, p2: Math.round(b * 10) / 10, points: a - b, what, how });
     const terms: EdgeTerm[] = [
-        { key: 'base', label: 'Base HP', p1: hp(p1), p2: hp(p2), points: W.base * (hp(p1) - hp(p2)) - (urgency(p1) - urgency(p2)), how: `${W.base} per HP, and a base under 12 HP costs (12 − HP)² / 8 more` },
-        { key: 'power', label: 'Board power', p1: power(p1), p2: power(p2), points: W.power * (power(p1) - power(p2)), how: `${W.power} per point of power on units in play` },
-        { key: 'toughness', label: 'Unit HP', p1: tough(p1), p2: tough(p2), points: W.toughness * (tough(p1) - tough(p2)), how: `${W.toughness} per HP left on units in play` },
-        { key: 'hand', label: 'Cards in hand', p1: p1.hand.length, p2: p2.hand.length, points: W.hand * (p1.hand.length - p2.hand.length), how: `${W.hand} per card` },
-        { key: 'resources', label: 'Resources', p1: p1.res.total, p2: p2.res.total, points: W.resources * (p1.res.total - p2.res.total), how: `${W.resources} per resource` }
+        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left, plus (12 − HP)² / 6 when 12 HP or less)`),
+        t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per upgrade + ${w.sentinel} if Sentinel, × ${w.exhaustedMult} if exhausted`),
+        t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, 'same rule as ground units'),
+        t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`),
+        t('resources', 'Resources', v.p1.resources, v.p2.resources, { p1: `${p1.res.total}`, p2: `${p2.res.total}` }, `${w.resource} per resource`),
+        t('initiative', 'Initiative', v.p1.initiative, v.p2.initiative, { p1: s.initiative === 'p1' ? 'has it' : '–', p2: s.initiative === 'p2' ? 'has it' : '–' }, `${w.initiative} for the player holding it`)
     ];
-    const total = sum(terms.map((t) => t.points));
-    return { terms, sum: total, edge: Math.tanh(total / W.scale) };
+    const total = v.p1.total - v.p2.total;
+    return { terms, sum: total, edge: Math.tanh(total / LENS_SCALE), exact: !!lens };
 }
 
 export const materialEdge = (s: Snapshot) => edgeTerms(s).edge;
 
-export function metrics(game: Game): Metrics[] {
+/** Per-step series for the curves; `lensSteps` (lensByIndex) makes the edge the omni bot's own where the game has a lens file. */
+export function metrics(game: Game, lensSteps?: Map<number, LensStep>): Metrics[] {
     return game.steps.map((st, i) => {
         const { p1, p2 } = st.state.players;
         return {
@@ -106,7 +112,7 @@ export function metrics(game: Game): Metrics[] {
             hand2: p2.hand.length,
             res1: p1.res.total,
             res2: p2.res.total,
-            edge: materialEdge(st.state)
+            edge: edgeTerms(st.state, lensSteps?.get(i) ?? null).edge
         };
     });
 }

@@ -19,6 +19,7 @@ import { useSettings } from '../lib/settings';
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
 import { parseGame } from '../data/source';
 import type { EvalFile } from '../data/evals';
+import { estimateLens, lensAt, lensByIndex, OMNI_WEIGHTS, type LensFile, type LensStep, type LensView } from '../data/lens';
 import type { Game, Seat, Snapshot } from '../data/types';
 
 export interface MountOptions {
@@ -33,6 +34,11 @@ export interface MountOptions {
     /** position evaluations (dashboard/evals/<gameId>.json contract), or a URL to fetch them from */
     evals?: EvalFile | null;
     evalsUrl?: string;
+    /** the omni bot's card values (dashboard/lens/<gameId>.json, swu-lens/1), or a URL to fetch them from; the Lens button estimates them without it */
+    lens?: LensFile | null;
+    lensUrl?: string;
+    /** turn the Lens on (true) or off (false) for every viewer on the page; omitted keeps the viewer's saved choice */
+    showLens?: boolean;
     /** first step to show (index into the game's steps); or stepN to give it as Step.n */
     step?: number;
     stepN?: number;
@@ -56,6 +62,7 @@ export interface ViewerHandle {
     pause(): void;
     setGame(game: Game | string): void;
     setEvals(evals: EvalFile | null): void;
+    setLens(lens: LensFile | null): void;
     destroy(): void;
 }
 
@@ -104,6 +111,10 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
         return best;
     };
     let evals: EvalFile | null = opts.evals ?? null;
+    let lens: LensFile | null = opts.lens ?? null;
+    if (opts.showLens != null) {
+        useSettings.getState().setLens(opts.showLens);
+    }
     let ctl: ViewerControl | null = null;
     let pending: number | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -120,7 +131,7 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
         const key = `${game.header.seed}:${game.header.players.map((p) => p.bot).join('/')}`;
         root.render(
             <MotionConfig reducedMotion="user">
-                <GameViewer key={key} game={game} live={!game.end} startStep={opts.step ?? (opts.stepN != null ? indexOfN(opts.stepN) : 0)} evals={evals} layout={opts.layout ?? 'full'} onStep={opts.onStep}
+                <GameViewer key={key} game={game} live={!game.end} startStep={opts.step ?? (opts.stepN != null ? indexOfN(opts.stepN) : 0)} evals={evals} lens={lens} layout={opts.layout ?? 'full'} onStep={opts.onStep}
                     control={(c) => {
                         ctl = c;
                         if (pending != null) {
@@ -156,6 +167,12 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
     render();
     if (!game && opts.url) {
         fetchGame();
+    }
+    if (!lens && opts.lensUrl) {
+        fetch(opts.lensUrl).then((r) => (r.ok ? r.json() : null)).then((l) => {
+            lens = l;
+            render();
+        }, () => undefined);
     }
     if (!evals && opts.evalsUrl) {
         fetch(opts.evalsUrl).then((r) => (r.ok ? r.json() : null)).then((e) => {
@@ -198,6 +215,10 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
             evals = e;
             render();
         },
+        setLens: (l) => {
+            lens = l;
+            render();
+        },
         destroy: () => {
             dead = true;
             clearTimeout(timer);
@@ -228,8 +249,11 @@ export function mountActionIcon(el: HTMLElement, props: ActionIconProps) {
     return { update: (p: Partial<ActionIconProps>) => root.render(<ActionIcon {...props} {...p} />), destroy: () => root.unmount() };
 }
 
-/** Draw one position (a recorder Snapshot, i.e. a step's `state`) as the full animated board. update() animates to the next one. */
-export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean } = {}) {
+/**
+ * Draw one position (a recorder Snapshot, i.e. a step's `state`) as the full animated board. update() animates to the next one.
+ * `lens`: true draws card values estimated from the board; a lens step (one entry of a swu-lens/1 file's steps) draws the omni bot's own.
+ */
+export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Record<Seat, string>; fonts?: boolean; lens?: boolean | LensStep } = {}) {
     if (opts.fonts !== false) {
         ensureFonts();
     }
@@ -239,18 +263,24 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
     const bots = opts.bots ?? { p1: state.players.p1.name, p2: state.players.p2.name };
     let prev: Snapshot | null = null;
     let n = 0;
+    let lensOpt = opts.lens;
+    const viewOf = (cur: Snapshot): LensView | null => !lensOpt ? null
+        : lensOpt === true ? { ...estimateLens(cur), exact: false, weights: OMNI_WEIGHTS } : { ...lensOpt, exact: true, weights: OMNI_WEIGHTS };
     const draw = (cur: Snapshot) => {
         const steps = (prev ? [prev, cur] : [cur]).map((st, i) => ({ t: 'step' as const, n: i, state: st }));
         const ids = trackUnits({ header: { t: 'header', v: 1, seed: 0, engine: null, players: [] }, steps, end: null });
         root.render(
             <MotionConfig reducedMotion="user">
-                <Board state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} />
+                <Board state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} lens={viewOf(cur)} />
             </MotionConfig>
         );
     };
     draw(state);
     return {
-        update: (next: Snapshot) => {
+        update: (next: Snapshot, lens?: boolean | LensStep) => {
+            if (lens !== undefined) {
+                lensOpt = lens;
+            }
             prev = state;
             state = next;
             draw(next);
@@ -259,9 +289,14 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
     };
 }
 
-/** The k most game-changing actions, using the evaluations' swing when given, else the board score's. */
-export function pivotal(game: Game, evals?: EvalFile | null, k = 8): Action[] {
-    return pivotalActions(classifyGame(game, evalsByIndex(game, evals)), k);
+/** The k most game-changing actions, using the evaluations' swing when given, else the omni board score's (exact with a lens file). */
+export function pivotal(game: Game, evals?: EvalFile | null, k = 8, lens?: LensFile | null): Action[] {
+    return pivotalActions(classifyGame(game, evalsByIndex(game, evals), lensByIndex(game, lens)), k);
+}
+
+/** Turn the card-value Lens on or off for every viewer on the page. */
+export function setLensView(on: boolean) {
+    useSettings.getState().setLens(on);
 }
 
 /** Switch every viewer and icon on the page between card art (true) and generated tiles (false). */
@@ -271,5 +306,5 @@ export function setCardArt(on: boolean) {
 
 export { setArtResolver, loadArtPack };
 export type { ArtResolver };
-export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES };
-export type { EvalFile, Game, Action, ActionClass, ActionIconProps };
+export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES, estimateLens, lensAt, lensByIndex };
+export type { EvalFile, Game, Action, ActionClass, ActionIconProps, LensFile, LensStep };

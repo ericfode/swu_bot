@@ -12,7 +12,7 @@ export const LANES: { key: LaneKey; label: string; hint: string }[] = [
     { key: 'llm', label: 'Evaluations', hint: 'P(player 1 wins) from each viewpoint; the band spans their disagreement' },
     { key: 'base', label: 'Base HP', hint: 'HP left on each base' },
     { key: 'power', label: 'Board power', hint: 'Total power of each side\'s units' },
-    { key: 'edge', label: 'Material edge', hint: 'Simple board read, +1 = player 1 far ahead, -1 = player 2' },
+    { key: 'edge', label: 'Omni score', hint: 'The omniscient bot\'s board score for player 1 (its total minus player 2\'s), squashed to -1..+1' },
     { key: 'cards', label: 'Hand', hint: 'Cards in hand' }
 ];
 
@@ -91,7 +91,7 @@ export function Momentum({ data, rounds, step, lanes, bots, onSeek, evals, heigh
                     {show('power') && <Line yAxisId="v" type="stepAfter" dataKey="power2" name={`${bots.p2} power`} stroke={P2} strokeDasharray="4 3" strokeWidth={1.5} dot={false} isAnimationActive={false} />}
                     {show('cards') && <Line yAxisId="v" type="stepAfter" dataKey="hand1" name={`${bots.p1} hand`} stroke={P1} strokeOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />}
                     {show('cards') && <Line yAxisId="v" type="stepAfter" dataKey="hand2" name={`${bots.p2} hand`} stroke={P2} strokeOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />}
-                    {show('edge') && <Line yAxisId="e" type="monotone" dataKey="edge" name="material edge (p1)" stroke="#a48bff" strokeWidth={2} dot={false} isAnimationActive={false} />}
+                    {show('edge') && <Line yAxisId="e" type="monotone" dataKey="edge" name="omni score (p1)" stroke="#a48bff" strokeWidth={2} dot={false} isAnimationActive={false} />}
                     <ReferenceLine yAxisId="v" x={step} stroke="#f6c454" strokeWidth={2} />
                     <Tooltip cursor={{ stroke: '#dce6fb33' }} isAnimationActive={false}
                         contentStyle={{ background: '#0f1829ee', border: '1px solid #1d2a44', borderRadius: 10, fontSize: 12 }}

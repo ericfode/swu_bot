@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Eye, Image, Pause, Play, Radio, Shapes, SkipBack, SkipForward, Sparkles, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Image, Pause, Play, Radio, ScanEye, Shapes, SkipBack, SkipForward, Sparkles, Trophy } from 'lucide-react';
 import { Board } from '../components/Board';
-import { Card, type Focus } from '../components/Card';
+import type { Focus } from '../components/Card';
+import { CardInspector, FloatingZoom } from '../components/CardZoom';
 import { Log } from '../components/Log';
 import { LANES, Momentum, type LaneKey } from '../components/Momentum';
 import { Spine } from './Spine';
@@ -11,6 +12,7 @@ import { EdgeBreakdown } from './EdgeBreakdown';
 import { classifyGame, describe, pivotalActions } from '../data/actions';
 import { deltas as diff, metrics, roundStarts, trackUnits } from '../data/derive';
 import { EVAL_KEYS, evalAt, evalsByIndex, type EvalFile } from '../data/evals';
+import { lensAt, lensByIndex, type LensFile } from '../data/lens';
 import type { Game, Seat } from '../data/types';
 import { humanize } from '../lib/cards';
 import { SPEEDS, useSettings, type Perspective } from '../lib/settings';
@@ -28,6 +30,8 @@ export interface GameViewerProps {
     startStep?: number;
     /** dashboard evals contract (dashboard/evals/<gameId>.json): adds evaluation curves, the analyst note and spine tints */
     evals?: EvalFile | null;
+    /** card values from the omniscient bot (dashboard/lens/<gameId>.json, swu-lens/1); without it the Lens estimates them from the board */
+    lens?: LensFile | null;
     /** playhead moved: step index, and that step's Step.n (the id evaluations and other data key on) */
     onStep?: (step: number, n: number) => void;
     /** 'window' listens for arrow keys everywhere (a full page); 'focus' only while the viewer has focus (embedded) */
@@ -41,24 +45,28 @@ export interface GameViewerProps {
 }
 
 /** The whole replay experience in one component: Holotable's game page and every embed (dashboard, analysis pages) use it. */
-export function GameViewer({ game, live = false, startStep = 0, evals = null, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control }: GameViewerProps) {
+export function GameViewer({ game, live = false, startStep = 0, evals = null, lens = null, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control }: GameViewerProps) {
     const last = game.steps.length - 1;
     const [step, setStep] = useState(() => (live && !startStep ? last : Math.min(startStep, last)));
     const [playing, setPlaying] = useState(false);
     const [follow, setFollow] = useState(live && !startStep);
     const [focus, setFocus] = useState<Focus | null>(null);
+    const [hovering, setHovering] = useState(false);
+    // the side panel sits beside the board from 64rem up; narrower, a hovered card is enlarged next to the pointer instead
+    const [beside, setBeside] = useState(false);
     const [hideResult, setHideResult] = useState(false);
     const ev = useMemo(() => evalsByIndex(game, evals), [game, evals]);
     const [lanes, setLanes] = useState<LaneKey[]>(() => (evals?.points?.length ? ['llm', 'base'] : ['base', 'edge']));
-    const { speed, setSpeed, perspective, setPerspective, art, setArt } = useSettings();
+    const { speed, setSpeed, perspective, setPerspective, art, setArt, lens: lensOn, setLens } = useSettings();
     const root = useRef<HTMLDivElement>(null);
+    const lensSteps = useMemo(() => lensByIndex(game, lens), [game, lens]);
 
     const ids = useMemo(() => trackUnits(game), [game]);
-    const actions = useMemo(() => classifyGame(game, ev), [game, ev]);
+    const actions = useMemo(() => classifyGame(game, ev, lensSteps), [game, ev, lensSteps]);
     const pivotal = useMemo(() => pivotalActions(actions, 10), [actions]);
     const actionAt = useMemo(() => new Map(actions.map((a) => [a.index, a])), [actions]);
     const [why, setWhy] = useState<'analyst' | 'board'>(() => (evals?.points?.length ? 'analyst' : 'board'));
-    const series = useMemo(() => metrics(game), [game]);
+    const series = useMemo(() => metrics(game, lensSteps), [game, lensSteps]);
     const rounds = useMemo(() => roundStarts(game), [game]);
     const changes = useMemo(() => game.steps.map((s, i) => (i ? diff(game.steps[i - 1].state, s.state) : [])), [game]);
     const bots = useMemo(() => ({
@@ -68,6 +76,22 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
     // recorded deck names are engine internal names ("leader#subtitle / base"); show the leader and base
     const decks = Object.fromEntries(game.header.players.map((p) => [p.id, p.deck.split(' / ').map((x) => humanize(x).split(':')[0]).join(' · ')])) as Record<Seat, string>;
     const endRound = Math.max(game.end?.round ?? 0, game.steps[last].state.round);
+
+    useEffect(() => {
+        const el = root.current;
+        if (!el || typeof ResizeObserver === 'undefined') {
+            return undefined;
+        }
+        const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        const ro = new ResizeObserver(([e]) => setBeside(e.contentRect.width >= 64 * rem));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+    const onCardFocus = useCallback((f: Focus | null) => {
+        setFocus(f);
+        setHovering(!!f);
+    }, []);
+    const onCardLeave = useCallback(() => setHovering(false), []);
 
     useEffect(() => {
         if (evals?.points?.length) {
@@ -181,6 +205,8 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
     const end = step === last ? game.end : null;
     const winner = game.end?.winner;
     const analysis = ev.size ? evalAt(ev, step) : null;
+    const view = useMemo(() => lensAt(game, step, lensSteps, lens), [game, step, lensSteps, lens]);
+    const prevView = useMemo(() => (step > 0 ? lensAt(game, step - 1, lensSteps, lens) : null), [game, step, lensSteps, lens]);
     const lastAction = useMemo(() => {
         for (let i = step; i > 0; i--) {
             const a = actionAt.get(i);
@@ -225,6 +251,10 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
                         <button className="btn !h-7 !border-0 !bg-transparent aria-pressed:!bg-raise aria-pressed:!text-fg text-dim" aria-pressed={!art} onClick={() => setArt(false)} title="Generated tiles: always available, light"><Shapes size={14} />Vector</button>
                         <button className="btn !h-7 !border-0 !bg-transparent aria-pressed:!bg-raise aria-pressed:!text-fg text-dim" aria-pressed={art} onClick={() => setArt(true)} title="Card images; cards without art fall back to tiles"><Image size={14} />Card art</button>
                     </div>
+                    <button className="btn !h-8" aria-pressed={lensOn} onClick={() => setLens(!lensOn)}
+                        title="Lens: write on every card what it is worth to the omniscient bot (its board score), and mark the cards its search liked">
+                        <ScanEye size={14} />Lens
+                    </button>
                     <span className="chip num">seed {game.header.seed}</span>
                     {game.end && <span className="chip num">{game.end.steps} decisions · R{endRound}</span>}
                     {live && (
@@ -235,10 +265,11 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
                 </div>
             </header>
 
-            <div className={`grid gap-3 grid-cols-[minmax(0,1fr)] min-h-0 ${full ? '@6xl:grid-cols-[minmax(0,1fr)_340px]' : ''}`}>
+            <div className={`grid gap-3 grid-cols-[minmax(0,1fr)] min-h-0 ${full ? '@5xl:grid-cols-[minmax(0,1fr)_384px]' : ''}`}>
                 <div className="flex flex-col gap-3 min-w-0">
                     <div className="panel p-2 @3xl:p-3 relative overflow-hidden">
-                        <Board state={cur.state} prev={prev?.state ?? null} ids={ids[step]} prevIds={step > 0 ? ids[step - 1] : null} bots={bots} actor={actor} step={step} onFocus={setFocus} />
+                        <Board state={cur.state} prev={prev?.state ?? null} ids={ids[step]} prevIds={step > 0 ? ids[step - 1] : null} bots={bots} actor={actor} step={step}
+                            onFocus={onCardFocus} onLeave={onCardLeave} lens={lensOn ? view : null} />
                         <AnimatePresence>
                             {end && !hideResult && (
                                 <motion.div className="absolute inset-0 grid place-items-center bg-bg/60 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setHideResult(true)}>
@@ -290,7 +321,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
                             <div className="px-3 py-2">
                                 {why === 'analyst' && ev.size > 0
                                     ? (analysis ? <Analysis point={analysis.point} at={game.steps[analysis.index].n} evaluator={evals?.evaluator?.model} /> : <span className="text-faint text-sm">The analysis starts at step {game.steps[Math.min(...ev.keys())].n}.</span>)
-                                    : <EdgeBreakdown state={cur.state} prev={prev?.state ?? null} bots={bots} />}
+                                    : <EdgeBreakdown state={cur.state} prev={prev?.state ?? null} bots={bots} lens={view.exact ? view : null} prevLens={prevView?.exact ? prevView : null} />}
                             </div>
                         </div>
                         <Spine game={game} step={step} evals={ev} onSeek={seek} />
@@ -298,33 +329,21 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
                 </div>
 
                 {full && (
-                    <aside className={`flex flex-col gap-3 min-h-0 ${fillWindow ? '@6xl:h-[calc(100vh-110px)] @6xl:sticky @6xl:top-3' : '@6xl:max-h-[880px]'}`}>
-                        <div className="panel p-3 flex gap-3 items-start min-h-[164px]">
-                            {focus ? (
-                                <>
-                                    <Card card={focus.card} back={focus.back} unit={focus.unit} />
-                                    <div className="min-w-0 flex flex-col gap-1">
-                                        <div className="font-display font-semibold leading-tight">{focus.card.n}</div>
-                                        {focus.note && <div className="text-xs text-dim">{focus.note}</div>}
-                                        {focus.unit && <div className="num text-xs text-dim">{focus.unit.p} power · {focus.unit.h - focus.unit.d}/{focus.unit.h} HP{focus.unit.x ? ' · exhausted' : ''}</div>}
-                                        {focus.unit?.u?.map((u, i) => <div key={i} className="text-xs text-gold">+ {u.n}{u.t ? ' (token)' : ''}</div>)}
-                                        <div className="num text-[11px] text-faint">{focus.card.s ?? 'token'}</div>
-                                    </div>
-                                </>
-                            ) : (
-                                lastAction ? (
-                                    <div className="flex gap-3 items-start">
-                                        <ActionIcon cls={lastAction.cls} seat={lastAction.seat} card={lastAction.card} outcome={lastAction.outcome} size={84} tier="card" />
-                                        <div className="min-w-0 flex flex-col gap-1">
+                    <aside className={`flex flex-col gap-3 min-h-0 ${fillWindow ? '@5xl:h-[calc(100vh-110px)] @5xl:sticky @5xl:top-3' : '@5xl:max-h-[960px]'}`}>
+                        <div className="panel p-3 shrink-0 overflow-y-auto @5xl:max-h-[72%]">
+                            {focus ? <CardInspector focus={focus} lens={lensOn ? view : null} /> : (
+                                <div className="flex flex-col items-center gap-2 py-2">
+                                    {lastAction ? (
+                                        <>
                                             <span className="eyebrow">Last play · step {game.steps[lastAction.index].n}</span>
-                                            <span className="text-[13px] leading-snug">{describe(lastAction, bots[lastAction.seat])}</span>
-                                            <span className="text-faint text-[11px]">Hover a card on the board to inspect it.</span>
-                                        </div>
-                                    </div>
-                                ) : <div className="text-faint text-sm self-center">Hover or focus a card to inspect it.</div>
+                                            <ActionIcon cls={lastAction.cls} seat={lastAction.seat} card={lastAction.card} outcome={lastAction.outcome} size={150} caption={describe(lastAction, bots[lastAction.seat])} />
+                                        </>
+                                    ) : null}
+                                    <span className="text-faint text-[12px]">Hover or tap a card on the board to see it here at full size.</span>
+                                </div>
                             )}
                         </div>
-                        <div className="panel flex flex-col min-h-[320px] max-h-[640px] @6xl:max-h-none @6xl:min-h-0 flex-1 overflow-hidden">
+                        <div className="panel flex flex-col min-h-[320px] max-h-[640px] @5xl:max-h-none @5xl:min-h-[200px] flex-1 overflow-hidden">
                             <div className="flex items-center gap-2 px-3 py-2 border-b border-line">
                                 <span className="eyebrow">Decisions</span>
                                 <label className="ml-auto flex items-center gap-1 text-xs text-dim">
@@ -341,6 +360,9 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, on
                     </aside>
                 )}
             </div>
+            <AnimatePresence>
+                {focus && hovering && !(full && beside) && <FloatingZoom key={`${focus.card.n}:${focus.rect?.left}:${focus.rect?.top}`} focus={focus} lens={lensOn ? view : null} />}
+            </AnimatePresence>
         </div>
     );
 }

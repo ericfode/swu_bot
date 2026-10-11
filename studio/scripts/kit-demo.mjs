@@ -1,11 +1,14 @@
-// Writes a single-file demo page for the viewer kit: the IIFE bundle, one game and (optionally) its evals inlined.
-//   node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html]
+// Writes a single-file demo page for the viewer kit: the IIFE bundle, one game and (optionally) its evals and lens inlined.
+//   node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html] [--lens lens.json]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const [gamePath, evalsPath, outPath = path.join(here, '..', 'dist-kit', 'demo.html')] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const li = argv.indexOf('--lens');
+const lensPath = li >= 0 ? argv.splice(li, 2)[1] : null;
+const [gamePath, evalsPath, outPath = path.join(here, '..', 'dist-kit', 'demo.html')] = argv;
 if (!gamePath) {
     console.error('usage: node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html]');
     process.exit(1);
@@ -13,6 +16,7 @@ if (!gamePath) {
 const kit = fs.readFileSync(path.join(here, '..', 'dist-kit', 'swu-viewer-kit.js'), 'utf8');
 const jsonl = fs.readFileSync(gamePath, 'utf8');
 const evals = evalsPath && fs.existsSync(evalsPath) ? fs.readFileSync(evalsPath, 'utf8') : 'null';
+const lens = lensPath && fs.existsSync(lensPath) ? fs.readFileSync(lensPath, 'utf8') : 'null';
 // </script> inside inlined text would end the script element early
 const safe = (s) => s.replace(/<\/script/gi, '<\\/script');
 
@@ -30,7 +34,7 @@ const html = `<meta charset="utf-8">
   code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #e9e5de; padding: 1px 5px; border-radius: 4px; }
 </style>
 <main>
-  <header><h1>SWU viewer kit</h1><p>The same viewer Holotable uses, embedded in a page with completely different styles. Below: the full viewer with its evaluations, the compact layout, and the pivotal plays drawn with <code>mountActionIcon</code> at every size tier.</p></header>
+  <header><h1>SWU viewer kit</h1><p>The same viewer Holotable uses, embedded in a page with completely different styles. Below: the full viewer with its evaluations and the omni bot's card values (press Lens), the compact layout, and the pivotal plays drawn with <code>mountActionIcon</code> at every size tier.</p></header>
   <section><h2>Full viewer</h2><div id="full"></div></section>
   <section><h2>Compact viewer</h2><div id="compact" style="max-width: 860px"></div></section>
   <section><h2>Pivotal plays</h2><div class="icons" id="pivotal"></div></section>
@@ -40,11 +44,12 @@ const html = `<meta charset="utf-8">
 <script>
   const jsonl = ${JSON.stringify(safe(jsonl))};
   const evals = ${safe(evals)};
+  const lens = ${safe(lens)};
   const game = SWUViewer.parseGame(jsonl, true);
-  const full = SWUViewer.mount(document.getElementById('full'), { game, evals });
-  const compact = SWUViewer.mount(document.getElementById('compact'), { game, layout: 'compact', step: Math.floor(game.steps.length / 2) });
+  const full = SWUViewer.mount(document.getElementById('full'), { game, evals, lens });
+  const compact = SWUViewer.mount(document.getElementById('compact'), { game, lens, layout: 'compact', step: Math.floor(game.steps.length / 2) });
   const bots = { p1: game.header.players[0].bot, p2: game.header.players[1].bot };
-  const piv = SWUViewer.pivotal(game, evals, 8);
+  const piv = SWUViewer.pivotal(game, evals, 8, lens);
   for (const a of piv) {
     const el = document.createElement('span');
     el.style.cursor = 'pointer';

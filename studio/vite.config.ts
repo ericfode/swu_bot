@@ -15,6 +15,8 @@ function replays(): Plugin {
     const root = path.resolve(process.env.REPLAYS_DIR ?? path.join(__dirname, '..', 'replays'));
     // position evaluations, one <gameId>.json per game (the research dashboard's evals contract)
     const evalsDir = path.resolve(process.env.EVALS_DIR ?? path.join(__dirname, '..', 'evals'));
+    // the omni bot's card values, one <gameId>.json per game (swu-lens/1, see bot/omni/lens.js)
+    const lensDir = path.resolve(process.env.LENS_DIR ?? path.join(__dirname, '..', 'lens'));
     const send = (req: IncomingMessage, res: ServerResponse, status: number, body: Buffer, type: string) => {
         const gz = /json|ndjson/.test(type) && body.length > 1024 && String(req.headers['accept-encoding'] ?? '').includes('gzip');
         res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-cache', ...(gz ? { 'Content-Encoding': 'gzip' } : {}) });
@@ -44,10 +46,11 @@ function replays(): Plugin {
         if (p === '/api/tournaments') {
             return send(req, res, 200, Buffer.from(JSON.stringify(list())), 'application/json');
         }
-        const ev = p.match(/^\/evals\/([^/]+\.json)$/);
+        const ev = p.match(/^\/(evals|lens)\/([^/]+\.json)$/);
         if (ev) {
-            const f = path.join(evalsDir, decodeURIComponent(ev[1]));
-            return f.startsWith(evalsDir + path.sep) && fs.existsSync(f) ? send(req, res, 200, fs.readFileSync(f), 'application/json') : send(req, res, 404, Buffer.from('no evals'), 'text/plain');
+            const dir = ev[1] === 'lens' ? lensDir : evalsDir;
+            const f = path.join(dir, decodeURIComponent(ev[2]));
+            return f.startsWith(dir + path.sep) && fs.existsSync(f) ? send(req, res, 200, fs.readFileSync(f), 'application/json') : send(req, res, 404, Buffer.from(`no ${ev[1]}`), 'text/plain');
         }
         if (!p.startsWith('/replays/')) {
             return next();
