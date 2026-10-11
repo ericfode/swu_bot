@@ -256,6 +256,10 @@ function main() {
 
     for (const withDecks of [false, true]) {
         const rows = frames(train, withDecks);
+        if (!rows.length) {
+            console.error('no training rows: every position is in the test split or has both hands hidden');
+            process.exit(2);
+        }
         const suffix = withDecks ? '-deck' : '';
         if (!withDecks) {
             for (const name of Object.keys(HAND)) {

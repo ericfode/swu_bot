@@ -151,7 +151,9 @@ function main() {
             const s = r.subjective,
                 o = r.objective;
             const src = Object.keys(s).filter((k) => k.startsWith('src:')).map((k) => `${k.slice(4)} ${s[k].brier.toFixed(3)}`).join('  ');
-            console.log(`${ev.name.padEnd(16)} subjective brier ${s.all.brier.toFixed(4)} ll ${s.all.logloss.toFixed(4)} acc ${s.all.acc.toFixed(3)} | objective ${o.all.brier.toFixed(4)} | ${src}`);
+            // a split of one-seat imports only has no objective view (and a fully hidden one no subjective view either)
+            const subj = s.all ? `${s.all.brier.toFixed(4)} ll ${s.all.logloss.toFixed(4)} acc ${s.all.acc.toFixed(3)}` : 'n/a';
+            console.log(`${ev.name.padEnd(16)} subjective brier ${subj} | objective ${o.all ? o.all.brier.toFixed(4) : 'n/a'} | ${src}`);
         }
     }
     if (arg('llm', null)) {

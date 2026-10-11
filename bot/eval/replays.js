@@ -103,16 +103,21 @@ function replayPositions(file, id, every = 1) {
         return null;
     }
     const steps = lines.filter((l) => l.t === 'step');
-    // seats whose hand was never captured (one-seat imports): their hands are placeholders, so fit.js and score.js
-    // skip those judges and the objective view
-    const hidden = lines[0]?.source?.hiddenHands ?? [];
+    // seats whose hand was never captured (one-seat imports), plus seats whose hand is a placeholder in this frame (an
+    // unpaired frame of a merged capture): fit.js and score.js skip those judges and the objective view
+    const header = lines[0]?.source?.hiddenHands ?? [];
+    const hiddenAt = (st) => ['p1', 'p2'].filter((seat) => header.includes(seat) || (st.players?.[seat]?.hand ?? []).some((c) => c?.hid));
     const out = [];
     let seen = 0;
     for (let i = 0; i + 1 < steps.length; i++) {
         const prev = steps[i],
             e = steps[i + 1];
         if (e.prompt?.startsWith('actionWindow') && prev.state?.phase === 'action' && seen++ % every === 0 && terminal(prev.state, 'p1') === null) {
-            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, ...(hidden.length ? { hidden } : {}) });
+            const hidden = hiddenAt(prev.state);
+            // with both hands hidden there is no judge and no objective view left to use
+            if (hidden.length < 2) {
+                out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, ...(hidden.length ? { hidden } : {}) });
+            }
         }
     }
     // the same game recorded twice (a folder listed twice, or a copied replay) has the same content digest
