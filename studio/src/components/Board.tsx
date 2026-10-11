@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from 'react';
+import { memo, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BrainCircuit, Flag, Layers, Library, Skull } from 'lucide-react';
 import { Card, CardBack, type CardValue, type Focus } from './Card';
@@ -58,14 +58,99 @@ function valueOf(seat: Seat, sl: SeatLens | null, zone: 'ground' | 'space' | 'ha
     return { v, seat, term: zone, heat: zone === 'hand' || v == null ? 0 : Math.max(0, v) / sl.max, regret: sl.search?.[zone]?.[i] ?? null };
 }
 
-function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, step, onFocus, onLeave, sl }: {
+// Lane geometry, matching .lane and .card in styles.css: an 84px card, 8px gaps, 8px padding and a 1px border each side.
+const CARD_W = 84;
+const GAP = 8;
+const LANE_X = 2 * (8 + 1);
+// a row of cards in a lane (card height 84 × 7/5, plus the gap)
+const ROW_H = 126;
+const laneWidth = (cols: number) => LANE_X + cols * CARD_W + (cols - 1) * GAP;
+const colsIn = (w: number) => Math.max(1, Math.floor((w - LANE_X + GAP) / (CARD_W + GAP)));
+const rowsOf = (n: number, cols: number) => Math.ceil(n / cols);
+
+/**
+ * How a side's two lanes share their width (total: both lanes together, px). The even split is kept whenever both
+ * lanes fit in two rows (weights null: today's look); a crowded lane otherwise gets the columns it needs from the other
+ * one, so the deeper lane is as shallow as it can be (ties: fewest rows in all). Weights are fr values for the tracks.
+ */
+export function laneSplit(total: number, ground: number, space: number): { rows: number; weights: [number, number] | null } {
+    const even = colsIn((total - GAP) / 2);
+    let rows = Math.max(rowsOf(ground, even), rowsOf(space, even));
+    if (total <= 0 || rows <= 2) {
+        return { rows, weights: null };
+    }
+    let sum = rowsOf(ground, even) + rowsOf(space, even);
+    let best: [number, number] | null = null;
+    for (let cg = 1; laneWidth(cg) + GAP + laneWidth(1) <= total; cg++) {
+        const cs = colsIn(total - GAP - laneWidth(cg));
+        const r = Math.max(rowsOf(ground, cg), rowsOf(space, cs));
+        const s = rowsOf(ground, cg) + rowsOf(space, cs);
+        if (r < rows || (r === rows && s < sum)) {
+            best = [cg, cs];
+            rows = r;
+            sum = s;
+        }
+    }
+    return { rows, weights: best && [laneWidth(best[0]), laneWidth(best[1])] };
+}
+
+interface SideBox {
+    /** the lanes row's width */
+    row: number;
+    /** the base and leader block's own size */
+    hqW: number;
+    hqH: number;
+    /** the container is wide enough for ground | base | space */
+    wide: boolean;
+}
+
+/** Sizes the side's layout depends on; none of them changes with the layout it picks, so the choice can't loop. */
+function useSideBox(row: RefObject<HTMLDivElement | null>, hq: RefObject<HTMLDivElement | null>, probe: RefObject<HTMLSpanElement | null>) {
+    const [box, setBox] = useState<SideBox>({ row: 0, hqW: 0, hqH: 0, wide: true });
+    useLayoutEffect(() => {
+        const r = row.current;
+        const h = hq.current;
+        const p = probe.current;
+        if (!r || !h || !p || typeof ResizeObserver === 'undefined') {
+            return;
+        }
+        const measure = () => {
+            const next = { row: Math.round(r.clientWidth), hqW: Math.round(h.offsetWidth), hqH: Math.round(h.offsetHeight), wide: getComputedStyle(p).display !== 'none' };
+            setBox((b) => (b.row === next.row && b.hqW === next.hqW && b.hqH === next.hqH && b.wide === next.wide ? b : next));
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(r);
+        ro.observe(h);
+        return () => ro.disconnect();
+    }, [row, hq, probe]);
+    return box;
+}
+
+/**
+ * The side's layout: ground | base | space when there is room (today's look), else the base on top of the two lanes.
+ * A crowded side also moves its base on top when that makes it clearly shorter, so the lanes get the middle's width.
+ */
+function sideLayout(box: SideBox, ground: number, space: number): { stack: boolean; weights: [number, number] | null } {
+    const stacked = laneSplit(box.row - GAP, ground, space);
+    if (!box.wide) {
+        return { stack: true, weights: stacked.weights };
+    }
+    // the base column is the block plus its px-2 padding
+    const three = laneSplit(box.row - (box.hqW + 16) - 2 * GAP, ground, space);
+    // only when it saves more than a row of cards: a small gain isn't worth the base leaving the middle
+    const stack = box.row > 0 && three.rows > 2 && box.hqH + GAP + stacked.rows * ROW_H + ROW_H < three.rows * ROW_H;
+    return stack ? { stack, weights: stacked.weights } : { stack, weights: three.weights };
+}
+
+function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, hiLeader, step, onFocus, onLeave, sl }: {
     label: string; seat: Seat; arena: 'ground' | 'space'; units: UnitRef[]; ids: string[]; prevUnits: UnitRef[] | null; prevIds: string[] | null;
-    leader: PlayerSnap['leader']; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null;
+    leader: PlayerSnap['leader']; hiLeader: boolean; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null;
 }) {
     const total = sl ? sl.side[arena].reduce((a, b) => a + b, 0) : 0;
     return (
         <div className="lane">
-            <span className="lane-label flex items-center gap-2">{label}{sl && units.length > 0 && (
+            <span className="lane-label">{label}{sl && units.length > 0 && (
                 <span className="lens-chip !text-[10px] !tracking-normal" style={termStyle(arena)} title={`This player's ${label} units together: the ${TERM_LABEL[arena]} row of the board score`}>
                     <TermIcon term={arena} size={10} />{fmt(total)}
                 </span>
@@ -76,12 +161,15 @@ function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, step
                     const pi = prevIds ? prevIds.indexOf(id) : -1;
                     const before = pi >= 0 && prevUnits ? prevUnits[pi] : null;
                     const isLeader = !!leader?.dep && u.n === leader.n && u.s === leader.s;
+                    // a leader deployed as a pilot rides on another unit as an upgrade
+                    const carries = !!leader?.dep && !isLeader && !!u.u?.some((x) => x.n === leader.n);
                     return (
-                        <motion.div key={id} layout className="relative" transition={spring}
+                        <motion.div key={id} layout className={`relative${hiLeader && (isLeader || carries) ? ' lead-hi' : ''}`} transition={spring}
                             initial={{ opacity: 0, scale: 0.6, y: seat === 'p1' ? 40 : -40 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.4, rotate: seat === 'p1' ? -14 : 14, filter: 'blur(6px)', transition: { duration: 0.35 } }}>
-                            <Card card={u} unit={u} back={isLeader} exhausted={!!u.x} onFocus={onFocus} onLeave={onLeave} note={isLeader ? 'Deployed leader' : undefined}
+                            <Card card={u} unit={u} back={isLeader} exhausted={!!u.x} onFocus={onFocus} onLeave={onLeave} leader={isLeader || carries}
+                                note={isLeader ? 'Deployed leader' : carries ? `Carries the leader ${leader!.n}` : undefined}
                                 value={valueOf(seat, sl, arena, i)} />
                             <Pop k={`${step}`} delta={before ? u.d - before.d : 0} />
                         </motion.div>
@@ -92,18 +180,32 @@ function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, step
     );
 }
 
-function Hq({ seat, p, prev, bot, step, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; prev: PlayerSnap | null; bot: string; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null }) {
+/** The leader slot: the leader card on the side it is on now (back art once deployed or flipped), tilted when exhausted. */
+function LeaderSlot({ seat, p, onFocus, onLeave, onHi, sl }: { seat: Seat; p: PlayerSnap; onFocus: (f: Focus | null) => void; onLeave?: () => void; onHi: (on: boolean) => void; sl: SeatLens | null }) {
+    const l = p.leader!;
+    const units = [...p.ground, ...p.space];
+    const onBoard = !!l.dep && units.some((u) => (u.n === l.n && u.s === l.s) || !!u.u?.some((x) => x.n === l.n));
+    const note = !l.dep ? 'Leader' : onBoard ? 'Leader · deployed (on the board, marked LEADER)' : 'Leader · flipped to its other side';
+    return (
+        <div className="leader-slot" onMouseEnter={() => onHi(true)} onMouseLeave={() => onHi(false)} onFocus={() => onHi(true)} onBlur={() => onHi(false)}>
+            <Card card={l} shape="wide" kind="leader" width={92} back={!!l.dep} exhausted={!!l.x} onFocus={onFocus} onLeave={onLeave} note={note}
+                value={sl?.search && sl.search.leader != null ? { v: null, seat, regret: sl.search.leader } : null} />
+            {onBoard && <span className="leader-out" title="Deployed: hover to find it on the board">on board</span>}
+        </div>
+    );
+}
+
+function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl }: { seat: Seat; p: PlayerSnap; prev: PlayerSnap | null; bot: string; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; onHiLeader: (on: boolean) => void; hqRef: RefObject<HTMLDivElement | null>; sl: SeatLens | null }) {
     const left = Math.max(0, p.base.hp - p.base.d);
     const frac = left / p.base.hp;
     const R = 34;
     const C = 2 * Math.PI * R;
-    const deployed = p.leader?.dep === 1;
     const baseNote = `Base · ${left} of ${p.base.hp} HP left`;
     return (
-        <div className="flex flex-col items-center gap-2 min-w-0">
-            <div className="relative">
+        <div ref={hqRef} className="flex flex-col items-center gap-2 min-w-0">
+            <div className="relative base-frame">
                 <Card card={p.base} shape="wide" kind="base" hpLeft={left} note={baseNote} onFocus={onFocus} onLeave={onLeave} value={sl ? { v: sl.side.base, seat, term: 'base' } : null} />
-                <svg viewBox="0 0 80 80" className="absolute -right-3 -top-3 size-14 drop-shadow-lg pointer-events-none" aria-label={`Base HP ${left} of ${p.base.hp}`}>
+                <svg viewBox="0 0 80 80" className="absolute -right-3 -top-3 size-14 drop-shadow-lg pointer-events-none z-[4]" aria-label={`Base HP ${left} of ${p.base.hp}`}>
                     <circle cx="40" cy="40" r="38" fill="#060a13" />
                     <circle cx="40" cy="40" r={R} fill="none" stroke="#1d2a44" strokeWidth="6" />
                     <motion.circle cx="40" cy="40" r={R} fill="none" stroke={frac < 0.35 ? '#ff5f6d' : 'var(--seat)'} strokeWidth="6" strokeLinecap="round"
@@ -112,18 +214,16 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, sl }: { seat: Seat; p:
                 </svg>
                 <Pop k={`b${step}`} delta={prev ? p.base.d - prev.base.d : 0} />
             </div>
-            <div className="flex items-center gap-2">
-                {p.leader && (deployed
-                    ? <div className="card wide sm grid place-items-center text-[9px] leading-tight text-center text-dim border border-dashed border-line" style={{ background: 'transparent', boxShadow: 'none' }}>leader<br />deployed</div>
-                    : <Card card={p.leader} size="sm" shape="wide" kind="leader" exhausted={!!p.leader.x} onFocus={onFocus} onLeave={onLeave} note="Leader"
-                        value={sl?.search && sl.search.leader != null ? { v: null, seat, regret: sl.search.leader } : null} />)}
+            <div className="flex items-center gap-2.5">
+                {p.leader && <LeaderSlot seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} onHi={onHiLeader} sl={sl} />}
                 <div className="flex flex-col gap-1 min-w-0">
                     <span className="flex items-center gap-1.5 min-w-0">
                         <span className="font-display text-[13px] font-semibold truncate max-w-[9rem]" style={{ color: 'var(--seat)' }}>{bot}</span>
                         {sl && <span className="lens-chip" style={{ '--seat': `var(--color-${seat})` } as CSSProperties} title="This player's total in the omni bot's board score: every coloured number on their side added up">Σ {fmt(sl.side.total)}</span>}
                     </span>
                     <div className="flex items-center gap-1.5">
-                        <div className="pips" aria-label={`${p.res.ready} of ${p.res.total} resources ready`}>
+                        {/* more than 12 resources: two even rows (a pip and its gap are 12px) */}
+                        <div className="pips" style={p.res.total > 12 ? { maxWidth: Math.ceil(p.res.total / 2) * 12 } : undefined} aria-label={`${p.res.ready} of ${p.res.total} resources ready`}>
                             {Array.from({ length: p.res.total }, (_, i) => <i key={i} className={i < p.res.ready ? '' : 'spent'} />)}
                         </div>
                         {sl && <span className="lens-chip !text-[10px]" style={termStyle('resources')} title="All resources together: the Resources row of the board score"><TermIcon term="resources" size={10} />{fmt(sl.side.resources)}</span>}
@@ -147,21 +247,25 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
     const flat = !sl || sl.side.hand.every((v) => v === sl.side.hand[0]);
     const handTotal = sl ? sl.side.hand.reduce((a, b) => a + b, 0) : 0;
     return (
-        <div className="flex gap-1.5 overflow-x-auto py-1 px-1 min-h-[72px] items-center" aria-label={`${seat} hand`}>
-            <AnimatePresence initial={false} mode="popLayout">
-                {p.hand.map((c, i) => {
-                    const v = valueOf(seat, sl, 'hand', i);
-                    const shown = v && flat ? { ...v, v: null } : v;
-                    return (
-                        <motion.div key={`${c.n}-${i}`} layout initial={{ opacity: 0, y: seat === 'p1' ? 20 : -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.7 }} transition={spring}>
-                            {visible ? <Card card={c} size="sm" kind="hand" onFocus={onFocus} onLeave={onLeave} note="In hand" value={shown} /> : <CardBack size="sm" value={shown} />}
-                        </motion.div>
-                    );
-                })}
-            </AnimatePresence>
-            {p.hand.length === 0 && <span className="text-faint text-xs">empty hand</span>}
+        <div className="hand" aria-label={`${seat} hand, ${p.hand.length} cards`}>
+            <span className="hand-label">Hand · {p.hand.length}</span>
+            <div className="hand-cards">
+                <AnimatePresence initial={false} mode="popLayout">
+                    {p.hand.map((c, i) => {
+                        const v = valueOf(seat, sl, 'hand', i);
+                        const shown = v && flat ? { ...v, v: null } : v;
+                        return (
+                            <motion.div key={`${c.n}-${i}`} layout className="hand-card" initial={{ opacity: 0, y: seat === 'p1' ? 20 : -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.7 }} transition={spring}>
+                                {visible ? <Card card={c} size="sm" kind="hand" onFocus={onFocus} onLeave={onLeave} note="In hand" value={shown} /> : <CardBack size="sm" value={shown} />}
+                                {visible && <span className="hand-name">{c.n}</span>}
+                            </motion.div>
+                        );
+                    })}
+                </AnimatePresence>
+                {p.hand.length === 0 && <span className="text-faint text-xs self-center">empty</span>}
+            </div>
             {sl && p.hand.length > 0 && (
-                <span className="lens-chip ml-1 shrink-0" style={termStyle('hand')} title="Cards in hand: the Hand row of the board score">
+                <span className="lens-chip shrink-0 ml-auto" style={termStyle('hand')} title="Cards in hand: the Hand row of the board score">
                     <TermIcon term="hand" size={10} />
                     {flat ? `${p.hand.length} × ${fmt(sl.side.hand[0])} = ${fmt(handTotal)}` : fmt(handTotal)}
                 </span>
@@ -175,11 +279,17 @@ function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens
     const p = state.players[seat];
     const pp = prev?.players[seat] ?? null;
     const hasInit = state.initiative === seat;
+    const [hiLeader, setHiLeader] = useState(false);
+    const rowRef = useRef<HTMLDivElement>(null);
+    const hqRef = useRef<HTMLDivElement>(null);
+    const probeRef = useRef<HTMLSpanElement>(null);
+    const { stack, weights } = sideLayout(useSideBox(rowRef, hqRef, probeRef), p.ground.length, p.space.length);
+    const cols = (weights ? { '--gw': `${weights[0]}fr`, '--sw': `${weights[1]}fr` } : {}) as CSSProperties;
     const row = (
-        <div className={`grid gap-2 grid-cols-2 @2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch rounded-2xl p-2 transition-shadow ${actor === seat ? 'to-act' : ''}`}>
-            <Lane label="ground" seat={seat} arena="ground" units={p.ground} ids={ids[seat].ground} prevUnits={pp?.ground ?? null} prevIds={prevIds?.[seat].ground ?? null} leader={p.leader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
-            <div className="relative px-2 py-1 flex flex-col items-center justify-center col-span-2 @2xl:col-span-1 order-first @2xl:order-none">
-                <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
+        <div ref={rowRef} className={`grid gap-2 grid-cols-[minmax(0,var(--gw,1fr))_minmax(0,var(--sw,1fr))] items-stretch ${stack ? '' : '@2xl:grid-cols-[minmax(0,var(--gw,1fr))_auto_minmax(0,var(--sw,1fr))]'}`} style={cols}>
+            <Lane label="ground" seat={seat} arena="ground" units={p.ground} ids={ids[seat].ground} prevUnits={pp?.ground ?? null} prevIds={prevIds?.[seat].ground ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
+            <div className={`relative px-2 py-1 flex flex-col items-center justify-center col-span-2 order-first ${stack ? '' : '@2xl:col-span-1 @2xl:order-none'}`}>
+                <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} onHiLeader={setHiLeader} hqRef={hqRef} sl={sl} />
                 {hasInit && (
                     <motion.div layoutId="initiative" transition={spring} title={sl ? `Initiative: ${fmt(sl.side.initiative)} points` : 'Initiative'}
                         className="absolute -left-1 top-1 flex flex-col items-center gap-0.5">
@@ -188,11 +298,13 @@ function Side({ seat, props, sl }: { seat: Seat; props: BoardProps; sl: SeatLens
                     </motion.div>
                 )}
             </div>
-            <Lane label="space" seat={seat} arena="space" units={p.space} ids={ids[seat].space} prevUnits={pp?.space ?? null} prevIds={prevIds?.[seat].space ?? null} leader={p.leader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
+            <Lane label="space" seat={seat} arena="space" units={p.space} ids={ids[seat].space} prevUnits={pp?.space ?? null} prevIds={prevIds?.[seat].space ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
         </div>
     );
     return (
-        <section className={`seat-${seat} flex flex-col gap-1`} aria-label={`${bots[seat]} (${seat})`}>
+        <section className={`seat-${seat} half flex flex-col gap-1.5${actor === seat ? ' to-act' : ''}`} aria-label={`${bots[seat]} (${seat})`}>
+            {/* shown only when the container has room for ground | base | space: tells the layout which one CSS picked */}
+            <span ref={probeRef} className="absolute size-0 hidden @2xl:block" aria-hidden="true" />
             {seat === 'p2' ? <><Hand seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} sl={sl} />{row}</> : <>{row}<Hand seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} sl={sl} /></>}
         </section>
     );

@@ -32,6 +32,11 @@
     --color-v-init: #f6c454;
     /* the omni score itself (the timeline curve, the breakdown's total) */
     --color-edge: #c4b2ff;
+    /* card states on the board, each its own hue: none is a seat, score, gold or violet colour */
+    --color-exh: #7480ff;
+    --color-dmg: #ff5a36;
+    --color-shield: #2fdcc4;
+    --color-sentinel: #c42bd6;
 }
 
 :root {
@@ -207,9 +212,19 @@ h3 {
 .card.lensed img.backdrop {
     filter: blur(10px) brightness(0.4);
 }
+/* exhausted: tilted and washed in indigo (a colour of its own, not grey) */
 .card.exh {
     transform: rotate(10deg) scale(0.94);
-    filter: saturate(0.45) brightness(0.72);
+}
+.card.exh::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(170deg, color-mix(in oklab, var(--color-exh) 34%, transparent), color-mix(in oklab, #10133f 72%, transparent));
+    box-shadow: inset 0 0 0 2px var(--color-exh);
 }
 .tile {
     position: absolute;
@@ -252,9 +267,30 @@ h3 {
 .card.sm .tile .nm {
     display: none;
 }
-.stat {
+/* Board-size cards stack their facts from the bottom up (name bar, power/HP, lens chip) and from the top down
+   (marks left, upgrades right), so no two of them can cover each other at any card size. */
+.foot {
     position: absolute;
-    bottom: 4px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    pointer-events: none;
+}
+.stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-inline: 4px;
+}
+.card:not(.named) .stats {
+    padding-bottom: 4px;
+}
+.stat {
+    position: relative;
     display: grid;
     place-items: center;
     min-width: 22px;
@@ -268,35 +304,101 @@ h3 {
     box-shadow: 0 2px 6px #0009;
 }
 .stat.pw {
-    left: 4px;
     background: #c2333f;
 }
 .stat.hp {
-    right: 4px;
     background: #2a6fd6;
 }
-/* damaged: same blue (SWU prints HP on blue), outlined so it shows without borrowing gold */
-.stat.hp.hurt {
-    color: #ffd9dd;
-    box-shadow: inset 0 0 0 2px #ffb4bc, 0 2px 6px #0009;
+/* damage: a vermilion damage counter on the HP chip's corner (HP left stays on SWU's blue) */
+.dmg {
+    position: absolute;
+    right: -3px;
+    bottom: calc(100% - 6px);
+    min-width: 16px;
+    height: 16px;
+    padding-inline: 3px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    color: #fff;
+    background: var(--color-dmg);
+    box-shadow: 0 0 0 1.5px #2a0a02, 0 2px 5px #000a;
+}
+/* the name: one line over art; on a generated tile it is the tile's own text, up to two lines */
+.nmbar {
+    display: block;
+    padding: 2px 5px 3px;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: max(9.5px, calc(var(--w) * 0.12));
+    line-height: 1.15;
+    color: #fff;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px #000;
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    box-shadow: inset 0 1.5px 0 color-mix(in oklab, var(--seat, var(--color-dim)) 85%, transparent);
+}
+.card.named:not(.art) .tile .nm {
+    display: none;
+}
+.card:not(.art) .nmbar {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    text-align: left;
+    /* a margin, not padding: overflow clips at the padding edge, so padding would show a third line */
+    padding: 0 6px;
+    margin-bottom: 5px;
+    background: none;
+    box-shadow: none;
+}
+.top {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    z-index: 3;
+    display: flex;
+    align-items: flex-start;
+    gap: 3px;
+    pointer-events: none;
+}
+.marks {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
 }
 .mark {
-    position: absolute;
-    top: 4px;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    line-height: 1.3;
+    text-transform: uppercase;
+    padding: 0 4px;
     border-radius: 4px;
+    box-shadow: 0 1px 4px #000b;
 }
 .mark.sentinel {
-    left: 4px;
-    background: #e9eef8;
-    color: #1d2a44;
+    background: var(--color-sentinel);
+    color: #fff;
+}
+/* a deployed leader on the board, in its owner's colour */
+.mark.leader {
+    background: var(--seat, var(--color-fg));
+    color: #06101f;
 }
 .ups {
-    position: absolute;
-    top: 4px;
-    right: 4px;
+    margin-left: auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -310,7 +412,7 @@ h3 {
     border-radius: 3px;
     background: #f6c454;
     color: #2a1d00;
-    max-width: calc(var(--w) - 8px);
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -319,35 +421,51 @@ h3 {
     background: #e9eef8;
     color: #1d2a44;
 }
+.up.shield {
+    background: var(--color-shield);
+    color: #022622;
+    font-weight: 700;
+}
+.up.more {
+    background: #0b1220e6;
+    color: var(--color-fg);
+    box-shadow: inset 0 0 0 1px #dce6fb55;
+}
+/* a tile with three upgrade tags and a lens chip: its name keeps one line so the chip clears the tags */
+.card.lensed:not(.art):has(.ups > :nth-child(3)) .nmbar {
+    -webkit-line-clamp: 1;
+}
 /* ---------- lens: card values from the omni bot's board score ---------- */
 .lens {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    translate: -50% -50%;
-    z-index: 3;
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
     gap: 3px;
+    padding-inline: 3px;
     pointer-events: none;
 }
-.card.sm .lens {
-    top: auto;
-    bottom: 2px;
-    translate: -50% 0;
-    gap: 1px;
-}
 .card.wide .lens {
-    left: 6px;
-    top: auto;
-    bottom: 6px;
-    translate: none;
-    align-items: flex-start;
+    justify-content: flex-start;
+    padding-inline: 5px;
+}
+.foot:has(.dmg) .lens {
+    margin-bottom: 9px;
+}
+/* on a tile the chip takes the monogram's place */
+.card.lensed .tile .mono {
+    opacity: 0.35;
+}
+.card.sm .foot {
+    padding-bottom: 2px;
+}
+.card.sm .lens {
+    flex-direction: column;
+    gap: 1px;
+    padding-inline: 2px;
 }
 .card.wide.sm .lens {
-    left: 2px;
-    bottom: 2px;
+    align-items: flex-start;
 }
 .lensv {
     min-width: 34px;
@@ -444,25 +562,48 @@ h3 {
 }
 
 /* ---------- board ---------- */
+/* Each half of the table carries its seat colour: a light tint (strongest at the player's own edge), the lanes'
+   outlines, the base frame and the hand strip. The player to act gets a full-strength outline and glow. */
+.half {
+    border-radius: 18px;
+    padding: 6px;
+    background: linear-gradient(var(--half-dir, to bottom), color-mix(in oklab, var(--seat) 14%, transparent), color-mix(in oklab, var(--seat) 5%, transparent) 75%);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--seat) 32%, transparent);
+    transition: box-shadow 0.25s;
+}
+.half.seat-p2 {
+    --half-dir: to bottom;
+}
+.half.seat-p1 {
+    --half-dir: to top;
+}
+.half.to-act {
+    box-shadow: inset 0 0 0 1.5px var(--seat), 0 0 30px -8px var(--seat);
+}
+/* units sit on a grid of card-wide columns; a crowded lane gets more of them (see laneSplit in Board.tsx) */
 .lane {
     min-height: 118px;
     border-radius: 12px;
-    border: 1px dashed color-mix(in oklab, var(--color-line) 80%, transparent);
-    background: color-mix(in oklab, var(--color-ink) 60%, transparent);
+    border: 1px dashed color-mix(in oklab, var(--seat, var(--color-line)) 34%, transparent);
+    background: color-mix(in oklab, var(--color-ink) 62%, transparent);
     padding: 8px;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 84px);
+    align-content: start;
     gap: 8px;
     min-width: 0;
 }
 .lane-label {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
     font-family: var(--font-display);
     font-size: 10px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--color-faint);
-    width: 100%;
+    color: color-mix(in oklab, var(--seat, var(--color-faint)) 62%, var(--color-faint));
 }
 
 .seat-p1 {
@@ -471,8 +612,98 @@ h3 {
 .seat-p2 {
     --seat: var(--color-p2);
 }
-.to-act {
-    box-shadow: 0 0 0 1px var(--seat), 0 0 28px -6px var(--seat);
+
+/* the base in a frame of its owner's colour */
+.base-frame {
+    border-radius: 9px;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--seat) 85%, transparent), 0 0 20px -6px var(--seat);
+}
+.base-frame > .card {
+    border-radius: 7px;
+}
+.leader-slot {
+    position: relative;
+    flex: none;
+}
+/* the leader is out on the board: a tag on the slot's top edge; hovering the slot lights the unit up */
+.leader-out {
+    position: absolute;
+    left: 50%;
+    top: -7px;
+    translate: -50% 0;
+    z-index: 4;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.45;
+    white-space: nowrap;
+    color: #06101f;
+    background: var(--seat);
+    box-shadow: 0 1px 4px #000a;
+    pointer-events: none;
+}
+.lead-hi > .card {
+    outline: 2px solid var(--seat);
+    outline-offset: 3px;
+    box-shadow: 0 0 26px 0 color-mix(in oklab, var(--seat) 70%, transparent);
+}
+
+/* the hand: a strip in the seat colour, "Hand · N", each card with its name under it */
+.hand {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    min-height: 44px;
+    padding: 6px 10px;
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--seat) 7%, color-mix(in oklab, var(--color-ink) 55%, transparent));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--seat) 22%, transparent);
+}
+.hand-label {
+    flex: none;
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--seat);
+}
+.hand-cards {
+    flex: 1 1 260px;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px 2px;
+}
+/* 74px: the longest one-word card names ("Supercommando", "Communications") fit on a line */
+.hand-card {
+    width: 74px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+.hand-name {
+    width: 100%;
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-align: center;
+    color: #c9d4ec;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .pips {

@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type FocusEvent, type MouseEvent } from 'react';
 import { cardImageUrl, tileLook } from '../lib/cards';
 import { useSettings } from '../lib/settings';
-import type { CardRef, Seat, UnitRef } from '../data/types';
+import type { CardRef, Seat, UnitRef, UpgradeRef } from '../data/types';
 import { TERM_COLOR, type TermKey } from '../data/lens';
 
 /** Leader fronts and bases are printed landscape ('wide'); everything else, a deployed leader included, is portrait ('tall'). */
@@ -48,6 +48,8 @@ interface Props {
     /** width in px, overriding the size's width */
     width?: number;
     value?: CardValue | null;
+    /** a deployed leader on the board: gets a LEADER badge */
+    leader?: boolean;
     onFocus?: (f: Focus | null) => void;
     onLeave?: () => void;
 }
@@ -74,8 +76,34 @@ export function LensMarks({ value, size }: { value: CardValue; size: 'sm' | 'md'
     );
 }
 
-/** One card: art when there is some, otherwise a generated tile (tokens, unreleased sets, fixtures). */
-export function Card({ card, size = 'md', shape = 'tall', back = false, unit, exhausted = false, note, kind = 'unit', hpLeft, width, value, onFocus, onLeave }: Props) {
+/**
+ * A unit's upgrade tags: copies of one upgrade (Experience, Advantage tokens…) folded into "Name ×N", and at most three
+ * tags, the third becoming "+N" (the inspector lists them all), so the stack never reaches the lens chip.
+ */
+function upgradeTags(ups: UpgradeRef[]) {
+    const groups: { n: string; t: 0 | 1; count: number; title: string; more?: boolean }[] = [];
+    for (const u of ups) {
+        const g = groups.find((x) => x.n === u.n);
+        if (g) {
+            g.count++;
+            g.title = `${u.n} ×${g.count}`;
+        } else {
+            groups.push({ n: u.n, t: u.t, count: 1, title: u.n });
+        }
+    }
+    if (groups.length <= 3) {
+        return groups;
+    }
+    const rest = groups.slice(2);
+    return [...groups.slice(0, 2), { n: `+${rest.reduce((a, g) => a + g.count, 0)}`, t: 0 as const, count: 1, title: rest.map((g) => g.title).join(', '), more: true }];
+}
+
+/**
+ * One card: art when there is some, otherwise a generated tile (tokens, unreleased sets, fixtures).
+ * Board-size cards stack their facts from the bottom up so nothing covers anything: name bar, then power/HP, then the
+ * lens chip; marks (LEADER, Sentinel) sit top left and upgrades top right.
+ */
+export function Card({ card, size = 'md', shape = 'tall', back = false, unit, exhausted = false, note, kind = 'unit', hpLeft, width, value, leader = false, onFocus, onLeave }: Props) {
     const art = useSettings((s) => s.art);
     useSettings((s) => s.artVersion);
     const [failed, setFailed] = useState<string | null>(null);
@@ -100,7 +128,11 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
         : {};
     const lensed = value && (value.v != null || value.regret != null);
     const heat = value?.heat ?? 0;
-    const cls = ['card', size !== 'md' ? size : '', shape === 'wide' ? 'wide' : '', exhausted ? 'exh' : '', lensed ? 'lensed' : ''].filter(Boolean).join(' ');
+    // board-size cards print their name in a bar at the bottom (one line over art, up to two on a tile)
+    const named = size === 'md';
+    const stats = !!unit && size !== 'sm';
+    const ups = !!unit?.u?.length && size !== 'sm';
+    const cls = ['card', size !== 'md' ? size : '', shape === 'wide' ? 'wide' : '', exhausted ? 'exh' : '', lensed ? 'lensed' : '', showImg ? 'art' : '', named ? 'named' : ''].filter(Boolean).join(' ');
     const style = {
         ...(width ? { '--w': `${width}px` } : {}),
         // the glow: the card's score colour, stronger the closer it is to the most valuable unit on the table
@@ -111,7 +143,7 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     } as CSSProperties;
     return (
         <div className={cls} style={style} title={card.n} {...focus}
-            aria-label={card.n + (unit ? `, ${unit.p} power, ${hp} HP left` : '') + (exhausted ? ', exhausted' : '') + (value?.v != null ? `, worth ${value.v.toFixed(1)}` : '')}>
+            aria-label={(leader ? 'Leader ' : '') + card.n + (unit ? `, ${unit.p} power, ${hp} HP left${unit.d > 0 ? ` (${unit.d} damage)` : ''}` : '') + (unit?.sn ? ', Sentinel' : '') + (exhausted ? ', exhausted' : '') + (value?.v != null ? `, worth ${value.v.toFixed(1)}` : '')}>
             {showImg ? (
                 <>
                     {mismatch === url && <img src={url} alt="" draggable={false} className="backdrop" />}
@@ -129,19 +161,38 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
                     <span className="nm">{card.n}</span>
                 </div>
             )}
-            {unit && size !== 'sm' && (
-                <>
-                    <span className="stat pw">{unit.p}</span>
-                    <span className={`stat hp${unit.d > 0 ? ' hurt' : ''}`}>{hp}</span>
-                </>
-            )}
-            {unit?.sn ? <span className="mark sentinel" title="Sentinel">SEN</span> : null}
-            {unit?.u && unit.u.length > 0 && size !== 'sm' && (
-                <div className="ups">
-                    {unit.u.map((u, i) => <span key={i} className={`up${u.t ? ' token' : ''}`} title={u.n}>{u.n}</span>)}
+            {(leader || unit?.sn || ups) && (
+                <div className="top">
+                    {(leader || unit?.sn) && (
+                        <span className="marks">
+                            {leader && <span className="mark leader" title="This player's leader, deployed">Leader</span>}
+                            {unit?.sn ? <span className="mark sentinel" title="Sentinel">SEN</span> : null}
+                        </span>
+                    )}
+                    {ups && (
+                        <div className="ups">
+                            {upgradeTags(unit!.u!).map((g) => (
+                                <span key={g.n} className={`up${g.t ? ' token' : ''}${g.t && g.n === 'Shield' ? ' shield' : ''}${g.more ? ' more' : ''}`} title={g.title}>{g.n}{g.count > 1 ? ` ×${g.count}` : ''}</span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
-            {lensed && <LensMarks value={value!} size={size} />}
+            {(lensed || stats || named) && (
+                <div className="foot">
+                    {lensed && <LensMarks value={value!} size={size} />}
+                    {stats && (
+                        <div className="stats">
+                            <span className="stat pw">{unit!.p}</span>
+                            <span className={`stat hp${unit!.d > 0 ? ' hurt' : ''}`}>
+                                {unit!.d > 0 && <span className="dmg" title={`${unit!.d} damage`}>{unit!.d}</span>}
+                                {hp}
+                            </span>
+                        </div>
+                    )}
+                    {named && <span className="nmbar">{card.n}</span>}
+                </div>
+            )}
         </div>
     );
 }
@@ -149,7 +200,7 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
 export function CardBack({ size = 'md', value }: { size?: 'sm' | 'md'; value?: CardValue | null }) {
     return (
         <div className={`card card-back${size === 'sm' ? ' sm' : ''}`} aria-hidden="true">
-            {value && <LensMarks value={{ ...value, v: null }} size={size} />}
+            {value && value.regret != null && <div className="foot"><LensMarks value={{ ...value, v: null }} size={size} /></div>}
         </div>
     );
 }
