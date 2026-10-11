@@ -318,10 +318,10 @@ const THEORY = /*__THEORY__*/null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const FAMLABEL = Object.fromEntries(AtlasKit.FAMILIES.map((f) => [f.id, f.label]));
+const FAMLABEL = AtlasKit.FAMLABEL;
 const famKey = (b) => AtlasKit.famKey(b.family);
 const famVar = (b) => `var(--f-${famKey(b)})`;
-const MIN_GAMES = 8;
+const MIN_GAMES = AtlasKit.MIN_GAMES;
 const pp = AtlasKit.pp;
 const pct = (x) => Math.round(x * 100) + '%';
 const GROUP = { Behind: 'When behind', Even: 'Close or long', Ahead: 'When ahead' };
@@ -351,7 +351,7 @@ const K = AtlasKit;
 K.injectCss({ base: false });
 const SPOTS = K.SPOT, drawBoard = K.drawBoard, ease = K.ease;
 const Q = Object.fromEntries(K.STYLES.map((x) => [x.id, x.quadrant]));
-function miniBoard(id, cls = 'pict') { return `<svg class="${cls}" viewBox="0 0 240 150" aria-hidden="true">${drawBoard(id, 1, { mini: true })}</svg>`; }
+const miniBoard = K.miniBoard;
 function pictogram(s) { return miniBoard(s.id); }
 
 /** The animated guide: cycles through the spots, or holds the one picked. */

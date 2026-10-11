@@ -2,18 +2,22 @@
  * Strategy Atlas kit: the one shared picture language and vocabulary for describing bots.
  * Spots (game situations) with their icons, play styles, bot families and the Atlas's terms.
  *
- * Works as a browser script (sets window.AtlasKit) and as a Node module (require). No dependencies.
+ * Works as a browser script (sets window.AtlasKit, also as window.ATLAS_KIT) and as a Node module (require).
+ * No dependencies and no DOM use at load time, so it can be inlined into any page.
  * The Strategy Atlas page is built from this file, and meta/export-kit.js copies it with ready-made SVGs
  * to /mnt/project-files/meta/kit/ on every refresh, so every page that uses it stays in step with the Atlas.
  */
 (function (root, factory) {
   const kit = factory();
   if (typeof module === 'object' && module.exports) module.exports = kit;
-  else root.AtlasKit = kit;
+  else root.AtlasKit = root.ATLAS_KIT = kit;
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
   const VERSION = 1;
+
+  /** A spot cell counts (can be "best") with this many games; under THIN games it is drawn hollow or hatched. */
+  const MIN_GAMES = 8, THIN = 5;
 
   /** Groups, in display order. */
   const GROUPS = [
@@ -57,6 +61,7 @@
       board: { you: { base: 18, units: [3, 2], hand: 3 }, them: { base: 6, units: [2], hand: 2 }, round: 6 } },
   ];
   const SPOT = Object.fromEntries(SPOTS.map((s) => [s.id, s]));
+  const GROUP = Object.fromEntries(GROUPS.map((g) => [g.id, g.label]));
 
   /** The even opening every animated icon starts from. */
   const OPEN = { you: { base: 30, units: [2, 3], hand: 4 }, them: { base: 30, units: [2, 3], hand: 4 }, round: 1 };
@@ -107,6 +112,8 @@
     { id: 'human', family: 'human', label: 'Humans', light: '#0f1420', dark: '#eef0f4' },
   ];
   const FAM_BY_FAMILY = Object.fromEntries(FAMILIES.map((f) => [f.family, f]));
+  /** Family key -> label, e.g. FAMLABEL.heur = 'Rules'. */
+  const FAMLABEL = Object.fromEntries(FAMILIES.map((f) => [f.id, f.label]));
   /** Family key ('heur', 'search', ...) for a bot's `family` field; anything unknown is an arena entrant. */
   const famKey = (family) => (FAM_BY_FAMILY[family] || FAM_BY_FAMILY.other).id;
   const famLabel = (family) => (FAM_BY_FAMILY[family] || FAM_BY_FAMILY.other).label;
@@ -123,15 +130,20 @@
     clock: '⏱ = games lost by a late or broken reply (a timeout, or a protocol error by that bot). Each one counts as a loss.',
     thin: 'Hollow dot or hatched cell = fewer than 5 games in that spot: treat it as a hint.',
     style: 'How a bot plays, from its own moves: base damage, units removed and where its attacks go (see STYLES).',
+    star: '★ = the best bot in that spot.',
+    upDown: '▲ ▼ = the bot\'s best and worst spot for its own level (vsOwn).',
     humans: 'Real karabast.net games, both seats as one competitor, scored like an average bot facing an equal opponent. Never ranked among bots.',
   };
 
   /** Edge as signed points: +12, −3, 0. */
   const pp = (x) => { const v = Math.round(x * 100); return v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v); };
+  /** |edge| below EDGE_STEPS[i] gets colour step i (0 = neutral --mid, 1..5 = --pos-n or --neg-n). */
+  const EDGE_STEPS = [0.03, 0.08, 0.14, 0.22, 0.32];
   /** Diverging colour step for an edge: { bg, fg } as CSS vars (--pos-1..5, --neg-1..5, --mid). */
   function edgeColor(e) {
     const a = Math.abs(e);
-    const step = a < 0.03 ? 0 : a < 0.08 ? 1 : a < 0.14 ? 2 : a < 0.22 ? 3 : a < 0.32 ? 4 : 5;
+    let step = EDGE_STEPS.findIndex((t) => a < t);
+    if (step < 0) step = 5;
     if (!step) return { bg: 'var(--mid)', fg: 'var(--ink-2)' };
     return { bg: `var(--${e > 0 ? 'pos' : 'neg'}-${step})`, fg: step >= 4 ? 'var(--panel)' : 'var(--ink)' };
   }
@@ -206,6 +218,9 @@
     return g;
   }
 
+  /** The small final-frame icon, as the Atlas uses it in tiles and grid headers. */
+  const miniBoard = (id, cls = 'pict') => `<svg class="${cls}" viewBox="0 0 240 150" aria-hidden="true">${drawBoard(id, 1, { mini: true })}</svg>`;
+
   /** A whole <svg> for a spot. Defaults to the small final-frame icon. */
   function spotSvg(id, { k = 1, mini = true, cls = 'pict', label = true } = {}) {
     const S = SPOT[id];
@@ -247,6 +262,9 @@
     dark: { '--ink': '#eef0f4', '--ink-2': '#b4bac8', '--panel': '#161a23', '--line-2': '#343a48', '--mid': '#1e232e', '--you': '#6f9cf0', '--them': '#e58258', '--neg-4': '#d9654f',
       '--pos-1': '#1d2c45', '--pos-2': '#23467a', '--pos-3': '#2f66b3', '--pos-4': '#4a8ae6', '--pos-5': '#8db8f5', '--neg-1': '#3a2220', '--neg-2': '#6a2f27', '--neg-3': '#a5412f', '--neg-5': '#f2a092', '--clock': '#f08a72' },
   };
+  /** What the drawings reference, so a page can map them to its own tokens. */
+  const CSS_VARS = ['--you', '--them', '--ink', '--ink-2', '--panel', '--line-2', '--neg-4'];
+  const CSS_CLASSES = ['bd-num', 'bd-lab', 'bd-who', 'bd-round', 'bd-pill'];
   const famTokens = (mode) => Object.fromEntries(FAMILIES.map((f) => [`--f-${f.id}`, f.id === 'human' ? 'var(--ink)' : f[mode]]));
   const decl = (o) => Object.entries(o).map(([k, v]) => `${k}: ${v};`).join(' ');
 
@@ -279,6 +297,7 @@
     document.head.appendChild(st);
   }
 
-  return { VERSION, GROUPS, SPOTS, SPOT, OPEN, ICON_PARTS, STYLES, TRAITS, FAMILIES, TERMS, TIMING,
-    famKey, famLabel, famColor, pp, edgeColor, ease, drawBoard, spotSvg, animate, TOKENS, css, injectCss };
+  return { VERSION, MIN_GAMES, THIN, GROUPS, GROUP, SPOTS, SPOT, OPEN, ICON_PARTS, STYLES, TRAITS, FAMILIES, FAMLABEL, TERMS, TIMING,
+    famKey, famLabel, famColor, pp, EDGE_STEPS, edgeColor, ease, drawBoard, miniBoard, spotSvg, animate,
+    TOKENS, CSS_VARS, CSS_CLASSES, css, injectCss };
 });
