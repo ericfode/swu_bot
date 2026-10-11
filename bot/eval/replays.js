@@ -6,11 +6,10 @@
  *
  *   node bot/eval/replays.js --from /mnt/project-files/results/omni-ref-1,... --out data/omni [--every 2]
  *
- * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state}) and <out>/decks/0.jsonl. Replay step
- * n's state is the board after step n's move, so its next actor is step n+1's pid (the same rule as arena.js). Decklists
- * are redrawn from the seed the way match.js draws them and kept only when the deck names match the replay header.
- * Draws, errors and decided boards are skipped. Game ids are prefixed with the tournament id when two tournaments
- * use the same game id.
+ * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state}) and <out>/decks/0.jsonl. Positions
+ * are the action-window checkpoints arena.js records (see replayPositions). Decklists are redrawn from the seed the way
+ * match.js draws them and checked (see deckLists). Draws, errors and decided boards are skipped. A game id already seen
+ * gets the source's position in --from and its folder name as a prefix.
  */
 const fs = require('fs');
 const path = require('path');
@@ -69,7 +68,11 @@ function deckLists(seed, header, lines = []) {
     return decks;
 }
 
-/** Positions of one replay file: every `every`-th undecided step with a known next actor. */
+/**
+ * Positions of one replay file, sampled like arena.js: the board right before an action-window decision (the next step's
+ * prompt starts with `actionWindow`, in the action phase), every `every`-th such checkpoint, with that step's actor.
+ * States inside a follow-up prompt (select, distribute, ...) are not checkpoints.
+ */
 function replayPositions(file, id, every = 1) {
     const lines = readJsonl(file);
     const end = lines.find((l) => l.t === 'end');
@@ -78,12 +81,13 @@ function replayPositions(file, id, every = 1) {
     }
     const steps = lines.filter((l) => l.t === 'step');
     const out = [];
-    for (let i = 0; i + 1 < steps.length; i += every) {
-        const s = steps[i];
-        if (!s.state || s.state.phase === 'setup' || terminal(s.state, 'p1') !== null) {
-            continue;
+    let seen = 0;
+    for (let i = 0; i + 1 < steps.length; i++) {
+        const prev = steps[i],
+            e = steps[i + 1];
+        if (e.prompt?.startsWith('actionWindow') && prev.state?.phase === 'action' && seen++ % every === 0 && terminal(prev.state, 'p1') === null) {
+            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state });
         }
-        out.push({ id, winner: end.winner, outcome: end.outcome, n: s.n, round: s.state.round, toAct: steps[i + 1].pid ?? null, state: s.state });
     }
     return { positions: out, decks: deckLists(lines[0]?.seed, lines[0], lines) };
 }
@@ -93,7 +97,7 @@ function main() {
     const out = arg('out', null);
     const every = Number(arg('every', '2'));
     if (!from.length || !out || !Number.isInteger(every) || every < 1) {
-        console.error('usage: node bot/eval/replays.js --from <tournament dir>[,...] --out <dataset dir> [--every N, a positive integer]');
+        console.error('usage: node bot/eval/replays.js --from <tournament dir>[,...] --out <dataset dir> [--every N, a positive integer: keep every N-th action-window checkpoint]');
         process.exit(2);
     }
     for (const d of ['positions', 'decks']) {
@@ -106,16 +110,17 @@ function main() {
     let games = 0,
         n = 0,
         withDecks = 0;
-    for (const t of from) {
+    for (const [ti, t] of from.entries()) {
         const g = path.join(t, 'games');
         if (!fs.existsSync(g)) {
             console.error(`skipping ${t}: no games/ folder`);
             continue;
         }
         for (const f of fs.readdirSync(g).filter((f) => f.endsWith('.jsonl')).sort()) {
+            // a game id seen before (same file name in another source) gets the source's index as a prefix
             let id = f.slice(0, -6);
             if (seen.has(id)) {
-                id = `${path.basename(t)}/${id}`;
+                id = `${ti}:${path.basename(t)}/${id}`;
             }
             seen.add(id);
             let r = null;
