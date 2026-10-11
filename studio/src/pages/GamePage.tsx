@@ -8,6 +8,7 @@ import { LANES, Momentum, type LaneKey } from '../components/Momentum';
 import { deltas as diff, metrics, roundStarts, trackUnits } from '../data/derive';
 import { useGame } from '../data/hooks';
 import type { Game, Seat } from '../data/types';
+import { humanize } from '../lib/cards';
 import { hrefTournament, replaceStep } from '../lib/route';
 import { SPEEDS, useSettings, type Perspective } from '../lib/settings';
 
@@ -40,7 +41,9 @@ function Replay({ tid, gid, game, live, startStep }: { tid: string; gid: string;
         p1: game.header.players.find((p) => p.id === 'p1')?.bot ?? 'p1',
         p2: game.header.players.find((p) => p.id === 'p2')?.bot ?? 'p2'
     }), [game]);
-    const decks = Object.fromEntries(game.header.players.map((p) => [p.id, p.deck])) as Record<Seat, string>;
+    // recorded deck names are engine internal names ("leader#subtitle / base"); show the leader and base
+    const decks = Object.fromEntries(game.header.players.map((p) => [p.id, p.deck.split(' / ').map((x) => humanize(x).split(':')[0]).join(' · ')])) as Record<Seat, string>;
+    const endRound = Math.max(game.end?.round ?? 0, game.steps[last].state.round);
 
     // a deep link to another step of the game already open (?step= changed by hand or by a link)
     const lastStart = useRef(startStep);
@@ -166,7 +169,7 @@ function Replay({ tid, gid, game, live, startStep }: { tid: string; gid: string;
                 </div>
                 <div className="flex gap-2 ml-auto items-center">
                     <span className="chip num">seed {game.header.seed}</span>
-                    {game.end && <span className="chip num">{game.end.steps} decisions · R{game.end.round}</span>}
+                    {game.end && <span className="chip num">{game.end.steps} decisions · R{endRound}</span>}
                     {live && (
                         <button className="btn" aria-pressed={follow} onClick={() => setFollow(true)}>
                             <Radio size={14} className={follow ? 'text-p2 animate-pulse' : ''} />{follow ? 'Live' : 'Jump to live'}
@@ -183,7 +186,7 @@ function Replay({ tid, gid, game, live, startStep }: { tid: string; gid: string;
                             {end && !hideResult && (
                                 <motion.div className="absolute inset-0 grid place-items-center bg-bg/60 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setHideResult(true)}>
                                     <motion.div className="panel px-8 py-6 text-center" initial={{ scale: 0.85, y: 20 }} animate={{ scale: 1, y: 0 }}>
-                                        <div className="eyebrow mb-1">Round {end.round} · {end.steps} decisions</div>
+                                        <div className="eyebrow mb-1">Round {endRound} · {end.steps} decisions</div>
                                         <div className="font-display text-3xl font-extrabold" style={{ color: end.winner === 'p1' ? 'var(--color-p1)' : end.winner === 'p2' ? 'var(--color-p2)' : undefined }}>
                                             {end.winner === 'draw' ? 'Draw' : end.winner ? `${bots[end.winner]} wins` : end.outcome}
                                         </div>

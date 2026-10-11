@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:static": "node fixtures/generate.mjs && tsc --noEmit && vite build --mode static",
+    "build:static": "node fixtures/stage.mjs && tsc --noEmit && vite build --mode static",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fixtures": "node fixtures/generate.mjs"

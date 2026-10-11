@@ -23,6 +23,7 @@ The engine's card data can't be downloaded everywhere, so `fixtures/generate.mjs
 npm run fixtures                                   # -> fixtures/replays/
 REPLAYS_DIR=$PWD/fixtures/replays npm run dev
 npm run build:static                               # one self-contained HTML file with the fixtures baked in -> dist-static/
+STATIC_REPLAYS=../replays npm run build:static     # same, with real tournaments instead (colon-separate several folders)
 ```
 
 The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/replays node viewer/server.cjs`.

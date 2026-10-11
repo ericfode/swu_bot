@@ -1,16 +1,16 @@
 import type { DataSource } from './source';
 import type { TournamentIndex, TournamentSummary } from './types';
 
-// Fixture tournaments (studio/fixtures/replays, made by fixtures/generate.mjs) bundled as raw text.
-const files = import.meta.glob('../../fixtures/replays/**/*.{json,jsonl}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const PREFIX = '../../fixtures/replays/';
+// Tournaments staged into studio/static-replays by fixtures/stage.mjs (real replays or generated fixtures), bundled as raw text.
+const files = import.meta.glob('../../static-replays/**/*.{json,jsonl}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const PREFIX = '../../static-replays/';
 const byPath = new Map(Object.entries(files).map(([k, v]) => [k.slice(PREFIX.length), v]));
 const t0 = Date.now();
 
 function read(rel: string): string {
     const v = byPath.get(rel);
     if (v == null) {
-        throw new Error(`${rel}: not in the bundled fixtures`);
+        throw new Error(`${rel}: not in the bundled replays`);
     }
     return v;
 }
