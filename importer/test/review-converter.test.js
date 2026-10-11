@@ -185,7 +185,7 @@ test('a capture holding a game and its rematch splits into two games', () => {
     try {
         const file = path.join(dir, 'session.txt');
         fs.writeFileSync(file, toSocketIo([...g1, ...g2]));
-        const out = importFile(file, {});
+        const out = importFile(file, { keepFileNames: true });
         assert.deepStrictEqual(out.map((x) => x.id), ['session', 'session.2']);
         assert.deepStrictEqual(out.map((x) => [endOf(x.events).winner, endOf(x.events).outcome, endOf(x.events).how ?? null]), [['p1', 'won', 'base destroyed'], [null, 'STUCK', null]]);
         assert.deepStrictEqual(steps(out[1].events).map((e) => e.state.round), [0, 1, 1]);

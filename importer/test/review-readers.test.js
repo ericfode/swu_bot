@@ -178,10 +178,14 @@ test('SWU Forge: entries after the last frame are dropped, except the game\'s ow
     assert.deepStrictEqual(view(back), view(want));
     assert.deepStrictEqual(back[back.length - 1], want[want.length - 1], 'end event: the late "has left" line does not change how the game ended');
     assert.ok(!/alice|bob|rematch/.test(JSON.stringify(back)));
-    // a timeout alert pushed after the last captured frame still says how the game ended
-    tl.chat.push({ ts: late + 3, tokens: [{ kind: 'alert', text: 'Game ended due to Opponent timing out.' }] });
-    const timedOut = convertFrames(readText(JSON.stringify(tl)).frames).events;
+    // a timeout alert pushed after the last captured frame still says how the game ended (when the base survived)
+    const alive = structuredClone(states);
+    alive[alive.length - 1].players.u2.base.damage = 10;
+    const tl2 = toTimeline(alive, stamps);
+    tl2.chat.push({ ts: late + 3, tokens: [{ kind: 'alert', text: 'Game ended due to bob timing out.' }] });
+    const timedOut = convertFrames(readText(JSON.stringify(tl2)).frames).events;
     assert.strictEqual(timedOut[timedOut.length - 1].how, 'timeout');
+    assert.ok(!/bob/.test(JSON.stringify(timedOut)));
 });
 
 test('browser devtools HAR export of the game socket', () => {
