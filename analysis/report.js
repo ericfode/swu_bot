@@ -10,6 +10,7 @@
  * --kit swu-viewer-kit.js inlines the shared game viewer (Holotable kit) with the replay, synced to the curves;
  *   without it the page shows a compact board summary per checkpoint instead.
  * --art-pack art-pack.json adds card art to the kit (only the cards in this game are kept).
+ * --lens lens.json adds the omni bot's card values to the kit's Lens view (dashboard/lens/<gameId>.json, swu-lens/1).
  */
 
 const fs = require('fs');
@@ -41,7 +42,7 @@ function boardSummaries(game, a) {
     });
 }
 
-function build(a, { baseline = null, boards = null, jsonl = null, art = null }) {
+function build(a, { baseline = null, boards = null, jsonl = null, art = null, lens = null }) {
     const fit = gameFitness(a, { view: 'objective' });
     const data = {
         game: a.game,
@@ -55,6 +56,7 @@ function build(a, { baseline = null, boards = null, jsonl = null, art = null }) 
         boards,
         jsonl,
         art,
+        lens,
         evals: jsonl ? toDashboard(a) : null
     };
     return { data, title: `${a.game.players.map((p) => p.bot).join(' vs ')}` };
@@ -393,7 +395,7 @@ if (window.SWUViewer && D.jsonl) {
   try {
     if (D.art) window.SWUViewer.loadArtPack(D.art);
     viewer = window.SWUViewer.mount($('#kit'), {
-      jsonl: D.jsonl, evals: D.evals, layout: 'full', step: 0,
+      jsonl: D.jsonl, evals: D.evals, lens: D.lens || undefined, layout: 'full', step: 0,
       onStep: (i, n) => {
         // the checkpoint whose position is on the board: the last one at or before the playhead
         let j = 0;
@@ -504,7 +506,7 @@ if (require.main === module) {
     const argv = process.argv.slice(2);
     const file = argv.find((x) => !x.startsWith('--') && !argv[argv.indexOf(x) - 1]?.startsWith('--'));
     if (!file) {
-        console.error('usage: node analysis/report.js <analysis.json> [--baseline other.json] [--game game.jsonl] [--kit swu-viewer-kit.js [--art-pack pack.json]] [--out report.html] [--fragment]');
+        console.error('usage: node analysis/report.js <analysis.json> [--baseline other.json] [--game game.jsonl] [--kit swu-viewer-kit.js [--art-pack pack.json] [--lens lens.json]] [--out report.html] [--fragment]');
         process.exit(2);
     }
     const a = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -526,7 +528,8 @@ if (require.main === module) {
         const codes = new Set(jsonl.match(/"s":"[^"]+"/g)?.map((m) => m.slice(5, -1)) ?? []);
         art = Object.fromEntries(Object.entries(pack).filter(([k]) => codes.has(k.replace(/-b$/, ''))));
     }
-    const { data, title } = build(a, { baseline, boards, jsonl, art });
+    const lens = kit && jsonl && opt(argv, 'lens') ? JSON.parse(fs.readFileSync(opt(argv, 'lens'), 'utf8')) : null;
+    const { data, title } = build(a, { baseline, boards, jsonl, art, lens });
     const out = opt(argv, 'out', file.replace(/\.json$/, '.html'));
     fs.writeFileSync(out, html(data, title, argv.includes('--fragment'), kit));
     console.error(`wrote ${out}`);
