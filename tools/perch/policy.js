@@ -9,7 +9,7 @@ const path = require('node:path');
 const ASKS_JEV = new Set(['scan', 'coverage', 'check']);
 // Commands that read code or findings, so they run in the snapshot. The rest (rules, setup, the
 // Perch Cloud commands) read and write this repo's own config.
-const IN_SNAPSHOT = new Set(['scan', 'coverage', 'check', 'issues', 'close', 'reopen', 'doctor']);
+const IN_SNAPSHOT = new Set(['scan', 'coverage', 'check', 'issues', 'findings', 'close', 'reopen', 'doctor']);
 // Variables git sets for hooks and `rebase -x` that point git at a repo other than the one it is
 // run in (`git rev-parse --local-env-vars`). Every git process here, and perch, runs without them.
 const GIT_LOCAL = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR',
@@ -200,9 +200,9 @@ function handWrittenFile(file) {
   return stat.size <= MAX_BYTES && handWritten(fs.readFileSync(file));
 }
 
-/** The contents of a hand-written source file, or null for anything else. */
+/** The contents of a hand-written source file, or null for anything else (links included). */
 function readSource(file) {
-  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
   if (!stat?.isFile() || stat.size > MAX_BYTES) return null;
   const bytes = fs.readFileSync(file);
   return handWritten(bytes) ? bytes : null;
@@ -330,7 +330,9 @@ function snapshot(dir, files, perchFiles = new Map()) {
     return result.stdout;
   };
   fs.mkdirSync(dir, { recursive: true });
-  if (git('rev-parse', '--git-dir').status !== 0) {
+  const own = git('rev-parse', '--absolute-git-dir');
+  // Only a real .git directory of its own will do: not a file or a link that leads to another repo.
+  if (own.status !== 0 || !fs.lstatSync(gitDir).isDirectory() || fs.realpathSync(own.stdout.trim()) !== fs.realpathSync(gitDir)) {
     fs.rmSync(gitDir, { recursive: true, force: true });
     const init = spawnSync('git', ['init', '-q', dir], { encoding: 'utf8', env: gitEnv() });
     if (init.status !== 0) throw new Error(`git init ${dir}: ${init.stderr}`);

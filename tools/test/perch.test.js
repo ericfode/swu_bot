@@ -263,6 +263,15 @@ test('the repo snapshot never writes to the repo it sits in', (t) => {
   assert.strictEqual(git('rev-parse', 'HEAD').stdout, head);
   assert.ok(fs.readFileSync(path.join(root, '.git/index')).equals(index), "the repo's index is untouched");
   assert.deepStrictEqual(lsTree(dir), ['bot/match.js']);
+  // A .git that is a link or a gitfile leading to this repo is replaced, not used.
+  for (const make of [() => fs.symlinkSync(path.join(root, '.git'), path.join(dir, '.git')), () => fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${root}/.git\n`)]) {
+    fs.rmSync(path.join(dir, '.git'), { recursive: true, force: true });
+    make();
+    snapshotRepo(root, { include: ['bot/*.js'], exclude: [] }, dir);
+    assert.strictEqual(git('rev-parse', 'HEAD').stdout, head);
+    assert.ok(fs.lstatSync(path.join(dir, '.git')).isDirectory());
+    assert.deepStrictEqual(lsTree(dir), ['bot/match.js']);
+  }
 });
 
 test('end to end, Jev sees no out-of-scope code, not even as a callee', async (t) => {
