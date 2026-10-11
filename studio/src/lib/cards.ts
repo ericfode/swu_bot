@@ -106,9 +106,14 @@ export const ASPECTS: Record<string, { label: string; hi: string; lo: string; pi
 };
 const ORDER = ['vigilance', 'command', 'aggression', 'cunning', 'heroism', 'villainy'];
 
-/** A card's aspects, each once, colours first and Heroism/Villainy last (data lists some as "villainy, vigilance"). */
+/** A card's aspect icons as printed, colours first and Heroism/Villainy last (data lists some as "villainy, vigilance"); a double aspect ("command, command") stays twice. */
+export function aspectPips(as: string[] | undefined): string[] {
+    return (as ?? []).map((a) => a.toLowerCase()).filter((a) => ASPECTS[a]).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+}
+
+/** A card's aspects, each once, in the same order (for colours). */
 export function aspectsOf(as: string[] | undefined): string[] {
-    return [...new Set((as ?? []).map((a) => a.toLowerCase()))].filter((a) => ASPECTS[a]).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+    return [...new Set(aspectPips(as))];
 }
 
 /**

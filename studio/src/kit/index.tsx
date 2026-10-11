@@ -3,6 +3,7 @@
 //   <script src="swu-viewer-kit.js"></script>
 //   <script>const v = SWUViewer.mount(document.getElementById('game'), { url: 'games/x.jsonl', evals, lens }); v.seek(120);</script>
 // It renders into a shadow root, so its styles and the host page's styles never touch each other.
+import { useMemo, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MotionConfig } from 'motion/react';
 import css from '../styles.css?inline';
@@ -15,9 +16,9 @@ import { ACTION_CLASSES, classifyGame, describe, pivotalActions, type Action, ty
 import { edgeTerms, trackUnits } from '../data/derive';
 import { Board } from '../components/Board';
 import { evalsByIndex } from '../data/evals';
-import { createSettingsStore, releaseSettingsStore, setEverywhere, SettingsProvider } from '../lib/settings';
+import { createSettingsStore, releaseSettingsStore, setEverywhere, SettingsProvider, useSettings } from '../lib/settings';
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
-import { cardTextBySet, loadCardText, loadedCardCost, type CardText, type CardTextFile } from '../lib/cardText';
+import { cardTextBySet, cardTextVersion, loadCardText, loadedCardCost, type CardText, type CardTextFile } from '../lib/cardText';
 import { lensPath, parseGame, readDirIndex } from '../data/source';
 import type { EvalFile, EvalPoint } from '../data/evals';
 import { estimateLens, lensAt, lensByIndex } from '../data/lens';
@@ -415,6 +416,18 @@ export function mountActionIcon(el: HTMLElement, props: ActionIconProps) {
 }
 
 /**
+ * mountBoard's board with its score worked out inside React, so the score is worked out again when card data arrives
+ * (each load bumps artVersion): the estimate and Omni v1 files without parts take card cost from the loaded card data,
+ * as the viewer and pivotal() do, and `cardText` given as a URL lands after the first draw.
+ */
+function KitBoard({ lens, ...props }: Omit<ComponentProps<typeof Board>, 'score'> & { lens: boolean | LensStep | FileStep | undefined }) {
+    useSettings((s) => s.artVersion);
+    const textVersion = cardTextVersion();
+    const score = useMemo((): ScoreView | null => (lens ? scoreOfBoard(props.state, lens, { cardCost: loadedCardCost }) : null), [props.state, lens, textVersion]);
+    return <Board {...props} score={score} />;
+}
+
+/**
  * Draw one position (a recorder Snapshot, i.e. a step's `state`) as the full animated board. update() animates to the next one.
  * `lens` (card values): true draws the Omni v1 estimate from the board; `{file, n}` draws the step with Step.n n of a
  * swu-lens/1 file, with that file's label, rules and chance (pass the snapshot of that step); a bare lens step (one entry
@@ -435,14 +448,12 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
     let prev: Snapshot | null = null;
     let n = 0;
     let lensOpt = opts.lens;
-    // the estimate takes card cost from the loaded card data, as the viewer and pivotal() do
-    const viewOf = (cur: Snapshot): ScoreView | null => (lensOpt ? scoreOfBoard(cur, lensOpt, { cardCost: loadedCardCost }) : null);
     const draw = (cur: Snapshot) => {
         const steps = (prev ? [prev, cur] : [cur]).map((st, i) => ({ t: 'step' as const, n: i, state: st }));
         const ids = trackUnits({ header: { t: 'header', v: 1, seed: 0, engine: null, players: [] }, steps, end: null });
         root.render(
             <MotionConfig reducedMotion="user">
-                <Board state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} score={viewOf(cur)} />
+                <KitBoard lens={lensOpt} state={cur} prev={prev} ids={ids[ids.length - 1]} prevIds={prev ? ids[0] : null} bots={bots} actor={null} step={n++} onFocus={() => undefined} />
             </MotionConfig>
         );
     };

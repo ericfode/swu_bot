@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ASPECTS, aspectGradient, aspectsOf, monogram } from '../lib/cards';
+import { ASPECTS, aspectGradient, aspectPips, monogram } from '../lib/cards';
 import type { CardText } from '../lib/cardText';
 
 /** One aspect as a coloured dot (the face's header, and [Aspect] costs inside rules text). */
@@ -82,7 +82,8 @@ export function CardTextFace({ text, back = false, shape = 'tall' }: { text: Car
     const base = ty.includes('base');
     const upgrade = ty.includes('upgrade') && !ty.includes('unit');
     const unitSide = ty.includes('unit') || (leader && back);
-    const aspects = aspectsOf(text.as);
+    // one pip per printed aspect icon, so a double aspect shows two
+    const aspects = aspectPips(text.as);
     // what the box holds: a leader's front is its leader text and epic action, with the deployed side summarised under them
     const main = leader && back ? text.db ?? '' : text.tx ?? '';
     const shown = leader && !back ? `${main}${text.ea ?? ''}${text.db ?? ''}` : main;
@@ -120,7 +121,7 @@ export function CardTextFace({ text, back = false, shape = 'tall' }: { text: Car
                         </div>
                         {text.st && <div className="italic text-dim text-[0.92em] leading-tight truncate">{text.st}</div>}
                     </div>
-                    {aspects.length > 0 && <span className="flex gap-[0.2em] shrink-0 pt-[0.2em]">{aspects.map((a) => <AspectPip key={a} aspect={a} size="1.05em" />)}</span>}
+                    {aspects.length > 0 && <span className="flex gap-[0.2em] shrink-0 pt-[0.2em]">{aspects.map((a, i) => <AspectPip key={`${a}${i}`} aspect={a} size="1.05em" />)}</span>}
                 </div>
                 <div className="text-[0.74em] uppercase tracking-[0.08em] leading-tight border-y border-white/10 py-[0.3em]">
                     <span className="font-semibold text-fg">{typeLine}</span>
