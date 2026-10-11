@@ -9,6 +9,7 @@
     "rust-search": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["search"], "lang": "rust" },
     "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" },
     "wasm": { "cmd": "node", "args": ["bot/wasm/host.js"], "lang": "wasm" },
+    "clj-forecast": { "cmd": "bot/clojure/run.sh", "args": [], "lang": "clojure", "startTimeoutMs": 60000 },
     "haskell": { "cmd": "bot/haskell/build/swu-bot-hs", "args": [], "lang": "haskell" },
     "bend": { "cmd": "bot/bend/run.sh", "args": [], "lang": "bend" },
     "bend-jev": { "cmd": "bot/bend/run.sh", "args": ["--jev"], "lang": "bend", "timeoutMs": 20000 },
