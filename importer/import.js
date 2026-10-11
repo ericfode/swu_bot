@@ -3,7 +3,7 @@
 /**
  * Import human games captured on karabast.net into the replay format.
  *
- *   node importer/import.js <capture file|dir>... --out replays/human [--names "Alice,Bob"] [--source karabuddy]
+ *   node importer/import.js <capture file|dir>... --out replays/human [--names "Alice,Bob"] [--source karabuddy] [--keep-file-names]
  *   node importer/import.js --pair <player 1's capture> <player 2's capture> --out replays/human
  *
  * --pair merges two captures of the same game, one recorded by each player, into one replay with both hands
@@ -12,11 +12,14 @@
  * Every input file becomes <out>/games/<id>.jsonl (spec/replay-format.md: header, steps, end) and <out>/index.json
  * is rewritten in the tournament format, so the viewer, analysis/ and bot/omni/lens.js read the folder unchanged.
  * Inputs: see importer/sources.js (KaraBuddy replay files, Karabast gamestate lists, socket.io dumps, capture.js).
- * <id> is the input file name without its extension.
+ * <id> is g-<hash> for a file and <hash>.both for a pair, the first 10 hex digits of the SHA-1 of the input bytes, so
+ * file names (KaraBuddy names downloads after both players) are never written. --keep-file-names uses the file name
+ * without its extension instead, and also writes source.file / source.pairedWith (for files you named yourself).
  *
  * Privacy: usernames, user ids and player chat are never written; seats are p1/p2 and names default to them.
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { readText } = require('./sources');
@@ -24,7 +27,7 @@ const { convertFrames } = require('./karabast');
 const { mergeCaptures } = require('./merge');
 
 function parseArgs(argv) {
-    const a = { inputs: [], pairs: [], out: path.join('replays', 'human'), names: null, source: null };
+    const a = { inputs: [], pairs: [], out: path.join('replays', 'human'), names: null, source: null, keepFileNames: false };
     for (let i = 0; i < argv.length; i++) {
         const k = argv[i];
         if (k === '--out') {
@@ -35,6 +38,8 @@ function parseArgs(argv) {
             a.source = argv[++i];
         } else if (k === '--pair') {
             a.pairs.push([argv[++i], argv[++i]]);
+        } else if (k === '--keep-file-names') {
+            a.keepFileNames = true;
         } else {
             a.inputs.push(k);
         }
@@ -46,7 +51,7 @@ function expand(inputs) {
     const files = [];
     for (const p of inputs) {
         if (fs.statSync(p).isDirectory()) {
-            files.push(...fs.readdirSync(p).filter((f) => /\.(json|jsonl|txt|log)$/.test(f) && !/\.truth\.jsonl$/.test(f)).sort().map((f) => path.join(p, f)));
+            files.push(...fs.readdirSync(p).filter((f) => /\.(json|jsonl|txt|log|karareplay)$/.test(f) && !/\.truth\.jsonl$/.test(f)).sort().map((f) => path.join(p, f)));
         } else {
             files.push(p);
         }
@@ -54,22 +59,27 @@ function expand(inputs) {
     return files;
 }
 
-const gameId = (file) => path.basename(file).replace(/\.(json|jsonl|txt|log)$/, '').replace(/[^A-Za-z0-9_.-]+/g, '-');
+const contentHash = (...bufs) => bufs.reduce((h, b) => h.update(b), crypto.createHash('sha1')).digest('hex').slice(0, 10);
+const nameId = (file) => path.basename(file, path.extname(file)).replace(/[^A-Za-z0-9_.-]+/g, '-');
+const gameId = (file, bytes, keepFileNames) => (keepFileNames ? nameId(file) : `g-${contentHash(bytes)}`);
 
-function importFile(file, { names, source }) {
-    const cap = readText(fs.readFileSync(file, 'utf8'));
+function importFile(file, { names, source, keepFileNames }) {
+    const bytes = fs.readFileSync(file);
+    const cap = readText(bytes.toString('utf8'));
     const seats = cap.meta.capture?.seats;
     const { events, report } = convertFrames(cap.frames, {
         seats, names: names ?? undefined, decks: cap.meta.decks,
-        source: { kind: source ?? cap.meta.reader, file: path.basename(file), ...(cap.meta.url ? { url: cap.meta.url } : {}), ...(cap.meta.startedAt ? { startedAt: cap.meta.startedAt } : {}) }
+        source: { kind: source ?? cap.meta.reader, ...(keepFileNames ? { file: path.basename(file) } : {}), ...(cap.meta.url ? { url: cap.meta.url } : {}), ...(cap.meta.startedAt ? { startedAt: cap.meta.startedAt } : {}) }
     });
-    return { id: gameId(file), events, report, reader: cap.meta.reader };
+    return { id: gameId(file, bytes, keepFileNames), events, report, reader: cap.meta.reader };
 }
 
 /** Two captures of one game, one from each player's seat, as one replay with both hands. */
-function importPair(fileA, fileB, { names, source }) {
-    const a = readText(fs.readFileSync(fileA, 'utf8'));
-    const b = readText(fs.readFileSync(fileB, 'utf8'));
+function importPair(fileA, fileB, { names, source, keepFileNames }) {
+    const bytesA = fs.readFileSync(fileA);
+    const bytesB = fs.readFileSync(fileB);
+    const a = readText(bytesA.toString('utf8'));
+    const b = readText(bytesB.toString('utf8'));
     const m = mergeCaptures(a.frames, b.frames);
     // each player's file has their own full list; prefer it over the other file's leader-and-base entry
     const decks = { ...(b.meta.decks ?? {}), ...(a.meta.decks ?? {}) };
@@ -81,12 +91,12 @@ function importPair(fileA, fileB, { names, source }) {
     const { events, report } = convertFrames(m.frames, {
         seats: a.meta.capture?.seats, names: names ?? undefined, decks,
         source: {
-            kind: source ?? `${a.meta.reader}+${b.meta.reader}`, file: path.basename(fileA), pairedWith: path.basename(fileB),
+            kind: source ?? `${a.meta.reader}+${b.meta.reader}`, ...(keepFileNames ? { file: path.basename(fileA), pairedWith: path.basename(fileB) } : {}),
             merge: { frames: m.frames.length, matched: m.matched, unmatched: m.unmatched }
         }
     });
     report.merge = m;
-    const id = `${gameId(fileA).replace(/\.(p1|p2)$/, '')}.both`;
+    const id = keepFileNames ? `${nameId(fileA).replace(/\.(p1|p2)$/, '')}.both` : `${contentHash(bytesA, bytesB)}.both`;
     return { id, events, report, reader: `${a.meta.reader}+${b.meta.reader} (${m.matched}/${m.frames.length} frames paired)` };
 }
 
@@ -106,7 +116,7 @@ function main() {
     const args = parseArgs(process.argv.slice(2));
     const files = expand(args.inputs);
     if (!files.length && !args.pairs.length) {
-        console.error('usage: node importer/import.js <capture file|dir>... [--pair <p1 capture> <p2 capture>] --out <dir> [--names A,B] [--source name]');
+        console.error('usage: node importer/import.js <capture file|dir>... [--pair <p1 capture> <p2 capture>] --out <dir> [--names A,B] [--source name] [--keep-file-names]');
         process.exit(2);
     }
     fs.mkdirSync(path.join(args.out, 'games'), { recursive: true });

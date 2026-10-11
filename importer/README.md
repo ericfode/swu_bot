@@ -11,7 +11,7 @@ stream. The importer reads the saved stream; it needs no engine and no card data
 ## Usage
 
 ```bash
-node importer/import.js <capture file or dir>... --out replays/human [--names Alice,Bob] [--source karabuddy]
+node importer/import.js <capture file or dir>... --out replays/human [--names Alice,Bob] [--source karabuddy] [--keep-file-names]
 npm run viewer    # REPLAYS_DIR defaults to replays/, so replays/human shows up as a tournament
 node analysis/analyze.js replays/human --evaluator heuristic
 node bot/omni/lens.js replays/human --out replays/human/lens   # omni lens (bot/omni is not on main yet)
@@ -20,11 +20,18 @@ node bot/omni/lens.js replays/human --out replays/human/lens   # omni lens (bot/
 When both players recorded the same game, pair the two files to get one replay with both hands:
 
 ```bash
-node importer/import.js --pair alice.karareplay bob.karareplay --out replays/human   # -> <alice id>.both.jsonl
+node importer/import.js --pair alice.karareplay bob.karareplay --out replays/human   # -> <hash>.both.jsonl
 ```
 
 Each input becomes `<out>/games/<id>.jsonl`, and `<out>/index.json` is rewritten in the tournament format with
-`human: true` and `pov` on each entry.
+`human: true` and `pov` on each entry. The id is `g-<hash>` for a file and `<hash>.both` for a pair, where `<hash>` is
+the first 10 hex digits of the SHA-1 of the input bytes (`sha1sum`; for a pair, of both files in order). Re-importing
+the same file replaces its entry. File names are not used by default, because they often hold usernames (KaraBuddy
+names its downloads after both players). For files you named yourself, such as `capture.js` output,
+`--keep-file-names` makes the id the file name without its extension (`.p1`/`.p2` dropped for a pair) and writes
+`source.file` (and `source.pairedWith`) to the header.
+
+A directory input adds its `.json`, `.jsonl`, `.txt`, `.log` and `.karareplay` files, except `*.truth.jsonl`.
 
 Inputs are detected from the content (`sources.js`):
 
@@ -89,7 +96,8 @@ What this means for the tools:
 ## Seats and privacy
 
 `p1` is the player holding the initiative when the game starts, unless the capture says otherwise. Usernames, user ids
-and player chat are never written; names default to `p1` / `p2` (`--names` sets them).
+and player chat are never written; names default to `p1` / `p2` (`--names` sets them). Input file names are not
+written either, unless you pass `--keep-file-names`.
 
 ## Testing
 

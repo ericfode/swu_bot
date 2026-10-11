@@ -34,13 +34,13 @@ function parseArgs(argv) {
         }
     }
     const m = /^(\d+)(?:-(\d+))?$/.exec(String(a.seeds));
-    if (!m || !a.bots || !a.out) {
+    const lo = Number(m?.[1]);
+    const hi = Number(m?.[2] ?? m?.[1]);
+    if (!m || hi < lo || !a.bots || !a.out) {
         console.error('usage: node importer/capture.js --bots a,b --seeds 1-3 --out <dir> [--maxSteps 6000]');
         process.exit(2);
     }
-    const lo = Number(m[1]);
-    const hi = Number(m[2] ?? m[1]);
-    a.seedList = Array.from({ length: Math.max(0, hi - lo + 1) }, (_, k) => lo + k);
+    a.seedList = Array.from({ length: hi - lo + 1 }, (_, k) => lo + k);
     a.botNames = a.bots.split(',');
     a.maxSteps = Number(a.maxSteps);
     return a;
