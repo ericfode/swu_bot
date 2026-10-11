@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: cards-${{ github.event.pull_request.number || github.ref }}
+  group: cards-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -65,6 +65,8 @@ jobs:
         run: |
           npm run wasm:build -- --install-tools
           npm run wasm:test
+          npm run wasm:pack
+          npm run wasm:pack:check
       - name: Capture generated changes
         run: git diff --binary -- bot/card-compiler/generated > card-conversion.patch
       - uses: actions/upload-artifact@v7
@@ -73,5 +75,7 @@ jobs:
           name: card-conversion-${{ github.run_id }}
           path: |
             bot/card-compiler/generated/
+            bot/omni-wasm/pkg/distribution/*.tgz
+            bot/omni-wasm/pkg/distribution/receipt.json
             card-conversion.patch
           if-no-files-found: error

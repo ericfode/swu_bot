@@ -14,9 +14,10 @@ The build creates both a CommonJS Node package and an ES module browser package 
 Generated binaries are local build outputs. Tool versions are pinned; the installer uses the workspace's
 ignored `target/wasm-tools` directory instead of replacing a global installation. No service credentials are needed.
 
-The original 100-card benchmark passed 300 complete game replays with zero mismatches. Wasm proved 102/103
-sampled endgame positions in 13.36 seconds including imports, versus JavaScript's 66/103 in 336.23 seconds;
-all 66 shared proofs agree. See [measurements, limits and reproduction commands](../../../results/omni-wasm-1/README.md).
+The generated-card build passed 300 original-pool games and 16 expanded-pool games with zero mismatches.
+It proved 102/103 sampled endgame positions in 14.00 seconds including imports, versus JavaScript's 66/103
+in 336.23 seconds; all 66 shared proofs agree. See [measurements and limits](../../../results/omni-wasm-2/README.md).
+For a self-contained local npm tarball usable outside this repository, see [packaging](../../omni-wasm/PACKAGING.md).
 
 ## Node
 

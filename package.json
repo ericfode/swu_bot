@@ -32,7 +32,9 @@
     "perch": "node tools/bin/perch",
     "cards:compile": "node bot/card-compiler/build.js && node tools/card-runtime-report.js",
     "cards:check": "node bot/card-compiler/build.js --check && node tools/card-runtime-report.js --check",
-    "cards:test": "node --test bot/card-compiler/test/*.test.js"
+    "cards:test": "node --test bot/card-compiler/test/*.test.js",
+    "wasm:pack": "node bot/omni-wasm/pack.js",
+    "wasm:pack:check": "node bot/omni-wasm/verify-package.js"
   },
   "devDependencies": {
     "@lakeday/perch": "0.4.3",
