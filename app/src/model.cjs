@@ -119,7 +119,7 @@
             const names = new Set(r.bots || r.games.flatMap(g => [g.p1, g.p2]));
             const fixed = metaRaw?.fixedEra?.[r.id] ?? (names.has('legacy') || FIXED_ERA_RUNS.has(r.id) || (typeof r.fixedEra === 'boolean' ? r.fixedEra : Date.parse(r.createdAt) >= FIX_ON_MAIN));
             const can = n => { const c = canonical(n, fixed); (rawOf[c] ||= new Set()).add(n); return c; };
-            const st = {}; let decided = 0, running = 0, errors = 0;
+            const st = {}; let decided = 0, running = 0, errors = 0, abandoned = 0;
             // games against people show in the grid, the run and the game pages, and stay out of bot records and ratings
             const people = runKind(r.id) === 'people';
             for (const g of r.games) {
@@ -133,6 +133,8 @@
                 else { res = 4; errors++; }
                 games.push([ri, g.id, bi(p1), bi(p2), res, g.rounds ?? null, g.steps ?? null, forfeit ? 1 : 0]);
                 if (people) {
+                    // a game that never started or went silent is abandoned, not an engine error
+                    if (res === 4 && g.outcome === 'abandoned') { errors--; abandoned++; }
                     // a finished game against a person, a draw included, counts in the run's own table only
                     if (res <= 2 && p1 && p2) {
                         decided++;
@@ -156,7 +158,7 @@
             const table = Object.entries(st).map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
             const bots = [...new Set([...(r.bots || []).map(can), ...table.map(t => t.id)])];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
-            return { id: r.id, createdAt: r.createdAt, kind: runKind(r.id), fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
+            return { id: r.id, createdAt: r.createdAt, kind: runKind(r.id), fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
 
         // the Atlas's ratings when the meta analyzer wrote them; the app's own fit (same rules) for bots it does not list

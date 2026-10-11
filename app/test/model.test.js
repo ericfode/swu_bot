@@ -95,15 +95,17 @@ test('buildModel: games against people on Karabast show as their own run and sta
         game('karabast-2', 'opponent', 'c-clock', 'p1'),
         { id: 'karabast-3', p1: 'c-clock', p2: 'opponent', outcome: 'running' },
         { id: 'karabast-4', p1: 'opponent', p2: 'c-clock', outcome: 'won', winnerSeat: 'draw' },
+        { id: 'karabast-5', p1: 'c-clock', p2: 'opponent', outcome: 'abandoned' },
     ] });
     const M = model.buildModel(src, null, null);
     const r = M.runs.find(x => x.id === 'karabast');
     assert.equal(r.kind, 'people');
-    assert.deepEqual([r.decided, r.running, r.errors], [3, 1, 0], 'a draw is a finished game');
+    assert.deepEqual([r.decided, r.running, r.errors, r.abandoned], [3, 1, 0, 1], 'a draw is a finished game; an abandoned one is neither');
     assert.deepEqual(r.table.find(t => t.id === 'c-clock'), { id: 'c-clock', w: 0, l: 2, d: 1, n: 3, pct: 1 / 6 });
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
     assert.ok(!M.bots.opponent, 'people are not bots');
-    assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 4, 'every game stays listed');
+    assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 5, 'every game stays listed');
+    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 4, 'an abandoned game has no result, so the grid leaves it out');
 });
 
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {
