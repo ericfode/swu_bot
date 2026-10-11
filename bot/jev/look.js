@@ -22,7 +22,8 @@
  *   round  `after`, then both sides keep playing like that until the round ends (or 40 actions)
  *
  * Hidden information: the opponent never plays a card from its hand (or resources/discard) at its action windows in
- * an imagined line, the engine RNG is reseeded from a bot-private stream, `state` is observe() from the bot's own seat
+ * an imagined line, the engine RNG is reseeded from a bot-private stream and both decks are shuffled with it (so draws
+ * and reveals do not follow the real deck order), `state` is observe() from the bot's own seat
  * (the opponent's hand stays a count), and any card that was hidden before (the opponent's hand, resources and deck,
  * and the bot's own deck) is blanked to "hidden card" in `state` and `steps` if the simulation moves it into view.
  *
@@ -212,6 +213,10 @@ class LookaheadBot extends ExternalBot {
         let out;
         try {
             eg.game.setRandomSeed(String(Math.floor(this.lookRng() * 1e9)));
+            // the real deck order is hidden from the bot: imagine with both decks shuffled (the rollback restores them)
+            for (const id of eg.ids) {
+                eg.player(id).shuffleDeck();
+            }
             const first = eg.refetch(pid, actions[i]);
             if (!first) {
                 throw new Error('action vanished');

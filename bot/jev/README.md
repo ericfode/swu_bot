@@ -50,8 +50,10 @@ second Choice: which situation to imagine, from a small vocabulary over its top 
 The adapter marks the game, plays the situation, rolls back, and returns the board from Jev's seat plus the steps
 taken. The bot adds a summary (what happened, what changed, both boards) to the state as `imagined`, asks the action
 question again with it, and repeats until Jev picks `decide` or 3 imaginations are used. Imagined lines never use the
-opponent's hand cards, picks among unseen cards (either deck, the opponent's hand) are random, draws and shuffles use
-a private seed, and any card that was unseen before shows up only as "hidden card", so they reveal nothing hidden.
+opponent's hand cards, picks among unseen cards (either deck, the opponent's hand) are random, both decks are shuffled
+with a private seed first (so draws do not follow the real deck order), and any card that was unseen before shows up
+only as "hidden card". One gap remains: an effect that makes the opponent discard or reveal a random hand card uses its
+real hand.
 
 Wire format (additive to the stdio protocol): the bot answers `decide` with
 `{"t":"imagine","situation":{"kind":"after","i":3}}`; the adapter answers
