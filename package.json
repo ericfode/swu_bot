@@ -18,12 +18,13 @@
     "analysis:fitness": "node analysis/fitness.js",
     "analysis:test": "npm --prefix analysis test",
     "ladder": "node bot/ladder.js",
-    "test": "node --test bot/test/*.test.js importer/test/*.test.js",
+    "test": "node --test bot/test/*.test.js importer/test/*.test.js tools/test/*.test.js",
     "test:py": "python3 -m unittest discover -s bot/python",
     "lisp:build": "sbcl --non-interactive --load bot/lisp/build.lisp",
     "lisp:test": "sbcl --script bot/lisp/test.lisp",
-    "lint": "node tools/bin/perch scan",
-    "lint:changed": "node tools/bin/perch scan --since origin/main",
+    "lint": "node tools/bin/perch scan --since origin/main",
+    "lint:full": "node tools/bin/perch scan --full",
+    "lint:shared": "node tools/bin/perch shared scan --full",
     "perch": "node tools/bin/perch"
   },
   "devDependencies": {
