@@ -328,3 +328,28 @@ pub fn heuristic(w: &[f32]) -> f32 {
     };
     (side(0) - side(SIDE)) / 30.0
 }
+
+/// Names of the STATE_DIM state features, in order (for explanations and the dashboard).
+pub fn state_names() -> Vec<String> {
+    let side = [
+        "base HP left", "base HP left %", "base at 10 or less", "ready resources", "resources", "hand size", "deck size",
+        "discard size", "ground units", "space units", "ground power", "space power", "unit HP left", "exhausted units",
+        "ready power", "sentinels", "shields", "upgrades", "leader deployed", "leader exhausted",
+    ];
+    let mut out = vec![];
+    for who in ["my", "opp"] {
+        out.extend(side.iter().map(|s| format!("{who} {s}")));
+    }
+    out.extend(
+        ["hand cost", "hand units", "hand events", "hand upgrades", "hand playable now", "hand cheapest", "hand power", "hand cards"]
+            .iter()
+            .map(|s| format!("my {s}")),
+    );
+    out.push("round".into());
+    out.extend(["phase setup", "phase action", "phase regroup"].map(String::from));
+    out.extend(["I have initiative", "opp has initiative", "no initiative"].map(String::from));
+    out.extend(PROMPT_TYPES.iter().map(|p| format!("prompt {p}")));
+    out.extend(["action window", "select single", "select multiple", "no selection", "selected count", "legal actions", "base race", "material"].map(String::from));
+    debug_assert_eq!(out.len(), STATE_DIM);
+    out
+}

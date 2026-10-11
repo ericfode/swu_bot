@@ -9,7 +9,7 @@
 //! millisecond per decision.
 
 use crate::features::{ACTION_DIM, ID_BUCKETS, STATE_DIM, WORLD_DIM};
-use burn::nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, Relu};
+use burn::nn::{Dropout, DropoutConfig, Embedding, EmbeddingConfig, Linear, LinearConfig, Relu};
 use burn::prelude::*;
 
 pub const HIDDEN: usize = 128;
@@ -26,6 +26,7 @@ pub struct Net {
     world: Linear,
     v: Linear,
     act: Relu,
+    drop: Dropout,
 }
 
 pub struct Out {
@@ -46,17 +47,18 @@ impl Net {
             world: LinearConfig::new(HIDDEN, WORLD_DIM).init(device),
             v: LinearConfig::new(HIDDEN, 1).init(device),
             act: Relu::new(),
+            drop: DropoutConfig::new(0.2).init(),
         }
     }
 
     /// `state` [B, STATE_DIM], `action` [B, ACTION_DIM], `ids` [B] (hashed card/label identity).
     pub fn forward(&self, state: Tensor<2>, action: Tensor<2>, ids: Tensor<1, Int>) -> Out {
         let z = self.act.forward(self.s1.forward(state));
-        let z = self.act.forward(self.s2.forward(z));
+        let z = self.drop.forward(self.act.forward(self.s2.forward(z)));
         let b = ids.dims()[0];
         let e: Tensor<2> = self.emb.forward(ids.reshape([b, 1])).reshape([b, EMB]);
         let a = self.act.forward(self.a1.forward(Tensor::cat(vec![action, e], 1)));
-        let j = self.act.forward(self.j1.forward(Tensor::cat(vec![z.clone(), a], 1)));
+        let j = self.drop.forward(self.act.forward(self.j1.forward(Tensor::cat(vec![z.clone(), a], 1))));
         Out { q: self.q.forward(j.clone()), v: self.v.forward(z), world: self.world.forward(j) }
     }
 

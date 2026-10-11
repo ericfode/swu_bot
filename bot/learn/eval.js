@@ -14,19 +14,7 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-function makeBot(name) {
-    const reg = JSON.parse(fs.readFileSync(process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json'), 'utf8'));
-    if (reg[name]) {
-        const { ExternalBot } = require('../players/external');
-        return new ExternalBot(name, reg[name]);
-    }
-    if (/^heuristic/.test(name)) {
-        const { HeuristicBot } = require('../players/heuristic');
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    return require('../players/random').createRandomBot(name);
-}
+const { makeBot } = require('../players');
 
 async function worker() {
     const { Env } = require('../env');
@@ -50,7 +38,7 @@ async function worker() {
         process.send({ start: { id, seed, p1: names[seats[0]], p2: names[seats[1]] } });
         const r = await playGame(env, { seed, bots: seats.map((k) => bots[k]), record: !!onEvent, snapshot, onEvent });
         const winner = r.winner === 'p1' ? names[seats[0]] : r.winner === 'p2' ? names[seats[1]] : r.winner;
-        process.send({ done: { id, seed, p1: names[seats[0]], p2: names[seats[1]], winner, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms } });
+        process.send({ done: { id, seed, p1: names[seats[0]], p2: names[seats[1]], winner, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing } });
     }
     process.exit(0);
 }

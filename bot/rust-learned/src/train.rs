@@ -8,7 +8,7 @@
 use crate::cards::CardDb;
 use crate::features::{encode, ACTION_DIM, STATE_DIM, WORLD_DIM};
 use crate::model::Net;
-use burn::optim::{AdamConfig, GradientsParams};
+use burn::optim::{AdamWConfig, GradientsParams};
 use burn::prelude::*;
 use burn::store::{ModuleSnapshot, SafetensorsStore};
 use burn::tensor::activation::softplus;
@@ -28,10 +28,14 @@ pub struct Data {
     pub wmask: Vec<f32>,
     /// Game index per row, for a train/validation split by game.
     pub game: Vec<u32>,
+    /// Row of the same seat's next action window in the same game (its whole action resolved), or -1.
+    pub next: Vec<i64>,
 }
 
 impl Data {
     fn append(&mut self, mut o: Data, game_offset: u32) {
+        let rows = self.n as i64;
+        self.next.extend(o.next.iter().map(|&x| if x < 0 { x } else { x + rows }));
         self.n += o.n;
         self.state.append(&mut o.state);
         self.action.append(&mut o.action);
@@ -110,7 +114,10 @@ fn read_shard(path: &Path, db: &CardDb) -> (Data, u32) {
 }
 
 fn push_game(data: &mut Data, rows: &[(String, Vec<f32>, Vec<f32>, i64, bool)], winner: &str, game: u32) {
+    let first = data.n as i64;
     for (k, (seat, s, a, id, _)) in rows.iter().enumerate() {
+        let nxt = rows[k + 1..].iter().position(|r| &r.0 == seat && r.4).map(|j| first + (k + 1 + j) as i64).unwrap_or(-1);
+        data.next.push(nxt);
         // world target: my board at my next action window, as a change from now
         let next = rows[k + 1..].iter().find(|r| &r.0 == seat && r.4);
         match next {
@@ -165,6 +172,7 @@ pub struct TrainCfg {
     pub value_weight: f32,
     pub seed: u64,
     pub max_rows: usize,
+    pub weight_decay: f32,
 }
 
 struct Rng(u64);
@@ -226,7 +234,7 @@ pub fn train(data: &Data, cfg: &TrainCfg, init: Option<&Path>, out: &Path) -> Ve
         net.load_from(&mut store).expect("load init model");
         eprintln!("continuing from {}", p.display());
     }
-    let mut opt = AdamConfig::new().init();
+    let mut opt = AdamWConfig::new().with_weight_decay(cfg.weight_decay).init();
     let mut rng = Rng(cfg.seed);
 
     // validation = every 20th game
@@ -280,9 +288,13 @@ pub fn train(data: &Data, cfg: &TrainCfg, init: Option<&Path>, out: &Path) -> Ve
             secs: t0.elapsed().as_secs_f32(),
         };
         eprintln!("{log:?}");
+        // keep the epoch with the best validation loss of the action model
+        if logs.iter().all(|l: &EpochLog| log.val_q < l.val_q) {
+            let mut store = SafetensorsStore::from_file(out).overwrite(true);
+            net.valid().save_into(&mut store).expect("save model");
+            eprintln!("  saved (best so far)");
+        }
         logs.push(log);
-        let mut store = SafetensorsStore::from_file(out).overwrite(true);
-        net.valid().save_into(&mut store).expect("save model");
     }
     logs
 }
@@ -303,4 +315,27 @@ fn evaluate(net: &Net, data: &Data, idx: &[usize]) -> (f32, f32, f32, f32) {
     }
     let n = n.max(1) as f64;
     ((q / n) as f32, (v / n) as f32, (w / n) as f32, (acc / n) as f32)
+}
+
+/// Bootstrapped labels: blend each row's game result with a teacher's value of the same seat's next action window.
+/// `w` = 0 keeps pure game results; `w` = 1 is one-step TD. Lower-variance targets for Q and V.
+pub fn bootstrap(data: &mut Data, teacher: &Path, w: f32) {
+    let dev = Device::flex();
+    let mut net = Net::new(&dev);
+    net.load_from(&mut SafetensorsStore::from_file(teacher)).expect("load teacher");
+    let mut v = Vec::with_capacity(data.n);
+    for start in (0..data.n).step_by(8192) {
+        let end = (start + 8192).min(data.n);
+        let t = Tensor::<2>::from_data(TensorData::new(data.state[start * STATE_DIM..end * STATE_DIM].to_vec(), [end - start, STATE_DIM]), &dev);
+        v.extend(burn::tensor::activation::sigmoid(net.value(t)).into_data().try_to_vec::<f32>().unwrap());
+    }
+    let mut changed = 0usize;
+    for i in 0..data.n {
+        let nx = data.next[i];
+        if nx >= 0 {
+            data.y[i] = (1.0 - w) * data.y[i] + w * v[nx as usize];
+            changed += 1;
+        }
+    }
+    eprintln!("bootstrapped {changed} of {} labels from {} (w = {w})", data.n, teacher.display());
 }

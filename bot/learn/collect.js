@@ -23,19 +23,7 @@ function decideBody(eg, pid, actions) {
     return { you: seatOf(eg, eg.player(pid)), prompt: promptView(eg, pid), state: observe(eg, pid), actions: actions.map((a, i) => actionView(eg, a, i)) };
 }
 
-function makeBot(name) {
-    if (/^heuristic/.test(name)) {
-        const { HeuristicBot } = require('../players/heuristic');
-        const d = /-d(\d)/.exec(name);
-        return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
-    }
-    if (/^random/.test(name)) {
-        return require('../players/random').createRandomBot(name);
-    }
-    const reg = JSON.parse(fs.readFileSync(process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json'), 'utf8'));
-    const { ExternalBot } = require('../players/external');
-    return new ExternalBot(name, reg[name]);
-}
+const { makeBot } = require('../players');
 
 /** Wraps a bot so every choice it makes is written as a trajectory line. */
 function recording(bot, write, all) {

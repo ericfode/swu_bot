@@ -1,7 +1,8 @@
 //! swu-learned: a tiny learned world model + action model for Star Wars Unlimited, in Rust with Burn.
 //!
 //!   swu-learned play  --model M [--world 0] [--heur 0] [--temp 0] [--epsilon 0] [--name N]
-//!   swu-learned train --data DIR[,DIR] --out M [--epochs 3] [--batch 512] [--lr 0.002] [--init M]
+//!   swu-learned train --data DIR[,DIR] --out M [--epochs 3] [--batch 512] [--lr 0.002] [--init M] [--teacher M --td 0.5]
+//!   swu-learned explain --model M --data DIR
 //!   swu-learned info
 //!
 //! `play` speaks spec/stdio-protocol.md on stdin/stdout. Card data is read from $SWU_CARD_DATA
@@ -35,7 +36,7 @@ fn main() {
     let cmd = args.get(1).map(String::as_str).unwrap_or("play");
     match cmd {
         "play" => {
-            let model = flag(&args, "model").unwrap_or_else(|| "bot/rust-learned/models/learned-v1.safetensors".into());
+            let model = flag(&args, "model").unwrap_or_else(|| "bot/rust-learned/models/learned-v4.safetensors".into());
             let mut net = model::Net::new(&Device::flex());
             let mut store = SafetensorsStore::from_file(&model);
             if let Err(e) = net.load_from(&mut store) {
@@ -60,7 +61,10 @@ fn main() {
             }
             let db = card_db();
             let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-            let d = train::load(&data, &db, threads);
+            let mut d = train::load(&data, &db, threads);
+            if let Some(t) = flag(&args, "teacher") {
+                train::bootstrap(&mut d, &PathBuf::from(t), num(&args, "td", 0.5));
+            }
             let cfg = train::TrainCfg {
                 epochs: num(&args, "epochs", 3),
                 batch: num(&args, "batch", 512),
@@ -69,6 +73,7 @@ fn main() {
                 value_weight: num(&args, "value-weight", 1.0),
                 seed: num(&args, "seed", 7),
                 max_rows: num(&args, "max-rows", usize::MAX),
+                weight_decay: num(&args, "weight-decay", 0.01),
             };
             let init = flag(&args, "init").map(PathBuf::from);
             let logs = train::train(&d, &cfg, init.as_deref(), &out);
@@ -79,6 +84,49 @@ fn main() {
             });
             std::fs::write(&log_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
             eprintln!("wrote {} and {}", out.display(), log_path.display());
+        }
+        "explain" => {
+            // how much the value head moves when one state feature moves by one standard deviation
+            let model = flag(&args, "model").expect("--model");
+            let data: Vec<PathBuf> = flag(&args, "data").expect("--data").split(',').map(PathBuf::from).collect();
+            let dev = Device::flex();
+            let mut net = model::Net::new(&dev);
+            net.load_from(&mut SafetensorsStore::from_file(&model)).expect("load model");
+            let db = card_db();
+            let d = train::load(&data, &db, 4);
+            let rows = d.n.min(20_000);
+            let step = (d.n / rows).max(1);
+            let sd = features::STATE_DIM;
+            let idx: Vec<usize> = (0..rows).map(|k| k * step).collect();
+            let mut base: Vec<f32> = Vec::with_capacity(rows * sd);
+            for &i in &idx {
+                base.extend_from_slice(&d.state[i * sd..(i + 1) * sd]);
+            }
+            let mean: Vec<f32> = (0..sd).map(|j| idx.iter().map(|&i| d.state[i * sd + j]).sum::<f32>() / rows as f32).collect();
+            let std: Vec<f32> = (0..sd)
+                .map(|j| (idx.iter().map(|&i| (d.state[i * sd + j] - mean[j]).powi(2)).sum::<f32>() / rows as f32).sqrt())
+                .collect();
+            let v = |x: Vec<f32>| -> Vec<f32> {
+                let t = Tensor::<2>::from_data(burn::tensor::TensorData::new(x, [rows, sd]), &dev);
+                burn::tensor::activation::sigmoid(net.value(t)).into_data().try_to_vec::<f32>().unwrap()
+            };
+            let v0 = v(base.clone());
+            let names = features::state_names();
+            let mut out = vec![];
+            for j in 0..sd {
+                if std[j] < 1e-6 {
+                    continue;
+                }
+                let mut x = base.clone();
+                for r in 0..rows {
+                    x[r * sd + j] += std[j];
+                }
+                let v1 = v(x);
+                let eff = v1.iter().zip(&v0).map(|(a, b)| a - b).sum::<f32>() / rows as f32;
+                out.push(serde_json::json!({"name": names[j], "weight": eff, "std": std[j]}));
+            }
+            out.sort_by(|a, b| b["weight"].as_f64().unwrap().abs().partial_cmp(&a["weight"].as_f64().unwrap().abs()).unwrap());
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
         }
         "info" => {
             println!(

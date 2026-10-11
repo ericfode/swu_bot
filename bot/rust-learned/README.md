@@ -59,16 +59,37 @@ board block of the state until that seat's next action window. With random playe
 Q(s, a) the win rate of "take a, then play randomly", one step of policy improvement over random.
 Retraining on the new bot's own games repeats the step.
 
+## Results so far (2026-10-11, 4 CPU cores)
+
+| Model | Trained on | Labels | Head-to-head |
+|---|---|---|---|
+| learned-v1 | 4000 random-vs-random games (1.56M decisions) | game result | 196-3 vs random-a, 48-52 vs rust-greedy |
+| learned-v2 | + 2400 games of v1 (exploring) vs rust-greedy and vs itself | game result | 99-99 vs rust-greedy, 29-10 vs heuristic, 110-89 vs v1 |
+| learned-v3td | same data | 50% result, 50% v2's value at my next action window | 110-90 vs v2 |
+| **learned-v4** | + 2400 games of v3td vs rust-greedy and itself (8678 games, 2.58M decisions) | 50% result, 50% v3td's value | **199-1 vs random-a, 138-61 vs rust-greedy**, 132-67 vs v3td |
+
+Knobs on v4 against rust-greedy (200 games each, same seeds): plain Q 138-61, `--heur 1` 148-52,
+`--world 1` 120-78. The world model predicts the board well enough to train on but does not yet help
+as a lookahead. Training takes about 30 s per epoch on CPU; a decision takes well under a millisecond.
+
+Lesson from v3: bootstrapping from the value of the *next decision* made the bot much worse (24-175 vs
+rust-greedy). The next decision is usually the target prompt of the same action, so its value says
+nothing about the action. Bootstrapping from the next *action window* (after the action resolved) works.
+
+Another round: `node bot/learn/selfplay-round.js --model bot/rust-learned/models/learned-v4.safetensors --next learned-v5`
+(records 2400 games of the current model vs rust-greedy and itself, then trains the next model).
+
 ## Commands (from the repo root)
 
 ```bash
 cargo build --release --manifest-path bot/rust-learned/Cargo.toml
-bot/rust-learned/target/release/swu-learned train --data data/traj/random-v1 --out bot/rust-learned/models/learned-v1.safetensors --epochs 3
+bot/rust-learned/target/release/swu-learned train --data data/traj/random-v1 --out bot/rust-learned/models/learned-v1.safetensors --epochs 3 [--teacher M --td 0.5]
+bot/rust-learned/target/release/swu-learned explain --model M --data DIR   # what the value head looks at
 node bot/learn/eval.js --bots rust-learned,random-a --games 200 --workers 4 [--out results/x] [--record]
 node bot/tournament.js --bots rust-learned,rust-greedy --games 10 --out replays/learned
 ```
 
-Registered bots (`bot/external-bots.json`): `rust-learned` (Q only), `rust-learned-world`
-(`--world 1`), `rust-learned-heur` (`--heur 1`). `SWU_LEARNED_THOUGHTS=<file>` makes the bot write its
+Registered bots (`bot/external-bots.json`, all on `models/learned-v4.safetensors`): `rust-learned` (Q only), `rust-learned-world`
+(`--world 1`), `rust-learned-heur` (`--heur 1`), `rust-learned-explore` (`--temp 0.3 --epsilon 0.05`, for collecting self-play data). `SWU_LEARNED_THOUGHTS=<file>` makes the bot write its
 latest decision (top actions with win chances) for the research dashboard. Card data is read from
 `$SWU_CARD_DATA` (default `forceteki/test/json`).
