@@ -6,7 +6,7 @@
  * actions, distribute targets, lower-cased strings, printed card stats), calls `decide()`, and sends back the index
  * (and damage split) the module wrote. Memory offsets and field numbers come from the module's own exports.
  *
- *   node bot/wasm/host.js            card data from $SWU_CARD_JSON or forceteki/test/json/Card
+ *   node bot/wasm/host.js            card data from $SWU_CARD_JSON/Card or forceteki/test/json/Card
  *   SWU_WASM_TRACE=1 node ...        print the module's trace calls on stderr
  *   node bot/wasm/host.js --check    compile and validate bot.wat, then exit
  */
@@ -16,7 +16,8 @@ const path = require('path');
 const readline = require('readline');
 
 const WAT = path.join(__dirname, 'bot.wat');
-const CARD_DIR = process.env.SWU_CARD_JSON ?? path.join(__dirname, '..', '..', 'forceteki', 'test', 'json', 'Card');
+// same convention as the Rust bot: $SWU_CARD_JSON is the folder that holds Card/
+const CARD_DIR = path.join(process.env.SWU_CARD_JSON ?? path.join(__dirname, '..', '..', 'forceteki', 'test', 'json'), 'Card');
 const TRACE = !!process.env.SWU_WASM_TRACE;
 
 const ASPECTS = { vigilance: 1, command: 2, aggression: 3, cunning: 4, villainy: 5, heroism: 6 };

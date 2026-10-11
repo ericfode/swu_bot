@@ -1270,19 +1270,40 @@
         (i32.store offset=24 (i32.add (global.get $ST) (i32.shl (global.get $g_dsel) (i32.const 2))) (call $f (local.get $r) (global.get $A_UID)))
         (i32.store offset=20 (global.get $ST) (i32.add (global.get $g_dsel) (i32.const 1))))))
 
+  ;; Multi-select and search prompts: a click that left the position unchanged (the prompt did not take the card)
+  ;; is remembered, so the same card is not clicked again in the same position.
+  (func $multi (result i32)
+    (local $i i32) (local $n i32)
+    (if (i32.eq (call $hdr (global.get $H_SELMODE)) (i32.const 2)) (then (return (i32.const 1))))
+    (local.set $n (call $hdr (global.get $H_NACTS)))
+    (block $end
+      (loop $l
+        (br_if $end (i32.ge_s (local.get $i) (local.get $n)))
+        (if (i32.eq (call $f (call $act (local.get $i)) (global.get $A_KIND)) (i32.const 4)) (then (return (i32.const 1))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $l)))
+    (i32.const 0))
+  (func $multi_key (param $r i32) (result i32)
+    (call $pair_key (i32.xor (global.get $g_fp) (i32.const 0x51ed27)) (local.get $r)))
+
   (func $choose_cards (result i32)
     (local $i i32)
     (call $disp_begin)
     (local.set $i (call $choose_cards_inner))
     (call $disp_pick (call $act (local.get $i)))
+    (if (call $multi)
+      (then
+        (if (i32.eq (call $f (call $act (local.get $i)) (global.get $A_KIND)) (i32.const 2))
+          (then (drop (call $tried (call $multi_key (call $act (local.get $i))) (i32.const 1)))))))
     (local.get $i))
 
   ;; prompts with selectable cards (targets, discards, search results); also the attack target prompt
   (func $choose_cards_inner (result i32)
     (local $i i32) (local $n i32) (local $r i32) (local $k i32) (local $s i32) (local $it i32) (local $amt i32)
     (local $best i32) (local $bi i32) (local $exit i32) (local $ei i32) (local $done i32) (local $attack i32)
-    (local $att i32) (local $want i32) (local $plan i32) (local $planned i32)
+    (local $att i32) (local $want i32) (local $plan i32) (local $planned i32) (local $multi i32)
     (local.set $n (call $hdr (global.get $H_NACTS)))
+    (local.set $multi (call $multi))
     (local.set $it (call $intent))
     (local.set $amt (call $t_num_after (global.get $S_DEAL)))
     (if (i32.eq (local.get $it) (global.get $I_HEAL))
@@ -1340,6 +1361,8 @@
                 (if (local.get $plan) (then (local.set $s (i32.add (local.get $s) (i32.const 20000))))))
               (else (local.set $s (call $target_score (local.get $r) (local.get $it) (local.get $amt)))))
             (local.set $s (i32.add (local.get $s) (call $noise)))
+            (if (i32.and (local.get $multi) (call $tried (call $multi_key (local.get $r)) (i32.const 0)))
+              (then (local.set $s (i32.sub (local.get $s) (i32.const 50000)))))
             (if (i32.gt_s (local.get $s) (local.get $best)) (then (local.set $best (local.get $s)) (local.set $bi (local.get $i))))))
         (if (i32.eq (local.get $k) (i32.const 5))
           (then

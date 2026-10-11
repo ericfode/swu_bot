@@ -12,7 +12,7 @@ it parses JSON, looks up printed card stats, copies everything into flat i32 tab
 
 It is registered as `wasm` (`"lang": "wasm"`) in `bot/external-bots.json`. `host.js` compiles `bot.wat` at start-up
 with `wabt` (a root devDependency, so run `npm install` at the repo root once) and reads card stats from
-`forceteki/test/json/Card` (or `$SWU_CARD_JSON`). `SWU_WASM_TRACE=1` prints the module's `trace` calls on stderr.
+`forceteki/test/json/Card` (or `$SWU_CARD_JSON/Card`, the same convention as the Rust bot). `SWU_WASM_TRACE=1` prints the module's `trace` calls on stderr.
 
 ## What it does
 

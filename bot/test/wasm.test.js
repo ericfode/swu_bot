@@ -141,3 +141,13 @@ test('does not repeat a click that changed nothing', () => {
     assert.strictEqual(window(st, acts).i, 1);
     assert.strictEqual(window(st, acts).i, 0, 'same position again: the play was cancelled, so pass');
 });
+
+test('multi-select: a click the prompt does not take is not repeated', () => {
+    const st = state({ opUnits: [unit('C5', 'Trooper', 'TST_003', 3, 2), unit('C6', 'Marine', 'TST_001', 3, 3)] });
+    const acts = [button(0, 'Done'), cardAct(1, 'C5', 'Trooper', 'TST_003', 'groundArena', 'p2'), cardAct(2, 'C6', 'Marine', 'TST_001', 'groundArena', 'p2')];
+    const prompt = { title: 'Choose units to deal 1 damage to', promptTitle: 'Blast', selectCardMode: 'multiple' };
+    const a = decide(prompt, st, acts).i;
+    const b = decide(prompt, st, acts).i;
+    assert.ok(a > 0 && b > 0 && a !== b);
+    assert.strictEqual(decide(prompt, st, acts).i, 0);
+});
