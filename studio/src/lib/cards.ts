@@ -19,8 +19,8 @@ export function setArtResolver(r: ArtResolver | null) {
 export async function loadArtPack(pack: string | Record<string, string>): Promise<number> {
     const map: Record<string, string> = typeof pack === 'string' ? await (await fetch(pack)).json() : pack;
     setArtResolver((code, back) => map[back ? `${code}-b` : code] ?? (back ? map[code] : null) ?? null);
-    const { useSettings } = await import('./settings');
-    useSettings.setState((s) => ({ artVersion: s.artVersion + 1 }));
+    const { bumpArtVersion } = await import('./settings');
+    bumpArtVersion();
     return Object.keys(map).length;
 }
 

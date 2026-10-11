@@ -4,60 +4,107 @@ import { LENS_SCALE, type LensStep } from '../data/lens';
 import type { Seat, Snapshot } from '../data/types';
 
 const sgn = (v: number, d = 1) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(d)}`;
+/** points of edge one full half-bar stands for, the same at every step so lengths compare */
+const SCALE = 15;
+const spring = { type: 'spring', stiffness: 300, damping: 30 } as const;
+const seatCol = (v: number) => (Math.abs(v) < 0.05 ? 'var(--color-faint)' : v > 0 ? 'var(--color-p1)' : 'var(--color-p2)');
+
+/** One row's tug of war: the bar grows from the centre toward the side the term favours; the outline is the previous step. */
+function Bar({ value, prev }: { value: number; prev: number | null }) {
+    const w = (v: number) => Math.min(50, (Math.abs(v) / SCALE) * 50);
+    const over = Math.abs(value) > SCALE;
+    return (
+        <span className="relative block h-3.5 rounded-sm bg-ink/80">
+            <span className="absolute left-1/2 top-0 bottom-0 w-px bg-line" />
+            {prev != null && Math.abs(prev - value) >= 0.05 && (
+                <span className="absolute top-0 bottom-0 rounded-sm border border-dashed border-fg/30"
+                    style={{ left: prev >= 0 ? '50%' : `${50 - w(prev)}%`, width: `${w(prev)}%` }} />
+            )}
+            <motion.span className="absolute top-0.5 bottom-0.5 rounded-sm" initial={false} transition={spring}
+                animate={{ left: value >= 0 ? '50%' : `${50 - w(value)}%`, width: `${w(value)}%` }}
+                style={{ background: value >= 0 ? 'var(--color-p1)' : 'var(--color-p2)', opacity: 0.85 }} />
+            {over && <span className="absolute top-1/2 -translate-y-1/2 text-[9px] leading-none text-fg" style={value > 0 ? { right: 1 } : { left: 1 }}>{value > 0 ? '▶' : '◀'}</span>}
+        </span>
+    );
+}
 
 /**
  * Why the board score is what it is, in the omniscient bot's own terms: what each part of the board is worth to each
- * player, drawn as a tug of war (bars right of centre pull toward player 1, left toward player 2), then the edge.
+ * player, the rule for each row, the total, and where that lands on the timeline's curve. Bars keep one scale (15 points
+ * to the end) and the dashed outline is the previous step, so a change shows as movement.
  * `lens` is the game's lens step for this board (exact values); without it the score is estimated without card cost.
  */
-export function EdgeBreakdown({ state, prev, bots, lens = null, prevLens = null }: { state: Snapshot; prev: Snapshot | null; bots: Record<Seat, string>; lens?: LensStep | null; prevLens?: LensStep | null }) {
+export function EdgeBreakdown({ state, prev, bots, lens = null, prevLens = null, previewN = null }: {
+    state: Snapshot; prev: Snapshot | null; bots: Record<Seat, string>; lens?: LensStep | null; prevLens?: LensStep | null;
+    /** set while the pointer previews another step on the timeline: that step's Step.n */
+    previewN?: number | null;
+}) {
     const { terms, sum, edge, exact } = edgeTerms(state, lens);
     const before = prev ? edgeTerms(prev, prevLens) : null;
-    const max = Math.max(8, ...terms.map((t) => Math.abs(t.points)));
-    const lead = sum > 0.5 ? 'p1' : sum < -0.5 ? 'p2' : null;
+    const prevOf = (k: string) => before?.terms.find((t) => t.key === k)?.points ?? null;
+    const lead: Seat | null = sum > 0.5 ? 'p1' : sum < -0.5 ? 'p2' : null;
     const tot = (s: Seat) => terms.reduce((a, t) => a + t[s], 0);
+    const moved = before ? terms.map((t) => ({ t, d: t.points - (prevOf(t.key) ?? 0) })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0] : null;
+    const cols = 'grid grid-cols-[2.6rem_minmax(0,1fr)_2.6rem_4.2rem] @md:grid-cols-[minmax(0,12.5rem)_2.8rem_minmax(0,1fr)_2.8rem_4.4rem] items-center gap-x-2';
+    const name = (s: Seat) => <span className="truncate" style={{ color: `var(--color-${s})` }} title={`${bots[s]} (${s})`}>{bots[s]}</span>;
     return (
-        <div className="flex flex-col gap-2">
+        <div className="@container flex flex-col gap-2">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="eyebrow">Omni board score</span>
-                <span className="num text-lg font-semibold" style={{ color: lead === 'p1' ? 'var(--color-p1)' : lead === 'p2' ? 'var(--color-p2)' : 'var(--color-fg)' }}>
-                    {sgn(sum)}
-                </span>
-                <span className="text-dim text-[13px]">{lead ? `${bots[lead]} ahead by ${Math.abs(sum).toFixed(1)} points` : 'even board'}</span>
-                <span className="text-faint text-[11px] num ml-auto" title="the curve plots tanh(edge / 25)">
-                    {tot('p1').toFixed(1)} − {tot('p2').toFixed(1)} · curve {sgn(edge, 2)}{before ? ` · ${sgn(sum - before.sum)} this step` : ''}
-                </span>
+                <span className="num text-lg font-semibold" style={{ color: lead ? `var(--color-${lead})` : 'var(--color-fg)' }}>{sgn(sum)}</span>
+                <span className="text-dim text-[13px]">{lead ? <>{name(lead)} ahead by {Math.abs(sum).toFixed(1)} points</> : 'even board'}</span>
+                {previewN != null && <span className="chip !text-fg !border-fg/40 ml-auto">previewing step {previewN}</span>}
             </div>
-            <div className="grid grid-cols-[minmax(0,8.5rem)_2.8rem_minmax(0,1fr)_2.8rem_3.2rem] items-center gap-x-2 gap-y-1.5 text-[12px]">
-                <span />
-                <span className="text-right text-p2 truncate text-[11px]" title={bots.p2}>{bots.p2}</span>
-                <span className="flex justify-between text-[10px] text-faint px-1"><span>← toward {bots.p2}</span><span>toward {bots.p1} →</span></span>
-                <span className="text-p1 truncate text-[11px]" title={bots.p1}>{bots.p1}</span>
-                <span className="text-right text-faint text-[10px]">edge</span>
+            <div className={`${cols} text-[10px] text-faint`}>
+                <span className="hidden @md:block" />
+                <span className="text-right">{bots.p2.length <= 7 ? name('p2') : 'p2'}</span>
+                <span className="flex justify-between gap-2 px-1 min-w-0"><span className="flex gap-1 min-w-0">◀ {name('p2')}</span><span className="flex gap-1 min-w-0 justify-end">{name('p1')} ▶</span></span>
+                <span>{bots.p1.length <= 7 ? name('p1') : 'p1'}</span>
+                <span className="text-right">edge</span>
+            </div>
+            <div className={`${cols} gap-y-1 text-[12px]`}>
                 {terms.map((t) => {
-                    const w = (Math.abs(t.points) / max) * 50;
-                    const pos = t.points >= 0;
-                    const what = t.what.p1 === t.what.p2 ? t.what.p1 : `${t.what.p2} vs ${t.what.p1}`;
+                    const p = prevOf(t.key);
+                    const d = p == null ? 0 : t.points - p;
+                    const what = t.what.p1 === t.what.p2 ? `${t.what.p1} each` : `${t.what.p2} vs ${t.what.p1}`;
                     return [
-                        <span key={`${t.key}l`} className="truncate" title={t.how}><span className="text-dim">{t.label}</span> <span className="text-faint text-[10px]">{what}</span></span>,
-                        <span key={`${t.key}a`} className="num text-right text-fg/80">{t.p2.toFixed(1)}</span>,
-                        <span key={`${t.key}b`} className="relative h-3.5 rounded-sm bg-ink/80" title={t.how}>
-                            <span className="absolute left-1/2 top-0 bottom-0 w-px bg-line" />
-                            <motion.span className="absolute top-0.5 bottom-0.5 rounded-sm" initial={false}
-                                animate={{ left: pos ? '50%' : `${50 - w}%`, width: `${w}%` }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                                style={{ background: pos ? 'var(--color-p1)' : 'var(--color-p2)', opacity: 0.85 }} />
+                        <span key={`${t.key}l`} className="col-span-4 @md:col-span-1 min-w-0 leading-tight pt-1 @md:pt-0" title={t.how}>
+                            <span className="text-fg/90">{t.label}</span> <span className="text-faint text-[11px]">{what}</span>
+                            <span className="block text-faint text-[10.5px] truncate">{t.rule}</span>
                         </span>,
+                        <span key={`${t.key}a`} className="num text-right text-fg/80">{t.p2.toFixed(1)}</span>,
+                        <Bar key={`${t.key}b`} value={t.points} prev={p} />,
                         <span key={`${t.key}c`} className="num text-fg/80">{t.p1.toFixed(1)}</span>,
-                        <span key={`${t.key}d`} className="num text-right" style={{ color: Math.abs(t.points) < 0.05 ? 'var(--color-faint)' : pos ? 'var(--color-p1)' : 'var(--color-p2)' }}>
-                            {sgn(t.points)}
+                        <span key={`${t.key}d`} className="num text-right whitespace-nowrap">
+                            <span style={{ color: seatCol(t.points) }}>{sgn(t.points)}</span>
+                            {Math.abs(d) >= 0.05 && <span className="text-[10px] ml-1" style={{ color: seatCol(d) }} title="change since the previous step">{d > 0 ? '▲' : '▼'}{Math.abs(d).toFixed(1)}</span>}
                         </span>
                     ];
                 })}
+                <span className="col-span-4 @md:col-span-1 pt-1.5 border-t border-line font-semibold text-fg">Total</span>
+                <span className="num text-right pt-1.5 border-t border-line text-fg">{tot('p2').toFixed(1)}</span>
+                <span className="pt-1.5 border-t border-line text-center text-[11px] text-dim num">{tot('p1').toFixed(1)} − {tot('p2').toFixed(1)}</span>
+                <span className="num pt-1.5 border-t border-line text-fg">{tot('p1').toFixed(1)}</span>
+                <span className="num text-right pt-1.5 border-t border-line font-semibold" style={{ color: seatCol(sum) }}>{sgn(sum)}</span>
             </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-dim">
+                <span>On the Omni score curve: tanh({sgn(sum)} / {LENS_SCALE}) = <b className="num" style={{ color: seatCol(edge) }}>{sgn(edge, 2)}</b></span>
+                <span className="relative h-2 w-40 rounded-full bg-ink/80 shrink-0" aria-hidden="true">
+                    <span className="absolute left-1/2 -top-0.5 -bottom-0.5 w-px bg-line" />
+                    <motion.span className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-bg" initial={false} transition={spring}
+                        animate={{ left: `${50 + edge * 50}%` }} style={{ background: seatCol(edge) }} />
+                    <span className="absolute -bottom-3.5 left-0 text-[9px] text-faint num">−1</span>
+                    <span className="absolute -bottom-3.5 right-0 text-[9px] text-faint num">+1</span>
+                </span>
+            </div>
+            {moved && (
+                <div className="text-[11px] text-dim pt-1">
+                    {Math.abs(moved.d) < 0.05 ? 'Nothing on the board score changed this step.' : <>Biggest change this step: <b className="text-fg/90">{moved.t.label}</b> moved {Math.abs(moved.d).toFixed(1)} toward {name(moved.d > 0 ? 'p1' : 'p2')} (edge {sgn(sum - before!.sum)} in total).</>}
+                </div>
+            )}
             <p className="text-faint text-[11px] leading-snug m-0">
-                The score the omniscient bot's search uses at its leaves: each row is what that part of the board is worth to each player (hover a row for its rule),
-                and the edge is player 1's total minus player 2's. The curve plots tanh(edge / {LENS_SCALE}).
-                {exact ? ' Values from this game\'s lens file.' : ' No lens file for this game: estimated from the board, without card cost.'} Turn on Lens to see every card's value on the board.
+                This is the score the omniscient bot's search uses at its leaves: each row is what that part of the board is worth to each player, and the edge is player 1's total minus player 2's.
+                {exact ? ' Values come from this game\'s lens file.' : ' This game has no lens file, so the values are estimated from the board and leave out card cost.'} Turn on Lens to see each card's value on the board.
             </p>
         </div>
     );

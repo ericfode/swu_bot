@@ -65,6 +65,9 @@ export interface EdgeTerm {
     points: number;
     /** what each side's points are made of, e.g. "3 units" */
     what: Record<Seat, string>;
+    /** the rule in a few words, shown under the row */
+    rule: string;
+    /** the rule in full (tooltip) */
     how: string;
 }
 
@@ -81,15 +84,17 @@ export function edgeTerms(s: Snapshot, lens?: LensStep | null): { terms: EdgeTer
     const w = OMNI_WEIGHTS;
     const { p1, p2 } = s.players;
     const hp = (p: PlayerSnap) => Math.max(0, p.base.hp - p.base.d);
-    const t = (key: EdgeTerm['key'], label: string, a: number, b: number, what: Record<Seat, string>, how: string): EdgeTerm =>
-        ({ key, label, p1: Math.round(a * 10) / 10, p2: Math.round(b * 10) / 10, points: a - b, what, how });
+    const t = (key: EdgeTerm['key'], label: string, a: number, b: number, what: Record<Seat, string>, rule: string, how: string): EdgeTerm =>
+        ({ key, label, p1: Math.round(a * 10) / 10, p2: Math.round(b * 10) / 10, points: a - b, what, rule, how });
+    const unitRule = `power × ${w.power} + HP × ${w.hp} + cost × ${w.cost} + upgrades, × ${w.exhaustedMult} if exhausted`;
+    const unitHow = `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per other upgrade + ${w.sentinel} if Sentinel, all × ${w.exhaustedMult} if exhausted`;
     const terms: EdgeTerm[] = [
-        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left, plus (12 − HP)² / 6 when 12 HP or less)`),
-        t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, `per unit: power × ${w.power} + HP left × ${w.hp} + cost × ${w.cost} + ${w.shield} per Shield + ${w.upgrade} per upgrade + ${w.sentinel} if Sentinel, × ${w.exhaustedMult} if exhausted`),
-        t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, 'same rule as ground units'),
-        t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`),
-        t('resources', 'Resources', v.p1.resources, v.p2.resources, { p1: `${p1.res.total}`, p2: `${p2.res.total}` }, `${w.resource} per resource`),
-        t('initiative', 'Initiative', v.p1.initiative, v.p2.initiative, { p1: s.initiative === 'p1' ? 'has it' : '–', p2: s.initiative === 'p2' ? 'has it' : '–' }, `${w.initiative} for the player holding it`)
+        t('base', 'Base', v.p1.base, v.p2.base, { p1: `${hp(p1)} HP`, p2: `${hp(p2)} HP` }, `${w.baseMult} × (${w.baseHp} per HP left + (12 − HP)² / 6 under 12)`, `${w.baseMult} × (${w.baseHp} per HP left, plus (12 − HP)² / 6 when 12 HP or less)`),
+        t('ground', 'Ground units', sum(v.p1.ground), sum(v.p2.ground), { p1: count(p1.ground.length, 'unit'), p2: count(p2.ground.length, 'unit') }, unitRule, unitHow),
+        t('space', 'Space units', sum(v.p1.space), sum(v.p2.space), { p1: count(p1.space.length, 'unit'), p2: count(p2.space.length, 'unit') }, unitRule, unitHow),
+        t('hand', 'Hand', sum(v.p1.hand), sum(v.p2.hand), { p1: count(p1.hand.length, 'card'), p2: count(p2.hand.length, 'card') }, `${w.hand} per card`, `${w.hand} per card in hand`),
+        t('resources', 'Resources', v.p1.resources, v.p2.resources, { p1: count(p1.res.total, 'resource'), p2: count(p2.res.total, 'resource') }, `${w.resource} per resource`, `${w.resource} per resource, ready or not`),
+        t('initiative', 'Initiative', v.p1.initiative, v.p2.initiative, { p1: s.initiative === 'p1' ? 'has it' : 'no', p2: s.initiative === 'p2' ? 'has it' : 'no' }, `${w.initiative} for whoever holds it`, `${w.initiative} for the player holding the initiative`)
     ];
     const total = v.p1.total - v.p2.total;
     return { terms, sum: total, edge: Math.tanh(total / LENS_SCALE), exact: !!lens };

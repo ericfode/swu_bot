@@ -8,12 +8,15 @@ import { TournamentPage } from './pages/TournamentPage';
 import { IconsPage } from './pages/IconsPage';
 import { useRoute } from './lib/route';
 import { loadArtPack } from './lib/cards';
+import { createSettingsStore, SettingsProvider } from './lib/settings';
 import './styles.css';
 
 // The static build can't reach the image CDN (published pages block external images); it ships art-pack.json beside the page.
 if (import.meta.env.MODE === 'static') {
     loadArtPack('./art-pack.json').catch(() => undefined);
 }
+
+const settings = createSettingsStore('holotable.settings');
 
 function App() {
     const route = useRoute();
@@ -29,4 +32,4 @@ function App() {
     );
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><SettingsProvider store={settings}><App /></SettingsProvider></StrictMode>);

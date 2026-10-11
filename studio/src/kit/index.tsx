@@ -15,7 +15,7 @@ import { ACTION_CLASSES, classifyGame, describe, pivotalActions, type Action, ty
 import { edgeTerms, trackUnits } from '../data/derive';
 import { Board } from '../components/Board';
 import { evalsByIndex } from '../data/evals';
-import { useSettings } from '../lib/settings';
+import { createSettingsStore, releaseSettingsStore, setEverywhere, SettingsProvider } from '../lib/settings';
 import { loadArtPack, setArtResolver, type ArtResolver } from '../lib/cards';
 import { parseGame } from '../data/source';
 import type { EvalFile } from '../data/evals';
@@ -37,8 +37,12 @@ export interface MountOptions {
     /** the omni bot's card values (dashboard/lens/<gameId>.json, swu-lens/1), or a URL to fetch them from; the Lens button estimates them without it */
     lens?: LensFile | null;
     lensUrl?: string;
-    /** turn the Lens on (true) or off (false) for every viewer on the page; omitted keeps the viewer's saved choice */
+    /** start with the Lens on (true) or off (false); default off */
     showLens?: boolean;
+    /** start with card art (true, default) or generated tiles (false) */
+    art?: boolean;
+    /** save this viewer's switches (art, lens, speed, hand perspective) in localStorage under this key; default: not saved */
+    persist?: string;
     /** first step to show (index into the game's steps); or stepN to give it as Step.n */
     step?: number;
     stepN?: number;
@@ -70,7 +74,8 @@ const FONTS = 'https://fonts.googleapis.com/css2?family=Oxanium:wght@500;600;700
 
 // Registered custom properties (@property) are ignored inside shadow roots, so always apply Tailwind's fallback defaults.
 const shadowCss = css.replace(/@layer properties\s*\{\s*@supports[^{]*\{/, '@layer properties{@supports (display:block){')
-    + ':host{display:block;color:var(--color-fg);font-family:var(--font-sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}'
+    // all:initial stops the host page's inherited text styles (case, italics, nowrap, shadows, colour scheme) leaking in
+    + ':host{all:initial;display:block;color-scheme:dark;color:var(--color-fg);font-family:var(--font-sans);font-size:14px;line-height:1.5;text-align:left;-webkit-font-smoothing:antialiased}'
     + '.swuv-root{background:var(--color-bg);border-radius:16px;padding:12px;container-type:inline-size}';
 
 function ensureFonts() {
@@ -112,9 +117,11 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
     };
     let evals: EvalFile | null = opts.evals ?? null;
     let lens: LensFile | null = opts.lens ?? null;
-    if (opts.showLens != null) {
-        useSettings.getState().setLens(opts.showLens);
-    }
+    // each viewer has its own switches, so two viewers on one page don't toggle each other
+    const settings = createSettingsStore(opts.persist ?? null, {
+        ...(opts.showLens != null ? { lens: opts.showLens } : {}),
+        ...(opts.art != null ? { art: opts.art } : {})
+    });
     let ctl: ViewerControl | null = null;
     let pending: number | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -130,7 +137,7 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
         }
         const key = `${game.header.seed}:${game.header.players.map((p) => p.bot).join('/')}`;
         root.render(
-            <MotionConfig reducedMotion="user">
+            <SettingsProvider store={settings}><MotionConfig reducedMotion="user">
                 <GameViewer key={key} game={game} live={!game.end} startStep={opts.step ?? (opts.stepN != null ? indexOfN(opts.stepN) : 0)} evals={evals} lens={lens} layout={opts.layout ?? 'full'} onStep={opts.onStep}
                     control={(c) => {
                         ctl = c;
@@ -139,7 +146,7 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
                             pending = null;
                         }
                     }} />
-            </MotionConfig>
+            </MotionConfig></SettingsProvider>
         );
     };
     const fetchGame = async () => {
@@ -222,6 +229,7 @@ export function mount(el: HTMLElement, opts: MountOptions = {}): ViewerHandle {
         destroy: () => {
             dead = true;
             clearTimeout(timer);
+            releaseSettingsStore(settings);
             root.unmount();
             shadow.innerHTML = '';
         }
@@ -296,12 +304,12 @@ export function pivotal(game: Game, evals?: EvalFile | null, k = 8, lens?: LensF
 
 /** Turn the card-value Lens on or off for every viewer on the page. */
 export function setLensView(on: boolean) {
-    useSettings.getState().setLens(on);
+    setEverywhere({ lens: on });
 }
 
 /** Switch every viewer and icon on the page between card art (true) and generated tiles (false). */
 export function setCardArt(on: boolean) {
-    useSettings.getState().setArt(on);
+    setEverywhere({ art: on });
 }
 
 export { setArtResolver, loadArtPack };
