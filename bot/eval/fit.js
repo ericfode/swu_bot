@@ -3,6 +3,7 @@
  * Fit every candidate evaluator on recorded positions and write bot/eval/models/<name>.json.
  *
  *   node bot/eval/fit.js --data <dir>[,<dir>...] [--out bot/eval/models] [--only linear,mlp] [--hidden 8] [--l2 1e-3] [--epochs 30]
+ *                        [--drop deckLow,toAct,...] [--suffix -g4]
  *
  * Training rows: the train split (by game) of every decided checkpoint, seen subjectively by each player in turn,
  * labelled with whether that player won. Hand-made evaluators get only their logistic scale fitted.
@@ -26,6 +27,9 @@ function frames(positions, withDecks) {
     const rows = [];
     for (const p of positions) {
         for (const judge of ['p1', 'p2']) {
+            if (p.hidden?.includes(judge)) {
+                continue;
+            }
             const fr = frameFeatures(p.state, judge, { view: 'subjective', decks: withDecks ? p.decks : null, toAct: p.toAct });
             rows.push({ fr, y: p.winner === judge ? 1 : 0, id: p.id, source: p.source });
         }
@@ -125,15 +129,21 @@ function fitLinear(rows, std, { l2 = 1e-4, iters = 600, drop = [] } = {}) {
     return { kind: 'linear', std, w: w.slice(0, n), wToAct: w[n], names: SIDE_KEYS };
 }
 
-/** Antisymmetric one-hidden-layer net, logit = g(me, opp) - g(opp, me), trained with Adam on the log loss. */
-function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 256, l2 = 1e-4, seed = 'mlp' } = {}) {
+/**
+ * Antisymmetric one-hidden-layer net, logit = g(me, opp) - g(opp, me), trained with Adam on the log loss.
+ * drop: feature names the net never sees (their inputs are zeroed and their first-layer weights start at 0 and stay
+ * there, so validation and the saved model see the same net).
+ */
+function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 256, l2 = 1e-4, seed = 'mlp', drop = [] } = {}) {
     const n = SIDE_KEYS.length;
     const inp = 2 * n + 2;
     const rng = seededRng(seed);
     const gauss = () => Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng());
+    const keep = SIDE_KEYS.map((k) => (drop.includes(k) ? 0 : 1));
+    const inMask = [...keep, ...keep, drop.includes('round') ? 0 : 1, drop.includes('toAct') ? 0 : 1];
     const m = {
         kind: 'mlp', hidden, std, names: SIDE_KEYS,
-        W1: Array.from({ length: hidden }, () => Array.from({ length: inp }, () => gauss() / Math.sqrt(inp))),
+        W1: Array.from({ length: hidden }, () => Array.from({ length: inp }, (_, i) => (inMask[i] * gauss()) / Math.sqrt(inp))),
         b1: Array.from({ length: hidden }, () => 0.1 * gauss()),
         W2: Array.from({ length: hidden }, () => gauss() / Math.sqrt(hidden)),
         b2: 0
@@ -141,11 +151,11 @@ function fitMlp(rows, val, std, { hidden = 16, epochs = 30, lr = 0.003, batch = 
     const enc = (a, b, round, toAct) => {
         const x = new Float64Array(inp);
         for (let i = 0; i < n; i++) {
-            x[i] = a[i] / std[i];
-            x[n + i] = b[i] / std[i];
+            x[i] = (keep[i] * a[i]) / std[i];
+            x[n + i] = (keep[i] * b[i]) / std[i];
         }
-        x[2 * n] = round / 10;
-        x[2 * n + 1] = toAct;
+        x[2 * n] = (inMask[2 * n] * round) / 10;
+        x[2 * n + 1] = inMask[2 * n + 1] * toAct;
         return x;
     };
     const data = rows.map((r) => {
@@ -238,21 +248,34 @@ function main() {
     const dirs = arg('data', '').split(',').filter(Boolean);
     const out = path.resolve(arg('out', MODELS));
     const only = arg('only', null)?.split(',');
+    // features the fitted models leave out (weight 0), and a suffix for the model file names
+    const drop = arg('drop', '').split(',').filter(Boolean);
+    // per-side features, plus the global inputs: round (net only) and who acts next
+    const unknown = drop.filter((k) => !SIDE_KEYS.includes(k) && k !== 'round' && k !== 'toAct');
+    if (unknown.length) {
+        console.error(`unknown feature(s) in --drop: ${unknown.join(', ')}`);
+        process.exit(2);
+    }
+    const tag = arg('suffix', '');
     const want = (n) => !only || only.includes(n);
     fs.mkdirSync(out, { recursive: true });
     const positions = loadPositions(dirs);
     const train = positions.filter((p) => !p.test);
     console.log(`${positions.length} positions from ${new Set(positions.map((p) => p.id)).size} games; ${train.length} for training`);
-    const meta = { trainedOn: dirs.map((d) => path.basename(d)), trainPositions: train.length, trainGames: new Set(train.map((p) => p.id)).size, fittedAt: new Date().toISOString() };
+    const meta = { ...(drop.length ? { dropped: drop } : {}), trainedOn: dirs.map((d) => path.basename(d)), trainPositions: train.length, trainGames: new Set(train.map((p) => p.id)).size, fittedAt: new Date().toISOString() };
     const save = (name, model, rows) => {
         const fit = meanLoss(rows, (fr) => (model.kind === 'hand' ? model.scale * HAND[model.base](fr) : model.kind === 'linear' ? linearLogit(model, fr) : mlpLogit(model, fr)));
         Object.assign(model, meta, { trainLogloss: Number(fit.logloss.toFixed(4)), trainBrier: Number(fit.brier.toFixed(4)) });
-        fs.writeFileSync(path.join(out, `${name}.json`), JSON.stringify(model, null, 1));
-        console.log(`${name}: train brier ${fit.brier.toFixed(4)} logloss ${fit.logloss.toFixed(4)}`);
+        fs.writeFileSync(path.join(out, `${name}${tag}.json`), JSON.stringify(model, null, 1));
+        console.log(`${name}${tag}: train brier ${fit.brier.toFixed(4)} logloss ${fit.logloss.toFixed(4)}`);
     };
 
     for (const withDecks of [false, true]) {
         const rows = frames(train, withDecks);
+        if (!rows.length) {
+            console.error('no training rows: every position is in the test split or has both hands hidden');
+            process.exit(2);
+        }
         const suffix = withDecks ? '-deck' : '';
         if (!withDecks) {
             for (const name of Object.keys(HAND)) {
@@ -263,14 +286,14 @@ function main() {
         }
         const std = stds(rows);
         if (want(`linear${suffix}`)) {
-            save(`linear${suffix}`, { ...fitLinear(rows, std), decks: withDecks }, rows);
+            save(`linear${suffix}`, { ...fitLinear(rows, std, { drop }), decks: withDecks }, rows);
         }
         if (want(`mlp${suffix}`)) {
             // hold out 10% of training games for early stopping
             const valIds = new Set([...new Set(rows.map((r) => r.id))].filter((id, i) => i % 10 === 0));
             const tr = rows.filter((r) => !valIds.has(r.id));
             const va = rows.filter((r) => valIds.has(r.id));
-            const model = fitMlp(tr, va, std, { hidden: Number(arg('hidden', 8)), epochs: Number(arg('epochs', 30)), l2: Number(arg('l2', 1e-3)) });
+            const model = fitMlp(tr, va, std, { hidden: Number(arg('hidden', 8)), epochs: Number(arg('epochs', 30)), l2: Number(arg('l2', 1e-3)), drop });
             save(`mlp${suffix}`, { ...model, decks: withDecks }, rows);
         }
     }

@@ -54,6 +54,9 @@ function scorePositions(ev, positions) {
         const b = bucketOf(pos.round);
         const rk = `R${b[0]}-${b[1] === 99 ? '' : b[1]}`;
         for (const judge of ['p1', 'p2']) {
+            if (pos.hidden?.includes(judge)) {
+                continue;
+            }
             const p = ev.predict(pos.state, judge, { view: 'subjective', decks: pos.decks, toAct: pos.toAct });
             const y = pos.winner === judge ? 1 : 0;
             for (const key of ['all', `src:${pos.source}`, `round:${rk}`]) {
@@ -63,6 +66,9 @@ function scorePositions(ev, positions) {
             c.n++;
             c.p += p;
             c.y += y;
+        }
+        if (pos.hidden?.length) {
+            continue;
         }
         const p = ev.predict(pos.state, 'p1', { view: 'objective', decks: pos.decks, toAct: pos.toAct });
         const y = pos.winner === 'p1' ? 1 : 0;
@@ -145,7 +151,9 @@ function main() {
             const s = r.subjective,
                 o = r.objective;
             const src = Object.keys(s).filter((k) => k.startsWith('src:')).map((k) => `${k.slice(4)} ${s[k].brier.toFixed(3)}`).join('  ');
-            console.log(`${ev.name.padEnd(16)} subjective brier ${s.all.brier.toFixed(4)} ll ${s.all.logloss.toFixed(4)} acc ${s.all.acc.toFixed(3)} | objective ${o.all.brier.toFixed(4)} | ${src}`);
+            // a split of one-seat imports only has no objective view (and a fully hidden one no subjective view either)
+            const subj = s.all ? `${s.all.brier.toFixed(4)} ll ${s.all.logloss.toFixed(4)} acc ${s.all.acc.toFixed(3)}` : 'n/a';
+            console.log(`${ev.name.padEnd(16)} subjective brier ${subj} | objective ${o.all ? o.all.brier.toFixed(4) : 'n/a'} | ${src}`);
         }
     }
     if (arg('llm', null)) {

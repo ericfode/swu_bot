@@ -4,6 +4,7 @@
 //!     q(s, a)                                 action model: logit of "I win if I take a"
 //!   + world * v(s + W(s, a))                  world model: value of the board it predicts
 //!   + heur  * h(s + W(s, a))                  hand-written heuristic on the predicted board
+//!   + prior * log softmax_a P(s, a)           a teacher bot's habits (see prior.rs)
 //! then argmax (or softmax sampling with `temp` > 0). The three knobs are command-line flags.
 
 use crate::cards::CardDb;
@@ -20,6 +21,10 @@ pub struct PlayCfg {
     pub heur: f32,
     pub temp: f32,
     pub epsilon: f32,
+    /// Weight of the teacher prior head (log softmax over legal actions).
+    pub prior: f32,
+    /// Use the prior in every prompt, not only action windows (for a behaviour-cloned network).
+    pub prior_all: bool,
     /// Write the latest decision's scores here (for the dashboard panel).
     pub thoughts: Option<std::path::PathBuf>,
 }
@@ -29,6 +34,7 @@ pub struct Scored {
     pub v_now: f32,
     pub v_next: Vec<f32>,
     pub h_next: Vec<f32>,
+    pub prior: Vec<f32>,
     pub score: Vec<f32>,
 }
 
@@ -57,6 +63,10 @@ impl Brain {
         let out = self.net.forward(s, a, ids);
         let q: Vec<f32> = out.q.into_data().try_to_vec::<f32>().unwrap();
         let v_now = sigmoid(out.v.into_data().try_to_vec::<f32>().unwrap()[0]);
+        let pr: Vec<f32> = out.prior.into_data().try_to_vec::<f32>().unwrap();
+        let m = pr.iter().cloned().fold(f32::MIN, f32::max);
+        let lse = m + pr.iter().map(|x| (x - m).exp()).sum::<f32>().ln();
+        let prior: Vec<f32> = pr.iter().map(|x| x - lse).collect();
         let delta: Vec<f32> = out.world.into_data().try_to_vec::<f32>().unwrap();
         // predicted next state = current state with the world block moved by the predicted change
         let mut next = Vec::with_capacity(n * STATE_DIM);
@@ -78,8 +88,11 @@ impl Brain {
         } else {
             vec![0.0; n]
         };
-        let score = (0..n).map(|k| q[k] + self.cfg.world * v_next[k] + self.cfg.heur * h_next[k]).collect();
-        Scored { q, v_now, v_next, h_next, score }
+        // the prior only helps in action windows: in card-pick prompts (resources, targets) it cannot tell which card the
+        // teacher takes, so its mass piles onto the one button (Skip, Done) and blending it in stops the bot resourcing
+        let wp = if self.cfg.prior_all || msg["prompt"]["actionWindow"].as_bool().unwrap_or(false) { self.cfg.prior } else { 0.0 };
+        let score = (0..n).map(|k| q[k] + self.cfg.world * v_next[k] + self.cfg.heur * h_next[k] + wp * prior[k]).collect();
+        Scored { q, v_now, v_next, h_next, prior, score }
     }
 }
 
@@ -129,7 +142,7 @@ fn write_thoughts(path: &std::path::Path, msg: &Value, sc: &Scored, chosen: usiz
             let a = &actions[i];
             let name = a["card"]["n"].as_str().map(String::from).unwrap_or_else(|| a["label"].as_str().unwrap_or("?").to_string());
             json!({"i": i, "label": format!("{} {}", a["kind"].as_str().unwrap_or(""), name),
-                   "pWin": sigmoid(sc.q[i]), "vNext": sigmoid(sc.v_next[i]), "heur": sc.h_next[i], "score": sc.score[i], "chosen": i == chosen})
+                   "pWin": sigmoid(sc.q[i]), "vNext": sigmoid(sc.v_next[i]), "heur": sc.h_next[i], "prior": sc.prior[i], "score": sc.score[i], "chosen": i == chosen})
         })
         .collect();
     let out = json!({

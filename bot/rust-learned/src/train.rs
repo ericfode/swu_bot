@@ -230,7 +230,7 @@ pub fn train(data: &Data, cfg: &TrainCfg, init: Option<&Path>, out: &Path) -> Ve
     let dev = Device::flex().autodiff();
     let mut net = Net::new(&dev);
     if let Some(p) = init {
-        let mut store = SafetensorsStore::from_file(p);
+        let mut store = SafetensorsStore::from_file(p).allow_partial(true);
         net.load_from(&mut store).expect("load init model");
         eprintln!("continuing from {}", p.display());
     }
@@ -322,7 +322,7 @@ fn evaluate(net: &Net, data: &Data, idx: &[usize]) -> (f32, f32, f32, f32) {
 pub fn bootstrap(data: &mut Data, teacher: &Path, w: f32) {
     let dev = Device::flex();
     let mut net = Net::new(&dev);
-    net.load_from(&mut SafetensorsStore::from_file(teacher)).expect("load teacher");
+    net.load_from(&mut SafetensorsStore::from_file(teacher).allow_partial(true)).expect("load teacher");
     let mut v = Vec::with_capacity(data.n);
     for start in (0..data.n).step_by(8192) {
         let end = (start + 8192).min(data.n);
