@@ -181,6 +181,15 @@ function defaultChoose(eg, pid, acts) {
             ? maxBy(cards, (a) => -keepScore(a.card, pl))
             : maxBy(cards, (a) => targetScore(a.card, pl, title));
     }
+    // multi-select display prompts keep offering unselected cards after the limit is reached (clicking them does nothing),
+    // so stop at the limit and press Done instead of clicking forever
+    if (acts.some((a) => a.kind === 'displayCard')) {
+        const picked = (prompt.displayCards ?? []).filter((dc) => dc.selectionState === 'selected').length;
+        const done = buttons.find((x) => /^(done|confirm|submit|ok)/i.test(x.label));
+        if (done && picked >= parseMax(title, 1)) {
+            return done;
+        }
+    }
     const options = acts.filter((a) => a.kind === 'option');
     if (options.length) {
         return /^#\d+$/.test(options[0].label) ? maxBy(options, (a) => Number(a.label.slice(1))) : options[0];

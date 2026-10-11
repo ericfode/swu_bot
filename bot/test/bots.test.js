@@ -126,3 +126,17 @@ test('registry resolves names, depth and #suffix', () => {
     assert.strictEqual(makeBot('tempo-d3').depth, 3);
     assert.throws(() => makeBot('nope'));
 });
+
+test('defaultChoose presses Done once a multi-select display prompt is at its limit', () => {
+    const { defaultChoose } = require('../players/heuristic');
+    const me = player();
+    const eg = game(me, player());
+    const done = { kind: 'button', label: 'Done' };
+    const more = { kind: 'displayCard', label: 'x' };
+    const prompt = (selected) => ({ menuTitle: 'Select up to 2 cards', displayCards: [...Array(selected).fill({ selectionState: 'selected' }), { selectionState: 'selectable' }] });
+    me.promptState = {};
+    me.currentPrompt = () => prompt(1);
+    assert.strictEqual(defaultChoose(eg, 'me', [done, more]), more);
+    me.currentPrompt = () => prompt(2);
+    assert.strictEqual(defaultChoose(eg, 'me', [done, more]), done);
+});
