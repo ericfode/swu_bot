@@ -10,15 +10,29 @@
  *   - socket.io frames as saved from browser devtools: lines like 42["gamestate",{...}], or a devtools HAR export
  *   - SWU Forge Battle Log "PersistedTimeline" v2/v3: { v, base, steps: [{timestamp, patch}], chat? }
  *   - importer/capture.js output: JSON Lines {t:"gamestate", view, state}
+ *
+ * SWU-PGN game files (.swupgn) are not frame captures: importer/import.js sends them to importer/swupgn.js, and
+ * readText() refuses them with a pointer there.
  */
+
+const { isSwuPgn } = require('./swupgn');
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isGamestate = (v) => isObj(v) && isObj(v.players) && ('phase' in v || 'winners' in v || 'newMessages' in v);
+
+// Patches come from files other people published; a key like __proto__ would write into Object.prototype.
+const UNSAFE_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+const checkKey = (k) => {
+    if (UNSAFE_KEYS.has(k)) {
+        throw new Error(`unsafe key in patch: ${k}`);
+    }
+};
 
 /** KaraBuddy's path-keyed patch: { "players/<id>/cardPiles/hand": [...] } replaces that value. */
 function applyPatch(state, patch) {
     for (const [p, value] of Object.entries(patch)) {
         const parts = p.split('/');
+        parts.forEach(checkKey);
         let obj = state;
         for (let i = 0; i < parts.length - 1; i++) {
             if (!isObj(obj[parts[i]])) {
@@ -69,6 +83,7 @@ function fromFullPatch(list, pick = (e) => e) {
  */
 function mergePatch(state, patch) {
     for (const [k, v] of Object.entries(patch)) {
+        checkKey(k);
         if (isObj(v) && isObj(state[k])) {
             mergePatch(state[k], v);
         } else {
@@ -321,6 +336,9 @@ function readHar(har) {
 }
 
 function readText(text) {
+    if (isSwuPgn(text)) {
+        throw new Error('SWU-PGN game file, not a Karabast capture: import it on its own (importer/swupgn.js); it already holds both hands');
+    }
     const trimmed = text.trim();
     // whole-file JSON first
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {

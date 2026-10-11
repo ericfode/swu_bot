@@ -6,6 +6,7 @@
  *   LearnedPolicyBot  ("learned-pi")  plays the action model's top choice at every prompt. No search, ~1 ms a decision.
  *   LearnedSearchBot  ("learned-v")   the heuristic bot's one-ply engine lookahead, but positions are scored by the
  *                                     learned value head instead of the hand-written formula; other prompts use the policy.
+ *                     ("learned-vh")  the same, scoring positions as the heuristic score + HEURISTIC_BLEND * learned value.
  *
  * Both read only the seat's own observation (bot/learned/observe.js): opponent hand and deck order stay hidden.
  */
@@ -16,6 +17,9 @@ const F = require('./features');
 const { observe, plainAction } = require('./observe');
 const { HeuristicBot, evaluate } = require('../players/heuristic');
 
+// learned-vh: weight of the learned value next to the heuristic score (whose spread is ~32 points); 10 won 28-12
+// against the heuristic bot over 40 games where the heuristic score alone went 20-20 (bot/learned/README.md)
+const HEURISTIC_BLEND = 10;
 const DEFAULT_MODEL = path.join(__dirname, '..', '..', 'models', 'learned', 'current.json');
 const models = new Map();
 
@@ -145,4 +149,4 @@ class LearnedSearchBot extends HeuristicBot {
     }
 }
 
-module.exports = { LearnedPolicyBot, LearnedSearchBot, featurize, loadModel, softmax };
+module.exports = { LearnedPolicyBot, LearnedSearchBot, HEURISTIC_BLEND, featurize, loadModel, softmax };

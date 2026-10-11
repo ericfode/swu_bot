@@ -25,8 +25,10 @@ the same inputs. Printed card stats (cost, power, HP, keywords) come from `force
 |---|---|---|
 | `learned-pi` | Plays the policy head's top action at every prompt. A loop guard lowers actions already tried in the exact same position, so pick-then-cancel loops end. | ~1 ms a decision |
 | `learned-v` | The heuristic bot's one-ply engine lookahead (`bot/players/heuristic.js`), with positions scored by the value head instead of the hand-written formula. Other prompts use the policy. | like `heuristic` |
+| `learned-vh` | Like `learned-v`, but a position's score is the hand-written heuristic score plus `HEURISTIC_BLEND` (10) times the value head: the network corrects the formula instead of replacing it. | like `heuristic` |
 
-Model file: `$SWU_LEARNED_MODEL`, default `models/learned/current.json`. Both bots read only their own seat's view.
+Model file: `$SWU_LEARNED_MODEL`, default `models/learned/current.json`. All three bots read only their own seat's view.
+`SWU_LEARNED_BLEND=<w>` turns `learned-v` into the blended score with weight `w`, for sweeps.
 
 ## Pipeline
 
@@ -69,6 +71,22 @@ seeds (`/mnt/project-files/results/learned-v3-ab/`, 6 games a pair) v3 beats ran
 5-1 vs 3-3, `learned-v` 6-0 vs 5-1). Both learned bots now lose to `heuristic` (0-6): after the shared evaluation fix
 on main, the hand-written score is better than the learned value head, so the earlier ladder (`learned-v` 3-1 against
 the heuristic) no longer holds.
+
+Model v4 (now `current.json`) adds ~2,700 fast games (the student plays 70% of moves, the teacher searches at 3% of
+windows) to give the value head more data: held-out value error 0.73 (v3 0.99). Against `heuristic`, scoring positions
+as heuristic score + w x learned value, on the same seeds:
+
+| Score used by the lookahead | 10 games (seed 71000) | 30 games (seed 72000) |
+|---|---|---|
+| heuristic score only (w = 0, control) | 4-6 | 16-14 |
+| + 10 x learned value (`learned-vh`) | 6-4 | 22-8 |
+| learned value only (`learned-v`) | 3-7 | - |
+
+With v3 the same blend went 3-7 and 25 x went 1-9, so the gain comes from the better value head.
+
+Ladder `/mnt/project-files/results/learned-ladder-v4/` (9 bots, 8 games a pair, model v4): aggro 59-5, `learned-vh`
+51-13, tempo 43-21, heuristic 40-24, rush 31-33, `learned-v` 25-39, control 22-42, `learned-pi` 15-49, random 2-62.
+`learned-vh` beat every bot but aggro (2-6), including the heuristic 7-1.
 
 ## Limits
 

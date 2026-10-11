@@ -198,9 +198,10 @@ function describeBot(name) {
     if (kind === 'rush') {
         return { name, kind: 'rules', profile: 'rush', depth: 0, lang: 'js' };
     }
-    if (kind === 'learned-pi' || kind === 'learned-v') {
-        // bot/learned: tinygrad-trained network, model file from $SWU_LEARNED_MODEL (default models/learned/current.json)
-        return { name, kind: 'learned', profile: kind, depth: kind === 'learned-v' ? depth : 0, lang: 'js' };
+    if (kind === 'learned-pi' || kind === 'learned-v' || kind === 'learned-vh') {
+        // bot/learned: tinygrad-trained network, model file from $SWU_LEARNED_MODEL (default models/learned/current.json).
+        // learned-vh scores lookahead positions with the heuristic score plus a learned correction
+        return { name, kind: 'learned', profile: kind, depth: kind === 'learned-pi' ? 0 : depth, lang: 'js' };
     }
     if (/^random/.test(kind)) {
         return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
@@ -216,7 +217,7 @@ function describeBot(name) {
 function makeBot(name, taken) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', 'learned-pi', 'learned-v', 'learned-vh', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
@@ -243,8 +244,11 @@ function makeBot(name, taken) {
         return makeArenaBot(name);
     }
     if (info.kind === 'learned') {
-        const { LearnedPolicyBot, LearnedSearchBot } = require('../learned/bots');
-        return info.profile === 'learned-v' ? new LearnedSearchBot(name, { depth: info.depth }) : new LearnedPolicyBot(name);
+        const { LearnedPolicyBot, LearnedSearchBot, HEURISTIC_BLEND } = require('../learned/bots');
+        if (info.profile === 'learned-pi') {
+            return new LearnedPolicyBot(name);
+        }
+        return new LearnedSearchBot(name, { depth: info.depth, blend: info.profile === 'learned-vh' ? HEURISTIC_BLEND : undefined });
     }
     if (info.kind === 'rules') {
         return createRushBot(name);

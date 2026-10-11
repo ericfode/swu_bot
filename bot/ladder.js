@@ -28,6 +28,12 @@
  * it), and the run key into ladder.json when the run is done: give it as
  * --key to play the same games again (two runs with the same --key and --seed get the same decks). --key none: seed alone.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
+ * --decks <file> plays fixed deck lists instead of random decks (bot/decklists.js: format, checks and how decks are
+ * dealt). Seed --seed + s plays deck pair s mod P (P = n(n-1)/2 pairs, in round-robin rounds), so the deal depends on
+ * the seed minus --seed, not on the seed alone; both games of a seed give each bot the same deck. Give each bot pair a
+ * whole number of passes (--games a multiple of 2P) or some deck pairs play more than others (a warning says so).
+ * Each index entry then carries decks {p1, p2} (the deck names). With a mirror (--bots c-clock#a,c-clock#b) the bots
+ * cancel out and the ratings that matter are the decks'.
  */
 const fs = require('fs');
 const os = require('os');
@@ -39,10 +45,18 @@ const { runKey, gameKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 const { runPool, killChildren } = require('./game-pool');
+const { loadDecks, dealDecks, deckPairs } = require('./decklists');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
-    return i > 0 ? process.argv[i + 1] : dflt;
+    if (i < 0) {
+        return dflt;
+    }
+    const v = process.argv[i + 1];
+    if (v === undefined || v.startsWith('--')) {
+        throw new Error(`--${name} needs a value`);
+    }
+    return v;
 }
 
 function engineRev() {
@@ -223,9 +237,9 @@ function readPrevious(file, config, engine) {
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
         || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
         || (c.harness ?? null) !== (config.harness ?? null) || (c.engineDiff ?? null) !== (config.engineDiff ?? null) || (c.programs ?? null) !== (config.programs ?? null)
-        || (c.keyId === null) !== (config.keyId === null) || (config.record && !c.record)) {
+        || (c.keyId === null) !== (config.keyId === null) || (config.record && !c.record) || !same(c.decks ?? null, config.decks ?? null)) {
         // a run that records needs a replay of every game: the kept games of a run that did not record have none
-        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs, seeding (--key none) or did not record, starting over');
+        console.log('resume: the earlier run used other bots, seeds, format, limits, engine, bot/ code, bot programs, deck lists, seeding (--key none) or did not record, starting over');
         return null;
     }
     if (c.keyId !== config.keyId) {
@@ -267,13 +281,26 @@ async function main() {
     const out = path.join(path.resolve(arg('out', defaultOut())), id);
     const record = process.argv.includes('--record');
     const key = runKey(arg('key', null));
+    const decksFile = arg('decks', null);
+    // the engine loads in this thread only to check the deck lists before any game starts (and before <out> is made)
+    const deckSet = decksFile ? loadDecks(decksFile, new (require('./env').Env)()) : null;
+    const decks = deckSet?.decks ?? null;
+    if (decks) {
+        const seeds = (perPair + (perPair % 2)) / 2;
+        const P = deckPairs(decks.length).length;
+        if (seeds % P !== 0) {
+            console.warn(`warning: ${seeds} seeds per bot pair is not a whole number of passes over the ${P} deck pairs, so some deck pairs will play more than others (--games ${2 * P} or a multiple of it plays every pair equally often)`);
+        }
+    }
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
-    const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
+    const plain = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
+    const schedule = decks ? dealDecks(plain, decks.length, firstSeed) : plain;
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
-                     harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), record, ...(vs ? { format: 'gauntlet', vs } : {}) };
+                     harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), record, ...(vs ? { format: 'gauntlet', vs } : {}),
+                     ...(decks ? { decks: { file: path.basename(decksFile), sha256: deckSet.sha256, names: decks.map((d) => d.metadata.name) } } : {}) };
     const games = [];
     let status = 'running';
     let prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
@@ -332,15 +359,18 @@ async function main() {
         [...held.keys()].filter((s) => !unplayed.has(s)).forEach(publish);
     }
     save();
-    console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${workers} workers -> ${out}`);
+    console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${workers} workers -> ${out}`);
 
     const t0 = Date.now();
     await runPool(queue, {
         workers,
         hangMs,
-        workerData: { maxSteps, engineRev: engine, capMs, key },
+        workerData: { maxSteps, engineRev: engine, capMs, key, decks },
         onStart: (job) => {
-            const entry = { id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, by: null, faultKind: null };
+            const entry = {
+                id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, by: null, faultKind: null,
+                ...(job.decks ? { decks: { p1: decks[job.decks[0]].metadata.name, p2: decks[job.decks[1]].metadata.name } } : {})
+            };
             games.push(entry);
             tIndex.games.push({ ...entry });
             if (record) {

@@ -198,7 +198,9 @@ parentPort.on('message', async (job) => {
             };
         }
         const key = workerData.key ? gameKey(workerData.key, job.seed) : null;
-        r = await playGame(env, { seed: job.seed, bots, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
+        // a fresh copy per game: the deck objects go into the engine and the replay header
+        const decks = job.decks && { p1: structuredClone(workerData.decks[job.decks[0]]), p2: structuredClone(workerData.decks[job.decks[1]]) };
+        r = await playGame(env, { seed: job.seed, bots, decks, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
         // let the timers and promise callbacks a bot left that are due now run while this game is still the current one
         // (a throw there is that bot's loss, see origin)
         await new Promise((resolve) => later(resolve, 1));

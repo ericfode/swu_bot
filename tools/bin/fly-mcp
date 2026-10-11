@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Starts flyctl's MCP server over stdio, so Claude Code gets tools for this project's Fly.io apps,
+# machines, volumes, secrets, certs and logs (https://fly.io/docs/mcp/flyctl-server/). .mcp.json runs it.
+#
+# The Fly token is never stored in the repo or the container. In a Claude Code cloud session the
+# egress proxy adds the real token to requests for Fly's API hosts, so flyctl only gets a placeholder.
+# Locally, flyctl uses your own login (fly auth login) or FLY_API_TOKEN.
+set -euo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+flyctl=$("$here/../fly/flyctl-path") || {
+    echo "fly-mcp: flyctl is not installed; in a cloud session .claude/hooks/session-start.sh installs it" >&2
+    exit 1
+}
+if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ -z "${FLY_API_TOKEN:-}${FLY_ACCESS_TOKEN:-}" ]; then
+    export FLY_API_TOKEN=proxy-injected
+fi
+export FLY_NO_UPDATE_CHECK=1
+exec "$flyctl" mcp server "$@"
