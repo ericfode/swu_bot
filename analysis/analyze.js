@@ -73,6 +73,13 @@ function usableViews(game, views) {
     return views.filter((v) => v === 'omniscient' || (v !== 'objective' && !hidden.includes(viewSeat(v))));
 }
 
+/**
+ * Seats outside hiddenHands whose hand is hidden in this snapshot: a merge of both players' captures (pov both) keeps
+ * a hand hidden on the frames that found no partner. The views that need that hand skip those checkpoints.
+ */
+const unseenAt = (game, state) => ['p1', 'p2'].filter((seat) => !hiddenSeats(game).includes(seat) && (state.players[seat]?.hand ?? []).some((c) => c?.hid));
+const needsHidden = (view, unseen) => (view === 'objective' ? unseen.length > 0 : unseen.includes(viewSeat(view)));
+
 /** Build the Claude requests for one game. */
 function buildRequests(game, cps, views, opt) {
     const names = { p1: botName(game, 'p1'), p2: botName(game, 'p2') };
@@ -80,8 +87,9 @@ function buildRequests(game, cps, views, opt) {
     const reqs = [];
     for (const cp of cps) {
         const state = game.steps[cp.stepIndex].state;
+        const unseen = unseenAt(game, state);
         for (const view of views) {
-            if (view === 'omniscient') {
+            if (view === 'omniscient' || needsHidden(view, unseen)) {
                 continue;
             }
             const pov = view === 'objective' ? null : viewSeat(view);
@@ -102,9 +110,11 @@ function buildRequests(game, cps, views, opt) {
         const lines = cps.map((cp) => trajectoryLine(cp, game.steps[cp.stepIndex].state));
         const result = game.end.winner === 'draw' ? 'The game was a draw.' : `RESULT: ${game.end.winner} (${names[game.end.winner]}) won in round ${game.end.round} after ${game.end.steps} decisions (${game.end.outcome}).`;
         const hidden = hiddenSeats(game);
+        const unseen = ['p1', 'p2'].map((seat) => [seat, cps.filter((cp) => unseenAt(game, game.steps[cp.stepIndex].state).includes(seat)).length]).filter(([, n]) => n);
         const user = [
             `Players: ${decks}.`,
             ...(hidden.length ? [`This game was recorded from the ${game.header.source.pov} view: the hand of ${hidden.join(', ')} was never seen and is listed as "Hidden card". Judge from what is shown.`] : []),
+            ...unseen.map(([seat, n]) => `The hand of ${seat} was not recorded at ${n} of ${cps.length} checkpoints and is listed there as "Hidden card". Judge from what is shown.`),
             `CHECKPOINTS (index, round, phase, what was done since the previous checkpoint, then both sides after it; hands are listed in full):`,
             lines.join('\n'),
             result,
@@ -300,6 +310,11 @@ async function main() {
     };
     const files = a._.flatMap(gameFiles);
     const viewsFor = (game) => {
+        const partly = ['p1', 'p2'].filter((seat) => game.steps.some((s) => unseenAt(game, s.state).includes(seat)));
+        if (partly.length && opt.evaluator !== 'heuristic') {
+            const unmatched = game.header.source?.merge?.unmatched;
+            console.error(`${game.id}: ${partly.join(', ')}'s hand is hidden on some frames${unmatched ? ` (${unmatched} unpaired in the merge)` : ''}; checkpoints there are skipped for the views that need it`);
+        }
         if (!hiddenSeats(game).length) {
             return opt;
         }
