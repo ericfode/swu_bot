@@ -133,6 +133,8 @@ test('search prompts: picks distinct cards up to the limit, then Done', () => {
     assert.notStrictEqual(b, 0);
     assert.notStrictEqual(a, b);
     assert.strictEqual(c, 0);
+    // a second search with the same title right after Done starts from no picks
+    assert.notStrictEqual(decide(prompt, st, acts).i, 0);
 });
 
 test('does not repeat a click that changed nothing', () => {

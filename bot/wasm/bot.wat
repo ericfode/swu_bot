@@ -1291,6 +1291,9 @@
     (call $disp_begin)
     (local.set $i (call $choose_cards_inner))
     (call $disp_pick (call $act (local.get $i)))
+    ;; Done (or any button) ends the display prompt: forget the picks, so a same-titled prompt right after starts clean
+    (if (i32.ne (call $f (call $act (local.get $i)) (global.get $A_KIND)) (i32.const 4))
+      (then (i32.store offset=20 (global.get $ST) (i32.const 0))))
     (if (call $multi)
       (then
         (if (i32.eq (call $f (call $act (local.get $i)) (global.get $A_KIND)) (i32.const 2))
