@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 /// - Resources: keeps cheap on-aspect units, resources expensive and off-aspect cards.
 /// - Damage and healing splits: kills the most valuable units it can, rest to the base; own damage to its own base.
 /// - Same loop guards as greedy.
+#[derive(Clone)]
 pub struct Greedy2 {
     db: &'static CardDb,
     rng: Rng,
@@ -657,6 +658,63 @@ impl Greedy2 {
     }
 }
 
+impl Greedy2 {
+    /// Score of every action, loop-guard penalties included (higher is better). Starts a new round's guards.
+    pub fn scores(&mut self, req: &Decide) -> Vec<f64> {
+        let p = &req.prompt;
+        if req.state.round != self.round {
+            self.round = req.state.round;
+            self.cancelled.clear();
+            self.picks.clear();
+        }
+        let empty = PlayerView::default();
+        let cx = self.ctx(req, &empty);
+        let attacker = cx.attacker(req, self.last_unit_pick.as_deref());
+        let prompt_key = format!("{}|{}|{}", p.signature, p.title.as_deref().unwrap_or(""), p.selected.len());
+        req.actions
+            .iter()
+            .map(|a| {
+                let key = action_key(a);
+                let mut s = cx.score(req, a, attacker);
+                if p.action_window && self.cancelled.contains(&key) {
+                    s -= 50.0;
+                }
+                if self.picks.get(&format!("{prompt_key}|{key}")).copied().unwrap_or(0) >= MAX_REPEATS {
+                    s -= 100.0;
+                }
+                s
+            })
+            .collect()
+    }
+
+    /// Bookkeeping after action `best` is taken: attacker, cancelled plays, repeat counts.
+    pub fn record(&mut self, req: &Decide, best: usize) {
+        let p = &req.prompt;
+        let me = req.you.as_str();
+        let chosen = &req.actions[best];
+        let key = action_key(chosen);
+        if let Some(c) = chosen.card.as_ref() {
+            let mine = req.state.players.get(me).is_some_and(|pl| pl.units().any(|u| u.id == c.id));
+            if c.ctl.as_deref() == Some(me) && mine {
+                self.last_unit_pick = Some(c.id.clone());
+            }
+        }
+        if p.action_window {
+            self.last_window_pick = Some(key.clone());
+        } else if chosen.kind == "button" && chosen.label.eq_ignore_ascii_case("cancel") {
+            if let Some(pick) = self.last_window_pick.take() {
+                self.cancelled.insert(pick);
+            }
+        }
+        let prompt_key = format!("{}|{}|{}", p.signature, p.title.as_deref().unwrap_or(""), p.selected.len());
+        *self.picks.entry(format!("{prompt_key}|{key}")).or_insert(0) += 1;
+    }
+
+    pub fn db(&self) -> &'static CardDb {
+        self.db
+    }
+}
+
 impl Policy for Greedy2 {
     fn new_game(&mut self, hello: &Hello) {
         self.rng.seed(hello.seed);
@@ -668,51 +726,17 @@ impl Policy for Greedy2 {
     }
 
     fn choose(&mut self, req: &Decide) -> usize {
-        let p = &req.prompt;
-        if req.state.round != self.round {
-            self.round = req.state.round;
-            self.cancelled.clear();
-            self.picks.clear();
-        }
-        let empty = PlayerView::default();
-        let cx = self.ctx(req, &empty);
-        let attacker = cx.attacker(req, self.last_unit_pick.as_deref());
-        let prompt_key = format!("{}|{}|{}", p.signature, p.title.as_deref().unwrap_or(""), p.selected.len());
+        let scores = self.scores(req);
         let n = req.actions.len();
         let start = self.rng.below(n);
         let mut best = start;
-        let mut best_score = f64::NEG_INFINITY;
         for k in 0..n {
             let i = (start + k) % n;
-            let a = &req.actions[i];
-            let key = action_key(a);
-            let mut s = cx.score(req, a, attacker);
-            if p.action_window && self.cancelled.contains(&key) {
-                s -= 50.0;
-            }
-            if self.picks.get(&format!("{prompt_key}|{key}")).copied().unwrap_or(0) >= MAX_REPEATS {
-                s -= 100.0;
-            }
-            if s > best_score {
-                best_score = s;
+            if scores[i] > scores[best] {
                 best = i;
             }
         }
-        let chosen = &req.actions[best];
-        let key = action_key(chosen);
-        if let Some(c) = chosen.card.as_ref() {
-            if c.ctl.as_deref() == Some(cx.me) && cx.my.units().any(|u| u.id == c.id) {
-                self.last_unit_pick = Some(c.id.clone());
-            }
-        }
-        if p.action_window {
-            self.last_window_pick = Some(key.clone());
-        } else if chosen.kind == "button" && chosen.label.eq_ignore_ascii_case("cancel") {
-            if let Some(pick) = self.last_window_pick.take() {
-                self.cancelled.insert(pick);
-            }
-        }
-        *self.picks.entry(format!("{prompt_key}|{key}")).or_insert(0) += 1;
+        self.record(req, best);
         best
     }
 
@@ -826,7 +850,7 @@ mod tests {
     #[test]
     fn splits_damage_to_kill_then_face() {
         let st: State = serde_json::from_str(&state("[]", r#"[{"id":"e1","n":"A","p":2,"h":2,"d":0},{"id":"e2","n":"B","p":5,"h":6,"d":0}]"#, 0)).unwrap();
-        let r = Decide { seq: 1, you: "p1".into(), prompt: Default::default(), state: st, actions: vec![] };
+        let r = Decide { seq: 1, you: "p1".into(), prompt: Default::default(), state: st, actions: vec![], sim: false, ms: None };
         let g = Greedy2::new(db());
         let empty = PlayerView::default();
         let d: Distribute = serde_json::from_str(r#"{"type":"distributeDamage","amount":5,"targets":[{"id":"e1","cap":null},{"id":"e2","cap":null},{"id":"b2","cap":null}]}"#).unwrap();

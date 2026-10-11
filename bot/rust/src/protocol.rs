@@ -1,4 +1,4 @@
-//! Wire types for spec/stdio-protocol.md (swu-bot-stdio v1: JSON Lines over stdio, one request -> one reply).
+//! Wire types for spec/stdio-protocol.md (swu-bot-stdio v1) and spec/protocol.md (v2: adds `over` and simulations).
 //!
 //! Unknown fields are ignored and most fields default, so the adapter can add data without breaking this bot.
 
@@ -9,17 +9,25 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub const PROTOCOL: &str = "swu-bot-stdio";
+/// `hello.v` is always 1; the version actually spoken is picked from `hello.versions` in `ready`.
 pub const VERSION: u32 = 1;
+pub const VERSION_2: u32 = 2;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum Request {
     Hello(Hello),
     Decide(Decide),
+    /// v2: the game ended; reply `ok`.
+    Over(Over),
+    /// v2: reply to a `sim` request.
+    Simulated(Simulated),
+    /// v2 on transports without end-of-file: stop, no reply.
+    Bye,
 }
 
 /// Sent at the start of every game; the process may serve several games in a row.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Hello {
     #[serde(default)]
     pub protocol: String,
@@ -31,9 +39,40 @@ pub struct Hello {
     /// Drawn from the match RNG; seed the bot's own RNG from it to keep games reproducible.
     #[serde(default)]
     pub seed: u64,
+    /// v2: protocol versions the referee speaks (absent from a v1 referee).
+    #[serde(default)]
+    pub versions: Vec<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+/// v2 `over`: the game ended.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Over {
+    #[serde(default)]
+    pub winner: Option<String>,
+    #[serde(default)]
+    pub outcome: Option<String>,
+}
+
+/// v2 reply to a `sim` request: a position (`actor`, `prompt`, `state`, `actions`), a finished game (`over`) or `error`.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Simulated {
+    #[serde(default)]
+    pub op: String,
+    #[serde(default)]
+    pub actor: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<Prompt>,
+    #[serde(default)]
+    pub state: Option<State>,
+    #[serde(default)]
+    pub actions: Option<Vec<Action>>,
+    #[serde(default)]
+    pub over: Option<Over>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Decide {
     #[serde(default)]
     pub seq: u64,
@@ -42,9 +81,15 @@ pub struct Decide {
     #[serde(default)]
     pub state: State,
     pub actions: Vec<Action>,
+    /// v2: `sim` requests are allowed before this decision's `act`.
+    #[serde(default)]
+    pub sim: bool,
+    /// v2: time for the `act` in milliseconds, simulations included.
+    #[serde(default)]
+    pub ms: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Prompt {
     /// Engine promptType (resource, actionWindow, initiative, ...), null for target selection.
@@ -66,7 +111,7 @@ pub struct Prompt {
     pub action_window: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Action {
     #[serde(default)]
@@ -139,7 +184,7 @@ pub struct CardWire {
 }
 
 /// The replay snapshot from this seat (spec/replay-format.md), with card uuids and the opponent's hand as a count.
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct State {
     #[serde(default)]
     pub round: u32,
@@ -151,7 +196,7 @@ pub struct State {
     pub players: BTreeMap<String, PlayerView>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerView {
     #[serde(default)]
@@ -173,7 +218,7 @@ pub struct PlayerView {
     pub space: Vec<UnitView>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct CardRef {
     #[serde(default)]
     pub id: String,
@@ -183,7 +228,7 @@ pub struct CardRef {
     pub s: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct LeaderView {
     #[serde(default)]
     pub id: String,
@@ -198,7 +243,7 @@ pub struct LeaderView {
     pub x: u8,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct BaseView {
     #[serde(default)]
     pub id: String,
@@ -212,7 +257,7 @@ pub struct BaseView {
     pub d: i32,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct Resources {
     #[serde(default)]
     pub ready: u32,
@@ -220,7 +265,7 @@ pub struct Resources {
     pub total: u32,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct UnitView {
     #[serde(default)]
     pub id: String,
@@ -243,7 +288,7 @@ pub struct UnitView {
     pub u: Vec<UpgradeRef>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct UpgradeRef {
     #[serde(default)]
     pub id: String,
@@ -314,11 +359,30 @@ pub fn other(seat: &str) -> &'static str {
 #[derive(Debug, Serialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum Reply {
-    Ready { v: u32, name: String },
+    Ready {
+        v: u32,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sim: Option<bool>,
+    },
+    /// The split is `distribution` in v1 and `split` in v2.
     Act {
         i: usize,
         #[serde(skip_serializing_if = "Option::is_none")]
         distribution: Option<Vec<DistShare>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        split: Option<Vec<DistShare>>,
     },
+    /// v2: play ahead on a private copy of the game (`op`: begin | act | end).
+    Sim {
+        op: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        deal: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        i: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        split: Option<Vec<DistShare>>,
+    },
+    Ok,
     Error { error: String },
 }
