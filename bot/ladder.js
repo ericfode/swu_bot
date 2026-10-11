@@ -3,7 +3,7 @@
  * Round-robin ladder with ratings, run on worker threads.
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
- *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--resume]
+ *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--resume]
  *       [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest.
  * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot forfeits. --hang-ms is the
@@ -15,6 +15,8 @@
  *   index.json   the same tournament index tournament.js writes (viewer and dashboard read it as is)
  *   ladder.json  the full report (schema "swu-ladder/1", see ladder-report.js): ratings, CIs, pair matrix, Elo history
  *   games/       per-game recordings (<id>.jsonl, same format as tournament.js), only with --record
+ * --vs a,b,c makes it a gauntlet: each --bots entry plays each --vs entry (and --bots entries do not play each
+ * other). Every challenger gets the same seeds, so a parameter sweep compares variants on the same decks.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
  */
 const fs = require('fs');
@@ -22,7 +24,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { describeBot } = require('./players');
-const { roundRobin } = require('./ratings');
+const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 const { runPool, killChildren } = require('./game-pool');
 
@@ -59,8 +61,9 @@ function readPrevious(file, config) {
     }
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const c = doc?.config ?? {};
-    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || (c.capMs ?? null) !== (config.capMs ?? null)) {
-        console.log('resume: the earlier run used other bots, seeds or time cap, starting over');
+    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || (c.capMs ?? null) !== (config.capMs ?? null)
+        || !same(c.vs ?? null, config.vs ?? null)) {
+        console.log('resume: the earlier run used other bots, seeds, format or time cap, starting over');
         return null;
     }
     return { games: Array.isArray(doc.games) ? doc.games : [] };
@@ -71,7 +74,9 @@ function defaultOut() {
 }
 
 async function main() {
-    const names = arg('bots', 'rush,aggro,tempo,control,heuristic,random').split(',');
+    const challengers = arg('bots', 'rush,aggro,tempo,control,heuristic,random').split(',');
+    const vs = arg('vs', null)?.split(',') ?? null;
+    const names = vs ? [...challengers, ...vs] : challengers;
     if (new Set(names).size !== names.length) {
         throw new Error('bot names must be unique (use name#2 to enter the same bot twice)');
     }
@@ -99,9 +104,10 @@ async function main() {
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
-    const schedule = roundRobin(names, perPair, firstSeed);
+    const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     // capMs null = no cap (JSON has no Infinity)
-    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs };
+    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
+                     ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config) : null;

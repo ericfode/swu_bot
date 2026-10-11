@@ -1,5 +1,4 @@
 'use strict';
-const { spawnSync } = require('child_process');
 /**
  * Runs game jobs ({id, seed, p1, p2, replayFile?}) on ladder-worker.js threads, with a watchdog. Shared by ladder.js
  * and arena/pool.js.
@@ -20,12 +19,14 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { Worker } = require('worker_threads');
+const { spawnSync } = require('child_process');
 
 const WORKER = path.join(__dirname, 'ladder-worker.js');
 const SLOT = { phase: 0, seat: 1, since: 2, steps: 3, round: 4, think1: 5, think2: 6 };
 const SLOTS = 7;
 const PHASE = { idle: 0, engine: 1, load: 2, choose: 3 };
 const CHECK_MS = 2000;
+const KILL_AFTER_MS = 5000;
 
 /** The worker's side of the control array (`since` is ms after `base`, a Date.now() the parent picked). */
 function workerControl(sab, base = Date.now()) {
@@ -81,9 +82,9 @@ function stoppedResult(job, st, { seat, kind, error, ms }) {
 }
 
 /**
- * Kills every child process of this process. Bots run in worker threads, so a child process can only come from a bot
- * (in-process bots may not start any; stdio bots are not supported by this runner yet). A bot stuck in execSync blocks
- * its worker thread until the child ends, so the watchdog and the final exit kill those children.
+ * Kills every child process of this process, with their children. Bots run in worker threads, so a child process can
+ * only come from a bot (stdio bots own one each; in-process bots may not start any). A bot stuck in execSync blocks its
+ * worker thread until the child ends, so the watchdog (when terminate() did not help) and the final exit kill them.
  */
 function killChildren() {
     try {
@@ -150,7 +151,6 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart
             // child process), the run still finishes, and unref() lets the process exit without waiting for it
             slots.delete(s);
             s.w.unref();
-            killChildren();
             onResult({ job, result });
             if (queue.length && !ended) {
                 spawn();
@@ -179,6 +179,7 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart
                 s.error = e;
             });
             s.w.on('exit', (code) => {
+                s.exited = true;
                 slots.delete(s);
                 if (!s.retired) {
                     if (s.job) {
@@ -226,6 +227,14 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart
                 }
                 stop(s, result);
                 s.w.terminate();
+                // terminate() interrupts JS and Atomics.wait, but not a thread blocked in execSync: only then kill the
+                // child processes (all of them, as they cannot be told apart per worker; stdio bots in other games
+                // lose theirs too, but in-process bots may not start any)
+                setTimeout(() => {
+                    if (!s.exited) {
+                        killChildren();
+                    }
+                }, KILL_AFTER_MS).unref();
             }
         }, CHECK_MS);
         const n = Math.max(0, Math.min(workers, queue.length));

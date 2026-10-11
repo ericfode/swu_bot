@@ -3,7 +3,7 @@
  * Time cap and fault tracking around a bot's choose(), the same for every bot (baselines included).
  *
  *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, onEnter, onExit }) -> a new object for the game runner:
- *       { name, needsUndo, stats, choose, thinkMs, wallMs, fault }   (getters; the bot cannot reach or change them)
+ *       { name, needsUndo, stats, choose, close, thinkMs, wallMs, fault }   (getters; the bot cannot reach or change them)
  *
  * The game runner hands the engine this object, never the bot, so a bot cannot unwrap its own guard or reset its
  * counters. Thinking time is this thread's CPU time (process.threadCpuUsage, user + system) for in-process bots, so a
@@ -93,7 +93,9 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnt
         get fault() {
             return fault;
         },
-        choose
+        choose,
+        // match.js closes bots after every game (stdio bots end their process and thread)
+        close: () => bot.close?.()
     };
 }
 
