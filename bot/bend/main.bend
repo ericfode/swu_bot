@@ -18,26 +18,31 @@ import ./txt.bend as T
 import ./policy.bend as P
 import ./jev.bend as V
 
+# jev: ask Jev at all; ties: only among moves within 15 (1.5 base damage) of the best
 type Cfg is Data:
-  Cfg{cs: C.Cards, jev: Bool, name: String}
+  Cfg{cs: C.Cards, jev: Bool, ties: Bool, name: String}
 
 def Cfg.cs(x: Cfg) -> C.Cards:
-  Cfg{cs, jev, name} = x
+  Cfg{cs, jev, ties, name} = x
   cs
 
 def Cfg.jev(x: Cfg) -> Bool:
-  Cfg{cs, jev, name} = x
+  Cfg{cs, jev, ties, name} = x
   jev
 
+def Cfg.ties(x: Cfg) -> Bool:
+  Cfg{cs, jev, ties, name} = x
+  ties
+
 def Cfg.name(x: Cfg) -> String:
-  Cfg{cs, jev, name} = x
+  Cfg{cs, jev, ties, name} = x
   name
 
 # Command line
 # ------------
 
 type Opts is Data:
-  Opts{jev: Bool, name: String, dir: String}
+  Opts{jev: Bool, ties: Bool, name: String, dir: String}
 
 # the folder part of a path, with its '/', or "./"
 def dir_go(s: String, +cur: String, +last: String) -> String:
@@ -56,19 +61,20 @@ def opts_go?(xs: List<String>, +o: Opts) -> Opts:
     case Nil{}:
       o
     case Con{+x, +rest}:
-      Opts{+jev, +name, +dir} = o
+      Opts{+jev, +ties, +name, +dir} = o
       +next = Maybe.default(&1, String, List.head(&1, String, rest), "")
-      Bool.pick(Opts, String.eq(x, "--jev"), opts_go(rest, Opts{True{}, Bool.pick(String, String.eq(name, "swu-bend"), "swu-bend-jev", name), dir}),
-        Bool.pick(Opts, String.eq(x, "--name"), opts_go(List.drop(&1, String, rest, 1n), Opts{jev, next, dir}),
-          Bool.pick(Opts, String.eq(x, "--cards"), opts_go(List.drop(&1, String, rest, 1n), Opts{jev, name, next}),
-            opts_go(rest, o))))
+      Bool.pick(Opts, String.eq(x, "--jev"), opts_go(rest, Opts{True{}, ties, Bool.pick(String, String.eq(name, "swu-bend"), "swu-bend-jev", name), dir}),
+        Bool.pick(Opts, String.eq(x, "--jev-ties"), opts_go(rest, Opts{True{}, True{}, Bool.pick(String, String.eq(name, "swu-bend"), "swu-bend-jev-ties", name), dir}),
+          Bool.pick(Opts, String.eq(x, "--name"), opts_go(List.drop(&1, String, rest, 1n), Opts{jev, ties, next, dir}),
+            Bool.pick(Opts, String.eq(x, "--cards"), opts_go(List.drop(&1, String, rest, 1n), Opts{jev, ties, name, next}),
+              opts_go(rest, o)))))
 
 def opts(xs: List<String>) -> Opts:
   match xs:
     case Nil{}:
-      Opts{False{}, "swu-bend", "./"}
+      Opts{False{}, False{}, "swu-bend", "./"}
     case Con{prog, rest}:
-      opts_go(rest, Opts{False{}, "swu-bend", dir_of(prog)})
+      opts_go(rest, Opts{False{}, False{}, "swu-bend", dir_of(prog)})
 
 # Replies
 # -------
@@ -91,7 +97,7 @@ def thought(+m: M.Msg, +out: P.Out, +c: P.Cand, +note: String) -> String:
 # ---
 
 def jev_note(+o: V.Opinion, +n: U32) -> String:
-  " | jev " ++ Bool.pick(String, V.Opinion.ok(o), "m" ++ U32.show(V.Opinion.pick(o)) ++ "/" ++ U32.show(n), "failed") ++
+  " | jev " ++ Bool.pick(String, V.Opinion.ok(o), "m" ++ U32.show(V.Opinion.pick(o)) ++ "/" ++ U32.show(n), "failed: " ++ V.Opinion.err(o)) ++
     Bool.pick(String, U32.is_le(V.Opinion.win(o), 100), " win " ++ U32.show(V.Opinion.win(o)) ++ "%", "")
 
 def with_jev(+tops: List<&2, P.Cand>, +best: P.Cand, +o: V.Opinion) -> P.Cand:
@@ -121,7 +127,7 @@ def on_decide(+cfg: Cfg, mem: P.Mem, +m: M.Msg) -> IO(P.Mem):
   +out = P.decide(Cfg.cs(cfg), mem, m)
   +ranked = P.rank(P.Out.cands(out), Nil{})
   +best = P.nth_cand(ranked, 0, P.Cand{0, 0, "none", "", "", ""})
-  +tops = P.contenders(ranked, 4)
+  +tops = Bool.pick(List<&2, P.Cand>, Cfg.ties(cfg), P.close(ranked, E.sub0(P.Cand.score(best), 15), 4), P.contenders(ranked, 4))
   +go = Bool.and(Bool.and(Cfg.jev(cfg), U32.is_gt(P.Out.ask(out), 0)), U32.is_ge(U32.from_nat(List.length(&2, P.Cand, tops)), 2))
   do IO<P.Mem>:
     pick : P.Cand & String <- ask_jev(go, cfg, m, out, tops, best)
@@ -181,12 +187,12 @@ def read?(f: File, acc: List<&2, U32>, +cfg: Cfg, mem: P.Mem) -> IO(Unit):
     on_chunk(got, acc, cfg, mem)
 
 def start(o: Opts) -> IO(Unit):
-  Opts{+jev, name, +dir} = o
+  Opts{+jev, ties, name, +dir} = o
   do IO<Unit>:
     +cs : C.Cards <- C.load(dir)
     IO.print_err("[bend] " ++ Nat.show(C.size(cs)) ++ " cards from " ++ dir ++ Bool.pick(String, jev, ", Jev on", ""))
     f : File <- IO.try(File, File.open("/dev/stdin", "r"))
-    read(f, Nil{}, Cfg{cs, jev, name}, P.Mem.fresh())
+    read(f, Nil{}, Cfg{cs, jev, ties, name}, P.Mem.fresh())
 
 def main() -> IO(Unit):
   do IO<Unit>:

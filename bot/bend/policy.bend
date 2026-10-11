@@ -161,7 +161,7 @@ def best(cs: List<&2, Cand>) -> Cand:
 # ------------------
 
 def exits() -> List<&2, String>:
-  ["cancel", "pass", "skip", "take nothing", "choose nothing", "done", "no", "decline"]
+  ["cancel", "pass", "skip", "take nothing", "choose nothing", "done", "confirm", "no", "decline"]
 
 # a button's general appeal, from its label
 def button_score(+l: String) -> U32:
@@ -340,15 +340,18 @@ def window_card(+cs: C.Cards, +st: M.State, +mem: Mem, +pk: Pick, +lethal: Bool,
   +ref = M.Act.card(a)
   +id = M.CRef.id(ref)
   +z = M.CRef.zone(ref)
+  # a leader keeps its id when it deploys: the deployed unit is a new card for the guard
+  +key = Bool.pick(String, U32.is_eq(z, 4), id ++ "@base", id)
   +me = M.State.me(st)
   +v = Bd.card_value(C.info_of(cs, M.CRef.code(ref)), st)
   +in_pick = Bd.contains(pick_ids(pk), id)
   +play : Cand = Cand{M.Act.i(a), Bool.pick(U32, in_pick, up((100 + v : U32)), down(10)), "play " ++ id, "", id, ""}
   +unit : Cand = unit_click(Bd.find(Bd.mine(st), id), st, lethal, a)
-  +lead : Cand = Cand{M.Act.i(a), up(150), "leader", "", id, ""}
-  +base : Cand = Cand{M.Act.i(a), up(15), "base ability", "", id, ""}
-  +other : Cand = Cand{M.Act.i(a), Bool.pick(U32, M.CRef.mine(ref), up(5), down(5)), "use " ++ id, "", id, ""}
-  Bool.pick(Cand, tried(mem, id), Cand{M.Act.i(a), down(1000), "tried", "", "", ""},
+  +deploy = Bool.and(Bool.not(M.Side.leader_dep(me)), U32.is_ge(M.Side.res_total(me), C.Info.cost(C.info_of(cs, M.Side.leader_code(me)))))
+  +lead : Cand = Cand{M.Act.i(a), Bool.pick(U32, deploy, up(250), up(40)), Bool.pick(String, deploy, "deploy leader", "leader ability"), "", key, ""}
+  +base : Cand = Cand{M.Act.i(a), up(15), "base ability", "", key, ""}
+  +other : Cand = Cand{M.Act.i(a), Bool.pick(U32, M.CRef.mine(ref), up(5), down(5)), "use " ++ id, "", key, ""}
+  Bool.pick(Cand, tried(mem, key), Cand{M.Act.i(a), down(1000), "tried", "", "", ""},
     Bool.pick(Cand, is_play(a), play,
       Bool.pick(Cand, Bool.and(M.CRef.mine(ref), U32.is_eq(z, 2) || U32.is_eq(z, 3)), unit,
         Bool.pick(Cand, String.eq(id, M.Side.leader_id(me)), lead,
@@ -395,10 +398,10 @@ def piece_or(m: Maybe<&2, M.Piece>, d: M.Piece) -> M.Piece:
 def attacker(+st: M.State, +mem: Mem) -> M.Piece:
   piece_or(Bd.find(Bd.mine(st), Mem.attacker(mem)), strongest(Bd.mine(st), no_piece()))
 
-def hit_or(m: Maybe<&2, M.Piece>, +a: M.Piece, +r: U32) -> U32:
+def hit_or(m: Maybe<&2, M.Piece>, +a: M.Piece, +r: U32, +mode: U32) -> U32:
   match m:
     case Some{t}:
-      E.hit_unit(a, t, r)
+      E.hit_unit(a, t, r, mode)
     case None{}:
       down(50)
 
@@ -410,8 +413,9 @@ def attack_cands(+st: M.State, +a: M.Piece, acts: List<&2, M.Act>) -> List<&2, C
       +r = attack_cands(st, a, rest)
       +id = id_of(x)
       +opp = M.State.opp(st)
-      +s = Bool.pick(U32, String.eq(id, M.Side.base_id(opp)), E.hit_base(a, E.base_left(opp), M.Side.base_d(M.State.me(st))),
-        hit_or(Bd.find(Bd.theirs(st), id), a, E.base_left(opp)))
+      +mode = Bd.race(st)
+      +s = Bool.pick(U32, String.eq(id, M.Side.base_id(opp)), E.hit_base(a, E.base_left(opp), M.Side.base_d(M.State.me(st)), mode),
+        hit_or(Bd.find(Bd.theirs(st), id), a, E.base_left(opp), mode))
       Bool.pick(List<&2, Cand>, is_card(x), Cand{M.Act.i(x), s, "hit " ++ id, "", "", ""} <> r,
         Bool.pick(List<&2, Cand>, is_button(x), Cand{M.Act.i(x), down(300), M.Act.label(x), "", "", ""} <> r, r))
 
@@ -423,7 +427,7 @@ def is_exit(+a: M.Act) -> Bool:
 
 # the exits, best first: Done, then the ways to take nothing, then Cancel
 def exit_score(+l: String) -> U32:
-  Bool.pick(U32, T.starts_ci("done", l), up(3),
+  Bool.pick(U32, T.starts_ci("done", l) || T.starts_ci("confirm", l), up(3),
     Bool.pick(U32, T.has_any(l, ["choose nothing", "take nothing", "skip", "pass", "no"]), up(2), up(1)))
 
 def exit_cands(acts: List<&2, M.Act>) -> List<&2, Cand>:
@@ -482,7 +486,7 @@ def resource(+cs: C.Cards, +st: M.State, +p: M.Prompt, +acts: List<&2, M.Act>) -
   +me = M.State.me(st)
   +enough = Bool.and(U32.is_ge(M.Side.res_total(me), 8), U32.is_le(M.Side.hand_n(me), 3))
   +done = Bool.or(U32.is_ge(len_strs(sel), want), Bool.and(enough, T.has(M.Prompt.title(p), "between 0")))
-  +exits = button_cand(acts, ["done"], up(1), "done")
+  +exits = button_cand(acts, ["done", "confirm", "skip"], up(1), "done")
   Bool.pick(List<&2, Cand>, Bool.and(done, Bool.not(List.is_empty(&2, Cand, exits))), exits,
     [best(resource_cards(cs, st, sel, acts))])
 
@@ -847,6 +851,15 @@ def contenders(cs: List<&2, Cand>, +k: U32) -> List<&2, Cand>:
     case Con{+c, rest}:
       Bool.pick(List<&2, Cand>, Bool.and(U32.is_gt(k, 0), U32.is_ge(Cand.score(c), (E.Z() - 20 : U32))),
         c <> contenders(rest, (k - 1 : U32)), Nil{})
+
+# the top k candidates within margin of the best (Jev as a tie-breaker)
+def close(cs: List<&2, Cand>, +floor: U32, +k: U32) -> List<&2, Cand>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{+c, rest}:
+      Bool.pick(List<&2, Cand>, Bool.and(U32.is_gt(k, 0), U32.is_ge(Cand.score(c), floor)),
+        c <> close(rest, floor, (k - 1 : U32)), Nil{})
 
 def nth_cand(cs: List<&2, Cand>, +n: U32, +d: Cand) -> Cand:
   match cs:

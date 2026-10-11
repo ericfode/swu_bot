@@ -89,13 +89,25 @@ def best_hit(ps: List<&2, M.Piece>, +d: U32) -> U32:
 # Attacks
 # -------
 
+# rounds a board of this power needs for a base with this much hp left
+def clock(+left: U32, +power: U32) -> U32:
+  Bool.pick(U32, U32.is_eq(power, 0), 99, ((left + power - 1) / power : U32))
+
+# 1: I win the race on board power now, 2: I lose it, 0: even (see E.hit_base)
+def race(+st: M.State) -> U32:
+  +me = M.State.me(st)
+  +opp = M.State.opp(st)
+  +mine = clock(E.base_left(opp), total_power(M.Side.units(me)))
+  +theirs = clock(E.base_left(me), total_power(M.Side.units(opp)))
+  Bool.pick(U32, U32.is_lt(mine, theirs), 1, Bool.pick(U32, U32.is_gt(mine, theirs), 2, 0))
+
 # the best value (around Z) of a attacking one of these targets, or the base when it can
-def best_target(+a: M.Piece, ts: List<&2, M.Piece>, +base_ok: Bool, +r: U32, +my_d: U32) -> U32:
+def best_target(+a: M.Piece, ts: List<&2, M.Piece>, +base_ok: Bool, +r: U32, +my_d: U32, +mode: U32) -> U32:
   match ts:
     case Nil{}:
-      Bool.pick(U32, base_ok, E.hit_base(a, r, my_d), E.minus(E.Z(), 100))
+      Bool.pick(U32, base_ok, E.hit_base(a, r, my_d, mode), E.minus(E.Z(), 100))
     case Con{+t, rest}:
-      U32.max(E.hit_unit(a, t, r), best_target(a, rest, base_ok, r, my_d))
+      U32.max(E.hit_unit(a, t, r, mode), best_target(a, rest, base_ok, r, my_d, mode))
 
 # what attacking with my unit a is worth now (around Z), against the enemy board
 def attack_value(+a: M.Piece, +st: M.State) -> U32:
@@ -103,7 +115,7 @@ def attack_value(+a: M.Piece, +st: M.State) -> U32:
   +foes = in_arena(M.Side.units(opp), M.Piece.arena(a))
   +sents = sentinels(foes)
   +blocked = Bool.and(Bool.not(List.is_empty(&2, M.Piece, sents)), Bool.not(E.kw(a, C.kw_saboteur())))
-  best_target(a, Bool.pick(List<&2, M.Piece>, blocked, sents, foes), Bool.not(blocked), E.base_left(opp), M.Side.base_d(M.State.me(st)))
+  best_target(a, Bool.pick(List<&2, M.Piece>, blocked, sents, foes), Bool.not(blocked), E.base_left(opp), M.Side.base_d(M.State.me(st)), race(st))
 
 # damage my ready units can put on the enemy base this round
 def reach(ps: List<&2, M.Piece>, +st: M.State) -> U32:

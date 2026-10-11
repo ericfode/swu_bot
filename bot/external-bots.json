@@ -1,5 +1,6 @@
 {
     "py-random": {"cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore"},
     "bend": {"cmd": "bot/bend/run.sh", "args": [], "lang": "bend"},
-    "bend-jev": {"cmd": "bot/bend/run.sh", "args": ["--jev"], "lang": "bend", "timeoutMs": 20000}
+    "bend-jev": {"cmd": "bot/bend/run.sh", "args": ["--jev"], "lang": "bend", "timeoutMs": 20000},
+    "bend-jev-ties": {"cmd": "bot/bend/run.sh", "args": ["--jev-ties"], "lang": "bend", "timeoutMs": 20000}
 }

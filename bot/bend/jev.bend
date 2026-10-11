@@ -3,8 +3,8 @@
 # The policy proposes the best few candidates; Jev gets the board (as short
 # text lines) and picks one of them, and says how likely I am to win. One
 # HTTPS call per decision through curl. The API key stays in the environment:
-# curl reads TYPESAFE_API_KEY itself (--variable), so it never appears in this
-# process, its arguments or its logs. Any failure means "no opinion".
+# the shell that starts curl expands TYPESAFE_API_KEY, so it never enters this
+# program or its logs. Any failure means "no opinion".
 import Base
 import ./cards.bend as C
 import ./model.bend as M
@@ -223,37 +223,40 @@ def percent(+out: String) -> U32:
 # --------
 
 type Opinion is Data:
-  Opinion{pick: U32, win: U32, ok: Bool, ms: U32}
-
-def failed(code: U32, msg: String) -> Opinion:
-  Opinion{99, 999, False{}, 0}
+  Opinion{pick: U32, win: U32, ok: Bool, err: String}
 
 def parse(r: Result<&1, &1, U32 & String, U32 & (String & String)>) -> Opinion:
   match r:
-    case Fail{e}:
-      Opinion{99, 999, False{}, 0}
+    case Fail{(c, msg)}:
+      Opinion{99, 999, False{}, msg}
     case Done{res}:
-      (code, outs) = res
+      (+code, outs) = res
       (+out, err) = outs
-      Opinion{choice(out), percent(out), U32.is_eq(code, 0), 0}
+      +pick = choice(out)
+      +ok = Bool.and(U32.is_eq(code, 0), U32.is_lt(pick, 99))
+      Opinion{pick, percent(out), ok, Bool.pick(String, ok, "", take(err ++ out, 160))}
 
+# sh, not this process, reads the key from the environment
 def curl_args() -> List<String>:
-  ["-sS", "-m", "6", "--variable", "%TYPESAFE_API_KEY", "--expand-header", "Authorization: Bearer {{TYPESAFE_API_KEY}}",
-    "-H", "Content-Type: application/json", "--data-binary", "@-", "https://api.typesafe.ai/v1/systemone"]
+  ["-c", "exec curl -sS -m 6 -H \"Authorization: Bearer $TYPESAFE_API_KEY\" -H 'Content-Type: application/json' --data-binary @- https://api.typesafe.ai/v1/systemone"]
 
 def ask(body: String) -> IO(Opinion):
   do IO<Opinion>:
-    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run("curl", curl_args(), body, 65536, 8000)
+    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run("sh", curl_args(), body, 65536, 8000)
     return parse(r)
 
 def Opinion.pick(x: Opinion) -> U32:
-  Opinion{pick, win, ok, ms} = x
+  Opinion{pick, win, ok, err} = x
   pick
 
 def Opinion.win(x: Opinion) -> U32:
-  Opinion{pick, win, ok, ms} = x
+  Opinion{pick, win, ok, err} = x
   win
 
 def Opinion.ok(x: Opinion) -> Bool:
-  Opinion{pick, win, ok, ms} = x
+  Opinion{pick, win, ok, err} = x
   ok
+
+def Opinion.err(x: Opinion) -> String:
+  Opinion{pick, win, ok, err} = x
+  err

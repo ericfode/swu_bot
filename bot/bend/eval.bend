@@ -57,13 +57,17 @@ def base_left(+s: M.Side) -> U32:
 def atk(+a: M.Piece) -> U32:
   (M.Piece.p(a) + bonus(kw(a, C.kw_raid()), C.Info.raid(M.Piece.info(a))) : U32)
 
+# The race: mode 1 when my board kills their base in fewer rounds than theirs
+# kills mine (go face: base damage counts double), 2 when I am behind (kills
+# count more, by the power they take off the enemy's clock), else 0.
+
 # value of a attacking the enemy base (r hp left), healing mine (mine_d damage) with Restore
-def hit_base(+a: M.Piece, +r: U32, +mine_d: U32) -> U32:
-  plus(plus(Z(), base_hit(atk(a), r)),
+def hit_base(+a: M.Piece, +r: U32, +mine_d: U32, +mode: U32) -> U32:
+  plus(plus(Z(), (base_hit(atk(a), r) * Bool.pick(U32, U32.is_eq(mode, 1), 2, 1) : U32)),
     (U32.min(mine_d, bonus(kw(a, C.kw_restore()), C.Info.restore(M.Piece.info(a)))) * 8 : U32))
 
 # value of a attacking unit t, with r hp left on the enemy base
-def hit_unit(+a: M.Piece, +t: M.Piece, +r: U32) -> U32:
+def hit_unit(+a: M.Piece, +t: M.Piece, +r: U32, +mode: U32) -> U32:
   +sab = kw(a, C.kw_saboteur())
   +t_shield = Bool.and(U32.is_gt(M.Piece.shields(t), 0), Bool.not(sab))
   +dmg = Bool.pick(U32, t_shield, 0, atk(a))
@@ -71,7 +75,9 @@ def hit_unit(+a: M.Piece, +t: M.Piece, +r: U32) -> U32:
   +a_shield = U32.is_gt(M.Piece.shields(a), 0)
   +back = Bool.pick(U32, a_shield, 0, M.Piece.p(t))
   +dies = Bool.and(U32.is_ge(back, rem(a)), U32.is_gt(back, 0))
-  +gain = (Bool.pick(U32, kill, worth(t), (dmg * 4 : U32)) + bonus(t_shield, 15) +
+  +kill_v = Bool.pick(U32, U32.is_eq(mode, 2), (worth(t) + M.Piece.p(t) * 15 : U32),
+    Bool.pick(U32, U32.is_eq(mode, 1), (worth(t) * 2 / 3 : U32), worth(t)))
+  +gain = (Bool.pick(U32, kill, kill_v, (dmg * 4 : U32)) + bonus(t_shield, 15) +
     bonus(Bool.and(kill, kw(a, C.kw_overwhelm())), base_hit(sub0(dmg, rem(t)), r)) : U32)
   +loss = (Bool.pick(U32, dies, worth(a), (back * 4 : U32)) + bonus(a_shield, 15) : U32)
   minus(plus(Z(), gain), loss)
