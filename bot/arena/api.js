@@ -197,10 +197,9 @@ const api = {
         }
         fs.writeFileSync(path.join(dir, 'bot.js'), botSource(start));
         fs.writeFileSync(path.join(dir, 'NOTES.md'), `# ${name} notes\n\nWhat you tried, what you measured, what you plan next. Read this first when you come back.\n`);
-        const r = home.roster();
         const token = crypto.randomBytes(18).toString('base64url');
-        r.agents = [...r.agents, { name, title: title ?? name, start, philosophy: philosophy ?? '', harness, owner, tokenHash: hash(token), registeredAt: new Date().toISOString() }];
-        home.writeJson(home.ROSTER, r);
+        const entry = { name, title: title ?? name, start, philosophy: philosophy ?? '', harness, owner, tokenHash: hash(token), registeredAt: new Date().toISOString() };
+        home.updateRoster((r) => ({ ...r, agents: [...r.agents.filter((a) => a.name !== name), entry] }));
         const v = api.submit({ name, note: `starting strategy: ${start}`, token });
         dash.updatePanel(name, { now: 'Registered', status: 'running' });
         return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, say, eval and inbox on a hosted arena.' };
@@ -220,7 +219,10 @@ const api = {
             // and it runs in the version's folder, so editing the live folder later cannot change a submitted version
             need(typeof bot.cmd === 'string' && bot.cmd && !path.isAbsolute(bot.cmd) && !bot.cmd.split(/[\\/]/).includes('..'), 'bad_request',
                 'bot.cmd: the program to run (spec/stdio-protocol.md), a path inside your folder (./my-bot) or a program on PATH (python3); it runs in your submitted folder');
-            need(bot.args === undefined || (Array.isArray(bot.args) && bot.args.every((a) => typeof a === 'string')), 'bad_request', 'bot.args: a list of strings (paths relative to your folder)');
+            // an argument may not name a file outside the folder either (/abs/live/bot.py would read the live copy)
+            const inside = (a) => a.split('=').every((p) => !path.isAbsolute(p) && !p.split(/[\\/]/).includes('..'));
+            need(bot.args === undefined || (Array.isArray(bot.args) && bot.args.every((a) => typeof a === 'string' && inside(a))), 'bad_request',
+                'bot.args: a list of strings; file arguments are paths inside your folder (no absolute paths, no ..)');
             need(bot.cwd === undefined, 'bad_request', 'bot.cwd: not allowed; the program runs in your submitted folder');
         }
         if (bot.files !== undefined) {

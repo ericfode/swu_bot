@@ -27,6 +27,8 @@ const SLOTS = 7;
 const PHASE = { idle: 0, engine: 1, load: 2, choose: 3 };
 const CHECK_MS = 2000;
 const KILL_AFTER_MS = 5000;
+const POOL_WORKER = 'SWU_POOL_WORKER';
+let workerIds = 0;
 
 /** The worker's side of the control array (`since` is ms after `base`, a Date.now() the parent picked). */
 function workerControl(sab, base = Date.now()) {
@@ -82,11 +84,14 @@ function stoppedResult(job, st, { seat, kind, error, ms }) {
 }
 
 /**
- * Kills every child process of this process, with their children. Bots run in worker threads, so a child process can
- * only come from a bot (stdio bots own one each; in-process bots may not start any). A bot stuck in execSync blocks its
- * worker thread until the child ends, so the watchdog (when terminate() did not help) and the final exit kill them.
+ * Kills the child processes of this process, with their children: all of them, or with `worker` only those started by
+ * that worker thread. Bots run in worker threads, so a child process can only come from a bot (stdio bots own one
+ * each; in-process bots may not start any). A bot stuck in execSync blocks its worker thread until the child ends, so
+ * the watchdog (when terminate() did not help) kills that worker's children and the final exit kills the rest.
+ * A worker's children are told apart by POOL_WORKER in their environment: each worker gets its own process.env, and
+ * child processes inherit it, so stdio bots playing on other workers are left alone.
  */
-function killChildren() {
+function killChildren(worker = null) {
     try {
         // the whole tree: execSync('cmd') runs /bin/sh -c cmd, and the grandchild keeps the call's pipes open
         const ps = spawnSync('ps', ['-e', '-o', 'pid=,ppid='], { encoding: 'utf8', timeout: 5000 }).stdout ?? '';
@@ -95,8 +100,16 @@ function killChildren() {
             const [pid, ppid] = line.trim().split(/\s+/).map(Number);
             kids.set(ppid, [...(kids.get(ppid) ?? []), pid]);
         }
+        const tag = worker === null ? null : `${POOL_WORKER}=${worker}`;
+        const ours = (pid) => {
+            try {
+                return fs.readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').includes(tag);
+            } catch {
+                return false; // gone, or no /proc: leave it to the final exit
+            }
+        };
         const tree = [];
-        for (let todo = [...(kids.get(process.pid) ?? [])]; todo.length;) {
+        for (let todo = (kids.get(process.pid) ?? []).filter((pid) => tag === null || ours(pid)); todo.length;) {
             const pid = todo.pop();
             tree.push(pid);
             todo.push(...(kids.get(pid) ?? []));
@@ -160,8 +173,9 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart
         };
         const spawn = () => {
             const sab = new SharedArrayBuffer(SLOTS * 4);
-            const s = { ctl: new Int32Array(sab), job: null, ready: false, retired: false, error: null };
-            s.w = new Worker(WORKER, { workerData: { ...workerData, control: sab, base } });
+            const s = { id: `${process.pid}.${++workerIds}`, ctl: new Int32Array(sab), job: null, ready: false, retired: false, error: null };
+            // its own process.env with its id, inherited by every process a bot on it starts (killChildren(worker))
+            s.w = new Worker(WORKER, { workerData: { ...workerData, control: sab, base }, env: { ...process.env, [POOL_WORKER]: s.id } });
             slots.add(s);
             s.w.on('message', (msg) => {
                 if (s.retired) {
@@ -227,12 +241,11 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, onStart
                 }
                 stop(s, result);
                 s.w.terminate();
-                // terminate() interrupts JS and Atomics.wait, but not a thread blocked in execSync: only then kill the
-                // child processes (all of them, as they cannot be told apart per worker; stdio bots in other games
-                // lose theirs too, but in-process bots may not start any)
+                // terminate() interrupts JS and Atomics.wait, but not a thread blocked in execSync: then kill the child
+                // processes this worker started (games on other workers keep their stdio bots)
                 setTimeout(() => {
                     if (!s.exited) {
-                        killChildren();
+                        killChildren(s.id);
                     }
                 }, KILL_AFTER_MS).unref();
             }

@@ -181,7 +181,18 @@ test('a stdio submission freezes its folder: cmd is a file in it or a program on
     assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', v, 'bot.py'), 'utf8'), 'print("v1")\n');
     const { resolveArena } = require('../arena/registry');
     assert.strictEqual(resolveArena(v).dir, path.join(HOME, 'versions', v));
-    for (const bot of [{ kind: 'stdio', cmd: '/usr/bin/python3' }, { kind: 'stdio', cmd: '../x' }, { kind: 'stdio', cmd: './missing' }, { kind: 'stdio', cmd: 'python3', cwd: '/tmp' }]) {
+    for (const bot of [{ kind: 'stdio', cmd: '/usr/bin/python3' }, { kind: 'stdio', cmd: '../x' }, { kind: 'stdio', cmd: './missing' }, { kind: 'stdio', cmd: 'python3', cwd: '/tmp' },
+        { kind: 'stdio', cmd: 'python3', args: [path.join(live, 'bot.py')] }, { kind: 'stdio', cmd: 'python3', args: ['--model=../x'] }]) {
         assert.throws(() => api.submit({ name: 'pyb', note: 'bad', bot }), (e) => e.code === 'bad_request', JSON.stringify(bot));
     }
+});
+
+test('registrations in a row all stay in the roster (roster updates are serialized)', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    for (const n of ['ra', 'rb', 'rc']) {
+        api.register({ name: n, start: 'rush' });
+    }
+    assert.deepStrictEqual(readJson(path.join(HOME, 'roster.json'), null).agents.map((a) => a.name), ['ra', 'rb', 'rc']);
+    assert.ok(!fs.existsSync(path.join(HOME, 'roster.json.lock')), 'the lock is released');
 });

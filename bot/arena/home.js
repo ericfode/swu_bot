@@ -55,6 +55,49 @@ function roster() {
     }
 }
 
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const LOCK_STALE_MS = 30000;
+
+/**
+ * Read-modify-write of roster.json under roster.json.lock: fn(roster) returns the new roster. Clients in different
+ * processes (MCP, CLI, HTTP) register at the same time, and without the lock the last writer would drop the others.
+ * A lock older than 30 s is taken as abandoned.
+ */
+function updateRoster(fn) {
+    const lock = `${ROSTER}.lock`;
+    fs.mkdirSync(HOME, { recursive: true });
+    for (const t0 = Date.now(); ;) {
+        try {
+            fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });
+            break;
+        } catch (e) {
+            if (e.code !== 'EEXIST') {
+                throw e;
+            }
+        }
+        let age = 0;
+        try {
+            age = Date.now() - fs.statSync(lock).mtimeMs;
+        } catch {
+            continue; // released meanwhile
+        }
+        if (age > LOCK_STALE_MS) {
+            fs.rmSync(lock, { force: true });
+        } else if (Date.now() - t0 > 10000) {
+            throw new Error(`${lock} is held by another process; try again`);
+        } else {
+            sleepSync(50);
+        }
+    }
+    try {
+        const r = fn(roster());
+        writeJson(ROSTER, r);
+        return r;
+    } finally {
+        fs.rmSync(lock, { force: true });
+    }
+}
+
 /** Submitted version numbers of an agent, ascending (staging folders and other dot-folders are ignored). */
 function versionsOf(agent) {
     if (!fs.existsSync(VERSIONS)) {
@@ -155,6 +198,6 @@ function readJsonl(file) {
 }
 
 module.exports = {
-    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, versionsOf,
+    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, updateRoster, versionsOf,
     exists, claimDir, writeFiles, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl
 };

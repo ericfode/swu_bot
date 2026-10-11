@@ -54,11 +54,12 @@ function makeArenaBot(name) {
         } catch {
             throw new Error(`${name} is a stdio bot, but bot/players/external.js (the spec's adapter) is not in this checkout`);
         }
-        // it runs in its frozen version folder (cmd ./x is a file there); one decision may take as long as the watchdog
-        // allows (the cap + 30 s), so the per-game cap, not the adapter's own 10 s default, decides a slow answer
+        // it runs in its frozen version folder (cmd ./x is a file there); the hello and each decision may take as long as
+        // the watchdog allows (the cap + 30 s), so the per-game cap, not the adapter's own defaults, decides a slow answer
         const cap = Number(roster().thinkCapMs);
         const cmd = /[\\/]/.test(r.stdio.cmd) ? path.join(r.dir, r.stdio.cmd) : r.stdio.cmd;
-        bot = new ExternalBot(name, { cmd, args: r.stdio.args ?? [], cwd: r.dir, ...(cap > 0 ? { timeoutMs: cap + 30000 } : {}) });
+        const limit = cap > 0 ? { timeoutMs: cap + 30000, startTimeoutMs: cap + 30000 } : {};
+        bot = new ExternalBot(name, { cmd, args: r.stdio.args ?? [], cwd: r.dir, ...limit });
         bot.external ??= true; // it thinks in another process: the guard times it by wall clock
     } else {
         bot = require(r.file).createBot(name);
