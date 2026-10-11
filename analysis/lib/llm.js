@@ -50,12 +50,18 @@ class DiskCache {
             return null;
         }
         const f = path.join(this.dir, `${key}.json`);
-        return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+        try {
+            return JSON.parse(fs.readFileSync(f, 'utf8'));
+        } catch {
+            return null; // missing, or cut off by an interrupted run: ask again
+        }
     }
 
     set(key, value) {
         if (this.dir) {
-            fs.writeFileSync(path.join(this.dir, `${key}.json`), JSON.stringify(value));
+            const f = path.join(this.dir, `${key}.json`);
+            fs.writeFileSync(`${f}.tmp${process.pid}`, JSON.stringify(value));
+            fs.renameSync(`${f}.tmp${process.pid}`, f);
         }
     }
 }
@@ -152,7 +158,8 @@ class ClaudeEvaluator {
             this.cache.set(cacheKey(this.model, req), value);
             results.set(req.id, value);
         } catch (e) {
-            results.set(req.id, { error: String(e.message ?? e), usage: msg.usage, model: msg.model });
+            // a failed answer is still billed (a max_tokens stop can be the most expensive call of the run)
+            results.set(req.id, { error: String(e.message ?? e), usage: msg.usage, model: msg.model, cost: cost(this.model, msg.usage, batch) });
         }
     }
 
@@ -210,7 +217,8 @@ class ClaudeEvaluator {
 
 /**
  * Answers produced elsewhere (any model, a human, a Claude Code session) for requests written with --dump-prompts.
- * File: one JSON object per line, { "id": "...", "output": { ...schema... } }.
+ * File: one JSON object per line, { "game": "...", "id": "...", "output": { ...schema... } }. Request ids repeat in
+ * every game, so "game" (copied from the dumped request) is needed when one file covers several games.
  */
 class AnswerFileEvaluator {
     constructor(files, label = 'external') {
@@ -220,7 +228,7 @@ class AnswerFileEvaluator {
             for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
                 if (line.trim()) {
                     const a = JSON.parse(line);
-                    this.answers.set(a.id, a);
+                    this.answers.set(`${a.game ?? ''}|${a.id}`, a);
                 }
             }
         }
@@ -231,10 +239,10 @@ class AnswerFileEvaluator {
         return { kind: 'external', model: this.label };
     }
 
-    async run(requests) {
+    async run(requests, gameId = '') {
         const results = new Map();
         for (const req of requests) {
-            const a = this.answers.get(req.id);
+            const a = this.answers.get(`${gameId}|${req.id}`) ?? this.answers.get(`|${req.id}`);
             results.set(req.id, a ? { output: a.output, model: a.model ?? this.label } : { error: 'no answer in file' });
         }
         return results;
