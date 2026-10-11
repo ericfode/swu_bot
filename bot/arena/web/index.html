@@ -105,9 +105,22 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
 <script src="strategy-diagram.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+// An arena behind ARENA_TOKEN (server.js): open the page once as /?token=<token>. The token is kept for this tab only
+// and taken out of the address bar, so it is not shared with a copied link.
+const gateToken = (() => {
+  const q = new URLSearchParams(location.search);
+  if (q.has('token')) {
+    try { sessionStorage.setItem('arenaToken', q.get('token')); } catch {}
+    q.delete('token');
+    history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+  }
+  try { return sessionStorage.getItem('arenaToken'); } catch { return null; }
+})();
 async function api(method, args) {
-  const res = await fetch('api/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args || {}) });
+  const headers = { 'content-type': 'application/json', ...(gateToken ? { authorization: 'Bearer ' + gateToken } : {}) };
+  const res = await fetch('api/' + method, { method: 'POST', headers, body: JSON.stringify(args || {}) });
   const j = await res.json();
+  if (res.status === 401) throw new Error('This arena needs its access token: open the page as ' + location.pathname + '?token=<token>');
   if (j.error) throw new Error(j.error.message);
   return j.result;
 }

@@ -169,3 +169,19 @@ test('eval reads results from fault and winnerSeat', () => {
     assert.strictEqual(resultFor({ outcome: 'won', winner: 'draw', winnerSeat: 'draw' }, 'p1'), 'draw');
     assert.strictEqual(resultFor({ outcome: 'ERROR', fault: null, error: 'TIME_FORFEIT me' }, 'p1'), 'ERROR');
 });
+
+test('a stdio submission freezes its folder: cmd is a file in it or a program on PATH, and later edits do not reach it', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'pyb', start: 'rush' });
+    const live = path.join(HOME, 'agents', 'pyb');
+    fs.writeFileSync(path.join(live, 'bot.py'), 'print("v1")\n');
+    const v = api.submit({ name: 'pyb', note: 'stdio', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }).version;
+    fs.writeFileSync(path.join(live, 'bot.py'), 'print("v2")\n');
+    assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', v, 'bot.py'), 'utf8'), 'print("v1")\n');
+    const { resolveArena } = require('../arena/registry');
+    assert.strictEqual(resolveArena(v).dir, path.join(HOME, 'versions', v));
+    for (const bot of [{ kind: 'stdio', cmd: '/usr/bin/python3' }, { kind: 'stdio', cmd: '../x' }, { kind: 'stdio', cmd: './missing' }, { kind: 'stdio', cmd: 'python3', cwd: '/tmp' }]) {
+        assert.throws(() => api.submit({ name: 'pyb', note: 'bad', bot }), (e) => e.code === 'bad_request', JSON.stringify(bot));
+    }
+});

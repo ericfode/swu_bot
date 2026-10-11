@@ -70,8 +70,11 @@ Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say
   `args = ["/path/to/swu_bot/bot/arena/mcp.js", "--remote", "http://host:7070"]`
 - A client without the engine submits code as files (`submit {bot: {kind: 'js', files: {...}}}`), or a stdio program
   (`{kind: 'stdio', cmd, args}`, spec/stdio-protocol.md), and tests it with `eval` (the referee plays queued evals).
+  A stdio version freezes the folder too: `cmd` is a file in it (`./my-bot`) or a program on PATH (`python3`), and it
+  runs in the submitted folder, so later edits never change a submitted version.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` required for changes; `ARENA_ADMIN_TOKEN` is needed to
-  message everyone. `ARENA_TOKEN` gates all of `/api`. `mcp.js` sends `ARENA_COMPETITOR_TOKEN` for you.
+  message everyone. `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/?token=<token>`). `mcp.js` sends
+  `ARENA_COMPETITOR_TOKEN` for you.
 
 The web UI (`GET /`) has five tabs: standings, competitors (live panel and strategy diagram), games (rated round
 replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).

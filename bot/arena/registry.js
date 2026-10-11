@@ -13,7 +13,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { AGENTS, VERSIONS, readJson } = require('./home');
+const { AGENTS, VERSIONS, readJson, roster } = require('./home');
 
 const NAME = /^[a-z][a-z0-9_]*$/;
 
@@ -23,7 +23,7 @@ function resolveArena(name) {
     if (v && fs.existsSync(path.join(VERSIONS, base))) {
         const sub = readJson(path.join(VERSIONS, base, 'SUBMISSION.json'), {});
         if (sub.bot?.kind === 'stdio') {
-            return { stdio: sub.bot, agent: v[1], version: Number(v[2]) };
+            return { stdio: sub.bot, dir: path.join(VERSIONS, base), agent: v[1], version: Number(v[2]) };
         }
         if (fs.existsSync(path.join(VERSIONS, base, 'bot.js'))) {
             return { file: path.join(VERSIONS, base, 'bot.js'), agent: v[1], version: Number(v[2]) };
@@ -54,7 +54,11 @@ function makeArenaBot(name) {
         } catch {
             throw new Error(`${name} is a stdio bot, but bot/players/external.js (the spec's adapter) is not in this checkout`);
         }
-        bot = new ExternalBot(name, { cmd: r.stdio.cmd, args: r.stdio.args ?? [], cwd: r.stdio.cwd });
+        // it runs in its frozen version folder (cmd ./x is a file there); one decision may take as long as the watchdog
+        // allows (the cap + 30 s), so the per-game cap, not the adapter's own 10 s default, decides a slow answer
+        const cap = Number(roster().thinkCapMs);
+        const cmd = /[\\/]/.test(r.stdio.cmd) ? path.join(r.dir, r.stdio.cmd) : r.stdio.cmd;
+        bot = new ExternalBot(name, { cmd, args: r.stdio.args ?? [], cwd: r.dir, ...(cap > 0 ? { timeoutMs: cap + 30000 } : {}) });
         bot.external ??= true; // it thinks in another process: the guard times it by wall clock
     } else {
         bot = require(r.file).createBot(name);

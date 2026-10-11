@@ -14,7 +14,8 @@
  *                                               deadline, competitors
  *   register {name, title?, philosophy?, start?, harness?, owner?}   create a competitor (starter bot, v0 submitted)
  *   submit {name, note, bot?}                   freeze the live bot as the next version; bot = {kind:'js'} (default:
- *                                               agents/<name>/) or {kind:'stdio', cmd, args?, cwd?}. A JS bot must load
+ *                                               agents/<name>/) or {kind:'stdio', cmd, args?}: the folder is frozen either way and a stdio cmd
+ *                                               runs in it. bot.files (text) is laid over the folder first. A JS bot must load
  *                                               (require bot.js, createBot) or the submit fails with code bad_bot.
  *   versions {name}                             submitted versions with notes
  *   standings {}                                every rated round so far, all-round Elo
@@ -215,11 +216,16 @@ const api = {
         let upload = null;
         if (bot.kind === 'stdio') {
             need(stdioSupported(), 'unsupported', 'this arena cannot run stdio bots (bot/players/external.js, the stdio adapter, is not in its checkout); submit a JS bot');
-            need(typeof bot.cmd === 'string' && bot.cmd, 'bad_request', 'bot.cmd: the program to run (spec/stdio-protocol.md)');
-            need(bot.args === undefined || (Array.isArray(bot.args) && bot.args.every((a) => typeof a === 'string')), 'bad_request', 'bot.args: a list of strings');
-        } else if (bot.files !== undefined) {
-            // remote clients upload their bot: {"bot.js": "...", "lib/x.js": "..."} on top of the live folder's files
-            need(bot.files && typeof bot.files === 'object' && !Array.isArray(bot.files) && typeof bot.files['bot.js'] === 'string', 'bad_request', 'bot.files must include "bot.js"');
+            // the program is frozen with the version: cmd is a file in the folder (./bot) or a program on PATH (python3),
+            // and it runs in the version's folder, so editing the live folder later cannot change a submitted version
+            need(typeof bot.cmd === 'string' && bot.cmd && !path.isAbsolute(bot.cmd) && !bot.cmd.split(/[\\/]/).includes('..'), 'bad_request',
+                'bot.cmd: the program to run (spec/stdio-protocol.md), a path inside your folder (./my-bot) or a program on PATH (python3); it runs in your submitted folder');
+            need(bot.args === undefined || (Array.isArray(bot.args) && bot.args.every((a) => typeof a === 'string')), 'bad_request', 'bot.args: a list of strings (paths relative to your folder)');
+            need(bot.cwd === undefined, 'bad_request', 'bot.cwd: not allowed; the program runs in your submitted folder');
+        }
+        if (bot.files !== undefined) {
+            // remote clients upload their bot as text files: {"bot.js": "...", "lib/x.js": "..."} on top of the live folder's files
+            need(bot.files && typeof bot.files === 'object' && !Array.isArray(bot.files) && (bot.kind === 'stdio' || typeof bot.files['bot.js'] === 'string'), 'bad_request', 'bot.files must include "bot.js"');
             upload = Object.entries(bot.files).map(([rel, text]) => {
                 const f = path.resolve(live, rel);
                 const ok = f.startsWith(live + path.sep) && typeof text === 'string' && !path.relative(live, f).split(path.sep).some((p) => p === '.git' || p === 'node_modules');
@@ -234,18 +240,20 @@ const api = {
                                submittedAt, round, checked: bot.kind === 'js' });
         const staging = home.stagingDir(name);
         try {
+            if (home.exists(live)) {
+                try {
+                    home.copyBot(live, staging);
+                } catch (e) {
+                    throw new ArenaError('bad_bot', `could not copy ${live}: ${e.message}`);
+                }
+            }
+            if (upload) {
+                home.writeFiles(staging, upload);
+            }
             if (bot.kind === 'js') {
-                if (home.exists(live)) {
-                    try {
-                        home.copyBot(live, staging);
-                    } catch (e) {
-                        throw new ArenaError('bad_bot', `could not copy ${live}: ${e.message}`);
-                    }
-                }
-                if (upload) {
-                    home.writeFiles(staging, upload);
-                }
                 need(home.exists(path.join(staging, 'bot.js')), 'bad_request', `no bot.js in ${live}`);
+            } else if (/[\\/]/.test(bot.cmd)) {
+                need(home.exists(path.join(staging, bot.cmd)), 'bad_request', `bot.cmd ${bot.cmd} is not in your folder`);
             }
             let n = (home.versionsOf(name).pop() ?? -1) + 1;
             home.writeJson(path.join(staging, 'SUBMISSION.json'), meta(n));
