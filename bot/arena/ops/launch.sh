@@ -3,7 +3,8 @@
 # the referee (referee.js --tournament) and the runner (runner.js), both detached from this shell.
 #
 #   bot/arena/ops/launch.sh start <commit>     set up and start a new tournament on <commit> (TITLE, TASK, ROUNDS,
-#                                              MINUTES, GAMES, BUDGET_USD from the environment)
+#                                              MINUTES, GAMES, BUDGET_USD, BRAKE_5H (0.8), BRAKE_7D (0.85) from the
+#                                              environment)
 #   bot/arena/ops/launch.sh resume             set up whatever is missing and resume the tournament in tournament.json
 #                                              (the commit comes from <ARENA_HOME>/launch.json)
 #   bot/arena/ops/launch.sh referee|runner     restart only that process, on the existing setup (keeper.sh uses these)
@@ -35,7 +36,8 @@ CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PRO
 [ -n "${ARENA_SECRET_FILE:-}" ] && CLEAN+=("ARENA_SECRET_FILE=$ARENA_SECRET_FILE")
 
 say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
-setting() { node -e "const j=require('$LAUNCH'); process.stdout.write(String(j[process.argv[1]] ?? ''))" "$1"; }
+# a launch setting from launch.json, or $2 when it has none
+setting() { node -e "const j=require('$LAUNCH'); process.stdout.write(String(j[process.argv[1]] ?? process.argv[2] ?? ''))" "$1" "${2:-}"; }
 
 engine() {
     if [ ! -d "$SRC/forceteki/build/server" ] || [ ! -d "$SRC/forceteki/test/json/Card" ]; then
@@ -104,7 +106,7 @@ start_referee() {
 start_runner() {
     cd "$BASE/referee"
     "${CLEAN[@]}" setsid nohup node bot/arena/runner.js --repo "$BASE/repos/{name}" --logs "$BASE/logs" --memo "$BASE/tools/memo" \
-        --budget-usd "$(setting budgetUSD)" --mirror "$BASE/results" "$SHARED_RESULTS" --backup "$BACKUP" >> "$BASE/runner.log" 2>&1 < /dev/null &
+        --budget-usd "$(setting budgetUSD 50)" --brake-5h "$(setting brake5h 0.8)" --brake-7d "$(setting brake7d 0.85)" --mirror "$BASE/results" "$SHARED_RESULTS" --backup "$BACKUP" >> "$BASE/runner.log" 2>&1 < /dev/null &
     say "runner started (pid $!)"
 }
 
@@ -114,7 +116,8 @@ case "$MODE" in
         COMMIT=$(git -C "$SRC" rev-parse "$COMMIT")
         mkdir -p "$ARENA_HOME/tools"
         [ -e "$ARENA_HOME/tools/memo" ] || cp "${MEMO_FROM:?MEMO_FROM: path to OptMem memo}" "$ARENA_HOME/tools/memo"
-        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), startedAt: new Date().toISOString()}, null, 1))" "$COMMIT" "${BUDGET_USD:-50}"
+        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), startedAt: new Date().toISOString()}, null, 1))" \
+            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}"
         setup "$COMMIT"
         (cd "$BASE/referee" && "${CLEAN[@]}" npm run -s gate)
         start_referee 0

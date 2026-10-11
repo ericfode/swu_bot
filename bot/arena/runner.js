@@ -17,7 +17,7 @@
  * Other kinds (a Codex or human competitor registered on the web page) run themselves; the runner skips them.
  *
  * Claude Code: a session that ends while 5 minutes or more are left is resumed with the time left (a fresh session, with
- * the brief, if the resume fails at once), up to 12 sessions a round. --budget-usd caps what one competitor may spend in
+ * the brief, if the resume fails at once), at most every 5 minutes and up to 12 sessions a round. --budget-usd caps what one competitor may spend in
  * one round over all its sessions (each session gets claude --max-budget-usd = what is left; spend is kept in
  * usage.jsonl, so a restarted runner does not hand out a new budget). It gets only the tools in TOOLS plus the arena MCP
  * server (no subagents, web, schedules or messages to other sessions), no auto-memory and no CLAUDE.md files, and a HOME
@@ -56,6 +56,19 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
+/** A usage fraction flag: missing or empty gives the default; anything outside (0, 1] is an error, not a brake at 0. */
+function limitArg(name, dflt) {
+    const v = arg(name, '');
+    if (v === '' || v === undefined) {
+        return dflt;
+    }
+    const x = Number(v);
+    if (!(x > 0 && x <= 1)) {
+        throw new Error(`--${name} must be a fraction in (0, 1], not "${v}"`);
+    }
+    return x;
+}
+
 const REPO = arg('repo', path.join(__dirname, '..', '..'));
 const LOGS = path.resolve(arg('logs', path.join(os.homedir(), 'arena-run', 'logs')));
 const MEMO = path.resolve(arg('memo', path.join(LOGS, '..', 'tools', 'memo')));
@@ -64,10 +77,11 @@ const STOP_EARLY_MS = Number(arg('stop-early-min', '2')) * 60000;
 const RESUME_MIN_MS = 5 * 60000;
 const MAX_SESSIONS = 12;
 const FAST_FAIL_MS = 60000; // a resumed session that ends this fast without a result is retried as a fresh one
+const SESSION_GAP_MS = 5 * 60000; // a session that ends sooner is resumed only this long after it started
 const POLL_MS = 5000;
 const PROBE_MS = 10 * 60000;
 const MIRROR_MS = 60000;
-const BRAKE = { five_hour: Number(arg('brake-5h', '0.8')), seven_day: Number(arg('brake-7d', '0.95')) };
+const BRAKE = { five_hour: limitArg('brake-5h', 0.8), seven_day: limitArg('brake-7d', 0.95) };
 const ONLY = arg('only', null)?.split(',');
 // what a harness may see of the runner's environment: what claude needs to reach the API, nothing else. No proxy
 // settings: in the cloud container the egress proxy adds the account's credentials (GitHub too), while the API is in
@@ -498,6 +512,9 @@ async function work(c, st) {
                 await sleep(30000);
             } else if (!s.sessionId) {
                 await sleep(30000);
+            } else if (Date.now() - t0 < SESSION_GAP_MS) {
+                // it chose to stop: ask again later (its queued evals may be done by then), not every few seconds
+                await sleep(Math.max(0, Math.min(t0 + SESSION_GAP_MS - Date.now(), stopAt - RESUME_MIN_MS - Date.now())));
             }
         }
         say(c, `Round ${st.roundIndex ?? k}: done working, waiting for the ladder`);
