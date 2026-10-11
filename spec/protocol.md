@@ -153,6 +153,11 @@ A legal split names only listed targets, each at most once, with integer amounts
 `maxTargets` non-zero entries, and a total equal to `amount` (at most `amount` with `canDistributeLess`; 0 only with
 `canChooseNoTargets`).
 
+Some legal actions change nothing. Mystic Monastery's action, used while you already have the Force, leaves the board
+as it was, and when the opponent is out for the phase you get the same decision again. A bot that ranks such an action
+above passing repeats it until the step cap (`STEP_CAP`, nobody wins). Guard against it, for example by never making
+the same choice twice for the same `state`, `prompt` and `actions`, as `bot/examples/search-bot.js` does.
+
 ### `sim` → `simulated`
 
 During a decision whose `sim` is `true`, a bot can play ahead on a private copy of the game.
