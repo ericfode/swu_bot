@@ -1,22 +1,36 @@
-// Writes a single-file demo page for the viewer kit: the IIFE bundle, one game and (optionally) its evals and lens inlined.
-//   node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html] [--lens lens.json]
+// Writes a single-file demo page for the viewer kit: the IIFE bundle, one game and (optionally) its evals and lens files inlined.
+//   node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html] [--lens lens.json] [--lens <dir>=other.json ...]
+// Each --lens is one score's file (several make a score picker); the first is the default path unless it names a dir.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
-const li = argv.indexOf('--lens');
-const lensPath = li >= 0 ? argv.splice(li, 2)[1] : null;
+const lensArgs = [];
+for (let li; (li = argv.indexOf('--lens')) >= 0;) {
+    lensArgs.push(...argv.splice(li, 2)[1].split(','));
+}
 const [gamePath, evalsPath, outPath = path.join(here, '..', 'dist-kit', 'demo.html')] = argv;
 if (!gamePath) {
-    console.error('usage: node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html]');
+    console.error('usage: node scripts/kit-demo.mjs <game.jsonl> [evals.json] [out.html] [--lens [<dir>=]lens.json ...]');
     process.exit(1);
 }
 const kit = fs.readFileSync(path.join(here, '..', 'dist-kit', 'swu-viewer-kit.js'), 'utf8');
 const jsonl = fs.readFileSync(gamePath, 'utf8');
 const evals = evalsPath && fs.existsSync(evalsPath) ? fs.readFileSync(evalsPath, 'utf8') : 'null';
-const lens = lensPath && fs.existsSync(lensPath) ? fs.readFileSync(lensPath, 'utf8') : 'null';
+// "<dir>=path" keeps a registry dir ('' = the default path); a bare path is keyed by the viewer
+const lensFiles = lensArgs.flatMap((a) => {
+    const m = a.match(/^([a-z0-9._@-]*)=(.+)$/);
+    const file = m ? m[2] : a;
+    if (!fs.existsSync(file)) {
+        console.warn(`skipped: no lens file ${file}`);
+        return [];
+    }
+    const text = fs.readFileSync(file, 'utf8');
+    return [m ? `{ "dir": ${JSON.stringify(m[1])}, "file": ${text} }` : text];
+});
+const lens = lensFiles.length ? `[${lensFiles.join(',\n')}]` : 'null';
 // </script> inside inlined text would end the script element early
 const safe = (s) => s.replace(/<\/script/gi, '<\\/script');
 
@@ -34,7 +48,7 @@ const html = `<meta charset="utf-8">
   code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #e9e5de; padding: 1px 5px; border-radius: 4px; }
 </style>
 <main>
-  <header><h1>SWU viewer kit</h1><p>The same viewer Holotable uses, embedded in a page with completely different styles. Below: the full viewer with its evaluations and the omni bot's card values (press Lens), the compact layout, and the pivotal plays drawn with <code>mountActionIcon</code> at every size tier.</p></header>
+  <header><h1>SWU viewer kit</h1><p>The same viewer Holotable uses, embedded in a page with completely different styles. Below: the full viewer with its evaluations and each score's card values (Card values button; a picker when there are several scores), the compact layout, and the pivotal plays drawn with <code>mountActionIcon</code> at every size tier.</p></header>
   <section><h2>Full viewer</h2><div id="full"></div></section>
   <section><h2>Compact viewer</h2><div id="compact" style="max-width: 860px"></div></section>
   <section><h2>Pivotal plays</h2><div class="icons" id="pivotal"></div></section>

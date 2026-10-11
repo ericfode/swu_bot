@@ -1,7 +1,8 @@
 // Fills studio/static-replays/, which `npm run build:static` bakes into the single-file build.
 //   STATIC_REPLAYS=dirA:dirB  copy every tournament (a folder with index.json) found in those replays folders
 //   STATIC_EVALS=dir          also bundle position evaluations (<gameId>.json, dashboard evals contract) from dir
-//   STATIC_LENS=dir           also bundle the omni bot's card values (<gameId>.json, swu-lens/1) from dir
+//   STATIC_LENS=dir           also bundle lens files (<gameId>.json, swu-lens/1) from dir: the default path, evaluators.json,
+//                             index.json, and each score's subfolder (<dir>/<gameId>.json and its index.json)
 //   CARD_TEXT=file            printed card data (swu-card-text/1) for cards without art, cut down to the staged games' cards
 //                             and staged as card-text.json; default /mnt/project-files/viewer-kit/card-text.json when it
 //                             exists, CARD_TEXT= (empty) to leave it out
@@ -44,11 +45,15 @@ if (process.env.STATIC_EVALS) {
     console.log(`staged evals from ${process.env.STATIC_EVALS}`);
 }
 if (process.env.STATIC_LENS) {
-    fs.mkdirSync(path.join(out, '_lens'), { recursive: true });
-    for (const f of fs.readdirSync(process.env.STATIC_LENS).filter((f) => f.endsWith('.json'))) {
-        fs.copyFileSync(path.join(process.env.STATIC_LENS, f), path.join(out, '_lens', f));
+    const from = process.env.STATIC_LENS;
+    // the folder's own .json files, then one level of subfolders with names a lens dir may have
+    for (const sub of ['', ...fs.readdirSync(from, { withFileTypes: true }).filter((d) => d.isDirectory() && /^[a-z0-9._@-]+$/.test(d.name) && !/^\.\.?$/.test(d.name)).map((d) => d.name)]) {
+        fs.mkdirSync(path.join(out, '_lens', sub), { recursive: true });
+        for (const f of fs.readdirSync(path.join(from, sub)).filter((f) => f.endsWith('.json'))) {
+            fs.copyFileSync(path.join(from, sub, f), path.join(out, '_lens', sub, f));
+        }
     }
-    console.log(`staged lens files from ${process.env.STATIC_LENS}`);
+    console.log(`staged lens files from ${from}`);
 }
 const cardText = process.env.CARD_TEXT ?? '/mnt/project-files/viewer-kit/card-text.json';
 if (cardText && fs.existsSync(cardText)) {
@@ -75,7 +80,7 @@ if (cardText && fs.existsSync(cardText)) {
     }
 }
 if (asFiles) {
-    const tournaments = fs.readdirSync(out, { withFileTypes: true }).filter((d) => d.isDirectory() && fs.existsSync(path.join(out, d.name, 'index.json'))).map((d) => d.name);
+    const tournaments = fs.readdirSync(out, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('_') && fs.existsSync(path.join(out, d.name, 'index.json'))).map((d) => d.name);
     fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ tournaments }));
     console.log(`staged ${tournaments.length} tournaments as files in ${out}`);
 }

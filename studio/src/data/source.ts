@@ -1,7 +1,8 @@
 import type { EvalFile } from './evals';
-import type { LensFile } from './lens';
+import { readLensIndex, type LensDirIndex, type LensFile, type LensIndex } from './lensFile';
 import type { CardTextFile } from '../lib/cardText';
 import type { End, Game, Header, Step, TournamentIndex, TournamentSummary } from './types';
+import { resultText } from './result';
 
 /** Where replays come from: the replays server (same routes as viewer/server.cjs) or fixtures baked into the build. */
 export interface DataSource {
@@ -12,11 +13,38 @@ export interface DataSource {
     loadGameText(tid: string, gid: string): Promise<string>;
     /** Position evaluations for a game (dashboard evals contract), or null when it has none. */
     loadEvals(tid: string, gid: string): Promise<EvalFile | null>;
-    /** The omni bot's card values for a game (swu-lens/1), or null when it has none. */
-    loadLens(tid: string, gid: string): Promise<LensFile | null>;
+    /** lens/evaluators.json: the dirs that hold scores and the one to open first; null when there is none. */
+    loadLensIndex(): Promise<LensIndex | null>;
+    /** lens/<dir>/index.json ('' = lens/index.json): one score's games; null when there is none. */
+    loadLensDirIndex(dir: string): Promise<LensDirIndex | null>;
+    /** One score's lens file for a game (swu-lens/1) from lens/<dir>/ ('' = the default path); null when it has none. */
+    loadLens(tid: string, gid: string, dir?: string): Promise<LensFile | null>;
     /** Printed card data (swu-card-text/1) for cards without art, or null when the server or preview has none. */
     loadCardText(): Promise<CardTextFile | null>;
 }
+
+/** A lens path: dirs use only [a-z0-9._@-], so '@' stays readable; every other character is encoded. */
+export const lensPath = (dir: string, file: string) => `${dir ? `${encodeURIComponent(dir).replace(/%40/g, '@')}/` : ''}${encodeURIComponent(file)}`;
+
+/** A dir index as read, or null when it isn't one (only its games list is used). */
+export function readDirIndex(raw: unknown): LensDirIndex | null {
+    const r = raw as LensDirIndex | null;
+    return r && typeof r === 'object' && r.schema === 'swu-lens-index/1' ? { ...r, games: Array.isArray(r.games) ? r.games.filter((g) => typeof g === 'string') : undefined } : null;
+}
+
+/** JSON at a URL, or null for a missing file (404), a network error or a body that isn't JSON. */
+async function json(url: string): Promise<unknown> {
+    try {
+        const r = await fetch(url);
+        return r.ok ? await r.json() : null;
+    } catch {
+        return null;
+    }
+}
+
+// the registry and the dir indexes, fetched once per page
+let lensIndex: Promise<LensIndex | null> | null = null;
+const dirIndexes = new Map<string, Promise<LensDirIndex | null>>();
 
 async function get(url: string): Promise<Response> {
     const r = await fetch(url);
@@ -35,8 +63,17 @@ const httpSource: DataSource = {
         const r = await fetch(`/evals/${encodeURIComponent(gid)}.json`);
         return r.ok ? r.json() : null;
     },
-    loadLens: async (_tid, gid) => {
-        const r = await fetch(`/lens/${encodeURIComponent(gid)}.json`);
+    loadLensIndex: () => (lensIndex ??= json('/lens/evaluators.json').then(readLensIndex)),
+    loadLensDirIndex: (dir) => {
+        let p = dirIndexes.get(dir);
+        if (!p) {
+            p = json(`/lens/${lensPath(dir, 'index.json')}`).then(readDirIndex);
+            dirIndexes.set(dir, p);
+        }
+        return p;
+    },
+    loadLens: async (_tid, gid, dir = '') => {
+        const r = await fetch(`/lens/${lensPath(dir, `${gid}.json`)}`);
         return r.ok ? r.json() : null;
     },
     loadCardText: async () => {
@@ -90,4 +127,30 @@ export function parseGame(text: string, allowPartial: boolean): Game | null {
         throw new Error('game file has no header or steps');
     }
     return { header, steps, end };
+}
+
+/**
+ * Why a finished game file has no board to show, or null: v2 writes the header before the bots' hello, so a game whose
+ * bot failed there has a header and an end and no step.
+ */
+export function noBoardReason(text: string): string | null {
+    let header: Header | null = null;
+    let end: End | null = null;
+    for (const line of text.split('\n')) {
+        try {
+            const e = line ? JSON.parse(line) : null;
+            if (e?.t === 'step') {
+                return null;
+            }
+            header = e?.t === 'header' ? e : header;
+            end = e?.t === 'end' ? e : end;
+        } catch {
+            // an unfinished last line
+        }
+    }
+    if (!header || !end) {
+        return null;
+    }
+    const bots = { p1: header.players.find((p) => p.id === 'p1')?.bot ?? 'p1', p2: header.players.find((p) => p.id === 'p2')?.bot ?? 'p2' };
+    return `the game ended before the first board: ${resultText(end, bots)}${end.error ? ` (${end.error})` : ''}`;
 }

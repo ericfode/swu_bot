@@ -25,7 +25,13 @@ export function parseRoute(hash: string): Route {
 
 export const hrefHome = () => '#/';
 export const hrefTournament = (tid: string) => `#/t/${encodeURIComponent(tid)}`;
-export const hrefGame = (tid: string, gid: string, step?: number) => `#/t/${encodeURIComponent(tid)}/g/${encodeURIComponent(gid)}${step ? `?step=${step}` : ''}`;
+export function hrefGame(tid: string, gid: string, step?: number, score?: string | null) {
+    const q = new URLSearchParams({ ...(step ? { step: String(step) } : {}), ...(score != null ? { score } : {}) }).toString();
+    return `#/t/${encodeURIComponent(tid)}/g/${encodeURIComponent(gid)}${q ? `?${q}` : ''}`;
+}
+
+/** A query parameter of the current hash route (?score= on a game page), or null. */
+export const hashParam = (key: string) => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get(key);
 
 export function useRoute(): Route {
     const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -37,9 +43,9 @@ export function useRoute(): Route {
     return route;
 }
 
-/** Updates ?step= without adding a history entry or re-routing. */
-export function replaceStep(tid: string, gid: string, step: number) {
-    const url = hrefGame(tid, gid, step);
+/** Updates ?step= (and ?score=, the score shown) without adding a history entry or re-routing. */
+export function replaceStep(tid: string, gid: string, step: number, score?: string | null) {
+    const url = hrefGame(tid, gid, step, score);
     try {
         if (window.location.hash !== url) {
             history.replaceState(null, '', url);

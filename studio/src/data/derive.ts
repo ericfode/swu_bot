@@ -1,4 +1,4 @@
-import type { Game, PlayerSnap, Seat, Snapshot } from './types';
+import type { CardRef, Game, PlayerSnap, Seat, Snapshot } from './types';
 import type { LensStep } from './lensFile';
 import { rowFacts, rowValue, scoreOfBoard } from './score';
 
@@ -8,8 +8,8 @@ type Arena = 'ground' | 'space';
 const ARENAS: Arena[] = ['ground', 'space'];
 
 /**
- * Snapshots carry no card ids, so units are matched from one step to the next by name (keeping order), which gives
- * each unit on the board a stable key for enter/exit animation and damage pop-ups.
+ * A stable key per unit on the board, for enter/exit animation and damage pop-ups: the card's id when the replay has
+ * one (v2), else units are matched from one step to the next by name (keeping order).
  * ids[step][seat][arena][i] is the id of state.players[seat][arena][i].
  */
 export type UnitIds = Record<Seat, Record<Arena, string[]>>[];
@@ -25,8 +25,8 @@ export function trackUnits(game: Game): UnitIds {
             for (const arena of ARENAS) {
                 const pool = prev ? [...prev[seat][arena]] : [];
                 for (const u of step.state.players[seat][arena]) {
-                    const i = pool.findIndex((p) => p.n === u.n);
-                    const id = i >= 0 ? pool.splice(i, 1)[0].id : `u${next++}`;
+                    const i = u.id ? -1 : pool.findIndex((p) => p.n === u.n);
+                    const id = u.id ? `#${u.id}` : i >= 0 ? pool.splice(i, 1)[0].id : `u${next++}`;
                     cur[seat][arena].push(id);
                     keep[seat][arena].push({ n: u.n, id });
                 }
@@ -36,6 +36,20 @@ export function trackUnits(game: Game): UnitIds {
         prev = keep;
     }
     return out;
+}
+
+/** The card with this id (v2) anywhere on a board: bases, leaders, units, upgrades, captured cards, hands, discards. */
+export function cardById(s: Snapshot, id: string): CardRef | null {
+    for (const seat of SEATS) {
+        const p = s.players[seat];
+        const units = [...p.ground, ...p.space];
+        const all: (CardRef | null)[] = [p.base, p.leader, ...units, ...units.flatMap((u) => [...(u.u ?? []), ...(u.cap ?? [])]), ...p.hand, ...p.discard];
+        const c = all.find((x) => x?.id === id);
+        if (c) {
+            return c;
+        }
+    }
+    return null;
 }
 
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
@@ -160,6 +174,8 @@ export function deltas(a: Snapshot, b: Snapshot): Delta[] {
         });
     }
     const inHands = (s: Snapshot, n: string) => SEATS.reduce((k, seat) => k + s.players[seat].hand.filter((c) => c.n === n).length, 0);
+    // v2: cards held captured under units
+    const captured = (s: Snapshot, n: string) => SEATS.reduce((k, seat) => k + units(s.players[seat]).reduce((j, u) => j + (u.cap ?? []).filter((c) => c.n === n).length, 0), 0);
     for (const seat of SEATS) {
         const pa = a.players[seat];
         const pb = b.players[seat];
@@ -184,7 +200,8 @@ export function deltas(a: Snapshot, b: Snapshot): Delta[] {
         for (const n of gone[seat]) {
             // more copies of it in the hands than before (and than bounces already counted): it went back to a hand
             const back = inHands(b, n) - inHands(a, n) - out.filter((d) => d.kind === 'bounce' && d.text === `${n} returns to hand`).length;
-            out.push(back > 0 ? { seat, kind: 'bounce', text: `${n} returns to hand` } : { seat, kind: 'defeat', text: `${n} defeated` });
+            const taken = captured(b, n) - captured(a, n) - out.filter((d) => d.kind === 'defeat' && d.text === `${n} captured`).length;
+            out.push(back > 0 ? { seat, kind: 'bounce', text: `${n} returns to hand` } : { seat, kind: 'defeat', text: taken > 0 ? `${n} captured` : `${n} defeated` });
         }
         out.push(...stolen.filter((d) => d.seat === seat));
         for (const n of came[seat]) {

@@ -1185,7 +1185,7 @@ function selftest(args: Args): number {
         check('p1Win outside 0..1: left out (the map\'s chance instead), with a warning', sb.steps.find((x) => x.n === bad.steps[5].n)?.p1WinFrom === 'map'
             && sb.source.warnings.some((w) => w.startsWith('p1Win outside')), sb.source.warnings.join('; '));
         const tpl = copy();
-        (tpl.evaluator!.terms!.side![0] as Obj).ruleTpl = 5;
+        (tpl.evaluator!.terms!.side![0] as unknown as Obj).ruleTpl = 5;
         let tplOk = false;
         let tplWarn = '';
         try {
@@ -1198,7 +1198,7 @@ function selftest(args: Args): number {
         check('a term with a ruleTpl that is not a string: dropped with a warning, no throw', tplOk && tplWarn.includes('ruleTpl'), tplWarn);
         const str = copy();
         const k = 60;
-        const p1 = str.steps[k].p1 as Obj;
+        const p1 = str.steps[k].p1 as unknown as Obj;
         const was = p1.base as number;
         p1.base = String(was);
         const ss = seriesOf(str);

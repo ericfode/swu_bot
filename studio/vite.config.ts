@@ -12,7 +12,8 @@ const DEFAULT_CARD_TEXT = '/mnt/project-files/viewer-kit/card-text.json';
 /**
  * Serves the same two routes as viewer/server.cjs (GET /api/tournaments and /replays/*), straight from a replays
  * folder, so `npm run dev` and `npm run preview` need no second server. REPLAYS_DIR overrides <repo>/replays. Also
- * /evals/<gameId>.json, /lens/<gameId>.json and /card-text.json (CARD_TEXT, default DEFAULT_CARD_TEXT when it exists).
+ * /evals/<gameId>.json, /lens/<gameId>.json, /lens/<dir>/<gameId>.json (one subfolder per score, plus evaluators.json
+ * and each folder's index.json) and /card-text.json (CARD_TEXT, default DEFAULT_CARD_TEXT when it exists).
  */
 function replays(): Plugin {
     const root = path.resolve(process.env.REPLAYS_DIR ?? path.join(__dirname, '..', 'replays'));
@@ -55,11 +56,24 @@ function replays(): Plugin {
         if (p === '/card-text.json') {
             return cardText && fs.existsSync(cardText) ? send(req, res, 200, fs.readFileSync(cardText), 'application/json') : send(req, res, 404, Buffer.from('no card text'), 'text/plain');
         }
-        const ev = p.match(/^\/(evals|lens)\/([^/]+\.json)$/);
-        if (ev) {
-            const dir = ev[1] === 'lens' ? lensDir : evalsDir;
-            const f = path.join(dir, decodeURIComponent(ev[2]));
-            return f.startsWith(dir + path.sep) && fs.existsSync(f) ? send(req, res, 200, fs.readFileSync(f), 'application/json') : send(req, res, 404, Buffer.from(`no ${ev[1]}`), 'text/plain');
+        // lens files may sit in one subfolder (another score's dir: [a-z0-9._@-], never '.' or '..'); evals may not.
+        // Matched on the path as sent, before URL() resolves '..' (/lens/../x.json is refused, not served as /x.json)
+        const sent = (req.url ?? '/').split('?')[0];
+        const ev = sent.match(/^\/(evals|lens)\/(?:([^/]+)\/)?([^/]+\.json)$/);
+        const route = [sent, p].map((x) => x.match(/^\/(evals|lens)\//)?.[1]).find(Boolean);
+        if (route) {
+            const what = ev?.[1] ?? route;
+            const dir = what === 'lens' ? lensDir : evalsDir;
+            let f: string | null = null;
+            try {
+                const sub = ev?.[2] == null ? '' : decodeURIComponent(ev[2]);
+                if (ev && (!sub || (what === 'lens' && /^[a-z0-9._@-]+$/.test(sub) && sub !== '.' && sub !== '..'))) {
+                    f = path.join(dir, sub, decodeURIComponent(ev[3]));
+                }
+            } catch {
+                // a bad %-escape
+            }
+            return f && f.startsWith(dir + path.sep) && fs.existsSync(f) && fs.statSync(f).isFile() ? send(req, res, 200, fs.readFileSync(f), 'application/json') : send(req, res, 404, Buffer.from(`no ${what}`), 'text/plain');
         }
         if (!p.startsWith('/replays/')) {
             return next();

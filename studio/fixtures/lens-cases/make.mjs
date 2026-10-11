@@ -191,6 +191,7 @@ function omniFitted(g) {
     f.evaluator.label = 'Omni v1';
     f.evaluator.scale = { ...f.evaluator.scale, unit: 'points', typical: 25, toWinProb: FITTED_MAP };
     f.evaluator.quality = FITTED_QUALITY;
+    f.evaluator.description = 'Hand-set linear score from the original heuristic bot, with the low-base-HP penalty subtracted. Test fixture: its win chance comes from a logistic map fitted per round bucket.';
     return f;
 }
 
@@ -199,7 +200,7 @@ function omniFitted(g) {
 // and resources keep omni's weights, so each weight set gives its steps' values (up to rounding).
 
 const PHASES = [
-    { key: 'R1-3', label: 'Rounds 1-3', to: 3, unit: 1.15, hand: 2.2, initiative: 1.5 },
+    { key: 'R0-3', label: 'Rounds 0-3', to: 3, unit: 1.15, hand: 2.2, initiative: 1.5 },
     { key: 'R4-6', label: 'Rounds 4-6', to: 6, unit: 1, hand: 1.6, initiative: 3 },
     { key: 'R7+', label: 'Rounds 7 on', to: Infinity, unit: 0.9, hand: 1.2, initiative: 3.5 }
 ];
@@ -241,14 +242,15 @@ function phaseWeights(g) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Case 5: inline-weights. The hand weight drifts from omni's 1.8 to 2.4 over the game's rounds; full weights on every step.
+// Case 5: inline-weights. The hand weight drifts from omni's 1.8 to 2.4 over the game's steps; full weights on every step.
+// It moves every few steps, so some changes fall inside attacks and plays, not only at the start of a round.
 
 function inlineWeights(g) {
     const w0 = g.file.weights;
-    const last = Math.max(...g.round.values());
-    const steps = g.file.steps.map((st) => {
+    const last = g.file.steps.length - 1;
+    const steps = g.file.steps.map((st, i) => {
         // rounded like a points value, so each hand card's value is the weight itself
-        const hand = r2(w0.hand + 0.6 * Math.min(g.round.get(st.n), last) / last);
+        const hand = r2(w0.hand + 0.6 * i / last);
         const [p1, p2] = SEATS.map((s) => {
             const v = st[s];
             return seat({ base: v.base, ground: v.ground, space: v.space, hand: v.hand.map(() => hand), resources: v.resources, initiative: v.initiative, parts: v.parts });
@@ -257,7 +259,7 @@ function inlineWeights(g) {
     });
     return lensFile(g, SOURCE(`${g.gameId}'s Omni v1 values with a hand weight that drifts by round`), evaluator({
         id: 'omni-drift', label: 'Omni drift', source: 'bot/omni/evaluate.js with a drifting hand weight (test fixture)',
-        description: 'Test fixture: Omni v1 with a hand weight that grows from 1.8 in round 0 to 2.4 in the last round. The weights are written on every step.',
+        description: 'Test fixture: Omni v1 with a hand weight that grows from 1.8 at the first step to 2.4 at the last. The weights are written on every step.',
         constantWeights: false, scale: structuredClone(g.file.evaluator.scale), terms: termsFor(g.file.evaluator.terms, steps[0].weights)
     }), steps[0].weights, steps);
 }
@@ -599,7 +601,7 @@ const CASES = [
         name: 'phase-weights', games: [B], entries: [at('omni-linear-v2-phase', phase)], registry: 'omni-linear-v2-phase',
         what: [
             'omni-linear-v2-phase/: unit values x1.15 in rounds 0-3, x1.0 in rounds 4-6, x0.9 from round 7; hand weight 2.2 / 1.6 / 1.2; initiative 1.5 / 3.0 / 3.5; base and resources as Omni v1.',
-            `weightSets R1-3, R4-6 and R7+, weightSet on every step, edgePrevWeights at the 2 switches (n ${switches.map((st) => `${st.n}: edge ${st.edge}, with the previous weights ${st.edgePrevWeights}`).join('; n ')}).`,
+            `weightSets R0-3, R4-6 and R7+, weightSet on every step, edgePrevWeights at the 2 switches (n ${switches.map((st) => `${st.n}: edge ${st.edge}, with the previous weights ${st.edgePrevWeights}`).join('; n ')}).`,
             'toWinProb fitted with byRound (rounds 0-3, 4-6, 7-99).'
         ],
         expect: [
@@ -612,13 +614,13 @@ const CASES = [
     },
     {
         name: 'inline-weights', games: [B], entries: [at('omni-drift', inlineWeights(base))], registry: 'omni-drift',
-        what: ['omni-drift/: constantWeights false; full weights on every step, the hand weight going from 1.8 in round 0 to 2.4 in the last round (no edgePrevWeights); Omni v1\'s rough map.'],
+        what: ['omni-drift/: constantWeights false; full weights on every step, the hand weight going from 1.8 at the first step to 2.4 at the last, in steps of 0.01 (no edgePrevWeights); Omni v1\'s rough map.'],
         expect: [
             'the chip "weights change every step";',
             'a hand rule showing the weight at that step;',
             'a sparkline for hand in the strip;',
             'a "this step" column in the Weights tab;',
-            'swing tooltips that say "includes a weight switch" where the hand weight changed during an action.'
+            'pivotal-marker tooltips that say "includes a weight switch" where the hand weight changed during that action.'
         ]
     },
     {
@@ -701,7 +703,7 @@ const CASES = [
         what: [`${B}.json: omni-today with p1's ground array one unit short at n ${mis.notes.shortened} (its total and the edge follow, so only I4 breaks there) and step n ${mis.notes.dropped} left out (I5).`],
         expect: [
             'at those steps: no chips, "file doesn\'t match this board here" / "no value at this step", and a gap in the timeline;',
-            'swing 0 for actions touching them;',
+            'swing 0 for actions that start or end on them (viewer-plan 10: only the ends are checked);',
             'no estimate mixed in.'
         ]
     },

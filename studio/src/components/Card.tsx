@@ -4,6 +4,7 @@ import { isToken } from '../lib/cardText';
 import { useSettings } from '../lib/settings';
 import type { CardRef, Seat, UnitRef, UpgradeRef } from '../data/types';
 import { rowColor } from '../data/terms';
+import { digitsOf, unitText } from '../data/format';
 
 /** Leader fronts and bases are printed landscape ('wide'); everything else, a deployed leader included, is portrait ('tall'). */
 export type CardShape = 'tall' | 'wide';
@@ -13,16 +14,38 @@ export interface CardValue {
     /** the score's value for the card's owner; null for cards the score doesn't count on their own (an undeployed leader) */
     v: number | null;
     seat: Seat;
+    /** the owner's bot name */
+    owner?: string;
     /** the row of the score the card counts in (row id, terms.ts): sets the chip's colour, the same as that row's total and breakdown row */
     row?: string;
+    /** that row's label ("Ground units") */
+    rowLabel?: string;
     /** what the value is made of, labelled from the score's terms (the inspector lists them) */
     parts?: { key: string; label: string; points: number }[];
     /** computed here, not read from a lens file (dashed chip) */
     estimated?: boolean;
+    /** what the score loses without the card (cardValues "ablation"): values don't add up (dashed chip with ⊖) */
+    ablation?: boolean;
     /** 0..1: how this card compares with the most valuable unit on the table (drives the glow) */
     heat?: number;
-    /** the omni bot's search on this board: 0 = the card it picked, negative = how much worse its best move with this card was */
+    /** the value's unit ('points', 'logit', ...) and its decimals */
+    unit?: string;
+    digits?: number;
+    /** the score's label and its badge text (ScoreBadge), for the titles */
+    label?: string;
+    badge?: string;
+    /** a search on this board, for the deciding seat: 0 = the card it picked, negative = how much worse its best move with this card was */
     regret?: number | null;
+    /** the search's unit ('prob': regrets in pp) and pick tolerance */
+    regretUnit?: string;
+    tolerance?: number;
+    /** the card's best line ended the game on every line the search tried (score.cardSees; not a proof) */
+    sees?: 'win' | 'loss' | null;
+    /** the same for the search as a whole: a card under a search that saw a win, whose own line didn't, "misses" it */
+    searchSees?: 'win' | 'loss' | null;
+    /** the search's kind ("alpha-beta") and the deciding bot */
+    searchKind?: string | null;
+    searchBot?: string;
 }
 
 export interface Focus {
@@ -61,33 +84,77 @@ interface Props {
     onLeave?: () => void;
 }
 
-const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+/** a card value with its unit's decimals (at most 0 from 100 on) */
+export function fmtCardValue(v: number, digits = 1): string {
+    const s = Math.abs(v).toFixed(Math.abs(v) >= 100 ? 0 : digits);
+    return v < 0 && Number(s) !== 0 ? `−${s}` : s;
+}
 
-/** The value chip and the search tag the lens draws on a card. */
+/** a regret as a tag: "−4.1", "−0.12", or "−4 pp" for a chance */
+const fmtRegret = (r: number, unit = 'points') => (unit === 'prob' ? `−${Math.abs(Math.round(r * 100))} pp` : `−${fmtCardValue(Math.abs(r), digitsOf(unit))}`);
+
+/** The chip's title: what the value means in this score. */
+function valueTitle(value: CardValue): string {
+    const v = value.v ?? 0;
+    const label = value.label ?? 'the score';
+    const unit = unitText(value.unit ?? 'points');
+    const n = fmtCardValue(Math.abs(v), value.digits);
+    // the estimate's label already says so
+    const est = value.estimated && !label.includes('estimated here') ? ' (estimated here)' : '';
+    const text = value.ablation
+        ? `${label} ${v >= 0 ? 'loses' : 'gains'} ${n} ${unit} without this card${est}. These values don't add up.`
+        : `Worth ${fmtCardValue(v, value.digits)} ${unit} to its owner in ${label}${!value.rowLabel ? '' : label.endsWith(')') ? `, ${value.rowLabel} row` : ` (${value.rowLabel})`}${est}.`;
+    return [text, value.badge].filter(Boolean).join('\n');
+}
+
+/** The search tag's text, title and class: the pick, a regret, or a line that saw the game end (never a proof). */
+export function regretTag(value: CardValue, small: boolean): { text: string; title: string; cls: string } {
+    const r = value.regret!;
+    const tol = value.tolerance ?? 0.05;
+    const unit = value.regretUnit ?? 'points';
+    const bot = value.searchBot ?? 'the bot';
+    const who = `${value.label ? `${value.label} search` : 'Search'}${value.searchKind ? ` (${value.searchKind})` : ''}`;
+    const pick = r >= -tol;
+    if (value.sees) {
+        const title = `${who}: the search saw the game end on every line it tried with this card (not a proof), with ${bot} ${value.sees === 'win' ? 'winning' : 'losing'}.`
+            + (pick ? ` The move ${bot} played starts with this card.` : '');
+        // a small card keeps the words and drops the star (the pick class still marks it)
+        return { text: pick && !small ? `★ sees ${value.sees}` : `sees ${value.sees}`, title, cls: `sees${pick ? ' pick' : ''}` };
+    }
+    if (value.searchSees === 'win') {
+        // its regret is measured from a sentinel, so the number means nothing
+        return { text: 'no win', title: `${who}: the search saw a win for ${bot} with another move, but no line it tried with this card ended in a win (not a proof).`, cls: '' };
+    }
+    if (pick) {
+        return { text: small ? '★' : '★ pick', title: `${who}: the move ${bot} played (or one within ${tol} ${unitText(unit)}) starts with this card.`, cls: 'pick' };
+    }
+    const by = unit === 'prob' ? `${Math.abs(Math.round(r * 100))} pp of chance` : `${fmtCardValue(Math.abs(r), digitsOf(unit))} ${unitText(unit)}`;
+    return { text: fmtRegret(r, unit), title: `${who}: the best move with this card scored ${by} below the move ${bot} played.`, cls: '' };
+}
+
+/** The value chip and the search tag the score draws on a card. */
 export function LensMarks({ value, size }: { value: CardValue; size: 'sm' | 'md' | 'lg' | 'xl' }) {
     const small = size === 'sm';
+    const tag = value.regret != null ? regretTag(value, small) : null;
     return (
         <span className="lens">
             {value.v != null && (
-                <span className={`lensv${small ? ' sm' : ''}${value.estimated ? ' est' : ''}`} style={{ '--term': rowColor(value.row ?? 'ground') } as CSSProperties} title="What this card is worth to its owner in the omni bot's board score">
-                    {fmt(value.v)}
+                <span className={`lensv${small ? ' sm' : ''}${value.estimated ? ' est' : ''}${value.ablation ? ' abl' : ''}`} style={{ '--term': rowColor(value.row ?? 'ground') } as CSSProperties} title={valueTitle(value)}>
+                    {value.ablation && <span className="abl-mark" aria-hidden="true">⊖</span>}
+                    {fmtCardValue(value.v, value.digits)}
                 </span>
             )}
-            {value.regret != null && (
-                <span className={`lensr${small ? ' sm' : ''}${value.regret >= -0.05 ? ' pick' : ''}`}
-                    title={value.regret >= -0.05 ? 'The move the omni bot played (or one just as good) starts with this card' : `The omni bot's best move with this card scored ${(-value.regret).toFixed(1)} points below the move it played`}>
-                    {value.regret >= -0.05 ? (small ? '★' : '★ pick') : `−${Math.abs(value.regret).toFixed(1)}`}
-                </span>
-            )}
+            {tag && <span className={`lensr${small ? ' sm' : ''}${tag.cls ? ` ${tag.cls}` : ''}`} title={tag.title}>{tag.text}</span>}
         </span>
     );
 }
 
 /**
  * A unit's upgrade tags: copies of one upgrade (Experience, Advantage tokens…) folded into "Name ×N", and at most three
- * tags, the third becoming "+N" (the inspector lists them all), so the stack never reaches the lens chip.
+ * tags, the third becoming "+N" (the inspector lists them all), so the stack never reaches the lens chip. On a card whose
+ * foot holds a value chip and a search tag, two or more upgrades fold into one "N upgrades" tag.
  */
-function upgradeTags(ups: UpgradeRef[]) {
+function upgradeTags(ups: UpgradeRef[], crowded = false) {
     const groups: { n: string; t: 0 | 1; count: number; title: string; more?: boolean }[] = [];
     for (const u of ups) {
         const g = groups.find((x) => x.n === u.n);
@@ -97,6 +164,9 @@ function upgradeTags(ups: UpgradeRef[]) {
         } else {
             groups.push({ n: u.n, t: u.t, count: 1, title: u.n });
         }
+    }
+    if (crowded && groups.length > 1) {
+        return [{ n: `${ups.length} upgrades`, t: 0 as const, count: 1, title: groups.map((g) => g.title).join(', '), more: true }];
     }
     if (groups.length <= 3) {
         return groups;
@@ -139,6 +209,8 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     const named = size === 'md';
     const stats = !!unit && size !== 'sm';
     const ups = !!unit?.u?.length && size !== 'sm';
+    // captured cards (v2): a mark with their names in the title; the inspector lists them
+    const cap = size !== 'sm' ? unit?.cap ?? [] : [];
     // tokens (Battle Droid, Shield…) have no set number; a text face that says "Token unit" makes the tag redundant
     const token = isToken(card) && (showImg || !face);
     const cls = ['card', size !== 'md' ? size : '', shape === 'wide' ? 'wide' : '', exhausted ? 'exh' : '', lensed ? 'lensed' : '', showImg ? 'art' : '', named ? 'named' : ''].filter(Boolean).join(' ');
@@ -152,7 +224,7 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     } as CSSProperties;
     return (
         <div className={cls} style={style} title={card.n} {...focus}
-            aria-label={(leader ? 'Leader ' : '') + card.n + (unit ? `, ${unit.p} power, ${hp} HP left${unit.d > 0 ? ` (${unit.d} damage)` : ''}` : '') + (unit?.sn ? ', Sentinel' : '') + (exhausted ? ', exhausted' : '') + (value?.v != null ? `, worth ${value.v.toFixed(1)}` : '')}>
+            aria-label={(leader ? 'Leader ' : '') + card.n + (unit ? `, ${unit.p} power, ${hp} HP left${unit.d > 0 ? ` (${unit.d} damage)` : ''}` : '') + (unit?.sn ? ', Sentinel' : '') + (unit?.cap?.length ? `, holds captured ${unit.cap.map((c) => c.n).join(', ')}` : '') + (exhausted ? ', exhausted' : '') + (value?.v != null ? `, worth ${fmtCardValue(value.v, value.digits)}` : '')}>
             {showImg ? (
                 <>
                     {mismatch === url && <img src={url} alt="" draggable={false} className="backdrop" />}
@@ -170,18 +242,19 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
                     <span className="nm">{card.n}</span>
                 </div>
             )}
-            {(leader || unit?.sn || token || ups) && (
+            {(leader || unit?.sn || token || ups || cap.length > 0) && (
                 <div className="top">
-                    {(leader || unit?.sn || token) && (
+                    {(leader || unit?.sn || token || cap.length > 0) && (
                         <span className="marks">
                             {leader && <span className="mark leader" title="This player's leader, deployed">Leader</span>}
                             {token && <span className="mark token" title="Token: created during play, not a card from a deck">TOKEN</span>}
                             {unit?.sn ? <span className="mark sentinel" title="Sentinel">SEN</span> : null}
+                            {cap.length > 0 && <span className="mark cap" title={`Holds ${cap.length} captured card${cap.length > 1 ? 's' : ''}: ${cap.map((c) => c.n).join(', ')}`}>CAP{cap.length > 1 ? ` ${cap.length}` : ''}</span>}
                         </span>
                     )}
                     {ups && (
                         <div className="ups">
-                            {upgradeTags(unit!.u!).map((g) => (
+                            {upgradeTags(unit!.u!, value?.v != null && value.regret != null).map((g) => (
                                 <span key={g.n} className={`up${g.t ? ' token' : ''}${g.t && g.n === 'Shield' ? ' shield' : ''}${g.more ? ' more' : ''}`} title={g.title}>{g.n}{g.count > 1 ? ` ×${g.count}` : ''}</span>
                             ))}
                         </div>

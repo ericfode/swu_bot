@@ -130,6 +130,8 @@ export interface ScoreStep {
     /** an exhaustive solver proved a win for this seat (never set by a capped search's sentinels) */
     proven: { seat: Seat; inWindows?: number; by?: string } | null;
     search: NormSearch | null;
+    /** an estimated step: whether the game's estimate took card cost from card data, decided once for the series */
+    estimateCost?: 'card' | 'none';
 }
 
 export interface ScoreSeries {
@@ -466,6 +468,12 @@ export function resolveScore(game: Game, source: ScoreSource, opts: { cardCost?:
         steps.push(step);
         last = step;
     });
+    if (source.origin === 'estimate') {
+        // once per game, so a step with no units (setup) doesn't say cost was left out while card data is loaded
+        const units = steps.flatMap((st) => SEATS.flatMap((x) => [...st.seats?.[x].unitCostFrom?.ground ?? [], ...st.seats?.[x].unitCostFrom?.space ?? []]));
+        const cost = units.includes('card') || (opts.cardCost != null && !units.length) ? 'card' : 'none';
+        steps.forEach((st) => (st.estimateCost = cost));
+    }
     const coverage = { file: 0, estimate: 0, held: 0, missing: 0, mismatch: 0 };
     for (const s of steps) {
         coverage[s.status]++;
@@ -473,8 +481,11 @@ export function resolveScore(game: Game, source: ScoreSource, opts: { cardCost?:
     return { source, steps, scales: displayScales(source.kEff, source.unit), coverage, unsplit };
 }
 
-/** Whether an estimated step took card cost from card data (any unit on either side) or left it out. */
-export const estimateCostFrom = (step: Pick<ScoreStep, 'seats'>): 'card' | 'none' => (SEATS.some((s) => step.seats?.[s].costFrom === 'card') ? 'card' : 'none');
+/** Whether the game's estimate took card cost from card data or left it out (else, any unit on either side at this step). */
+export const estimateCostFrom = (step: Pick<ScoreStep, 'seats' | 'estimateCost'>): 'card' | 'none' => step.estimateCost ?? (SEATS.some((s) => step.seats?.[s].costFrom === 'card') ? 'card' : 'none');
+
+/** The term keys a step's values leave out, for its rule texts: the cost term of an estimate made without card data. */
+export const leftOutTerms = (step: Pick<ScoreStep, 'seats' | 'status' | 'estimateCost'>): string[] => (step.status === 'estimate' && estimateCostFrom(step) === 'none' ? ['cost'] : []);
 
 /** The rows a step shows, Other (not split) included when the rows don't add up. */
 export const rowsAt = (source: ScoreSource, step: ScoreStep) => (step.other ? [...source.rows, OTHER_ROW] : source.rows);
@@ -603,12 +614,6 @@ export function scoreOfBoard(state: Snapshot, lens: true | LensStep | FileStep, 
         return null;
     }
     return { source, step: resolveScore(game, source, { cardCost: opts.cardCost }).steps[0] };
-}
-
-/** The default series of a game with at most one lens file (the default path), or the estimate when it has none. */
-export function defaultSeries(game: Game, lens: unknown | null | undefined, opts: { estimate?: boolean; cardCost?: (c: CardRef) => number | null | undefined } = {}): ScoreSeries | null {
-    const source = chooseDefault(sourcesFor(game, lens ? [{ dir: '', file: lens }] : [], null, opts));
-    return source ? resolveScore(game, source, opts) : null;
 }
 
 /** what logScoreNotes already printed, per source: its warnings, and the number of steps that don't add up */

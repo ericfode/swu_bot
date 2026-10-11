@@ -409,6 +409,12 @@ h3 {
     color: #dce6fb;
     box-shadow: inset 0 0 0 1px #dce6fb73;
 }
+/* holds captured cards (v2 `cap`); a stack edge under the tag */
+.mark.cap {
+    background: #0b1220d9;
+    color: #dce6fb;
+    box-shadow: inset 0 0 0 1px #dce6fb73, 2px 2px 0 -1px #0b1220, 2px 2px 0 0 #dce6fb73;
+}
 .ups {
     margin-left: auto;
     min-width: 0;
@@ -444,8 +450,9 @@ h3 {
     color: var(--color-fg);
     box-shadow: inset 0 0 0 1px #dce6fb55;
 }
-/* a tile with three upgrade tags and a lens chip: its name keeps one line so the chip clears the tags */
-.card.lensed:not(.art):has(.ups > :nth-child(3)) .nmbar {
+/* a tile with three upgrade tags and a lens chip, or a top tag over a chip and a search tag: its name keeps one line so the chip clears the tags */
+.card.lensed:not(.art):has(.ups > :nth-child(3)) .nmbar,
+.card.lensed:not(.art):has(.top):has(.lensr):has(.lensv) .nmbar {
     -webkit-line-clamp: 1;
 }
 /* ---------- lens: card values from a score's lens file (or the built-in estimate) ---------- */
@@ -500,6 +507,22 @@ h3 {
     outline: 1.5px dashed var(--term);
     outline-offset: -1.5px;
 }
+.lensv.abl {
+    /* what the score loses without the card (ablation): dashed, with a ⊖ mark; these values don't add up */
+    box-shadow: 0 4px 12px -2px #000;
+    outline: 1.5px dashed var(--term);
+    outline-offset: -1.5px;
+}
+.abl-mark {
+    margin-right: 1px;
+    font-family: var(--font-sans);
+    font-size: 0.75em;
+    font-weight: 600;
+    opacity: 0.8;
+}
+.lensv.sm .abl-mark {
+    margin-right: 0;
+}
 .lensv.sm {
     min-width: 0;
     padding: 0 3px;
@@ -528,6 +551,35 @@ h3 {
     color: var(--color-bg);
     background: var(--color-fg);
     box-shadow: 0 0 12px -1px #dce6fbaa;
+}
+/* a line that saw the game end on every line the search tried: plain and dotted, never gold (a capped search is not a proof) */
+.lensr.sees {
+    color: var(--color-fg);
+    background: #0b1220eb;
+    box-shadow: 0 2px 6px #0009;
+    outline: 1px dotted #dce6fb;
+    outline-offset: -1px;
+}
+.lensr.sees.pick {
+    color: var(--color-bg);
+    background: var(--color-fg);
+}
+.sees-note {
+    padding: 0 6px;
+    border-radius: 999px;
+    border: 1px dotted var(--color-dim);
+    color: var(--color-fg);
+    white-space: nowrap;
+}
+/* an exhaustive solver's proof (step.proven): the one gold mark a score can earn */
+.proven-badge {
+    padding: 0 7px;
+    border-radius: 999px;
+    font-weight: 700;
+    color: var(--color-bg);
+    background: var(--color-gold);
+    box-shadow: 0 0 12px -2px var(--color-gold);
+    white-space: nowrap;
 }
 /* parts of a score that sit on no card (joint terms, "Other (not split)"): hatched in the faint colour */
 .hatch {
@@ -668,6 +720,49 @@ h3 {
     background: var(--seat);
     box-shadow: 0 1px 4px #000a;
     pointer-events: none;
+}
+/* v2: the leader deployed with its epic action and was defeated; greyed so it doesn't read as undeployed */
+.leader-slot.gone > .card {
+    filter: grayscale(0.85) brightness(0.62);
+}
+.leader-out.gone {
+    color: var(--color-dim);
+    background: #0b1220;
+    box-shadow: inset 0 0 0 1px var(--color-line), 0 1px 4px #000a;
+}
+/* v2: the base's epic action is used */
+.epic-used {
+    position: absolute;
+    left: 8px;
+    top: -7px;
+    z-index: 4;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.45;
+    white-space: nowrap;
+    color: var(--color-dim);
+    background: #0b1220;
+    box-shadow: inset 0 0 0 1px var(--color-line), 0 1px 4px #000a;
+    pointer-events: none;
+}
+/* v2 seat state next to the bot name: passed its last action, or out for the action phase */
+.seat-tag {
+    flex: none;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.5;
+    color: var(--seat);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--seat) 55%, transparent);
 }
 .lead-hi > .card {
     outline: 2px solid var(--seat);

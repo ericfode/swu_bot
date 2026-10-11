@@ -12,10 +12,10 @@ export interface RowDef {
     group: 'base' | 'unit' | 'side' | 'extra' | 'joint' | 'other';
     key: string;
     label: string;
-    /** the short rule, filled with the weights in force ('' when the file gives none) */
-    rule(w: Weights | null): string;
+    /** the short rule, filled with the weights in force ('' when the file gives none); `skip` leaves out those term keys */
+    rule(w: Weights | null, skip?: string[]): string;
     /** every rule of the row in full (tooltip) */
-    how(w: Weights | null): string;
+    how(w: Weights | null, skip?: string[]): string;
     color: string;
     /** icon key for PartIcon */
     icon: string;
@@ -68,8 +68,17 @@ export function fillRule(tpl: string, w: Weights | null): string {
 /** The weight keys a term reads: its `uses`, else the slots of its template. */
 export const usesOf = (t: TermDef) => t.uses ?? [...(t.ruleTpl ?? '').matchAll(/\{([^{}]+)\}/g)].map((m) => m[1]);
 
-/** A term's rule at these weights: the filled template, else the literal rule (always, when there are no weights). */
+const sameWeight = (a: number | undefined, b: number | undefined) => a != null && b != null && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+
+/**
+ * A term's rule at these weights: the literal rule while the weights it reads are the ones it was written for, else the
+ * filled template, else the literal rule (always, when there are no weights).
+ */
 export function termRule(t: TermDef, w: Weights | null): string {
+    const at = t.literalAt;
+    if (t.rule && w && at && usesOf(t).every((k) => sameWeight(w[k], at[k]))) {
+        return t.rule;
+    }
     if (t.ruleTpl && w) {
         return fillRule(t.ruleTpl, w);
     }
@@ -105,14 +114,21 @@ export function rowsOf(ev: Evaluator): RowDef[] {
     const { unit, base, side, joint, sixRows } = ev.terms;
     const rows: RowDef[] = [];
     const unitNote = unitNoteOf(ev);
-    const mk = (id: string, group: RowDef['group'], key: string, name: string, terms: TermDef[], note?: (w: Weights | null) => string): RowDef => ({
-        id, group, key, label: name,
-        rule: (w) => (terms.length === 1 ? termRule(terms[0], w) : terms.map(label).join(' + ')),
-        how: (w) => [joinRules(terms, w), note?.(w)].filter(Boolean).join('; '),
-        color: rowColor(id), icon: rowIcon(id),
-        transient: terms.length === 1 && (terms[0].transient ?? terms[0].key === 'initiative'),
-        uses: [...new Set(terms.flatMap(usesOf))]
-    });
+    const mk = (id: string, group: RowDef['group'], key: string, name: string, terms: TermDef[], note?: (w: Weights | null) => string): RowDef => {
+        const kept = (skip?: string[]) => (skip?.length ? terms.filter((t) => !skip.includes(t.key)) : terms);
+        return {
+            id, group, key, label: name,
+            // a zone row lists its unit terms by name; any other row prints its rules
+            rule: (w, skip) => {
+                const ts = kept(skip);
+                return ts.length === 1 ? termRule(ts[0], w) : group === 'unit' ? ts.map(label).join(' + ') : ts.map((t) => termRule(t, w)).filter(Boolean).join('; ');
+            },
+            how: (w, skip) => [joinRules(kept(skip), w), note?.(w)].filter(Boolean).join('; '),
+            color: rowColor(id), icon: rowIcon(id),
+            transient: terms.length === 1 && (terms[0].transient ?? terms[0].key === 'initiative'),
+            uses: [...new Set(terms.flatMap(usesOf))]
+        };
+    };
     if (base.length || sixRows) {
         rows.push(mk('base', 'base', 'base', 'Base', base));
     }

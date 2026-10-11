@@ -6,17 +6,26 @@
 /** decimals for a value in this unit: points 1, log-odds 2 */
 export const digitsOf = (unit: string) => (unit === 'logit' ? 2 : unit === 'prob' ? 3 : 1);
 
-/** A value in its unit: points (and other units) with 1 decimal, log-odds with 2, a chance with 3. */
-export const fmtValue = (v: number, unit = 'points'): string => v.toFixed(digitsOf(unit));
+/** A value in its unit: points (and other units) with 1 decimal, log-odds with 2, a chance with 3; "−7.2", never "−0.0". */
+export function fmtValue(v: number, unit = 'points'): string {
+    const s = Math.abs(v).toFixed(digitsOf(unit));
+    return v < 0 && Number(s) !== 0 ? `−${s}` : s;
+}
 
-/** "+12.3" / "−0.42" */
-export const fmtSigned = (v: number, unit = 'points') => `${v >= 0 ? '+' : '−'}${fmtValue(Math.abs(v), unit)}`;
+/** "+12.3" / "−0.42"; a value that rounds to zero prints "+0.0", never "−0.0" */
+export function fmtSigned(v: number, unit = 'points'): string {
+    const s = fmtValue(Math.abs(v), unit);
+    return `${v < 0 && Number(s) !== 0 ? '−' : '+'}${s}`;
+}
 
 /** the unit in words */
 export const unitText = (unit: string) => (unit === 'logit' ? 'log-odds' : unit === 'prob' ? 'chance' : unit);
 
-/** 0.64 → "64%" */
-export const pct = (p: number) => `${Math.round(p * 100)}%`;
+/** 0.64 → "64%"; a chance short of certain never prints as one: 0.998 → ">99%", 0.003 → "<1%" */
+export function pct(p: number): string {
+    const r = Math.round(p * 100);
+    return r >= 100 && p < 1 ? '>99%' : r <= 0 && p > 0 ? '<1%' : `${r}%`;
+}
 
 /** a change in percentage points: "+6 pp" / "−4 pp" */
 export const ppText = (d: number) => `${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d))} pp`;

@@ -20,6 +20,8 @@ export interface TermDef {
     uses?: string[];
     /** flips on quiet moves (pass, claim initiative, resource), so swings leave it out; default true for initiative only */
     transient?: boolean;
+    /** set by readLens, never by a file: the weights `rule` was written for (the file's, or Omni v1's for a built-in rule) */
+    literalAt?: Weights;
 }
 
 export interface LensTerms {
@@ -359,6 +361,7 @@ function readTerms(v: unknown, at: string, warn: (m: string) => void): TermDef[]
     const dropped: string[] = [];
     const terms = v.filter((t): t is Obj => isObj(t) && typeof t.key === 'string' && !!t.key).map((t) => {
         const out: Obj = { ...t };
+        delete out.literalAt;
         for (const [k, ok] of [['label', str], ['rule', str], ['ruleTpl', str]] as const) {
             if (t[k] != null && ok(t[k]) == null) {
                 delete out[k];
@@ -441,7 +444,7 @@ function checkSteps(steps: unknown[], sets: Obj | null, warn: (m: string) => voi
  * Fills an evaluator block. `base` (the built-in Omni v1 descriptor) fills what the file leaves out, term by term;
  * fields the file gives always win. Without a base, missing fields take the plain defaults.
  */
-function fillEvaluator(ev: Obj, base: LensEvaluator | null, warn: (m: string) => void): Evaluator {
+function fillEvaluator(ev: Obj, base: LensEvaluator | null, warn: (m: string) => void, fileWeights: Weights | null = null): Evaluator {
     const scale = isObj(ev.scale) ? ev.scale : {};
     const pick = <T extends string>(v: unknown, allowed: T[], fallback: T, name: string): T => {
         if (v == null) {
@@ -462,8 +465,9 @@ function fillEvaluator(ev: Obj, base: LensEvaluator | null, warn: (m: string) =>
     const group = (g: 'unit' | 'base' | 'side' | 'joint'): TermDef[] => {
         const own = fileTerms ? readTerms(fileTerms[g], g, warn) : null;
         const from = baseTerms?.[g] ?? [];
+        // a built-in rule was written for Omni v1's weights, a file's own rule for the file's weights
         if (!own) {
-            return from.map((t) => ({ ...t }));
+            return from.map((t) => ({ ...t, literalAt: OMNI_V1_WEIGHTS }));
         }
         // a term the base knows gets the base's template, label and flags for whatever the file leaves out; a file term
         // with a rule of its own keeps it (the base's template, and the weights it uses, only go with the base's rule)
@@ -474,7 +478,8 @@ function fillEvaluator(ev: Obj, base: LensEvaluator | null, warn: (m: string) =>
                 delete keep.ruleTpl;
                 delete keep.uses;
             }
-            return { ...keep, ...Object.fromEntries(Object.entries(t).filter(([, x]) => x != null)) } as TermDef;
+            const literalAt = typeof t.rule === 'string' ? fileWeights ?? undefined : b ? OMNI_V1_WEIGHTS : undefined;
+            return { ...keep, ...Object.fromEntries(Object.entries(t).filter(([, x]) => x != null)), literalAt } as TermDef;
         });
     };
     // the same for the unit note: the base's template only while the file gives no other note
@@ -544,9 +549,9 @@ export function readLens(raw: unknown): LensReadResult {
         }
     } else if (raw.evaluator.id === OMNI_V1_ID) {
         builtIn = 'omni-v1';
-        evaluator = fillEvaluator(raw.evaluator, OMNI_V1_EVALUATOR, warn);
+        evaluator = fillEvaluator(raw.evaluator, OMNI_V1_EVALUATOR, warn, fileWeights);
     } else {
-        evaluator = fillEvaluator(raw.evaluator, null, warn);
+        evaluator = fillEvaluator(raw.evaluator, null, warn, fileWeights);
     }
     if (raw.weightSets !== undefined && !isObj(raw.weightSets)) {
         warn('weightSets is not an object: ignored');

@@ -1,4 +1,5 @@
-import type { DataSource } from './source';
+import { readDirIndex, type DataSource } from './source';
+import { readLensIndex } from './lensFile';
 import type { TournamentIndex, TournamentSummary } from './types';
 
 // Tournaments staged by fixtures/stage.mjs (real replays or generated fixtures). Either bundled into the page as raw
@@ -58,8 +59,16 @@ export const staticSource: DataSource = {
         const t = await get(`_evals/${gid}.json`);
         return t ? JSON.parse(t) : null;
     },
-    async loadLens(_tid, gid) {
-        const t = await get(`_lens/${gid}.json`);
+    async loadLensIndex() {
+        const t = await get('_lens/evaluators.json');
+        return t ? readLensIndex(JSON.parse(t)) : null;
+    },
+    async loadLensDirIndex(dir) {
+        const t = await get(`_lens/${dir ? `${dir}/` : ''}index.json`);
+        return t ? readDirIndex(JSON.parse(t)) : null;
+    },
+    async loadLens(_tid, gid, dir = '') {
+        const t = await get(`_lens/${dir ? `${dir}/` : ''}${gid}.json`);
         return t ? JSON.parse(t) : null;
     },
     async loadCardText() {
@@ -72,11 +81,12 @@ export const staticSource: DataSource = {
             ? [...byPath.keys()].map((rel) => rel.match(/^([^/]+)\/index\.json$/)?.[1]).filter((x): x is string => !!x)
             : (JSON.parse(await read('manifest.json')) as { tournaments: string[] }).tournaments;
         const out: TournamentSummary[] = [];
-        for (const id of ids) {
+        // _lens and _evals are data folders, not tournaments
+        for (const id of ids.filter((x) => !x.startsWith('_'))) {
             const idx = JSON.parse(await read(`${id}/index.json`)) as TournamentIndex;
             out.push({ id, createdAt: idx.createdAt, engine: idx.engine, bots: idx.bots, games: idx.games.length });
         }
-        return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        return out.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
     },
     async loadIndex(tid) {
         return JSON.parse(await read(`${tid}/index.json`));

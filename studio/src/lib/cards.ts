@@ -94,7 +94,7 @@ export function monogram(name: string): string {
  * The six aspects in card colours, used only when card data is loaded (src/lib/cardText.ts). `hi`/`lo` are a tile's light
  * and dark ends, kept as dark as the muted tones so white names stay readable; `pip` is the swatch on a dark face.
  * Vigilance is a royal blue and Aggression a brick red, so neither reads as a seat colour (p1 cyan, p2 pink-red), and
- * none is the omni score's violet.
+ * none is the score's violet.
  */
 export const ASPECTS: Record<string, { label: string; hi: string; lo: string; pip: string }> = {
     vigilance: { label: 'Vigilance', hi: '#3a5fa8', lo: '#111f3d', pip: '#4c7bd4' },
@@ -149,6 +149,6 @@ export function tileLook(name: string, setCode: string | null = null) {
     return { ...asp, mono: monogram(name), angle: 120 + (h % 90), grad: text ? aspectGradient(text.as) : null, aspects: text ? aspectsOf(text.as) : null };
 }
 
-// tournament colours per bot: none is a seat colour (p1 blue, p2 red), gold or the omni score's violet, so a bot's colour never reads as a seat
+// tournament colours per bot: none is a seat colour (p1 blue, p2 red), gold or the score's violet, so a bot's colour never reads as a seat
 const BOT_COLORS = ['#4fe0a8', '#ff9d5c', '#e58bd8', '#c9d36a', '#d6b48a', '#9ad0e0'];
 export const botColor = (bots: string[], bot: string) => BOT_COLORS[Math.max(0, bots.indexOf(bot)) % BOT_COLORS.length];
