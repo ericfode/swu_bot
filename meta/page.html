@@ -252,7 +252,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
       <h2>Who to bet on in each spot</h2>
       <p>The bot that wins most often from that spot, compared with an average bot in the same spot against the same opponent.</p>
     </div>
-    <div class="ladder-head"><span class="eyebrow">overall strength (rating), strongest first · <span class="clock">⏱</span> = games lost on the clock</span><span class="legend" id="fam-legend"></span></div>
+    <div class="ladder-head"><span class="eyebrow">overall strength (rating), strongest first · <span class="clock">⏱</span> = games lost by a late or broken reply</span><span class="legend" id="fam-legend"></span></div>
     <div class="ladder" id="ladder"></div>
     <p class="verdict" id="verdict"></p>
     <div class="spots" id="spots"></div>
@@ -537,7 +537,7 @@ function renderLegend() {
     <span class="key">★ best bot in that spot</span>
     <span class="key">▲ ▼ the bot's best and worst spot for its own level</span>
     <span class="key"><span class="sw hatch" style="border:1px solid var(--line-2)"></span> under 5 games</span>
-    <span class="key"><span class="clock">⏱4</span> games lost on the clock</span>`;
+    <span class="key"><span class="clock">⏱4</span> games lost by a late or broken reply</span>`;
 }
 
 function renderGrid(M) {
