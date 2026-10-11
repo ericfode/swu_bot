@@ -8,6 +8,8 @@
     "rust-greedy2": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy2"], "lang": "rust" },
     "rust-search": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["search"], "lang": "rust" },
     "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" },
+    "wasm": { "cmd": "node", "args": ["bot/wasm/host.js"], "lang": "wasm" },
+    "clj-forecast": { "cmd": "bot/clojure/run.sh", "args": [], "lang": "clojure", "startTimeoutMs": 60000 },
     "haskell": { "cmd": "bot/haskell/build/swu-bot-hs", "args": [], "lang": "haskell" },
     "bend": { "cmd": "bot/bend/run.sh", "args": [], "lang": "bend" },
     "bend-jev": { "cmd": "bot/bend/run.sh", "args": ["--jev"], "lang": "bend", "timeoutMs": 20000 },
@@ -16,5 +18,10 @@
     "rust-learned-world": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--world", "1", "--name", "rust-learned-world"], "stderr": "ignore" },
     "rust-learned-heur": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--heur", "1", "--name", "rust-learned-heur"], "stderr": "ignore" },
     "rust-learned-explore": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/learned-v4.safetensors", "--temp", "0.3", "--epsilon", "0.05", "--name", "rust-learned-explore"], "stderr": "ignore" },
-    "rust-learned-bc": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/bc-g2.safetensors", "--prior", "100", "--prior-all", "--name", "rust-learned-bc"], "stderr": "ignore" }
+    "rust-learned-bc": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/bc-g2.safetensors", "--prior", "100", "--prior-all", "--name", "rust-learned-bc"], "stderr": "ignore" },
+    "c-clock": { "cmd": "bot/c/swu-c", "args": [], "lang": "c" },
+    "py-clock": { "cmd": "python3", "args": ["bot/python/swu_clock.py"], "lang": "python" },
+    "jepa": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--name", "jepa"], "stderr": "ignore", "lang": "python" },
+    "jepa-h1": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--name", "jepa-h1"], "stderr": "ignore", "lang": "python" },
+    "jepa-pure": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v2p.safetensors", "--name", "jepa-pure"], "stderr": "ignore", "lang": "python" }
 }

@@ -9,7 +9,7 @@
   --pos-1: #dbe8fb; --pos-2: #a9c8f3; --pos-3: #5f9be8; --pos-4: #2a6fd0; --pos-5: #184f95;
   --neg-1: #fbe0dc; --neg-2: #f4b0a6; --neg-3: #e8735f; --neg-4: #cc4632; --neg-5: #962a1c;
   --mid: #eef0f3; --hatch: rgba(15, 20, 32, .14); --clock: #b4361f;
-  --f-heur: #2a78d6; --f-search: #eb6834; --f-llm: #1baf7a; --f-learned: #c98500; --f-arena: #d55181; --f-random: #8a90a0;
+  --f-heur: #2a78d6; --f-search: #eb6834; --f-llm: #1baf7a; --f-learned: #c98500; --f-arena: #d55181; --f-random: #8a90a0; --f-human: var(--ink);
   --display: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif;
   --body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -20,7 +20,7 @@
   --pos-1: #1d2c45; --pos-2: #23467a; --pos-3: #2f66b3; --pos-4: #4a8ae6; --pos-5: #8db8f5;
   --neg-1: #3a2220; --neg-2: #6a2f27; --neg-3: #a5412f; --neg-4: #d9654f; --neg-5: #f2a092;
   --mid: #1e232e; --hatch: rgba(238, 240, 244, .16); --clock: #f08a72;
-  --f-heur: #3987e5; --f-search: #d95926; --f-llm: #199e70; --f-learned: #c98500; --f-arena: #d55181; --f-random: #7d8494;
+  --f-heur: #3987e5; --f-search: #d95926; --f-llm: #199e70; --f-learned: #c98500; --f-arena: #d55181; --f-random: #7d8494; --f-human: var(--ink);
   color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0e1118; --panel: #161a23; --ink: #eef0f4; --ink-2: #b4bac8; --muted: #7d8494; --line: #262b37; --line-2: #343a48;
@@ -28,7 +28,7 @@
   --pos-1: #1d2c45; --pos-2: #23467a; --pos-3: #2f66b3; --pos-4: #4a8ae6; --pos-5: #8db8f5;
   --neg-1: #3a2220; --neg-2: #6a2f27; --neg-3: #a5412f; --neg-4: #d9654f; --neg-5: #f2a092;
   --mid: #1e232e; --hatch: rgba(238, 240, 244, .16); --clock: #f08a72;
-  --f-heur: #3987e5; --f-search: #d95926; --f-llm: #199e70; --f-learned: #c98500; --f-arena: #d55181; --f-random: #7d8494;
+  --f-heur: #3987e5; --f-search: #d95926; --f-llm: #199e70; --f-learned: #c98500; --f-arena: #d55181; --f-random: #7d8494; --f-human: var(--ink);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -191,6 +191,9 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
 #fo-a { border-color: var(--fa); } #fo-b { border-color: var(--fb); }
 .fo-sum { font-family: var(--display); font-size: 20px; font-weight: 600; }
 .fo-sum .a { color: var(--fa); } .fo-sum .b { color: var(--fb); }
+.hum-row th, .hum-row td { border-bottom: 2px solid var(--line-2); }
+.runner.hum { color: var(--ink); font-weight: 600; }
+.runner.hum .dot { margin-right: 4px; }
 .verdict { margin: 12px 0 0; font-size: 15px; max-width: 80ch; }
 .fo-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
 .fo-key i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid; vertical-align: -2px; margin-right: 5px; box-sizing: border-box; }
@@ -207,6 +210,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
 .fo-track .gap { position: absolute; top: 14px; height: 6px; border-radius: 3px; opacity: .35; }
 .fo-track .dot { position: absolute; top: 8px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; border: 2.5px solid; box-sizing: border-box; }
 .fo-win { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) { .fo-win { white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.15; } }
 .fo-grp { font-family: var(--display); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid var(--line-2); padding: 8px 0 2px; }
 .fo-style { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; margin-top: 14px; }
 .fo-st h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
@@ -315,15 +319,21 @@ const THEORY = /*__THEORY__*/null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const FAM = { heuristic: 'heur', search: 'search', llm: 'llm', learned: 'learned', other: 'arena', random: 'random' };
-const FAMLABEL = { heur: 'Rules', search: 'Search', llm: 'LLM', learned: 'Learned', arena: 'Arena entrant', random: 'Random' };
+const FAM = { heuristic: 'heur', search: 'search', llm: 'llm', learned: 'learned', other: 'arena', random: 'random', human: 'human' };
+const FAMLABEL = { heur: 'Rules', search: 'Search', llm: 'LLM', learned: 'Learned', arena: 'Arena entrant', random: 'Random', human: 'Humans' };
 const famKey = (b) => FAM[b.family] || 'arena';
 const famVar = (b) => `var(--f-${famKey(b)})`;
 const MIN_GAMES = 8;
 const pp = (x) => { const v = Math.round(x * 100); return v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v); };
 const pct = (x) => Math.round(x * 100) + '%';
 const GROUP = { Behind: 'When behind', Even: 'Close or long', Ahead: 'When ahead' };
-let SIT = {}, mapped = [], few = [], sel = null;
+let SIT = {}, mapped = [], few = [], sel = null, HUM = null;
+// Humans (real karabast.net games) are one extra competitor: shown beside the bots, never ranked among them.
+const botById = (id) => (id === 'humans' ? HUM : META.bots.find((x) => x.id === id));
+// Public human games must carry their source's credit wherever their data appears.
+const humCredit = () => (META.humanSources || []).filter((x) => x.credit).map((x) => x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.credit)}</a>` : esc(x.credit)).join(', ');
+const humNote = () => (humCredit() ? ` · games from ${humCredit()}` : '');
+const humCell = (sid) => (HUM && HUM.situations[sid] && HUM.situations[sid].n >= 5 ? HUM.situations[sid] : null);
 
 function edgeColor(e) {
   const a = Math.abs(e);
@@ -471,12 +481,13 @@ function prepare(M) {
   SIT = Object.fromEntries(M.situations.map((s) => [s.id, s]));
   mapped = M.bots.filter((b) => b.games >= MIN_GAMES && b.replayGames >= 5);
   few = M.bots.filter((b) => !mapped.includes(b));
+  HUM = M.humans && M.humans.replayGames >= 5 ? M.humans : null;
 }
 const rankIn = (sid) => mapped.filter((b) => b.situations[sid].n >= MIN_GAMES).sort((a, b) => b.situations[sid].edge - a.situations[sid].edge);
 
 function renderHeader(M) {
   const t = M.totals;
-  $('lede').textContent = `${mapped.length} bots, ${t.games.toLocaleString()} games. For each kind of game spot: which bot wins from there, and how each one plays.`;
+  $('lede').textContent = `${mapped.length} bots, ${t.games.toLocaleString()} games${HUM ? `, plus ${HUM.games} real human games` : ''}. For each kind of game spot: which bot wins from there, and how each one plays.`;
   $('stamp').textContent = `updated ${new Date(M.generatedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${M.sources.length} runs · ${t.replays} replays · ${t.snapshots.toLocaleString()} round starts`;
 }
 
@@ -487,6 +498,7 @@ function renderSpots(M) {
   $('verdict').innerHTML = most && top ? (most[0] === top.id
     ? `<b>${esc(top.id)}</b> is both the top rated bot and the best bot in the most spots (${most[1]} of ${M.situations.length}).`
     : `<b>${esc(top.id)}</b> has the top rating (wins the most games overall), but <b>${esc(most[0])}</b> is the best bot in the most spots (${most[1]} of ${M.situations.length}). Rating counts every game; a spot counts only games that reach it.`) : '';
+  if (HUM) $('verdict').innerHTML += ` The <b>humans</b> line under each spot comes from ${HUM.games} real games${humNote()}.`;
   const groups = {};
   for (const s of M.situations) (groups[s.group] ||= []).push(s);
   $('spots').innerHTML = Object.entries(groups).map(([g, list]) => `
@@ -505,6 +517,7 @@ function renderSpots(M) {
             <div class="champ"><span class="dot" style="background:${famVar(r[0])}"></span><span class="n">${esc(r[0].id)}</span><span class="edge" style="background:${col.bg};color:${col.fg}" title="points of win chance above an average bot">${pp(c.edge)} pts</span></div>
             <div class="runner">then ${next || '–'}</div>
             <div class="runner">worst: ${esc(last.id)} ${pp(last.situations[s.id].edge)}</div>
+            ${humCell(s.id) ? `<div class="runner hum"><span class="dot" style="background:var(--f-human)"></span>humans ${pp(humCell(s.id).edge)}</div>` : ''}
           </div></button>`;
       }).join('')}
     </div>`).join('');
@@ -536,6 +549,16 @@ function renderGrid(M) {
   let h = `<thead><tr><th class="rowh"></th><th></th>${groups.map((g) => `<th class="grp" colspan="${g.n}">${esc(GROUP[g.name] || g.name)}</th>`).join('')}<th></th></tr>`;
   h += `<tr><th class="rowh"><span class="eyebrow">bot</span></th><th class="str"><span class="eyebrow">rating</span></th>${sits.map((s) => `<th class="colh">${pictogram(s)}${esc(s.label)}<small>${esc(s.short)}</small></th>`).join('')}<th><span class="eyebrow">style</span></th></tr></thead><tbody>`;
   const repeat = `<tr><th class="rowh"></th><th></th>${sits.map((s) => `<th class="colh">${pictogram(s)}${esc(s.label)}</th>`).join('')}<th></th></tr>`;
+  if (HUM) {
+    h += `<tr data-bot="humans" class="hum-row"><th class="rowh"><span class="botname"><span class="dot" style="background:var(--f-human)"></span>humans</span></th><td class="str"><span class="small">${HUM.games} real games${humNote()}</span></td>`;
+    for (const s of sits) {
+      const c = HUM.situations[s.id];
+      if (!c.n) { h += `<td><div class="cell none">–</div></td>`; continue; }
+      const col = edgeColor(c.edge), thin = c.n < 5, isSel = sel && sel.b === 'humans' && sel.s === s.id;
+      h += `<td><div class="cell${thin ? ' hatch' : ''}${isSel ? ' sel' : ''}" data-s="${s.id}" style="background-color:${thin ? 'var(--mid)' : col.bg};color:${thin ? 'var(--muted)' : col.fg}">${pp(c.edge)}</div></td>`;
+    }
+    h += `<td><span class="style-tag">${esc(HUM.summary.style || '')}</span></td></tr>`;
+  }
   mapped.forEach((b, i) => {
     if (i && i % 12 === 0) h += repeat;
     const w = 8 + 92 * (b.rating - minR) / Math.max(1, maxR - minR);
@@ -554,7 +577,7 @@ function renderGrid(M) {
   });
   $('grid').innerHTML = h + '</tbody>';
   for (const tr of $('grid').querySelectorAll('tr[data-bot]')) {
-    const b = M.bots.find((x) => x.id === tr.dataset.bot);
+    const b = botById(tr.dataset.bot);
     for (const el of tr.querySelectorAll('.cell[data-s]')) {
       const s = SIT[el.dataset.s], c = b.situations[s.id];
       bindTip(el, `<b>${esc(b.id)}</b> · ${esc(s.label)} (${esc(s.short)})<br>won ${c.wins} of ${c.n} (${pct(c.rate)})<br>an average bot here: ${pct(c.expected)}<br>${pp(c.edge)} points of win chance`);
@@ -679,12 +702,12 @@ function renderCards(M) {
 let FO = { a: null, b: null };
 try { FO = JSON.parse(localStorage.getItem('atlas-faceoff')) || FO; } catch {}
 function renderFaceoff(M) {
-  const ids = mapped.map((b) => b.id);
+  const ids = [...mapped.map((b) => b.id), ...(HUM ? ['humans'] : [])];
   if (!ids.includes(FO.a)) FO.a = ids[0];
   if (!ids.includes(FO.b) || FO.b === FO.a) FO.b = ids.find((x) => x !== FO.a);
   const opts = (sel) => ids.map((id) => `<option value="${esc(id)}"${id === sel ? ' selected' : ''}>${esc(id)}</option>`).join('');
   $('fo-a').innerHTML = opts(FO.a); $('fo-b').innerHTML = opts(FO.b);
-  const A = M.bots.find((b) => b.id === FO.a), B = M.bots.find((b) => b.id === FO.b);
+  const A = botById(FO.a), B = botById(FO.b);
   const get = pairGetter(M), h = get(A.id, B.id);
   let aw = 0, bw = 0, rows = '', lastG = null;
   const span = 0.45;
@@ -712,7 +735,7 @@ function renderFaceoff(M) {
   rows += `<div class="fo-row"><span></span><span class="fo-lab"></span><div style="display:grid;grid-template-columns:1fr auto 1fr;font-size:11px;color:var(--muted)"><span>← worse than an average bot</span><span>average</span><span style="text-align:right">better →</span></div><span></span></div>`;
   $('fo-grid').innerHTML = rows;
   $('fo-sum').innerHTML = `<span class="a">${esc(A.id)}</span> is better in ${aw} spot${aw === 1 ? '' : 's'}, <span class="b">${esc(B.id)}</span> in ${bw}`
-    + `<div class="small" style="font-family:var(--body);font-weight:400">rating ${A.rating} vs ${B.rating}${h ? ` · head to head ${h.w}–${h.n - h.w}` : ' · they have not played each other'}</div>`
+    + `<div class="small" style="font-family:var(--body);font-weight:400">${A.rating == null || B.rating == null ? `humans: ${HUM.games} real games${humNote()}, scored like an average bot facing an equal opponent` : `rating ${A.rating} vs ${B.rating}${h ? ` · head to head ${h.w}–${h.n - h.w}` : ' · they have not played each other'}`}</div>`
     + `<div class="fo-key"><span><i style="border-color:var(--fa);background:var(--fa)"></i>${esc(A.id)}</span><span><i style="border-color:var(--fb);background:var(--fb)"></i>${esc(B.id)}</span><span><i style="border-color:var(--muted)"></i>hollow dot = fewer than 5 games in that spot</span></div>`;
   const st = [['baseShare', 'Attacks aimed at the base', pct], ['baseDmg', 'Base damage per round', (v) => v.toFixed(1)], ['kills', 'Enemy units removed per round', (v) => v.toFixed(2)], ['rounds', 'Rounds per game', (v) => v.toFixed(1)]];
   $('fo-style').innerHTML = st.map(([k, label, f]) => {
@@ -789,12 +812,12 @@ if (window.claude?.use) setTimeout(startLive, 400);
 function select(botId, sid) {
   sel = { b: botId, s: sid };
   renderSpots(META); renderGrid(META);
-  const b = META.bots.find((x) => x.id === botId), s = SIT[sid], c = b.situations[sid];
+  const b = botById(botId), s = SIT[sid], c = b.situations[sid];
   const box = $('moments');
   box.hidden = false;
   const ex = c.examples || [];
   box.innerHTML = `<div class="section-head"><h3>${esc(b.id)} · ${esc(s.label)} <span class="eyebrow">${esc(s.short)}</span></h3><span class="small">won ${c.wins} of ${c.n} · an average bot: ${pct(c.expected)}</span></div>
-    <div class="moment-list">${ex.map((e, i) => `<button class="moment" type="button" data-i="${i}"><span class="${e.won ? 'res-w' : 'res-l'}">${e.won ? 'Won' : 'Lost'}</span> vs <b>${esc(e.opp)}</b> · ${esc(e.run)} · step ${e.step}</button>`).join('')}</div>
+    <div class="moment-list">${ex.map((e, i) => `<button class="moment" type="button" data-i="${i}"><span class="${e.won ? 'res-w' : 'res-l'}">${e.won ? 'Won' : 'Lost'}</span> vs <b>${esc(e.opp === 'humans' ? 'a human' : e.opp)}</b> · ${esc(e.run)} · step ${e.step}</button>`).join('')}</div>
     <div id="viewer"></div><div class="note" id="viewer-note">${files ? 'Pick a game to replay it from that moment.' : 'Replays open here when the page can read the project files.'}</div>`;
   for (const el of box.querySelectorAll('.moment')) el.addEventListener('click', () => openReplay(ex[+el.dataset.i]));
   box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -802,14 +825,14 @@ function select(botId, sid) {
 let viewer = null;
 async function openReplay(e) {
   const note = $('viewer-note');
-  if (!files) { note.textContent = `Replay file: results/${e.run}/games/${e.game}.jsonl, step ${e.step}.`; return; }
+  if (!files) { note.textContent = `Replay file: ${e.root || 'results'}/${e.run}/games/${e.game}.jsonl, step ${e.step}.`; return; }
   if (!window.SWUViewer) { note.textContent = 'The replay viewer did not load.'; return; }
   note.textContent = 'Loading replay…';
   try {
-    const text = await readText(`results/${e.run}/games/${e.game}.jsonl`);
+    const text = await readText(`${e.root || 'results'}/${e.run}/games/${e.game}.jsonl`);
     if (viewer) viewer.destroy();
     viewer = window.SWUViewer.mount($('viewer'), { jsonl: text, layout: 'compact', stepN: e.step });
-    note.textContent = `${e.game} · ${e.seat === 'p1' ? 'player 1' : 'player 2'} is the bot · opened at the round start where it reached this spot.`;
+    note.textContent = `${e.game} · ${e.seat === 'p1' ? 'player 1' : 'player 2'} is ${e.root ? 'the human in this spot' : 'the bot'} · opened at the round start where it reached this spot.`;
   } catch (err) { note.textContent = err && err.code === 'not_granted' ? 'Replays need access to the project files.' : `Could not open the replay (${(err && err.code) || 'error'}).`; }
 }
 
