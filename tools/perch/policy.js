@@ -7,6 +7,20 @@ const path = require('node:path');
 
 // Commands that send questions to Jev.
 const ASKS_JEV = new Set(['scan', 'coverage', 'check']);
+// Commands that read code or findings, so they run in the snapshot. The rest (rules, setup, the
+// Perch Cloud commands) read and write this repo's own config.
+const IN_SNAPSHOT = new Set(['scan', 'coverage', 'check', 'issues', 'close', 'reopen', 'doctor']);
+// Variables git sets for hooks and `rebase -x` that point git at a repo other than the one it is
+// run in (`git rev-parse --local-env-vars`). Every git process here, and perch, runs without them.
+const GIT_LOCAL = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR',
+  'GIT_PREFIX', 'GIT_IMPLICIT_WORK_TREE', 'GIT_GRAFT_FILE', 'GIT_SHALLOW_FILE', 'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_CONFIG', 'GIT_NAMESPACE'];
+
+/** `env` without the GIT_LOCAL variables. */
+function gitEnv(env = process.env) {
+  const clean = { ...env };
+  for (const name of GIT_LOCAL) delete clean[name];
+  return clean;
+}
 // perch's flags that take no value (its `switches`), plus ours. Every other flag takes the next
 // argument unless written --flag=value.
 const SWITCHES = new Set(['--force', '--all', '--json', '--verbose', '--closed', '--types', '--wait', '--help', '--version', '--full', '-h', '-v']);
@@ -72,18 +86,26 @@ const real = (p) => {
   }
 };
 
+const isHelp = (flags) => Boolean(flags['--help'] || flags['-h'] || flags['--version'] || flags['-v']);
+
 /** True when these perch arguments send questions to Jev. */
 function asksJev(args) {
   const { positionals, flags } = parseArgs(args);
-  return ASKS_JEV.has(positionals[0]) && !(flags['--help'] || flags['-h'] || flags['--version'] || flags['-v']);
+  return ASKS_JEV.has(positionals[0]) && !isHelp(flags);
 }
 
-const runGit = (repo) => (argv) => spawnSync('git', ['-C', repo, ...argv], { encoding: 'utf8', maxBuffer: 64 << 20 });
+/** True when these perch arguments read code or findings, so perch must run in a snapshot. */
+function usesSnapshot(args) {
+  const { positionals, flags } = parseArgs(args);
+  return IN_SNAPSHOT.has(positionals[0]) && !isHelp(flags);
+}
+
+const runGit = (repo) => (argv) => spawnSync('git', ['-C', repo, ...argv], { encoding: 'utf8', maxBuffer: 64 << 20, env: gitEnv() });
 
 /**
  * What tools/bin/perch should run for these arguments.
  * Returns { command, asksJev, args, env } and, to stop instead, `error` (exit 2) or `nothing` (exit 0).
- * scan and coverage get an explicit --paths list: the files they would read (all files at HEAD, or
+ * scan gets an explicit --paths list: the files it would read (all files at HEAD, or
  * those changed since --since), narrowed to a named path or --paths, then to `scope`.
  */
 function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
@@ -91,6 +113,10 @@ function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
   const command = positionals[0];
   const out = { command, asksJev: asksJev(args), args: [...args], env: {} };
   if (!out.asksJev) return out;
+  if (command === 'coverage') {
+    // perch coverage measures tests, and the snapshot holds none: it would call every method untested.
+    return { ...out, error: "perch: coverage needs tests, and tests are out of Perch's scope (tools/perch/scope.js). Use `npm run lint`." };
+  }
   if (flags['--force']) out.env.PERCH_CACHE_READ = '0';
   const root = real(repo);
   const relative = (p) => path.posix.normalize(path.relative(root, real(path.resolve(cwd, p))).split(path.sep).join('/'));
@@ -108,7 +134,7 @@ function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
     out.args[args.indexOf(target)] = [rel, ...method].join('::');
     return out;
   }
-  if (command !== 'scan' && command !== 'coverage') return out;
+  if (command !== 'scan') return out;
 
   // Paths the caller narrowed to, repo-relative; '' is the whole repo (perch drops "." from --paths,
   // and an empty list means every path).
@@ -122,8 +148,8 @@ function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
   const since = typeof flags['--since'] === 'string' ? flags['--since'] : null;
   const narrow = named.filter((p) => p !== '');
   if (!since && !narrow.length && !flags['--full']) {
-    out.error = `perch: \`perch ${command}\` with no scope asks Jev about every method in scope. ` +
-      (command === 'scan' ? 'Use `npm run lint` (code changed since origin/main), or name' : 'Name') + ' a path, --paths or --since, or add --full.';
+    out.error = 'perch: `perch scan` with no scope asks Jev about every method in scope. ' +
+      'Use `npm run lint` (code changed since origin/main), or name a path, --paths or --since, or add --full.';
     return out;
   }
 
@@ -294,15 +320,20 @@ function readOr(file, fallback) {
  * and .perch/rules is rebuilt from them.
  */
 function snapshot(dir, files, perchFiles = new Map()) {
-  const git = (...argv) => spawnSync('git', ['-C', dir, ...argv], { encoding: 'utf8' });
+  // The snapshot sits inside this repo's work tree. Naming its .git outright means a half-made
+  // .git fails here instead of git finding this repo's and committing to it.
+  const gitDir = path.join(dir, '.git');
+  const git = (...argv) => spawnSync('git', [`--git-dir=${gitDir}`, `--work-tree=${dir}`, ...argv], { cwd: dir, encoding: 'utf8', env: gitEnv() });
   const must = (...argv) => {
     const result = git(...argv);
     if (result.status !== 0) throw new Error(`git ${argv.join(' ')} in ${dir}: ${result.stderr}`);
     return result.stdout;
   };
-  if (!fs.existsSync(path.join(dir, '.git'))) {
-    fs.mkdirSync(dir, { recursive: true });
-    must('init', '-q');
+  fs.mkdirSync(dir, { recursive: true });
+  if (git('rev-parse', '--git-dir').status !== 0) {
+    fs.rmSync(gitDir, { recursive: true, force: true });
+    const init = spawnSync('git', ['init', '-q', dir], { encoding: 'utf8', env: gitEnv() });
+    if (init.status !== 0) throw new Error(`git init ${dir}: ${init.stderr}`);
   }
   const exclude = path.join(dir, '.git', 'info', 'exclude');
   if (!readOr(exclude, '').split('\n').includes('/.perch/')) {
@@ -313,6 +344,8 @@ function snapshot(dir, files, perchFiles = new Map()) {
   // Snapshots made before .perch/ was ignored still track perch's closed.jsonl.
   if (tracked.some((file) => file.startsWith('.perch/'))) must('rm', '-r', '-q', '--cached', '.perch');
   for (const file of tracked) if (!file.startsWith('.perch/') && !files.has(file)) fs.rmSync(path.join(dir, file), { force: true });
+  // Files left over from a check of uncommitted code (snapshotRepo's `workingTree`).
+  must('clean', '-fdxq', '-e', '/.perch/');
   for (const [file, bytes] of files) writeIfChanged(path.join(dir, file), bytes);
   must('add', '-A');
   if (git('diff', '--cached', '--quiet').status !== 0 || git('rev-parse', '-q', '--verify', 'HEAD').status !== 0) {
@@ -322,11 +355,17 @@ function snapshot(dir, files, perchFiles = new Map()) {
   for (const [file, bytes] of perchFiles) writeIfChanged(path.join(dir, '.perch', file), bytes);
 }
 
-/** The repo's source files in `scope`, as committed at HEAD, plus perch.yaml, closed issues and rules. */
-function snapshotRepo(repo, scope, dir) {
-  const listed = spawnSync('git', ['-C', repo, 'ls-tree', '-r', '-z', '--name-only', 'HEAD'], { encoding: 'utf8', maxBuffer: 64 << 20 });
+/**
+ * The repo's source files in `scope`, as committed at HEAD, plus perch.yaml, closed issues and rules.
+ * With `workingTree`, the in-scope files that differ from HEAD are then laid over it, uncommitted,
+ * for `perch check`, which asks about work in progress. The next snapshot puts HEAD back.
+ */
+function snapshotRepo(repo, scope, dir, { workingTree = false } = {}) {
+  const git = runGit(repo);
+  const listed = git(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
   if (listed.status !== 0) throw new Error(`git ls-tree in ${repo}: ${listed.stderr}`);
-  const names = listed.stdout.split('\0').filter((f) => f === 'perch.yaml' || (SOURCE.test(f) && inScope(f, scope)));
+  const wanted = (f) => SOURCE.test(f) && inScope(f, scope);
+  const names = listed.stdout.split('\0').filter((f) => f === 'perch.yaml' || wanted(f));
   const files = new Map([...readAtHead(repo, names)].filter(([file, bytes]) => file === 'perch.yaml' || handWritten(bytes)));
   const perchFiles = new Map([['closed.jsonl', readBytes(path.join(repo, '.perch', 'closed.jsonl'))]]);
   const rules = path.join(repo, '.perch', 'rules');
@@ -335,6 +374,14 @@ function snapshotRepo(repo, scope, dir) {
     if (bytes) perchFiles.set(path.posix.join('rules', String(name).split(path.sep).join('/')), bytes);
   }
   snapshot(dir, files, perchFiles);
+  if (!workingTree) return;
+  const changed = [git(['diff', '--name-only', '-z', 'HEAD']), git(['ls-files', '-z', '--others', '--exclude-standard'])]
+    .flatMap((result) => (result.status === 0 ? result.stdout.split('\0') : []))
+    .filter((f) => f && wanted(f));
+  for (const file of new Set(changed)) {
+    const bytes = readSource(path.join(repo, file));
+    if (bytes) writeIfChanged(path.join(dir, file), bytes);
+  }
 }
 
 /** The source files in the shared project folder that `scope` covers, plus the closed issues at `closures`. */
@@ -358,7 +405,7 @@ function snapshotShared(scope, dir, closures) {
 
 /** Contents of `files` at HEAD in `repo`, read with one git process. */
 function readAtHead(repo, files) {
-  const out = spawnSync('git', ['-C', repo, 'cat-file', '--batch'], { input: files.map((f) => `HEAD:${f}\n`).join(''), maxBuffer: 1 << 30 });
+  const out = spawnSync('git', ['-C', repo, 'cat-file', '--batch'], { input: files.map((f) => `HEAD:${f}\n`).join(''), maxBuffer: 1 << 30, env: gitEnv() });
   if (out.status !== 0) throw new Error(`git cat-file in ${repo}: ${out.stderr}`);
   const found = new Map();
   let at = 0;
@@ -412,4 +459,4 @@ function writeIfChanged(file, bytes) {
   fs.writeFileSync(file, bytes);
 }
 
-module.exports = { parseArgs, plan, asksJev, inScope, readDay, holdLock, snapshotRepo, snapshotShared, appendNew, readBytes };
+module.exports = { parseArgs, plan, asksJev, usesSnapshot, gitEnv, inScope, readDay, holdLock, snapshotRepo, snapshotShared, appendNew, readBytes };

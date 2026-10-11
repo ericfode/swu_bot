@@ -11,14 +11,15 @@
 //   /mnt/project-files/perch when that folder exists (so threads share answers and one daily
 //   budget), else .perch/jev in this repo. tools/perch/jev-cache.mjs does the caching and budget.
 //
-// Every perch command runs in a snapshot: a scratch git repo under .perch/ that holds only the files
-// in tools/perch/scope.js (the shared core, not the bots), so Jev never sees anything else. perch
-// keeps its findings there; the closed ones are added back to .perch/closed.jsonl in this repo.
+// Every perch command that reads code or findings runs in a snapshot: a scratch git repo under
+// .perch/ that holds only the files in tools/perch/scope.js (the shared core, not the bots) at HEAD,
+// so Jev never sees anything else. check also sees uncommitted in-scope changes. perch keeps its
+// findings there; the closed ones are added back to .perch/closed.jsonl in this repo.
 // `perch shared <command>` does the same for the code in the shared project folder.
 //
-// Limits on the commands that ask Jev (scan, coverage, check), set in tools/perch/policy.js:
-// - scan needs a scope (a path, --since or --paths), coverage a path or --paths; everything in
-//   scope needs --full.
+// Limits on the commands that ask Jev (scan and check), set in tools/perch/policy.js:
+// - scan needs a scope (a path, --since or --paths); everything in scope needs --full.
+// - coverage is refused: it measures tests, and tests are out of scope.
 // - --parallel defaults to 8 instead of perch's 32.
 // - One perch command at a time per checkout, Jev commands stopped after PERCH_TIMEOUT_MIN minutes
 //   (default 15).
@@ -29,11 +30,12 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { parseArgs, plan, asksJev, readDay, holdLock, snapshotRepo, snapshotShared, appendNew, readBytes } = require('../perch/policy.js');
+const { parseArgs, plan, asksJev, usesSnapshot, gitEnv, readDay, holdLock, snapshotRepo, snapshotShared, appendNew, readBytes } = require('../perch/policy.js');
 const scopes = require('../perch/scope.js');
 
 const repo = path.resolve(__dirname, '../..');
-const env = { ...process.env };
+// Without the variables git sets for hooks, so perch and every git process find the repo they run in.
+const env = gitEnv(process.env);
 const sharedFolder = '/mnt/project-files';
 const jevDir = env.PERCH_JEV_DIR || (fs.existsSync(sharedFolder) ? path.join(sharedFolder, 'perch') : path.join(repo, '.perch', 'jev'));
 env.PERCH_CACHE_DIR ||= path.join(jevDir, 'cache');
@@ -52,29 +54,40 @@ if (args[0] === 'usage') {
 const shared = args[0] === 'shared';
 if (shared) args = args.slice(1);
 const jev = asksJev(args);
+const snap = usesSnapshot(args);
 const off = env.PERCH_DISABLED === '1' ? 'PERCH_DISABLED=1' : fs.existsSync(path.join(jevDir, 'DISABLED')) && path.join(jevDir, 'DISABLED');
 if (jev && off) {
   console.error(`perch is turned off (${off}); skipped ${parseArgs(args).positionals[0]}.`);
   process.exit(0);
 }
-const workRoot = path.join(repo, '.perch', shared ? 'shared' : 'core');
+if (shared && !snap) {
+  console.error('perch: `perch shared` runs scan, check, issues, close, reopen and doctor. rules and setup change this repo\'s own config: run them without `shared`.');
+  process.exit(2);
+}
+// rules, setup and the Perch Cloud commands read no code and edit this repo's config, so they run here.
+const workRoot = snap ? path.join(repo, '.perch', shared ? 'shared' : 'core') : repo;
 const closures = shared ? path.join(jevDir, 'shared', 'closed.jsonl') : path.join(repo, '.perch', 'closed.jsonl');
 // In this repo, the arguments are checked before the snapshot is made, since --since needs the
 // repo's history. In the shared folder, the snapshot is the only repo there is.
 let run = shared ? null : stopIfDone(plan(args, { repo, scope: scopes.repo }));
 
-// Commands that ask Jev do not wait for another run; quick ones such as issues and close wait a little.
-const lock = holdLock(path.join(repo, '.perch', 'wrapper.lock'), jev ? 0 : 30e3);
-if (!lock.held) {
-  console.error(`perch: another perch run (pid ${lock.holder}) is using this checkout. Wait for it, or delete ${lock.file} if none is running.`);
-  process.exit(1);
-}
-process.on('exit', lock.release);
-if (shared) {
-  snapshotShared(scopes.shared, workRoot, closures);
-  run = stopIfDone(plan(args, { repo: workRoot, scope: null, cwd: workRoot }));
-} else {
-  snapshotRepo(repo, scopes.repo, workRoot);
+if (snap) {
+  // Commands that ask Jev do not wait for another run; quick ones such as issues and close wait a little.
+  const lock = holdLock(path.join(repo, '.perch', 'wrapper.lock'), jev ? 0 : 30e3);
+  if (!lock.held) {
+    console.error(`perch: another perch run (pid ${lock.holder}) is using this checkout. Wait for it, or delete ${lock.file} if none is running.`);
+    process.exit(1);
+  }
+  process.on('exit', lock.release);
+  if (shared) {
+    snapshotShared(scopes.shared, workRoot, closures);
+    run = stopIfDone(plan(args, { repo: workRoot, scope: null, cwd: workRoot }));
+  } else {
+    // check asks about work in progress, so it sees uncommitted in-scope changes too.
+    snapshotRepo(repo, scopes.repo, workRoot, { workingTree: run.command === 'check' });
+  }
+  // If the snapshot's .git were ever broken, git must not climb out of it into this repo.
+  env.GIT_CEILING_DIRECTORIES = [fs.realpathSync(path.dirname(workRoot)), env.GIT_CEILING_DIRECTORIES].filter(Boolean).join(':');
 }
 Object.assign(env, run.env);
 
@@ -106,14 +119,14 @@ if ((env.HTTPS_PROXY || env.https_proxy) && !env.NODE_USE_ENV_PROXY) {
 const minutes = Number(env.PERCH_TIMEOUT_MIN) > 0 ? Number(env.PERCH_TIMEOUT_MIN) : 15;
 const preload = pathToFileURL(path.join(repo, 'tools/perch/jev-cache.mjs')).href;
 const localClosures = path.join(workRoot, '.perch', 'closed.jsonl');
-const before = readBytes(localClosures);
+const before = snap && readBytes(localClosures);
 const child = spawnSync(process.execPath, ['--import', preload, bin, ...run.args], {
   cwd: workRoot,
   stdio: 'inherit',
   env,
   timeout: jev ? Math.round(minutes * 60e3) : undefined,
 });
-appendNew(localClosures, before, closures);
+if (snap) appendNew(localClosures, before, closures);
 if (child.error?.code === 'ETIMEDOUT') {
   console.error(`perch: stopped after ${minutes} min (PERCH_TIMEOUT_MIN).`);
   process.exit(1);

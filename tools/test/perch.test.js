@@ -8,12 +8,15 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { plan, inScope, readDay, holdLock, snapshotRepo, snapshotShared, appendNew } = require('../perch/policy');
+const { plan, inScope, readDay, holdLock, snapshotRepo, snapshotShared, appendNew, gitEnv } = require('../perch/policy');
 const scopes = require('../perch/scope');
 
 const preload = path.join(__dirname, '../perch/jev-cache.mjs');
 const wrapper = path.join(__dirname, '../bin/perch');
 const repo = path.resolve(__dirname, '../..');
+// Run from a git hook, git's own variables would point every git call below at this repo.
+const clean = gitEnv();
+for (const name of Object.keys(process.env)) if (!(name in clean)) delete process.env[name];
 
 /** A request body like perch's: one method's state and the questions about it. */
 const ask = (state, ...questions) => JSON.stringify({ model: 'jev-test', state, questions: Object.fromEntries(questions.map((q) => [q, { type: 'noul' }])) });
@@ -135,7 +138,7 @@ test('plan lists the in-scope files for scan and coverage, and keeps other comma
   const scope = { include: ['bot/*.js', 'bot/players/index.js', 'viewer/**'], exclude: [] };
   const p = (...args) => plan(args, { repo, scope, cwd: repo, git });
 
-  for (const args of [['scan'], ['scan', '.'], ['scan', repo], ['scan', '--paths', '.'], ['scan', '--paths=./'], ['scan', '--paths', 'bot/..'], ['coverage'], ['--json', 'scan']]) {
+  for (const args of [['scan'], ['scan', '.'], ['scan', repo], ['scan', '--paths', '.'], ['scan', '--paths=./'], ['scan', '--paths', 'bot/..'], ['--json', 'scan']]) {
     assert.match(p(...args).error || '', /no scope/, args.join(' '));
   }
   assert.match(p('scan', '--since', 'nope').error, /not a commit/);
@@ -144,8 +147,7 @@ test('plan lists the in-scope files for scan and coverage, and keeps other comma
   assert.deepStrictEqual(p('--since=base', '--json', 'scan').args, ['scan', '--json', '--parallel', '8', '--paths', 'bot/env.js']);
   assert.deepStrictEqual(p('scan', '--full', '--min', '70').args, ['scan', '--min', '70', '--parallel', '8', '--paths', 'bot/env.js,bot/players/index.js,viewer/src/api.ts']);
   assert.deepStrictEqual(p('scan', 'bot', '--parallel=2').args, ['scan', '--parallel=2', '--paths', 'bot/env.js,bot/players/index.js']);
-  assert.deepStrictEqual(p('coverage', '--since', 'base').args, ['coverage', '--parallel', '8', '--paths', 'bot/env.js']);
-  assert.deepStrictEqual(p('coverage', '--paths', 'viewer').args, ['coverage', '--parallel', '8', '--paths', 'viewer/src/api.ts']);
+  assert.match(p('coverage', '--paths', 'viewer').error, /coverage needs tests/);
   assert.match(p('scan', 'bot/rust').nothing, /out of scope/);
   assert.match(p('check', 'bot/players/rush.js::RushBot.choose').error, /outside Perch's scope/);
   assert.deepStrictEqual(p('check', 'bot/env.js', '--force'), { command: 'check', asksJev: true, args: ['check', 'bot/env.js', '--force'], env: { PERCH_CACHE_READ: '0' } });
@@ -227,6 +229,40 @@ test('the repo snapshot holds only in-scope code at HEAD, so bot code never reac
   assert.deepStrictEqual(lsTree(dir), ['bot/match.js', 'perch.yaml']);
   assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/closed.jsonl'), 'utf8'), '{"id":"a"}\n');
   assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/rules/r.md'), 'utf8'), 'rule\n');
+  // For check, uncommitted in-scope changes are laid over HEAD, and the next snapshot drops them.
+  write('bot/match.js', 'module.exports = 2;\n');
+  snapshotRepo(root, scope, dir, { workingTree: true });
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'bot/match.js'), 'utf8'), 'module.exports = 2;\n');
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'bot/ratings.js'), 'utf8'), 'module.exports = 1;\n');
+  assert.deepStrictEqual(lsTree(dir), ['bot/match.js', 'perch.yaml'], 'not committed');
+  snapshotRepo(root, scope, dir);
+  assert.match(fs.readFileSync(path.join(dir, 'bot/match.js'), 'utf8'), /choose/);
+  assert.strictEqual(fs.existsSync(path.join(dir, 'bot/ratings.js')), false);
+});
+
+test('the repo snapshot never writes to the repo it sits in', (t) => {
+  const root = scratch(t);
+  const write = writer(root);
+  const git = (...argv) => spawnSync('git', ['-C', root, ...argv], { encoding: 'utf8' });
+  git('init', '-q');
+  write('bot/match.js', 'module.exports = 1;\n');
+  write('bot/players/rush.js', 'module.exports = 2;\n');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one');
+  const head = git('rev-parse', 'HEAD').stdout;
+  const index = fs.readFileSync(path.join(root, '.git/index'));
+  const dir = path.join(root, '.perch/core');
+  fs.mkdirSync(path.join(dir, '.git'), { recursive: true }); // a half-made snapshot, as an interrupted git init leaves it
+  // As in a hook during `git commit -a`, which points git at this repo's index.
+  process.env.GIT_INDEX_FILE = path.join(root, '.git/index');
+  try {
+    snapshotRepo(root, { include: ['bot/*.js'], exclude: [] }, dir);
+  } finally {
+    delete process.env.GIT_INDEX_FILE;
+  }
+  assert.strictEqual(git('rev-parse', 'HEAD').stdout, head);
+  assert.ok(fs.readFileSync(path.join(root, '.git/index')).equals(index), "the repo's index is untouched");
+  assert.deepStrictEqual(lsTree(dir), ['bot/match.js']);
 });
 
 test('end to end, Jev sees no out-of-scope code, not even as a callee', async (t) => {
@@ -269,6 +305,18 @@ test('end to end, Jev sees no out-of-scope code, not even as a callee', async (t
   assert.ok(seen.some((body) => body.includes('play')), 'asked about bot/match.js');
   for (const body of seen) assert.ok(!body.includes('cards.sort()') && !body.includes('bot/players/rush.js'), 'no bot code in a request');
   assert.deepStrictEqual(lsTree(path.join(root, '.perch/core')), ['bot/match.js']);
+
+  // check asks about work in progress.
+  write('bot/match.js', fs.readFileSync(path.join(root, 'bot/match.js'), 'utf8').replace('return null', 'return UNCOMMITTED_FIX'));
+  seen.length = 0;
+  const check = await run(['check', 'bot/match.js::play']);
+  assert.ok(seen.some((body) => body.includes('UNCOMMITTED_FIX')), check.out);
+  // coverage needs tests, which are out of scope; rules edit this repo's own perch.yaml.
+  assert.strictEqual((await run(['coverage', 'bot'])).status, 2);
+  const rules = await run(['rules', 'add', 'no-sort', '--where', 'bot/**', '--ensure', 'does not sort in place']);
+  assert.strictEqual(rules.status, 0, rules.out);
+  assert.match(fs.readFileSync(path.join(root, 'perch.yaml'), 'utf8'), /no-sort/);
+  assert.strictEqual((await run(['shared', 'rules', 'list'])).status, 2);
 });
 
 test('closed issues are added to the shared list, never copied over it', (t) => {
