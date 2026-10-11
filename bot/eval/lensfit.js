@@ -104,6 +104,24 @@ function firstLine(file) {
     return JSON.parse(buf.slice(0, n).toString().split('\n')[0]);
 }
 
+let envCache = null;
+const env = () => (envCache ??= new (require('../env').Env)());
+
+/**
+ * Both decklists (set codes, for the -deck models), redrawn the way match.js draws them from the seed. Returns null
+ * when the redrawn deck names do not match the replay header (another card pool or deck builder).
+ */
+function deckLists(e, seed, header) {
+    const { seededRng } = require('../env');
+    const rng = seededRng('bot' + seed);
+    const d = [e.randomDeck(rng), e.randomDeck(rng)];
+    if (header?.t !== 'header' || d.some((x, i) => x.metadata.name !== header.players?.[i]?.deck)) {
+        return null;
+    }
+    const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
+    return { p1: flat(d[0]), p2: flat(d[1]) };
+}
+
 function main() {
     const lensDir = arg('lens', '/mnt/project-files/dashboard/lens');
     const field = arg('field', 'edge');
@@ -124,22 +142,26 @@ function main() {
         }
         const lines = readJsonl(file);
         const end = lines.find((l) => l.t === 'end');
-        if (!end || end.outcome !== 'won') {
+        if (!end || end.outcome !== 'won' || (end.winner !== 'p1' && end.winner !== 'p2')) {
             skipped++;
             continue;
         }
-        const states = new Map(lines.filter((l) => l.t === 'step').map((l) => [l.n, l.state]));
+        const steps = new Map(lines.filter((l) => l.t === 'step').map((l) => [l.n, l]));
+        const decks = deckLists(env(), lens.seed, lines[0]);
         for (const s of lens.steps) {
-            const st = states.get(s.n);
+            // lens step n = the board after step n's move, so the next actor is step n+1's pid (as in arena.js)
+            const st = steps.get(s.n)?.state;
+            const toAct = steps.get(s.n + 1)?.pid ?? null;
             // decided boards (a base at 0) are left out: the bench evaluators read them as 0/1 for free
             if (typeof s[field] !== 'number' || !st || terminal(st, 'p1') !== null) {
                 continue;
             }
-            rows.push({ id: lens.gameId, fold: fold(lens.gameId), x: s[field], y: end.winner === 'p1' ? 1 : 0, state: st, round: st.round });
+            rows.push({ id: lens.gameId, fold: fold(lens.gameId), x: s[field], y: end.winner === 'p1' ? 1 : 0, state: st, toAct, decks });
         }
     }
     const games = new Set(rows.map((r) => r.id)).size;
-    console.log(`${rows.length} positions from ${games} games (${skipped} lens files skipped)`);
+    const withDecks = new Set(rows.filter((r) => r.decks).map((r) => r.id)).size;
+    console.log(`${rows.length} positions from ${games} games (${withDecks} with redrawn decklists; ${skipped} lens files skipped)`);
 
     // pooled out-of-fold predictions: each fold is predicted by a fit on the other four
     const methods = { hand: [], scale: [], 'scale+bias': [] };
@@ -161,7 +183,7 @@ function main() {
     }
     for (const ev of evs) {
         for (const view of ['subjective', 'objective']) {
-            methods[`${ev.name} (${view})`] = rows.map((r) => [ev.predict(r.state, 'p1', { view }), r.y, r.fold]);
+            methods[`${ev.name} (${view})`] = rows.map((r) => [ev.predict(r.state, 'p1', { view, toAct: r.toAct, decks: r.decks }), r.y, r.fold]);
         }
     }
     const report = (sel) => Object.fromEntries(Object.entries(methods).map(([m, v]) => {
@@ -171,7 +193,7 @@ function main() {
     const all = report(() => true);
     const fold0 = report((q) => q[2] === 0);
     const full = { scale: fitLogistic(rows.map((r) => r.x), rows.map((r) => r.y), false), bias: fitLogistic(rows.map((r) => r.x), rows.map((r) => r.y), true) };
-    const out = { lensDir, field, handK: k, positions: rows.length, games, folds: fits, fullData: { scale: full.scale.a, scaleBias: [full.bias.a, full.bias.b] }, outOfFold: all, benchTestFold: fold0 };
+    const out = { lensDir, field, handK: k, positions: rows.length, games, gamesWithDecks: withDecks, folds: fits, fullData: { scale: full.scale.a, scaleBias: [full.bias.a, full.bias.b] }, outOfFold: all, benchTestFold: fold0 };
     const w = Math.max(...Object.keys(all).map((m) => m.length));
     console.log(`${'method'.padEnd(w)}  5-fold Brier  logloss   fold-0 Brier`);
     for (const m of Object.keys(all).sort((a, b) => all[a].brier - all[b].brier)) {
