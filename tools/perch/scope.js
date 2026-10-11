@@ -22,6 +22,7 @@ module.exports = {
       'bot/learn/eval.js', // head-to-head runner for any two bots
       'bot/omni/lens.js', // writes the per-card lens files the viewers show
       'bot/karabast/**', // Karabast socket client, frame reader and spectate recorder (any bot, any game)
+      'bot/compiled/**', // builds any bot as a sandboxed WebAssembly bundle, and runs it
       'spec/**',
       'viewer/**',
       'studio/**',
