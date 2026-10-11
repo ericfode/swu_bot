@@ -60,7 +60,14 @@ child.on('error', (e) => { dead = 'could not start ' + cmd + ': ' + e.message; f
 child.on('exit', (code, signal) => { dead = dead ?? ('bot process exited (code ' + code + (signal ? ', ' + signal : '') + ')'); flush(); });
 child.stdin.on('error', () => undefined);
 parentPort.on('message', (m) => {
-    if (m.close) { child.stdin.end(); setTimeout(() => child.kill(), 2000).unref(); return; }
+    if (m.close) {
+        // the open port keeps this thread alive, so close it once the child is gone
+        child.stdin.end();
+        if (dead) { parentPort.close(); return; }
+        child.once('exit', () => parentPort.close());
+        setTimeout(() => child.kill(), 2000).unref();
+        return;
+    }
     waiting = true;
     if (!dead) child.stdin.write(m.line + '\\n');
     flush();
