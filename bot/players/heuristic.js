@@ -203,6 +203,11 @@ class HeuristicBot {
         this.stats = { windows: 0, playouts: 0, failedPlayouts: 0, noops: 0, loopPasses: 0, ms: 0 };
     }
 
+    /** Score a position for pid; subclasses (bot/learned) swap in their own evaluation. */
+    evaluate(eg, pid) {
+        return evaluate(eg, pid);
+    }
+
     choose({ game: eg, pid, actions, rng }) {
         this.rng ??= seededRng(`h${Math.floor(rng() * 1e9)}`);
         if (!eg.isActionWindow(pid)) {
@@ -358,7 +363,7 @@ class HeuristicBot {
                 }
                 eg.apply(actor, choice, this.rng);
             }
-            score = evaluate(eg, pid);
+            score = this.evaluate(eg, pid);
             fp = fingerprint(eg);
             if (extra > 0 && !eg.over && this.advanceToMyWindow(eg, pid)) {
                 const next = this.bestFrom(eg, pid, extra);

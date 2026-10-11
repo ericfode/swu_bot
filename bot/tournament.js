@@ -9,6 +9,7 @@ const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
 const { createRandomBot } = require('./players/random');
 const { HeuristicBot } = require('./players/heuristic');
+const { LearnedPolicyBot, LearnedSearchBot } = require('./learned/bots');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -20,6 +21,13 @@ function makeBot(name) {
     if (/^heuristic/.test(name)) {
         const d = /-d(\d)/.exec(name);
         return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
+    }
+    // learned bots (bot/learned): model file from $SWU_LEARNED_MODEL, default models/learned/current.json
+    if (/^learned-v/.test(name)) {
+        return new LearnedSearchBot(name);
+    }
+    if (/^learned/.test(name)) {
+        return new LearnedPolicyBot(name);
     }
     return createRandomBot(name);
 }
