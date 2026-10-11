@@ -2,7 +2,7 @@
 
 /**
  * Publishes the Atlas kit for other pages: node meta/export-kit.js [out dir]   (default /mnt/project-files/meta/kit)
- * Writes atlas-kit.js, kit.json (all words and data, no code), README.md, demo.html and spots/<id>[-full][-anim].svg.
+ * Writes atlas-kit.js, kit.json (all words and data, no code), kit.css, README.md, demo.html and spots/<id>[-full][-anim].svg.
  * refresh.sh runs it every hour, so the shared copy always matches the Atlas.
  */
 const fs = require('fs');
@@ -44,8 +44,10 @@ put('atlas-kit.js', fs.readFileSync(path.join(__dirname, 'atlas-kit.js'), 'utf8'
 put('kit.json', JSON.stringify({
   schema: 'atlas-kit/1', version: K.VERSION, generatedAt: new Date().toISOString(),
   groups: K.GROUPS, spots: K.SPOTS, open: K.OPEN, iconParts: K.ICON_PARTS, styles: K.STYLES, traits: K.TRAITS,
-  families: K.FAMILIES, terms: K.TERMS, tokens: K.TOKENS,
+  families: K.FAMILIES, terms: K.TERMS, tokens: K.TOKENS, minGames: K.MIN_GAMES, thin: K.THIN, edgeSteps: K.EDGE_STEPS,
+  cssVars: K.CSS_VARS, cssClasses: K.CSS_CLASSES,
 }, null, 1));
+put('kit.css', K.css() + '\n');
 put('README.md', fs.readFileSync(path.join(__dirname, 'kit-README.md'), 'utf8'));
 
 put('demo.html', `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
