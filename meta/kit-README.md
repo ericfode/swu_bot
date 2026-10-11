@@ -29,7 +29,7 @@ Exports: `SPOTS` (list) and `SPOT` (by id: `say`, `focus`, `board` = the final s
 says if the spot holds, `spotsAt(state, pid)` lists the spots that hold. Ranking: `mappedOf(meta)` (bots with 8+ games and 5+
 replays), `rankIn(bots, spotId)`, `standouts(bots)` (the Atlas's one-line summary).
 
-Family colours match the console: Search blue, Rules (heuristic) orange, Learned purple, LLM teal, Random grey.
+Family colours match the console: Search blue, Heuristic orange, Rules mustard, Learned purple, LLM teal, Random grey.
 
 Heuristic bots: games from before the heuristic fix (PR #10, 2026-10-11 11:37 UTC) are named `legacy` and
 `legacy-<profile>` (e.g. `legacy-tempo`); plain `heuristic`, `aggro`, `tempo`, `control` mean the fixed code.
