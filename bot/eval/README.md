@@ -52,11 +52,15 @@ source and round. Its `paired` row scores the spectator view on exactly the judg
 uses, so the two compare like with like on one-seat captures too (on engine games the two rows agree).
 `fit.js --view spectator` fits on spectator frames instead, so captures with no visible hand become training rows.
 
-**Real Karabast games.** On the 181 decided public KaraBuddy games (6,311 positions, spectator view, no decklists in the
-captures) the best model is `mlp-g5` at Brier 0.214, against 0.171 on engine games. A linear model fitted only on real
-games, 5-fold by game, scores 0.212, so more engine games of the same kind will not close the gap. Most of it comes from
-concessions: 76 games end with the loser above 6 base HP, and on those the model is near a coin flip (0.246).
-Results: `/mnt/project-files/research/position-eval/real-games.json`.
+**Real Karabast games.** On the 181 decided public KaraBuddy games (6,383 positions, spectator view, no decklists in the
+captures) the best model is `mlp-g5` at Brier 0.213, against 0.171 on engine games. A linear model fitted only on real
+games, 5-fold by game, scores 0.210, so more engine games of the same kind will not close the gap. Concessions are not
+the cause: 72 games end with the loser's base intact (judged on the final frame), and the model calls those slightly
+better (0.203) than games that end with the base destroyed (0.218). One action before a destroyed base, the model still
+favours the loser in 20 of 109 real games (14 of 168 heuristic games, 1 of 131 omni games). In all 20 the winner was
+the one to act, and in 13 the winner's ready units could not deal the damage, so the finish came from cards a
+spectator cannot see (events, leader abilities). `flags.js` lists concessions made while the board favoured the
+conceder, and likely blunders, with viewer links. Results: `/mnt/project-files/research/position-eval/real-games.json`.
 
 **Note on the heuristic's base term.** Until 2026-10-11 `bot/players/heuristic.js` scored base HP as `hp*0.9 + (12-hp)^2/6`
 when `hp <= 12`. The second term grows as the base drops, so below about 9 HP each point of damage *raised* that
