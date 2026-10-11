@@ -6,7 +6,7 @@ JSON reader and loads card stats from the engine's card JSON.
 
     sudo apt-get install sbcl                 # SBCL 2.x
     npm run lisp:build                        # = sbcl --non-interactive --load bot/lisp/build.lisp -> bot/lisp/swu-lisp
-    npm run lisp:test                         # 24 checks on mock boards, no engine needed
+    npm run lisp:test                         # 25 checks on mock boards, no engine needed
     node bot/tournament.js --bots lisp,rush --games 10 --out replays/lisp
     node bot/ladder.js --bots lisp,rush,aggro,tempo,random --games 10
 
@@ -83,6 +83,8 @@ One build, one ladder (`results/lisp-ladder-1`, 10 games per pair, seeds 301-305
 
 Head to head: lisp 7-3 vs rust-greedy2, 5-5 vs aggro, 8-1 vs tempo, 8-2 vs rush, 10-0 vs random.
 
-Known issue: one game (tempo vs lisp, seed 312) hit the 6,000-step cap. In a "Choose units to deal 1 damage to"
-multi-select prompt the bot kept clicking the same card, and the prompt never took it. The repeat guard lowers that
-card's score but still picks it when it is the only card and no minimum is met.
+One game (tempo vs lisp, seed 312) hit the 6,000-step cap in that ladder. The prompt was "Choose units to deal 1
+damage to", which was already full, so the bot's clicks on another card did nothing, and it kept clicking. This is now
+fixed: in a multi-select prompt the bot does not click a card again at the same selection size, and presses Done
+instead. Seed 312 now ends in 134 steps (lisp wins). The table above is from before the fix; the fix only changes play
+in that loop.

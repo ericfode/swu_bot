@@ -127,6 +127,16 @@
                     "[{\"i\":0,\"kind\":\"card\",\"label\":\"cheap-guy\",\"card\":{\"id\":\"h1\",\"zone\":\"hand\",\"ctl\":\"p1\"}},
                       {\"i\":1,\"kind\":\"card\",\"label\":\"takedown\",\"card\":{\"id\":\"h2\",\"zone\":\"hand\",\"ctl\":\"p1\"}}]")))
 
+;;; multi-select loop guard: a click that did not register is not repeated
+(check "presses Done when a multi-select click does not register"
+       (let ((prompt "{\"type\":null,\"signature\":\"-|multiple\",\"title\":\"Choose units to deal 1 damage to\",\"promptTitle\":\"Zap\",\"selectCardMode\":\"multiple\",\"selected\":[\"e9\",\"e8\"],\"actionWindow\":false}")
+             (state (state-json :op-ground "[{\"id\":\"e1\",\"n\":\"Guy\",\"p\":2,\"h\":2,\"d\":0}]"))
+             (actions "[{\"i\":0,\"kind\":\"button\",\"label\":\"Done\",\"arg\":\"done\"},{\"i\":1,\"kind\":\"button\",\"label\":\"Cancel\",\"arg\":\"cancel\"},
+                       {\"i\":2,\"kind\":\"card\",\"label\":\"guy\",\"card\":{\"id\":\"e1\",\"zone\":\"groundArena\",\"ctl\":\"p2\"}}]"))
+         (new-game 7)
+         (flet ((ask () (choose (parse-json (format nil "{\"t\":\"decide\",\"seq\":1,\"you\":\"p1\",\"prompt\":~a,\"state\":~a,\"actions\":~a}" prompt state actions)))))
+           (and (= 2 (ask)) (= 0 (ask))))))
+
 ;;; distribute
 (let ((w (parse-world (parse-json (state-json :op-ground "[{\"id\":\"e1\",\"n\":\"A\",\"p\":2,\"h\":2,\"d\":0},{\"id\":\"e2\",\"n\":\"B\",\"p\":5,\"h\":6,\"d\":0}]")) "p1")))
   (check "split kills then goes face"

@@ -576,14 +576,22 @@
                                i))))
     (when multiple
       (multiple-value-bind (lo hi) (wanted-range (concatenate 'string title " " (lower (jget prompt "promptTitle"))))
-        (let ((done (position-if #'done-button-p actions))
-              (cards (remove-if-not (lambda (x) (equal (action-kind (nth (cdr x) actions)) "card")) scored)))
+        (let* ((done (position-if #'done-button-p actions))
+               ;; a card already clicked at this selection size did not register: the prompt is full
+               (cards (loop for x in scored
+                            for a = (nth (cdr x) actions)
+                            when (equal (action-kind a) "card")
+                              collect (if (plusp (gethash (list *round* sig (action-key a)) *repeats* 0))
+                                          (cons (- (car x) 100.0) (cdr x))
+                                          x)))
+               (best (and cards (car (reduce (lambda (x y) (if (> (car y) (car x)) y x)) cards)))))
           (when done
-            (cond ((or (>= selected hi) (null cards))
-                   (return-from generic-choice done))
-                  ((and (>= selected lo) (<= (car (reduce (lambda (x y) (if (> (car y) (car x)) y x)) cards)) 0))
-                   (return-from generic-choice done))
-                  (t (return-from generic-choice (pick-best cards))))))))
+            (let ((pick (cond ((or (>= selected hi) (null cards)) done)
+                              ((and (>= selected lo) (<= best 0)) done)
+                              ((< best -50) done)
+                              (t (pick-best cards)))))
+              (incf (gethash (list *round* sig (action-key (nth pick actions))) *repeats* 0))
+              (return-from generic-choice pick))))))
     ;; optional single picks: decline when every card only hurts us
     (let* ((cards (remove-if-not (lambda (x) (equal (action-kind (nth (cdr x) actions)) "card")) scored))
            (decline (position-if (lambda (a) (or (equal (jget a "arg") "passAbility")
