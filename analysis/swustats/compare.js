@@ -223,7 +223,11 @@ function fitModel(games, human) {
     return { index, fit: fitLogistic(rows, index.size, penalty) };
 }
 
+/** Weighted Pearson correlation; null with fewer than 3 points or no spread (a small run may have no leader with 10+ games). */
 function weightedCorr(xs, ys, ws = xs.map(() => 1)) {
+    if (xs.length < 3) {
+        return null;
+    }
     const W = ws.reduce((a, b) => a + b, 0);
     const mx = xs.reduce((a, x, i) => a + ws[i] * x, 0) / W;
     const my = ys.reduce((a, y, i) => a + ws[i] * y, 0) / W;
@@ -235,7 +239,8 @@ function weightedCorr(xs, ys, ws = xs.map(() => 1)) {
         sxx += ws[i] * (x - mx) ** 2;
         syy += ws[i] * (ys[i] - my) ** 2;
     });
-    return sxy / Math.sqrt(sxx * syy);
+    const r = sxy / Math.sqrt(sxx * syy);
+    return Number.isFinite(r) ? r : null;
 }
 const ranks = (a) => {
     const r = new Array(a.length);

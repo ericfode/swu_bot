@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { run, summarize, robotsAllows, USER_AGENT } = require('../swustats/fetch');
-const { compare, fitModel } = require('../swustats/compare');
+const { compare, fitModel, weightedCorr } = require('../swustats/compare');
 
 (async () => {
     // robots: no rules allows; a matching Disallow stops; our own group wins over *
@@ -78,6 +78,10 @@ const { compare, fitModel } = require('../swustats/compare');
     assert.strictEqual(r.games.decided, 3000);
     const { credit, ...noCredit } = summary;
     assert.strictEqual(compare(games.slice(0, 300), noCredit).credit, credit, 'credit is kept even if the summary lacks it');
+    // correlation: null, not NaN, when there is nothing to correlate
+    assert.strictEqual(weightedCorr([], []), null);
+    assert.strictEqual(weightedCorr([1, 2, 3], [5, 5, 5]), null);
+    assert(Math.abs(weightedCorr([1, 2, 3], [2, 4, 7]) - 0.9934) < 1e-3);
     console.log('ok: swustats robots, summary, fetch, model, compare');
 })().catch((e) => {
     console.error(e);
