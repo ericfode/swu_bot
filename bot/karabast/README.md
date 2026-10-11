@@ -11,6 +11,7 @@ without a browser. Plain CommonJS on Node 22's built-in `WebSocket` and `fetch`,
 | `seat.js` | One protocol bot playing one seat, with the undo rules and the command allow-list below. |
 | `queue.js` | Quick match as a bot: enter the queue with a deck, play the match, leave. Counts people (`ledger.js`). |
 | `spectate.js` | Watches games as a spectator and writes scrubbed frames as JSON Lines, which `importer/import.js` turns into replays. `--predict <evaluator>` prints P(win) as the game goes. |
+| `live-view.js` | Serves recorded games to the Holotable viewer kit while they are played: a game picker, the board following each move, and an evaluator's chance that p1 wins. |
 | `ledger.js` | The people cap: counts each real person a run touches (salted hashes, no ids) and stops at the limit. |
 | `selfplay.js` | Two protocol bots on a local server, through `seat.js`: the end-to-end test. `--pester-undo` makes seat 2 ask for undos. |
 | `fidelity.js` | Checks `observe.js` against the referee: the same engine state, seen through a Karabast frame and through `bot/view.js`. |
@@ -54,6 +55,19 @@ node bot/karabast/fidelity.js --games 20                                        
   decision (a game the server can no longer move) the seat concedes.
 - Two players with the same name break a game: the engine finds a player's opponent by name
   (`Game.getOtherPlayer`), and the first frame fails to serialize. Give each local bot run its own `--username`.
+
+## Watch a game as it is played (`live-view.js`)
+
+```bash
+node bot/karabast/live-view.js --runs <folder holding spectate/queue --out folders> --kit /mnt/project-files/viewer-kit --predict mlp-g5
+```
+
+Open http://localhost:8080. The page lists every recorded game, newest first, and follows the newest live one unless you
+pick another. Each frame file is turned into a replay by the importer whenever it grows. A game with no winner whose
+file changed in the last 5 minutes is served without its `end` line, so the kit re-fetches it every second and follows
+each move. `--predict` adds the evaluator's P(p1 wins) from the public board (no hands) as a score on the timeline.
+The server reads only the frame files and the two kit files. It listens on 127.0.0.1 unless `--host` says otherwise;
+on a reachable host, add `--key <secret>` so every route sits under `/<secret>/`.
 
 ## What a bot sees (`fidelity.js`)
 

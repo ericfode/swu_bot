@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Karabast live</title>
+<style>
+  :root { --bg: #0d1016; --panel: #151a22; --line: #262d39; --fg: #e6e9ef; --muted: #8a93a6; --live: #ff4d5e; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+           padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .02em; display: flex; gap: 8px; align-items: center; }
+  select { flex: 1 1 320px; min-width: 0; max-width: 100%; padding: 6px 8px; font: inherit; color: var(--fg);
+           background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+  label { display: flex; gap: 6px; align-items: center; color: var(--muted); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--live); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #note { padding: 24px 16px; color: var(--muted); max-width: 60ch; }
+  #game { padding: 12px 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="dot"></span>Karabast live</h1>
+  <select id="pick" aria-label="Game"></select>
+  <label><input type="checkbox" id="follow" checked> follow the live game</label>
+</header>
+<div id="note">Looking for games…</div>
+<div id="game"></div>
+<script src="kit/swu-viewer-kit.js"></script>
+<script>
+  // Polls the game list; the kit itself re-fetches a live game (no end line) every second and follows its newest move.
+  const PREDICT = __PREDICT__;
+  const pick = document.getElementById('pick');
+  const follow = document.getElementById('follow');
+  const note = document.getElementById('note');
+  const dot = document.getElementById('dot');
+  const el = document.getElementById('game');
+  let list = [];
+  let current = null;
+  let viewer = null;
+  let lensTag = null;
+
+  SWUViewer.loadCardText('kit/card-text.json').catch(() => {});
+
+  function label(g) {
+    const when = new Date(g.mtime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const state = g.live ? '● live' : g.winner === 'draw' ? 'draw' : g.winner ? `${g.winner} won` : 'ended early';
+    const decks = g.decks ? g.decks.join('  vs  ') : 'waiting for the first board';
+    return `${state} · ${g.kind} · ${when}${g.round ? ` · round ${g.round}` : ''} · ${decks}`;
+  }
+
+  async function refresh() {
+    try {
+      list = await (await fetch('games', { cache: 'no-store' })).json();
+    } catch {
+      return;
+    }
+    pick.replaceChildren(...list.map((g) => new Option(label(g), g.id, false, g.id === current)));
+    const shown = list.find((g) => g.id === current);
+    dot.classList.toggle('on', Boolean(shown?.live));
+    if (!list.length) {
+      note.textContent = 'No games recorded yet. A watched game shows up here as soon as its first board arrives.';
+      return;
+    }
+    const live = list.find((g) => g.live && g.steps > 0);
+    if (follow.checked && live && live.id !== current) {
+      open(live);
+    } else if (!current) {
+      const first = list.find((g) => g.steps > 0);
+      if (first) {
+        open(first);
+      }
+    }
+  }
+
+  function open(g) {
+    current = g.id;
+    lensTag = null;
+    pick.value = g.id;
+    dot.classList.toggle('on', g.live);
+    note.hidden = true;
+    viewer?.destroy();
+    viewer = SWUViewer.mount(el, {
+      // step 0: a finished game opens at its start; a live one (no end line yet) follows its newest move
+      url: `game/${g.id}`, layout: 'full', cardText: 'kit/card-text.json', persist: 'karabast-live.viewer', step: 0
+    });
+    loadLens();
+  }
+
+  async function loadLens() {
+    const id = current;
+    if (!PREDICT || !viewer || !id) {
+      return;
+    }
+    try {
+      const r = await fetch(`lens/${id}`, { cache: 'no-store' });
+      const tag = r.headers.get('ETag');
+      if (!r.ok || id !== current || tag === lensTag) {
+        return;
+      }
+      lensTag = tag;
+      viewer.setLens(await r.json());
+    } catch {
+      // the board still shows without the predictor
+    }
+  }
+
+  pick.addEventListener('change', () => {
+    const g = list.find((x) => x.id === pick.value);
+    if (g) {
+      follow.checked = g.live;
+      open(g);
+    }
+  });
+  refresh();
+  setInterval(refresh, 5000);
+  setInterval(() => {
+    if (list.find((g) => g.id === current)?.live) {
+      loadLens();
+    }
+  }, 3000);
+</script>
+</body>
+</html>

@@ -352,3 +352,78 @@ test('a reservation holds places until it is used or released', () => {
     assert.strictEqual(new PeopleLedger(file, 3).count, 3);
     assert.ok(!b.room(1));
 });
+
+/** A tiny watched game as spectate.js writes it: one scrubbed gamestate per line, both hands hidden. */
+function watchedStates() {
+    const card = (uuid, name, number, extra = {}) => ({ id: `id-${uuid}`, setId: { set: 'SOR', number }, uuid, name, ...extra });
+    const player = (id, n) => ({
+        id, name: id, hasInitiative: id === 'player1', availableResources: 0, numCardsInDeck: 40, isActionPhaseActivePlayer: false,
+        leaders: [card(`L${n}`, `Leader ${n}`, n, { type: 'leader', zone: 'base', controllerId: id, exhausted: false })],
+        base: card(`B${n}`, `Base ${n}`, 20 + n, { type: 'base', hp: 30, damage: 0, controllerId: id }),
+        cardPiles: { hand: [{ controllerId: id, zone: 'hand' }], resources: [], groundArena: [], spaceArena: [], discard: [], outsideTheGame: [], capturedZone: [], credits: [] }
+    });
+    const P = (id) => ({ type: 'player', id, name: id, uuid: `Player_${id}` });
+    const s0 = { id: 'g1', phase: 'setup', winners: [], players: { player1: player('player1', 1), player2: player('player2', 2) }, newMessages: [] };
+    const s1 = structuredClone(s0);
+    s1.phase = 'action';
+    s1.players.player1.isActionPhaseActivePlayer = true;
+    s1.newMessages = [{ date: '2026-10-01T12:00:01.000Z', message: { alert: { type: 'notification', message: ['Round: 1 - Action Phase'] } } }];
+    const s2 = structuredClone(s1);
+    s2.players.player2.base.damage = 4;
+    s2.newMessages = [{ date: '2026-10-01T12:00:02.000Z', message: [P('player1'), ' attacks ', P('player2'), "'s base with ", { type: 'card', name: 'Leader 1', uuid: 'L1' }] }];
+    const s3 = structuredClone(s2);
+    s3.winners = ['player1'];
+    s3.newMessages = [{ date: '2026-10-01T12:00:03.000Z', message: [P('player2'), ' concedes the game'] }];
+    return [s0, s1, s2, s3];
+}
+
+test('the live view serves a game being played without an end line, and refuses ids outside the runs folder', () => {
+    const { Games, LIVE_MS } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    fs.mkdirSync(path.join(runs, 'w-1'));
+    const file = path.join(runs, 'w-1', 'abcdef012345.jsonl');
+    const states = watchedStates().map((s) => JSON.stringify(s));
+    // three boards and the recorder halfway through writing the fourth
+    fs.writeFileSync(file, `${states.slice(0, 3).join('\n')}\n${states[3].slice(0, 40)}`);
+    const games = new Games(runs);
+    const [entry] = games.list();
+    assert.deepStrictEqual([entry.id, entry.kind], ['w-1/abcdef012345', 'watched']);
+    let g = games.get(entry.id);
+    assert.ok(g.live);
+    let lines = games.replay(g).trim().split('\n').map((l) => JSON.parse(l));
+    assert.strictEqual(lines[0].t, 'header');
+    assert.ok(lines.length > 1 && !lines.some((e) => e.t === 'end'));
+    // the game ends: the end line is served and the game is no longer live
+    fs.writeFileSync(file, `${states.join('\n')}\n`);
+    g = games.get(entry.id);
+    assert.ok(!g.live);
+    lines = games.replay(g).trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual([lines.at(-1).t, lines.at(-1).winner], ['end', 'p1']);
+    assert.strictEqual(games.summary(entry).winner, 'p1');
+    // a capture that stopped with no winner is live only for a while
+    fs.writeFileSync(file, `${states.slice(0, 3).join('\n')}\n`);
+    assert.ok(games.get(entry.id).live);
+    assert.ok(!new Games(runs, { now: () => Date.now() + LIVE_MS + 1000 }).get(entry.id).live);
+    for (const bad of ['../w-1/abcdef012345', 'w-1/../../abcdef012345', '.w/abcdef012345', 'w-1/abcdef01234', 'w-1/other/abcdef012345', 'w-1/frames/../abcdef012345']) {
+        assert.strictEqual(games.get(bad), null, bad);
+    }
+});
+
+test('the live view answers only under its key', async () => {
+    const { Games, makeServer } = require('../karabast/live-view');
+    const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
+    fs.writeFileSync(path.join(kit, 'swu-viewer-kit.js'), '// kit');
+    fs.writeFileSync(path.join(kit, 'card-text.json'), '{}');
+    fs.writeFileSync(path.join(kit, 'secret.txt'), 'no');
+    const server = makeServer({ games: new Games(fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'))), kit, key: 'k3y-for-tests' });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const at = (p) => fetch(`http://127.0.0.1:${server.address().port}${p}`).then((r) => r.status);
+    try {
+        assert.deepStrictEqual(
+            await Promise.all(['/', '/games', '/k3y-for-tests/', '/k3y-for-tests/games', '/k3y-for-tests/kit/swu-viewer-kit.js', '/k3y-for-tests/kit/secret.txt', '/k3y-for-tests/game/w-1/abcdef012345'].map(at)),
+            [404, 404, 200, 200, 200, 404, 404]
+        );
+    } finally {
+        server.close();
+    }
+});
