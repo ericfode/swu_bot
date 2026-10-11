@@ -18,12 +18,24 @@
 const { EventEmitter } = require('events');
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+// says who is calling in every HTTP request (Node's WebSocket cannot set headers)
+const USER_AGENT = 'swu-bot/0.1 (research bot, one game at a time; github.com/ericfode/swu_bot)';
 
-/** Throws unless `base` is a localhost URL or its host is listed in `allowHosts`. Returns the parsed URL. */
+/**
+ * Throws unless `base` is a localhost URL or its host is listed in `allowHosts`. Returns the parsed URL.
+ * Behind an HTTPS proxy (cloud sessions), Node's fetch and WebSocket bypass it unless NODE_USE_ENV_PROXY is set, so a
+ * non-local host also needs that.
+ */
 function checkHost(base, allowHosts = []) {
     const url = new URL(base);
-    if (!LOCAL_HOSTS.has(url.hostname) && !allowHosts.includes(url.hostname)) {
+    if (LOCAL_HOSTS.has(url.hostname)) {
+        return url;
+    }
+    if (!allowHosts.includes(url.hostname)) {
         throw new Error(`refusing to connect to ${url.hostname}: only localhost is allowed unless the host is passed explicitly (--allow-host ${url.hostname})`);
+    }
+    if ((process.env.HTTPS_PROXY || process.env.https_proxy) && !process.env.NODE_USE_ENV_PROXY) {
+        throw new Error(`HTTPS_PROXY is set but Node will not use it: run with NODE_USE_ENV_PROXY=1 to reach ${url.hostname}`);
     }
     return url;
 }
@@ -31,7 +43,7 @@ function checkHost(base, allowHosts = []) {
 /** POST a JSON body to `base + route` and return { status, body }. */
 async function post(base, route, body, { allowHosts, token } = {}) {
     checkHost(base, allowHosts);
-    const headers = { 'content-type': 'application/json' };
+    const headers = { 'content-type': 'application/json', 'user-agent': USER_AGENT };
     if (token) {
         headers.cookie = `next-auth.session-token=${token}`;
     }
@@ -42,7 +54,7 @@ async function post(base, route, body, { allowHosts, token } = {}) {
 /** GET `base + route` as JSON and return { status, body }. */
 async function get(base, route, { allowHosts } = {}) {
     checkHost(base, allowHosts);
-    const r = await fetch(new URL(route, base));
+    const r = await fetch(new URL(route, base), { headers: { 'user-agent': USER_AGENT } });
     return { status: r.status, body: await r.json().catch(() => null) };
 }
 

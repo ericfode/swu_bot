@@ -381,7 +381,7 @@ async function main() {
         onResult: ({ job, result: r }) => {
             const done = {
                 winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null,
-                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null
+                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, ...(r.versions ? { versions: r.versions } : {})
             };
             Object.assign(games.find((g) => g.id === job.id), done, { think: r.think ?? null, botStats: r.botStats });
             Object.assign(tIndex.games.find((g) => g.id === job.id), done);
