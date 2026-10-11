@@ -64,11 +64,11 @@
       note.textContent = 'No games recorded yet. A watched game shows up here as soon as its first board arrives.';
       return;
     }
-    const live = list.find((g) => g.live && g.steps > 0);
+    const live = list.find((g) => g.live && g.board);
     if (follow.checked && live && live.id !== current) {
       open(live);
     } else if (!current) {
-      const first = list.find((g) => g.steps > 0);
+      const first = list.find((g) => g.board);
       if (first) {
         open(first);
       }

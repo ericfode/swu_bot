@@ -409,6 +409,35 @@ test('the live view serves a game being played without an end line, and refuses 
     }
 });
 
+test('the live view lists every game it can open, a game with only its first board included', () => {
+    const { Games } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    const first = `${JSON.stringify(watchedStates()[0])}\n`;
+    // a folder name a game id cannot carry is left out, so no listed game is a 404
+    fs.mkdirSync(path.join(runs, 'run 1'));
+    fs.writeFileSync(path.join(runs, 'run 1', 'abcdef012345.jsonl'), first);
+    fs.mkdirSync(path.join(runs, 'w-1'));
+    for (let i = 0; i < 45; i++) {
+        fs.writeFileSync(path.join(runs, 'w-1', `${String(i).padStart(12, '0')}.jsonl`), first);
+    }
+    fs.writeFileSync(path.join(runs, 'w-1', 'ffffffffffff.jsonl'), 'not a frame file\n');
+    const games = new Games(runs);
+    const all = games.list().map((e) => games.summary(e));
+    assert.strictEqual(all.length, 46);
+    assert.ok(all.every((g) => g.id.startsWith('w-1/')));
+    const one = all.find((g) => g.id === 'w-1/000000000000');
+    assert.deepStrictEqual([one.board, one.steps, one.live], [true, 0, true]);
+    assert.strictEqual(all.find((g) => g.id === 'w-1/ffffffffffff').board, false);
+});
+
+test('the live view gzips only when the client allows it', () => {
+    const { acceptsGzip } = require('../karabast/live-view');
+    const cases = { 'gzip': true, 'gzip, deflate, br': true, 'br;q=1.0, gzip;q=0.8': true, '*': true, 'gzip;q=0': false, 'gzip;q=0.0, br': false, '*;q=0': false, 'br, *;q=0.5': true, 'identity': false, '': false };
+    for (const [header, want] of Object.entries(cases)) {
+        assert.strictEqual(acceptsGzip(header), want, header);
+    }
+});
+
 test('the live view answers only under its key', async () => {
     const { Games, makeServer } = require('../karabast/live-view');
     const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));

@@ -28,7 +28,10 @@ const { convertFrames, splitGames } = require('../../importer/karabast');
 
 /** A frame file stays "live" this long after its last write when it has no winner yet (prompt timer + bank). */
 const LIVE_MS = 5 * 60000;
-const ID = /^([A-Za-z0-9][\w.-]*)\/(?:(frames)\/)?([0-9a-f]{12})$/;
+const RUN = /^[A-Za-z0-9][\w.-]*$/;
+const ID = new RegExp(`^(${RUN.source.slice(1, -1)})\\/(?:(frames)\\/)?([0-9a-f]{12})$`);
+/** Full games kept in memory; the picker's summaries are kept for every file. */
+const KEEP = 8;
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', json: 'application/json', jsonl: 'application/x-ndjson' };
 
 function arg(name, dflt) {
@@ -41,7 +44,8 @@ class Games {
     constructor(runs, { predict = null, now = () => Date.now() } = {}) {
         this.runs = path.resolve(runs);
         this.now = now;
-        this.cache = new Map(); // file -> { version, game }
+        this.cache = new Map(); // file -> { version, game }, the KEEP most recently used
+        this.summaries = new Map(); // file -> { version, info }
         this.ev = predict ? require('../eval/evaluators').loadEvaluator(predict) : null;
         this.predictName = predict;
     }
@@ -56,7 +60,8 @@ class Games {
     list() {
         const out = [];
         const dirs = fs.existsSync(this.runs) ? fs.readdirSync(this.runs, { withFileTypes: true }) : [];
-        for (const d of dirs.filter((x) => x.isDirectory() && /^[A-Za-z0-9]/.test(x.name))) {
+        // only names a game id can carry, so every listed game can be opened
+        for (const d of dirs.filter((x) => x.isDirectory() && RUN.test(x.name))) {
             for (const sub of [null, 'frames']) {
                 const dir = path.join(this.runs, d.name, ...(sub ? [sub] : []));
                 if (!fs.existsSync(dir)) {
@@ -64,7 +69,8 @@ class Games {
                 }
                 for (const f of fs.readdirSync(dir).filter((x) => /^[0-9a-f]{12}\.jsonl$/.test(x))) {
                     const id = [d.name, sub, f.slice(0, -6)].filter(Boolean).join('/');
-                    out.push({ id, mtime: fs.statSync(path.join(dir, f)).mtimeMs, kind: sub ? 'bot game' : 'watched' });
+                    const st = fs.statSync(path.join(dir, f));
+                    out.push({ id, mtime: st.mtimeMs, size: st.size, kind: sub ? 'bot game' : 'watched' });
                 }
             }
         }
@@ -82,7 +88,11 @@ class Games {
         let hit = this.cache.get(file);
         if (!hit || hit.version !== version) {
             hit = { version, game: this.convert(fs.readFileSync(file, 'utf8')) };
-            this.cache.set(file, hit);
+        }
+        this.cache.delete(file);
+        this.cache.set(file, hit);
+        while (this.cache.size > KEEP) {
+            this.cache.delete(this.cache.keys().next().value);
         }
         if (!hit.game) {
             return null;
@@ -93,32 +103,38 @@ class Games {
     }
 
     convert(text) {
-        // the recorder may be halfway through writing a line
-        const cap = readText(text.slice(0, text.lastIndexOf('\n') + 1));
-        const games = splitGames(cap.frames.filter((f) => Object.keys(f.state?.players ?? f.players ?? {}).length >= 2));
-        if (!games.length) {
-            return null;
-        }
         try {
+            // the recorder may be halfway through writing a line
+            const cap = readText(text.slice(0, text.lastIndexOf('\n') + 1));
+            const games = splitGames(cap.frames.filter((f) => Object.keys(f.state?.players ?? f.players ?? {}).length >= 2));
+            if (!games.length) {
+                return null;
+            }
             const { events } = convertFrames(games[games.length - 1], { seats: cap.meta.capture?.seats, source: { kind: cap.meta.reader } });
             return { events };
         } catch {
-            return null; // too few frames for a board
+            return null; // no board yet, or not a frame file
         }
     }
 
-    /** One line per game for the picker. */
+    /** One line per game for the picker (an entry from list()). `board` says whether the game can be shown yet. */
     summary(entry) {
-        const g = this.get(entry.id);
-        if (!g) {
-            return { id: entry.id, kind: entry.kind, live: this.now() - entry.mtime < LIVE_MS, steps: 0, mtime: entry.mtime };
+        const file = this.file(entry.id);
+        const version = `${entry.size}-${Math.round(entry.mtime)}`;
+        let s = this.summaries.get(file);
+        if (!s || s.version !== version) {
+            const g = this.get(entry.id);
+            const h = g?.events[0];
+            const end = g?.events[g.events.length - 1];
+            s = {
+                version,
+                info: g && { steps: end.steps, round: end.round, winner: end.winner, how: end.how ?? null, decks: h.players.map((p) => p.deck), pov: h.source.pov }
+            };
+            this.summaries.set(file, s);
         }
-        const h = g.events[0];
-        const end = g.events[g.events.length - 1];
-        return {
-            id: entry.id, kind: entry.kind, live: g.live, mtime: entry.mtime, steps: end.steps, round: end.round,
-            winner: end.winner, how: end.how ?? null, decks: h.players.map((p) => p.deck), pov: h.source.pov
-        };
+        const fresh = this.now() - entry.mtime < LIVE_MS;
+        const base = { id: entry.id, kind: entry.kind, mtime: entry.mtime };
+        return s.info ? { ...base, ...s.info, board: true, live: !s.info.winner && fresh } : { ...base, board: false, live: fresh, steps: 0 };
     }
 
     /** The replay text the kit reads: no end line while the game is live. */
@@ -150,8 +166,19 @@ class Games {
     }
 }
 
+/** True when Accept-Encoding allows gzip: named with q above 0, or covered by "*" when not named. */
+function acceptsGzip(header) {
+    const q = {};
+    for (const part of String(header ?? '').split(',')) {
+        const [name, ...params] = part.trim().toLowerCase().split(';').map((x) => x.trim());
+        const qp = params.find((x) => x.startsWith('q='));
+        q[name] = qp ? Number(qp.slice(2)) : 1;
+    }
+    return (q.gzip ?? q['*'] ?? 0) > 0;
+}
+
 function send(req, res, status, body, type, etag = null) {
-    const headers = { 'Content-Type': type, 'Cache-Control': 'no-cache' };
+    const headers = { 'Content-Type': type, 'Cache-Control': 'no-cache', Vary: 'Accept-Encoding' };
     if (etag) {
         headers.ETag = `"${etag}"`;
         if (req.headers['if-none-match'] === headers.ETag) {
@@ -161,7 +188,7 @@ function send(req, res, status, body, type, etag = null) {
         }
     }
     let buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
-    if (buf.length > 1024 && String(req.headers['accept-encoding'] ?? '').includes('gzip')) {
+    if (buf.length > 1024 && acceptsGzip(req.headers['accept-encoding'])) {
         headers['Content-Encoding'] = 'gzip';
         buf = zlib.gzipSync(buf);
     }
@@ -190,7 +217,7 @@ function makeServer({ games, kit, key = null }) {
                 return send(req, res, 200, page, TYPES.html);
             }
             if (rel === 'games') {
-                return send(req, res, 200, JSON.stringify(games.list().slice(0, 40).map((e) => games.summary(e))), TYPES.json);
+                return send(req, res, 200, JSON.stringify(games.list().map((e) => games.summary(e))), TYPES.json);
             }
             if (rel.startsWith('kit/') && Object.hasOwn(kitFiles, rel.slice(4))) {
                 return send(req, res, 200, fs.readFileSync(path.join(kit, rel.slice(4))), kitFiles[rel.slice(4)]);
@@ -238,4 +265,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { Games, makeServer, LIVE_MS };
+module.exports = { Games, makeServer, acceptsGzip, LIVE_MS };
