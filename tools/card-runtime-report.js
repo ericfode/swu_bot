@@ -13,7 +13,7 @@ if (process.argv.slice(2).some((arg) => arg !== '--check')) throw new Error('Usa
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'swu-card-admission-'));
 try {
     const pool = path.join(temporary, 'pool.json');
-    const run = spawnSync('cargo', ['run', '--locked', '--quiet', '--release', '-p', 'omni-rs', '--',
+    const run = spawnSync('cargo', ['run', '--locked', '--quiet', '--release', '-p', 'omni-rs', '--bin', 'omni-rs', '--',
         'catalogue', path.join(output, 'catalog.json'), '--out-pool', pool], {
         cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
     });
