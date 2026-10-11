@@ -153,6 +153,8 @@
     { id: 'human', family: 'human', label: 'Humans', desc: 'real karabast.net players', hue: null, chroma: 0, light: '#0f1420', dark: '#eef0f4' },
   ];
   const FAM_BY_FAMILY = Object.fromEntries(FAMILIES.map((f) => [f.family, f]));
+  // The dashboard and app call hand-written bots (rust-greedy, rush) family "rules".
+  FAM_BY_FAMILY.rules = FAM_BY_FAMILY.heuristic;
   /** Family key -> label, e.g. FAMLABEL.heur = 'Heuristic'. */
   const FAMLABEL = Object.fromEntries(FAMILIES.map((f) => [f.id, f.label]));
   /** Family key ('heur', 'search', ...) for a bot's `family` field; anything unknown counts as 'other'. */

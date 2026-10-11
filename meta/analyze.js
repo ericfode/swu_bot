@@ -155,6 +155,7 @@ const FEATURES = ['baseLead', 'boardLead', 'hpLead', 'handLead', 'resLead', 'ini
 
 /** Logistic regression by plain gradient descent on standardized features. Small data, so this is fast enough. */
 function fitLogistic(rows) {
+    if (!rows.length) return { predict: () => 0.5, coef: Object.fromEntries(FEATURES.map((f) => [f, 0])), intercept: 0 };
     const k = FEATURES.length;
     const mu = FEATURES.map((f) => rows.reduce((s, r) => s + r.x[f], 0) / rows.length);
     const sd = FEATURES.map((f, j) => Math.sqrt(rows.reduce((s, r) => s + (r.x[f] - mu[j]) ** 2, 0) / rows.length) || 1);
