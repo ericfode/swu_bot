@@ -210,7 +210,9 @@ async function run(o) {
     const out = { seed: o.seed, bots: o.bots, decks: g.decks, n: o.n, windows: windows.length, realWinner, realRounds: g1.eg.round, checkpoints: [] };
     steps = 0;
     while (!g.eg.over && steps < o.maxSteps) {
-        // me is null if the replay drifted from pass 1; out.replayMatches records that
+        // pass 1 only picks the steps. The label and L0 come from this game's own future, so if a nondeterministic bot
+        // makes the replay drift from pass 1, each position is still paired with what happened after it. me is null if
+        // the drifted game has no action window at a target step; out.replayMatches says whether the passes agreed.
         const me = targets.has(steps) ? g.eg.ids.find((id) => g.eg.legalActions(id).length && g.eg.isActionWindow(id)) : null;
         if (me) {
             const opp = g.eg.ids.find((id) => id !== me);
@@ -220,7 +222,7 @@ async function run(o) {
                 board: { myBase: hpLeft(g.eg, me), oppBase: hpLeft(g.eg, opp), myHand: g.eg.player(me).hand.length, oppHand: g.eg.player(opp).hand.length,
                     myDeck: g.eg.player(me).drawDeck.length, oppDeck: g.eg.player(opp).drawDeck.length,
                     myUnits: g.eg.player(me).getArenaUnits().length, oppUnits: g.eg.player(opp).getArenaUnits().length },
-                meWonReal: realWinner && realWinner.length === 1 ? realWinner[0] === meName : null,
+                meWonReal: null,
                 levels: {}
             };
             const mark = g.eg.mark(me);
@@ -250,7 +252,8 @@ async function run(o) {
                 return `${L} ${ok.length ? (ok.filter((x) => x.winner === 'me').length / ok.length).toFixed(2) : '-'}${bad ? ` (${bad} err/draw)` : ''}`;
             }).join(' | ');
             cp.pid = me;
-            console.error(`seed ${o.seed} step ${steps} r${cp.round} ${meName}: ${summ}  (${cp.ms} ms, real ${cp.meWonReal == null ? 'n/a' : cp.meWonReal ? 'win' : 'loss'})`);
+            const pass1 = realWinner && realWinner.length === 1 ? (realWinner[0] === meName ? 'win' : 'loss') : 'n/a';
+            console.error(`seed ${o.seed} step ${steps} r${cp.round} ${meName}: ${summ}  (${cp.ms} ms, pass 1 ${pass1})`);
         }
         if (!step(g.eg, bots, g.rng)) {
             break;
@@ -260,10 +263,14 @@ async function run(o) {
     closeBots(bots);
     for (const cp of out.checkpoints) {
         const opp = g.eg.ids.find((id) => id !== cp.pid);
-        cp.levels.L0 = [{ winner: outcome(g.eg, cp.pid), margin: hpLeft(g.eg, cp.pid) - hpLeft(g.eg, opp), rounds: g.eg.round, steps: steps - cp.step }];
+        const real = outcome(g.eg, cp.pid);
+        cp.meWonReal = real === 'me' ? true : real === 'opp' ? false : null;
+        cp.levels.L0 = [{ winner: real, margin: hpLeft(g.eg, cp.pid) - hpLeft(g.eg, opp), rounds: g.eg.round, steps: steps - cp.step }];
         delete cp.pid;
     }
     out.replayMatches = g.eg.over && JSON.stringify(finalWinners(g.eg)) === JSON.stringify(realWinner);
+    out.realWinner = finalWinners(g.eg);
+    out.realRounds = g.eg.round;
     const json = JSON.stringify(out);
     if (o.out) {
         fs.writeFileSync(o.out, json);
