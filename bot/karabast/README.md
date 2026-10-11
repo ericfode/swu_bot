@@ -81,8 +81,9 @@ a game the page isn't showing, a button opens it.
 ## Play games back to back (`queue.js --games N`)
 
 With `--games` above 1, `queue.js` queues again `--gap` seconds after each game (at least 25: a finished lobby keeps
-its users ~20 s). A wait with no match queues again; any other failure is a row with `result: "error"`, and
-`--max-errors` failures in a row (default 3) stop the run. It also stops on the people cap, a ledger error or the stop
+its users ~20 s). A wait with no match queues again without using up a game, and `--max-waits` of them in a row
+(default 6) stop the run. Any other failure, a game cut off with no result included, counts as a game and toward
+`--max-errors` failures in a row (default 3). It also stops on the people cap, a ledger error or the stop
 file, and exits 1 when it ended on a failure. `<out>/status.json` is rewritten whole every 30 s and at each change
 (`state`: starting, queued, playing with `file`, between games, stopped with `reason`; plus `played`, `won`, `lost`,
 `errors`), so a reader tells a dead run from one waiting in the queue.

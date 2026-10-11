@@ -510,6 +510,27 @@ test('the queue loop counts a game with no result as a failure and says why it s
     assert.deepStrictEqual([ok.ok, ok.reason], [true, 'played the 2 game(s) asked for']);
 });
 
+test('the queue loop retries a wait with no match without using up a game, up to maxWaits in a row', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const quiet = (n) => async (g, hooks) => {
+        hooks.onQueued();
+        if (g < n) {
+            throw new Error('no match within 10 minutes');
+        }
+        return { result: 'win' };
+    };
+    const one = await runLoop({ games: 1, gapS: 25, out, bot: 'c-clock', deck: 'd', play: quiet(2), log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([one.played, one.won, one.ok, one.reason], [1, 1, true, 'played the 1 game(s) asked for']);
+    const none = await runLoop({ games: 1, gapS: 25, maxWaits: 3, out, bot: 'c-clock', deck: 'd', play: quiet(99), log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([none.played, none.ok, none.reason], [0, false, 'no match in 3 waits in a row']);
+    // a ledger that fails still leaves a stopped status that says why
+    const broken = { reserve: () => { throw new Error('people ledger stayed locked'); } };
+    const end = await runLoop({ games: 3, gapS: 25, ledger: broken, out, bot: 'c-clock', deck: 'd', play: quiet(0), log: () => {}, wait: async () => {} });
+    const st = JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8'));
+    assert.deepStrictEqual([end.ok, st.state, st.reason], [false, 'stopped', 'stopped on an error: people ledger stayed locked']);
+});
+
 test('the queue loop stops at the people cap and on the stop file', async () => {
     const { runLoop } = require('../karabast/queue');
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));

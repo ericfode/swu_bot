@@ -8,10 +8,11 @@
  *        [--server http://127.0.0.1:9500] [--allow-host <host>] [--username "swu-bot (bot)"]
  *        [--format premier] [--card-pool current] [--wait-minutes 10] [--chat "<line>"] [--out <dir>]
  *        [--ledger <file> --max-people 10] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
+ *        [--max-waits 6]
  *
  * With --games above 1 it is a loop: after each game it waits --gap seconds (at least 25: a finished lobby keeps its
- * users ~20 s) and queues again, until the games, the people cap, the stop file or --max-errors failures in a row end
- * it. A wait with no match is no failure: it queues again.
+ * users ~20 s) and queues again, until the games, the people cap, the stop file, --max-errors failures in a row or
+ * --max-waits waits with no match in a row end it. A wait with no match is no game: it queues again.
  *
  * Safety:
  * - Only localhost unless --allow-host names the server's host (socket.js).
@@ -166,6 +167,7 @@ async function main() {
     const gapS = Number(arg('gap', 60));
     const waitMinutes = Number(arg('wait-minutes', 10));
     const maxErrors = Number(arg('max-errors', 3));
+    const maxWaits = Number(arg('max-waits', 6));
     // NaN would pass every comparison below and loop without a stop; a delay past setTimeout's limit (~24.8 days)
     // fires after 1 ms, which would queue again at once (gap) or give up at once and spend a place (wait)
     if (!(gapS >= MIN_GAP_S && gapS <= 3600)) {
@@ -174,11 +176,11 @@ async function main() {
     if (!(waitMinutes > 0 && waitMinutes <= 60)) {
         throw new Error('--wait-minutes must be above 0 and at most 60');
     }
-    if (!Number.isInteger(games) || games < 1 || !Number.isInteger(maxErrors) || maxErrors < 1) {
-        throw new Error('--games and --max-errors must be whole numbers of 1 or more');
+    if (![games, maxErrors, maxWaits].every((n) => Number.isInteger(n) && n >= 1)) {
+        throw new Error('--games, --max-errors and --max-waits must be whole numbers of 1 or more');
     }
     const end = await runLoop({
-        games, gapS, maxErrors, stopFile, ledger, out, bot, deck: name, log,
+        games, gapS, maxErrors, maxWaits, stopFile, ledger, out, bot, deck: name, log,
         play: (g, hooks) => queueOnce({
             server, user, deck, bot, format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
             waitMs: waitMinutes * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
@@ -196,7 +198,7 @@ async function main() {
  * It stops on the stop file, the people cap, a ledger error, or maxErrors failures in a row (a wait with no match is
  * no failure). Resolves to the status it ended on.
  */
-async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = null, out = null, bot, deck, play, log, wait = sleep }) {
+async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = null, ledger = null, out = null, bot, deck, play, log, wait = sleep }) {
     const tally = { played: 0, won: 0, lost: 0, errors: 0 };
     let status = { bot, deck, state: 'starting', since: new Date().toISOString(), file: null };
     const set = (patch) => {
@@ -210,9 +212,11 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
     let lastFailure = null;
     let failures = 0;
     let ok = true;
+    let done = 0; // games that ended, failed ones included; a wait with no match is not one
+    let waits = 0; // waits with no match in a row
     try {
         set({});
-        for (let g = 0; g < games; g++) {
+        for (let g = 0; done < games; g++) {
             if (stopFile && fs.existsSync(stopFile)) {
                 reason = 'the stop file exists';
                 break;
@@ -261,21 +265,24 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
             }
             // 'none' is a game that ended with no result (the socket closed mid-game): a failure, never a game played
             const failed = row.result === 'error' || row.result === 'none';
+            const noMatch = row.result === 'no match';
+            waits = noMatch ? waits + 1 : 0;
             if (failed) {
                 tally.errors++;
                 failures++;
-                log(`game ${g + 1} failed: ${row.reason}`);
-            } else {
+                log(`attempt ${g + 1} failed: ${row.reason}`);
+            } else if (!noMatch) {
                 failures = 0;
-                if (row.result !== 'no match') {
-                    tally.played++;
-                    tally.won += row.result === 'win' ? 1 : 0;
-                    tally.lost += row.result === 'loss' ? 1 : 0;
-                }
+                tally.played++;
+                tally.won += row.result === 'win' ? 1 : 0;
+                tally.lost += row.result === 'loss' ? 1 : 0;
             }
-            // a run that ends on a failed game reports it (exit code 1 and the reason), even below maxErrors
-            ok = !failed;
-            lastFailure = failed ? row.reason : null;
+            if (!noMatch) {
+                done++;
+                // a run that ends on a failed game reports it (exit code 1 and the reason), even below maxErrors
+                ok = !failed;
+                lastFailure = failed ? row.reason : null;
+            }
             if (ledgerError) {
                 reason = `the people ledger refused the opponent: ${ledgerError.message}`;
                 ok = false;
@@ -285,11 +292,20 @@ async function runLoop({ games, gapS, maxErrors = 3, stopFile = null, ledger = n
                 reason = `${failures} failures in a row (last: ${row.reason})`;
                 break;
             }
-            if (g + 1 < games) {
+            if (waits >= maxWaits) {
+                reason = `no match in ${waits} waits in a row`;
+                ok = false;
+                break;
+            }
+            if (done < games) {
                 set({ state: 'between games', since: new Date().toISOString(), file: null, last: row.result });
                 await wait(gapS * 1000);
             }
         }
+    } catch (e) {
+        // the ledger (reserve, spend, release) or the status file failed: stop, and still say why below
+        reason = `stopped on an error: ${e.message}`;
+        ok = false;
     } finally {
         clearInterval(beat);
     }
