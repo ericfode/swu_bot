@@ -1,0 +1,140 @@
+'use strict';
+
+/**
+ * Omniscient bot: a reference opponent that cheats on purpose.
+ *
+ * It searches with full information (both hands, both deck orders, the real engine RNG, so it knows every future
+ * draw and shuffle in the lines it reads) using the alpha-beta search in `bot/omni/search.js`. It is not a fair
+ * bot; it exists to measure how much information and lookahead are worth, as an upper reference for fair bots and
+ * position functions.
+ *
+ * At each of its action windows it:
+ *   1. tries every move once (depth 1); a move that wins the game on the spot is played at once,
+ *   2. runs alpha-beta to `depth` windows (its move, the opponent's best reply, ...) within a node/time budget,
+ *      keeping the deepest fully searched answer.
+ * Prompts outside the action window follow the plan of the chosen move, then the rule-based choice the search
+ * assumes, so the real game follows the line that was searched.
+ *
+ * Options: depth (default 2), budget (nodes per window, default 600), ms (time per window, default 6000), beam
+ * (moves that get a deeper look, default 8), followUps (target options tried for our own move, default 8),
+ * blind (true: reseed the engine RNG inside the search so it cannot see future draws; the "fair luck" ablation).
+ *
+ * With OMNI_LOG_DIR set, every action-window decision is appended to <dir>/<seed>-<bot>-<seat>.jsonl (value, depth,
+ * principal variation, the top moves and their values). bot/omni/lens.js joins these with the replay: the k-th line
+ * is the bot's k-th actionWindow step.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { seededRng } = require('../env');
+const { OmniSearch, BudgetExceeded, ruleChoice, stateKey, same, isPass } = require('../omni/search');
+
+class OmniscientBot {
+    constructor(name = 'omni', { depth = 2, budget = 600, ms = 6000, blind = false, beam = 8, followUps = 8 } = {}) {
+        this.name = name;
+        this.needsUndo = true;
+        this.depth = depth;
+        this.budget = budget;
+        this.ms = ms;
+        this.blind = blind;
+        this.beam = beam;
+        this.followUps = followUps;
+        this.plan = [];
+        this.seen = new Map();
+        this.rng = null;
+        this.last = null;
+        this.stats = { windows: 0, playouts: 0, failedPlayouts: 0, noops: 0, loopPasses: 0, ms: 0, depthReached: {}, forcedWins: 0 };
+    }
+
+    choose({ game: eg, pid, actions, rng }) {
+        this.rng ??= seededRng(`omni${Math.floor(rng() * 1e9)}`);
+        if (!eg.isActionWindow(pid)) {
+            if (this.plan.length) {
+                const live = actions.find((a) => same(a, this.plan[0]));
+                this.plan.shift();
+                if (live) {
+                    return live.kind === 'distribute' ? ruleChoice(eg, pid, [live]) : live;
+                }
+                this.plan = [];
+            }
+            return ruleChoice(eg, pid, actions);
+        }
+        const t0 = Date.now();
+        const pick = this.decide(eg, pid, actions);
+        this.stats.windows++;
+        this.stats.ms += Date.now() - t0;
+        return pick;
+    }
+
+    decide(eg, pid, actions) {
+        this.plan = [];
+        const pass = actions.find(isPass);
+        const key = stateKey(eg, !this.blind);
+        const seen = (this.seen.get(key) ?? 0) + 1;
+        this.seen.set(key, seen);
+        if (seen > 2 && pass) {
+            this.stats.loopPasses++;
+            return pass;
+        }
+        const t0 = Date.now();
+        const rootMark = eg.mark(pid);
+        const reseed = this.blind ? () => String(Math.floor(this.rng() * 1e9)) : null;
+        // branch on targets for our own first move only; deeper moves and the opponent's use the rule-based targets
+        const followUps = (who, ply) => (who === pid && ply === 0 ? this.followUps : 0);
+        const search = new OmniSearch(eg, { budget: this.budget, deadline: t0 + this.ms, followUps, reseed, side: pid });
+        let best = null;
+        let reached = 0;
+        try {
+            for (let d = 1; d <= this.depth; d++) {
+                const r = search.alphaBeta(d, -Infinity, Infinity, 0, this.beam);
+                if (r.pv?.length) {
+                    best = r;
+                    reached = d;
+                }
+                if (Math.abs(r.value) >= 9000) {
+                    break;
+                }
+            }
+        } catch (e) {
+            if (!(e instanceof BudgetExceeded)) {
+                throw e;
+            }
+        } finally {
+            // alpha-beta leaves the engine at the root already; restoring again also puts back the real RNG state
+            eg.restore(pid, rootMark);
+        }
+        this.stats.playouts += search.nodes;
+        this.stats.failedPlayouts += search.failed;
+        this.stats.depthReached[reached] = (this.stats.depthReached[reached] ?? 0) + 1;
+        if (!best) {
+            this.last = { round: eg.round, depth: 0, nodes: search.nodes, ms: Date.now() - t0, value: null, pv: [], moves: [] };
+            this.log(eg, pid);
+            return pass ?? actions[0];
+        }
+        if (best.value >= 9000) {
+            this.stats.forcedWins++;
+        }
+        const seq = best.pv[0];
+        this.last = {
+            round: eg.round, depth: reached, nodes: search.nodes, ms: Date.now() - t0, value: best.value,
+            pv: best.pv.map((m) => m.map((a) => a.label).join(' > ')),
+            moves: (best.kids ?? []).slice(0, 40).map((k) => ({ move: k.seq.map((a) => a.label).join(' > '), value: +(k.searched ?? k.value).toFixed(2) }))
+        };
+        this.log(eg, pid);
+        this.plan = seq.slice(1);
+        return eg.refetch(pid, seq[0]) ?? pass ?? actions[0];
+    }
+}
+
+OmniscientBot.prototype.log = function log(eg, pid) {
+    const dir = process.env.OMNI_LOG_DIR;
+    if (!dir) {
+        return;
+    }
+    const seat = `p${eg.ids.indexOf(pid) + 1}`;
+    const seed = String(eg.game.id).replace(/^bot-/, '');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, `${seed}-${this.name}-${seat}.jsonl`), `${JSON.stringify({ seat, ...this.last })}\n`);
+};
+
+module.exports = { OmniscientBot };

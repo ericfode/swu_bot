@@ -9,6 +9,7 @@ const { playGame } = require('./match');
 const { snapshot } = require('./recorder');
 const { createRandomBot } = require('./players/random');
 const { HeuristicBot } = require('./players/heuristic');
+const { OmniscientBot } = require('./players/omniscient');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -20,6 +21,12 @@ function makeBot(name) {
     if (/^heuristic/.test(name)) {
         const d = /-d(\d)/.exec(name);
         return new HeuristicBot(name, { depth: d ? Number(d[1]) : 1 });
+    }
+    if (/^omni/.test(name)) {
+        // omni[-d<depth>][-n<nodes per window>][-blind]: the full-information reference bot (cheats on purpose)
+        const d = /-d(\d)/.exec(name);
+        const n = /-n(\d+)/.exec(name);
+        return new OmniscientBot(name, { depth: d ? Number(d[1]) : 2, ...(n ? { budget: Number(n[1]) } : {}), blind: /-blind/.test(name) });
     }
     return createRandomBot(name);
 }
