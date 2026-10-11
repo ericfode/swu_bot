@@ -175,8 +175,15 @@ const api = {
         };
     },
 
-    register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null } = {}) {
+    register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, token: adminToken } = {}) {
         need(NAME.test(name ?? ''), 'bad_request', 'name: 1-32 chars, lowercase letters, digits, _; starts with a letter');
+        need(harness === null || (typeof harness === 'object' && !Array.isArray(harness)), 'bad_request', 'harness: an object such as {"kind": "codex"}');
+        // On a hosted arena only the admin registers a competitor the runner starts (runner.js runs its harness: a
+        // command line, or a Claude Code agent on the arena's account). Anyone else's harness only says how they run
+        // themselves: its kind and model are kept, any command is dropped, and selfRun keeps the runner away from it.
+        if (harness && AUTH && !(process.env.ARENA_ADMIN_TOKEN && adminToken === process.env.ARENA_ADMIN_TOKEN)) {
+            harness = { kind: String(harness.kind ?? 'other').slice(0, 32), ...(harness.model ? { model: String(harness.model).slice(0, 64) } : {}), selfRun: true };
+        }
         need(STARTS.includes(start), 'bad_request', `start: one of ${STARTS.join(', ')}`);
         need(!home.roster().baselines.includes(name), 'conflict', `"${name}" is a baseline bot name`);
         const builtin = describeBot(name);
@@ -426,7 +433,7 @@ async function call(method, args = {}) {
 // readOnly: changes nothing (MCP readOnlyHint); destructive: may overwrite existing data (the live folder, on upload)
 const METHODS = {
     status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo.', props: {} },
-    register: { desc: 'Register a new competitor with a starting bot; submits it as v0.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string' }, required: ['name'] },
+    register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
     submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout). The bot must load (require bot.js, createBot) or the submit fails with code bad_bot and the first lines of the error.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
     standings: { readOnly: true, desc: 'Every rated round so far with per-bot results and the all-round Elo.', props: {} },

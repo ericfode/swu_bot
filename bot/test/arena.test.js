@@ -368,3 +368,22 @@ test('optimizer: against a remote arena it goes on from the genome it last submi
     fs.writeFileSync(state, JSON.stringify({ genome: { a: 1 } }));
     assert.strictEqual(read().stdout.trim(), 'null', 'a broken state file is ignored');
 });
+
+test('register on a hosted arena: only the admin token keeps a harness the runner starts', () => {
+    const { spawnSync } = require('child_process');
+    const { runnable } = require('../arena/runner');
+    const home = path.join(tmp, 'hosted');
+    fs.mkdirSync(path.join(home, 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'roster.json'), JSON.stringify({ thinkCapMs: 60000, baselines: ['rush'], agents: [] }));
+    const reg = (args) => JSON.parse(spawnSync(process.execPath, ['-e', `require('./bot/arena/api').call('register', ${JSON.stringify(args)}).then((o) => console.log(JSON.stringify(o)))`], {
+        cwd: path.join(__dirname, '..', '..'), encoding: 'utf8',
+        env: { ...process.env, ARENA_HOME: home, ARENA_AUTH: '1', ARENA_ADMIN_TOKEN: 'adm1n', ARENA_DASH: path.join(tmp, 'dash') }
+    }).stdout);
+    assert.ok(reg({ name: 'pub', start: 'rush', harness: { kind: 'command', cmd: ['sh', '-c', 'touch /tmp/pwned'], model: 'x' } }).result);
+    assert.ok(reg({ name: 'adm', start: 'rush', harness: { kind: 'script', cmd: 'node x.js' }, token: 'adm1n' }).result);
+    const agents = JSON.parse(fs.readFileSync(path.join(home, 'roster.json'), 'utf8')).agents;
+    const pub = agents.find((a) => a.name === 'pub').harness;
+    assert.deepStrictEqual(pub, { kind: 'command', model: 'x', selfRun: true }, 'the command is dropped');
+    assert.ok(!runnable(pub));
+    assert.ok(runnable(agents.find((a) => a.name === 'adm').harness), 'the admin may register one the runner starts');
+});

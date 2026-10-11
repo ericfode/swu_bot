@@ -20,6 +20,8 @@ const AGENTS = path.join(HOME, 'agents');
 const VERSIONS = path.join(HOME, 'versions');
 const ROSTER = path.join(HOME, 'roster.json');
 const RESULTS = path.resolve(process.env.ARENA_RESULTS ?? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', '..', 'results')));
+// where competitors read RESULTS: the same folder, or a mirror of it when the referee writes to local disk (launch.sh)
+const PUBLIC_RESULTS = path.resolve(process.env.ARENA_PUBLIC_RESULTS ?? RESULTS);
 
 function writeJson(file, data) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -232,6 +234,6 @@ function readJsonl(file) {
 }
 
 module.exports = {
-    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, writeJson, readJson, roster, updateRoster, versionsOf,
+    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeJson, readJson, roster, updateRoster, versionsOf,
     exists, claimDir, writeFiles, mirror, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
 };

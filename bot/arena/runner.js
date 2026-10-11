@@ -615,8 +615,14 @@ async function mirrorLoop() {
     }
 }
 
-/** Whether the runner can start this harness: claude-code, a script with a command line, or a command array. */
+/**
+ * Whether the runner can start this harness: claude-code, a script with a command line, or a command array, unless it
+ * is a selfRun harness (a hosted arena's public registration: the competitor runs itself, see api.js register).
+ */
 function runnable(h) {
+    if (h?.selfRun) {
+        return false;
+    }
     return h?.kind === 'claude-code' || (h?.kind === 'script' && typeof h.cmd === 'string' && h.cmd.trim() !== '')
         || (h?.kind === 'command' && Array.isArray(h.cmd) && h.cmd.length > 0);
 }
@@ -625,22 +631,34 @@ async function main() {
     if (process.argv.includes('--mirror-loop')) {
         return mirrorLoop();
     }
-    const roster = home.roster();
-    const chosen = roster.agents.filter((a) => a.harness && (!ONLY || ONLY.includes(a.name)));
-    for (const a of chosen.filter((x) => !runnable(x.harness))) {
-        // e.g. a Codex or human competitor registered through the web form: it runs itself
-        log(`${a.name}: harness ${JSON.stringify(a.harness)} is not one the runner starts (claude-code, script with cmd, command), skipping it`);
-    }
-    const runners = chosen.filter((a) => runnable(a.harness));
-    if (!runners.length) {
-        throw new Error('no competitor with a harness the runner can start (roster.json agents[].harness)');
-    }
-    for (const c of runners) {
-        const r = repoFor(c.name);
-        if (!fs.existsSync(path.join(r, 'bot', 'arena', 'eval.js'))) {
-            throw new Error(`${c.name}: no checkout at ${r} (--repo)`);
+    // the competitors the runner starts, read from the roster again at every round: one registered (or benched) during
+    // the tournament joins (or leaves) from the next round on. Each needs its own checkout (launch.sh makes them).
+    const told = new Set();
+    const once = (key, msg) => {
+        if (!told.has(key)) {
+            told.add(key);
+            log(msg);
         }
+    };
+    const current = () => {
+        const chosen = home.roster().agents.filter((a) => a.harness && (!ONLY || ONLY.includes(a.name)));
+        for (const a of chosen.filter((x) => !runnable(x.harness))) {
+            // e.g. a Codex or human competitor registered through the web form: it runs itself
+            once(`skip ${a.name}`, `${a.name}: harness ${JSON.stringify(a.harness)} is not one the runner starts (claude-code, script with cmd, command), skipping it`);
+        }
+        return chosen.filter((a) => runnable(a.harness)).filter((c) => {
+            const ok = fs.existsSync(path.join(repoFor(c.name), 'bot', 'arena', 'eval.js'));
+            if (!ok) {
+                once(`repo ${c.name}`, `${c.name}: no checkout at ${repoFor(c.name)} (--repo; launch.sh resume makes it), not starting it`);
+            }
+            return ok;
+        });
+    };
+    let runners = current();
+    if (!runners.length) {
+        throw new Error('no competitor with a harness the runner can start and a checkout (roster.json agents[].harness, --repo)');
     }
+    const everyone = new Map(runners.map((c) => [c.name, c])); // whoever ran, for publishLogs at the end
     log(`runner: ${runners.map((a) => a.name).join(', ')}; repo ${REPO}; logs ${LOGS}; $${BUDGET_USD} per competitor per round;`
         + ` usage brake at 5h ${BRAKE.five_hour}, 7d ${BRAKE.seven_day}`);
     // what an earlier runner left running (it crashed, or was killed) has no deadline any more
@@ -668,7 +686,7 @@ async function main() {
             }, 15000);
         });
     }
-    const anyClaude = runners.some((a) => a.harness.kind === 'claude-code');
+    let anyClaude = runners.some((a) => a.harness.kind === 'claude-code');
     let lastProbe = 0;
     let probing = null;
     const probe = () => {
@@ -687,13 +705,20 @@ async function main() {
         }
         const st = clock();
         if (st.phase === 'done' && !busy.size) {
-            publishLogs(runners);
+            publishLogs([...everyone.values()]);
             log('runner: the tournament is over');
             await new Promise((res) => (mirrorChild && mirrorChild.exitCode === null ? mirrorChild.on('exit', res) : res()));
             return;
         }
         if (st.phase === 'work' && st.round !== lastRound) {
             lastRound = st.round;
+            try {
+                runners = current();
+            } catch (e) {
+                log(`runner: could not read the roster (${e.message}), starting the competitors of the last round`);
+            }
+            runners.forEach((c) => everyone.set(c.name, c));
+            anyClaude = runners.some((a) => a.harness.kind === 'claude-code');
             // scripts start at once; Claude Code competitors first read the account's usage (the probe)
             const order = [...runners].sort((a, b) => (a.harness.kind === 'claude-code') - (b.harness.kind === 'claude-code'));
             let probed = false;

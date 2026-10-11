@@ -32,7 +32,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { bradleyTerry } = require('../ratings');
-const { HOME, RESULTS, readJson, writeJson, roster: loadRoster, versionsOf } = require('./home');
+const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, roster: loadRoster, versionsOf } = require('./home');
 const dash = require('./dash');
 const { TOURNAMENT, notify } = require('./api');
 const { resolveArena } = require('./registry');
@@ -144,7 +144,7 @@ function scoreRound(round, ladder) {
                 r.losses++;
                 vs.l++;
                 r.lost.push({ id: g.id, seat, opp, rounds: g.rounds, forfeit: forfeit[i], faultKind: forfeit[i] ? g.faultKind ?? null : null, outcome: g.outcome,
-                              replay: fs.existsSync(path.join(RESULTS, ladder.id, 'games', `${g.id}.jsonl`)) ? path.join(RESULTS, ladder.id, 'games', `${g.id}.jsonl`) : null });
+                              replay: fs.existsSync(path.join(RESULTS, ladder.id, 'games', `${g.id}.jsonl`)) ? path.join(PUBLIC_RESULTS, ladder.id, 'games', `${g.id}.jsonl`) : null });
             }
         });
         if (score !== null) {
