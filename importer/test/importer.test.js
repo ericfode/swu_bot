@@ -206,6 +206,106 @@ test("KaraBuddy's REPLAYHIDDEN placeholder cards count as hidden", () => {
     assert.deepStrictEqual(r.items[0].state.players.p2.hand, [{ n: 'Hidden card', s: null, hid: 1 }, { n: 'Hidden card', s: null, hid: 1 }]);
 });
 
+test('robots.txt rules: our group wins over *, longest match wins, empty Disallow allows', () => {
+    const { disallowed, allowedPath } = require('../fetch-karabuddy');
+    const robots = 'User-agent: *\nDisallow: /api/\n\nUser-agent: swu_bot-research\nDisallow: /api/private\nAllow: /api/replays\n';
+    const mine = disallowed(robots);
+    assert.ok(allowedPath(mine, '/api/replays/public'));
+    assert.ok(!allowedPath(mine, '/api/private/x'));
+    assert.ok(!allowedPath(disallowed(robots, 'otherbot'), '/api/replays/public'));
+    assert.ok(allowedPath(disallowed('User-agent: *\nDisallow:\n'), '/api/replays/public'));
+    const narrow = disallowed('User-agent: *\nAllow: /api/\nDisallow: /api/replays/public\n');
+    assert.ok(allowedPath(narrow, '/api/replays/abc'));
+    assert.ok(!allowedPath(narrow, '/api/replays/public'), 'longer Disallow beats a shorter Allow');
+});
+
+/** A fake karabuddy.app: robots.txt, the public list, replay metadata and payload blobs. Records every request. */
+function fakeKaraBuddy({ robots = '', list = [], replays = {}, blobs = {} }) {
+    const calls = [];
+    const res = (status, body) => ({
+        ok: status === 200, status,
+        text: async () => String(body),
+        json: async () => JSON.parse(body),
+        arrayBuffer: async () => { const b = Buffer.isBuffer(body) ? body : Buffer.from(body); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); }
+    });
+    const fetchImpl = async (url, opts) => {
+        calls.push({ url, ua: opts?.headers?.['user-agent'] });
+        const p = new URL(url);
+        if (p.pathname === '/robots.txt') {
+            return robots === null ? res(404, '') : res(200, robots);
+        }
+        if (p.pathname === '/api/replays/public') {
+            return res(200, JSON.stringify({ data: list }));
+        }
+        const m = /^\/api\/replays\/([^/]+)$/.exec(p.pathname);
+        if (m) {
+            return replays[m[1]] ? res(200, JSON.stringify({ data: replays[m[1]] })) : res(404, '');
+        }
+        return blobs[url] ? res(200, blobs[url]) : res(404, '');
+    };
+    return { fetchImpl, calls };
+}
+
+test('KaraBuddy public fetch: polite, credited, no names or deck lists, skips what it has', async () => {
+    const zlib = require('zlib');
+    const os = require('os');
+    const { run, USER_AGENT } = require('../fetch-karabuddy');
+    const kb = toKaraBuddy(game());
+    kb.decks = { u1: { username: 'alice', name: 'my secret deck', leader: { id: 'SOR_005' }, base: { id: 'SOR_023' }, deck: [{ id: 'SOR_042', count: 3 }] } };
+    const blob = 'https://x.public.blob.vercel-storage.com/a.json.gz';
+    const plain = 'https://pub.r2.dev/b.json';
+    const site = fakeKaraBuddy({
+        robots: 'User-agent: *\nDisallow: /admin\n',
+        list: [
+            { slug: 'gz-game', publicAt: '2026-10-01T00:00:00Z' },
+            { slug: 'plain-game' },
+            { slug: 'locked', encrypted: true },
+            { slug: 'gone' },
+            { slug: '../etc' }
+        ],
+        replays: {
+            'gz-game': { payloadBlobUrl: blob },
+            'plain-game': { payloadBlobUrl: plain },
+            gone: { payloadBlobUrl: 'https://x/c', payloadPrunedAt: '2026-10-05T00:00:00Z' }
+        },
+        blobs: { [blob]: zlib.gzipSync(JSON.stringify(kb)), [plain]: JSON.stringify(kb) }
+    });
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-public-'));
+    try {
+        const r = await run({ out, limit: 200, delay: 0 }, site.fetchImpl, () => {});
+        assert.deepStrictEqual(r, { listed: 5, imported: 2, pruned: 1, failed: 0 });
+        assert.ok(site.calls.every((c) => c.ua === USER_AGENT), 'every request names the project');
+        assert.strictEqual(site.calls[0].url, 'https://karabuddy.app/robots.txt');
+        assert.ok(!site.calls.some((c) => /locked|etc/.test(c.url)), 'encrypted and odd slugs are never requested');
+
+        const text = fs.readFileSync(path.join(out, 'games', 'gz-game.jsonl'), 'utf8');
+        assert.ok(!/alice|bob|secret/.test(text), 'no usernames or deck names');
+        const h = JSON.parse(text.split('\n')[0]);
+        assert.strictEqual(h.source.credit, 'KaraBuddy (karabuddy.app)');
+        assert.strictEqual(h.source.url, 'https://karabuddy.app/r/gz-game');
+        assert.strictEqual(h.source.publishedAt, '2026-10-01T00:00:00Z');
+        assert.strictEqual(h.source.decklists, undefined, 'deck lists stay hidden, as KaraBuddy hides them');
+        assert.strictEqual(fs.readFileSync(path.join(out, 'games', 'plain-game.jsonl'), 'utf8'), text.replace(/gz-game/g, 'plain-game').replace(/"publishedAt":"[^"]*"/, '"publishedAt":null'));
+        const index = JSON.parse(fs.readFileSync(path.join(out, 'index.json'), 'utf8'));
+        assert.match(index.credit, /KaraBuddy/);
+        assert.deepStrictEqual(index.games.map((g) => g.id), ['gz-game', 'plain-game']);
+
+        const again = fakeKaraBuddy({ list: [{ slug: 'gz-game' }, { slug: 'plain-game' }] });
+        const r2 = await run({ out, limit: 200, delay: 0 }, again.fetchImpl, () => {});
+        assert.deepStrictEqual(r2, { listed: 2, imported: 0, pruned: 0, failed: 0 });
+        assert.strictEqual(again.calls.length, 2, 'only robots.txt and the list: nothing fetched twice');
+    } finally {
+        fs.rmSync(out, { recursive: true, force: true });
+    }
+});
+
+test('KaraBuddy public fetch stops when robots.txt disallows the API', async () => {
+    const { run } = require('../fetch-karabuddy');
+    const site = fakeKaraBuddy({ robots: 'User-agent: *\nDisallow: /api\n', list: [{ slug: 'a' }] });
+    await assert.rejects(run({ out: 'unused', limit: 1, delay: 0 }, site.fetchImpl, () => {}), /robots\.txt disallows/);
+    assert.strictEqual(site.calls.length, 1);
+});
+
 test('compact snapshot of a deployed leader', () => {
     const s = game()[4];
     s.players.u1.leaders[0] = { ...s.players.u1.leaders[0], zone: 'groundArena', type: 'leaderUnit', power: 6, hp: 7, damage: 0, exhausted: true };

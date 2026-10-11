@@ -37,6 +37,22 @@ Inputs are detected from the content (`sources.js`):
 | JSON array or JSON Lines of `gamestate` objects | any other recorder |
 | `importer/capture.js` output | engine-made test captures |
 
+### Public KaraBuddy replays
+
+KaraBuddy users can publish a replay; the site lists up to 200 of them, anonymized. `fetch-karabuddy.js` imports that
+list, and only that list:
+
+```bash
+node importer/fetch-karabuddy.js --out replays/karabuddy-public [--limit 200] [--delay 3000] [--dry-run]
+```
+
+It is slow and polite on purpose. It reads `robots.txt` first and stops if the API is disallowed. It sends one request
+at a time, at least 1 s apart (3 s by default), with a User-Agent that names this project. Re-runs skip games already in
+`<out>/games`. KaraBuddy shows strangers no names and no deck lists, so the replay keeps neither (the downloaded file is
+never written to disk), and chat is dropped as in every import. Each header credits KaraBuddy and links the replay's
+page (`source.credit`, `source.url`). Encrypted and pruned replays are skipped. The container needs `karabuddy.app` and
+the payload hosts (`*.public.blob.vercel-storage.com`, `*.r2.dev`) allowed.
+
 ## What a capture has, and what it lacks
 
 A capture is one viewer's stream. A player sees their own hand and resources; the opponent's hand and face-down
