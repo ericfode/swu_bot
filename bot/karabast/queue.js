@@ -12,7 +12,8 @@
  * Safety:
  * - Only localhost unless --allow-host names the server's host (socket.js).
  * - A non-local run needs --ledger: before entering the queue the run reserves one place under --max-people, or stops
- *   (ledger.js). The opponent is counted in that place as soon as the match is made.
+ *   (ledger.js). The opponent is counted in that place as soon as the match is made. A run that fails after entering
+ *   the queue keeps the place counted, unless the wait ended with no match.
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -50,15 +51,17 @@ function checkDeck(deck) {
 }
 
 /**
- * Enters the queue and plays one match. onMatched(opponentId) runs when the opponent is known, before play starts;
- * it may throw to leave. Resolves to a result row.
+ * Enters the queue and plays one match. onQueued() runs once the server took the queue entry. onMatched(opponentId)
+ * runs when the opponent is known, before play starts; it may throw to leave. Resolves to a result row. A wait that
+ * ends with no match rejects with an error marked `noMatch`.
  */
-async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, onMatched, log }) {
+async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, onQueued, onMatched, log }) {
     const opts = { allowHosts };
     const entered = await post(server, '/api/enter-queue', { user, format, cardPool, gamesToWinMode: 'bestOfOne', deck }, opts);
     if (!entered.body?.success) {
         throw new Error(`enter-queue refused: ${entered.body?.message ?? entered.status}`);
     }
+    onQueued?.();
     const sock = new KarabastSocket(server, { user, allowHosts });
     const client = loadClient(bot);
     const scrub = makeScrubber([user.id, user.username]);
@@ -68,7 +71,7 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
     try {
         // the socket must be listening before the match frames arrive
         const matched = new Promise((resolve, reject) => {
-            const timer = setTimeout(() => reject(new Error(`no match within ${waitMs / 60000} minutes`)), waitMs);
+            const timer = setTimeout(() => reject(Object.assign(new Error(`no match within ${waitMs / 60000} minutes`), { noMatch: true })), waitMs);
             const onLobby = (ls) => {
                 const others = (ls?.users ?? []).map((u) => u.id).filter((id) => id && id !== user.id);
                 if (others.length) {
@@ -147,12 +150,17 @@ async function main() {
             break;
         }
         let row;
+        let queued = false;
         let matched = false;
+        let noMatch = false;
         try {
             row = await queueOnce({
                 server, user, deck, bot: arg('bot', 'c-clock'), format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
                 waitMs: Number(arg('wait-minutes', 10)) * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
                 seed: `${seed}-${g}`, out, log,
+                onQueued: () => {
+                    queued = true;
+                },
                 onMatched: async (opponent) => {
                     matched = true;
                     if (ledger) {
@@ -160,9 +168,13 @@ async function main() {
                     }
                 }
             });
+        } catch (e) {
+            noMatch = e.noMatch === true;
+            throw e;
         } finally {
-            // matched but not counted (add() failed): the place stays counted
-            if (matched) {
+            // once queued, the server may have matched us before we heard of it (or add() failed): unless the wait
+            // ended with no match, the place stays counted
+            if (matched || (queued && !noMatch)) {
                 ledger?.spend(hold, 'played');
             } else {
                 ledger?.release(hold);

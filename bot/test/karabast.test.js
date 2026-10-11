@@ -298,6 +298,32 @@ test('a seat concedes when the server keeps ignoring its answers at one decision
     assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
 });
 
+test('a quick-match run that fails after entering the queue keeps the place counted', async () => {
+    const http = require('http');
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const { spawn } = require('child_process');
+    // a server that takes the queue entry, then drops the socket before any lobbystate
+    const server = http.createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+    });
+    server.on('upgrade', (req, socket) => socket.destroy());
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-queue-'));
+    const ledgerFile = path.join(dir, 'people.json');
+    const child = spawn(process.execPath, [path.join(__dirname, '..', 'karabast', 'queue.js'), '--server', `http://127.0.0.1:${server.address().port}`,
+        '--bot', 'js-random', '--deck', 'luke-skywalker_jtl_data-vault', '--games', '1', '--ledger', ledgerFile, '--max-people', '10'], { stdio: 'ignore' });
+    const code = await new Promise((r) => child.on('exit', r));
+    server.close();
+    assert.strictEqual(code, 1);
+    const data = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    assert.strictEqual(Object.keys(data.people).length, 1);
+    assert.match(Object.keys(data.people)[0], /^unidentified-/);
+    assert.deepStrictEqual(data.held, {});
+});
+
 test('a reservation holds places until it is used or released', () => {
     const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
     const a = new PeopleLedger(file, 3);
