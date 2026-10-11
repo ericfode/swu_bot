@@ -127,7 +127,7 @@ function main() {
     const field = arg('field', 'edge');
     const k = Number(arg('k', '0.08'));
     const replays = indexReplays(arg('replays', '/mnt/project-files/results'));
-    const evs = EVALUATORS.map((n) => loadEvaluator(n));
+    const evs = arg('evals', EVALUATORS.join(',')).split(',').map((n) => loadEvaluator(n));
     const rows = [];
     let skipped = 0;
     for (const f of fs.readdirSync(lensDir).filter((f) => f.endsWith('.json'))) {
