@@ -23,9 +23,9 @@ Policies (first CLI argument, registered as `rust-<policy>` in `bot/external-bot
 - `search`: greedy2 plus lookahead with v2 simulations (`sim` requests). At a decision it takes greedy2's six best
   actions; for each it starts a simulation (hidden cards dealt again, the same deal for every candidate), plays the
   action, lets greedy2 play both seats until the round's action phase ends (60 steps at most), and scores the board
-  from its seat (base HP, steeper below 12; units at 3 times greedy2's unit value; cards in hand; resources;
-  initiative). It plays the best score and uses at most a third of the decision's time, 3 s at most. Under a v1
-  referee it plays exactly like greedy2. Settings for experiments: `SWU_SEARCH_WIDTH`, `_DEALS`, `_STEPS`, `_ROUNDS`
+  from its seat (base HP, steeper below 12; units at 3 times greedy2's unit value, exhausted ones a bit less while the
+  action phase still runs; cards in hand; resources; initiative). It plays the best score and uses at most a third of
+  the decision's time, 3 s at most. Under a v1 referee it plays exactly like greedy2. Settings for experiments: `SWU_SEARCH_WIDTH`, `_DEALS`, `_STEPS`, `_ROUNDS`
   and the score weights `SWU_EVAL_BASE`, `_UNIT`, `_EXHAUSTED`, `_HAND`, `_RESOURCE`, `_INITIATIVE` (`env` in
   `bot/external-bots.json`).
 
@@ -53,6 +53,20 @@ search vs greedy2 on the v2 referee (spec thread's work in progress, `--key none
 | **units x3 (default)** | **68-28 (71%)** | 187-205 |
 | units x4 | 62-34 (65%) | 195-216 |
 | units x5 | 32-16 | 233 |
+
+search vs c-clock (the best rule bot) on the final v2 referee, `--key none`, 48 games each on seeds 1001-4001 and
+5001-8001, same seeds for every row:
+
+| search setting | vs c-clock | vs greedy2 (seeds 1001-4001) |
+| --- | --- | --- |
+| exhausted units count less at the end of the playout (until 2026-10-11) | 44-51 (46%) | 34-14 |
+| **exhausted units count less only mid-phase (default)** | **53-42 (56%)** | 34-14 |
+| (old) 12 candidates / one more round / 20 or 8 steps per playout (1001-4001 only) | 22-25 / 15-32 / 22-24 / 17-30 | |
+| (old) base HP weight 1.0 / 2.0 (default 1.35), hand 3.0 (1.8), units x2 (1001-4001 only) | 17-28 / 23-24 / 23-24 / 20-27 | |
+
+All units ready up in the regroup, so discounting exhausted units at the end of the action phase only rewarded keeping
+units home: search claimed initiative with an unused ready unit 64 times in 47 games against c-clock (c-clock: 9).
+With the fix it attacks instead (36 times); per paired game it turned 11 losses into wins and 2 wins into losses.
 
 Decision time: the Rust policy takes about 30 us; the harness measures about 1 ms per decision because the adapter
 builds and sends the board JSON. The JS search bots (tempo, heuristic) average 170-430 ms.
