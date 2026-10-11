@@ -50,6 +50,9 @@ function handler(req, res) {
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
         return serveFile(res, path.join(__dirname, 'web', 'index.html'), 'text/html; charset=utf-8');
     }
+    if (req.method === 'GET' && url.pathname === '/strategy-diagram.js') {
+        return serveFile(res, path.join(__dirname, 'web', 'strategy-diagram.js'), 'text/javascript');
+    }
     if (req.method === 'GET' && url.pathname === '/kit.js') {
         return serveFile(res, KIT, 'text/javascript');
     }

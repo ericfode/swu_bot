@@ -31,7 +31,7 @@ function basePanel(agent) {
 }
 
 /** Change the live part of a panel (now / idea / thought / plan) and keep the rest. */
-function updatePanel(agent, { now, idea, thought, plan, status } = {}) {
+function updatePanel(agent, { now, idea, thought, plan, status, diagram } = {}) {
     if (!enabled()) {
         return;
     }
@@ -51,6 +51,10 @@ function updatePanel(agent, { now, idea, thought, plan, status } = {}) {
     }
     if (status) {
         p.status = status;
+    }
+    if (diagram) {
+        // the strategy diagram is always the panel's first widget; rebuilds from standings keep it there
+        p.widgets = [{ ...diagram, updatedAt: t }, ...(p.widgets ?? []).filter((w) => w.type !== 'strategy')];
     }
     p.updatedAt = t;
     writeJson(panelFile(agent), p);
@@ -77,6 +81,7 @@ function publishStandings(st) {
         p.thread = a.owner ?? p.thread;
         p.updatedAt = t;
         p.widgets = [
+            ...(p.widgets ?? []).filter((w) => w.type === 'strategy'),
             { type: 'stats', items: [
                 { label: 'Elo (all rounds)', value: cur ? Math.round(eloOf(a.name, rows[rows.length - 1].rd)) : '-' },
                 { label: `rank in round ${last?.round ?? '-'}`, value: cur ? `${cur.rank} / ${last.bots.length}` : '-' },

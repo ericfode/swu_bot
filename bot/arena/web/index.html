@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SWU Bot Arena</title>
+<script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 <style>
 /* Layout: sticky clock bar, then tabs: Standings, Competitors, Games (viewer kit), Join, Submit. */
 :root {
@@ -101,6 +102,7 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
     <div id="subout" class="out"></div>
   </section>
 </main>
+<script src="strategy-diagram.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 async function api(method, args) {
@@ -147,6 +149,8 @@ async function refresh() {
         if (!p) return;
         if (p.now) card.append(mk('div', 'muted', 'Now: ' + p.now));
         if (p.mentalModel?.summary) card.append(mk('div', '', 'Idea: ' + p.mentalModel.summary));
+        const dg = (p.widgets || []).find((w) => w.type === 'strategy');
+        if (dg && window.SWUStrategy) { const box = mk('div'); card.append(box); window.SWUStrategy.render(box, dg); }
         for (const t of (p.thoughts || []).slice(-3)) card.append(mk('div', 'thought', t.text));
       }).catch(() => {});
       cards.append(card);

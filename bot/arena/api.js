@@ -17,7 +17,7 @@
  *   versions {name}                             submitted versions with notes
  *   standings {}                                every rated round so far, all-round Elo
  *   report {round?}                             a round's markdown report (default: latest)
- *   say {name, text?, now?, idea?, plan?}       post thoughts to the competitor's live dashboard panel
+ *   say {name, text?, now?, idea?, plan?, diagram?}  post thoughts (and a strategy diagram, strategy.js) to the live panel
  *   send {to, text, from?}                      leave a message in a competitor's inbox ("all" = everyone)
  *   inbox {name, since?}                        messages for a competitor, oldest first
  *   eval {name, vs?, seeds?, version?}          queue test games on the server (for clients without the engine)
@@ -30,6 +30,7 @@ const path = require('path');
 const home = require('./home');
 const dash = require('./dash');
 const { botSource, STARTS } = require('./starters');
+const { validateDiagram } = require('./strategy');
 
 const crypto = require('crypto');
 
@@ -133,9 +134,12 @@ const api = {
             if (bot.files) {
                 // remote clients upload their bot: {"bot.js": "...", "lib/x.js": "..."} replaces the live folder's files
                 need(typeof bot.files === 'object' && typeof bot.files['bot.js'] === 'string', 'bad_request', 'bot.files must include "bot.js"');
-                for (const [rel, text] of Object.entries(bot.files)) {
+                const writes = Object.entries(bot.files).map(([rel, text]) => {
                     const f = path.resolve(src, rel);
                     need(f.startsWith(src + path.sep) && typeof text === 'string', 'bad_request', `bad file path ${rel}`);
+                    return [f, text];
+                });
+                for (const [f, text] of writes) {
                     fs.mkdirSync(path.dirname(f), { recursive: true });
                     fs.writeFileSync(f, text);
                 }
@@ -168,10 +172,10 @@ const api = {
         return { round: Number(k), markdown: fs.readFileSync(path.join(dir, `r${k}.md`), 'utf8') };
     },
 
-    say({ name, text, now, idea, plan, token } = {}) {
+    say({ name, text, now, idea, plan, diagram, token } = {}) {
         owned(name, token);
         const p = Array.isArray(plan) ? plan.map((x) => (typeof x === 'string' ? { text: x, state: 'todo' } : x)) : undefined;
-        dash.updatePanel(name, { thought: text, now, idea, plan: p });
+        dash.updatePanel(name, { thought: text, now, idea, plan: p, diagram: diagram ? validateDiagram(diagram) : undefined });
         return { ok: true };
     },
 
@@ -265,7 +269,7 @@ const METHODS = {
     versions: { desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
     standings: { desc: 'Every rated round so far with per-bot results and the all-round Elo.', props: {} },
     report: { desc: 'A round report in markdown: standings, results per opponent, lost games with replay paths. Default: latest round.', props: { round: 'integer' } },
-    say: { token: true, desc: 'Post your current thinking to your live dashboard panel. text = one thought, now = what you are doing, idea = current idea, plan = list of steps.', props: { name: 'string', text: 'string', now: 'string', idea: 'string', plan: 'array' }, required: ['name'] },
+    say: { token: true, desc: 'Post your current thinking to your live dashboard panel. text = one thought, now = what you are doing, idea = current idea, plan = list of steps, diagram = a strategy diagram (schema swu-strategy/1: {title, caption, nodes:[{id,label,kind:input|memory|feature|decision|action,value,note}], edges:[{from,to,weight,label}], highlight:[ids], steps:[{caption,highlight}]}) that the arena animates to show the essence of your current strategy.', props: { name: 'string', text: 'string', now: 'string', idea: 'string', plan: 'array', diagram: 'object' }, required: ['name'] },
     send: { token: true, desc: 'Leave a message in a competitor inbox (to = name or "all").', props: { to: 'string', text: 'string', from: 'string' }, required: ['to', 'text'] },
     eval: { token: true, desc: 'Queue test games on the arena server: your live bot (or `version`) vs each name in `vs`, `seeds` seeds from both seats. Returns an id for eval_result. Use this when you cannot run the engine yourself.', props: { name: 'string', vs: 'array', seeds: 'integer', version: 'string' }, required: ['name'] },
     eval_result: { desc: 'State and results of a queued eval: queued, running, done (W-L per opponent, ms per decision, lost games with replay paths).', props: { id: 'string' }, required: ['id'] },
