@@ -158,6 +158,14 @@ test('analysis keeps only the views a one-seat capture supports', () => {
     assert.deepStrictEqual(usableViews({ header: { seed: 1 } }, ALL_VIEWS), ALL_VIEWS);
 });
 
+test('merge pairs frames across dropped and repeated frames', () => {
+    const { align } = require('../merge');
+    assert.deepStrictEqual(align(['a', 'b', 'b', 'c', 'd'], ['a', 'b', 'c', 'c', 'd']), [0, 1, 1, 2, 4]);
+    assert.deepStrictEqual(align(['a', 'x', 'b'], ['a', 'b']), [0, -1, 1]);
+    // an undo back to an earlier board pairs with the next copy of that board, not the old one
+    assert.deepStrictEqual(align(['a', 'b', 'a', 'c'], ['a', 'b', 'a', 'c']), [0, 1, 2, 3]);
+});
+
 test('compact snapshot of a deployed leader', () => {
     const s = game()[4];
     s.players.u1.leaders[0] = { ...s.players.u1.leaders[0], zone: 'groundArena', type: 'leaderUnit', power: 6, hp: 7, damage: 0, exhausted: true };
@@ -185,6 +193,14 @@ test('engine capture matches the recorder on every frame (rush vs random, seed 4
         const bad = truth.map((t, k) => diffSnapshot(t.state, r.items[k].state, hiddenSeats)).filter((d) => d.length);
         assert.strictEqual(bad.length, 0, `${view}: ${JSON.stringify(bad[0])}`);
     }
+    // both players' captures merged: every frame equals the truth, both hands included
+    const { mergeCaptures } = require('../merge');
+    const merged = mergeCaptures(f.p1.map((x) => ({ state: x.state })), f.p2.map((x) => ({ state: x.state })));
+    assert.strictEqual(merged.unmatched, 0);
+    const both = readFrames(merged.frames, { seats });
+    assert.strictEqual(both.pov, 'both');
+    const badBoth = truth.map((t, k) => diffSnapshot(t.state, both.items[k].state, [])).filter((d) => d.length);
+    assert.strictEqual(badBoth.length, 0, `merged: ${JSON.stringify(badBoth[0])}`);
     // and through KaraBuddy and SWU Forge files
     const states = f.p1.map((x) => x.state);
     const want = JSON.stringify(steps(convertFrames(frames(states), { seats }).events).map((e) => e.state));

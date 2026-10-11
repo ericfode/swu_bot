@@ -17,6 +17,12 @@ node analysis/analyze.js replays/human --evaluator heuristic
 node bot/omni/lens.js replays/human --out replays/human/lens   # omni lens (bot/omni is not on main yet)
 ```
 
+When both players recorded the same game, pair the two files to get one replay with both hands:
+
+```bash
+node importer/import.js --pair alice.karareplay bob.karareplay --out replays/human   # -> <alice id>.both.jsonl
+```
+
 Each input becomes `<out>/games/<id>.jsonl`, and `<out>/index.json` is rewritten in the tournament format with
 `human: true` and `pov` on each entry.
 
@@ -43,6 +49,12 @@ resources are stubs with no name. A spectator sees neither hand.
 | other hand, other resources | `{ "n": "Hidden card", "s": null, "hid": 1 }`, right count |
 | decisions | rebuilt from the game log lines (play, attack, deploy, resource, pass, ...); `legal` is 1 |
 | deck order, the opponent's resource choices, legal actions, the engine seed | not in any capture |
+
+Two captures of one game, one from each seat, fill that gap (`--pair`, `merge.js`). Karabast pushes the same update
+to both players, so frames pair up by public board and log length; the merged replay has both hands and resources and
+`pov: "both"`. Only deck order is still missing. On the 30 engine games every merged frame equals the truth
+(9,493 frames). With frames dropped from one file, the frames that lose their partner keep that hand hidden and are
+counted in `source.merge.unmatched`.
 
 The header says so: `source.pov` (`p1`, `p2`, `both` or `spectator`), `source.hiddenHands`, and `source.synthetic`
 lists the step fields the importer filled in (`prompt`, `title`, `action`, `legal`, `seed`). `end.how` says how the

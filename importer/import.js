@@ -4,6 +4,10 @@
  * Import human games captured on karabast.net into the replay format.
  *
  *   node importer/import.js <capture file|dir>... --out replays/human [--names "Alice,Bob"] [--source karabuddy]
+ *   node importer/import.js --pair <player 1's capture> <player 2's capture> --out replays/human
+ *
+ * --pair merges two captures of the same game, one recorded by each player, into one replay with both hands
+ * (importer/merge.js). It can be given more than once.
  *
  * Every input file becomes <out>/games/<id>.jsonl (spec/replay-format.md: header, steps, end) and <out>/index.json
  * is rewritten in the tournament format, so the viewer, analysis/ and bot/omni/lens.js read the folder unchanged.
@@ -17,9 +21,10 @@ const fs = require('fs');
 const path = require('path');
 const { readText } = require('./sources');
 const { convertFrames } = require('./karabast');
+const { mergeCaptures } = require('./merge');
 
 function parseArgs(argv) {
-    const a = { inputs: [], out: path.join('replays', 'human'), names: null, source: null };
+    const a = { inputs: [], pairs: [], out: path.join('replays', 'human'), names: null, source: null };
     for (let i = 0; i < argv.length; i++) {
         const k = argv[i];
         if (k === '--out') {
@@ -28,6 +33,8 @@ function parseArgs(argv) {
             a.names = argv[++i].split(',');
         } else if (k === '--source') {
             a.source = argv[++i];
+        } else if (k === '--pair') {
+            a.pairs.push([argv[++i], argv[++i]]);
         } else {
             a.inputs.push(k);
         }
@@ -59,6 +66,23 @@ function importFile(file, { names, source }) {
     return { id: gameId(file), events, report, reader: cap.meta.reader };
 }
 
+/** Two captures of one game, one from each player's seat, as one replay with both hands. */
+function importPair(fileA, fileB, { names, source }) {
+    const a = readText(fs.readFileSync(fileA, 'utf8'));
+    const b = readText(fs.readFileSync(fileB, 'utf8'));
+    const m = mergeCaptures(a.frames, b.frames);
+    const { events, report } = convertFrames(m.frames, {
+        seats: a.meta.capture?.seats, names: names ?? undefined,
+        source: {
+            kind: source ?? `${a.meta.reader}+${b.meta.reader}`, file: path.basename(fileA), pairedWith: path.basename(fileB),
+            merge: { frames: m.frames.length, matched: m.matched, unmatched: m.unmatched }
+        }
+    });
+    report.merge = m;
+    const id = `${gameId(fileA).replace(/\.(p1|p2)$/, '')}.both`;
+    return { id, events, report, reader: `${a.meta.reader}+${b.meta.reader} (${m.matched}/${m.frames.length} frames paired)` };
+}
+
 function indexEntry(id, events) {
     const h = events[0];
     const end = events[events.length - 1];
@@ -74,8 +98,8 @@ function indexEntry(id, events) {
 function main() {
     const args = parseArgs(process.argv.slice(2));
     const files = expand(args.inputs);
-    if (!files.length) {
-        console.error('usage: node importer/import.js <capture file|dir>... --out <dir> [--names A,B] [--source name]');
+    if (!files.length && !args.pairs.length) {
+        console.error('usage: node importer/import.js <capture file|dir>... [--pair <p1 capture> <p2 capture>] --out <dir> [--names A,B] [--source name]');
         process.exit(2);
     }
     fs.mkdirSync(path.join(args.out, 'games'), { recursive: true });
@@ -83,9 +107,10 @@ function main() {
     const index = fs.existsSync(indexFile)
         ? JSON.parse(fs.readFileSync(indexFile, 'utf8'))
         : { id: path.basename(args.out), createdAt: new Date().toISOString(), engine: null, bots: [], gamesPerPairing: 1, games: [], human: true };
-    for (const file of files) {
+    const jobs = [...files.map((f) => ({ name: f, run: () => importFile(f, args) })), ...args.pairs.map(([x, y]) => ({ name: `${x} + ${y}`, run: () => importPair(x, y, args) }))];
+    for (const job of jobs) {
         try {
-            const { id, events, report, reader } = importFile(file, args);
+            const { id, events, report, reader } = job.run();
             fs.writeFileSync(path.join(args.out, 'games', `${id}.jsonl`), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
             const entry = indexEntry(id, events);
             index.games = index.games.filter((g) => g.id !== id).concat(entry);
@@ -96,7 +121,7 @@ function main() {
             }
             console.log(`${id}: ${reader}, ${report.frames} frames -> ${report.steps} steps, pov ${report.pov}, winner ${entry.winnerSeat ?? '-'}, ${report.messages} log lines${report.chatDropped ? `, ${report.chatDropped} chat lines dropped` : ''}`);
         } catch (e) {
-            console.error(`${file}: ${e.message}`);
+            console.error(`${job.name}: ${e.message}`);
             process.exitCode = 1;
         }
     }
@@ -107,4 +132,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { importFile, indexEntry, gameId };
+module.exports = { importFile, importPair, indexEntry, gameId };
