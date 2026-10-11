@@ -188,3 +188,41 @@ yardstick from the oracle test (imagined-vs-real agreement) rose and play fell. 
 perfect predictor (`jepa-sim-v`) was not clearly stronger either. What limits the bot is the planning itself: one
 move scored by V a short way ahead, while 63% of decisions are follow-up and resource prompts it plans no further.
 jepa-h1 (v1) stays the JEPA entry.
+
+## Planning whole moves (jepa-plan)
+
+`--score plan` (registered as `jepa-plan`: model v1, mix 0) plans each action window on the referee's copy of the game
+(protocol v2 simulations). Every candidate move (the 16 best by the imagined score, plus Pass) is played together with
+its follow-up choices: at each of my follow-up prompts (targets, cards, options) the best 6 options by the imagined
+score each get a line of their own, 3 at the second level, the greedy choice below that. The opponent's prompts inside
+my move are played like rush. A line stops where the move has settled: anyone's next action window, the end of the
+action phase, or the end of the game. The value head scores that real position (an opponent-to-act position is read as
+my action window, the same way for every move); a move's score is its best line. The chosen line's follow-up choices
+are replayed at the real follow-up prompts while the prompt matches; resource prompts and anything else use the
+imagined score.
+
+```bash
+node bot/ladder.js --bots jepa-plan,jepa-h1,rush,rust-greedy2,h@linear-deck-g4 --games 20 --workers 4 --seed 860000 --id jepa-plan-1
+```
+
+Result (`results/jepa-plan-1`, 20 games per pair, random decks, seats alternate):
+
+| Bot | W-L | BT Elo | vs jepa-plan |
+|---|---|---|---|
+| rust-greedy2 | 63-17 | 1723 | 17-3 |
+| h@linear-deck-g4 | 60-20 | 1693 | 16-4 |
+| rush | 37-43 | 1483 | 9-11 |
+| **jepa-plan** | 33-47 | 1446 | |
+| jepa-h1 | 7-73 | 1155 | 5-15 |
+
+Planning whole moves lifts the bot by about 290 Elo: it beats jepa-h1 15-5 and rush 11-9, where jepa-h1 went 0-20
+against rush in the same run (3-17 and 2-8 in the branch runs). It planned all 2,014 of its action windows, 9.6 lines
+and 0.32 s each (no window ran out of time); 1,308 follow-up prompts were answered from the plan, 29 plans were dropped
+because the real prompt differed, and 2,288 resource prompts plus about 200 other prompts used the imagined score.
+
+So the planning scope was the main limit. h@linear-deck-g4 plans the same way (each move with its first follow-up
+choices, judged where the move settles, `bot/players/heuristic.js`) and answers the other prompts with hand-written
+rules; it also runs inside the engine, so its lookahead sees the real hidden cards. The remaining gap (about 250 Elo)
+therefore sits in the scorer (value head against the fitted linear-deck evaluator) and the unplanned prompts, mostly
+resources, which simulations cannot reach (sims are allowed only in action windows). A run of the same planner scored
+by the linear-deck evaluator would measure the scorer's share. jepa-plan is now the JEPA entry.

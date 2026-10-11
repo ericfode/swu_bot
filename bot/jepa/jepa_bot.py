@@ -20,6 +20,12 @@ Oracle modes, to find the weak part (each swaps one part for a perfect stand-in;
                     linear-deck-g4) through bot/jepa/eval_helper.js: a perfect predictor and a better scorer.
   --log <file>      every decision with more than one move appends one JSON line with all three scores per move
                     (imagined, sim-v, sim-eval), whatever --score picks with.
+
+Planner (--score plan): at an action window, play every candidate move on the referee's copy together with its
+follow-up choices (targets, cards, options: the best few by the imagined score, two levels deep), stop each line where
+the move has settled (anyone's next action window, the end of the action phase, or the end of the game), and score
+that real position with the value head. The best line's follow-up choices are then replayed at the real follow-up
+prompts while they match; every other decision (resource prompts, the opponent's turn) uses the imagined score.
 """
 import argparse
 import json
@@ -28,6 +34,7 @@ import random
 import subprocess
 import sys
 import time
+from collections import deque
 
 import numpy as np
 
@@ -40,8 +47,28 @@ def log(*a):
     print("jepa:", *a, file=sys.stderr, flush=True)
 
 
+def is_button(a, label):
+    return a.get("kind") == "button" and str(a.get("label", "")).lower() == label
+
+
+def action_key(a):
+    """An action's identity across the referee's copy and the real game (card ids can differ there)."""
+    c = a.get("card") or {}
+    return [a.get("kind"), a.get("label"), c.get("n"), c.get("zone"), c.get("ctl"), a.get("arg") if isinstance(a.get("arg"), (int, float)) else None]
+
+
+def labels_key(acts):
+    return json.dumps([action_key(a) for a in acts])
+
+
+# the prompt a settled position is encoded with when the opponent is the one to act: the value head was trained on my
+# own decisions only, so every such position is read as my action window, the same way for every candidate move
+WAIT_PROMPT = {"type": "actionWindow", "actionWindow": True, "selectCardMode": None, "selected": []}
+
+
 class JepaPlayer:
-    def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round", window_model=None):
+    def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round", window_model=None,
+                 plan=None):
         w, self.meta = M.load_safetensors(model_path)
         self.net = M.NumpyJepa(w)
         # optional second model used only in action windows (e.g. a predictor fine-tuned on branches, which only cover windows)
@@ -59,11 +86,18 @@ class JepaPlayer:
         self.decks = None
         self.fallbacks = 0
         self.fail = None  # why the last simulation failed
+        # planner settings (--score plan): root moves, follow-up options at the first and deeper levels, levels, lines and
+        # wall-clock seconds per decision, and the time left (ms) below which no more simulation requests are sent
+        self.plan_cfg = {"roots": 16, "follow": 6, "follow2": 3, "depth": 2, "lines": 150, "secs": 5.0, "floor": 2500, **(plan or {})}
+        self.plan = []  # my remaining follow-up choices from the chosen line: [(labels_key, action_key)]
+        self.new_game(seed)
 
     def new_game(self, seed, hello=None):
         self.rng = random.Random(seed)
         self.seen = {}
         self.decks = None
+        self.plan = []
+        self.stats = {"windows": 0, "planned": 0, "lines": 0, "leaves": 0, "failed": 0, "secs": 0.0, "followed": 0, "unplanned": 0, "dropped": 0}
         if hello and hello.get("deck") and hello.get("opponent"):
             you = hello.get("you", "p1")
             them = "p2" if you == "p1" else "p1"
@@ -244,6 +278,152 @@ class JepaPlayer:
                 tot[k] += done[k]
         return {k: v / self.deals for k, v in tot.items()}
 
+    @staticmethod
+    def settled(r):
+        """A simulated line stops when my move has played out: the game ended, someone is in an action window, or the
+        action phase is over."""
+        return bool(r.get("over") or (r.get("prompt") or {}).get("actionWindow") or (r.get("state") or {}).get("phase") != "action")
+
+    def plan_line(self, msg, sim, path, queue, depth_cap):
+        """Replay `path` (action indices from the real position, both seats) on a fresh simulation, then play on until
+        the move has settled: the opponent like rush, my follow-up prompts by the imagined score. At a follow-up prompt
+        reached for the first time in this line, the next best options go into `queue` as new lines. Returns
+        (taken, my_steps, position), None when this line failed, or "abort" when no more simulations can be sent."""
+        me = msg["you"]
+        cfg = self.plan_cfg
+        r = sim({"t": "sim", "op": "begin", "deal": 0})
+        if r.get("error") or len(r.get("actions") or []) != len(msg["actions"]):
+            self.fail = f"begin: {r.get('error') or 'actions differ'}"
+            return "abort"
+        taken, mine, guard, seen, depth = [], [], {}, {}, 0
+        for step in range(80):
+            if r.get("error"):
+                self.fail = f"act: {r['error']}"
+                return None  # the simulation is closed; the next line begins a new one
+            if r.get("ms") is not None and r["ms"] < cfg["floor"]:
+                self.fail = "time"
+                return "abort"
+            if step > 0 and self.settled(r):
+                return taken, mine, r
+            acts = r.get("actions") or []
+            if not acts:
+                self.fail = "no actions"
+                return None
+            actor = r.get("actor")
+            key = None
+            if actor == me and len(acts) > 1:
+                key = json.dumps([r.get("prompt"), r.get("state"), [x.get("label") for x in acts]], sort_keys=True)
+            if step < len(path):
+                j = path[step]
+                if key is not None and step > 0:
+                    guard.setdefault(key, []).append(j)
+                    depth += 1
+            elif actor != me:
+                j = self.rush_move(r, me, seen)
+            elif len(acts) == 1:
+                j = 0
+            else:
+                pos = {"you": me, "prompt": r.get("prompt"), "state": r.get("state"), "actions": acts}
+                order = [int(k) for k in np.argsort(-self.think(pos)["score"])]
+                cancel = {k for k, x in enumerate(acts) if is_button(x, "cancel")}
+                order = [k for k in order if k not in cancel] + [k for k in order if k in cancel]
+                tried = guard.setdefault(key, [])
+                if not tried and depth < depth_cap:
+                    # a new follow-up prompt: this line takes the best option, the next ones become lines of their own
+                    width = cfg["follow"] if depth == 0 else cfg["follow2"]
+                    opts = [k for k in order if k not in cancel][:width] or order[:1]
+                    for alt in opts[1:]:
+                        queue.append(taken + [alt])
+                    j = opts[0]
+                else:
+                    # the same prompt again in this line (a multi-select prompt toggles cards), or past the depth cap
+                    j = order[0]
+                    if len(tried) >= 2 and j in tried:
+                        fresh = [k for k in order if k not in tried]
+                        j = fresh[0] if fresh else self.rng.randrange(len(acts))
+                tried.append(j)
+                depth += 1
+            if actor == me and step > 0 and len(acts) > 1:
+                mine.append((labels_key(acts), action_key(acts[j])))
+            taken.append(j)
+            r = sim({"t": "sim", "op": "act", "i": j})
+        self.fail = "step cap"
+        return None
+
+    def plan_moves(self, msg, sim, imagined):
+        """The planner's score for every root move (max over its simulated lines of the value of the settled
+        position), and the best line's follow-up choices per root move. None when nothing could be simulated."""
+        me = msg["you"]
+        acts = msg["actions"]
+        n = len(acts)
+        cfg = self.plan_cfg
+        order = [int(k) for k in np.argsort(-imagined)]
+        roots = order[:cfg["roots"]] + [k for k in range(n) if is_button(acts[k], "pass") and k not in order[:cfg["roots"]]]
+        queue = deque([[i] for i in roots])  # first one line per root move, in imagined order, then the alternatives
+        t0 = time.perf_counter()
+        leaves, lines = [], 0
+        while queue and lines < cfg["lines"] and time.perf_counter() - t0 < cfg["secs"]:
+            path = queue.popleft()
+            res = self.plan_line(msg, sim, path, queue, cfg["depth"])
+            lines += 1
+            if res == "abort":
+                break
+            if res is None:
+                self.stats["failed"] += 1
+                why = (self.fail or "?")[:60]
+                self.stats.setdefault("fails", {})[why] = self.stats.setdefault("fails", {}).get(why, 0) + 1
+            else:
+                leaves.append(res)
+        sim({"t": "sim", "op": "end"})
+        self.stats["lines"] += lines
+        self.stats["leaves"] += len(leaves)
+        self.stats["secs"] += time.perf_counter() - t0
+        if not leaves:
+            return None
+        vals = np.full(len(leaves), np.nan)
+        live, pos = [], []
+        for k, (taken, _, r) in enumerate(leaves):
+            if r.get("over"):
+                w = r["over"].get("winner")
+                vals[k] = 1.0 if w == me else 0.5 if w in ("draw", None) else 0.0
+            elif r.get("actor") == me and (r.get("prompt") or {}).get("actionWindow") and r.get("state") == msg.get("state"):
+                vals[k] = 0.0  # back in my window with nothing changed: the move does nothing
+            else:
+                live.append(k)
+                if r.get("actor") == me:
+                    pos.append({"you": me, "prompt": r.get("prompt"), "state": r.get("state"), "actions": r.get("actions")})
+                else:
+                    pos.append({"you": me, "prompt": WAIT_PROMPT, "state": r.get("state"), "actions": acts})
+        if live:
+            es = [F.encode(m, self.db) for m in pos]
+            z = self.net.encode(np.stack([e["state"] for e in es]), np.stack([e["tok_ids"] for e in es]).astype(np.int64),
+                                np.stack([e["tok_feats"] for e in es]), np.stack([e["tok_mask"] for e in es]))
+            vals[live] = M.sigmoid(self.net.value(z))
+        score = np.full(n, -1.0)
+        best = {}
+        for k, (taken, mine, _) in enumerate(leaves):
+            i = taken[0]
+            if vals[k] > score[i]:
+                score[i] = vals[k]
+                best[i] = mine
+        return score, best
+
+    def follow_plan(self, msg):
+        """My planned choice at a real follow-up prompt, or None when the prompt is not the one the plan expects."""
+        if not self.plan:
+            return None
+        sig = labels_key(msg["actions"])
+        for k, (want, choice) in enumerate(self.plan):
+            if want == sig:
+                self.plan = self.plan[k + 1:]
+                for i, a in enumerate(msg["actions"]):
+                    if action_key(a) == choice:
+                        return i
+                return None
+        self.plan = []
+        self.stats["dropped"] += 1
+        return None
+
     def choose(self, msg, sim=None):
         n = len(msg.get("actions") or [])
         if n <= 1:
@@ -251,7 +431,29 @@ class JepaPlayer:
         t = self.think(msg)
         score = t["score"].astype(np.float64)
         self.fail = None
-        if sim is not None and msg.get("sim") and self.needs_sim:
+        window = bool((msg.get("prompt") or {}).get("actionWindow"))
+        best = None
+        if self.score == "plan":
+            if window:
+                self.plan = []
+                self.stats["windows"] += 1
+                if sim is not None and msg.get("sim"):
+                    planned = self.plan_moves(msg, sim, score)
+                    if planned is None:
+                        self.fallbacks += 1
+                    else:
+                        score, best = planned
+                        self.stats["planned"] += 1
+            else:
+                had = bool(self.plan)
+                j = self.follow_plan(msg)
+                if j is not None:
+                    self.stats["followed"] += 1
+                    return j, t
+                self.stats["unplanned"] += 1
+                kind = "resource" if F.prompt_type(msg.get("prompt") or {}) == 1 else "plan missed" if had else "other"
+                self.stats.setdefault("why", {})[kind] = self.stats.setdefault("why", {}).get(kind, 0) + 1
+        elif sim is not None and msg.get("sim") and self.needs_sim:
             want = ["sim-v", "sim-eval"] if (self.log is not None or self.score == "sim-eval") else ["sim-v"]
             real = self.sim_scores(msg, sim, want)
             if real is None:
@@ -273,6 +475,8 @@ class JepaPlayer:
             fresh = [i for i in order if i not in tried]
             pick = int(fresh[0]) if fresh else int(self.rng.randrange(n))
         tried.append(pick)
+        if best is not None:
+            self.plan = list(best.get(pick) or [])
         if self.log is not None:
             real = t.get("real")
             rec = {"seq": msg.get("seq"), "round": (msg.get("state") or {}).get("round"), "n": n, "pick": pick, "score": self.score,
@@ -327,8 +531,10 @@ def main():
     ap.add_argument("--mix", type=float, default=0.5, help="weight of the 4-decision horizon in the score")
     ap.add_argument("--temp", type=float, default=0.0, help="softmax temperature over scores; 0 = best move")
     ap.add_argument("--name", default="jepa")
-    ap.add_argument("--score", choices=["imagined", "sim-v", "sim-eval"], default="imagined",
-                    help="what ranks the moves: the imagined next latent (the bot), or the real next position from a simulation")
+    ap.add_argument("--score", choices=["imagined", "sim-v", "sim-eval", "plan"], default="imagined",
+                    help="what ranks the moves: the imagined next latent (the bot), the real next position from a simulation, "
+                         "or the planner (whole moves with their follow-up choices, simulated)")
+    ap.add_argument("--plan", default="", help="planner settings as k=v,... (roots, follow, follow2, depth, lines, secs, floor)")
     ap.add_argument("--evaluator", default="linear-deck-g4", help="bot/eval evaluator for sim-eval and --log")
     ap.add_argument("--deals", type=int, default=1, help="deals of the hidden cards per move in sim modes")
     ap.add_argument("--judge", choices=["round", "window"], default="round",
@@ -341,7 +547,9 @@ def main():
     log(f"{len(db)} card codes, model {a.model}, score {a.score}")
     logf = open(a.log, "a") if a.log else None
     helper = EvalHelper(a.evaluator) if (a.score == "sim-eval" or logf) else None
-    player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge, window_model=a.window_model)
+    plan = {k: float(v) for k, v in (kv.split("=") for kv in a.plan.split(",") if kv)}
+    player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge, window_model=a.window_model,
+                        plan={k: (v if k == "secs" else int(v)) for k, v in plan.items()})
     thoughts = os.environ.get("SWU_JEPA_THOUGHTS")
     stdin = sys.stdin
 
@@ -372,6 +580,11 @@ def main():
             # v1 unless a mode needs simulations (v2 also brings both deck lists and `over`)
             out = {"t": "ready", "v": 2, "name": a.name, "sim": True} if player.needs_sim and 2 in (msg.get("versions") or []) else {"t": "ready", "v": 1, "name": a.name}
         elif t == "over":
+            if player.score == "plan" and player.stats.get("windows"):
+                st = player.stats
+                log(f"plan: {st['planned']}/{st['windows']} windows planned, {st['lines'] / max(st['planned'], 1):.1f} lines and "
+                    f"{st['secs'] / max(st['planned'], 1):.2f} s each, {st['failed']} failed lines {st.get('fails') or ''}; follow-ups {st['followed']} from the plan, "
+                    f"{st['unplanned']} unplanned {st.get('why')}, {st['dropped']} plans dropped")
             out = {"t": "ok"}
         elif t == "decide":
             t0 = time.perf_counter()
