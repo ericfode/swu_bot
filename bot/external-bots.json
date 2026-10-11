@@ -7,6 +7,7 @@
     "rust-greedy": { "cmd": "target/release/swu-bot-rs", "args": ["greedy"], "lang": "rust" },
     "rust-greedy2": { "cmd": "target/release/swu-bot-rs", "args": ["greedy2"], "lang": "rust" },
     "rust-search": { "cmd": "target/release/swu-bot-rs", "args": ["search"], "lang": "rust" },
+    "rust-omni": { "cmd": "target/release/swu-omni-bot", "args": [], "lang": "rust" },
     "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" },
     "wasm": { "cmd": "node", "args": ["bot/wasm/host.js"], "lang": "wasm" },
     "clj-forecast": { "cmd": "bot/clojure/run.sh", "args": [], "lang": "clojure", "startTimeoutMs": 60000 },

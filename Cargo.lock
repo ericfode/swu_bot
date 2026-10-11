@@ -285,6 +285,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "swu-omni-bot"
+version = "0.1.0"
+dependencies = [
+ "omni-rs",
+ "serde_json",
+ "swu-bot-rs",
+]
+
+[[package]]
 name = "syn"
 version = "3.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
