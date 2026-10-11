@@ -18,7 +18,7 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - Engine input rules learned the hard way: the distribute-damage prompt's `Done` button is *not* a menu click
   (it is sent via `statefulPromptResults`); in "cards with buttons" prompts only the per-card buttons are legal;
   indirect damage on a unit may not exceed its remaining HP.
-- Undo/snapshots are disabled by default (`newGame({ undo: true })` enables `UndoMode.Full` for search experiments).
+- Undo/snapshots are disabled by default (`newGame({ undo: true })` enables `UndoMode.Free` for search experiments).
 
 ## Recording and tournaments
 - `recorder.js` — read-only per-step board snapshots (`snapshot(envGame)`); `match.js` — `playGame(env, {seed, bots, record, snapshot})`.

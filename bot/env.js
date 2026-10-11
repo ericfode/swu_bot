@@ -12,6 +12,9 @@
  */
 const path = require('path');
 
+// Quiet the engine's rollback logging and Discord reporting (same switch the test harness uses). Must be set before the engine loads.
+process.env.NODE_ENV ??= 'test';
+
 const root = path.resolve(__dirname, '..', 'forceteki');
 const b = (p) => require(path.join(root, 'build/server', p));
 
@@ -136,7 +139,7 @@ class EnvGame {
             id: `bot-${seed}`, owner: names[0], allowSpectators: false, players,
             cardDataGetter: env.cardDataGetter, pushUpdate: () => undefined, scheduler,
             userTimeoutDisconnect: () => undefined,
-            undoMode: undo ? UndoMode.Full : UndoMode.Disabled
+            undoMode: undo ? UndoMode.Free : UndoMode.Disabled
         }, { router: makeRouter(this.sink) });
         this.game.setRandomSeed(String(seed));
         this.game.selectDeck(this.ids[0], new Deck(deck1, env.cardDataGetter));
