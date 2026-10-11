@@ -12,7 +12,8 @@
  * Every input file becomes <out>/games/<id>.jsonl (spec/replay-format.md: header, steps, end) and <out>/index.json
  * is rewritten in the tournament format, so the viewer, analysis/ and bot/omni/lens.js read the folder unchanged.
  * Inputs: see importer/sources.js (KaraBuddy replay files, Karabast gamestate lists, socket.io dumps, capture.js).
- * <id> is the input file name without its extension.
+ * <id> is the input file name without its extension. A file holding several games (a socket dump across a rematch or
+ * a best-of-three) gives <id>, <id>.2, <id>.3, ...
  *
  * Privacy: usernames, user ids and player chat are never written; seats are p1/p2 and names default to them.
  */
@@ -20,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readText } = require('./sources');
-const { convertFrames } = require('./karabast');
+const { convertFrames, splitGames } = require('./karabast');
 const { mergeCaptures } = require('./merge');
 
 function parseArgs(argv) {
@@ -56,14 +57,21 @@ function expand(inputs) {
 
 const gameId = (file) => path.basename(file).replace(/\.(json|jsonl|txt|log)$/, '').replace(/[^A-Za-z0-9_.-]+/g, '-');
 
+/** One capture file -> one replay per game in it. */
 function importFile(file, { names, source }) {
     const cap = readText(fs.readFileSync(file, 'utf8'));
     const seats = cap.meta.capture?.seats;
-    const { events, report } = convertFrames(cap.frames, {
-        seats, names: names ?? undefined, decks: cap.meta.decks,
-        source: { kind: source ?? cap.meta.reader, file: path.basename(file), ...(cap.meta.url ? { url: cap.meta.url } : {}), ...(cap.meta.startedAt ? { startedAt: cap.meta.startedAt } : {}) }
+    const games = splitGames(cap.frames);
+    return games.map((frames, k) => {
+        const { events, report } = convertFrames(frames, {
+            seats, names: names ?? undefined, decks: cap.meta.decks,
+            source: {
+                kind: source ?? cap.meta.reader, file: path.basename(file), ...(games.length > 1 ? { game: k + 1, games: games.length } : {}),
+                ...(cap.meta.url ? { url: cap.meta.url } : {}), ...(cap.meta.startedAt ? { startedAt: cap.meta.startedAt } : {})
+            }
+        });
+        return { id: k ? `${gameId(file)}.${k + 1}` : gameId(file), events, report, reader: cap.meta.reader };
     });
-    return { id: gameId(file), events, report, reader: cap.meta.reader };
 }
 
 /** Two captures of one game, one from each player's seat, as one replay with both hands. */
@@ -117,16 +125,17 @@ function main() {
     const jobs = [...files.map((f) => ({ name: f, run: () => importFile(f, args) })), ...args.pairs.map(([x, y]) => ({ name: `${x} + ${y}`, run: () => importPair(x, y, args) }))];
     for (const job of jobs) {
         try {
-            const { id, events, report, reader } = job.run();
-            fs.writeFileSync(path.join(args.out, 'games', `${id}.jsonl`), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
-            const entry = indexEntry(id, events);
-            index.games = index.games.filter((g) => g.id !== id).concat(entry);
-            for (const b of [entry.p1, entry.p2]) {
-                if (!index.bots.includes(b)) {
-                    index.bots.push(b);
+            for (const { id, events, report, reader } of [job.run()].flat()) {
+                fs.writeFileSync(path.join(args.out, 'games', `${id}.jsonl`), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+                const entry = indexEntry(id, events);
+                index.games = index.games.filter((g) => g.id !== id).concat(entry);
+                for (const b of [entry.p1, entry.p2]) {
+                    if (!index.bots.includes(b)) {
+                        index.bots.push(b);
+                    }
                 }
+                console.log(`${id}: ${reader}, ${report.frames} frames -> ${report.steps} steps, pov ${report.pov}, winner ${entry.winnerSeat ?? '-'}, ${report.messages} log lines${report.chatDropped ? `, ${report.chatDropped} chat lines dropped` : ''}`);
             }
-            console.log(`${id}: ${reader}, ${report.frames} frames -> ${report.steps} steps, pov ${report.pov}, winner ${entry.winnerSeat ?? '-'}, ${report.messages} log lines${report.chatDropped ? `, ${report.chatDropped} chat lines dropped` : ''}`);
         } catch (e) {
             console.error(`${job.name}: ${e.message}`);
             process.exitCode = 1;
