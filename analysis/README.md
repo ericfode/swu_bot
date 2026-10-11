@@ -54,10 +54,13 @@ Useful options (full list at the top of `analyze.js`):
 - `--model` (default `claude-opus-5-5`), `--effort` for checkpoint calls (default `medium`), `--omni-effort` (default `high`).
 - `--granularity turn|round`: a checkpoint after every player turn (default), or once per round.
 - `--max-checkpoints N`: evenly subsample long games. A turn-level game has 100 to 250 checkpoints, so 3 calls each.
+  A kept checkpoint covers all turns since the previous one (its `actions` list them all; `actor` is null if both
+  players acted).
 - `--views subjective_p1,objective`: run a subset.
 - `--dashboard /mnt/project-files/dashboard/evals`: also write the research dashboard's eval file.
 - `--dump-prompts file.jsonl` then `--answers answers.jsonl --label name`: run the exact same requests through any
-  other model or process and feed the answers back (`{"id": ..., "output": {...}}` per line).
+  other model or process and feed the answers back (`{"game": ..., "id": ..., "output": {...}}` per line; `game`
+  is in every dumped request and is needed when one file covers several games).
 
 Answers are cached in `analysis/.cache` by a hash of model, effort, prompt and schema, so re-running or re-rendering
 costs nothing. Direct calls use streaming, adaptive thinking, structured outputs (a JSON schema per view) and
@@ -92,7 +95,9 @@ server-side refusal fallbacks; `--batch` drops the fallbacks because the Batches
 `fitness.js` credits each checkpoint's change in the objective P(win) to the player who acted in that turn, in that
 player's frame. Per bot it reports credit per turn (mean win probability gained per own turn) and blunders per 100
 turns (turns that cost more than 12 points). Regroup draws land on whoever acted last, so compare bots over many
-games. It also scores each view against the result (Brier) and reports the mean information and hindsight gaps,
+games. A checkpoint where both players acted (round granularity, or turns merged by `--max-checkpoints`) credits
+nobody, and `unattributed` reports the share of the curve's movement that had no owner, so for bot fitness analyse
+every turn. It also scores each view against the result (Brier) and reports the mean information and hindsight gaps,
 which is how to tell whether an LLM evaluator knows more than the heuristic one.
 
 ## Example
@@ -100,7 +105,9 @@ which is how to tell whether an LLM evaluator knows more than the heuristic one.
 `examples/random-b-vs-random-a-2.*` is a real recorded game (random bots, demo tournament seed 2) at 40 checkpoints.
 The `.claude.json` answers were produced by Claude through Claude Code subagents answering the `--dump-prompts`
 requests one at a time in order (no API key was available), then loaded with `--answers`; the raw answers are in
-`.answers.jsonl`. `.heuristic.json` is the baseline on the same checkpoints.
+`.answers.jsonl`. `.heuristic.json` is the baseline on the same checkpoints. The answers were given to the
+`pos-eval-1` prompts (before subjective logs also hid picks from hidden zones). At 40 checkpoints every one covers
+turns by both players, so the example has curves and gaps but no per-turn credit.
 
 ```bash
 node analysis/report.js analysis/examples/random-b-vs-random-a-2.claude.json --baseline analysis/examples/random-b-vs-random-a-2.heuristic.json --game <path to the replay>
