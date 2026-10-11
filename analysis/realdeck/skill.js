@@ -12,9 +12,9 @@
  * game for game. All runs must share the reference bot, and each challenger plays in one run only (one copy: no
  * `bot#1`, `bot#2`). Play whole passes (--games a multiple of 2P, P = n(n−1)/2 deck pairs: 702 for 27 decks), so every
  * deck sits on the challenger's side as often as on the reference's; otherwise deck luck is left in the skill and the
- * reference's 50% is not on the same deals. A warning says so for each challenger whose finished seeds (both games
- * done) do not put every deck on its side as often as on the reference's, as in a part pass or a run read while it is
- * still going (seeds finish out of order). Run ids must be unique.
+ * reference's 50% is not on the same deals. A warning says so for each challenger whose decided games do not put every
+ * deck on its side as often as on the reference's: a part pass, a run read while it is still going (seeds finish out
+ * of order), or games dropped as incomplete (a deck with an engine bug). Run ids must be unique.
  *
  * Skill: the challenger's score against the reference in decided games (a draw counts half), a Wilson 95% CI, and the
  * same as an Elo difference. An ERROR game a bot caused (`by` set: it threw, made an illegal move or timed out) is a
@@ -209,25 +209,30 @@ function skillOf(t) {
 const sameDecks = (x, y) => !!x && !!y && x.p1 === y.p1 && x.p2 === y.p2;
 
 /**
- * How evenly a challenger's finished seeds put each deck on its side and on the reference's. full: seeds with both
- * games finished; half: seeds with one; off: decks on one side more often than the other; max: the largest gap.
+ * How evenly a challenger's decided games (the games its rate counts) put each deck on its side and on the
+ * reference's. decided: those games; full / half: seeds with both games finished / with one; off: decks on one side
+ * in more games than the other; max: the largest gap, in games. A dropped game (engine error, step cap) unbalances
+ * its decks as much as a missing one.
  */
 function deckBalance(t) {
     const side = new Map();
     let full = 0;
+    let decided = 0;
     for (const rec of t.seeds.values()) {
-        if (!rec.p1 || !rec.p2) {
-            continue;
-        }
-        full++;
-        const d = rec.p1.decks; // the game with the challenger at p1: its deck is p1's, the reference's p2's
-        if (d?.p1 && d?.p2) {
-            side.set(d.p1, (side.get(d.p1) ?? 0) + 1);
-            side.set(d.p2, (side.get(d.p2) ?? 0) - 1);
+        full += rec.p1 && rec.p2 ? 1 : 0;
+        for (const seat of ['p1', 'p2']) {
+            const g = rec[seat];
+            if (!g || g.y === null || !g.decks?.p1 || !g.decks?.p2) {
+                continue;
+            }
+            decided++;
+            const other = seat === 'p1' ? 'p2' : 'p1';
+            side.set(g.decks[seat], (side.get(g.decks[seat]) ?? 0) + 1);
+            side.set(g.decks[other], (side.get(g.decks[other]) ?? 0) - 1);
         }
     }
     const gaps = [...side.values()].map(Math.abs).filter((g) => g > 0);
-    return { full, half: t.seeds.size - full, off: gaps.length, max: gaps.length ? Math.max(...gaps) : 0 };
+    return { decided, full, half: t.seeds.size - full, off: gaps.length, max: gaps.length ? Math.max(...gaps) : 0 };
 }
 
 /** Paired score difference of challengers A and B over the seeds both played with the same deals (see the header). */
@@ -422,10 +427,11 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
             continue;
         }
         const b = deckBalance(t);
-        if (b.off || b.half) {
-            warnings.push(`${t.bot} (${t.run}${status === 'running' ? ', still running' : ''}): over its ${b.full} seeds with both games finished` +
-                `${b.half ? ` (and ${b.half} with one)` : ''}, ${b.off} decks are not on its side as often as on the reference's (off by up to ${b.max}), ` +
-                `so deck luck is left in its rate and it is not on the reference's 50% deals (play whole passes: --games ${2 * P})`);
+        if (b.off) {
+            warnings.push(`${t.bot} (${t.run}${status === 'running' ? ', still running' : ''}): over its ${b.decided} decided games ` +
+                `(${t.incomplete} incomplete left out, ${b.full} seeds with both games finished${b.half ? `, ${b.half} with one` : ''}), ` +
+                `${b.off} decks are not on its side as often as on the reference's (off by up to ${b.max} games), so some deck luck is ` +
+                `left in its rate (whole passes, --games ${2 * P}, balance every deck when no game is dropped)`);
         }
     }
     const withAgreement = bots.filter((b) => b.agreement);

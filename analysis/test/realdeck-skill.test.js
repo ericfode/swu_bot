@@ -236,19 +236,23 @@ const cmpFixture = () => {
 
     // warnings: a part pass, a gauntlet without decks, and bots whose left-out decks differ
     // seeds 1-10 put each of the 5 decks twice on each side; seeds 1-7 do not
-    assert.deepStrictEqual(sk.deckBalance(sk.gauntletTallies([gl]).tallies.get('heuristic')), { full: 10, half: 0, off: 0, max: 0 });
+    assert.deepStrictEqual(sk.deckBalance(sk.gauntletTallies([gl]).tallies.get('heuristic')), { decided: 20, full: 10, half: 0, off: 0, max: 0 });
     const part = sk.skillVsAgreement([{ ...gl, status: 'running', games: games.filter((x) => x.seed <= 7) }], cmpFixture());
-    assert.match(part.warnings.join('\n'), /heuristic \(gl, still running\): over its 7 seeds with both games finished, 4 decks are not on its side as often as on the reference's \(off by up to 1\)/);
+    assert.match(part.warnings.join('\n'), /heuristic \(gl, still running\): over its 14 decided games \(0 incomplete left out, 7 seeds with both games finished\), 4 decks are not on its side as often as on the reference's \(off by up to 2 games\)/);
+    // a game dropped as incomplete unbalances its decks too
+    const crashed = games.map((x) => (x.seed === 4 && x.p1 === 'heuristic' ? { ...x, outcome: 'ERROR', winnerSeat: null } : x));
+    assert.deepStrictEqual(sk.deckBalance(sk.gauntletTallies([{ ...gl, games: crashed }]).tallies.get('heuristic')), { decided: 19, full: 10, half: 0, off: 2, max: 1 });
+    assert.match(sk.skillVsAgreement([{ ...gl, games: crashed }], cmpFixture()).warnings.join('\n'), /heuristic \(gl\): over its 19 decided games \(1 incomplete left out, 10 seeds/);
     assert.strictEqual(part.warnings.length, 3, 'one per challenger');
     // the same count of seeds can still be unbalanced when they finish out of order: seed 11 done before seed 10
     const shifted = games.filter((x) => x.seed !== 10 || x.p1 === 'random' || x.p2 === 'random' || x.p1 === 'rust-search' || x.p2 === 'rust-search')
         .concat(seedGames('heuristic', 'c-clock', 11, [1, 1]));
     const r6 = sk.skillVsAgreement([{ ...gl, games: shifted }], cmpFixture());
     assert.deepStrictEqual(r6.warnings.map((w) => w.split(':')[0]), ['heuristic (gl)']);
-    assert.match(r6.warnings[0], /over its 10 seeds with both games finished, 4 decks are not on its side as often/);
+    assert.match(r6.warnings[0], /over its 20 decided games \(0 incomplete left out, 10 seeds with both games finished\), 4 decks are not on its side as often/);
     const oneGame = sk.skillVsAgreement([{ ...gl, games: games.filter((x) => !(x.seed === 3 && x.p1 === 'c-clock' && x.p2 === 'random')) }], cmpFixture());
     assert.deepStrictEqual(oneGame.warnings.map((w) => w.split(':')[0]), ['random (gl)'], 'a seed with one game left unbalances only that bot');
-    assert.match(oneGame.warnings[0], /over its 9 seeds with both games finished \(and 1 with one\)/);
+    assert.match(oneGame.warnings[0], /over its 19 decided games \(0 incomplete left out, 9 seeds with both games finished, 1 with one\), 2 decks/);
     assert.throws(() => sk.skillVsAgreement([gl, { ...gl, challengers: [], games: [] }], cmpFixture()), /run ids must be unique.*found twice: gl/);
     const plain = sk.skillVsAgreement([{ ...gl, decks: null }], cmpFixture());
     assert.match(plain.warnings.join('\n'), /gl: no deck list in ladder.json/);
