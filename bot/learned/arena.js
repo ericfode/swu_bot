@@ -31,11 +31,17 @@ async function worker() {
         if (file) {
             fs.writeFileSync(file, '');
         }
-        const r = await playGame(env, {
-            seed: job.seed, bots: job.seats.map(makeBot), record: !!file, snapshot,
-            onEvent: file ? (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) : null
-        });
-        delete r.events;
+        let r;
+        try {
+            r = await playGame(env, {
+                seed: job.seed, bots: job.seats.map(makeBot), record: !!file, snapshot,
+                onEvent: file ? (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) : null
+            });
+            delete r.events;
+        } catch (e) {
+            // e.g. a bot that cannot load its model: report it as this game's error instead of dying silently
+            r = { seed: job.seed, steps: 0, outcome: 'ERROR', winner: null, round: 0, ms: 0, error: String((e && e.message) || e).split('\n')[0].slice(0, 200), botStats: [] };
+        }
         process.send({ id: job.id, r });
     });
     process.send({ ready: true });
@@ -143,35 +149,55 @@ async function main() {
     let done = 0;
     await new Promise((resolve) => {
         const n = Math.min(workers, jobs.length);
+        let live = n;
         for (let w = 0; w < n; w++) {
             const child = fork(__filename, ['--worker'], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+            let current = null;
             const give = () => {
                 if (next >= jobs.length) {
                     child.send('stop');
                     return;
                 }
                 const j = jobs[next++];
+                current = j.id;
                 entries.get(j.id).outcome = 'running';
                 write('running');
                 child.send(j);
             };
-            child.on('message', (m) => {
-                if (m.ready) {
-                    give();
-                    return;
-                }
-                const e = entries.get(m.id);
-                const j = jobs.find((x) => x.id === m.id);
-                const r = m.r;
+            const finish = (id, r) => {
+                const e = entries.get(id);
+                const j = jobs.find((x) => x.id === id);
                 const winnerBot = r.winner === 'p1' ? j.seats[0] : r.winner === 'p2' ? j.seats[1] : r.winner;
                 Object.assign(e, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, botStats: r.botStats });
                 done++;
-                console.log(`[${done}/${jobs.length}] ${m.id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${(r.ms / 1000).toFixed(1)}s${r.error ? ' ' + r.error : ''}`);
+                console.log(`[${done}/${jobs.length}] ${id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${(r.ms / 1000).toFixed(1)}s${r.error ? ' ' + r.error : ''}`);
                 write(done === jobs.length ? 'done' : 'running');
                 if (done === jobs.length) {
                     resolve();
                 }
+            };
+            child.on('message', (m) => {
+                if (!m.ready) {
+                    current = null;
+                    finish(m.id, m.r);
+                }
                 give();
+            });
+            // a worker that dies (startup failure, crash) fails its game and is not given more work
+            child.on('exit', (code) => {
+                if (current !== null) {
+                    const id = current;
+                    current = null;
+                    process.exitCode = 1;
+                    finish(id, { steps: 0, outcome: 'ERROR', winner: null, round: 0, ms: 0, error: `arena worker exited with code ${code}`, botStats: [] });
+                }
+                live--;
+                if (live === 0 && done < jobs.length) {
+                    process.exitCode = 1;
+                    while (next < jobs.length) {
+                        finish(jobs[next++].id, { steps: 0, outcome: 'ERROR', winner: null, round: 0, ms: 0, error: 'no arena worker left', botStats: [] });
+                    }
+                }
             });
         }
     });
