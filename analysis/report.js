@@ -50,7 +50,7 @@ function build(a, { baseline = null, boards = null, jsonl = null, art = null, le
         settings: a.settings,
         usage: a.usage,
         omniscient: a.omniscient,
-        fitness: { seats: fit.seats, views: fit.views, gaps: fit.gaps },
+        fitness: { seats: fit.seats, views: fit.views, gaps: fit.gaps, unattributed: fit.unattributed },
         cps: a.checkpoints.map((c) => ({ i: c.i, step: c.step, round: c.round, phase: c.phase, actor: c.actor, actions: c.actions, v: c.views })),
         baseline: baseline ? { model: baseline.evaluator.model, byStep: Object.fromEntries(baseline.checkpoints.map((c) => [c.step, c.views.objective?.p1 ?? null])) } : null,
         boards,
@@ -436,6 +436,7 @@ function sidebar() {
     h('td', 'n', s.blunders, r);
     for (const m of [s.best, s.worst]) { const td = h('td', 'n', m ? (m.delta > 0 ? '+' : '') + (100 * m.delta).toFixed(0) + ' @#' + m.i : '–', r); if (m) td.title = m.actions.join(' › '); }
   }
+  if (D.fitness.unattributed > 0.05) h('p', 'note', Math.round(100 * D.fitness.unattributed) + '% of the curve\'s movement happened at checkpoints where both players acted, so nobody gets credit for it. Analyse every turn (no --max-checkpoints, turn granularity) for a fair split.', cr);
 
   const t = $('#table');
   const tt = h('table', null, null, h('div', 'scroll', null, t));
@@ -451,7 +452,7 @@ function sidebar() {
 
 legend(); drawMain(); drawGaps(); sidebar();
 let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { drawMain(); drawGaps(); markers.forEach((m) => m && m(selected)); }, 120); });
-select(D.cps.length - 1 > 0 ? Math.min(D.cps.length - 1, (D.omniscient && D.omniscient.turningPoints && D.omniscient.turningPoints[0] ? D.cps.findIndex((c) => c.i === D.omniscient.turningPoints[0].i) : 0)) : 0);
+select(D.cps.length - 1 > 0 ? Math.min(D.cps.length - 1, (D.omniscient && D.omniscient.turningPoints && D.omniscient.turningPoints[0] ? Math.max(0, D.cps.findIndex((c) => c.i === D.omniscient.turningPoints[0].i)) : 0)) : 0);
 `;
 
 function html(data, title, fragment, kit = null) {
@@ -504,7 +505,8 @@ ${kit ? `<script>${kit.replace(/<\/script/gi, '<\\/script')}</script>\n` : ''}<s
 
 if (require.main === module) {
     const argv = process.argv.slice(2);
-    const file = argv.find((x) => !x.startsWith('--') && !argv[argv.indexOf(x) - 1]?.startsWith('--'));
+    const valued = new Set(['--baseline', '--game', '--kit', '--art-pack', '--lens', '--out']);
+    const file = argv.find((x, k) => !x.startsWith('--') && !valued.has(argv[k - 1]));
     if (!file) {
         console.error('usage: node analysis/report.js <analysis.json> [--baseline other.json] [--game game.jsonl] [--kit swu-viewer-kit.js [--art-pack pack.json] [--lens lens.json]] [--out report.html] [--fragment]');
         process.exit(2);
@@ -530,7 +532,7 @@ if (require.main === module) {
     }
     const lens = kit && jsonl && opt(argv, 'lens') ? JSON.parse(fs.readFileSync(opt(argv, 'lens'), 'utf8')) : null;
     const { data, title } = build(a, { baseline, boards, jsonl, art, lens });
-    const out = opt(argv, 'out', file.replace(/\.json$/, '.html'));
+    const out = opt(argv, 'out', /\.json$/i.test(file) ? file.replace(/\.json$/i, '.html') : `${file}.html`);
     fs.writeFileSync(out, html(data, title, argv.includes('--fragment'), kit));
     console.error(`wrote ${out}`);
 }

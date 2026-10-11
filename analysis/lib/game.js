@@ -44,6 +44,8 @@ const botName = (game, seat) => game.header.players.find((p) => p.id === seat)?.
  * granularity 'round': one checkpoint at the end of each round's action phase, plus the start and the end.
  *
  * max: if there are more checkpoints than this, keep an evenly spaced subset (always keeping the first and last).
+ *   A kept checkpoint then covers every turn since the previous kept one: fromStep and actions span them all, and
+ *   actor is null when more than one player acted in that span.
  */
 function checkpoints(game, { granularity = 'turn', max = Infinity } = {}) {
     const steps = game.steps;
@@ -89,11 +91,15 @@ function checkpoints(game, { granularity = 'turn', max = Infinity } = {}) {
     });
 
     if (out.length > max && max >= 2) {
-        const picked = [];
-        for (let j = 0; j < max; j++) {
-            picked.push(out[Math.round((j * (out.length - 1)) / (max - 1))]);
-        }
-        out = [...new Set(picked)];
+        const picked = [...new Set(Array.from({ length: max }, (_, j) => Math.round((j * (out.length - 1)) / (max - 1))))];
+        out = picked.map((k, j) => {
+            if (j === 0) {
+                return out[k];
+            }
+            const span = out.slice(picked[j - 1] + 1, k + 1);
+            const actors = new Set(span.map((c) => c.actor));
+            return { ...out[k], fromStep: span[0].fromStep, actor: actors.size === 1 ? span[0].actor : null, actions: span.flatMap((c) => c.actions) };
+        });
     }
     return out.map((c, i) => ({ i, ...c }));
 }

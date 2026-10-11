@@ -4,7 +4,8 @@
  * Text renderings of replay snapshots for the three evaluation views.
  *
  *   subjective (pov p1|p2): own hand by name, opponent hand as a count, both boards, discards, resources;
- *                           the action log hides the opponent's private choices (cards they resourced).
+ *                           the action log hides the opponent's private choices (cards they resourced, picks
+ *                           from their deck or another hidden zone).
  *   objective:              both hands by name, full action log; nothing about the future.
  *   omniscient:             the whole trajectory, every hand, and the result.
  *
@@ -59,10 +60,22 @@ function renderBoard(state, { pov = null, names = {} } = {}) {
     return parts.join('\n\n');
 }
 
-/** Is this decision private to its maker? Resource choices put a card face down. */
-function isPrivate(step) {
-    return /^resource/.test(step.prompt ?? '') && step.action?.kind === 'card';
+/**
+ * Why a decision is private to its maker, or null: resource choices put a card face down, and picks from a hidden
+ * zone (deck searches and top/bottom choices show the cards as a display prompt; other prompts say so in the title).
+ */
+function privateKind(step) {
+    const kind = step.action?.kind;
+    if (/^resource/.test(step.prompt ?? '') && kind === 'card') {
+        return 'resourced a card (hidden)';
+    }
+    if (kind === 'displayCard' || kind === 'perCardButton' || /^displayCards/.test(step.prompt ?? '') || /hidden zone/i.test(step.title ?? '')) {
+        return 'chose from a hidden zone (hidden)';
+    }
+    return null;
 }
+
+const isPrivate = (step) => privateKind(step) !== null;
 
 /** The last `k` decisions up to and including steps[upto], as seen from pov (null = everything). */
 function renderLog(steps, upto, { pov = null, k = 30 } = {}) {
@@ -74,8 +87,8 @@ function renderLog(steps, upto, { pov = null, k = 30 } = {}) {
             continue;
         }
         const who = pov ? (s.pid === pov ? 'you' : 'opponent') : s.pid;
-        const hidden = pov && s.pid !== pov && isPrivate(s);
-        const what = hidden ? 'resourced a card (hidden)' : `${s.title ? `${s.title}: ` : ''}${pretty(s.action?.label ?? s.label ?? '')}`;
+        const hidden = pov && s.pid !== pov ? privateKind(s) : null;
+        const what = hidden ? hidden : `${s.title ? `${s.title}: ` : ''}${pretty(s.action?.label ?? s.label ?? '')}`;
         lines.push(`  #${s.n} r${s.state.round} ${s.state.phase} ${who}: ${what}`);
     }
     return lines.length ? lines.join('\n') : '  (no decisions yet)';
