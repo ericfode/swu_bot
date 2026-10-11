@@ -1,0 +1,891 @@
+{
+  "schema": "swu-card-batch-receipts/v1",
+  "generationCatalogueSha256": "c2532f4e47ce6ff6f2b1f1c7246b253eb2ecf8d49601d5fb301f4ae52da06416",
+  "corpora": [
+    {
+      "directory": "death",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "ant-and-landing-same-player.jsonl.gz",
+          "sha256": "c2c545e988901a1ea7e1e5f7ca94c4d7e0d2c7ea313baf0efc06c4944fd83dbc"
+        },
+        {
+          "file": "ant-bounce-no-death.jsonl.gz",
+          "sha256": "b61c7f27b7e5f8b62f8b2cca24f63018b7afc5d25a3627e4d196db214f9de35f"
+        },
+        {
+          "file": "ant-combat-mutual-death.jsonl.gz",
+          "sha256": "b697d4b62e649ec7d22d6d62076a6df4245b29c2beb05a733d2cec24d08095ff"
+        },
+        {
+          "file": "ant-effect-defeat-draw.jsonl.gz",
+          "sha256": "fc7772c9d07cc0c5ee5de57816e3c608dd36b8b381149e3231d8d3e68969757e"
+        },
+        {
+          "file": "ant-phase-hp-expiry-draw.jsonl.gz",
+          "sha256": "79a3e846baf2e284995efab4a75397a6e18abf16eefaaf31862d260dbf589c12"
+        },
+        {
+          "file": "both-player-active-vs-initiative.jsonl.gz",
+          "sha256": "927000c96876aedf3339713a4c5cb7bcae645891fa6516b35d6eecd9afdc8f03"
+        },
+        {
+          "file": "commando-secondary-ant-death-enemy.jsonl.gz",
+          "sha256": "c79c4a47db46c48bb94ad700e0b0af158a76325f3c37f58464fb0e45b262ffd3"
+        },
+        {
+          "file": "commando-secondary-ant-death-own.jsonl.gz",
+          "sha256": "739ecc85697834c9ede2d499d4ceecbf0336f0766dfb8c9142a997929a4b03a5"
+        },
+        {
+          "file": "different-title-death-sources.jsonl.gz",
+          "sha256": "a51787c8f49c990dcb1e3a3d94a6bb3bb87547c9c334f48057476e0db7c70700"
+        },
+        {
+          "file": "highsinger-unique-defeat-incoming-preserves-play.jsonl.gz",
+          "sha256": "99f1e96bf054224e2b0aec325135135176c2e68b1acdec903c3a308f9f27eacd"
+        },
+        {
+          "file": "highsinger-unique-defeat-old-preserves-play.jsonl.gz",
+          "sha256": "887c55ff6f5b4a7d82e360a8889c3b8661e387d658aaa955cf06ad546e007c90"
+        },
+        {
+          "file": "landing-effect-accept.jsonl.gz",
+          "sha256": "2d2058de1c7f2c1bf9bbcac2ea74eb20330704326400aaa948be47fdaccca8bf"
+        },
+        {
+          "file": "landing-effect-pass.jsonl.gz",
+          "sha256": "8e2b1d63730ed2d06b78f3e8779405764c5a804a8e34ae21f6091ca12a9a4708"
+        },
+        {
+          "file": "lethal-overwhelm-optional-commando-death.jsonl.gz",
+          "sha256": "f005805081be8db414cba5404ad24b627e377a1f1c3009a9bc9a02daecf2ede3"
+        },
+        {
+          "file": "lethal-overwhelm-tauntaun-heal-cannot-rescue.jsonl.gz",
+          "sha256": "6628e3f5131bed89dfe7760fddfb1e440540343a2d35d6009ddb4dfabfa6a195"
+        },
+        {
+          "file": "phase-expiry-both-shuttles-initiative-opposite-final-passer-opponent-first.jsonl.gz",
+          "sha256": "e2407bf493cba39dc8c8756ddaf669642a5425f9ee4d50f6958c57e5ebaf4a87"
+        },
+        {
+          "file": "phase-expiry-both-shuttles-initiative-opposite-final-passer-you-first.jsonl.gz",
+          "sha256": "6df644bc2cc15c2245073c444a33740942f95fe61d5fae45dfe67cf419da557c"
+        },
+        {
+          "file": "pryce-nested-sacrifice-ant.jsonl.gz",
+          "sha256": "a31efc1cfe5d92f5ab9e14475c2190762531e5f229b66ed2d86b8ecb6a5bdc42"
+        },
+        {
+          "file": "pryce-no-friendly-target.jsonl.gz",
+          "sha256": "ebb9f743fdc32c13603a0683aa5e0a64530559dc084a8acce477b4fd27bd2e94"
+        },
+        {
+          "file": "pryce-pass.jsonl.gz",
+          "sha256": "8513055ee2cf2e594e310b7253653d7f8ab7c77a6c6713d09304101242c81264"
+        },
+        {
+          "file": "pryce-sacrifice-shuttle-continuation-before-pass.jsonl.gz",
+          "sha256": "0e1ff322b2798785a96858b7658e5d28544d7c8078724c7045a176d740d1a4f5"
+        },
+        {
+          "file": "pryce-sacrifice-shuttle-continuation-before-trigger.jsonl.gz",
+          "sha256": "a7a549368f3db7455ee163111d5b182e7c33c776fa1ac7534a67c7c8501a412e"
+        },
+        {
+          "file": "pryce-unique-replacement-defeat-incoming.jsonl.gz",
+          "sha256": "ef408d7cca406f2afce74c497763153e30534ad81af0a4b70687fb2a3aa47cf6"
+        },
+        {
+          "file": "pryce-unique-replacement-defeat-old.jsonl.gz",
+          "sha256": "64409e94bb7bc487b944828a538d781262a196c436a44b43c24284e84186d7fd"
+        },
+        {
+          "file": "two-ant-both-players-opponent-first.jsonl.gz",
+          "sha256": "1a96116a0ee926358fdc33361fe7da937fab7376a641e603f60bb98eb7490244"
+        },
+        {
+          "file": "two-ant-both-players-you-first.jsonl.gz",
+          "sha256": "5a2cffeb716507207f99270c25a6206063fbf86c28a124e9415477a10bba5e96"
+        },
+        {
+          "file": "two-ant-same-player-order.jsonl.gz",
+          "sha256": "dff435097e6b654bc429e50a6ed6ad2784371fa008f06b87541202f769f1b1e3"
+        }
+      ]
+    },
+    {
+      "directory": "alias",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "rho-medical-shuttle-alias-attack-heal.jsonl.gz",
+          "sha256": "1ee509ace5efd26f5785700b37ed166cadfa84208d132502c91845eaa0a4ac64"
+        },
+        {
+          "file": "rho-medical-shuttle-alias-attack-no-effect.jsonl.gz",
+          "sha256": "e22fc5b3f4e1c245b0f9d17193aff16dfc88d908989a2f87e7e02fdb8c093716"
+        },
+        {
+          "file": "rho-medical-shuttle-alias-attack-pass.jsonl.gz",
+          "sha256": "f436a047c51dd8fca56224fbb03865d4ef94875fbcf32ed322f40b820e9e67ea"
+        },
+        {
+          "file": "rho-medical-shuttle-alias-play-heal.jsonl.gz",
+          "sha256": "0ef672315c241e1e617fba80ce136f136fce23de9768238a4d8df6a5f9877df1"
+        },
+        {
+          "file": "rho-medical-shuttle-alias-play-no-effect.jsonl.gz",
+          "sha256": "3461cf457935a66a264afa23edfb8caa3bcaab115d77dd6c59d915455b576d73"
+        },
+        {
+          "file": "rho-medical-shuttle-alias-play-pass.jsonl.gz",
+          "sha256": "0da514e4f9fe4ef5693756cb687e6792e78ba48b3fd8a26ea44162974d2eabd2"
+        }
+      ]
+    },
+    {
+      "directory": "coordinate",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "anakin-coordinate-attack-three-draw.jsonl.gz",
+          "sha256": "5e39cf29326a8c59252ded5918781bb66b1dac24992559c5ace0bdc5dcba9c7d"
+        },
+        {
+          "file": "anakin-coordinate-attack-two-no-draw.jsonl.gz",
+          "sha256": "b6d143326d1891db92556cc4fd411317e0fe79ae3af165ac58bc7fcb36aba076"
+        },
+        {
+          "file": "cody-aura-loss-complete-lethal-set.jsonl.gz",
+          "sha256": "f8d39c44e3d2a0fbc4578911dc6040d62a119f2e43e179e40091a2c359cbaa39"
+        },
+        {
+          "file": "coordinate-sentinel-three-blocks-base-and-other-unit.jsonl.gz",
+          "sha256": "e5fa911604e718bc4ddbfd8f0a03d0544dea9cd37181116bd2a905ee7022b40d"
+        },
+        {
+          "file": "coordinate-sentinel-two-allows-base.jsonl.gz",
+          "sha256": "0fce07d2b007191c9dc262995853ed0a1faf3fb7122db342e44535f7d94f02a3"
+        },
+        {
+          "file": "coordinate-two-self-hp-bonuses-lost-complete-lethal-set.jsonl.gz",
+          "sha256": "4987926fee41c78cf79149dfc900eec96d6e4ea05a44b1a35e8bc9ec6fca3e00"
+        },
+        {
+          "file": "coruscant-guard-incoming-second-no-ambush.jsonl.gz",
+          "sha256": "c4c720f2cfc3a106066eb532f73a65548ab6c27756d36bfbf0f1bd4356f26748"
+        },
+        {
+          "file": "coruscant-guard-incoming-third-ambush.jsonl.gz",
+          "sha256": "37caa993819b2a1ea9232d719edb95713e59a8a4af963e43003c2556401b40b4"
+        },
+        {
+          "file": "echo-coordinate-live-two-three-two.jsonl.gz",
+          "sha256": "efeb3e7ab1b0a606bce502b5e841b5d988dd08026aea2d036cc713e600ea84bc"
+        },
+        {
+          "file": "kit-fisto-coordinate-attack-damage.jsonl.gz",
+          "sha256": "ebe3106569d4ab37676eef33ea42148741488d68218d74ce3fcf4fcd86da27b6"
+        },
+        {
+          "file": "kit-fisto-coordinate-attack-pass.jsonl.gz",
+          "sha256": "17c1ae13f15250ae2c4e4c0d3ec71f996ae7ee5ccbf0c0f1753ad709a7f63373"
+        }
+      ]
+    },
+    {
+      "directory": "token-unit",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "atte-death-two-clones.jsonl.gz",
+          "sha256": "d52139ff016e72676237873acb09764acddf9f2dd51ba4ccbb5b62be35339c75"
+        },
+        {
+          "file": "babwa-opponent-beast.jsonl.gz",
+          "sha256": "b2baedb7749faf5e572f2e3161d583c7639c0845f67ad1984c60d1042b14d032"
+        },
+        {
+          "file": "cody-aura-includes-created-space-ties.jsonl.gz",
+          "sha256": "5cabe6967aa4a741a344a623355a37e15166cb12386c2ced8af4cd50b99976e5"
+        },
+        {
+          "file": "created-spy-raid-two-combat.jsonl.gz",
+          "sha256": "11d7ece171c03d5706eb151b0d7211dfb2c7c16da6125b6fab1a119f858a65ed"
+        },
+        {
+          "file": "created-token-bounce-does-not-enter-normal-zone.jsonl.gz",
+          "sha256": "dcf40f25165d511c734c67e307234b643d115a74b03b61bf03639696a4b996df"
+        },
+        {
+          "file": "created-token-defeat-does-not-enter-normal-zone.jsonl.gz",
+          "sha256": "a051b0349b0b47f39f834c1607c9244bd6eee76aa2311a8c6d9174a74c547087"
+        },
+        {
+          "file": "created-xwing-space-only-combat.jsonl.gz",
+          "sha256": "646b35e17d6a8c69779dcd5d6dbff8879c3a1fc3db84ec3a4d7f540e4106dd76"
+        },
+        {
+          "file": "death-by-droids-tokens-visible-at-optional-death.jsonl.gz",
+          "sha256": "f78fe6f75422f9d07c2135ca6f007c15b4fa1fab9ad3bed7ee8520d379793950"
+        },
+        {
+          "file": "draven-xwing-on-attack.jsonl.gz",
+          "sha256": "0b3326fcc4e208b80c5447a20eecc5fe9c10c74b0359a9b125970f33fdf90bca"
+        },
+        {
+          "file": "draven-xwing-when-played.jsonl.gz",
+          "sha256": "565a3118dc93169c32399434e5b59d239a643713bf8f6099d2c2b4b46bd9d7a5"
+        },
+        {
+          "file": "droid-deployment-two-exhausted.jsonl.gz",
+          "sha256": "6c4211b7af31cc0e7383e22fcdc3197e761e490f55cdd57210698553d9242643"
+        },
+        {
+          "file": "droid-tokens-activate-coordinate-two-to-four.jsonl.gz",
+          "sha256": "8b4bc752b45c256d35a7fdaeeb37aa4e716aa29715d44bf6ac38521ea7b16e8e"
+        },
+        {
+          "file": "drop-in-cody-snoke-all-token-entries-before-sweep.jsonl.gz",
+          "sha256": "f57760829a9d871462d33f1506658341fa97709b9879783f4ba82b459473b6cb"
+        },
+        {
+          "file": "drop-in-two-clones.jsonl.gz",
+          "sha256": "36e411ef1c469a5c1e3bf72acdc34b3da807121e29cdec9c5ba314110f291c5a"
+        },
+        {
+          "file": "executor-three-ties-when-played.jsonl.gz",
+          "sha256": "eb25e0450ee862754bf79d6927bb18d1c60d6afc28b03a47e87c22c357470c28"
+        },
+        {
+          "file": "howler-death-beast.jsonl.gz",
+          "sha256": "dedf5b8d35359460455c6c78036f8a0616aabc3eb15842a48bb611a1f284dc31"
+        },
+        {
+          "file": "jesse-two-opponent-droids.jsonl.gz",
+          "sha256": "1f67f4b67b306e7bed072222350ba8a7ed56502d15a42e3e82af20fb8561f606"
+        },
+        {
+          "file": "occupier-death-spy.jsonl.gz",
+          "sha256": "37950f203d14133717f61560d7c127bb5876bba4bf28cefcd2fd630288fe7da0"
+        },
+        {
+          "file": "on-the-doorstep-three-ready.jsonl.gz",
+          "sha256": "481851fa92cb4826f563c055cc29d72c7de2752621be0fd0d60dcf1dbd934147"
+        },
+        {
+          "file": "senate-five-spies.jsonl.gz",
+          "sha256": "893b123fd6b68169880627640c6eced71135e29fcb1560c38cc58d7bf4c47868"
+        },
+        {
+          "file": "single-droid-token-entry-activates-coordinate-two-to-three.jsonl.gz",
+          "sha256": "9eaeb2ba74bdfe812ef649d6d03309b6d0010ffe82a4ef77e7534c37300beb91"
+        },
+        {
+          "file": "wartime-official-death-droid.jsonl.gz",
+          "sha256": "8461203def80b9547d9c005a6d948d7e71a5ca877249a69148b8b53ce1d80998"
+        }
+      ]
+    },
+    {
+      "directory": "discard",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "bail-attack-discard-creates-spy.jsonl.gz",
+          "sha256": "c586be5cf3471b24c4c23a89f181857786f08820715e939626907ed453b2653c"
+        },
+        {
+          "file": "handmaiden-attack-discard-then-draw.jsonl.gz",
+          "sha256": "ea1b56a1a51ffeea7446e9b95909371f99d7544a1ffe5de2b5f1f52ee99d521c"
+        },
+        {
+          "file": "handmaiden-attack-optional-pass.jsonl.gz",
+          "sha256": "bd4296d2dac3419143c05cb77435040169a5332547787d23ab30a3ed7e906c24"
+        },
+        {
+          "file": "handmaiden-empty-hand-no-if-you-do.jsonl.gz",
+          "sha256": "4f28fc9c257f8875ef30ae8e877e476e8b692124aa3a2843680b0247a6b82f7b"
+        },
+        {
+          "file": "lof_194-death-own-hand-discard.jsonl.gz",
+          "sha256": "b06873f4b93c7d2fe8f8b8f2bd0064c0e6826a8d42ef4bba245ba908040cafb9"
+        },
+        {
+          "file": "lof_194-played-actual-draw.jsonl.gz",
+          "sha256": "4d3f7ee01f0b187d3f14ff6a2fae85ca8daa82a865d5d6c5da4419243a3712fa"
+        },
+        {
+          "file": "mos-espa-draw-then-discard.jsonl.gz",
+          "sha256": "f485378bcecaf50664f54e6f87e8069428273f12990ce7869e5b5fb75b1158eb"
+        },
+        {
+          "file": "mos-espa-optional-pass.jsonl.gz",
+          "sha256": "a6e500b31ec3940ab1929259f4172f195a612e23fb5dc115159b61d459625dad"
+        },
+        {
+          "file": "no-bargain-discard-choice-before-draw.jsonl.gz",
+          "sha256": "828406254304454c62478af83421941d5f0a786cc0a229d8e954589da6190fc6"
+        },
+        {
+          "file": "outland-vanguard-printed-cost-high-cost.jsonl.gz",
+          "sha256": "6bfa6b9c504e5c9131ab746e51fda160d9d6f08cc3cc5a4c126b9c4b266ec0c7"
+        },
+        {
+          "file": "outland-vanguard-printed-cost-pass.jsonl.gz",
+          "sha256": "10e019c3d33e2c05cd4a31700e41ec12d1760987768ebb85998baa2bb044aaee"
+        },
+        {
+          "file": "outland-vanguard-printed-cost-positive.jsonl.gz",
+          "sha256": "3e4efabf0a75fc53ca565b02f9f0a3b9cb74d3af2219733acb899dde52b91867"
+        },
+        {
+          "file": "outland-vanguard-printed-cost-source-only.jsonl.gz",
+          "sha256": "8b4c8ede4d18d6fda0ff0ec67947f1182e4aea4d7b37c7c13686f8397b919c7d"
+        },
+        {
+          "file": "ozzel-death-opponent-chooses-hand-discard.jsonl.gz",
+          "sha256": "d224f4227405cba374ab4f011aa98bba2c5b655c279df5cf784e9030c58c84a9"
+        },
+        {
+          "file": "proof-draw-two-then-discard-one.jsonl.gz",
+          "sha256": "3e8bdb1f7356b34e420344a352c1c316583b3f7d14e8c5d7bf718280b97e94cb"
+        },
+        {
+          "file": "twi148-death-opponent-hand-discard.jsonl.gz",
+          "sha256": "be04dcce673ff5036dff1bd0e174f8e9e3606c7dde4db4cefac286931a15692c"
+        },
+        {
+          "file": "twi_208-death-own-hand-discard.jsonl.gz",
+          "sha256": "74dc45efa38989c67da7691bba6f2423b44d0f9f032a73b6211ca6eccb6822c4"
+        },
+        {
+          "file": "twi_208-played-actual-draw.jsonl.gz",
+          "sha256": "8ad453669af8fd26f8ad58c18407dc3a14bfe006b94aace3d405765d65197082"
+        }
+      ]
+    },
+    {
+      "directory": "incidental",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "growth-beast-draw-actual-heal.jsonl.gz",
+          "sha256": "3fdc5cc7cad1c7aa1fc48470466116b36f096929c32d49bcaf5dad8bfba172c5"
+        },
+        {
+          "file": "growth-beast-draw-full-health-zero-heal.jsonl.gz",
+          "sha256": "703a0ffcca1283e4e4fe37616e3688e4eb3e7536d7ca11c0cf6cd77ece2ec324"
+        },
+        {
+          "file": "growth-heal-before-empty-deck-fatigue-survives.jsonl.gz",
+          "sha256": "18a89bd0cfdf420c48c9b2b0d2b1615326a0e53cf15b3395f6eea9f0d94a3df3"
+        },
+        {
+          "file": "knowledge-defense-no-unit-still-draw.jsonl.gz",
+          "sha256": "0e0597c5ee2a9bebb910a29c9d90e044ceb0b4675f36611e95efd1f82a6d1498"
+        },
+        {
+          "file": "knowledge-defense-stat-modifier-and-draw.jsonl.gz",
+          "sha256": "9639acea904aa59f2a51f1a5b88efe3cbd23e234e5fc8014446e9bbf67032e82"
+        },
+        {
+          "file": "obiwan-death-two-experience-force.jsonl.gz",
+          "sha256": "9f9aef16aad16bf4746e6ab1dcaf6532f9620910579bed0966603e9b7cc16b1c"
+        },
+        {
+          "file": "obiwan-death-two-experience-non-force.jsonl.gz",
+          "sha256": "bd8df365b16e54789d7aa1ac7af650cfc564714d59692d3533f007387f84a0fd"
+        },
+        {
+          "file": "obiwan-death-two-experience-none.jsonl.gz",
+          "sha256": "357c054bb423abc9acdf91fd2cf49b88468c679c3f7f038811b994a0112be5d8"
+        }
+      ]
+    },
+    {
+      "directory": "play-first90",
+      "poolSha256": "315ddcf99fea615ac0c0724c91286a34f3ffd6e7b90f8a2285591a5d71ab9fc0",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "ASH_043.jsonl.gz",
+          "sha256": "0fefa7df949ce60d9d526835c9a3f48a4347ea7669eb651ad63286104fcf611a"
+        },
+        {
+          "file": "ASH_097.jsonl.gz",
+          "sha256": "6bfae5e53335765c60fbfc6ec8b58a5350017d393d76bb23201d5ded18228c68"
+        },
+        {
+          "file": "ASH_116.jsonl.gz",
+          "sha256": "4098e8bd9ff4a2ca6e94bdb8808c757aa2911203398aa8f4bcc96432c0361665"
+        },
+        {
+          "file": "ASH_153.jsonl.gz",
+          "sha256": "4a27737e9b6d6a4d928fa7e7ee75e09e094a0fecf4dd8b7de7cc87b279b54262"
+        },
+        {
+          "file": "HMW_063.jsonl.gz",
+          "sha256": "0a7aff9ee67161329cc6bb8675c9adcc94d531d327e5719d40ad5b5abbaf5073"
+        },
+        {
+          "file": "HMW_144.jsonl.gz",
+          "sha256": "57c548fb1b4b6b94b8f07958dc3c6677e522b976db03873e7ad52730d5873a85"
+        },
+        {
+          "file": "HMW_152.jsonl.gz",
+          "sha256": "9ead582f98b3b0e74e4e3a4df60f43c802b3ed29270bf6753201918d7b62e650"
+        },
+        {
+          "file": "HMW_194.jsonl.gz",
+          "sha256": "aa1890ff577f489c3e21a6bf7c6cbd25039cc504fa6c40e72263a3011f7c5d80"
+        },
+        {
+          "file": "HMW_241.jsonl.gz",
+          "sha256": "b514effb5beffd8ac0e6210a91e3d9286212ad17bc09f0fd7ca1047ba5df9dd7"
+        },
+        {
+          "file": "HMW_262.jsonl.gz",
+          "sha256": "0c4f711028a08dbd8c66a79d22e5e50e50742d5c267d7e5de993e3d0264d15d5"
+        },
+        {
+          "file": "IBH_015.jsonl.gz",
+          "sha256": "31f99e6800bf98043ef692faec409a6b502ff833be0c52f9cd1cbcbfd4624088"
+        },
+        {
+          "file": "JTL_033.jsonl.gz",
+          "sha256": "435ce90c1d4aec5da9fe5a0d0522e3327c4f774aa2d7c0f44cd79ecc0c9042f0"
+        },
+        {
+          "file": "JTL_040.jsonl.gz",
+          "sha256": "afe691851b8ed607f036d44fdb9aec07662407d1eaa5475e5e683a3e4d829118"
+        },
+        {
+          "file": "JTL_060.jsonl.gz",
+          "sha256": "534bd910585da07043ff96ecc1e14f4b1354325f023724aa459fc6b853d7cde0"
+        },
+        {
+          "file": "JTL_063.jsonl.gz",
+          "sha256": "0c92b7229f72e7f6782e792c6c1754edb789d3141803af36115bb2f3b58fee6f"
+        },
+        {
+          "file": "JTL_082.jsonl.gz",
+          "sha256": "2dc25e3c05c81bd1a614d02b0f884d452b38268b3e604cc6eb557607d7d55668"
+        },
+        {
+          "file": "JTL_087.jsonl.gz",
+          "sha256": "07aca7bbbd70246c2c0f23230ee99a5cd35f5ed8d85e30c937e75e2ffc395be7"
+        },
+        {
+          "file": "JTL_088.jsonl.gz",
+          "sha256": "18503a27ec6c4ac898d233f721b8fd89222733453c7f189ffb475996dfcf93b7"
+        },
+        {
+          "file": "JTL_090.jsonl.gz",
+          "sha256": "03c5d45f4c712b6acf510032f11b1c0104a1cd750b8239b76ef1cda4613774d4"
+        },
+        {
+          "file": "JTL_099.jsonl.gz",
+          "sha256": "9f1f0ac23ce121b243252d5713939171fc7cab1c0efbffa7bd79ae0ecb4e7377"
+        },
+        {
+          "file": "JTL_117.jsonl.gz",
+          "sha256": "3e7f2d5ffe813dfee41d3a984483d49c36f5c5e145719363cf6f901bf01da1af"
+        },
+        {
+          "file": "JTL_220.jsonl.gz",
+          "sha256": "dfbc7afcd40d690b24f05175107cb35425e2f6a0f60a2ad7124d121dbcbec00b"
+        },
+        {
+          "file": "JTL_243.jsonl.gz",
+          "sha256": "4038fcde8a938c4efc7358662de4aabc2f7cec105827efa47d6052ee04b72528"
+        },
+        {
+          "file": "JTL_252.jsonl.gz",
+          "sha256": "647e7341f64815669f7669bd47b89f60ea72e9ad5bed3d6ed2007c773215f0b2"
+        },
+        {
+          "file": "JTL_254.jsonl.gz",
+          "sha256": "c6a3560f862e0f39b06a19d7bc54d0f3634042d804fbf9a952ac188600af9a96"
+        },
+        {
+          "file": "LAW_057.jsonl.gz",
+          "sha256": "dd6441c9b6d815ba39773f1a7a717d05cfcb60684b6e94e98f9617889d2e7533"
+        },
+        {
+          "file": "LAW_059.jsonl.gz",
+          "sha256": "cad440ac3542a922f5f3ccafe95624b074f1d0816820b2435ff0cecb613597ff"
+        },
+        {
+          "file": "LAW_091.jsonl.gz",
+          "sha256": "ea1425b5679f8bf3993383a83351ffb3294674e7cd834562ec3117e4eca7b87b"
+        },
+        {
+          "file": "LAW_097.jsonl.gz",
+          "sha256": "6551c66ab183f7081db3313c3811138eb6874c216027afe5844f4e699ee82db8"
+        },
+        {
+          "file": "LAW_142.jsonl.gz",
+          "sha256": "668c7b922ddef1a1221d1e44c8573e5ae2df6c9b5702df5d2aaec33de81504a1"
+        },
+        {
+          "file": "LAW_189.jsonl.gz",
+          "sha256": "d84699e0e256f3c21bd5c845ac7e171f0715471483a74d1df6278f900b34fb1d"
+        },
+        {
+          "file": "LOF_059.jsonl.gz",
+          "sha256": "6db2cb7385d962bed99f2ad49b0f212801fda5451ce9422a2ccd30898ee21a42"
+        },
+        {
+          "file": "LOF_064.jsonl.gz",
+          "sha256": "814ee725004c8fc66ee00bd8dc9351c9599e0f2364a571d47cc8641a7c3e1d00"
+        },
+        {
+          "file": "LOF_095.jsonl.gz",
+          "sha256": "3a88c98e272e579d75722217bf1de238b03b40884f85929ddd426d3fdaead0e8"
+        },
+        {
+          "file": "LOF_165.jsonl.gz",
+          "sha256": "2486a79f1024743dd94588bd098c56980e6d2fdb1bf0a896856d5fadf21f6228"
+        },
+        {
+          "file": "LOF_207.jsonl.gz",
+          "sha256": "f91146419327ce57dc3546f7ba6b2715d9d3cbffca1043d607e22bcb8902028d"
+        },
+        {
+          "file": "SEC_031.jsonl.gz",
+          "sha256": "e8ba32f7d7dd6c44f59c8053f31aa555160e5744c13ebe7b2a1054916195cb3c"
+        },
+        {
+          "file": "SEC_055.jsonl.gz",
+          "sha256": "4233e91e309f82d4758f67a3241970cac3e4b3fc7c3a83c87176e7be2f363aa2"
+        },
+        {
+          "file": "SEC_087.jsonl.gz",
+          "sha256": "527d086dee4fb8267de4dc0a57ac3f57c178ccc8caf21d59fea6bebfbed15f5e"
+        },
+        {
+          "file": "SEC_092.jsonl.gz",
+          "sha256": "436bd1f2a2aebf18e3b206bdcbbed41d0c178807a6a2cdddbf78f9fa5b9730ec"
+        },
+        {
+          "file": "SEC_097.jsonl.gz",
+          "sha256": "da70135ec3aab4067acad2f4893c0420d3d32fcba78d260ef9e66cb305926840"
+        },
+        {
+          "file": "SEC_115.jsonl.gz",
+          "sha256": "e8c31b9e9c8650404c56aeb83936282be6e7cc00d098e76b4a82ab8b5592f418"
+        },
+        {
+          "file": "SEC_132.jsonl.gz",
+          "sha256": "1d4c8f9d4a323ac3d9ee297f32430efc3aa84c474cc660a083ab8a8d0b4e632d"
+        },
+        {
+          "file": "SEC_136.jsonl.gz",
+          "sha256": "474ef4aeecf57af4e1f1f9b4227e8b50b5ad88aadf008428606943153379e30c"
+        },
+        {
+          "file": "SEC_142.jsonl.gz",
+          "sha256": "a4df7730653b9dfc04c2cd20eb0c8b7928e0bd4935ff8ef0e48af9a2b5a7fcd5"
+        },
+        {
+          "file": "SEC_191.jsonl.gz",
+          "sha256": "45b0fa2460f9f4e6d3760d3cc060b86cd074e5b45168cbc5bea45467e6f95469"
+        },
+        {
+          "file": "SEC_202.jsonl.gz",
+          "sha256": "8b21ab4ae259def9deecca8e02b806c43146cb7b13a277f4bfb400f7543ecbd9"
+        },
+        {
+          "file": "SHD_103.jsonl.gz",
+          "sha256": "02fbba38a43583fe7d2017b308f7dc77a7be21b74b074772e6fea22b6670c7f4"
+        },
+        {
+          "file": "SHD_164.jsonl.gz",
+          "sha256": "2af813eddfe7e649c5ff8ab511bf8e5e1210fbc404fe52c3288898e1d8accd1b"
+        },
+        {
+          "file": "SOR_050.jsonl.gz",
+          "sha256": "cc2a8fe28d2e57affd96d7e8f22d82b3bad08040211ea858f7ab172fe86dc951"
+        },
+        {
+          "file": "SOR_060.jsonl.gz",
+          "sha256": "71bd816399bf104def72381e6e06907c7bb418c52d9e74e50e9b49550ccac298"
+        },
+        {
+          "file": "SOR_108.jsonl.gz",
+          "sha256": "7ceb513b6bdd0dd7d2951aeb7a25fffca3b76d8ba46d44d60de8b2ba0ed85cb6"
+        },
+        {
+          "file": "SOR_134.jsonl.gz",
+          "sha256": "9eadb4441afff7d5486147da563112a809de50fc3622ff7cb0baeb3e9193a4c6"
+        },
+        {
+          "file": "SOR_163.jsonl.gz",
+          "sha256": "51579cdc1471c23ce41ac833e51ba322a3d3e1574c66f6af7acef7b9eeccad48"
+        },
+        {
+          "file": "TWI_032.jsonl.gz",
+          "sha256": "8b496a7c55f9ee0c6beacb4cc116bda58dcf4732576922c4b7794d25c4103e87"
+        },
+        {
+          "file": "TWI_043.jsonl.gz",
+          "sha256": "5cd29fcf0cb3b681b58c9f52a099d8df317499e69531b6c771ed18af69ccfede"
+        },
+        {
+          "file": "TWI_045.jsonl.gz",
+          "sha256": "6d9b5c8b4008955efdc1368e8cdb7ca803ec2905365e319b94f7a01c57286d97"
+        },
+        {
+          "file": "TWI_046.jsonl.gz",
+          "sha256": "d449ed92b644003b5bd2a6b45b49dc63468b569e79aeeebc5b36842eafe7f0c9"
+        },
+        {
+          "file": "TWI_048.jsonl.gz",
+          "sha256": "6c103d7a82dc060c14232841eed4ca36730eda5721d42004ddea454f3d717321"
+        },
+        {
+          "file": "TWI_050.jsonl.gz",
+          "sha256": "3e02b4385ca3dc6c466a1f504f54d82d1ff0b5ac5fc31a21967b746471470eb6"
+        },
+        {
+          "file": "TWI_060.jsonl.gz",
+          "sha256": "ad50c0d3ff8b6cb48d1d20016561251f5d78fe8b2bb41848677b24ce52672714"
+        },
+        {
+          "file": "TWI_061.jsonl.gz",
+          "sha256": "0fe5419f1a15898ff360ba3f170b2f8ab3e21b9dcd0e931e9d8d297e06de5b91"
+        },
+        {
+          "file": "TWI_073.jsonl.gz",
+          "sha256": "fedbdc4851b4615ec9653c25ae80414ba7f8ab42f64402b315db0c419d640573"
+        },
+        {
+          "file": "TWI_076.jsonl.gz",
+          "sha256": "70d333142484f5df25510b89deceddf6789563686eb1a44884543aece298f680"
+        },
+        {
+          "file": "TWI_079.jsonl.gz",
+          "sha256": "f05b40f345f2028888e1b2f66e2a2e55c7597ab0e7aaf0d9b69000eace262d23"
+        },
+        {
+          "file": "TWI_090.jsonl.gz",
+          "sha256": "38fca78faf93c11f05a2e160911fc7a7856e277eb0064e3a814a676d6b399572"
+        },
+        {
+          "file": "TWI_097.jsonl.gz",
+          "sha256": "ffc2d0b2dce696a4cdaa4b49d67f6ec0f392d87d227c38e1fec78d0a569d2ac0"
+        },
+        {
+          "file": "TWI_104.jsonl.gz",
+          "sha256": "a88f9dd303dc4087138bec7f506bfba2eca690deb55f455f664b0810ea287e34"
+        },
+        {
+          "file": "TWI_106.jsonl.gz",
+          "sha256": "3b78a5e0b19b925356f20c1c9f28b079964ea00d3d85e8649de52f1817ce52f4"
+        },
+        {
+          "file": "TWI_112.jsonl.gz",
+          "sha256": "f85d24d756d5f4c2cd6d01c474825317a553af2b25a79d8e2bf2f22f6f99b6d2"
+        },
+        {
+          "file": "TWI_114.jsonl.gz",
+          "sha256": "b7c16c0e00421c1a0a3b14b7dfa0db78b2fe2a32605b962a1d324b32540ba72a"
+        },
+        {
+          "file": "TWI_131.jsonl.gz",
+          "sha256": "54bfac91778837a359eb3994618c39cb49e64aaa86a024aba7e86e2edc745181"
+        },
+        {
+          "file": "TWI_144.jsonl.gz",
+          "sha256": "1f5101de3b4107b4164516cfacf785c5c65e02f07ba5a231544c24e7d47c9d66"
+        },
+        {
+          "file": "TWI_145.jsonl.gz",
+          "sha256": "be5b493d2fe7d03c707d6c31a1ba683d50dea0dbdbb7ae112e6b4e9df25b7ec6"
+        },
+        {
+          "file": "TWI_147.jsonl.gz",
+          "sha256": "1d987a2dc78d53422c3efe4a6277382ae535350dcf3cd998ffec1105ec310820"
+        },
+        {
+          "file": "TWI_158.jsonl.gz",
+          "sha256": "cf2bdf064e124590f7bb1924ab94a35b636167ea2d1feba0da31386baeca6793"
+        },
+        {
+          "file": "TWI_165.jsonl.gz",
+          "sha256": "50dc89df8bbfaf3dcde43c6fbfb2576409ee52a35c0b9f6d3d3a0cdc6b05567d"
+        },
+        {
+          "file": "TWI_181.jsonl.gz",
+          "sha256": "c3a3066bbbcea1510657d7399851b762c5b84a5570c3d7bfc558d1116909faab"
+        },
+        {
+          "file": "TWI_183.jsonl.gz",
+          "sha256": "03b89026da903355322f12a4d7d13108b09f25886298b7503b8b4748067eca0c"
+        },
+        {
+          "file": "TWI_190.jsonl.gz",
+          "sha256": "e63467c4958a6893cbac0c2745250c3379ebfeb3d122f35cd402da5ac426d333"
+        },
+        {
+          "file": "TWI_192.jsonl.gz",
+          "sha256": "bcfcbac4fb76e1e6ec4b680f73777733b29369d3d77a915015cefe36f09b53d8"
+        },
+        {
+          "file": "TWI_196.jsonl.gz",
+          "sha256": "2de0cbf0ceac940f04b3513d18f760b26f7271d7fb0b3f7903e677367f2dcc1b"
+        },
+        {
+          "file": "TWI_198.jsonl.gz",
+          "sha256": "238ba7f47dd726b67d077cc7a9fa06441a5513ef0ad85f5c640557a773a9fc86"
+        },
+        {
+          "file": "TWI_200.jsonl.gz",
+          "sha256": "15985dba4f8b3a6c574533dc6e0b3b8560da5c651aac0cc7e959d119b330a2e3"
+        },
+        {
+          "file": "TWI_229.jsonl.gz",
+          "sha256": "c864a16ccca5a81365f34ea6694129eb581052cc0b28bb0868f61134e92785ba"
+        },
+        {
+          "file": "TWI_237.jsonl.gz",
+          "sha256": "d9de6dd21feadfa127e86d448ec91373793e89fac5d6207139ea6b0e477ff556"
+        },
+        {
+          "file": "TWI_240.jsonl.gz",
+          "sha256": "d02f19e0601cd1ff7a14cc79b9c8eb76ec32dc5e6a3b38c63f72d30cd7ef77fe"
+        },
+        {
+          "file": "TWI_243.jsonl.gz",
+          "sha256": "233212b1257bd905531d4347731b3ccc8ab3bddbe8d97c8861ef8b70156a4fef"
+        },
+        {
+          "file": "TWI_247.jsonl.gz",
+          "sha256": "028f455ac047e9a24b0083d56181c3e80ace61c6a5fcea5883060f640d90b3cf"
+        },
+        {
+          "file": "TWI_251.jsonl.gz",
+          "sha256": "d5c7e1b2c2d9d8e0d759b2367c7b1b7397c0e37696b94b699694ec39d39e563e"
+        }
+      ]
+    },
+    {
+      "directory": "play-last13",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Engine-only generation evidence; final fresh native and Wasm agreement is recorded separately in verification.json.",
+      "fixtures": [
+        {
+          "file": "ASH_260.jsonl.gz",
+          "sha256": "760f8218db3e89a192df1ca4f6e87118d9c78769e246ff93ff39a3fc64bc55d5"
+        },
+        {
+          "file": "HMW_272.jsonl.gz",
+          "sha256": "619c9e104fad4dc24aa7ba1c762cf3eecb35d769c1b138cdc5d9cd9f751d14a9"
+        },
+        {
+          "file": "IBH_074.jsonl.gz",
+          "sha256": "070e0033f262402a940b5261f5327c8ea8ad6fb87622da233986e77251d715f9"
+        },
+        {
+          "file": "IBH_082.jsonl.gz",
+          "sha256": "440e553a7d45e7f6dd609bd35269d3248ca291f5ac5fa07145d00c00d76d1f2c"
+        },
+        {
+          "file": "LOF_194.jsonl.gz",
+          "sha256": "a58a534c43268a80b315da9ad82158e3f0fa993c21f6e8f1fdb2c1aebd569122"
+        },
+        {
+          "file": "SEC_075.jsonl.gz",
+          "sha256": "af3220b07646f108a46975a1af3cb20f6366f5b81dbb4f61b26d34330330cae9"
+        },
+        {
+          "file": "SEC_197.jsonl.gz",
+          "sha256": "4014cbdaf545d84bac6e34949961505cbd4682af1551d81423a99bfabdb0718f"
+        },
+        {
+          "file": "SEC_198.jsonl.gz",
+          "sha256": "c569010e0bbec898a399874e13e574baaabddf7dbb774c98efde9344c4cc3bb6"
+        },
+        {
+          "file": "SHD_082.jsonl.gz",
+          "sha256": "6ab28ef588b97bfe16ee2d38224e6a5079fc1460f2afe8a5535ce064606db2f8"
+        },
+        {
+          "file": "SHD_244.jsonl.gz",
+          "sha256": "47cce4dad02f486c7f3ab288d0dd673ebc30710bba5d6e85f41cc9a017ff66a9"
+        },
+        {
+          "file": "SOR_049.jsonl.gz",
+          "sha256": "98270f3e5ba3ebae3569e0dd316469edf29de9553abb5e1b02d03509e5c1e4e8"
+        },
+        {
+          "file": "TWI_148.jsonl.gz",
+          "sha256": "58044fdb8270a6f9d1cd5463d81de39518a9a10974b42e38bbf860b6f23d16b7"
+        },
+        {
+          "file": "TWI_208.jsonl.gz",
+          "sha256": "654bb58548a404196df8dcce0047fd82fe36bfa7fd35fdf722bace27886c505b"
+        }
+      ]
+    },
+    {
+      "directory": "discard-fatigue",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Generation evidence; final fresh native and Wasm checks are recorded in verification.json.",
+      "fixtures": [
+        {
+          "file": "mos-espa-empty-deck-fatigue-then-discard.jsonl.gz",
+          "sha256": "cb0dc8c0126a63659940338aa7d71cf2756157e706adeb93b8ff7c17f33f73e7"
+        },
+        {
+          "file": "mos-espa-empty-deck-lethal-fatigue-pending-discard.jsonl.gz",
+          "sha256": "f6266a87969a4dfa7a50816ea00d56771d5df28e00c0e99ed2ac121338a1882f"
+        },
+        {
+          "file": "mos-espa-empty-deck-optional-pass.jsonl.gz",
+          "sha256": "9cc8579f97df4e76f2b74577f7287e98dcc940d5aa56fdd35a75f214de901e04"
+        }
+      ]
+    },
+    {
+      "directory": "proof-forward",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Generation evidence; final fresh native and Wasm checks are recorded in verification.json.",
+      "fixtures": [
+        {
+          "file": "low-proof-draw-two-deck-0-then-mandatory-discard.jsonl.gz",
+          "sha256": "ea71ef8574382dda039816e67f8bc9ab1b45271999b581d9681ffb6288d05a44"
+        },
+        {
+          "file": "low-proof-draw-two-deck-1-then-mandatory-discard.jsonl.gz",
+          "sha256": "b5dd8d75d9903dce664193a91165287e3956faea5ad2f2754342229278ef29b4"
+        }
+      ]
+    },
+    {
+      "directory": "death-raid",
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "conformance": "Actual printed-source review regression. Final fresh native/Wasm checks appear in verification.json.",
+      "fixtures": [
+        {
+          "file": "skyway-death-selector-raid.jsonl.gz",
+          "sha256": "2ec00b1e37f871748f08424ffe6ef58d3e8292df73fc1e8fe4264b90a8181ba6"
+        },
+        {
+          "file": "skyway-terminal-raid.jsonl.gz",
+          "sha256": "add62d8ab910988ede40309e02b7bbd21683629e4fc63c05c760cb97f0f0f7da"
+        }
+      ]
+    }
+  ]
+}

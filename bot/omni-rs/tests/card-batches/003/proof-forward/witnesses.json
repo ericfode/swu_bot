@@ -1,0 +1,124 @@
+{
+  "expectationsSha256": "eeaf6bebda07000485eb7889e5389370e95f4bb95ac1e0fa5eaee86992379d5f",
+  "generatorSha256": "28d5a80a928d182299918e81a4f3cb8bd99fd68317e894ccf0d4dc1151696bb4",
+  "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+  "conformance": "unassessed; await runtime owner fresh binary confirmation",
+  "witnesses": [
+    {
+      "scenario": "low-proof-draw-two-deck-0-then-mandatory-discard",
+      "family": "draw-partial-or-empty-then-discard",
+      "observed": {
+        "discardMenu": [
+          {
+            "key": "[\"card\",\"c44\",null,null,\"maul#only-revenge-remains\"]",
+            "kind": "card",
+            "card": "c44",
+            "arg": null,
+            "method": null,
+            "label": "maul#only-revenge-remains"
+          },
+          {
+            "key": "[\"card\",\"c18\",null,null,\"noti-mobile-pod\"]",
+            "kind": "card",
+            "card": "c18",
+            "arg": null,
+            "method": null,
+            "label": "noti-mobile-pod"
+          },
+          {
+            "key": "[\"card\",\"c29\",null,null,\"ewok-brigade\"]",
+            "kind": "card",
+            "card": "c29",
+            "arg": null,
+            "method": null,
+            "label": "ewok-brigade"
+          },
+          {
+            "key": "[\"card\",\"c13\",null,null,\"open-circle-ace\"]",
+            "kind": "card",
+            "card": "c13",
+            "arg": null,
+            "method": null,
+            "label": "open-circle-ace"
+          }
+        ],
+        "fatigueBeforeDiscard": 6,
+        "actualDrawn": 0,
+        "chosenDiscardId": "c44",
+        "mandatoryDiscardResolved": true,
+        "postAction": true
+      },
+      "decisions": 43,
+      "winner": "p2",
+      "file": "low-proof-draw-two-deck-0-then-mandatory-discard.jsonl.gz",
+      "sha256": "ea71ef8574382dda039816e67f8bc9ab1b45271999b581d9681ffb6288d05a44",
+      "actualScriptedCardIds": [
+        "IBH_074"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "low-proof-draw-two-deck-1-then-mandatory-discard",
+      "family": "draw-partial-or-empty-then-discard",
+      "observed": {
+        "discardMenu": [
+          {
+            "key": "[\"card\",\"c36\",null,null,\"filthy-dianoga\"]",
+            "kind": "card",
+            "card": "c36",
+            "arg": null,
+            "method": null,
+            "label": "filthy-dianoga"
+          },
+          {
+            "key": "[\"card\",\"c41\",null,null,\"champions-of-endor\"]",
+            "kind": "card",
+            "card": "c41",
+            "arg": null,
+            "method": null,
+            "label": "champions-of-endor"
+          },
+          {
+            "key": "[\"card\",\"c14\",null,null,\"open-circle-ace\"]",
+            "kind": "card",
+            "card": "c14",
+            "arg": null,
+            "method": null,
+            "label": "open-circle-ace"
+          },
+          {
+            "key": "[\"card\",\"c31\",null,null,\"mace-windu#austere-centrist\"]",
+            "kind": "card",
+            "card": "c31",
+            "arg": null,
+            "method": null,
+            "label": "mace-windu#austere-centrist"
+          },
+          {
+            "key": "[\"card\",\"c23\",null,null,\"nala-se#silent-survivor\"]",
+            "kind": "card",
+            "card": "c23",
+            "arg": null,
+            "method": null,
+            "label": "nala-se#silent-survivor"
+          }
+        ],
+        "fatigueBeforeDiscard": 3,
+        "actualDrawn": 1,
+        "chosenDiscardId": "c36",
+        "mandatoryDiscardResolved": true,
+        "postAction": true
+      },
+      "decisions": 80,
+      "winner": "p2",
+      "file": "low-proof-draw-two-deck-1-then-mandatory-discard.jsonl.gz",
+      "sha256": "b5dd8d75d9903dce664193a91165287e3956faea5ad2f2754342229278ef29b4",
+      "actualScriptedCardIds": [
+        "IBH_074"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    }
+  ]
+}

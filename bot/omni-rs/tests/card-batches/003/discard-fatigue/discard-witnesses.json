@@ -1,0 +1,223 @@
+{
+  "evidenceStatus": "real engine observations",
+  "conformance": "unassessed; fresh native and Wasm comparison required",
+  "pool": {
+    "path": "/private/tmp/swu-mos-espa-empty-deck-final/pool.json",
+    "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+  },
+  "generatorSha256": "23b509709fe9382093be469aa5e0d4e4e41b83de6d56d62931c9e6f3ec98fd9a",
+  "witnesses": [
+    {
+      "scenario": "mos-espa-empty-deck-fatigue-then-discard",
+      "family": "scalar-owner-hand-discard",
+      "observed": {
+        "menus": [
+          {
+            "actor": "p1",
+            "title": "You may trigger this ability",
+            "ownHand": 4,
+            "enemyHand": 4,
+            "actions": [
+              {
+                "key": "[\"button\",null,\"trigger\",null,\"Trigger\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "trigger",
+                "method": null,
+                "label": "Trigger"
+              },
+              {
+                "key": "[\"button\",null,\"pass\",null,\"Pass\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "pass",
+                "method": null,
+                "label": "Pass"
+              }
+            ]
+          },
+          {
+            "actor": "p1",
+            "title": "Choose a card to discard for Mos Espa Watermonger's effect",
+            "ownHand": 4,
+            "enemyHand": 4,
+            "actions": [
+              {
+                "key": "[\"card\",\"c9\",null,null,\"peridea-bandit\"]",
+                "kind": "card",
+                "card": "c9",
+                "arg": null,
+                "method": null,
+                "label": "peridea-bandit"
+              },
+              {
+                "key": "[\"card\",\"c15\",null,null,\"death-trooper-squad\"]",
+                "kind": "card",
+                "card": "c15",
+                "arg": null,
+                "method": null,
+                "label": "death-trooper-squad"
+              },
+              {
+                "key": "[\"card\",\"c40\",null,null,\"champions-of-endor\"]",
+                "kind": "card",
+                "card": "c40",
+                "arg": null,
+                "method": null,
+                "label": "champions-of-endor"
+              },
+              {
+                "key": "[\"card\",\"c28\",null,null,\"ewok-brigade\"]",
+                "kind": "card",
+                "card": "c28",
+                "arg": null,
+                "method": null,
+                "label": "ewok-brigade"
+              }
+            ]
+          }
+        ],
+        "discardChooser": "p1",
+        "discardMenu": true,
+        "emptyDeckDrawResolved": true,
+        "fatigueDamage": 3,
+        "actualCardsDrawn": 0,
+        "ifYouDoDiscardAfterFatigue": true,
+        "postAction": true
+      },
+      "decisions": 69,
+      "winner": "p2",
+      "file": "mos-espa-empty-deck-fatigue-then-discard.jsonl.gz",
+      "sha256": "cb0dc8c0126a63659940338aa7d71cf2756157e706adeb93b8ff7c17f33f73e7",
+      "actualScriptedCardIds": [
+        "ASH_260"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "mos-espa-empty-deck-optional-pass",
+      "family": "scalar-owner-hand-discard",
+      "observed": {
+        "menus": [
+          {
+            "actor": "p1",
+            "title": "You may trigger this ability",
+            "ownHand": 4,
+            "enemyHand": 4,
+            "actions": [
+              {
+                "key": "[\"button\",null,\"trigger\",null,\"Trigger\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "trigger",
+                "method": null,
+                "label": "Trigger"
+              },
+              {
+                "key": "[\"button\",null,\"pass\",null,\"Pass\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "pass",
+                "method": null,
+                "label": "Pass"
+              }
+            ]
+          }
+        ],
+        "emptyDeckDrawResolved": false,
+        "fatigueDamage": 0,
+        "actualCardsDrawn": 0,
+        "ifYouDoDiscardAfterFatigue": false,
+        "postAction": true
+      },
+      "decisions": 90,
+      "winner": "p2",
+      "file": "mos-espa-empty-deck-optional-pass.jsonl.gz",
+      "sha256": "9cc8579f97df4e76f2b74577f7287e98dcc940d5aa56fdd35a75f214de901e04",
+      "actualScriptedCardIds": [
+        "ASH_260"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "mos-espa-empty-deck-lethal-fatigue-pending-discard",
+      "family": "scalar-owner-hand-discard",
+      "observed": {
+        "menus": [
+          {
+            "actor": "p1",
+            "title": "You may trigger this ability",
+            "ownHand": 4,
+            "enemyHand": 4,
+            "actions": [
+              {
+                "key": "[\"button\",null,\"trigger\",null,\"Trigger\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "trigger",
+                "method": null,
+                "label": "Trigger"
+              },
+              {
+                "key": "[\"button\",null,\"pass\",null,\"Pass\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "pass",
+                "method": null,
+                "label": "Pass"
+              }
+            ]
+          }
+        ],
+        "terminalDiscardPrompt": [
+          {
+            "key": "[\"card\",\"c8\",null,null,\"dinosaur-turtle\"]",
+            "kind": "card",
+            "card": "c8",
+            "arg": null,
+            "method": null,
+            "label": "dinosaur-turtle"
+          },
+          {
+            "key": "[\"card\",\"c37\",null,null,\"filthy-dianoga\"]",
+            "kind": "card",
+            "card": "c37",
+            "arg": null,
+            "method": null,
+            "label": "filthy-dianoga"
+          },
+          {
+            "key": "[\"card\",\"c47\",null,null,\"desperate-nantex\"]",
+            "kind": "card",
+            "card": "c47",
+            "arg": null,
+            "method": null,
+            "label": "desperate-nantex"
+          },
+          {
+            "key": "[\"card\",\"c35\",null,null,\"arena-reek#fixture-of-ceremony\"]",
+            "kind": "card",
+            "card": "c35",
+            "arg": null,
+            "method": null,
+            "label": "arena-reek#fixture-of-ceremony"
+          }
+        ],
+        "winnerLatchedBeforeExternalDiscard": true,
+        "actualCardsDrawn": 0,
+        "postAction": true
+      },
+      "decisions": 3,
+      "winner": "p2",
+      "file": "mos-espa-empty-deck-lethal-fatigue-pending-discard.jsonl.gz",
+      "sha256": "f6266a87969a4dfa7a50816ea00d56771d5df28e00c0e99ed2ac121338a1882f",
+      "actualScriptedCardIds": [
+        "ASH_260"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    }
+  ]
+}

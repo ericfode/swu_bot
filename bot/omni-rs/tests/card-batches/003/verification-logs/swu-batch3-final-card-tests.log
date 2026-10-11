@@ -1,0 +1,314 @@
+
+> swu-bot@0.1.0 cards:test
+> node --test bot/card-compiler/test/*.test.js tools/test/card-batch.test.js bot/test/phase-stats-export.test.js
+
+TAP version 13
+# Subtest: new card source compiles costs, condition, dynamic amount and both-base target
+ok 1 - new card source compiles costs, condition, dynamic amount and both-base target
+  ---
+  duration_ms: 6.255125
+  type: 'test'
+  ...
+# Subtest: healing continuation keeps its event reference and can-distribute-less semantics
+ok 2 - healing continuation keeps its event reference and can-distribute-less semantics
+  ---
+  duration_ms: 1.408167
+  type: 'test'
+  ...
+# Subtest: simultaneous and sequential effects remain distinct instructions
+ok 3 - simultaneous and sequential effects remain distinct instructions
+  ---
+  duration_ms: 0.849958
+  type: 'test'
+  ...
+# Subtest: phase stat modifiers preserve signed values, targeting and captured context
+ok 4 - phase stat modifiers preserve signed values, targeting and captured context
+  ---
+  duration_ms: 1.179834
+  type: 'test'
+  ...
+# Subtest: phase modifier lowering rejects live calculations and unsupported lasting semantics
+ok 5 - phase modifier lowering rejects live calculations and unsupported lasting semantics
+  ---
+  duration_ms: 2.504834
+  type: 'test'
+  ...
+# Subtest: constant static modifiers distinguish self defaults from continuous aura filters
+ok 6 - constant static modifiers distinguish self defaults from continuous aura filters
+  ---
+  duration_ms: 0.877709
+  type: 'test'
+  ...
+# Subtest: constant modifiers reject live stat dependencies, dynamic amounts and custom zones
+ok 7 - constant modifiers reject live stat dependencies, dynamic amounts and custom zones
+  ---
+  duration_ms: 1.606125
+  type: 'test'
+  ...
+# Subtest: arena existence and count queries preserve bounded intersecting filters
+ok 8 - arena existence and count queries preserve bounded intersecting filters
+  ---
+  duration_ms: 0.742666
+  type: 'test'
+  ...
+# Subtest: arena queries reject unsupported filters, collections and captured card registers
+ok 9 - arena queries reject unsupported filters, collections and captured card registers
+  ---
+  duration_ms: 3.08725
+  type: 'test'
+  ...
+# Subtest: trait aspect and keyword in-play aliases lower to the same arena unit filters
+ok 10 - trait aspect and keyword in-play aliases lower to the same arena unit filters
+  ---
+  duration_ms: 1.969834
+  type: 'test'
+  ...
+# Subtest: target filtering preserves basic-unit exclusion of token units
+ok 11 - target filtering preserves basic-unit exclusion of token units
+  ---
+  duration_ms: 0.240292
+  type: 'test'
+  ...
+# Subtest: selector filters intersect and optional targeting flags combine
+ok 12 - selector filters intersect and optional targeting flags combine
+  ---
+  duration_ms: 0.285333
+  type: 'test'
+  ...
+# Subtest: const locals and template titles compile without running display expressions
+ok 13 - const locals and template titles compile without running display expressions
+  ---
+  duration_ms: 0.435917
+  type: 'test'
+  ...
+# Subtest: continuation factories cannot substitute a newly selected target for a captured old target
+ok 14 - continuation factories cannot substitute a newly selected target for a captured old target
+  ---
+  duration_ms: 0.526542
+  type: 'test'
+  ...
+# Subtest: unknown semantics reject the whole card with a source location
+ok 15 - unknown semantics reject the whole card with a source location
+  ---
+  duration_ms: 1.186416
+  type: 'test'
+  ...
+# Subtest: custom class behavior and module execution cannot disappear from conversion
+ok 16 - custom class behavior and module execution cannot disappear from conversion
+  ---
+  duration_ms: 0.801584
+  type: 'test'
+  ...
+# Subtest: inventory automatically discovers newly added cards and retains blocked cards
+ok 17 - inventory automatically discovers newly added cards and retains blocked cards
+  ---
+  duration_ms: 12.925583
+  type: 'test'
+  ...
+# Subtest: CLI check detects a newly added card; strict conversion fails on blockers
+ok 18 - CLI check detects a newly added card; strict conversion fails on blockers
+  ---
+  duration_ms: 504.584084
+  type: 'test'
+  ...
+# Subtest: pinned leaders are lowered from source into the same generic IR
+ok 19 - pinned leaders are lowered from source into the same generic IR
+  ---
+  duration_ms: 100.080375
+  type: 'test'
+  ...
+# Subtest: keyword modifier lists retain gain loss, live numeric and shared targets
+ok 20 - keyword modifier lists retain gain loss, live numeric and shared targets
+  ---
+  duration_ms: 0.3455
+  type: 'test'
+  ...
+# Subtest: keyword lowering rejects unsupported keywords, helper fields, cycles and live phase callbacks
+ok 21 - keyword lowering rejects unsupported keywords, helper fields, cycles and live phase callbacks
+  ---
+  duration_ms: 0.544917
+  type: 'test'
+  ...
+# Subtest: printed core keyword parsing follows engine case, own-line, expected-name and side rules
+ok 22 - printed core keyword parsing follows engine case, own-line, expected-name and side rules
+  ---
+  duration_ms: 0.355166
+  type: 'test'
+  ...
+# Subtest: context menu titles preserve typed live fragments and exact numeric keyword text
+ok 23 - context menu titles preserve typed live fragments and exact numeric keyword text
+  ---
+  duration_ms: 0.323375
+  type: 'test'
+  ...
+# Subtest: context menu title callbacks cannot hide side effects or unsupported helpers
+ok 24 - context menu title callbacks cannot hide side effects or unsupported helpers
+  ---
+  duration_ms: 0.410959
+  type: 'test'
+  ...
+# Subtest: context titles bound fragment and literal byte capacities
+ok 25 - context titles bound fragment and literal byte capacities
+  ---
+  duration_ms: 0.246125
+  type: 'test'
+  ...
+# Subtest: trait display labels use pinned enum title case in static and live menus
+ok 26 - trait display labels use pinned enum title case in static and live menus
+  ---
+  duration_ms: 0.242291
+  type: 'test'
+  ...
+# Subtest: bounded aspect list labels match pinned conjunction rendering
+ok 27 - bounded aspect list labels match pinned conjunction rendering
+  ---
+  duration_ms: 0.082
+  type: 'test'
+  ...
+# Subtest: one lasting modifier list retains event identity separately from immediate groups
+ok 28 - one lasting modifier list retains event identity separately from immediate groups
+  ---
+  duration_ms: 0.135875
+  type: 'test'
+  ...
+# Subtest: UpTo selectors retain engine zero-choice default and explicit override
+ok 29 - UpTo selectors retain engine zero-choice default and explicit override
+  ---
+  duration_ms: 0.404584
+  type: 'test'
+  ...
+# Subtest: selection predicates reject lexical outer target captures rather than rebinding them
+ok 30 - selection predicates reject lexical outer target captures rather than rebinding them
+  ---
+  duration_ms: 0.533084
+  type: 'test'
+  ...
+# Subtest: standard trigger aliases preserve source and hook order and the complete body
+ok 31 - standard trigger aliases preserve source and hook order and the complete body
+  ---
+  duration_ms: 0.249417
+  type: 'test'
+  ...
+# Subtest: standard aliases reject watcher, shared state, unknown and nonstatic semantics
+ok 32 - standard aliases reject watcher, shared state, unknown and nonstatic semantics
+  ---
+  duration_ms: 0.708792
+  type: 'test'
+  ...
+# Subtest: exact unit/base union lowers only inside attackable inventories
+ok 33 - exact unit/base union lowers only inside attackable inventories
+  ---
+  duration_ms: 0.428166
+  type: 'test'
+  ...
+# Subtest: Coordinate preserves live constant gate provenance and captured attack registration
+ok 34 - Coordinate preserves live constant gate provenance and captured attack registration
+  ---
+  duration_ms: 0.17
+  type: 'test'
+  ...
+# Subtest: Coordinate rejects unaudited registration shapes and extra semantics
+ok 35 - Coordinate rejects unaudited registration shapes and extra semantics
+  ---
+  duration_ms: 0.410125
+  type: 'test'
+  ...
+# Subtest: token-unit helpers preserve fixed type and engine factory defaults
+ok 36 - token-unit helpers preserve fixed type and engine factory defaults
+  ---
+  duration_ms: 0.99275
+  type: 'test'
+  ...
+# Subtest: token-unit lowering rejects unsafe amounts, entry effects and extra properties
+ok 37 - token-unit lowering rejects unsafe amounts, entry effects and extra properties
+  ---
+  duration_ms: 1.420583
+  type: 'test'
+  ...
+# Subtest: owner-chosen hand discard preserves opponent default and explicit scalar players
+ok 38 - owner-chosen hand discard preserves opponent default and explicit scalar players
+  ---
+  duration_ms: 0.324542
+  type: 'test'
+  ...
+# Subtest: hand discard rejects unaudited random, filtered, dynamic and player-list semantics
+ok 39 - hand discard rejects unaudited random, filtered, dynamic and player-list semantics
+  ---
+  duration_ms: 1.010084
+  type: 'test'
+  ...
+# Subtest: selected-player resource helpers fail closed instead of targeting resolving player
+ok 40 - selected-player resource helpers fail closed instead of targeting resolving player
+  ---
+  duration_ms: 0.123541
+  type: 'test'
+  ...
+# Subtest: hand-discard continuation event identity capture remains explicitly unsupported
+ok 41 - hand-discard continuation event identity capture remains explicitly unsupported
+  ---
+  duration_ms: 0.133666
+  type: 'test'
+  ...
+# Subtest: Coordinate registration marker follows pinned printed-text parsing, not keyword mentions
+ok 42 - Coordinate registration marker follows pinned printed-text parsing, not keyword mentions
+  ---
+  duration_ms: 0.763916
+  type: 'test'
+  ...
+# Subtest: phase stats preserve signed stacked modifiers independently of visible stat floors
+ok 43 - phase stats preserve signed stacked modifiers independently of visible stat floors
+  ---
+  duration_ms: 0.602666
+  type: 'test'
+  ...
+# Subtest: unknown durations, mechanics and out-of-bound values cannot silently lose state
+ok 44 - unknown durations, mechanics and out-of-bound values cannot silently lose state
+  ---
+  duration_ms: 0.187458
+  type: 'test'
+  ...
+# Subtest: registered constant stats are derived while persistent lasting effects remain rejected
+ok 45 - registered constant stats are derived while persistent lasting effects remain rejected
+  ---
+  duration_ms: 0.177083
+  type: 'test'
+  ...
+# Subtest: phase keyword ledger preserves gains under loss and aggregates numeric stacks
+ok 46 - phase keyword ledger preserves gains under loss and aggregates numeric stacks
+  ---
+  duration_ms: 0.14375
+  type: 'test'
+  ...
+# Subtest: phase keyword export rejects unsupported mechanics, malformed values and lasting effects
+ok 47 - phase keyword export rejects unsupported mechanics, malformed values and lasting effects
+  ---
+  duration_ms: 0.519334
+  type: 'test'
+  ...
+# Subtest: batch separates queued, source-only, runtime gains, collateral gains and regressions
+ok 48 - batch separates queued, source-only, runtime gains, collateral gains and regressions
+  ---
+  duration_ms: 1.192834
+  type: 'test'
+  ...
+# Subtest: stale pools fail even when catalogue and admission agree
+ok 49 - stale pools fail even when catalogue and admission agree
+  ---
+  duration_ms: 0.933875
+  type: 'test'
+  ...
+# Subtest: invalid manifests cannot manufacture progress
+ok 50 - invalid manifests cannot manufacture progress
+  ---
+  duration_ms: 0.210292
+  type: 'test'
+  ...
+1..50
+# tests 50
+# suites 0
+# pass 50
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 763.869208

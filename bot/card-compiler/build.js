@@ -37,13 +37,13 @@ function requiredCapabilities(abilities, card) {
 }
 function keywordValues(card) {
     const values = {};
-    const core = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded'].map(name => [name.toLowerCase(), name]));
+    const parsedKeywords = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded', 'Coordinate'].map(name => [name.toLowerCase(), name]));
     // Card's constructor parses text for units; leaders parse deployBox and
     // text separately. Metadata supplies expected names, including mentions
     // that do not become intrinsic keywords without an own-line text match.
     const texts = card.types?.includes('leader') ? [card.deployBox, card.text] : [card.text];
     for (const keyword of new Set(card.keywords ?? [])) {
-        const name = core.get(keyword);
+        const name = parsedKeywords.get(keyword);
         if (!name) continue; // Unsupported printed kinds still fail runtime admission.
         const numeric = keyword === 'raid' || keyword === 'restore';
         for (const text of texts) {

@@ -1,0 +1,279 @@
+{
+  "schema": "swu-card-batch-verification/v1",
+  "verifiedAtUtc": "2026-10-11T22:29:06.092310+00:00",
+  "baseRevision": "7eb401200e6d859ec45410ae244493c3fdd66ece",
+  "testedState": "Uncommitted implementation bound by exact source hashes below; publication records the tested commit and remote readback separately.",
+  "engineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+  "engineSourceTreeHash": "5f0ca3885bb5d079266e33259dd31d0cea84b65568a49c365b2bd38ed85ab661",
+  "engineIsolation": "Pinned source exported and built in an isolated directory, separate from concurrent main-checkout engine work. Engine source unchanged.",
+  "engineBuildTreeSha256": "f15296176e4b144aea87db86691fe8edbd09f5c13d879e8e84c833f6224e07c6",
+  "engineBuildModuleCount": 2489,
+  "engineBuildTreeHashRecipe": "SHA256 of sorted relative POSIX JS paths, NUL, exact file bytes, NUL under forceteki/build/server.",
+  "receiptIndexSha256": "bcf65b1c6752e8875d997b0e4fd0800981653319d75ea27c0bec416610ef245c",
+  "familyWitnessLedgerSha256": "bae96643104eb2df18624ae8e31a07bfb5c8cbd9bea7d1529e4e723afbbb309f",
+  "testedFileSha256": {
+    ".agents/skills/swu-card-conversion/SKILL.md": "5088be978b0c48ee5f608f13d7158d538d5d57fca898828846c7f09e328344c2",
+    "Cargo.lock": "f2c658ced558f2ea88f0d07675b3b2035701db1aaa77154e2bd38eccfe70f04b",
+    "Cargo.toml": "e01802c9bc9e5dd876f498569518276e2b6bf36201c9792c1768af65ae996d8a",
+    "bot/card-compiler/README.md": "94b689d8602f0dbe9c401d59d72d3bc44cb6e51b136fd3de9677a42a0f7c312c",
+    "bot/card-compiler/build.js": "84ade4a5d29a048dcb79d0a852a460220391c1bf968fd036ad8d37e71e190fb6",
+    "bot/card-compiler/compiler.js": "8e6f3a9c94c18589ab212a9a32f5406d188bb2be80294c48b1b448fa5ccdba33",
+    "bot/card-compiler/test/compiler.test.js": "dd8cd69c40787a11b61accc6fd8c4f895cc628f41704ad47316b4dab1a6714e7",
+    "bot/card-compiler/test/keyword-provenance.test.js": "74ee57e5090f0109df3bbbe1a169c3fa4d2162d11faa49f50c00ccace5c33538",
+    "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+    "bot/omni-rs/Cargo.toml": "1d8d85d5a77cb3617ec4633b3f91f2640ed3a69522db05df692f6cf9cfba0e52",
+    "bot/omni-rs/README.md": "11855c2519c81ef404440c096dd75eb13c82cdb2ae572411650999542c9c6bd4",
+    "bot/omni-rs/src/ability_ir.rs": "7e34f9c7ab5447221b09260499219f10ab5ca1131422a730600b234d9c3bb748",
+    "bot/omni-rs/src/check.rs": "d5e73c0cb851ed1156a615318afb6f8999cf3f95480da706dede51157e5de7d8",
+    "bot/omni-rs/src/generic_runtime.rs": "de742b94a9cc92d2368a7f1248c0aac14a273cfeee1370520cd8d6a733355453",
+    "bot/omni-rs/src/generic_runtime_tests.rs": "6adaf0c0550e6905942852813b663930bdd607677fb74671232489b8fd7e8615",
+    "bot/omni-rs/src/lib.rs": "1d22ed339878092a3c962884cf2f80b6ae3eec25fe2415a5a84d26c9dd12e857",
+    "bot/omni-rs/src/main.rs": "e6d14fc1a3cab9aeca05f0467c106796adfdb7fca5cd246835877a7d7ab5ad69",
+    "bot/omni-rs/src/model.rs": "cd60966ea948266311985e9f7b390ca2984f8d2f61376846973003a581bee3e0",
+    "bot/omni-rs/src/search.rs": "035d7dc42c5da78168e05fa95b76504e9556cc18a6e10bb08974f6a18ff29a15",
+    "bot/omni-rs/src/simulator.rs": "ad47c0eb8b398b0375d3e6f0bce16067a6b531cf9d35da2b0c89e113726e3c54",
+    "bot/omni-rs/src/simulator_tests.rs": "44051eb986776c38e090621042ebe13816afd8ae8b46bb5f721d4e7f1d7b8450",
+    "bot/omni-rs/src/validation.rs": "7b42ff0079c183c8e42d01badc75c4d85ac38e563490e56762fcddd440e8ceeb",
+    "bot/omni-rs/tests/card_batch_conformance.rs": "a6efb6ded68a89a149443d8137d43dbcaa5f11970ea6ebd906f20dc3c11d1212",
+    "bot/omni-wasm/src/lib.rs": "91de41d463bfb5ebda669e876be5debbeb8e4c0da53ad901f496eaa723e010d1",
+    "bot/omni/rs/make-alias-fixtures.js": "57700a6a64c1d258ca4c9f615665df42b95840f2f4da24982ec885a93ebf650c",
+    "bot/omni/rs/make-batch-play-fixtures.js": "89728ebe465f09a146d45c9a3301cdb7c549434b03fb26b530bb023a37a69cd0",
+    "bot/omni/rs/make-coordinate-fixtures.js": "71de652d3248fa85959ffd41963c738c552f67ac18e1283a8fc2048027742042",
+    "bot/omni/rs/make-death-fixtures.js": "b398cd0e312c361eebffb2a4e80814002894da21d2c0ee12eec8b91b497ad5d1",
+    "bot/omni/rs/make-discard-fixtures.js": "c5ebee4b18101d9c4a936d14f9b2929e44f6c5a1a95f268f3e9ff08f7d997cd1",
+    "bot/omni/rs/make-group-fixtures.js": "2f85ff6c827ac832820ff1d1e181f28b8b4493000a44ad1b9b5182beba554a13",
+    "bot/omni/rs/make-incidental-fixtures.js": "f18d83762603f884952cf5bea79b405d2205404540b89373f47fd92ad612b9e8",
+    "bot/omni/rs/make-keyword-fixtures.js": "ed051e4ee80da593f048d1e3ed48f8deffd51570d0d45d435c268ca1e8975372",
+    "bot/omni/rs/make-phase-fixtures.js": "cb03b4241d33d06e8e0b6a654c635ff4592cbe6622f8b6bae4c2c22f4cf63a67",
+    "bot/omni/rs/make-token-unit-fixtures.js": "1442fe4531d6add31288a50f5d69a58940592fa558bf874008d62c4c6177fd54",
+    "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+    "bot/omni/rs/state.js": "df3516c04e88dc30c4a1a6542edaf9a6f8723e0e0c3fc2b8904c20bbffd37a50",
+    "bot/omni/rs/trace.js": "b02af70ebc11317173afb8de1a92b4d4082a8ca102f1c2b51ffd04d191d895af",
+    "bot/omni/wasm/test/card-batches.test.js": "cdfb9515658c26e6aba58015711af663e5f8603c5c5383231dd0d79f47724dd7",
+    "bot/test/env-selection-actions.test.js": "1c97b9358f352522fbac75eae7cc0b643c0234d3f24b4ed0372a5c2bcb158752",
+    "bot/test/phase-stats-export.test.js": "417e4f4f9302fd15b262be41cb65c2efe2600876c1b742a631e296acaeaa7109",
+    "tools/card-batch.js": "312765b5231a681e8efa0e5f86983c1b4744d89eb4a0baf73097bc358738e838"
+  },
+  "nativeReleaseBinarySha256": "bbdf5cfcd637d8e533122c79f30818e8ac68ea1e48274d796d79c7c405cd1cde",
+  "wasmBuild": {
+    "schema": "omni-wasm-build-v1",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "wasmBindgen": "0.2.129",
+    "profile": "release",
+    "stackBytes": 16777216,
+    "artifacts": [
+      {
+        "target": "node",
+        "bytes": 1264707,
+        "sha256": "5b998d9b4e74e1042cf4b415deb147615fcc8c5ec28971af52f92ee2a605897b"
+      },
+      {
+        "target": "web",
+        "bytes": 1264707,
+        "sha256": "5b998d9b4e74e1042cf4b415deb147615fcc8c5ec28971af52f92ee2a605897b"
+      }
+    ]
+  },
+  "artifactSha256": {
+    "catalog.json": "c2532f4e47ce6ff6f2b1f1c7246b253eb2ecf8d49601d5fb301f4ae52da06416",
+    "coverage.json": "093489b8f944596fadb552cf40cb9bfdddce20c25ef993246600f90345cc69ee",
+    "coverage.md": "7f77379936c41132a5fe39d574bd2c6f004525113a6f68a9e574864354650556",
+    "runtime-admission.json": "eabadd5ff2dbd3a92c28ec7d6c8b386919e6f4fd2291f5021c22145538ae5795",
+    "runtime-pool.json": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+  },
+  "commands": [
+    {
+      "command": "cargo build --locked -p omni-rs --bin omni-rs --release",
+      "log": "verification-logs/swu-batch3-final-native-build.log",
+      "exitCode": 0,
+      "logSha256": "222a02ed477d249a21359df8cae975864a62d848f4739cadc5b00b6190a963c6"
+    },
+    {
+      "command": "npm run wasm:build",
+      "log": "verification-logs/swu-batch3-final-wasm-build.log",
+      "exitCode": 0,
+      "logSha256": "49df32118812da1f793a2761838384384bca2fdea003e4091526baf4cf7bb83f"
+    },
+    {
+      "command": "npm test",
+      "log": "verification-logs/swu-batch3-final-js-tests.log",
+      "exitCode": 0,
+      "logSha256": "bc17d3fe5e1dbabb02b482169cfa1ea14e6258e7cadf80f98fadcaad5fe3f5da"
+    },
+    {
+      "command": "npm run cards:test",
+      "log": "verification-logs/swu-batch3-final-card-tests.log",
+      "exitCode": 0,
+      "logSha256": "c19dc6de5c66afcd1de0cb671a6ebb100d9e7af2b40c70b24caebc542a6048c3"
+    },
+    {
+      "command": "cargo test --locked --workspace",
+      "log": "verification-logs/swu-batch3-final-rust-tests.log",
+      "exitCode": 0,
+      "logSha256": "4bca29d98cffed581c23e1413eca5f54d8fd893f14ecdd7d0006bed67fd88d5f"
+    },
+    {
+      "command": "npm run wasm:test",
+      "log": "verification-logs/swu-batch3-final-wasm-tests.log",
+      "exitCode": 0,
+      "logSha256": "56db3ea2bf400c95d27d63d9c47655feb31f0fc43a2bd282f279040f4fd85001"
+    },
+    {
+      "command": "npm run cards:check",
+      "log": "verification-logs/swu-batch3-final-cards-check.log",
+      "exitCode": 0,
+      "logSha256": "769cef2a9952e0cc3ffbcc9cdde0df9b97c8463855869423e3984e539748a497"
+    },
+    {
+      "command": "target/release/omni-rs check replays/omni-rs-corpus/*.jsonl.gz",
+      "log": "verification-logs/swu-batch3-final-original300-native.log",
+      "exitCode": 0,
+      "logSha256": "e7919f5b752f5244f00f29a3e84ff467c17511bdda8294a74f22a6a1cb603990"
+    },
+    {
+      "command": "node bot/omni/wasm/check.js replays/omni-rs-corpus/*.jsonl.gz",
+      "log": "verification-logs/swu-batch3-final-original300-wasm.log",
+      "exitCode": 0,
+      "logSha256": "ab1011905b4252a103ca2df5da4799cab8d9f31236c9cd683c82528062aee275"
+    },
+    {
+      "command": "python3 verification-logs/check-batch.py native bot/card-compiler/generated/catalog.json 003 LOG",
+      "log": "verification-logs/swu-batch3-final-003-native.log",
+      "exitCode": 0,
+      "logSha256": "f3fe739f767f212f87b0bc167145279397a60355d56e7f1477e342ed306cf66f"
+    },
+    {
+      "command": "python3 verification-logs/check-batch.py wasm bot/card-compiler/generated/catalog.json 003 LOG",
+      "log": "verification-logs/swu-batch3-final-003-wasm.log",
+      "exitCode": 0,
+      "logSha256": "85d80cef51383b4a7c4d4cc7beebc731090228acfb5f16d59c924c917f2e5153"
+    },
+    {
+      "command": "npm run wasm:pack",
+      "log": "verification-logs/swu-batch3-final-pack.log",
+      "exitCode": 0,
+      "logSha256": "92c608e5180ac03a8a736547b08c14295ff80c3779ffe6e71ce4fc1941b9fce8"
+    },
+    {
+      "command": "npm run wasm:pack:check",
+      "log": "verification-logs/swu-batch3-final-pack-check.log",
+      "exitCode": 0,
+      "logSha256": "bc3bdfbbff80ec2b24cf3b00050532bf6b30abead3eb555193e9520da9ef373d"
+    },
+    {
+      "command": "PYTHONPATH=/private/tmp/swu-skill-validator-deps python3 /Users/ericfode/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/swu-card-conversion",
+      "log": "verification-logs/swu-batch3-final-skill-check.log",
+      "exitCode": 0,
+      "logSha256": "db349825903d66adffea3ecf1bd8e1803043e8a71cf1a051235dabc5371f5bb0"
+    }
+  ],
+  "unitTests": {
+    "javascriptRepository": 177,
+    "compilerAccountingExporter": 50,
+    "rustWorkspace": 167,
+    "rustCore": 137,
+    "wasmNodeBrowserAdapter": 11
+  },
+  "batchCorpora": [
+    {
+      "directory": "death",
+      "games": 27,
+      "decisions": 5506,
+      "windows": 2231,
+      "terminalResults": 27,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "alias",
+      "games": 6,
+      "decisions": 1272,
+      "windows": 522,
+      "terminalResults": 6,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "coordinate",
+      "games": 11,
+      "decisions": 2418,
+      "windows": 1010,
+      "terminalResults": 11,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "token-unit",
+      "games": 22,
+      "decisions": 5427,
+      "windows": 2292,
+      "terminalResults": 22,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "discard",
+      "games": 18,
+      "decisions": 4304,
+      "windows": 1806,
+      "terminalResults": 18,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "incidental",
+      "games": 8,
+      "decisions": 1907,
+      "windows": 823,
+      "terminalResults": 8,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "play-first90",
+      "games": 90,
+      "decisions": 5597,
+      "windows": 2795,
+      "terminalResults": 90,
+      "poolSha256": "315ddcf99fea615ac0c0724c91286a34f3ffd6e7b90f8a2285591a5d71ab9fc0"
+    },
+    {
+      "directory": "play-last13",
+      "games": 13,
+      "decisions": 838,
+      "windows": 412,
+      "terminalResults": 13,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    }
+  ],
+  "batchTotals": {
+    "games": 195,
+    "decisions": 27269,
+    "windows": 11891,
+    "terminalResults": 195
+  },
+  "batchNative": "all195 matched",
+  "batchWasm": "all195 matched",
+  "original300Regression": {
+    "native": {
+      "games": 300,
+      "decisions": 57604,
+      "windows": 25949
+    },
+    "wasm": {
+      "games": 300,
+      "decisions": 57604,
+      "windows": 25949
+    }
+  },
+  "earlierCommittedCorpora": {
+    "batch001Games": 146,
+    "batch002Games": 185,
+    "originalGames": 6,
+    "expandedGames": 16,
+    "native": "passed in cargo workspace tests",
+    "wasm": "passed in wasm:test"
+  },
+  "limitations": [
+    "Finite engine traces and complete source review do not prove correctness of all possible interactions. Unsupported mechanics remain rejected.",
+    "The governing100 queue was frozen after90 prototype admissions and before the final10 implementations completed; not a fully prospective selection.",
+    "Every new card has a completed handplay observation.41of103 have dedicated printed-effect cases;62 use shared family semantics plus complete source/IR review, not dedicated effect assertions.",
+    "Synthetic diagnostics informed implementation timing but are excluded from the195 actual-source indexed corpus and admission totals.",
+    "The low-effort readiness check is a targeted process assessment, not a statistical estimate of low-effort conversion accuracy."
+  ],
+  "reviewStatus": "Final independent HIGH approval pending; no publication authorized by this receipt alone."
+}

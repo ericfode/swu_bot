@@ -448,12 +448,12 @@ impl Engine {
                 out.push(Action::button("You", 0));
                 out.push(Action::button("Opponent", 1));
             }
-            Decision::AbilityMenu
+            Decision::DeathPlayer | Decision::DeathOrder | Decision::DeathBatch | Decision::AbilityMenu
             | Decision::AbilityTarget
             | Decision::AbilityOptional
             | Decision::AbilityNoEffect
             | Decision::AbilityDistribute
-            | Decision::AbilityGroupShield => unreachable!(),
+            | Decision::AbilityGroupShield | Decision::AbilityDiscard => unreachable!(),
             Decision::Terminal => {}
         }
         out
@@ -521,6 +521,7 @@ impl Engine {
             return self.apply_ability_action(s, a);
         }
         let mut t = *s;
+        if t.decision==Decision::Window {t.action_player=Some(t.active);}
         let seat = t.active;
         let id = a.id().unwrap_or(0);
         let arg = a.arg.as_ref().and_then(Value::as_str).unwrap_or("");
@@ -625,6 +626,7 @@ impl Engine {
                     let source = t.source;
                     t.card_mut(source).exhausted = true;
                     t.trigger_context = 2;
+                    t.attack_source = source;
                     t.pending_triggers = 0;
                     let d = self.def(&t, source);
                     t.attack_restore = self.keyword_amount(&t, source, "restore");
@@ -726,12 +728,12 @@ impl Engine {
                 t.trigger_context = 3;
                 self.combat(&mut t)?;
             }
-            Decision::AbilityMenu
+            Decision::DeathPlayer | Decision::DeathOrder | Decision::DeathBatch | Decision::AbilityMenu
             | Decision::AbilityTarget
             | Decision::AbilityOptional
             | Decision::AbilityNoEffect
             | Decision::AbilityDistribute
-            | Decision::AbilityGroupShield => unreachable!(),
+            | Decision::AbilityGroupShield | Decision::AbilityDiscard => unreachable!(),
             Decision::Terminal => return Err("game is over".into()),
         }
         self.sweep_stat_defeats(&mut t)?;
@@ -801,6 +803,7 @@ impl Engine {
         Ok(())
     }
     fn cancel(&self, s: &mut State) {
+        s.attack_source=0;
         s.source = 0;
         s.target = 0;
         s.trigger_context = 0;
@@ -852,6 +855,9 @@ impl Engine {
         }
     }
     fn process_triggers(&self, s: &mut State) -> Result<(), String> {
+        if s.trigger_context==4 {return self.process_deaths(s);}
+        self.merge_enter_deaths(s)?;
+        if self.open_deaths(s,2)? {return Ok(());}
         if self.catalogue.is_some() {
             return self.process_all_triggers(s);
         }
@@ -982,15 +988,19 @@ impl Engine {
             }
             let source_dead = s.card(source).damage >= self.hp(s, source);
             let target_dead = s.card(target).damage >= self.hp(s, target);
-            if source_dead {
-                self.defeat(s, source)?;
-            }
-            if target_dead {
-                self.defeat(s, target)?;
-            }
+            let dead=[(source,source_dead),(target,target_dead)].into_iter().filter_map(|(id,dead)|dead.then_some(id)).collect::<Vec<_>>();
+            self.defeat_many(s,&dead)?;
         } else {
             s.card_mut(target).damage += attack;
         }
+        self.sweep_stat_defeats(s)?;
+        self.check_win(s);
+        if self.open_deaths(s,5)? {return Ok(());}
+        self.combat_after_damage(s)
+    }
+    fn combat_after_damage(&self,s:&mut State)->Result<(),String> {
+        let source=s.source;
+        s.attack_source=0;
         self.check_win(s);
         if s.is_terminal() {
             self.finish(s)?;
@@ -1011,7 +1021,14 @@ impl Engine {
         Ok(())
     }
     fn defeat(&self, s: &mut State, id: CardId) -> Result<(), String> {
+        if !self.in_arena(s,id) {return Ok(());}
+        self.capture_death(s,id)?;
         self.leave_play(s, id)
+    }
+    fn defeat_many(&self,s:&mut State,ids:&[CardId])->Result<(),String> {
+        for &id in ids {self.capture_death(s,id)?;}
+        for &id in ids {if self.in_arena(s,id) {self.leave_play(s,id)?;}}
+        Ok(())
     }
     fn leave_play(&self, s: &mut State, id: CardId) -> Result<(), String> {
         let owner = s.card(id).owner;
@@ -1062,15 +1079,19 @@ impl Engine {
     }
     fn finish(&self, s: &mut State) -> Result<(), String> {
         self.sweep_stat_defeats(s)?;
+        if self.open_deaths(s,3)? {return Ok(());}
+        if s.death_depth>0 {return self.process_deaths(s);}
         if s.is_terminal() {
             s.prev_passed = false;
             if !s.regroup && !s.player(s.active.other()).out {
                 s.active = s.active.other();
             }
+            if !s.regroup {s.action_player=Some(s.active);}
             s.decision = Decision::Terminal;
             return Ok(());
         }
         s.prev_passed = false;
+        s.attack_source=0;
         s.after_attack_triggers = 0;
         s.after_attack_programs = 0;
         s.pending_programs = 0;
@@ -1093,6 +1114,7 @@ impl Engine {
     }
     fn advance(&self, s: &mut State) -> Result<(), String> {
         if s.players.iter().all(|p| p.out) {
+            s.action_player=None;
             for id in 1..s.next_id {
                 s.card_mut(id).phase_power = 0;
                 s.card_mut(id).phase_hp = 0;
@@ -1101,6 +1123,15 @@ impl Engine {
                 s.card_mut(id).phase_lost_keywords = 0;
             }
             self.sweep_stat_defeats(s)?;
+            if self.open_deaths(s,4)? {return Ok(());}
+            return self.advance_after_expiry(s);
+        } else {
+            if !s.player(s.active.other()).out {s.active=s.active.other();}
+            s.decision=Decision::Window;s.action_player=Some(s.active);
+        }
+        Ok(())
+    }
+    fn advance_after_expiry(&self,s:&mut State)->Result<(),String> {
             s.regroup = true;
             s.players[0].out = false;
             s.players[1].out = false;
@@ -1123,12 +1154,6 @@ impl Engine {
                 s.resource_selected = [0; 2];
                 s.active = Seat::P1;
             }
-        } else {
-            if !s.player(s.active.other()).out {
-                s.active = s.active.other();
-            }
-            s.decision = Decision::Window;
-        }
         Ok(())
     }
     fn end_regroup(&self, s: &mut State) -> Result<(), String> {
@@ -1153,7 +1178,7 @@ impl Engine {
         }
         s.round = s.round.checked_add(1).ok_or("round capacity exceeded")?;
         s.regroup = false;
-        s.active = s.initiative;
+        s.active = s.initiative;s.action_player=Some(s.active);
         s.decision = Decision::Window;
         s.resource_selected = [0; 2];
         s.resource_done = [false; 2];
@@ -1249,6 +1274,7 @@ impl Engine {
             return Err("invalid round".into());
         }
         s.initiative = Seat::parse(v["initiative"].as_str().ok_or("missing initiative")?)?;
+        s.action_player=v["activePlayer"].as_str().map(Seat::parse).transpose()?;
         s.initiative_claimed = b(v, "initiativeClaimed");
         s.prev_passed = b(v, "prevPassed");
         s.active = Seat::parse(
@@ -1381,7 +1407,7 @@ impl Engine {
                             }
                             if c.phase_lost_keywords != 0 { v["phaseLostKeywords"] = json!(crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter_map(|(i,k)| (c.phase_lost_keywords & (1 << i) != 0).then_some(*k)).collect::<Vec<_>>()); }
                             v["exhausted"] = json!(c.exhausted);
-                            v["power"] = json!(self.power(s, id, false));
+                            v["power"] = json!(self.power(s, id, self.is_attacking(s, id)));
                             v["hp"] = json!(self.hp(s, id));
                             let mut ids = Vec::new();
                             for mut token in [c.shield, c.experience] {
@@ -1412,7 +1438,7 @@ impl Engine {
         } else {
             s.winner().map(Seat::as_str)
         };
-        json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":if s.regroup{None}else{Some(s.active.as_str())},"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players})
+        json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":s.action_player.map(Seat::as_str),"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players})
     }
 }
 

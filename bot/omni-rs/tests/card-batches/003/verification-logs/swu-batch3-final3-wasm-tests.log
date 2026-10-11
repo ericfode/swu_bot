@@ -1,0 +1,80 @@
+
+> swu-bot@0.1.0 wasm:test
+> node --test bot/omni-wasm/test.js bot/omni/wasm/test/*.test.js
+
+TAP version 13
+# Subtest: actual Node Wasm matches every fixture decision, action set, window, and terminal state
+ok 1 - actual Node Wasm matches every fixture decision, action set, window, and terminal state
+  ---
+  duration_ms: 195.701625
+  type: 'test'
+  ...
+# Subtest: clones retain prompts and catalogue; invalid inputs and proofs do not mutate
+ok 2 - clones retain prompts and catalogue; invalid inputs and proofs do not mutate
+  ---
+  duration_ms: 6.828
+  type: 'test'
+  ...
+# Subtest: browser ESM package initializes from bytes and runs the same retained-state search
+ok 3 - browser ESM package initializes from bytes and runs the same retained-state search
+  ---
+  duration_ms: 98.669292
+  type: 'test'
+  ...
+# Subtest: Wasm adapter matches every engine decision and state in all committed fixtures
+ok 4 - Wasm adapter matches every engine decision and state in all committed fixtures
+  ---
+  duration_ms: 193.197542
+  type: 'test'
+  ...
+# Subtest: Wasm state, copies, checkpoints, and searches remain independent of JS snapshots
+ok 5 - Wasm state, copies, checkpoints, and searches remain independent of JS snapshots
+  ---
+  duration_ms: 9.557458
+  type: 'test'
+  ...
+# Subtest: Wasm rejects incorrect pools, unsupported cards, invalid limits and illegal choices without mutation
+ok 6 - Wasm rejects incorrect pools, unsupported cards, invalid limits and illegal choices without mutation
+  ---
+  duration_ms: 5.375209
+  type: 'test'
+  ...
+# Subtest: compiled Wasm programmes replay all sixteen expanded engine games with exact pool provenance
+ok 7 - compiled Wasm programmes replay all sixteen expanded engine games with exact pool provenance
+  ---
+  duration_ms: 706.234875
+  type: 'test'
+  ...
+# Subtest: catalogue JSON supports both all-admitted cards and an exact raw subset pool
+ok 8 - catalogue JSON supports both all-admitted cards and an exact raw subset pool
+  ---
+  duration_ms: 195.650541
+  type: 'test'
+  ...
+# Subtest: invalid wrapper options release their owned Wasm handle and CLI flags cannot disappear
+ok 9 - invalid wrapper options release their owned Wasm handle and CLI flags cannot disappear
+  ---
+  duration_ms: 2.404458
+  type: 'test'
+  ...
+# Subtest: A drawn game lists both player names, like EnvGame.winners
+ok 10 - A drawn game lists both player names, like EnvGame.winners
+  ---
+  duration_ms: 0.32475
+  type: 'test'
+  ...
+# Subtest: all card batches match current Wasm programs and immutable engine receipts
+ok 11 - all card batches match current Wasm programs and immutable engine receipts
+  ---
+  duration_ms: 14737.5715
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 14782.678

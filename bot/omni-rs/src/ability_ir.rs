@@ -136,7 +136,7 @@ impl Expr {
                     "damage"
                         | "power"
                         | "hp"
-                        | "cost"
+                        | "cost" | "printedCost"
                         | "remainingHp"
                         | "readyResourceCount"
                         | "exhaustedResourceCount"
@@ -154,7 +154,7 @@ impl Expr {
                 then.validate_number().is_ok() && r#else.validate_number().is_ok()
             }
             Self::Query { name, .. } => {
-                ["getPower", "getHp", "getCost", "arenaUnitCount"].contains(&name.as_str())
+                ["getPower", "getHp", "getCost", "getPrintedCost", "arenaUnitCount"].contains(&name.as_str())
             }
         };
         if numeric {
@@ -202,7 +202,7 @@ impl Expr {
                 {
                     ["source" | "target" | "card" | "player" | "opponent"] => true,
                     ["source" | "target" | "card", "title"] => true,
-                    ["source" | "target" | "card", "damage" | "power" | "hp" | "cost" | "remainingHp" | "exhausted"
+                    ["source" | "target" | "card", "damage" | "power" | "hp" | "cost" | "printedCost" | "remainingHp" | "exhausted"
                     | "controller" | "unique" | "zoneName"] => true,
                     ["player" | "opponent", "readyResourceCount" | "exhaustedResourceCount" | "base"] => {
                         true
@@ -257,7 +257,7 @@ impl Expr {
                 let arity = match name.as_str() {
                     "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
                     | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
-                    | "getCost" => 0,
+                    | "getCost" | "getPrintedCost" => 0,
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" | "hasSomeArenaUnit"
                     | "arenaUnitCount" => 1,
                     _ => return Err(format!("unsupported runtime query {name}")),
@@ -407,6 +407,8 @@ pub enum Cost {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Effect {
+    DiscardOwnHand {amount:Expr,target:Target},
+    CreateTokenUnit { #[serde(rename="tokenType")] token_type:String, amount:Expr, target:Target, #[serde(default,rename="entersReady")] enters_ready:bool },
     Damage {
         amount: Expr,
         target: Target,
@@ -496,6 +498,8 @@ fn one() -> Expr {
 pub struct Ability {
     #[serde(default)]
     pub trigger: String,
+    #[serde(default)]
+    pub coordinate: bool,
     pub title: String,
     #[serde(default)]
     pub context_title: Vec<Expr>,
@@ -529,6 +533,8 @@ pub struct Sides {
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
+    /// All then/sequence subwindows pass registrations to this initiating ability window.
+    EndStep,
     Commit,
     Select(TargetResolver),
     Conditional { condition: Expr, skip: usize },
@@ -543,11 +549,13 @@ pub struct Program {
     pub title: String,
     pub context_title: Vec<Expr>,
     pub trigger: String,
+    pub coordinate: bool,
     pub costs: Vec<Cost>,
     pub optional: bool,
     pub requires_confirmation: bool,
     pub condition: Option<Expr>,
     pub instructions: Vec<Instruction>,
+    pub event_end: u8,
 }
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
@@ -561,6 +569,8 @@ impl Program {
                 _ => e.validate(),
             }
         }
+        if ability.coordinate && !["constant","onAttack"].contains(&ability.trigger.as_str()) {return Err("Coordinate supports only constant or onAttack registrations".into());}
+        if ability.then.as_ref().is_some_and(|a|a.coordinate) || ability.if_you_do.as_ref().is_some_and(|a|a.coordinate) {return Err("Coordinate cannot register on a continuation".into());}
         if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
         fn title_literal_bytes(e: &Expr) -> usize {
             match e {
@@ -581,7 +591,7 @@ impl Program {
             if literal_bytes > 1024 { return Err("context title aggregate literal bytes exceed capacity".into()); }
         }
 
-        if !["action", "whenPlayed", "onAttack", "event", "constant"]
+        if !["action", "whenPlayed", "whenDefeated", "onAttack", "event", "constant"]
             .contains(&ability.trigger.as_str())
         {
             return Err(format!("unsupported runtime trigger {}", ability.trigger));
@@ -648,11 +658,13 @@ impl Program {
             title: ability.title.clone(),
             context_title: ability.context_title.clone(),
             trigger: ability.trigger.clone(),
+            coordinate: ability.coordinate,
             costs: ability.costs.clone(),
             optional: ability.optional,
             requires_confirmation: ability.requires_confirmation,
             condition: ability.condition.clone(),
             instructions: vec![],
+            event_end:0,
         };
         if let Some(e) = &p.condition {
             e.validate()?;
@@ -682,6 +694,9 @@ impl Program {
             }
         }
         p.compile_ability(ability, 0)?;
+        if p.instructions.len()>u8::MAX as usize {return Err("ability event boundary exceeds capacity".into());}
+        p.event_end=p.instructions.len() as u8;
+        p.instructions.push(Instruction::EndStep);
         if p.instructions.len() > MAX_PROGRAM_INSTRUCTIONS {
             return Err("ability program exceeds instruction capacity".into());
         }
@@ -692,7 +707,7 @@ impl Program {
             return Err("ability continuation nesting exceeds capacity".into());
         }
         if depth > 0
-            && (!ability.context_title.is_empty()
+            && (ability.coordinate || !ability.context_title.is_empty()
                 || !ability.costs.is_empty()
                 || ability.optional
                 || !ability.trigger.is_empty()
@@ -732,6 +747,15 @@ impl Program {
             };
         }
         Ok(())
+    }
+    fn scalar_hand_amount(amount:&Expr,target:&Target)->Result<usize,String> {
+        if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("hand effects require a scalar player target".into());}
+        match amount {Expr::Const {value}=>value.as_u64().filter(|n|(1..=2).contains(n)).map(|n|n as usize).ok_or("hand effect amount must be 1..2".into()),_=>Err("hand effects require literal bounded amounts".into())}
+    }
+    fn token_unit_amount(token_type:&str,amount:&Expr,target:&Target)->Result<usize,String> {
+        if !["battleDroid","cloneTrooper","beast","spy","tieFighter","xwing"].contains(&token_type) {return Err("unsupported created token unit type".into());}
+        if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("token creation requires a scalar player target".into());}
+        match amount {Expr::Const {value}=>value.as_u64().filter(|n|(1..=5).contains(n)).map(|n|n as usize).ok_or("token creation amount must be 1..5".into()),_=>Err("token creation requires a literal bounded amount".into())}
     }
     fn validate_phase_modifiers(&self, effects: &[Effect]) -> Result<(), String> {
         if effects.is_empty() || effects.len() > 8 { return Err("phase modifier list exceeds bounded capacity".into()); }
@@ -812,7 +836,10 @@ impl Program {
                     for e in effects { let target=match e { Effect::ModifyStats {target,..}|Effect::GainKeyword {target,..}|Effect::LoseKeyword {target,..}=>target,_=>unreachable!() }; records+=multiplicity(target,targets,array)?; }
                     (records,false,true)
                 },
-                Effect::Draw { .. } | Effect::Sequence { .. } | Effect::ReturnToHand { .. } | Effect::ReadyResources { .. } | Effect::DistributeHealing { .. } => return Err("event group contains an unverified operation".into()),
+                Effect::DiscardOwnHand {amount,target} => (Program::scalar_hand_amount(amount,target)?+1,false,false),
+                Effect::Draw {amount,target} => {Program::scalar_hand_amount(amount,target)?;(2,false,false)},
+                Effect::CreateTokenUnit {token_type,amount,target,..} => (Program::token_unit_amount(token_type,amount,target)?+1,false,true),
+                Effect::Sequence { .. } | Effect::ReturnToHand { .. } | Effect::ReadyResources { .. } | Effect::DistributeHealing { .. } => return Err("event group contains an unverified operation".into()),
                 Effect::NoAction => (0,false,false),
                 primitive => {
                     let mut checker=p.clone(); checker.instructions.clear(); checker.compile_effect(primitive,depth+1)?;
@@ -835,6 +862,8 @@ impl Program {
             };
             if records > MAX_GROUP_RECORDS { return Err("event group record budget exceeds capacity".into()); }
             if damage && newly_attached { return Err("mixed damage and newly attached tokens/lasting modifiers require dedicated engine witnesses".into()); }
+            fn has_hand_effect(e:&Effect)->bool {match e {Effect::Draw{..}|Effect::DiscardOwnHand{..}=>true,Effect::Simultaneous{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(has_hand_effect),Effect::Conditional{on_true,on_false,..}=>has_hand_effect(on_true)||on_false.as_deref().is_some_and(has_hand_effect),Effect::Select{effect,..}=>has_hand_effect(effect),_=>false}}
+            if damage && has_hand_effect(effect) {return Err("mixed damage and hand effects require dedicated engine witnesses".into());}
             Ok((records,damage,newly_attached))
         }
         fn operation_budget(e: &Effect, depth: usize) -> Result<usize,String> {
@@ -873,6 +902,15 @@ impl Program {
                 }
             }
         }
+        fn unique_draw_players(e:&Effect,seen:&mut Vec<String>)->Result<(),String> {
+            match e {
+                Effect::Draw {target:Target::Name(player),..}=>{if seen.contains(player) {return Err("multiple grouped draws for one player require separate contingent witnesses".into());}seen.push(player.clone());}
+                Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}=>for e in effects {unique_draw_players(e,seen)?;},
+                Effect::Conditional {on_true,on_false,..}=>{unique_draw_players(on_true,seen)?;if let Some(e)=on_false {unique_draw_players(e,seen)?;}},
+                Effect::Select {effect,..}=>unique_draw_players(effect,seen)?,_=>{},
+            }Ok(())
+        }
+        unique_draw_players(effect,&mut vec![])?;
         operation_budget(effect,0)?;
         validate_shared_target(effect,false)?;
         let array=self.instructions.iter().rev().find_map(|i|if let Instruction::Select(r)=i {Some(r.is_multiple())}else{None}).unwrap_or(false);
@@ -934,12 +972,14 @@ impl Program {
             return Err("effect nesting exceeds capacity".into());
         }
         match effect {
+            Effect::DiscardOwnHand {amount,target} => {Self::scalar_hand_amount(amount,target)?;self.instructions.push(Instruction::Group(effect.clone()));}
+            Effect::CreateTokenUnit {token_type,amount,target,..} => {Self::token_unit_amount(token_type,amount,target)?;self.instructions.push(Instruction::Group(effect.clone()));}
             Effect::Sequence { effects } => { for effect in effects { self.compile_effect(effect, depth + 1)?; } }
             Effect::Conditional { condition, on_true, on_false } => {
                 condition.validate()?;let start=self.instructions.len();self.instructions.push(Instruction::Conditional {condition:condition.clone(),skip:0});
                 self.compile_effect(on_true,depth+1)?;let jump=self.instructions.len();self.instructions.push(Instruction::Jump{to:0});
                 self.instructions[start]=Instruction::Conditional{condition:condition.clone(),skip:self.instructions.len()};
-                if let Some(other)=on_false{self.compile_effect(other,depth+1)?;}
+                if let Some(other)=on_false{self.compile_effect(other,depth+1)?;}else{self.instructions.push(Instruction::Apply(Effect::NoAction));}
                 self.instructions[jump]=Instruction::Jump{to:self.instructions.len()};
             }
             Effect::Simultaneous { effects } if self.trigger == "constant" => { for effect in effects { self.compile_effect(effect, depth + 1)?; } }
@@ -1036,6 +1076,9 @@ impl Catalogue {
                 }
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
+                let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
+                if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
+                if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}
                 let mut out = CardPrograms::default();
                 let mut programs = Vec::new();
                 for (src, dst) in [

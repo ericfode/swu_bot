@@ -364,6 +364,30 @@ function effect(input, context, defaultTarget = 'self') {
         return { kind: kind === 'sequential' ? 'sequence' : 'simultaneous', effects: unwrap(node.arguments[0]).elements.map((e) => effect(e, ctx, defaultTarget)) };
     }
     const obj = node.arguments[0] ? object(node.arguments[0], ctx) : { props: new Map(), ctx, node };
+    if (kind === 'discardCardsFromOwnHand') {
+        // The wrapper changes who chooses, not who is targeted. Its inherited
+        // PlayerTargetSystem default is the opponent, despite the helper name.
+        for (const [key, value] of obj.props) if (!['amount', 'target', 'cardTypeFilter'].includes(key)) fail(obj.ctx, value, 'unsupported-hand-discard-field:' + key);
+        if (obj.props.has('cardTypeFilter') && literal(obj.props.get('cardTypeFilter'), obj.ctx) !== 'any') fail(obj.ctx, obj.props.get('cardTypeFilter'), 'hand-discard-type-filter');
+        const amount = obj.props.has('amount') ? literal(obj.props.get('amount'), obj.ctx) : 1;
+        if (!Number.isSafeInteger(amount) || amount < 1 || amount > 2) fail(obj.ctx, obj.props.get('amount') || node, 'hand-discard-amount-bound');
+        const playerTarget = target(obj.props.get('target'), obj.ctx, 'enemyPlayer');
+        if (!['ownPlayer', 'enemyPlayer'].includes(playerTarget)) fail(obj.ctx, obj.props.get('target') || node, 'hand-discard-player-target');
+        return { kind:'discardOwnHand', amount:constant(amount), target:playerTarget };
+    }
+    const tokenTypes = { createBattleDroid:'battleDroid', createCloneTrooper:'cloneTrooper', createXWing:'xwing', createTieFighter:'tieFighter', createSpy:'spy', createBeast:'beast' };
+    if (Object.hasOwn(tokenTypes, kind)) {
+        // Token factory wrappers append their fixed type; caller-supplied type,
+        // entry effects and event captures require their own execution contract.
+        for (const [key, value] of obj.props) if (!['amount', 'target', 'entersReady'].includes(key)) fail(obj.ctx, value, 'unsupported-token-field:' + key);
+        const amount = obj.props.has('amount') ? literal(obj.props.get('amount'), obj.ctx) : 1;
+        if (!Number.isSafeInteger(amount) || amount < 1 || amount > 5) fail(obj.ctx, obj.props.get('amount') || node, 'token-amount-bound');
+        const entersReady = obj.props.has('entersReady') ? literal(obj.props.get('entersReady'), obj.ctx) : false;
+        if (typeof entersReady !== 'boolean') fail(obj.ctx, obj.props.get('entersReady') || node, 'token-readiness-boolean');
+        const tokenTarget = target(obj.props.get('target'), obj.ctx, 'ownPlayer');
+        if (!['ownPlayer', 'enemyPlayer'].includes(tokenTarget)) fail(obj.ctx, obj.props.get('target') || node, 'token-player-target');
+        return { kind:'createTokenUnit', tokenType:tokenTypes[kind], amount:constant(amount), target:tokenTarget, entersReady };
+    }
     if (kind === 'forThisPhaseCardEffect') {
         // Lasting stat modifiers have their values captured when the immediate
         // system resolves. A function passed to modifyStats itself is different:
@@ -402,7 +426,13 @@ function targetResolverProperties(obj) {
     const { props, ctx, node } = obj;
     const rawType = props.has('cardTypeFilter') ? literal(props.get('cardTypeFilter'), ctx) : 'any';
     const typeNames = { unit: 'unit', 'nonLeaderUnit': 'nonLeaderUnit', 'non-leader unit': 'nonLeaderUnit', basicUnit: 'basicUnit', base: 'base', any: 'any', upgrade: 'upgrade', event: 'event', leaderUnit: 'leaderUnit', tokenUnit: 'tokenUnit', token: 'token', basicUpgrade: 'basicUpgrade', tokenUpgrade: 'tokenUpgrade', nonTokenUnit: 'nonTokenUnit', nonUnit: 'nonUnit' };
-    let type = typeNames[rawType];
+    let type = Array.isArray(rawType) ? null : typeNames[rawType];
+    // Engine arrays are unions. Only this exact union can use the runtime's
+    // attackable inventory; discard/hand inventories may contain other types.
+    if (Array.isArray(rawType) && rawType.length === 2 && rawType.includes('unit') && rawType.includes('base')) {
+        const zone = props.has('zoneFilter') ? literal(props.get('zoneFilter'), ctx) : 'anyAttackable';
+        if (['anyAttackable', 'anyArena', 'groundArena', 'spaceArena', 'base'].includes(zone)) type = 'any';
+    }
     if (!type) fail(ctx, props.get('cardTypeFilter') || node, 'cardTypeFilter:' + rawType);
     const ownerRaw = props.has('controller') ? literal(props.get('controller'), ctx) : 'any';
     const owner = { self: 'self', opponent: 'opponent', any: 'any' }[ownerRaw];
@@ -432,6 +462,9 @@ function targetResolverProperties(obj) {
         result.predicate = expr(props.get('cardCondition'), ctx, ['card', 'context']);
     }
     if (props.has('mode')) result.mode = literal(props.get('mode'), ctx);
+    // A selected player needs a typed player target register. Falling back to
+    // ownPlayer loses the user's choice (e.g. a ready-resources continuation).
+    if (result.mode === 'player') fail(ctx, props.get('mode'), 'unsupported-player-target-resolver');
     if (props.has('numCards')) result.count = expr(props.get('numCards'), ctx);
     if (props.has('canChooseNoCards')) result.optional = !!result.optional || literal(props.get('canChooseNoCards'), ctx);
     else if (['upTo','upToVariable'].includes(result.mode)) result.optional = true;
@@ -452,8 +485,8 @@ function costs(input, ctx) {
         fail(ctx, n, 'cost:' + kind);
     });
 }
-function constantAbility(input, context) {
-    const obj = object(input, context);
+function constantAbility(input, context, validatedObject = null) {
+    const obj = validatedObject || object(input, context);
     knownProperties(obj, ['title', 'condition', 'ongoingEffect', 'matchTarget', 'targetController', 'targetCardTypeFilter', 'targetZoneFilter']);
     const { props, ctx, node } = obj;
     if (!props.has('ongoingEffect')) fail(ctx, node, 'constant-without-effect');
@@ -481,8 +514,8 @@ function constantAbility(input, context) {
     check(result.condition); check(result.targetResolver); check(result.effect);
     return result;
 }
-function ability(input, context, trigger = null) {
-    const obj = object(input, context);
+function ability(input, context, trigger = null, validatedObject = null) {
+    const obj = validatedObject || object(input, context);
     const { props, ctx, node } = obj;
     knownProperties(obj, ['title', 'optional', 'cost', 'condition', 'immediateEffect', 'targetResolver', 'ifYouDo', 'ifYouDoCondition', 'then', 'thenCondition', 'limit', 'optionalMakesAbilityNonCancelable']);
     const result = { ...(trigger ? { trigger } : {}), title: props.has('title') ? displayText(props.get('title'), ctx) : '', costs: costs(props.get('cost'), ctx) };
@@ -526,7 +559,57 @@ function ability(input, context, trigger = null) {
         if (capturedEvent && multipleEffects) fail(ctx, factory, 'continuation-factory-event-lifetime', 'Factory event capture requires a separate value slot before subsequent effects');
         if (dynamicReference && multipleEffects) fail(ctx, factory, 'continuation-factory-value-lifetime', 'Factory values require capture slots before a sequence can change their referenced state');
     }
+    let createsTokens = false, discardsHand = false, capturesTokenEvent = false;
+    const tokenCapture = (value) => {
+        if (!value || typeof value !== 'object') return;
+        if (value.kind === 'createTokenUnit') createsTokens = true;
+        if (value.kind === 'discardOwnHand') discardsHand = true;
+        if (value.kind === 'ref' && value.path[0] === 'event') capturesTokenEvent = true;
+        Object.values(value).forEach(tokenCapture);
+    };
+    tokenCapture(result);
+    if (createsTokens && capturesTokenEvent) fail(ctx, node, 'token-event-result-capture');
+    if (discardsHand && capturesTokenEvent) fail(ctx, node, 'hand-discard-event-result-capture');
     return result;
+}
+// Standard hooks are one registration with alternative event names. Expand only
+// static self hooks; event watchers and shared activation state need separate IR.
+function standardTriggeredAbilities(input, context, validatedObject = null) {
+    const obj = validatedObject || object(input, context);
+    if (!obj.props.has('when')) fail(obj.ctx, obj.node, 'trigger-alias-without-when');
+    const whenProperty = obj.node.properties.find(p => ts.isPropertyAssignment(p) && (p.name.text === 'when'));
+    if (!whenProperty) fail(obj.ctx, obj.node, 'trigger-alias-static-when');
+    const whenNode = unwrap(obj.props.get('when'));
+    if (!ts.isObjectLiteralExpression(whenNode)) fail(obj.ctx, whenNode, 'trigger-alias-static-when');
+    const when = object(whenNode, obj.ctx);
+    if (!when.props.size || when.props.size > 3) fail(when.ctx, when.node, 'trigger-alias-hook-count');
+    for (const [hook, value] of when.props) {
+        if (!['whenPlayed', 'onAttack', 'whenDefeated'].includes(hook)) fail(when.ctx, value, 'trigger-alias-hook:' + hook);
+        if (unwrap(value).kind !== ts.SyntaxKind.TrueKeyword) fail(when.ctx, value, 'trigger-alias-true-only');
+    }
+    if (obj.props.has('cost')) fail(obj.ctx, obj.props.get('cost'), 'trigger-alias-cost');
+    const props = new Map(obj.props);
+    props.delete('when');
+    return [...when.props.keys()].map((trigger) => ability(input, obj.ctx, trigger, { ...obj, props }));
+}
+// Coordinate grants this definition while its printed keyword is active.
+// Runtime retains the marker separately from condition: attack registration
+// is captured before resolution, whereas constant gates remain live.
+function coordinateAbility(input, context) {
+    const obj = object(input, context);
+    if (!obj.props.has('type')) fail(obj.ctx, obj.node, 'coordinate-without-type');
+    const type = literal(obj.props.get('type'), obj.ctx);
+    const props = new Map(obj.props);
+    props.delete('type');
+    let result;
+    if (type === 'constant') result = constantAbility(input, obj.ctx, { ...obj, props });
+    else if (type === 'triggered') {
+        if (!props.has('when')) fail(obj.ctx, obj.node, 'coordinate-without-when');
+        const when = object(props.get('when'), obj.ctx);
+        if (when.props.size !== 1 || !when.props.has('onAttack')) fail(obj.ctx, obj.node, 'coordinate-trigger');
+        [result] = standardTriggeredAbilities(input, obj.ctx, { ...obj, props });
+    } else fail(obj.ctx, obj.props.get('type'), 'coordinate-type:' + type);
+    return { ...result, coordinate: true };
 }
 function loadEnums(sourceRoot) {
     const out = {};
@@ -609,9 +692,15 @@ function compileSource(text, file, enums = {}) {
                 const call = statement.expression;
                 const parts = access(call.expression, local);
                 const registration = parts.at(-1);
-                if (parts.length !== 2 || parts[0] !== member.parameters[0]?.name.getText(source) || (!TRIGGERS[registration] && registration !== 'addConstantAbility')) fail(local, call, 'registrar:' + registration);
+                if (parts.length !== 2 || parts[0] !== member.parameters[0]?.name.getText(source) || (!TRIGGERS[registration] && registration !== 'addConstantAbility' && registration !== 'addTriggeredAbility' && registration !== 'addCoordinateAbility')) fail(local, call, 'registrar:' + registration);
                 if (call.arguments.length !== 1) fail(local, call, 'registration-arity');
-                out.abilities[SIDE_METHODS[name]].push(registration === 'addConstantAbility' ? constantAbility(call.arguments[0], local) : ability(call.arguments[0], local, TRIGGERS[registration]));
+                if (registration === 'addCoordinateAbility') {
+                    if (out.baseClass !== 'NonLeaderUnitCard' || name !== 'setupCardAbilities') fail(local, call, 'coordinate-source-side');
+                    if (out.abilities.card.some(a => a.coordinate)) fail(local, call, 'coordinate-multiple-definitions');
+                    out.abilities.card.push(coordinateAbility(call.arguments[0], local));
+                }
+                else if (registration === 'addTriggeredAbility') out.abilities[SIDE_METHODS[name]].push(...standardTriggeredAbilities(call.arguments[0], local));
+                else out.abilities[SIDE_METHODS[name]].push(registration === 'addConstantAbility' ? constantAbility(call.arguments[0], local) : ability(call.arguments[0], local, TRIGGERS[registration]));
             } catch (e) { if (e instanceof Unsupported) diagnostics.push(e.diagnostic); else throw e; }
         }
     }

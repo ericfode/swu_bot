@@ -310,7 +310,7 @@ pub fn validate_state_with_catalogue(
                     leader_info
                 } else {
                     let (_, info) = refs.card(c, &at)?;
-                    if has_type(info, "token")
+                    if (has_type(info, "token") && (!arena || !has_type(info,"unit") || has_type(info,"upgrade")))
                         || has_type(info, "leader")
                         || has_type(info, "base")
                         || !(has_type(info, "unit") || (!arena && has_type(info, "event")))

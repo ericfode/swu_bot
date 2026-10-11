@@ -1,0 +1,238 @@
+{
+  "evidenceStatus": "real engine observations",
+  "conformance": "unassessed; fresh native and Wasm comparison required",
+  "pool": {
+    "path": "/private/tmp/swu-final767-coordinate/pool.json",
+    "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+  },
+  "generatorSha256": "71de652d3248fa85959ffd41963c738c552f67ac18e1283a8fc2048027742042",
+  "witnesses": [
+    {
+      "scenario": "echo-coordinate-live-two-three-two",
+      "family": "coordinate-constant-stats",
+      "observed": {
+        "initialTwoInactive": true,
+        "thirdActivated": true,
+        "returnRemovedGate": true,
+        "postAction": true
+      },
+      "decisions": 298,
+      "winner": "p1",
+      "file": "echo-coordinate-live-two-three-two.jsonl.gz",
+      "sha256": "efeb3e7ab1b0a606bce502b5e841b5d988dd08026aea2d036cc713e600ea84bc",
+      "actualScriptedCardIds": [
+        "TWI_090"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "coruscant-guard-incoming-second-no-ambush",
+      "family": "coordinate-incoming-keyword",
+      "observed": {
+        "postAction": true
+      },
+      "decisions": 144,
+      "winner": "p1",
+      "file": "coruscant-guard-incoming-second-no-ambush.jsonl.gz",
+      "sha256": "c4c720f2cfc3a106066eb532f73a65548ab6c27756d36bfbf0f1bd4356f26748",
+      "actualScriptedCardIds": [
+        "TWI_106"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "coruscant-guard-incoming-third-ambush",
+      "family": "coordinate-incoming-keyword",
+      "observed": {
+        "menus": [
+          {
+            "title": "You may trigger this ability",
+            "actions": [
+              {
+                "key": "[\"button\",null,\"trigger\",null,\"Trigger\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "trigger",
+                "method": null,
+                "label": "Trigger"
+              },
+              {
+                "key": "[\"button\",null,\"pass\",null,\"Pass\"]",
+                "kind": "button",
+                "card": null,
+                "arg": "pass",
+                "method": null,
+                "label": "Pass"
+              }
+            ]
+          },
+          {
+            "title": "Choose a target for attack",
+            "actions": [
+              {
+                "key": "[\"card\",\"c53\",null,null,\"nala-se#silent-survivor\"]",
+                "kind": "card",
+                "card": "c53",
+                "arg": null,
+                "method": null,
+                "label": "nala-se#silent-survivor"
+              }
+            ]
+          }
+        ],
+        "ambushOffered": true,
+        "postAction": true
+      },
+      "decisions": 353,
+      "winner": "draw",
+      "file": "coruscant-guard-incoming-third-ambush.jsonl.gz",
+      "sha256": "37caa993819b2a1ea9232d719edb95713e59a8a4af963e43003c2556401b40b4",
+      "actualScriptedCardIds": [
+        "TWI_106"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "cody-aura-loss-complete-lethal-set",
+      "family": "coordinate-aura-hp-loss",
+      "observed": {
+        "auraActiveBeforeRemoval": true,
+        "bothHpLossVictimsDefeated": true,
+        "postAction": true
+      },
+      "decisions": 189,
+      "winner": "p1",
+      "file": "cody-aura-loss-complete-lethal-set.jsonl.gz",
+      "sha256": "f8d39c44e3d2a0fbc4578911dc6040d62a119f2e43e179e40091a2c359cbaa39",
+      "actualScriptedCardIds": [
+        "TWI_114",
+        "ASH_116"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "anakin-coordinate-attack-two-no-draw",
+      "family": "coordinate-trigger",
+      "observed": {
+        "coordinateAttackDraw": false,
+        "postAction": true
+      },
+      "decisions": 76,
+      "winner": "p1",
+      "file": "anakin-coordinate-attack-two-no-draw.jsonl.gz",
+      "sha256": "b6d143326d1891db92556cc4fd411317e0fe79ae3af165ac58bc7fcb36aba076",
+      "actualScriptedCardIds": [
+        "TWI_147"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "anakin-coordinate-attack-three-draw",
+      "family": "coordinate-trigger",
+      "observed": {
+        "coordinateAttackDraw": true,
+        "postAction": true
+      },
+      "decisions": 178,
+      "winner": "p1",
+      "file": "anakin-coordinate-attack-three-draw.jsonl.gz",
+      "sha256": "5e39cf29326a8c59252ded5918781bb66b1dac24992559c5ace0bdc5dcba9c7d",
+      "actualScriptedCardIds": [
+        "TWI_147"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "kit-fisto-coordinate-attack-damage",
+      "family": "coordinate-optional-trigger",
+      "observed": {
+        "optionalGroundMenu": true,
+        "postAction": true
+      },
+      "decisions": 333,
+      "winner": "p2",
+      "file": "kit-fisto-coordinate-attack-damage.jsonl.gz",
+      "sha256": "ebe3106569d4ab37676eef33ea42148741488d68218d74ce3fcf4fcd86da27b6",
+      "actualScriptedCardIds": [
+        "TWI_165"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "kit-fisto-coordinate-attack-pass",
+      "family": "coordinate-optional-trigger",
+      "observed": {
+        "optionalGroundMenu": true,
+        "postAction": true
+      },
+      "decisions": 217,
+      "winner": "p1",
+      "file": "kit-fisto-coordinate-attack-pass.jsonl.gz",
+      "sha256": "17c1ae13f15250ae2c4e4c0d3ec71f996ae7ee5ccbf0c0f1753ad709a7f63373",
+      "actualScriptedCardIds": [
+        "TWI_165"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "coordinate-two-self-hp-bonuses-lost-complete-lethal-set",
+      "family": "coordinate-constant-hp-loss",
+      "observed": {
+        "bothAliveWithGate": true,
+        "postAction": true
+      },
+      "decisions": 246,
+      "winner": "p2",
+      "file": "coordinate-two-self-hp-bonuses-lost-complete-lethal-set.jsonl.gz",
+      "sha256": "4987926fee41c78cf79149dfc900eec96d6e4ea05a44b1a35e8bc9ec6fca3e00",
+      "actualScriptedCardIds": [
+        "TWI_090",
+        "TWI_045"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "coordinate-sentinel-two-allows-base",
+      "family": "coordinate-constant-keyword-targeting",
+      "observed": {
+        "exactSentinelTargetMenu": true,
+        "postAction": true
+      },
+      "decisions": 182,
+      "winner": "p2",
+      "file": "coordinate-sentinel-two-allows-base.jsonl.gz",
+      "sha256": "0fce07d2b007191c9dc262995853ed0a1faf3fb7122db342e44535f7d94f02a3",
+      "actualScriptedCardIds": [
+        "TWI_061"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "coordinate-sentinel-three-blocks-base-and-other-unit",
+      "family": "coordinate-constant-keyword-targeting",
+      "observed": {
+        "exactSentinelTargetMenu": true,
+        "postAction": true
+      },
+      "decisions": 202,
+      "winner": "p2",
+      "file": "coordinate-sentinel-three-blocks-base-and-other-unit.jsonl.gz",
+      "sha256": "e5fa911604e718bc4ddbfd8f0a03d0544dea9cd37181116bd2a905ee7022b40d",
+      "actualScriptedCardIds": [
+        "TWI_061"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    }
+  ]
+}

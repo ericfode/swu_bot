@@ -1,0 +1,237 @@
+   Compiling omni-rs v0.1.0 (/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs)
+   Compiling omni-wasm v0.1.0 (/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-wasm)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.32s
+     Running unittests src/lib.rs (target/debug/deps/omni_rs-c0dce21a6f41be83)
+
+running 137 tests
+test ability_ir::tests::references_are_explicitly_bounded ... ok
+test ability_ir::tests::rejects_unknown_effects_instead_of_ignoring_them ... ok
+test ability_ir::tests::rejects_unknown_fields_that_could_hide_additional_rules ... ok
+test ability_ir::tests::conditional_and_if_you_do_compile_real_continuations ... ok
+test ability_ir::tests::standalone_phase_lists_reject_noncard_destinations ... ok
+test ability_ir::tests::phase_modifier_lists_validate_shared_target_and_duration ... ok
+test ability_ir::tests::bounded_selectors_compile_to_group_even_for_one_selected_card ... ok
+test ability_ir::tests::groups_preserve_nested_selection_and_phase_event_identity ... ok
+test ability_ir::tests::exact_card_title_predicates_support_named_friendly_auras ... ok
+test ability_ir::tests::token_contingents_count_toward_group_capacity ... ok
+test check::tests::canonical_keys_preserve_distinct_methods_and_reject_collisions ... ok
+test ability_ir::tests::unverified_group_shapes_and_array_captures_reject ... ok
+test ability_ir::tests::sibling_target_capture_after_select_rejects_but_fresh_selections_remain_legal ... ok
+test check::tests::state_differences_include_nested_deck_order_and_fields ... ok
+test ability_ir::tests::damage_groups_require_disjoint_destinations_and_no_unverified_defeat_mix ... ok
+test search::tests::cycle_dependent_positive_prompt_results_are_not_cached ... ok
+test ability_ir::tests::array_group_values_reject_unbound_card_alias_but_keep_local_arena_predicates ... ok
+test ability_ir::tests::changed_sibling_card_aliases_reject_without_rejecting_local_query_bindings ... ok
+test search::tests::defender_subchoices_are_all_checked ... ok
+test search::tests::defender_target_cancellation_does_not_become_a_stalling_reply ... ok
+test ability_ir::tests::groups_reject_player_targets_and_scalar_target_expressions_under_arrays ... ok
+test ability_ir::tests::expanded_named_targets_count_toward_physical_record_budget ... ok
+test search::tests::draw_is_not_a_win_for_either_side ... ok
+test search::tests::elapsed_budget_interrupts_without_claiming_a_win ... ok
+test search::tests::iterative_depth_counts_both_players_windows ... ok
+test search::tests::limit_is_shared_by_targets_and_depths_and_never_proves_unvisited_replies ... ok
+test search::tests::menus_with_only_loops_do_not_vacuously_prove_a_win ... ok
+test search::tests::optional_prompt_cycles_do_not_hide_a_finite_win ... ok
+test search::tests::real_action_window_loops_consume_depth_instead_of_being_skipped ... ok
+test search::tests::resource_selection_switches_reach_every_committed_choice ... ok
+test search::tests::side_to_move_is_proved_first ... ok
+test search::tests::simultaneous_choices_give_the_defender_the_second_choice ... ok
+test search::tests::target_prompt_can_deliver_lethal_at_depth_zero ... ok
+test search::tests::zero_budget_is_incomplete_without_visiting_a_move ... ok
+test search::tests::zobrist_collisions_cannot_turn_a_defender_escape_into_a_proof ... ok
+test simulator::generic_runtime::tests::context_menu_titles_reject_unmodelled_parent_refs_and_object_fragments ... ok
+test simulator::generic_runtime::tests::context_titles_bound_recursive_aggregate_literals ... ok
+test search::tests::compiled_ability_cancellation_is_skipped_only_before_commitment ... ok
+test ability_ir::tests::zero_record_trees_still_require_bounded_group_operations ... ok
+test simulator::generic_runtime::tests::admitted_plain_base_metadata_hp_controls_terminal_threshold ... ok
+test simulator::generic_runtime::tests::constant_stat_cycles_fail_closed_and_arena_query_rebinds_card ... ok
+test simulator::generic_runtime::tests::accepting_optional_group_trigger_does_not_offer_pass_again_at_nested_selectors ... ok
+test simulator::generic_runtime::tests::damage_callback_defeats_follow_selected_order_before_arena_stat_sweep ... ok
+test simulator::generic_runtime::tests::death_capacity_and_unsettled_group_fail_explicitly_and_hash_covers_context ... ok
+test simulator::generic_runtime::tests::created_token_units_keep_owner_readiness_printed_keywords_and_leave_play_zones ... ok
+test simulator::generic_runtime::tests::capability_and_upgrade_queries_use_type_and_attached_token_state ... ok
+test simulator::generic_runtime::tests::arena_predicate_card_binding_preserves_outer_target_and_target_arena ... ok
+test simulator::generic_runtime::tests::continuous_keywords_are_live_deduped_and_losses_suppress_all_sources ... ok
+test simulator::generic_runtime::tests::bounce_clears_arena_state_and_returns_discard_without_defeat_semantics ... ok
+test simulator::generic_runtime::tests::constant_aura_is_live_filters_controller_and_removal_defeats_damaged_unit ... ok
+test simulator::generic_runtime::tests::conditional_nested_selection_availability_checks_candidate_effects ... ok
+test simulator::generic_runtime::tests::context_menu_titles_render_live_damage_and_preserve_no_effect_prefix ... ok
+test simulator::generic_runtime::tests::keyword_admission_rejects_cycles_unknowns_and_unbounded_values ... ok
+test simulator::generic_runtime::tests::damage_pending_negative_aura_does_not_rescue_framework_dead_unit ... ok
+test simulator::generic_runtime::tests::catalogue_admission_is_explicit_and_original_leaders_use_programs ... ok
+test simulator::generic_runtime::tests::death_draw_captures_once_and_bounce_never_registers ... ok
+test simulator::generic_runtime::tests::coordinate_stats_follow_both_friendly_arenas_and_attack_registration_is_captured ... ok
+test simulator::generic_runtime::tests::death_player_choice_uses_action_player_and_restores_after_optional_decline ... ok
+test simulator::generic_runtime::tests::group_captures_live_amounts_before_any_handler_changes_damage ... ok
+test simulator::generic_runtime::tests::live_raid_and_overwhelm_do_not_redirect_replaced_shield_damage ... ok
+test simulator::generic_runtime::tests::effectless_event_is_paid_and_discarded_without_confirmation ... ok
+test simulator::generic_runtime::tests::event_generation_allocates_tokens_before_nested_selection_and_preserves_outer_binding ... ok
+test simulator::generic_runtime::tests::group_shield_consolidation_preserves_stashed_context_order_for_three_units ... ok
+test simulator::generic_runtime::tests::discard_unit_selector_excludes_events_and_array_predicates_use_any_member ... ok
+test simulator::generic_runtime::tests::leader_deployment_resolves_shielded_keyword_and_advances_token_identity ... ok
+test simulator::generic_runtime::tests::group_same_owner_shields_offer_resolution_menu_to_their_controller ... ok
+test simulator::generic_runtime::tests::duplicated_static_death_titles_group_all_programs_consistently ... ok
+test simulator::generic_runtime::tests::incoming_unique_aura_waits_for_choice_and_only_survivor_applies ... ok
+test simulator::generic_runtime::tests::event_group_defers_damage_deaths_and_checks_both_lethal_bases_together ... ok
+test simulator::generic_runtime::tests::phase_keyword_arithmetic_and_live_unverified_amounts_fail_admission ... ok
+test simulator::generic_runtime::tests::exact_two_card_discard_toggles_at_cap_and_zero_hand_skips_prompt ... ok
+test simulator::generic_runtime::tests::printed_title_admission_rejects_numeric_and_query_coercion ... ok
+test simulator::generic_runtime::tests::metadata_keyword_mentions_are_not_intrinsic_keywords ... ok
+test simulator::generic_runtime::tests::nested_explicit_defeat_steps_share_the_initiating_ability_trigger_window ... ok
+test simulator::generic_runtime::tests::nested_sacrifice_restores_parent_if_you_do_result_and_source ... ok
+test simulator::generic_runtime::tests::phase_stat_bounds_clamp_negative_power_and_reject_overflow ... ok
+test simulator::generic_runtime::tests::numeric_keyword_overflow_fails_even_with_negative_power_modifier ... ok
+test simulator::generic_runtime::tests::phase_expiry_marks_all_lethal_units_before_negative_aura_source_leaves ... ok
+test simulator::generic_runtime::tests::no_legal_event_targets_offer_play_anyway_and_preserve_cancel ... ok
+test simulator::generic_runtime::tests::ordered_multi_selection_toggles_at_cap_and_allocates_all_experience_before_shields ... ok
+test simulator::generic_runtime::tests::phase_keywords_stack_numeric_dedupe_boolean_roundtrip_and_expire ... ok
+test simulator::generic_runtime::tests::no_target_ambush_retains_trigger_order_choice_and_resolves_without_attack ... ok
+test simulator::generic_runtime::tests::phase_stat_stacking_clamping_cleanup_and_roundtrip ... ok
+test simulator::generic_runtime::tests::ready_resources_preserves_first_exhausted_resource_order_and_caps_amount ... ok
+test simulator::generic_runtime::tests::printed_title_references_use_exact_title_across_roots_and_controllers ... ok
+test simulator::generic_runtime::tests::owner_discard_selects_before_simultaneous_draw_and_restores_ability_player ... ok
+test simulator::generic_runtime::tests::native_tokens_fail_closed_if_source_or_stats_change ... ok
+test simulator::generic_runtime::tests::lethal_entry_resolves_deaths_before_self_tokens_but_retains_draw_trigger ... ok
+test simulator::generic_runtime::tests::internal_selection_commits_event_and_uses_choose_nothing_while_outer_can_cancel ... ok
+test simulator::generic_runtime::tests::unverified_collection_targets_and_multiplayer_resource_ready_fail_admission ... ok
+test simulator::generic_runtime::tests::repeated_death_group_and_distinct_source_order_match_menu_protocol ... ok
+test simulator::tests::ambush_is_optional_and_never_targets_a_base ... ok
+test simulator::tests::aspect_penalty_counts_each_missing_icon ... ok
+test simulator::tests::defeated_leader_returns_exhausted_and_epic_action_stays_spent ... ok
+test simulator::tests::drawing_one_available_card_takes_only_one_deck_out_hit ... ok
+test simulator::generic_runtime::tests::resource_costs_are_aggregated_and_cancel_restores_continuation_state ... ok
+test simulator::tests::on_attack_suicide_latches_winner_but_combat_still_finishes ... ok
+test simulator::generic_runtime::tests::shield_consumes_oldest_identity_and_experience_round_trips ... ok
+test simulator::generic_runtime::tests::replacement_resolution_and_actual_damage_are_distinct ... ok
+test simulator::generic_runtime::tests::sequence_passes_defeat_triggers_to_initiating_window_after_following_draw ... ok
+test simulator::generic_runtime::tests::restore_amount_is_captured_before_its_aura_source_leaves ... ok
+test simulator::tests::raid_and_grit_are_dynamic_and_only_raid_needs_attacking ... ok
+test simulator::tests::regroup_draws_simultaneously_and_deck_out_can_draw_the_game ... ok
+test simulator::tests::satine_branches_zero_one_two_including_overheal_and_opponents ... ok
+test simulator::tests::saboteur_defeats_shield_before_combat_and_restore_precedes_damage ... ok
+test simulator::tests::sentinel_obeys_arena_and_saboteur_ignores_it ... ok
+test simulator::tests::shield_prevention_on_both_sides_preserves_the_player_order_prompt ... ok
+test simulator::generic_runtime::tests::sentinel_filtered_stat_aura_tracks_granted_and_lost_keyword_without_cycles ... ok
+test simulator::generic_runtime::tests::simultaneous_explicit_defeat_conditions_capture_before_any_source_moves ... ok
+test simulator::tests::shield_replacement_prevents_overwhelm_contingent_damage ... ok
+test simulator::tests::simultaneous_resource_choices_can_be_ordered_for_sound_proof ... ok
+test validation::tests::catalogue_events_are_allowed_outside_arenas ... ok
+test validation::tests::complete_engine_snapshot_passes_but_missing_state_and_overflow_fail ... ok
+test simulator::tests::successful_action_resets_pass_and_claimed_player_gets_no_more_windows ... ok
+test validation::tests::missing_negative_fractional_and_overflow_numbers_never_default_or_wrap ... ok
+test simulator::tests::state_is_inline_copy_and_hash_covers_prompts_and_deck_order ... ok
+test simulator::tests::unique_rule_gives_both_copies_as_explicit_defeat_choices ... ok
+test validation::tests::conditional_grit_metadata_does_not_add_damage_to_capacity ... ok
+test simulator::tests::zero_power_leader_can_attack_to_restore_four ... ok
+test validation::tests::duplicate_ids_and_noncanonical_ids_fail ... ok
+test validation::tests::terminal_grit_damage_cannot_overflow_computed_power ... ok
+test validation::tests::unresolved_unique_choice_is_not_an_action_window ... ok
+test validation::tests::duplicated_zone_membership_and_reused_token_ids_fail ... ok
+test simulator::generic_runtime::tests::simultaneous_stat_defeats_preserve_arena_entry_order_in_discard ... ok
+test validation::tests::supplied_catalogue_replaces_static_catalogue_without_fallback ... ok
+test simulator::generic_runtime::tests::token_capacity_rejection_is_transactional_and_raw_ir_is_strict ... ok
+test validation::tests::multiple_shield_and_experience_tokens_keep_unique_references ... ok
+test simulator::generic_runtime::tests::terminal_optional_opponent_prompt_preserves_latched_action_priority ... ok
+test simulator::generic_runtime::tests::shield_group_cleanup_rotates_retained_token_identity_between_units ... ok
+test validation::tests::pool_metadata_can_change_without_reinterpreting_card_rules ... ok
+test validation::tests::unknown_cards_and_altered_leader_rules_are_rejected_by_name ... ok
+test simulator::generic_runtime::tests::token_helper_filters_bases_even_when_resolver_type_is_any ... ok
+test simulator::generic_runtime::tests::unique_choice_precedes_existing_aura_lethal_check_for_incoming_copy ... ok
+test simulator::generic_runtime::tests::zero_phase_stats_are_legal_and_resolve_an_event ... ok
+test simulator::generic_runtime::tests::ordinary_combat_reuses_shield_consolidation_in_chosen_player_order ... ok
+test simulator::generic_runtime::tests::generated_programs_match_all_committed_engine_traces ... ok
+test simulator::generic_runtime::tests::subset_pool_binds_provenance_and_rejects_metadata_changes ... ok
+
+test result: ok. 137 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.89s
+
+     Running unittests src/main.rs (target/debug/deps/omni_rs-321682f6ae0b6279)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/card_batch_conformance.rs (target/debug/deps/card_batch_conformance-1ea14a8aa710f6bb)
+
+running 1 test
+test every_card_batch_matches_current_programs_and_immutable_engine_receipts has been running for over 60 seconds
+test every_card_batch_matches_current_programs_and_immutable_engine_receipts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.42s
+
+     Running tests/compiled_conformance.rs (target/debug/deps/compiled_conformance-3fbf9ba18e3a8057)
+
+running 1 test
+test compiled_card_programs_match_all_expanded_engine_receipts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.04s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-432718142840567e)
+
+running 2 tests
+test checker_rejects_missing_receipts_and_tampered_provenance ... ok
+test recorded_engine_games_match_every_decision_and_window ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running unittests src/lib.rs (target/debug/deps/omni_wasm-f7dc33c25809a25b)
+
+running 1 test
+test tests::limits_keep_native_semantics_and_reject_typos_and_invalid_numbers ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/swu_bot_rs-d44c6a68522bcbf9)
+
+running 1 test
+test cards::tests::finds_a_card_by_any_printing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/swu_bot_rs-d799646f2989bb04)
+
+running 24 tests
+test policy::greedy2::tests::parses_damage_amounts ... ok
+test cards::tests::finds_a_card_by_any_printing ... ok
+test policy::greedy2::tests::aspect_penalty_counts_each_missing_icon ... ok
+test policy::greedy2::tests::cancels_a_play_that_has_no_effect ... ok
+test policy::greedy::tests::wanted_counts ... ok
+test policy::greedy2::tests::splits_damage_to_kill_then_face ... ok
+test policy::search::tests::exhausted_units_count_less_only_during_the_action_phase ... ok
+test policy::greedy2::tests::resources_expensive_off_aspect_cards_first ... ok
+test policy::greedy2::tests::attacks_for_lethal_before_playing ... ok
+test policy::greedy2::tests::spends_resources_fully ... ok
+test policy::greedy2::tests::damage_event_goes_for_the_kill ... ok
+test policy::search::tests::falls_back_to_greedy2_when_sims_fail ... ok
+test policy::greedy2::tests::plays_the_biggest_card_and_holds_removal_with_no_targets ... ok
+test tests::greedy_attacks_the_opponent_not_itself ... ok
+test policy::search::tests::plays_the_action_whose_simulation_wins ... ok
+test tests::hello_and_version_check ... ok
+test policy::greedy2::tests::takes_a_free_kill_but_not_a_suicide_attack ... ok
+test tests::greedy_plays_a_card_before_passing ... ok
+test tests::picks_v2_when_offered_and_asks_for_sims_only_if_it_searches ... ok
+test tests::greedy_confirms_resources_once_enough_are_selected ... ok
+test tests::greedy_does_not_replay_a_card_it_cancelled ... ok
+test tests::greedy_breaks_out_of_a_repeated_no_op ... ok
+test tests::random_is_reproducible_per_seed ... ok
+test policy::search::tests::stops_simulating_at_the_deadline ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+   Doc-tests omni_rs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests omni_wasm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests swu_bot_rs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

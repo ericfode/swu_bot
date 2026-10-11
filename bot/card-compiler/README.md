@@ -81,6 +81,20 @@ cycles and unsupported duration/value shapes remain rejected. Intrinsic
 keywords require the engine's printed-text match: a keyword in the downloaded
 metadata may only be mentioned or granted to another card.
 
+Standard self-defeat registrations retain their source and controller through
+zone movement and nested trigger windows. Standard multi-trigger aliases use
+the same programs. Printed Coordinate enables supported constant and on-attack
+abilities at three friendly arena units, including tokens; on-attack eligibility
+is captured when the attack is declared.
+
+Unit-token creation supports Battle Droid, Clone Trooper, Beast, Spy, TIE Fighter
+and X-Wing tokens, one to five at a time, for either player, with explicit ready
+entry. Token allocation precedes entry, and tokens leaving play stay out of
+ordinary hands and discard piles. Scalar hand-discard effects let the affected
+player choose their own cards. Their inherited default target is the opponent;
+the helper's name does not imply a friendly target. Player selectors remain
+rejected until their selected-player context can be preserved.
+
 Bounded simultaneous groups preserve separate event preparation and resolution.
 The runtime supports selected combinations of damage, healing, tokens, readiness,
 and phase modifiers, with independent nested selections. Up-to selections retain
@@ -88,6 +102,9 @@ click order, toggles, and zero selections; unlimited selection is currently
 restricted to the two bases. A single phase-effect call with several modifiers
 remains one lasting effect. Group admission rejects unsupported continuations,
 ambiguous repeated damage, and reference scopes the runtime cannot preserve.
+Supported draw/discard groups prepare choices before resolving their effects.
+Mixed damage with hand effects or newly created unit tokens remains rejected.
+The runtime checks its bounded storage and fails explicitly on overflow.
 
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or

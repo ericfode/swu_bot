@@ -1,0 +1,122 @@
+{
+  "conformance": "unassessed",
+  "pool": {
+    "path": "/private/tmp/swu-final767-alias/pool.json",
+    "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+  },
+  "generatorSha256": "57700a6a64c1d258ca4c9f615665df42b95840f2f4da24982ec885a93ebf650c",
+  "witnesses": [
+    {
+      "scenario": "rho-medical-shuttle-alias-play-heal",
+      "family": "standard-when-alias",
+      "observed": {
+        "aliasHealPrompt": true,
+        "actualScriptedCard": "HMW_063 Rho Medical Shuttle",
+        "actualScriptedEffect": "Heal 1 damage from another unit or base via play",
+        "postAction": true
+      },
+      "decisions": 338,
+      "winner": "p2",
+      "file": "rho-medical-shuttle-alias-play-heal.jsonl.gz",
+      "sha256": "0ef672315c241e1e617fba80ce136f136fce23de9768238a4d8df6a5f9877df1",
+      "actualScriptedCardIds": [
+        "HMW_063"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "rho-medical-shuttle-alias-play-pass",
+      "family": "standard-when-alias",
+      "observed": {
+        "aliasHealPrompt": true,
+        "actualScriptedCard": "HMW_063 Rho Medical Shuttle",
+        "actualScriptedEffect": "Heal 1 damage from another unit or base via play",
+        "postAction": true
+      },
+      "decisions": 189,
+      "winner": "p2",
+      "file": "rho-medical-shuttle-alias-play-pass.jsonl.gz",
+      "sha256": "0da514e4f9fe4ef5693756cb687e6792e78ba48b3fd8a26ea44162974d2eabd2",
+      "actualScriptedCardIds": [
+        "HMW_063"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "rho-medical-shuttle-alias-play-no-effect",
+      "family": "standard-when-alias",
+      "observed": {
+        "actualScriptedCard": "HMW_063 Rho Medical Shuttle",
+        "actualScriptedEffect": "Heal 1 damage from another unit or base via play",
+        "postAction": true
+      },
+      "decisions": 145,
+      "winner": "p2",
+      "file": "rho-medical-shuttle-alias-play-no-effect.jsonl.gz",
+      "sha256": "3461cf457935a66a264afa23edfb8caa3bcaab115d77dd6c59d915455b576d73",
+      "actualScriptedCardIds": [
+        "HMW_063"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "rho-medical-shuttle-alias-attack-heal",
+      "family": "standard-when-alias",
+      "observed": {
+        "aliasHealPrompt": true,
+        "actualScriptedCard": "HMW_063 Rho Medical Shuttle",
+        "actualScriptedEffect": "Heal 1 damage from another unit or base via attack",
+        "postAction": true
+      },
+      "decisions": 289,
+      "winner": "p1",
+      "file": "rho-medical-shuttle-alias-attack-heal.jsonl.gz",
+      "sha256": "1ee509ace5efd26f5785700b37ed166cadfa84208d132502c91845eaa0a4ac64",
+      "actualScriptedCardIds": [
+        "HMW_063"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "rho-medical-shuttle-alias-attack-pass",
+      "family": "standard-when-alias",
+      "observed": {
+        "aliasHealPrompt": true,
+        "actualScriptedCard": "HMW_063 Rho Medical Shuttle",
+        "actualScriptedEffect": "Heal 1 damage from another unit or base via attack",
+        "postAction": true
+      },
+      "decisions": 133,
+      "winner": "p2",
+      "file": "rho-medical-shuttle-alias-attack-pass.jsonl.gz",
+      "sha256": "f436a047c51dd8fca56224fbb03865d4ef94875fbcf32ed322f40b820e9e67ea",
+      "actualScriptedCardIds": [
+        "HMW_063"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    },
+    {
+      "scenario": "rho-medical-shuttle-alias-attack-no-effect",
+      "family": "standard-when-alias",
+      "observed": {
+        "actualScriptedCard": "HMW_063 Rho Medical Shuttle",
+        "actualScriptedEffect": "Heal 1 damage from another unit or base via attack",
+        "postAction": true
+      },
+      "decisions": 178,
+      "winner": "p1",
+      "file": "rho-medical-shuttle-alias-attack-no-effect.jsonl.gz",
+      "sha256": "e22fc5b3f4e1c245b0f9d17193aff16dfc88d908989a2f87e7e02fdb8c093716",
+      "actualScriptedCardIds": [
+        "HMW_063"
+      ],
+      "sharedRelatedCardIds": [],
+      "synthetic": false
+    }
+  ]
+}

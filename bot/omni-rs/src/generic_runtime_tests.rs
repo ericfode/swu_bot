@@ -1143,3 +1143,254 @@ fn ordinary_combat_reuses_shield_consolidation_in_chosen_player_order() {
         assert!(!s.attack_shield_opponent_first);
     }
 }
+fn death_program(e:&mut Engine,s:&State,source:CardId,ability:Value)->u16 {
+    let a:crate::ability_ir::Ability=serde_json::from_value(ability).unwrap();
+    let p=crate::ability_ir::Program::compile(&a).unwrap();
+    let index=e.catalogue.as_ref().unwrap().programs.len() as u16;
+    e.catalogue.as_mut().unwrap().programs.push(p);
+    e.definitions[s.card(source).def as usize].programs.card.push(index);index
+}
+fn draw_death(optional:bool)->Value {json!({"trigger":"whenDefeated","title":"Draw a card","optional":optional,"effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}})}
+fn deck_card(e:&Engine,s:&mut State,seat:Seat)->CardId {let id=add(e,s,seat,"LOF_256");s.player_mut(seat).deck.push(id).unwrap();id}
+#[test]
+fn death_draw_captures_once_and_bounce_never_registers() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");let drawn=deck_card(&e,&mut s,Seat::P1);
+    death_program(&mut e,&s,source,draw_death(false));
+    let mut bounced=s;e.leave_play(&mut bounced,source).unwrap();assert_eq!(bounced.death_pending.len,0);
+    e.defeat(&mut s,source).unwrap();e.defeat(&mut s,source).unwrap();assert_eq!(s.death_pending.len,1);
+    e.finish(&mut s).unwrap();assert!(s.players[0].hand.contains(drawn));assert!(s.players[0].discard.contains(source));assert_eq!(s.active,Seat::P2);assert_eq!(s.death_depth,0);
+}
+#[test]
+fn death_player_choice_uses_action_player_and_restores_after_optional_decline() {
+    let mut e=engine();let mut s=board(&e);s.initiative=Seat::P2;
+    let first=unit(&e,&mut s,Seat::P1,"LOF_254");let second=unit(&e,&mut s,Seat::P2,"LOF_256");
+    death_program(&mut e,&s,first,draw_death(false));death_program(&mut e,&s,second,draw_death(true));
+    let drawn=deck_card(&e,&mut s,Seat::P1);let skipped=deck_card(&e,&mut s,Seat::P2);
+    e.defeat_many(&mut s,&[first,second]).unwrap();e.finish(&mut s).unwrap();
+    assert_eq!(s.active,Seat::P1);assert_eq!(e.legal_actions(&s),vec![Action::button("You",0),Action::button("Opponent",1)]);
+    s=e.apply(&s,&Action::button("Opponent",1)).unwrap();assert_eq!(s.active,Seat::P2);assert_eq!(s.decision,Decision::AbilityOptional);
+    assert_eq!(e.legal_actions(&s),vec![Action::button("Trigger","trigger"),Action::button("Pass","pass")]);
+    s=e.apply(&s,&Action::button("Pass","pass")).unwrap();assert!(s.players[0].hand.contains(drawn));assert!(s.players[1].deck.contains(skipped));assert_eq!(s.active,Seat::P2);assert_eq!(s.death_depth,0);
+}
+#[test]
+fn repeated_death_group_and_distinct_source_order_match_menu_protocol() {
+    let mut e=engine();let mut s=board(&e);let a=unit(&e,&mut s,Seat::P1,"LOF_254");let b=unit(&e,&mut s,Seat::P1,"LOF_254");
+    death_program(&mut e,&s,a,draw_death(false));deck_card(&e,&mut s,Seat::P1);deck_card(&e,&mut s,Seat::P1);
+    e.defeat_many(&mut s,&[a,b]).unwrap();e.finish(&mut s).unwrap();assert_eq!(s.decision,Decision::DeathBatch);
+    assert_eq!(e.legal_actions(&s),vec![Action::button("Resolve next","next"),Action::button("Resolve all (2)","all")]);
+    s=e.apply(&s,&Action::button("Resolve all (2)","all")).unwrap();assert_eq!(s.players[0].hand.len,2);assert_eq!(s.death_depth,0);
+    let mut s=board(&e);let a=unit(&e,&mut s,Seat::P1,"LOF_254");let b=unit(&e,&mut s,Seat::P1,"ASH_029");death_program(&mut e,&s,b,draw_death(true));deck_card(&e,&mut s,Seat::P1);
+    e.defeat_many(&mut s,&[a,b]).unwrap();e.finish(&mut s).unwrap();assert_eq!(s.decision,Decision::DeathOrder);
+    assert_eq!(e.legal_actions(&s),vec![Action::button("Draw a card","0"),Action::button("Draw a card","1")]);
+}
+#[test]
+fn nested_sacrifice_restores_parent_if_you_do_result_and_source() {
+    let mut e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P1,"LOF_254");let child=unit(&e,&mut s,Seat::P1,"ASH_029");
+    death_program(&mut e,&s,child,draw_death(true));let draw=deck_card(&e,&mut s,Seat::P1);
+    death_program(&mut e,&s,parent,json!({"trigger":"whenDefeated","title":"Sacrifice","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"defeat","target":"chosen"},"ifYouDo":{"title":"Damage","effect":{"kind":"damage","target":"enemyBase","amount":{"kind":"const","value":4}}}}));
+    e.defeat(&mut s,parent).unwrap();e.finish(&mut s).unwrap();assert_eq!(s.decision,Decision::AbilityTarget);
+    s=e.apply(&s,&e.card_action(&s,child)).unwrap();assert_eq!(s.decision,Decision::AbilityOptional);assert_eq!(s.death_depth,2);assert_eq!(s.source,child);assert_eq!(s.card(s.players[1].base).damage,4);
+    s=e.apply(&s,&Action::button("Pass","pass")).unwrap();assert!(s.players[0].deck.contains(draw));assert_eq!(s.card(s.players[1].base).damage,4);assert_eq!(s.death_depth,0);assert_eq!(s.active,Seat::P2);
+}
+#[test]
+fn death_capacity_and_unsettled_group_fail_explicitly_and_hash_covers_context() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");death_program(&mut e,&s,source,draw_death(true));
+    s.death_pending.len=MAX_DEATH_TRIGGERS as u8;assert!(e.defeat(&mut s,source).unwrap_err().contains("capacity"));assert!(e.in_arena(&s,source));
+    s.death_pending=DeathWindow::default();e.capture_death(&mut s,source).unwrap();s.event_group.active=true;assert!(e.open_deaths(&mut s,3).unwrap_err().contains("settled"));
+    s.event_group.active=false;s.death_depth=MAX_DEATH_DEPTH as u8;assert!(e.open_deaths(&mut s,3).unwrap_err().contains("nested"));
+    let original=s.zobrist();s.death_frames[0].context.ability_succeeded=true;assert_ne!(s.zobrist(),original);
+    let original=s.zobrist();s.death_pending.entries[0].player=Seat::P2;assert_ne!(s.zobrist(),original);
+}
+#[test]
+fn nested_explicit_defeat_steps_share_the_initiating_ability_trigger_window() {
+    let mut e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P1,"LOF_254");let first=unit(&e,&mut s,Seat::P1,"ASH_029");let second=unit(&e,&mut s,Seat::P1,"LOF_256");
+    death_program(&mut e,&s,first,draw_death(true));death_program(&mut e,&s,second,draw_death(true));deck_card(&e,&mut s,Seat::P1);deck_card(&e,&mut s,Seat::P1);
+    death_program(&mut e,&s,parent,json!({"trigger":"whenDefeated","title":"Nested sacrifices","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"defeat","target":"chosen"},"then":{"title":"Second sacrifice","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"defeat","target":"chosen"}}}));
+    e.defeat(&mut s,parent).unwrap();e.finish(&mut s).unwrap();s=e.apply(&s,&e.card_action(&s,first)).unwrap();assert_eq!(s.decision,Decision::AbilityTarget);assert_eq!(s.source,parent);
+    s=e.apply(&s,&e.card_action(&s,second)).unwrap();assert_eq!(s.decision,Decision::DeathOrder);
+    s=e.apply(&s,&Action::button("Draw a card","1")).unwrap();assert_eq!(s.source,second);assert_eq!(s.decision,Decision::AbilityOptional);
+    s=e.apply(&s,&Action::button("Pass","pass")).unwrap();assert_eq!(s.source,first);assert_eq!(s.decision,Decision::AbilityOptional);
+    s=e.apply(&s,&Action::button("Trigger","trigger")).unwrap();assert_eq!(s.players[0].hand.len,1);assert_eq!(s.death_pending.len,0);assert_eq!(s.death_depth,0);
+}
+#[test]
+fn sequence_passes_defeat_triggers_to_initiating_window_after_following_draw() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");let victim=unit(&e,&mut s,Seat::P1,"ASH_029");death_program(&mut e,&s,victim,draw_death(true));deck_card(&e,&mut s,Seat::P1);
+    let program=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Defeat then draw","targetResolver":{"owner":"self","type":"unit","zone":"arena"},"effect":{"kind":"sequence","effects":[{"kind":"defeat","target":"chosen"},{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}]}}));
+    s.source=source;e.begin_program(&mut s,program,0).unwrap();s=e.apply(&s,&e.card_action(&s,victim)).unwrap();assert_eq!(s.decision,Decision::AbilityOptional);assert_eq!(s.players[0].hand.len,1);
+    s=e.apply(&s,&Action::button("Pass","pass")).unwrap();assert_eq!(s.players[0].hand.len,1);assert_eq!(s.death_depth,0);
+}
+#[test]
+fn duplicated_static_death_titles_group_all_programs_consistently() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");death_program(&mut e,&s,source,draw_death(false));death_program(&mut e,&s,source,draw_death(false));deck_card(&e,&mut s,Seat::P1);deck_card(&e,&mut s,Seat::P1);
+    e.defeat(&mut s,source).unwrap();e.finish(&mut s).unwrap();assert_eq!(e.legal_actions(&s),vec![Action::button("Resolve next","next"),Action::button("Resolve all (2)","all")]);
+    s=e.apply(&s,&Action::button("Resolve all (2)","all")).unwrap();assert_eq!(s.players[0].hand.len,2);assert_eq!(s.death_depth,0);
+}
+#[test]
+fn coordinate_stats_follow_both_friendly_arenas_and_attack_registration_is_captured() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");let second=unit(&e,&mut s,Seat::P1,"ASH_029");let third=unit(&e,&mut s,Seat::P1,"LOF_256");unit(&e,&mut s,Seat::P2,"LOF_254");
+    s.players[0].ground.remove(third);s.players[0].space.push(third).unwrap();
+    let hp=e.hp(&s,source);death_program(&mut e,&s,source,json!({"trigger":"constant","coordinate":true,"title":"Coordinate HP","effect":{"kind":"modifyStats","duration":"persistent","target":"self","power":{"kind":"const","value":0},"hp":{"kind":"const","value":3}}}));assert_eq!(e.hp(&s,source),hp+3);
+    let program=death_program(&mut e,&s,source,json!({"trigger":"onAttack","coordinate":true,"title":"Draw a card","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}}));let drawn=deck_card(&e,&mut s,Seat::P1);
+    s.source=source;e.queue_programs(&mut s,"onAttack");let captured=s.pending_programs;assert_ne!(captured,0);
+    e.leave_play(&mut s,third).unwrap();assert_eq!(e.hp(&s,source),hp);assert_eq!(s.pending_programs,captured);e.begin_program(&mut s,program,0).unwrap();assert!(s.players[0].hand.contains(drawn));
+    s.source=source;e.queue_programs(&mut s,"onAttack");assert_eq!(s.pending_programs,0);assert!(e.in_arena(&s,second));
+}
+#[test]
+fn simultaneous_explicit_defeat_conditions_capture_before_any_source_moves() {
+    let mut e=engine();let mut s=board(&e);let first=unit(&e,&mut s,Seat::P1,"LOF_254");let second=unit(&e,&mut s,Seat::P1,"LOF_254");
+    let mut ability=draw_death(false);ability["condition"]=json!({"kind":"binary","op":">=","left":{"kind":"query","name":"arenaUnitCount","receiver":{"kind":"ref","path":["player"]},"args":[{"kind":"const","value":true}]},"right":{"kind":"const","value":2}});
+    death_program(&mut e,&s,first,ability);deck_card(&e,&mut s,Seat::P1);deck_card(&e,&mut s,Seat::P1);
+    let source=s.players[0].leader;let program=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Defeat two units","targetResolver":{"owner":"self","type":"unit","zone":"arena","mode":"upTo","count":{"kind":"const","value":2}},"effect":{"kind":"defeat","target":"chosen"}}));
+    s.source=source;e.begin_program(&mut s,program,0).unwrap();s=e.apply(&s,&e.card_action(&s,first)).unwrap();s=e.apply(&s,&e.card_action(&s,second)).unwrap();
+    let done=e.legal_actions(&s).into_iter().find(|a|a.label=="Done").unwrap();s=e.apply(&s,&done).unwrap();assert_eq!(s.players[0].ground.len,0);assert_eq!(s.decision,Decision::DeathBatch);
+    s=e.apply(&s,&Action::button("Resolve all (2)","all")).unwrap();assert_eq!(s.players[0].hand.len,2);
+}
+#[test]
+fn created_token_units_keep_owner_readiness_printed_keywords_and_leave_play_zones() {
+    let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;let start=s.next_id;
+    let p=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Create spies","effect":{"kind":"createTokenUnit","tokenType":"spy","amount":{"kind":"const","value":2},"target":"enemyPlayer","entersReady":true}}));
+    s.source=source;e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.players[1].ground.as_slice(),&[start,start+1]);assert_eq!(s.next_id,start+2);
+    for id in [start,start+1] {assert_eq!(s.card(id).owner,Seat::P2);assert!(!s.card(id).exhausted);assert_eq!(e.power(&s,id,false),0);assert_eq!(e.power(&s,id,true),2);}
+    let snapshot=e.snapshot(&s);assert_eq!(e.snapshot(&e.load_state(&snapshot).unwrap()),snapshot);
+    e.defeat(&mut s,start).unwrap();assert!(!s.players[1].discard.contains(start));assert!(!s.players[1].ground.contains(start));
+    s.source=source;s.active=Seat::P1;s.ability_target=start+1;e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::Name("chosen".into())}).unwrap();assert!(!s.players[1].hand.contains(start+1));assert!(!s.players[1].discard.contains(start+1));
+}
+#[test]
+fn token_capacity_rejection_is_transactional_and_raw_ir_is_strict() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");s.card_mut(source).exhausted=true;
+    death_program(&mut e,&s,source,json!({"trigger":"action","title":"Create two droids","effect":{"kind":"createTokenUnit","tokenType":"battleDroid","amount":{"kind":"const","value":2},"target":"ownPlayer"}}));s.next_id=(MAX_CARDS-1) as u16;let original=s.zobrist();
+    assert!(e.apply(&s,&e.card_action(&s,source)).unwrap_err().contains("capacity"));assert_eq!(s.zobrist(),original);
+    for effect in [json!({"kind":"createTokenUnit","tokenType":"battleDroid","amount":{"kind":"const","value":6},"target":"ownPlayer"}),json!({"kind":"createTokenUnit","tokenType":"unknown","amount":{"kind":"const","value":1},"target":"ownPlayer"}),json!({"kind":"createTokenUnit","tokenType":"cloneTrooper","amount":{"kind":"ref","path":["source","damage"]},"target":"ownPlayer"})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"whenPlayed","title":"bad","effect":effect})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+}
+#[test]
+fn owner_discard_selects_before_simultaneous_draw_and_restores_ability_player() {
+    let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;
+    let first=add(&e,&mut s,Seat::P2,"LOF_254");let second=add(&e,&mut s,Seat::P2,"ASH_029");s.players[1].hand.push(first).unwrap();s.players[1].hand.push(second).unwrap();let draw=deck_card(&e,&mut s,Seat::P1);
+    let p=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Discard and draw","effect":{"kind":"simultaneous","effects":[{"kind":"discardOwnHand","target":"enemyPlayer","amount":{"kind":"const","value":1}},{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}]}}));
+    s.source=source;e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityDiscard);assert_eq!(s.active,Seat::P2);assert!(s.players[0].deck.contains(draw));assert_eq!(e.legal_actions(&s),vec![e.card_action(&s,first),e.card_action(&s,second)]);
+    s=e.apply(&s,&e.card_action(&s,second)).unwrap();assert!(s.players[1].discard.contains(second));assert!(s.players[1].hand.contains(first));assert!(s.players[0].hand.contains(draw));assert_eq!(s.active,Seat::P2);
+}
+#[test]
+fn exact_two_card_discard_toggles_at_cap_and_zero_hand_skips_prompt() {
+    let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;let mut cards=vec![];
+    for code in ["LOF_254","LOF_256","ASH_029"] {let id=add(&e,&mut s,Seat::P2,code);s.players[1].hand.push(id).unwrap();cards.push(id);}
+    let p=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Discard two","effect":{"kind":"discardOwnHand","target":"enemyPlayer","amount":{"kind":"const","value":2}}}));s.source=source;e.begin_program(&mut s,p,0).unwrap();
+    s=e.apply(&s,&e.card_action(&s,cards[0])).unwrap();assert!(!e.legal_actions(&s).iter().any(|a|a.label=="Done"));s=e.apply(&s,&e.card_action(&s,cards[2])).unwrap();assert!(!e.legal_actions(&s).iter().any(|a|a.id()==Some(cards[1])));assert!(e.legal_actions(&s).iter().any(|a|a.id()==Some(cards[0])));
+    s=e.apply(&s,&Action::button("Done","done")).unwrap();assert_eq!(s.players[1].discard.as_slice(),&[cards[0],cards[2]]);
+    let mut empty=board(&e);empty.source=empty.players[0].leader;e.begin_program(&mut empty,p,1).unwrap();assert_eq!(empty.decision,Decision::Window);assert_eq!(empty.players[1].discard.len,0);
+}
+#[test]
+fn terminal_optional_opponent_prompt_preserves_latched_action_priority() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");let victim=unit(&e,&mut s,Seat::P2,"ASH_029");
+    death_program(&mut e,&s,victim,draw_death(true));let draw=deck_card(&e,&mut s,Seat::P2);
+    e.definitions[s.card(source).def as usize].flags|=OVERWHELM;s.card_mut(source).phase_power=10;
+    s.card_mut(victim).damage=e.hp(&s,victim)-1;s.card_mut(s.players[1].base).damage=29;s.source=source;s.target=victim;
+    e.combat(&mut s).unwrap();assert_eq!(s.outcome,1);assert_eq!(s.active,Seat::P2);assert_eq!(s.decision,Decision::AbilityOptional);assert!(e.legal_actions(&s).is_empty());assert!(s.players[1].deck.contains(draw));
+    assert_eq!(e.snapshot(&s)["activePlayer"],json!("p1"));
+    let original=s.zobrist();s.action_player=None;assert_ne!(s.zobrist(),original);
+}
+
+#[test]
+fn empty_deck_draw_resolves_fatigue_and_preserves_if_you_do_discard() {
+    let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;
+    let discard=add(&e,&mut s,Seat::P1,"LOF_254");s.players[0].hand.push(discard).unwrap();
+    let program=death_program(&mut e,&s,source,json!({"trigger":"whenPlayed","title":"Draw then discard","optional":true,"effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}},"ifYouDo":{"title":"Discard a card","effect":{"kind":"discardOwnHand","target":"ownPlayer","amount":{"kind":"const","value":1}}}}));
+    s.source=source;e.begin_program(&mut s,program,1).unwrap();assert_eq!(s.decision,Decision::AbilityOptional);
+    let declined=e.apply(&s,&Action::button("Pass","pass")).unwrap();assert_eq!(declined.card(declined.players[0].base).damage,0);assert!(declined.players[0].hand.contains(discard));
+    s=e.apply(&s,&Action::button("Trigger","trigger")).unwrap();assert_eq!(s.decision,Decision::AbilityDiscard);assert_eq!(s.ability_result,0);assert!(!s.ability_succeeded);assert_eq!(s.card(s.players[0].base).damage,3);
+    s=e.apply(&s,&e.card_action(&s,discard)).unwrap();assert!(s.players[0].discard.contains(discard));assert_eq!(s.players[0].hand.len,0);assert_eq!(s.card(s.players[0].base).damage,3);
+}
+#[test]
+fn draw_resolution_and_actual_draw_count_are_separate_in_scalar_and_group_execution() {
+    let e=engine();let mut s=board(&e);let source=s.players[0].leader;s.source=source;
+    let empty=Effect::Draw {target:Target::Name("ownPlayer".into()),amount:Expr::number(1)};
+    assert_eq!(e.apply_effect(&mut s,&empty).unwrap(),(0,true));assert_eq!(s.card(s.players[0].base).damage,3);
+    let zero=Effect::Draw {target:Target::Name("ownPlayer".into()),amount:Expr::number(0)};
+    assert_eq!(e.apply_effect(&mut s,&zero).unwrap(),(0,false));assert_eq!(s.card(s.players[0].base).damage,3);
+    let draw=deck_card(&e,&mut s,Seat::P1);let partial=Effect::Draw {target:Target::Name("ownPlayer".into()),amount:Expr::number(2)};
+    assert_eq!(e.apply_effect(&mut s,&partial).unwrap(),(1,true));assert!(s.players[0].hand.contains(draw));assert_eq!(s.card(s.players[0].base).damage,6);
+    s.ability_result=0;s.ability_succeeded=false;s.event_group.active=true;s.event_group.initiator=s.active;
+    let group=Effect::Simultaneous {effects:vec![empty]};e.generate_group(&mut s,&group).unwrap();e.resolve_group(&mut s,&group).unwrap();assert_eq!(s.ability_result,0);assert!(s.ability_succeeded);assert_eq!(s.card(s.players[0].base).damage,9);
+}
+
+#[test]
+fn grouped_draw_fatigue_follows_all_primaries_without_early_winner_latch() {
+    let e=engine();for (initial,expected) in [(1,3),(29,29)] {let mut s=board(&e);s.source=s.players[0].leader;let base=s.players[0].base;s.card_mut(base).damage=initial;
+    s.event_group.active=true;s.event_group.initiator=s.active;
+    let group=Effect::Simultaneous {effects:vec![Effect::Draw {target:Target::Name("ownPlayer".into()),amount:Expr::number(1)},Effect::Heal {target:Target::Name("ownBase".into()),amount:Expr::number(3)}]};
+    e.generate_group(&mut s,&group).unwrap();e.resolve_group(&mut s,&group).unwrap();assert_eq!(s.card(base).damage,expected);assert_eq!(s.outcome,0);assert!(s.ability_succeeded);}
+}
+
+#[test]
+fn grouped_draws_reserve_fatigue_contingents_and_reject_same_player_multiplicity() {
+    let draw=json!({"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}});
+    let duplicate:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"duplicate draw","effect":{"kind":"simultaneous","effects":[draw.clone(),draw.clone()]}})).unwrap();
+    assert!(crate::ability_ir::Program::compile(&duplicate).unwrap_err().contains("multiple grouped draws"));
+    let heal=json!({"kind":"heal","target":"ownBase","amount":{"kind":"const","value":1}});
+    let mut effects=vec![];for _ in 0..3 {effects.push(json!({"kind":"simultaneous","effects":vec![heal.clone();8]}));}
+    let mut last=vec![heal;7];last.push(draw);effects.push(json!({"kind":"simultaneous","effects":last}));
+    let too_large:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"contingent capacity","effect":{"kind":"simultaneous","effects":effects}})).unwrap();
+    assert!(crate::ability_ir::Program::compile(&too_large).unwrap_err().contains("record budget"));
+}
+
+#[test]
+fn empty_discard_group_does_not_inherit_a_preceding_draw_success_for_if_you_do() {
+    for enemy_has_card in [false,true] {
+        let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;let drawn=deck_card(&e,&mut s,Seat::P1);
+        let enemy_card=if enemy_has_card {let id=add(&e,&mut s,Seat::P2,"LOF_254");s.players[1].hand.push(id).unwrap();Some(id)}else{None};
+        let program=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Draw then discard","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}},"then":{"title":"Enemy discards","effect":{"kind":"discardOwnHand","target":"enemyPlayer","amount":{"kind":"const","value":1}},"ifYouDo":{"title":"Pay damage","effect":{"kind":"damage","target":"ownBase","amount":{"kind":"const","value":1}}}}}));
+        s.source=source;e.begin_program(&mut s,program,0).unwrap();assert!(s.players[0].hand.contains(drawn));
+        if let Some(id)=enemy_card {
+            assert_eq!(s.decision,Decision::AbilityDiscard);assert_eq!(s.active,Seat::P2);assert_eq!(s.ability_result,1);assert!(!s.ability_succeeded);
+            s=e.apply(&s,&e.card_action(&s,id)).unwrap();assert!(s.players[1].discard.contains(id));
+        }else{assert_eq!(s.decision,Decision::Window);}
+        assert_eq!(s.card(s.players[0].base).damage,u16::from(enemy_has_card));
+    }
+}
+
+#[test]
+fn omitted_conditional_else_cannot_inherit_a_preceding_draw_success() {
+    let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;let drawn=deck_card(&e,&mut s,Seat::P1);
+    let program=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Draw then condition","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}},"then":{"title":"No discard","effect":{"kind":"conditional","condition":{"kind":"const","value":false},"onTrue":{"kind":"discardOwnHand","target":"enemyPlayer","amount":{"kind":"const","value":1}}},"ifYouDo":{"title":"Pay damage","effect":{"kind":"damage","target":"ownBase","amount":{"kind":"const","value":1}}}}}));
+    s.source=source;e.begin_program(&mut s,program,0).unwrap();assert!(s.players[0].hand.contains(drawn));assert_eq!(s.card(s.players[0].base).damage,0);assert_eq!(s.decision,Decision::Window);
+}
+#[test]
+fn group_generation_preserves_parent_distribution_amount_before_resetting_its_result() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_254");s.card_mut(source).damage=2;let hp=e.hp(&s,source);
+    let program=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Heal and grow","effect":{"kind":"distributeHealing","amount":{"kind":"const","value":2},"maxTargets":1,"targetResolver":{"owner":"self","type":"unit","zone":"arena"}},"ifYouDo":{"title":"Grow","effect":{"kind":"phaseModifiers","effects":[{"kind":"modifyStats","target":"self","duration":"phase","power":{"kind":"const","value":0},"hp":{"kind":"ref","path":["event","totalDistributed"]}}]}}}));
+    s.source=source;e.begin_program(&mut s,program,0).unwrap();assert_eq!(s.decision,Decision::AbilityDistribute);
+    let action=e.legal_actions(&s).into_iter().find(|a|a.arg.as_ref().is_some_and(|v|v[0][1].as_u64()==Some(2))).unwrap();s=e.apply(&s,&action).unwrap();assert_eq!(s.card(source).damage,0);assert_eq!(e.hp(&s,source),hp+2);
+}
+
+#[test]
+fn attack_power_survives_death_source_and_nested_context_restoration() {
+    let e=engine();let mut s=board(&e);
+    let attacker=unit(&e,&mut s,Seat::P1,"SOR_194");
+    let dying=unit(&e,&mut s,Seat::P2,"LOF_256");
+    s.source=dying;s.attack_source=attacker;s.trigger_context=0;
+    let query:Expr=serde_json::from_value(json!({"kind":"query","name":"getPower","receiver":{"kind":"ref","path":["card"]}})).unwrap();
+    let power:Expr=serde_json::from_value(json!({"kind":"ref","path":["card","power"]})).unwrap();
+    for expr in [&query,&power] {assert_eq!(e.eval_with_card(&s,dying,0,attacker,expr).number(),4);}
+    let parent=ResolutionContext::capture(&s);let hash=s.zobrist();
+    s.attack_source=dying;assert_ne!(s.zobrist(),hash);
+    parent.restore(&mut s);assert_eq!(s.attack_source,attacker);assert_eq!(s.zobrist(),hash);
+    s.death_frames[0].context=parent;s.death_depth=1;s.attack_source=dying;
+    assert_eq!(e.eval_with_card(&s,dying,0,attacker,&query).number(),4);
+    let suspended_hash=s.zobrist();s.death_frames[0].context.attack_source=0;assert_ne!(s.zobrist(),suspended_hash);
+    assert_eq!(e.eval_with_card(&s,dying,0,attacker,&query).number(),2);
+    s.death_frames[0].context=parent;s.death_depth=0;s.attack_source=attacker;
+    e.leave_play(&mut s,attacker).unwrap();
+    assert_eq!(e.eval_with_card(&s,dying,0,attacker,&query).number(),2);
+    e.cancel(&mut s);assert_eq!(s.attack_source,0);
+}
+
+#[test]
+fn terminal_death_prompt_snapshot_keeps_live_attacking_raid_power() {
+    let e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P1,"SOR_194");
+    s.attack_source=attacker;s.outcome=1;s.decision=Decision::AbilityTarget;
+    let snapshot=e.snapshot(&s);assert_eq!(snapshot["players"]["p1"]["ground"][0]["power"],4);
+    assert!(e.legal_actions(&s).is_empty());
+    s.attack_source=0;assert_eq!(e.snapshot(&s)["players"]["p1"]["ground"][0]["power"],2);
+}

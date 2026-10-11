@@ -1,0 +1,32 @@
+
+> swu-bot@0.1.0 wasm:pack
+> node bot/omni-wasm/pack.js
+
+{
+  "name": "@swu-bot/omni-wasm",
+  "version": "0.1.0",
+  "tarball": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-wasm/pkg/distribution/swu-bot-omni-wasm-0.1.0.tgz",
+  "sha256": "fd1a592f7e8ca8921fd069e7f90b58c455a1615e50ff584a8760974d74847f85",
+  "bytes": 692458,
+  "unpackedBytes": 2692726,
+  "files": [
+    "README.md",
+    "adapter.mjs",
+    "bindings/node/omni_wasm_bg.wasm",
+    "bindings/node/omni_wasm_bg.wasm.d.ts",
+    "bindings/node/omni_wasm.d.ts",
+    "bindings/node/omni_wasm.js",
+    "bindings/node/package.json",
+    "bindings/web/omni_wasm_bg.wasm",
+    "bindings/web/omni_wasm_bg.wasm.d.ts",
+    "bindings/web/omni_wasm.d.ts",
+    "bindings/web/omni_wasm.js",
+    "bindings/web/package.json",
+    "browser.mjs",
+    "node.cjs",
+    "package.json",
+    "pool.json"
+  ],
+  "dependencies": [],
+  "builtBindingsReused": true
+}

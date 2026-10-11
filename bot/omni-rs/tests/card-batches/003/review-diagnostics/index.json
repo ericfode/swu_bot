@@ -1,0 +1,179 @@
+{
+  "schema": "swu-synthetic-review-diagnostics/v1",
+  "scope": "Four explicit synthetic engine ability registrations mirrored in dedicated raw IR catalogues. Excluded from all actual-source card, game and admission counts. All post-metadata engine records remain byte-content-equivalent JSON in comparison copies.",
+  "cases": [
+    {
+      "directory": "draw-heal-base29",
+      "synthetic": true,
+      "files": {
+        "catalog.json.gz": "70891590193357804d62e7bbb098d85a818d11d8a40a32ba749613d06766d311",
+        "comparison.jsonl.gz": "1788fdbca481b708fe6d1b88f3f0fcaa66cb22534e17842a80e5e45780d215a6",
+        "engine-oracle.jsonl.gz": "eff4de239358f5aa2a26ae7a0b42f8d5ca069422fa3a21dab96984c55c65ba53",
+        "generator.cjs": "28eb72819ebfc2689cb891da61acf6a2ebfda7600c2eea42e34a065e14fbdaa1",
+        "pool.json.gz": "56d294e6c5e08b32b18f851ca94fea6d182de91ebd9a615aae4b4fed88103854"
+      },
+      "catalogueDecompressedSha256": "61e0286c0fe16e6be308208b09432c67c7783fb7c45244835b5a9668fd045e32",
+      "poolDecompressedSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "decisions": 3,
+      "windows": 3,
+      "metadataChanges": {
+        "pool": {
+          "engine": {
+            "path": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/incidental/pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          },
+          "comparison": {
+            "path": "/private/tmp/swu-draw-heal-review-diagnostic-pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          }
+        },
+        "evidenceStatus": {
+          "engine": "Engine observation; native/Wasm conformance unassessed",
+          "comparison": "SYNTHETIC ENGINE DIAGNOSTIC only; no printed-card conformance claim"
+        },
+        "syntheticRegistration": {
+          "engine": null,
+          "comparison": "beforeWindow(step0), before first recorded state/input, replace EVERY physical SOR077 ability with context-relative simultaneous Draw1 ownPlayer then Heal3 ownBase. Resolve game state+continue once. No later state/ability edits."
+        },
+        "syntheticOriginalInputPool": {
+          "engine": null,
+          "comparison": {
+            "path": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/incidental/pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          }
+        }
+      }
+    },
+    {
+      "directory": "draw-heal-base1",
+      "synthetic": true,
+      "files": {
+        "catalog.json.gz": "70891590193357804d62e7bbb098d85a818d11d8a40a32ba749613d06766d311",
+        "comparison.jsonl.gz": "df1d10ec036b62c2ec66811ac5045620e5c6947dc6cfde4b268dcc630508d8fa",
+        "engine-oracle.jsonl.gz": "81c53006bffde1b74e580db4eb8d62346dc09256302f7573d321e29ef22eb408",
+        "generator.cjs": "28eb72819ebfc2689cb891da61acf6a2ebfda7600c2eea42e34a065e14fbdaa1",
+        "pool.json.gz": "56d294e6c5e08b32b18f851ca94fea6d182de91ebd9a615aae4b4fed88103854"
+      },
+      "catalogueDecompressedSha256": "61e0286c0fe16e6be308208b09432c67c7783fb7c45244835b5a9668fd045e32",
+      "poolDecompressedSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "decisions": 61,
+      "windows": 20,
+      "metadataChanges": {
+        "pool": {
+          "engine": {
+            "path": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/incidental/pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          },
+          "comparison": {
+            "path": "/private/tmp/swu-draw-heal-review-diagnostic-pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          }
+        },
+        "evidenceStatus": {
+          "engine": "Engine observation; native/Wasm conformance unassessed",
+          "comparison": "SYNTHETIC ENGINE DIAGNOSTIC only; no printed-card conformance claim"
+        },
+        "syntheticRegistration": {
+          "engine": null,
+          "comparison": "beforeWindow(step0), before first recorded state/input, replace EVERY physical SOR077 ability with context-relative simultaneous Draw1 ownPlayer then Heal3 ownBase. Resolve game state+continue once. No later state/ability edits."
+        },
+        "syntheticOriginalInputPool": {
+          "engine": null,
+          "comparison": {
+            "path": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/incidental/pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          }
+        }
+      }
+    },
+    {
+      "directory": "empty-discard-result",
+      "synthetic": true,
+      "files": {
+        "catalog.json.gz": "627a9264640ee1b4659793cc5daf6e37a25dee8001428ccb6b6751eb51bcd9a4",
+        "comparison.jsonl.gz": "658d270ca5446eb28f868762bf07d38e35d1ffe7c951692b6288eb326283bce2",
+        "engine-oracle.jsonl.gz": "d6db0c63ea29c2e36b688c79e764832bddf6e96de5ddd87c57cf541de5af6bca",
+        "generator.cjs": "16aa5596fb50122a2fae82e850beca8c4a74530deb3d1f7cc32c71dd2e808427",
+        "pool.json.gz": "56d294e6c5e08b32b18f851ca94fea6d182de91ebd9a615aae4b4fed88103854"
+      },
+      "catalogueDecompressedSha256": "8da827c92457a4a5652e9f5bb6252f921eb669938823ea29b1acbdf5689d0299",
+      "poolDecompressedSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "decisions": 269,
+      "windows": 104,
+      "metadataChanges": {
+        "diagnosticHarness": {
+          "engine": null,
+          "comparison": {
+            "path": "/private/tmp/swu-review-synthetic-harness.js",
+            "sha256": "99571bafc50d7d4f7b3c55d030f8688034b2e38648f50596167fc4ebb2e049f2",
+            "change": "Absolute module imports and one explicit pre-capture emptyEnemyHand construction clause; otherwise identical tokenFixture harness."
+          }
+        },
+        "pool": {
+          "engine": {
+            "path": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/incidental/pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          },
+          "comparison": {
+            "path": "/private/tmp/swu-group-result-review-diagnostic-pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          }
+        },
+        "syntheticRegistration": {
+          "engine": null,
+          "comparison": "At beforeWindow(step0) before first recorded state/input, replace EVERY matching physical SOR077 card with context-relative Draw1 then enemyDiscard1 ifYouDo ownBaseDamage1; all targets derive from context.player. Refresh gameState and continue once. Empty enemy hand constructed before initial snapshot. No later state/ability edits."
+        },
+        "fixtureConstruction": {
+          "engine": "At first natural action window, move specified real deck units into their printed arenas with specified exhaustion, move script cards into p1 hand, move12 remaining deck cards perplayer into ready resources, ready all resources, set bases damage24(orprintedHP-1 forbothLethal), resolve game state, then set disclosed survivingunitdamage and refreshprompts. Specified initial Shields are created with pinned game.generateToken and attached before state resolution. No later state edits. Additionally enemy hand is moved to ready resources before initial capture, and ALL matching SOR077 physical cards at initial script input have their event ability replaced with Draw1 then single-leaf simultaneous enemyDiscard1 (empty hand) ifYouDo ownBaseDamage1.",
+          "comparison": "At beforeWindow(step0) before first recorded state/input, replace EVERY matching physical SOR077 card with context-relative Draw1 then enemyDiscard1 ifYouDo ownBaseDamage1; all targets derive from context.player. Refresh gameState and continue once. Empty enemy hand constructed before initial snapshot. No later state/ability edits."
+        }
+      }
+    },
+    {
+      "directory": "omitted-conditional-else",
+      "synthetic": true,
+      "files": {
+        "catalog.json.gz": "d3260301216f2a5eb8e5de0957b3e3d69d2f336e783f8e195bed1c53d5aa0aeb",
+        "comparison.jsonl.gz": "7579ae0f40f05b0f94ed2af94c33108cfae76809f45247458c641a957a3395c2",
+        "engine-oracle.jsonl.gz": "3d39bcc77282e240cafa34f7ebf2002c10f9031751c8ad52ff5f5705bdd959ad",
+        "generator.cjs": "d5b95b83d66cb451a679646b4751c5809c3209d864eaf72db07d81262c22c82c",
+        "pool.json.gz": "56d294e6c5e08b32b18f851ca94fea6d182de91ebd9a615aae4b4fed88103854"
+      },
+      "catalogueDecompressedSha256": "87e2cf8bf1c215ebd28d943da346a8d166b42354958afb055d103c9d40c20961",
+      "poolDecompressedSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9",
+      "decisions": 223,
+      "windows": 91,
+      "metadataChanges": {
+        "diagnosticHarness": {
+          "engine": null,
+          "comparison": {
+            "path": "/private/tmp/swu-review-synthetic-harness.js",
+            "sha256": "99571bafc50d7d4f7b3c55d030f8688034b2e38648f50596167fc4ebb2e049f2",
+            "change": "Absolute module imports and one explicit pre-capture emptyEnemyHand construction clause; otherwise identical tokenFixture harness."
+          }
+        },
+        "pool": {
+          "engine": {
+            "path": "/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/incidental/pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          },
+          "comparison": {
+            "path": "/private/tmp/swu-conditional-result-review-diagnostic-pool.json",
+            "sha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+          }
+        },
+        "syntheticRegistration": {
+          "engine": null,
+          "comparison": "At beforeWindow(step0) before first recorded state/input, replace EVERY matching physical SOR077 card with context-relative Draw1 then Conditional(false,onTrue enemyDiscard1,omittedFalse) ifYouDo ownBaseDamage1; all targets derive from context.player. Refresh gameState and continue once. Empty enemy hand constructed before initial snapshot. No later state/ability edits."
+        },
+        "fixtureConstruction": {
+          "engine": "At first natural action window, move specified real deck units into their printed arenas with specified exhaustion, move script cards into p1 hand, move12 remaining deck cards perplayer into ready resources, ready all resources, set bases damage24(orprintedHP-1 forbothLethal), resolve game state, then set disclosed survivingunitdamage and refreshprompts. Specified initial Shields are created with pinned game.generateToken and attached before state resolution. No later state edits. Additionally enemy hand is moved to ready resources before initial capture, and ALL matching SOR077 physical cards at initial script input have their event ability replaced with Draw1 then single-leaf simultaneous enemyDiscard1 (empty hand) ifYouDo ownBaseDamage1.",
+          "comparison": "At beforeWindow(step0) before first recorded state/input, replace EVERY matching physical SOR077 card with context-relative Draw1 then Conditional(false,onTrue enemyDiscard1,omittedFalse) ifYouDo ownBaseDamage1; all targets derive from context.player. Refresh gameState and continue once. Empty enemy hand constructed before initial snapshot. No later state/ability edits."
+        }
+      }
+    }
+  ],
+  "supportFiles": {
+    "synthetic-harness.cjs": "99571bafc50d7d4f7b3c55d030f8688034b2e38648f50596167fc4ebb2e049f2"
+  }
+}

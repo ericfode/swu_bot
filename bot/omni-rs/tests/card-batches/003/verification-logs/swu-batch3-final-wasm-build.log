@@ -1,0 +1,9 @@
+
+> swu-bot@0.1.0 wasm:build
+> node bot/omni-wasm/build.js
+
+   Compiling omni-rs v0.1.0 (/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs)
+   Compiling omni-wasm v0.1.0 (/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-wasm)
+    Finished `release` profile [optimized] target(s) in 2.84s
+Built bot/omni-wasm/pkg/node (1,264,707 bytes Wasm)
+Built bot/omni-wasm/pkg/web (1,264,707 bytes Wasm)

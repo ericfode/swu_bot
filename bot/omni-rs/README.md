@@ -68,8 +68,12 @@ from the rules text. Every leader/base pair must have enough eligible cards for 
 The default 100-card pool excludes events, ordinary upgrades and other leader abilities. The generated-IR path
 adds admitted action, event and triggered programs; its exact supported set is in the generated runtime report.
 The generated path also supports bounded phase stat modifiers, static conditional stat auras, arena queries,
-return-to-hand effects and resource readiness. Other lasting effects, Piloting, Bounty, Smuggle, Exploit,
-Coordinate, random effects, shuffle effects, capture and control changes still require additional rules.
+return-to-hand effects, resource readiness, self-defeat triggers, supported printed Coordinate registrations,
+bounded unit-token creation and scalar hand discard. Trigger capture, card movement and parent ability
+resolution remain separate stages. Capacity limits fail explicitly rather than dropping pending effects.
+Other lasting effects, Piloting, Bounty, Smuggle, Exploit, random effects, shuffle effects, capture and control
+changes still require additional rules. Coordinate registrations outside the supported constant/on-attack
+forms also remain rejected.
 Satine's single-target healing distribution is explicit:
 choosing the amount is part of the game tree.
 

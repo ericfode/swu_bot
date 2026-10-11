@@ -1,0 +1,50 @@
+
+> swu-bot@0.1.0 wasm:pack:check
+> node bot/omni-wasm/verify-package.js
+
+{
+  "isolatedPackage": true,
+  "dependencies": [],
+  "nodeProof": {
+    "result": "p2",
+    "depth": 1,
+    "nodes": 1,
+    "decisions": 2,
+    "ms": 1.383291,
+    "complete": true,
+    "transpositions": 0
+  },
+  "webProof": {
+    "result": "p2",
+    "depth": 1,
+    "nodes": 1,
+    "decisions": 2,
+    "ms": 0.06475,
+    "complete": true,
+    "transpositions": 0
+  },
+  "expandedPoolHash": "aaa86f650888a9e3039c522a64c9a1c3b04c184694afe2f976c5f06d2843a428",
+  "expandedProof": {
+    "result": null,
+    "depth": 2,
+    "nodes": 12,
+    "decisions": 126,
+    "ms": 3.88075,
+    "complete": true,
+    "transpositions": 0
+  },
+  "expandedWebProof": {
+    "result": null,
+    "depth": 2,
+    "nodes": 12,
+    "decisions": 126,
+    "ms": 2.7073750000000003,
+    "complete": true,
+    "transpositions": 0
+  },
+  "catalogueOnlyLoaded": true,
+  "drawNames": [
+    "Alice",
+    "Bob"
+  ]
+}

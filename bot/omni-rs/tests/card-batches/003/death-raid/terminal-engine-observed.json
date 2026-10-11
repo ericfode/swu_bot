@@ -1,0 +1,11 @@
+{
+  "scenario": "skyway-terminal-death-snapshot-preserves-raid-attacker-power",
+  "family": "actual-death-selector-live-attacker-Raid",
+  "observed": {
+    "liveTerminalPower": 9,
+    "stillAttackingAtTerminal": true,
+    "postAction": true
+  },
+  "decisions": 5,
+  "winner": "p1"
+}

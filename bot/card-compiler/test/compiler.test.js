@@ -348,3 +348,130 @@ test('selection predicates reject lexical outer target captures rather than rebi
     assert.equal(rebound.status,'supported');
     const safe=compile(action("selectCard(ctx=>({cardTypeFilter:'unit',cardCondition:card=>card!==ctx.source,immediateEffect:AbilityHelper.immediateEffects.heal({amount:1})}))"));assert.equal(safe.status,'supported');
 });
+
+
+test('standard trigger aliases preserve source and hook order and the complete body', () => {
+    const card = compile(`registrar.addWhenPlayedAbility({title:'Before',immediateEffect:AbilityHelper.immediateEffects.draw()});
+        registrar.addTriggeredAbility({title:'Shared',contextTitle:'Shared context',optional:true,when:{onAttack:true,whenPlayed:true,whenDefeated:true},targetResolver:{cardTypeFilter:'unit',immediateEffect:AbilityHelper.immediateEffects.heal({amount:2})}});
+        registrar.addOnAttackAbility({title:'After',immediateEffect:AbilityHelper.immediateEffects.draw()});`);
+    assert.equal(card.status,'supported',JSON.stringify(card.diagnostics));
+    assert.deepEqual(card.abilities.card.map(a=>[a.title,a.trigger]), [['Before','whenPlayed'],['Shared','onAttack'],['Shared','whenPlayed'],['Shared','whenDefeated'],['After','onAttack']]);
+    const aliases=card.abilities.card.slice(1,4);
+    for(const a of aliases) {
+        assert.equal(a.optional,true);
+        assert.deepEqual(a.contextTitle,[{kind:'const',value:'Shared context'}]);
+        assert.equal(a.effect.kind,'heal');
+        assert.deepEqual(a.effect.amount,{kind:'const',value:2});
+        assert.equal(a.targetResolver.type,'unit');
+    }
+    assert.deepEqual(aliases.map(({trigger,...body})=>body),[...Array(3)].map(()=>{const {trigger,...body}=aliases[0];return body;}));
+});
+test('standard aliases reject watcher, shared state, unknown and nonstatic semantics', () => {
+    for (const fields of [
+        'when:{}', 'when:{onDefense:true}', 'when:{onAttack:false}',
+        'when:{onAttack:()=>true}', 'when:{onAttack:true,onAttack:true}',
+        'when:{...{onAttack:true}}', 'when:()=>({onAttack:true})',
+        'when:{onAttack:true},aggregateWhen:{}', 'when:{onAttack:true},collectiveTrigger:true',
+        'when:{onAttack:true},zoneFilter:"anyArena"', 'when:{onAttack:true},limit:1',
+        'when:{onAttack:true},cost:AbilityHelper.costs.exhaustSelf()',
+        'when:{onAttack:true},unknown:true',
+    ]) assert.equal(compile(`registrar.addTriggeredAbility({title:'Alias',${fields},immediateEffect:AbilityHelper.immediateEffects.draw()});`).status,'unsupported',fields);
+    assert.equal(compile(`const enabled=true; registrar.addTriggeredAbility({when:{onAttack:enabled},immediateEffect:AbilityHelper.immediateEffects.draw()});`).status,'unsupported');
+    assert.equal(compile(`const when={onAttack:true}; registrar.addTriggeredAbility({when,immediateEffect:AbilityHelper.immediateEffects.draw()});`).status,'unsupported');
+});
+
+
+test('exact unit/base union lowers only inside attackable inventories', () => {
+    for (const types of ['["unit","base"]','["base","unit"]']) {
+        const c=compile(`registrar.addWhenPlayedAbility({targetResolver:{cardTypeFilter:${types},cardCondition:(card,ctx)=>card!==ctx.source,immediateEffect:AbilityHelper.immediateEffects.heal({amount:1})}});`);
+        assert.equal(c.status,'supported');
+        assert.equal(c.abilities.card[0].targetResolver.type,'any');
+        assert.equal(c.abilities.card[0].targetResolver.zone,'anyAttackable');
+    }
+    for (const fields of ['cardTypeFilter:["unit","base"],zoneFilter:"discard"','cardTypeFilter:["unit","base"],zoneFilter:"hand"','cardTypeFilter:["unit","base"],zoneFilter:"any"','cardTypeFilter:["unit","upgrade"]','cardTypeFilter:["unit","unit"]','cardTypeFilter:["unit"]']) {
+        assert.equal(compile(`registrar.addWhenPlayedAbility({targetResolver:{${fields},immediateEffect:AbilityHelper.immediateEffects.heal({amount:1})}});`).status,'unsupported',fields);
+    }
+});
+test('Coordinate preserves live constant gate provenance and captured attack registration', () => {
+    const c=compile(`registrar.addCoordinateAbility({type:'constant',title:'Gain',condition:ctx=>ctx.player.hasInitiative(),ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:2,hp:1})});`);
+    assert.equal(c.status,'supported',JSON.stringify(c.diagnostics));
+    assert.equal(c.abilities.card[0].coordinate,true);
+    assert.equal(c.abilities.card[0].trigger,'constant');
+    assert.equal(c.abilities.card[0].condition.name,'hasInitiative');
+    assert.equal(c.abilities.card[0].effect.duration,'persistent');
+    const attack=compile(`registrar.addCoordinateAbility({type:'triggered',when:{onAttack:true},optional:true,targetResolver:{cardTypeFilter:'unit',immediateEffect:AbilityHelper.immediateEffects.damage({amount:3})}});`);
+    assert.equal(attack.status,'supported',JSON.stringify(attack.diagnostics));
+    assert.equal(attack.abilities.card[0].coordinate,true);
+    assert.equal(attack.abilities.card[0].trigger,'onAttack');
+    assert.equal(attack.abilities.card[0].condition,undefined);
+    assert.equal(attack.abilities.card[0].optional,true);
+});
+test('Coordinate rejects unaudited registration shapes and extra semantics', () => {
+    for (const body of [
+        `type:'action',immediateEffect:AbilityHelper.immediateEffects.draw()`,
+        `type:'triggered',when:{whenPlayed:true},immediateEffect:AbilityHelper.immediateEffects.draw()`,
+        `type:'triggered',when:{onAttack:true,whenDefeated:true},immediateEffect:AbilityHelper.immediateEffects.draw()`,
+        `type:'triggered',when:{onAttack:()=>true},immediateEffect:AbilityHelper.immediateEffects.draw()`,
+        `type:'constant',ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1}),unknown:true`,
+        `type:'constant',ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1}),when:{onAttack:true}`,
+    ]) assert.equal(compile(`registrar.addCoordinateAbility({${body}});`).status,'unsupported',body);
+    const one=`registrar.addCoordinateAbility({type:'constant',ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1})});`;
+    assert.equal(compile(one+one).status,'unsupported');
+    assert.equal(compile(one,{base:'LeaderUnitCard'}).status,'unsupported');
+});
+
+
+test('token-unit helpers preserve fixed type and engine factory defaults', () => {
+    for (const [helper,tokenType] of Object.entries({createBattleDroid:'battleDroid',createCloneTrooper:'cloneTrooper',createXWing:'xwing',createTieFighter:'tieFighter',createSpy:'spy',createBeast:'beast'})) {
+        const c=compile(action(`${helper}()`));
+        assert.equal(c.status,'supported',JSON.stringify(c.diagnostics));
+        assert.deepEqual(c.abilities.card[0].effect,{kind:'createTokenUnit',tokenType,amount:{kind:'const',value:1},target:'ownPlayer',entersReady:false});
+    }
+    for (const amount of [1,2,3,5]) for (const entersReady of [false,true]) for (const [player,target] of [['ctx.player','ownPlayer'],['ctx.player.opponent','enemyPlayer']]) {
+        const c=compile(action(`createCloneTrooper(ctx=>({amount:${amount},entersReady:${entersReady},target:${player}}))`));
+        assert.equal(c.status,'supported',JSON.stringify(c.diagnostics));
+        assert.deepEqual(c.abilities.card[0].effect,{kind:'createTokenUnit',tokenType:'cloneTrooper',amount:{kind:'const',value:amount},target,entersReady});
+    }
+});
+test('token-unit lowering rejects unsafe amounts, entry effects and extra properties', () => {
+    for (const fields of ['amount:0','amount:-1','amount:6','amount:1.5','amount:9007199254740992','amount:"2"','amount:ctx=>2','amount:ctx.source.power','entersReady:1','entersReady:ctx=>true','tokenType:"spy"','unknown:true','isCost:true','effect:"hidden mutation"','enterPlayEffect:AbilityHelper.immediateEffects.damage({amount:1})','target:ctx.source','target:[ctx.player,ctx.player.opponent]']) {
+        assert.equal(compile(action(`createBattleDroid(ctx=>({${fields}}))`)).status,'unsupported',fields);
+    }
+    assert.equal(compile(action('createMandalorian()')).status,'unsupported');
+    assert.equal(compile(action('createBattleDroid(ctx=>{ctx.source.damage=1;return {};})')).status,'unsupported');
+    assert.equal(compile(action('createBattleDroid({}, {})')).status,'unsupported');
+    assert.equal(compile(`registrar.addWhenPlayedAbility({immediateEffect:AbilityHelper.immediateEffects.createCloneTrooper(),then:ctx=>({immediateEffect:AbilityHelper.immediateEffects.damage({amount:ctx.events[0].amount,target:ctx.player.base})})});`).status,'unsupported');
+});
+
+
+test('owner-chosen hand discard preserves opponent default and explicit scalar players', () => {
+    const defaults=compile(action('discardCardsFromOwnHand({})'));
+    assert.equal(defaults.status,'supported',JSON.stringify(defaults.diagnostics));
+    assert.deepEqual(defaults.abilities.card[0].effect,{kind:'discardOwnHand',target:'enemyPlayer',amount:{kind:'const',value:1}});
+    for(const amount of [1,2]) for(const [player,target] of [['ctx.player','ownPlayer'],['ctx.player.opponent','enemyPlayer']]) {
+        const c=compile(action(`discardCardsFromOwnHand(ctx=>({amount:${amount},target:${player},cardTypeFilter:'any'}))`));
+        assert.equal(c.status,'supported',JSON.stringify(c.diagnostics));
+        assert.deepEqual(c.abilities.card[0].effect,{kind:'discardOwnHand',target,amount:{kind:'const',value:amount}});
+    }
+    const continuation=compile(`registrar.addOnAttackAbility({optional:true,immediateEffect:AbilityHelper.immediateEffects.discardCardsFromOwnHand(ctx=>({amount:1,target:ctx.player})),ifYouDo:{immediateEffect:AbilityHelper.immediateEffects.createSpy()}});`);
+    assert.equal(continuation.status,'supported');
+    assert.equal(continuation.abilities.card[0].ifYouDo.effect.kind,'createTokenUnit');
+});
+test('hand discard rejects unaudited random, filtered, dynamic and player-list semantics', () => {
+    for(const fields of ['amount:0','amount:-1','amount:3','amount:1.5','amount:"1"','amount:ctx=>1','amount:ctx.player.hand.length','target:[ctx.player,ctx.player.opponent]','target:ctx.source','target:ctx.game.getPlayers()','cardTypeFilter:"unit"','cardTypeFilter:["any"]','random:true','random:false','cardCondition:card=>true','choosingPlayer:"opponent"','isCost:true','unknown:true','effect:"ignored"']) {
+        assert.equal(compile(action(`discardCardsFromOwnHand(ctx=>({${fields}}))`)).status,'unsupported',fields);
+    }
+    assert.equal(compile(action('discardCardsFromOwnHand(ctx=>{ctx.player.hand.pop();return {};})')).status,'unsupported');
+});
+test('selected-player resource helpers fail closed instead of targeting resolving player', () => {
+    const c=compile(`registrar.addWhenPlayedAbility({immediateEffect:AbilityHelper.immediateEffects.damage({amount:1}),then:{title:'Ready a resource',targetResolver:{mode:'player',immediateEffect:AbilityHelper.immediateEffects.readyResources({amount:1})}}});`);
+    assert.equal(c.status,'unsupported');
+    assert.equal(c.diagnostics[0].pattern,'unsupported-player-target-resolver');
+    assert.equal(compile(`registrar.setEventAbility({targetResolver:{mode:'player',immediateEffect:AbilityHelper.immediateEffects.discardCardsFromOwnHand({amount:2})}});`,{base:'EventCard'}).status,'unsupported');
+});
+
+test('hand-discard continuation event identity capture remains explicitly unsupported', () => {
+    const c=compile(`registrar.addWhenPlayedAbility({immediateEffect:AbilityHelper.immediateEffects.discardCardsFromOwnHand(ctx=>({target:ctx.player})),ifYouDo:ctx=>({targetResolver:{cardTypeFilter:'unit',cardCondition:card=>card.title===ctx.events[0].card.title,immediateEffect:AbilityHelper.immediateEffects.giveExperience({amount:2})}})});`);
+    assert.equal(c.status,'unsupported');
+    assert.equal(c.diagnostics[0].pattern,'hand-discard-event-result-capture');
+});

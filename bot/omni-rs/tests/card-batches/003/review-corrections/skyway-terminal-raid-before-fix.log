@@ -1,0 +1,1239 @@
+omni-rs: /private/tmp/swu-skyway-terminal-raid-review-oracle.jsonl.gz:10 step 5: state mismatch
+difference:
+$.players.p1.ground[0].power: engine=9, rust=3
+engine state:
+{
+  "activePlayer": "p1",
+  "actor": null,
+  "initiative": "p1",
+  "initiativeClaimed": false,
+  "nextCardId": 106,
+  "phase": "action",
+  "players": {
+    "p1": {
+      "base": {
+        "damage": 29,
+        "epicUsed": false,
+        "hp": 30,
+        "id": "c50",
+        "name": "command-center",
+        "setCode": "SOR_023"
+      },
+      "deck": [
+        {
+          "id": "c22",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c4",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c35",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c32",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c8",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "id": "c25",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c9",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "id": "c7",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "id": "c44",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c41",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "id": "c6",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "id": "c0",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "id": "c19",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c39",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "id": "c37",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c49",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "id": "c23",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c11",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "id": "c20",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c3",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c27",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c21",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c33",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c12",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c46",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "id": "c29",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c34",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c42",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c13",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        }
+      ],
+      "discard": [
+        {
+          "id": "c10",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        }
+      ],
+      "ground": [
+        {
+          "damage": 3,
+          "exhausted": true,
+          "hp": 9,
+          "id": "c1",
+          "name": "raiding-party",
+          "phaseKeywords": {
+            "overwhelm": 1
+          },
+          "phaseStats": {
+            "hp": 3,
+            "power": 3
+          },
+          "power": 9,
+          "setCode": "HMW_230",
+          "upgrades": []
+        },
+        {
+          "damage": 0,
+          "exhausted": false,
+          "hp": 4,
+          "id": "c5",
+          "name": "akoba#restless-raider",
+          "power": 1,
+          "setCode": "HMW_052",
+          "upgrades": []
+        }
+      ],
+      "hand": [
+        {
+          "id": "c31",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c16",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c38",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c47",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        }
+      ],
+      "leader": {
+        "deployed": false,
+        "epicUsed": false,
+        "exhausted": false,
+        "id": "c51",
+        "name": "sabine-wren#galvanized-revolutionary",
+        "setCode": "SOR_014"
+      },
+      "out": false,
+      "resources": [
+        {
+          "exhausted": true,
+          "id": "c18",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "exhausted": true,
+          "id": "c36",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "exhausted": true,
+          "id": "c14",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "exhausted": false,
+          "id": "c40",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "exhausted": false,
+          "id": "c45",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "exhausted": false,
+          "id": "c43",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "exhausted": false,
+          "id": "c26",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "exhausted": false,
+          "id": "c24",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "exhausted": false,
+          "id": "c48",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "exhausted": false,
+          "id": "c28",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "exhausted": false,
+          "id": "c17",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "exhausted": false,
+          "id": "c30",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "exhausted": false,
+          "id": "c15",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "exhausted": false,
+          "id": "c2",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        }
+      ],
+      "space": []
+    },
+    "p2": {
+      "base": {
+        "damage": 30,
+        "epicUsed": false,
+        "hp": 30,
+        "id": "c103",
+        "name": "command-center",
+        "setCode": "SOR_023"
+      },
+      "deck": [
+        {
+          "id": "c57",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c70",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c80",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c84",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c77",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c91",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c92",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "id": "c67",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c81",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c99",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "id": "c102",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "id": "c90",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c56",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c98",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "id": "c86",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c79",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c72",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c69",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c74",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c85",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c54",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "id": "c78",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c96",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c66",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c65",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c71",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c89",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c87",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c68",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c73",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c63",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        }
+      ],
+      "discard": [
+        {
+          "id": "c60",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        }
+      ],
+      "ground": [],
+      "hand": [
+        {
+          "id": "c82",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c62",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "id": "c95",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c76",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        }
+      ],
+      "leader": {
+        "deployed": false,
+        "epicUsed": false,
+        "exhausted": false,
+        "id": "c104",
+        "name": "sabine-wren#galvanized-revolutionary",
+        "setCode": "SOR_014"
+      },
+      "out": false,
+      "resources": [
+        {
+          "exhausted": false,
+          "id": "c93",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "exhausted": false,
+          "id": "c53",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "exhausted": false,
+          "id": "c97",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "exhausted": false,
+          "id": "c100",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "exhausted": false,
+          "id": "c94",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "exhausted": false,
+          "id": "c59",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "exhausted": false,
+          "id": "c61",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "exhausted": false,
+          "id": "c58",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "exhausted": false,
+          "id": "c75",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "exhausted": false,
+          "id": "c55",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "exhausted": false,
+          "id": "c64",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "exhausted": false,
+          "id": "c88",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "exhausted": false,
+          "id": "c101",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "exhausted": false,
+          "id": "c83",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        }
+      ],
+      "space": []
+    }
+  },
+  "prevPassed": true,
+  "round": 1,
+  "winner": "p1"
+}
+rust state:
+{
+  "activePlayer": "p1",
+  "actor": null,
+  "initiative": "p1",
+  "initiativeClaimed": false,
+  "nextCardId": 106,
+  "phase": "action",
+  "players": {
+    "p1": {
+      "base": {
+        "damage": 29,
+        "epicUsed": false,
+        "hp": 30,
+        "id": "c50",
+        "name": "command-center",
+        "setCode": "SOR_023"
+      },
+      "deck": [
+        {
+          "id": "c22",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c4",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c35",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c32",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c8",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "id": "c25",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c9",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "id": "c7",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "id": "c44",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c41",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "id": "c6",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "id": "c0",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "id": "c19",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c39",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "id": "c37",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c49",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "id": "c23",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c11",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "id": "c20",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c3",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c27",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c21",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c33",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c12",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c46",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "id": "c29",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c34",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c42",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c13",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        }
+      ],
+      "discard": [
+        {
+          "id": "c10",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        }
+      ],
+      "ground": [
+        {
+          "damage": 3,
+          "exhausted": true,
+          "hp": 9,
+          "id": "c1",
+          "name": "raiding-party",
+          "phaseKeywords": {
+            "overwhelm": 1
+          },
+          "phaseStats": {
+            "hp": 3,
+            "power": 3
+          },
+          "power": 3,
+          "setCode": "HMW_230",
+          "upgrades": []
+        },
+        {
+          "damage": 0,
+          "exhausted": false,
+          "hp": 4,
+          "id": "c5",
+          "name": "akoba#restless-raider",
+          "power": 1,
+          "setCode": "HMW_052",
+          "upgrades": []
+        }
+      ],
+      "hand": [
+        {
+          "id": "c31",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c16",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c38",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c47",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        }
+      ],
+      "leader": {
+        "deployed": false,
+        "epicUsed": false,
+        "exhausted": false,
+        "id": "c51",
+        "name": "sabine-wren#galvanized-revolutionary",
+        "setCode": "SOR_014"
+      },
+      "out": false,
+      "resources": [
+        {
+          "exhausted": true,
+          "id": "c18",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "exhausted": true,
+          "id": "c36",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "exhausted": true,
+          "id": "c14",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "exhausted": false,
+          "id": "c40",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "exhausted": false,
+          "id": "c45",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "exhausted": false,
+          "id": "c43",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "exhausted": false,
+          "id": "c26",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "exhausted": false,
+          "id": "c24",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "exhausted": false,
+          "id": "c48",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "exhausted": false,
+          "id": "c28",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "exhausted": false,
+          "id": "c17",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "exhausted": false,
+          "id": "c30",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "exhausted": false,
+          "id": "c15",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "exhausted": false,
+          "id": "c2",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        }
+      ],
+      "space": []
+    },
+    "p2": {
+      "base": {
+        "damage": 30,
+        "epicUsed": false,
+        "hp": 30,
+        "id": "c103",
+        "name": "command-center",
+        "setCode": "SOR_023"
+      },
+      "deck": [
+        {
+          "id": "c57",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c70",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c80",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c84",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c77",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c91",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c92",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "id": "c67",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c81",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c99",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "id": "c102",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "id": "c90",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c56",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "id": "c98",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "id": "c86",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c79",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c72",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c69",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c74",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "id": "c85",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        },
+        {
+          "id": "c54",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "id": "c78",
+          "name": "death-trooper-squad",
+          "setCode": "ASH_242"
+        },
+        {
+          "id": "c96",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c66",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c65",
+          "name": "strike-team-vanguard",
+          "setCode": "ASH_061"
+        },
+        {
+          "id": "c71",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c89",
+          "name": "ewok-brigade",
+          "setCode": "HMW_116"
+        },
+        {
+          "id": "c87",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "id": "c68",
+          "name": "dinosaur-turtle",
+          "setCode": "ASH_131"
+        },
+        {
+          "id": "c73",
+          "name": "peridea-bandit",
+          "setCode": "ASH_190"
+        },
+        {
+          "id": "c63",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        }
+      ],
+      "discard": [
+        {
+          "id": "c60",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        }
+      ],
+      "ground": [],
+      "hand": [
+        {
+          "id": "c82",
+          "name": "noti-mobile-pod",
+          "setCode": "ASH_261"
+        },
+        {
+          "id": "c62",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "id": "c95",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "id": "c76",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        }
+      ],
+      "leader": {
+        "deployed": false,
+        "epicUsed": false,
+        "exhausted": false,
+        "id": "c104",
+        "name": "sabine-wren#galvanized-revolutionary",
+        "setCode": "SOR_014"
+      },
+      "out": false,
+      "resources": [
+        {
+          "exhausted": false,
+          "id": "c93",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "exhausted": false,
+          "id": "c53",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "exhausted": false,
+          "id": "c97",
+          "name": "arena-reek#fixture-of-ceremony",
+          "setCode": "HMW_135"
+        },
+        {
+          "exhausted": false,
+          "id": "c100",
+          "name": "filthy-dianoga",
+          "setCode": "HMW_155"
+        },
+        {
+          "exhausted": false,
+          "id": "c94",
+          "name": "mace-windu#austere-centrist",
+          "setCode": "HMW_128"
+        },
+        {
+          "exhausted": false,
+          "id": "c59",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "exhausted": false,
+          "id": "c61",
+          "name": "skyway-cloud-car",
+          "setCode": "JTL_220"
+        },
+        {
+          "exhausted": false,
+          "id": "c58",
+          "name": "akoba#restless-raider",
+          "setCode": "HMW_052"
+        },
+        {
+          "exhausted": false,
+          "id": "c75",
+          "name": "open-circle-ace",
+          "setCode": "ASH_201"
+        },
+        {
+          "exhausted": false,
+          "id": "c55",
+          "name": "raiding-party",
+          "setCode": "HMW_230"
+        },
+        {
+          "exhausted": false,
+          "id": "c64",
+          "name": "overpower",
+          "setCode": "LOF_126"
+        },
+        {
+          "exhausted": false,
+          "id": "c88",
+          "name": "coastal-catamarans",
+          "setCode": "HMW_093"
+        },
+        {
+          "exhausted": false,
+          "id": "c101",
+          "name": "champions-of-endor",
+          "setCode": "HMW_163"
+        },
+        {
+          "exhausted": false,
+          "id": "c83",
+          "name": "nala-se#silent-survivor",
+          "setCode": "HMW_082"
+        }
+      ],
+      "space": []
+    }
+  },
+  "prevPassed": true,
+  "round": 1,
+  "winner": "p1"
+}

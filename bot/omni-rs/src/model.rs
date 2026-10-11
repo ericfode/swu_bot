@@ -145,6 +145,10 @@ pub enum Decision {
     AbilityNoEffect,
     AbilityDistribute,
     AbilityGroupShield,
+    AbilityDiscard,
+    DeathPlayer,
+    DeathOrder,
+    DeathBatch,
     Terminal,
 }
 
@@ -168,6 +172,7 @@ pub struct PreparedEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EventGroupState {
     pub active: bool, pub resolving: bool, pub replacement_done: bool, pub pc: u16, pub count: u8,
+    pub discard_count:u8, pub discard_owner:Seat,
     pub shield_mask:u8, pub shield_count:u8, pub shield_priority:u8, pub initiator:Seat,
     pub shield_stash:[CardId;MAX_CARDS], pub shield_stash_len:u8,
     pub context: Selection, pub picks: Selection,
@@ -175,13 +180,63 @@ pub struct EventGroupState {
     pub records: [PreparedEvent; 32],
 }
 impl Default for EventGroupState {
-    fn default() -> Self { Self { active:false, resolving:false, replacement_done:false, pc:0, count:0, shield_mask:0, shield_count:0, shield_priority:0, initiator:Seat::P1, shield_stash:[0;MAX_CARDS], shield_stash_len:0,
+    fn default() -> Self { Self { active:false, resolving:false, replacement_done:false, pc:0, count:0, discard_count:0, discard_owner:Seat::P1, shield_mask:0, shield_count:0, shield_priority:0, initiator:Seat::P1, shield_stash:[0;MAX_CARDS], shield_stash_len:0,
         context:Selection::default(), picks:Selection::default(), stack:[Selection::default();8], depth:0,
         records:[PreparedEvent::default();32] } }
 }
+pub const MAX_DEATH_TRIGGERS: usize = 64;
+pub const MAX_DEATH_DEPTH: usize = 8;
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeathTrigger { pub source: CardId, pub program: u16, pub player: Seat, pub after_pc: u8, pub defer_depth: u8, pub keyword: u8 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeathWindow {
+    pub entries: [DeathTrigger; MAX_DEATH_TRIGGERS], pub len: u8,
+    pub initiator: Seat, pub player: Seat, pub player_chosen: bool,
+    pub group_program: u16, pub group_source: CardId, pub group_keyword:u8, pub resolve_all: bool,
+}
+impl Default for DeathWindow {
+    fn default() -> Self { Self { entries:[DeathTrigger::default();MAX_DEATH_TRIGGERS], len:0,
+        initiator:Seat::P1, player:Seat::P1, player_chosen:false,
+        group_program:0, group_source:0, group_keyword:0, resolve_all:false } }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ResolutionContext {
+    pub active: Seat,
+    pub decision: Decision,
+    pub source: CardId,
+    pub target: CardId,
+    pub ambush: bool,
+    pub after_attack_triggers: u8,
+    pub attack_restore: u16,
+    pub attack_source: CardId,
+    pub attack_shield_opponent_first: bool,
+    pub pending_triggers: u8,
+    pub trigger_context: u8,
+    pub pending_programs: u16,
+    pub after_attack_programs: u16,
+    pub ability_program: u16,
+    pub ability_pc: u8,
+    pub ability_target: CardId,
+    pub ability_selection: Selection,
+    pub ability_result: u16,
+    pub ability_succeeded: bool,
+    pub ability_return: u8,
+    pub ability_committed: bool,
+}
+impl ResolutionContext {
+    pub fn capture(s:&State)->Self { Self { active:s.active, decision:s.decision, source:s.source, target:s.target, ambush:s.ambush, after_attack_triggers:s.after_attack_triggers, attack_restore:s.attack_restore, attack_source:s.attack_source, attack_shield_opponent_first:s.attack_shield_opponent_first, pending_triggers:s.pending_triggers, trigger_context:s.trigger_context, pending_programs:s.pending_programs, after_attack_programs:s.after_attack_programs, ability_program:s.ability_program, ability_pc:s.ability_pc, ability_target:s.ability_target, ability_selection:s.ability_selection, ability_result:s.ability_result, ability_succeeded:s.ability_succeeded, ability_return:s.ability_return, ability_committed:s.ability_committed } }
+    pub fn restore(self,s:&mut State) { s.active=self.active; s.decision=self.decision; s.source=self.source; s.target=self.target; s.ambush=self.ambush; s.after_attack_triggers=self.after_attack_triggers; s.attack_restore=self.attack_restore; s.attack_source=self.attack_source; s.attack_shield_opponent_first=self.attack_shield_opponent_first; s.pending_triggers=self.pending_triggers; s.trigger_context=self.trigger_context; s.pending_programs=self.pending_programs; s.after_attack_programs=self.after_attack_programs; s.ability_program=self.ability_program; s.ability_pc=self.ability_pc; s.ability_target=self.ability_target; s.ability_selection=self.ability_selection; s.ability_result=self.ability_result; s.ability_succeeded=self.ability_succeeded; s.ability_return=self.ability_return; s.ability_committed=self.ability_committed; }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeathFrame { pub context: ResolutionContext, pub window: DeathWindow, pub resume: u8 }
+
 /// All mutable game data is inline. Copying a position neither allocates nor shares mutable data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
+    pub death_pending: DeathWindow,
+    pub death_window: DeathWindow,
+    pub death_frames: [DeathFrame; MAX_DEATH_DEPTH],
+    pub death_depth: u8,
     pub cards: [Card; MAX_CARDS],
     pub next_id: CardId,
     pub players: [Player; 2],
@@ -191,6 +246,8 @@ pub struct State {
     pub initiative_claimed: bool,
     pub prev_passed: bool,
     pub active: Seat,
+    /// Action-phase priority is distinct from the owner of a prompted trigger.
+    pub action_player: Option<Seat>,
     pub decision: Decision,
     pub source: CardId,
     // Internal entry-registration boundary; zero in every returned position.
@@ -199,6 +256,7 @@ pub struct State {
     pub ambush: bool,
     pub after_attack_triggers: u8,
     pub attack_restore: u16,
+    pub attack_source: CardId,
     pub attack_shield_opponent_first: bool,
     pub pending_triggers: u8,
     pub trigger_context: u8,
@@ -222,6 +280,8 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            death_pending:DeathWindow::default(), death_window:DeathWindow::default(),
+            death_frames:[DeathFrame::default();MAX_DEATH_DEPTH], death_depth:0,
             cards: [Card::default(); MAX_CARDS],
             next_id: 1,
             players: [Player::default(); 2],
@@ -231,6 +291,7 @@ impl Default for State {
             initiative_claimed: false,
             prev_passed: false,
             active: Seat::P1,
+            action_player:Some(Seat::P1),
             decision: Decision::Window,
             source: 0,
             disabled_ongoing_source: 0,
@@ -238,6 +299,7 @@ impl Default for State {
             ambush: false,
             after_attack_triggers: 0,
             attack_restore: 0,
+            attack_source: 0,
             attack_shield_opponent_first: false,
             pending_triggers: 0,
             trigger_context: 0,
@@ -302,6 +364,17 @@ impl State {
             i += 1;
             h ^= key(i, v);
         };
+        fn context_values(c:&ResolutionContext,put:&mut impl FnMut(u64)) {
+            for v in [c.active.index() as u64,c.decision as u64,c.source as u64,c.target as u64,c.ambush as u64,c.after_attack_triggers as u64,c.attack_restore as u64,c.attack_source as u64,c.attack_shield_opponent_first as u64,c.pending_triggers as u64,c.trigger_context as u64,c.pending_programs as u64,c.after_attack_programs as u64,c.ability_program as u64,c.ability_pc as u64,c.ability_target as u64,c.ability_result as u64,c.ability_succeeded as u64,c.ability_return as u64,c.ability_committed as u64,c.ability_selection.len as u64] {put(v);}
+            for id in c.ability_selection.ids {put(id as u64);}
+        }
+        fn window_values(w:&DeathWindow,put:&mut impl FnMut(u64)) {
+            for v in [w.len as u64,w.initiator.index() as u64,w.player.index() as u64,w.player_chosen as u64,w.group_program as u64,w.group_source as u64,w.group_keyword as u64,w.resolve_all as u64] {put(v);}
+            for e in w.entries {for v in [e.source as u64,e.program as u64,e.player.index() as u64,e.after_pc as u64,e.defer_depth as u64,e.keyword as u64] {put(v);}}
+        }
+        put(self.death_depth as u64);
+        window_values(&self.death_pending,&mut put);window_values(&self.death_window,&mut put);
+        for f in &self.death_frames {put(f.resume as u64);context_values(&f.context,&mut put);window_values(&f.window,&mut put);}
         put(self.next_id as u64);
         put(self.round as u64);
         put(self.regroup as u64);
@@ -309,12 +382,14 @@ impl State {
         put(self.initiative_claimed as u64);
         put(self.prev_passed as u64);
         put(self.active.index() as u64);
+        put(self.action_player.map_or(0,|p|p.index() as u64+1));
         put(self.decision as u64);
         put(self.source as u64);
         put(self.target as u64);
         put(self.ambush as u64);
         put(self.after_attack_triggers as u64);
         put(self.attack_restore as u64);
+        put(self.attack_source as u64);
         put(self.attack_shield_opponent_first as u64);
         put(self.pending_triggers as u64);
         put(self.disabled_ongoing_source as u64);
@@ -328,6 +403,7 @@ impl State {
         put(self.ability_selection.len as u64);
         for id in self.ability_selection.ids { put(id as u64); }
         let g = &self.event_group;
+        put(g.discard_count as u64);put(g.discard_owner.index() as u64);
         put(g.active as u64); put(g.resolving as u64); put(g.replacement_done as u64); put(g.shield_mask as u64); put(g.shield_count as u64); put(g.shield_priority as u64); put(g.shield_stash_len as u64); for id in g.shield_stash { put(id as u64); } put(g.initiator.index() as u64); put(g.pc as u64); put(g.count as u64); put(g.depth as u64);
         for selection in [g.context, g.picks].into_iter().chain(g.stack) {
             put(selection.len as u64); for id in selection.ids { put(id as u64); }

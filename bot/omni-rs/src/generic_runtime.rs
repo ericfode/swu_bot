@@ -137,6 +137,10 @@ impl Engine {
                 let mut restore = 0;
                 for keyword in entry["card"]["keywords"].as_array().into_iter().flatten() {
                     let name = keyword.as_str().ok_or("invalid keyword")?;
+                    if name=="coordinate" {
+                        if entry["keywordValues"][name].as_u64()!=Some(1) || programs.card.iter().filter(|&&id|catalogue.programs[id as usize].coordinate).count()!=1 || info.is("leader") {return Err("unimplemented printed Coordinate registration".into());}
+                        continue;
+                    }
                     if !crate::ability_ir::CORE_KEYWORDS.contains(&name) { return Err(format!("unimplemented runtime keyword {name}")); }
                     // Provider metadata includes keyword mentions in abilities.
                     // Only the compiler's engine-matching printed-text parse
@@ -397,9 +401,7 @@ impl Engine {
             if dead.is_empty() {
                 return Ok(());
             }
-            for id in dead {
-                self.defeat(s, id)?;
-            }
+            self.defeat_many(s,&dead)?;
         }
     }
     fn constant_effects<'a>(&'a self, s: &State, target: CardId, keywords: bool) -> Vec<(CardId, &'a Effect)> {
@@ -420,7 +422,7 @@ impl Engine {
                 .map(|&id| self.program(id))
             {
                 if keywords && !program.instructions.iter().any(|i| matches!(i, Instruction::Apply(Effect::GainKeyword { .. } | Effect::LoseKeyword { .. }))) { continue; }
-                if program.trigger != "constant"
+                if (program.coordinate && !self.coordinate_active(s,source)) || program.trigger != "constant"
                     || program
                         .condition
                         .as_ref()
@@ -538,6 +540,9 @@ impl Engine {
             })
             .collect()
     }
+    pub(super) fn is_attacking(&self, s: &State, id: CardId) -> bool {
+        self.in_arena(s, id) && (id == s.attack_source || s.death_frames[..s.death_depth as usize].iter().any(|frame| frame.context.attack_source == id))
+    }
     fn eval(&self, s: &State, source: CardId, target: CardId, e: &Expr) -> Eval {
         self.eval_with_card(s, source, target, target, e)
     }
@@ -622,7 +627,7 @@ impl Engine {
                     Some("damage") => Eval::Number(s.card(id).damage as i64),
                     Some("power") => {
                         Eval::Number(
-                            self.power(s, id, s.trigger_context == 2 && id == s.source) as i64
+                            self.power(s, id, self.is_attacking(s, id)) as i64
                         )
                     }
                     Some("hp") => Eval::Number(self.hp(s, id) as i64),
@@ -630,7 +635,7 @@ impl Engine {
                         Eval::Number(self.hp(s, id).saturating_sub(s.card(id).damage) as i64)
                     }
                     Some("title") => Eval::Text(self.def(s, id).info.title.clone()),
-                    Some("cost") => Eval::Number(self.def(s, id).info.cost() as i64),
+                    Some("cost" | "printedCost") => Eval::Number(self.def(s, id).info.cost() as i64),
                     Some("exhausted") => Eval::Bool(s.card(id).exhausted),
                     Some("zoneName") => {
                         let p = s.player(s.card(id).owner);
@@ -757,11 +762,11 @@ impl Engine {
                     "isLeader" => Eval::Bool(d.info.is("leader")),
                     "getPower" => {
                         Eval::Number(
-                            self.power(s, id, s.trigger_context == 2 && id == s.source) as i64
+                            self.power(s, id, self.is_attacking(s, id)) as i64
                         )
                     }
                     "getHp" => Eval::Number(self.hp(s, id) as i64),
-                    "getCost" => Eval::Number(d.info.cost() as i64),
+                    "getCost" | "getPrintedCost" => Eval::Number(d.info.cost() as i64),
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" => {
                         let values = match args.first().map(sub) {
                             Some(Eval::Array(v)) => v,
@@ -858,7 +863,7 @@ impl Engine {
         context.ability_target = target;
         if context.event_group.active { context.event_group.context=Selection::one(target); }
         let (dest, amount) = match e {
-            Effect::ReadyResources { target, amount }
+            Effect::DiscardOwnHand {target,amount} | Effect::CreateTokenUnit {target,amount,..} | Effect::ReadyResources { target, amount }
             | Effect::Damage { target, amount }
             | Effect::Heal { target, amount }
             | Effect::Draw { target, amount }
@@ -879,7 +884,8 @@ impl Engine {
             .into_iter()
             .any(|dest| match dest {
                 Eval::Player(player) => {
-                    if matches!(e, Effect::ReadyResources { .. }) {
+                    if matches!(e,Effect::DiscardOwnHand {..}) {!require_change || (amount>0 && s.player(player).hand.len>0)}
+                    else if matches!(e, Effect::ReadyResources { .. }) {
                         !require_change
                             || s.player(player)
                                 .resources
@@ -887,7 +893,7 @@ impl Engine {
                                 .iter()
                                 .any(|&id| s.card(id).exhausted)
                     } else {
-                        matches!(e, Effect::Draw { .. }) && (!require_change || amount > 0)
+                        matches!(e, Effect::Draw { .. } | Effect::CreateTokenUnit {..}) && (!require_change || amount > 0)
                     }
                 }
                 Eval::Card(id) if id != 0 => {
@@ -931,6 +937,7 @@ impl Engine {
         let mut pc = start;
         while let Some(instruction) = instructions.get(pc) {
             match instruction {
+                Instruction::EndStep => {}
                 Instruction::Commit => {}
                 Instruction::Select(resolver) => {
                     return self.matching_targets(s, source, resolver).into_iter().any(
@@ -1021,18 +1028,33 @@ impl Engine {
     pub(super) fn is_ability_decision(&self, d: Decision) -> bool {
         matches!(
             d,
-            Decision::AbilityMenu
+            Decision::DeathPlayer | Decision::DeathOrder | Decision::DeathBatch | Decision::AbilityMenu
                 | Decision::AbilityTarget
                 | Decision::AbilityOptional
                 | Decision::AbilityNoEffect
                 | Decision::AbilityDistribute
-                | Decision::AbilityGroupShield
+                | Decision::AbilityGroupShield | Decision::AbilityDiscard
         )
     }
     pub(super) fn ability_actions(&self, s: &State) -> Vec<Action> {
         let mut out = Vec::new();
         let source = s.source;
         match s.decision {
+            Decision::AbilityDiscard => {
+                let g=&s.event_group;
+                if g.discard_count>1 && g.picks.len==g.discard_count {out.push(Action::button("Done","done"));}
+                for &id in s.player(g.discard_owner).hand.as_slice() {if g.picks.len<g.discard_count || g.picks.ids[..g.picks.len as usize].contains(&id) {out.push(self.card_action(s,id));}}
+            }
+            Decision::DeathPlayer => {out.push(Action::button("You",0));out.push(Action::button("Opponent",1));}
+            Decision::DeathOrder => {
+                for g in self.death_groups(s) {let e=s.death_window.entries[g[0]];
+                    let title=if g.len()>1 {let title=self.death_title(s,e,true);if !g.iter().any(|i|self.death_has_effect(s,s.death_window.entries[*i])) {format!("(No effect) {title}")}else{title}}else{self.death_title(s,e,false)};
+                    out.push(Action::button(title,out.len().to_string()));}
+            }
+            Decision::DeathBatch => {
+                let count=s.death_window.entries[..s.death_window.len as usize].iter().filter(|e|e.player==s.active && self.batch_member(s,**e)).count();
+                out.push(Action::button("Resolve next","next"));out.push(Action::button(format!("Resolve all ({count})"),"all"));
+            }
             Decision::AbilityGroupShield => {
                 if s.event_group.shield_count==0 { out.push(Action::button("You",0)); out.push(Action::button("Opponent",1)); }
                 else { out.push(Action::button("Resolve next","next")); out.push(Action::button(format!("Resolve all ({})",s.event_group.shield_count),"all")); }
@@ -1192,7 +1214,9 @@ impl Engine {
         let next = s.ability_return;
         s.ability_program = 0;
         s.ability_selection=Selection::default(); s.event_group=EventGroupState::default();
-        if next == 1 {
+        if next == 2 {
+            self.process_deaths(s)
+        } else if next == 1 {
             self.process_triggers(s)
         } else {
             self.finish(s)
@@ -1200,11 +1224,13 @@ impl Engine {
     }
     fn run_program(&self, s: &mut State) -> Result<(), String> {
         loop {
+            if self.open_deaths(s,1)? {return Ok(());}
             let p = self.program(s.ability_program - 1);
             let Some(instruction) = p.instructions.get(s.ability_pc as usize) else {
                 return self.end_program(s);
             };
             match instruction {
+                Instruction::EndStep => {s.ability_pc+=1;}
                 Instruction::Commit => {
                     self.commit_program(s)?;
                     s.ability_pc += 1;
@@ -1251,6 +1277,7 @@ impl Engine {
                 Instruction::Group(effect) => {
                     self.commit_program(s)?;
                     if !s.event_group.active {
+                        s.ability_succeeded=false;
                         s.event_group.active=true; s.event_group.initiator=s.active;
                         s.event_group.context=if s.ability_selection.len>0 { s.ability_selection } else { Selection::one(s.ability_target) };
                     }
@@ -1280,6 +1307,29 @@ impl Engine {
         self.matching_targets(s,s.source,r).into_iter().filter(|id| self.effect_can_affect(s,s.source,*id,e,require_change)).collect()
     }
     fn capture_group_leaf(&self,s:&mut State,op:usize,e:&Effect)->Result<(),String> {
+        if let Effect::Draw {target,amount}=e {
+            let Eval::Player(player)=self.effect_targets(s,target).into_iter().next().ok_or("draw target missing")? else{return Err("group draw requires player target".into());};
+            let n=s.event_group.count as usize;if n==32 {return Err("prepared draw event capacity exceeded".into());}
+            let amount=self.effect_amount(s,amount)?;
+            // DrawSystem generates fatigue contingents from the deck at event generation.
+            let fatigue=amount.saturating_sub(s.player(player).deck.len as u16)*3;
+            s.event_group.records[n]=PreparedEvent {op:op as u16,target:s.player(player).base,amount,hp:fatigue as i32,..PreparedEvent::default()};s.event_group.count+=1;return Ok(());
+        }
+        if let Effect::CreateTokenUnit {token_type,amount,target,enters_ready}=e {
+            let code=match token_type.as_str() {"battleDroid"=>"TOKEN_BATTLE_DROID","cloneTrooper"=>"TOKEN_CLONE_TROOPER","beast"=>"TOKEN_BEAST","spy"=>"TOKEN_SPY","tieFighter"=>"TOKEN_TIE_FIGHTER","xwing"=>"TOKEN_XWING",_=>return Err("unsupported token unit type".into())};
+            let def=*self.by_code.get(code).ok_or("created token definition missing from loaded pool")?;
+            let amount=self.effect_amount(s,amount)? as usize;
+            let targets=self.effect_targets(s,target);
+            if s.next_id as usize+amount*targets.len()>MAX_CARDS {return Err("card capacity exceeded generating token units".into());}
+            if s.event_group.count as usize+amount*targets.len()>32 {return Err("prepared token unit event capacity exceeded".into());}
+            for target in targets {let Eval::Player(player)=target else{return Err("token unit target is not a player".into());};
+                for _ in 0..amount {
+                    let token=s.next_id;s.next_id+=1;*s.card_mut(token)=Card {present:true,owner:player,def,exhausted:!*enters_ready,..Card::default()};
+                    let n=s.event_group.count as usize;s.event_group.records[n]=PreparedEvent {op:op as u16,target:s.player(player).base,amount:1,token,..PreparedEvent::default()};s.event_group.count+=1;
+                }
+            }
+            return Ok(());
+        }
         let (target,amount)=match e {
             Effect::Damage{target,amount}|Effect::Heal{target,amount}|Effect::GiveShield{target,amount}|Effect::GiveExperience{target,amount}|Effect::GainKeyword{target,amount,..}=>(target,self.effect_amount(s,amount)?),
             Effect::Ready{target}|Effect::Exhaust{target}|Effect::Defeat{target}|Effect::ModifyStats{target,..}|Effect::LoseKeyword{target,..}=>(target,1),
@@ -1322,6 +1372,11 @@ impl Engine {
                     s.event_group.depth-=1;
                     s.event_group.context=s.event_group.stack[s.event_group.depth as usize];
                     s.event_group.stack[s.event_group.depth as usize]=Selection::default();
+                }
+                GroupOp::Leaf(Effect::DiscardOwnHand {amount,target})=> {
+                    let Eval::Player(player)=self.effect_targets(s,target).into_iter().next().ok_or("discard target missing")? else{return Err("discard target is not a player".into());};
+                    let count=(self.effect_amount(s,amount)? as usize).min(s.player(player).hand.len as usize);
+                    if count>0 {s.event_group.discard_owner=player;s.event_group.discard_count=count as u8;s.active=player;s.decision=Decision::AbilityDiscard;return Ok(false);}
                 }
                 GroupOp::Leaf(effect)=>self.capture_group_leaf(s,s.event_group.pc as usize,effect)?,
             }
@@ -1436,14 +1491,43 @@ impl Engine {
             s.event_group.shield_mask&=!(1<<seat.index()); s.event_group.shield_priority=0;
         }
         s.active=s.event_group.initiator;
+        // All explicit defeat registrations see the same pre-movement event state.
+        let mut explicit_sources=vec![];
+        for r in &s.event_group.records[..s.event_group.count as usize] {
+            if matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Defeat{..})) && self.in_arena(s,r.target) && !explicit_sources.contains(&r.target) {explicit_sources.push(r.target);}
+        }
+        for id in explicit_sources {self.capture_explicit_death(s,id)?;}
+        // Generation can read the preceding step's numeric event context.
+        // Reset the new group's result only after those values are captured.
+        s.ability_result=0;s.ability_succeeded=false;
         s.event_group.resolving=true;
-        // Token attachment contingents run after the primary handlers.
-        let is_attachment=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::GiveShield{..}|Effect::GiveExperience{..}));
-        let indices=(0..s.event_group.count as usize).filter(|i|!is_attachment(*i))
-            .chain((0..s.event_group.count as usize).filter(|i|is_attachment(*i))).collect::<Vec<_>>();
-        for index in indices {
+        // Attachment, unit-entry and draw-fatigue contingents retain record order
+        // after every primary handler has finished.
+        let is_attachment=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::GiveShield{..}|Effect::GiveExperience{..}|Effect::CreateTokenUnit{..}));
+        let is_draw=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::Draw{..}));
+        let indices=(0..s.event_group.count as usize).filter(|i|!is_attachment(*i)).map(|i|(i,false))
+            .chain((0..s.event_group.count as usize).filter(|i|is_attachment(*i)||is_draw(*i)).map(|i|(i,true))).collect::<Vec<_>>();
+        for (index,contingent) in indices {
             let r=s.event_group.records[index];
             let GroupOp::Leaf(effect)=&ops[r.op as usize] else { unreachable!() };
+            if matches!(effect,Effect::DiscardOwnHand {..}) {
+                let owner=s.card(r.target).owner;
+                if s.player_mut(owner).hand.remove(r.target) {s.player_mut(owner).discard.push(r.target)?;s.ability_result=s.ability_result.saturating_add(1);s.ability_succeeded=true;}
+                continue;
+            }
+            if let Effect::Draw {target,..}=effect {
+                if contingent {
+                    let hp=self.def(s,r.target).info.hp.unwrap_or(30) as u16;
+                    s.card_mut(r.target).damage=s.card(r.target).damage.saturating_add(r.hp as u16).min(hp);
+                    continue;
+                }
+                let (amount,resolved)=self.apply_effect(s,&Effect::Draw {target:target.clone(),amount:Expr::number(r.amount as i64)})?;
+                s.ability_result=s.ability_result.saturating_add(amount);s.ability_succeeded|=resolved;continue;
+            }
+            if matches!(effect,Effect::CreateTokenUnit {..}) {
+                self.add_arena(s,r.token)?;s.ability_result=s.ability_result.saturating_add(1);s.ability_succeeded=true;
+                continue;
+            }
             if !self.in_arena(s,r.target)&&!self.def(s,r.target).info.is("base") { continue; }
             if r.token!=0 && matches!(effect,Effect::Damage{..}) {
                 self.remove_group_shield(s,r.target,r.token);
@@ -1473,6 +1557,15 @@ impl Engine {
             let (amount,resolved)=self.apply_effect(s,&effect)?;
             s.ability_result=s.ability_result.saturating_add(amount); s.ability_succeeded|=resolved;
         }
+        let created=s.event_group.records[..s.event_group.count as usize].iter().filter(|r|matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::CreateTokenUnit{..}))).map(|r|r.token).collect::<Vec<_>>();
+        for source in created {
+            let flags=self.effective_flags(s,source);
+            for keyword in [T_SHIELD,T_AMBUSH] {
+                if (keyword==T_SHIELD && flags&SHIELDED==0)||(keyword==T_AMBUSH&&flags&AMBUSH==0) {continue;}
+                let n=s.death_pending.len as usize;if n==MAX_DEATH_TRIGGERS {return Err("created token trigger capacity exceeded".into());}
+                s.death_pending.entries[n]=DeathTrigger {source,keyword,player:s.card(source).owner,after_pc:self.program(s.ability_program-1).event_end,defer_depth:s.death_depth,..DeathTrigger::default()};s.death_pending.len+=1;
+            }
+        }
         s.event_group.resolving=false;
         // Damage callbacks capture their lethal set in handler/selection order,
         // before any queued source defeat can change another unit's HP aura.
@@ -1486,7 +1579,7 @@ impl Engine {
         let framework_dead=s.players.iter().flat_map(|p|p.ground.as_slice().iter().chain(p.space.as_slice())).copied()
             .filter(|id|s.card(*id).damage>=self.hp(s,*id)).collect::<Vec<_>>();
         for id in framework_dead { if !damage_defeats.contains(&id) { damage_defeats.push(id); } }
-        for id in damage_defeats { self.defeat(s,id)?; }
+        self.defeat_many(s,&damage_defeats)?;
         self.sweep_stat_defeats(s)?;
         Ok(true)
     }
@@ -1609,6 +1702,7 @@ impl Engine {
         let targets = self.effect_targets(s, target);
         let mut result = 0u16;
         let mut replacement_resolved = false;
+        let mut draw_resolved = false;
         let mut resources_fully_resolved = true;
         for target in targets {
             match target {
@@ -1628,13 +1722,18 @@ impl Engine {
                     resources_fully_resolved &= readied == amount;
                 }
                 Eval::Player(seat) if matches!(e, Effect::Draw { .. }) => {
+                    // Fatigue is a contingent of a resolved draw, even with no cards drawn.
+                    draw_resolved |= amount > 0;
                     for _ in 0..amount {
                         if let Some(id) = s.player_mut(seat).deck.pop_front() {
                             s.player_mut(seat).hand.push(id)?;
                             result = result.saturating_add(1);
                         } else {
-                            let base = s.player(seat).base;
-                            s.card_mut(base).damage = s.card(base).damage.saturating_add(3);
+                            if !s.event_group.resolving {
+                                let base = s.player(seat).base;
+                                let hp=self.def(s,base).info.hp.unwrap_or(30) as u16;
+                                s.card_mut(base).damage = s.card(base).damage.saturating_add(3).min(hp);
+                            }
                         }
                     }
                 }
@@ -1718,7 +1817,8 @@ impl Engine {
                             result += 1;
                         }
                         Effect::Defeat { .. } if in_arena => {
-                            self.defeat(s, id)?;
+                            if !s.event_group.resolving {self.capture_explicit_death(s,id)?;}
+                            self.leave_play(s,id)?;
                             result += 1;
                         }
                         Effect::GiveShield { .. } | Effect::GiveExperience { .. } if in_arena => {
@@ -1743,13 +1843,29 @@ impl Engine {
             if matches!(e, Effect::ReadyResources { .. }) {
                 resources_fully_resolved
             } else {
-                result > 0 || replacement_resolved
+                result > 0 || replacement_resolved || draw_resolved
             },
         ))
     }
     pub(super) fn apply_ability_action(&self, s: &State, a: &Action) -> Result<State, String> {
         let mut t = *s;
         match s.decision {
+            Decision::AbilityDiscard => {
+                let count=t.event_group.discard_count;
+                if count==1 {t.event_group.picks=Selection::one(a.id().ok_or("discard card missing")?);}
+                else if a.kind=="card" {t.event_group.picks.toggle(a.id().ok_or("discard card missing")?);return Ok(t);}
+                if t.event_group.picks.len!=count {return Err("discard selection must match required count".into());}
+                let op=t.event_group.pc;
+                for id in t.event_group.picks.ids[..count as usize].to_vec() {
+                    let n=t.event_group.count as usize;if n==32 {return Err("prepared discard event capacity exceeded".into());}
+                    t.event_group.records[n]=PreparedEvent {op,target:id,amount:1,..PreparedEvent::default()};t.event_group.count+=1;
+                }
+                t.event_group.picks=Selection::default();t.event_group.discard_count=0;t.event_group.discard_owner=Seat::P1;
+                t.active=t.event_group.initiator;t.event_group.pc+=1;self.run_program(&mut t)?;
+            }
+            Decision::DeathPlayer => {t.death_window.player=if a.arg.as_ref().and_then(Value::as_u64)==Some(0){s.active}else{s.active.other()};t.death_window.player_chosen=true;self.process_deaths(&mut t)?;}
+            Decision::DeathOrder => {let i=a.arg.as_ref().and_then(Value::as_str).ok_or("death index missing")?.parse::<usize>().map_err(|_|"invalid death index")?;let groups=self.death_groups(s);self.choose_death_group(&mut t,groups.get(i).ok_or("invalid death group")?)?;}
+            Decision::DeathBatch => {t.death_window.resolve_all=a.arg.as_ref().and_then(Value::as_str)==Some("all");let i=t.death_window.entries[..t.death_window.len as usize].iter().position(|e|e.player==t.active && self.batch_member(&t,*e)).ok_or("missing death batch")?;self.resolve_death(&mut t,i)?;}
             Decision::AbilityGroupShield => {
                 if s.event_group.shield_count==0 {
                     let seat=if a.arg.as_ref().and_then(Value::as_u64)==Some(0) { s.active } else { s.active.other() };
@@ -1845,6 +1961,128 @@ impl Engine {
         self.sweep_stat_defeats(&mut t)?;
         Ok(t)
     }
+    /// Capture standard self-defeat registrations while the source is still in play.
+    fn capture_explicit_death(&self,s:&mut State,id:CardId)->Result<(),String> {
+        let start=s.death_pending.len as usize;self.capture_death(s,id)?;
+        if s.ability_program!=0 {
+            let end=self.program(s.ability_program-1).event_end;
+            for entry in &mut s.death_pending.entries[start..] {if entry.source==0 {break;}entry.after_pc=end;entry.defer_depth=s.death_depth;}
+        }
+        Ok(())
+    }
+    pub(super) fn capture_death(&self,s:&mut State,id:CardId)->Result<(),String> {
+        if self.catalogue.is_none() || !self.in_arena(s,id) {return Ok(());}
+        let mut context=*s; context.active=s.card(id).owner; context.source=id;
+        for &program in self.card_programs(s,id) {
+            let p=self.program(program);
+            if p.trigger!="whenDefeated" || p.condition.as_ref().is_some_and(|e|!self.eval(&context,id,0,e).truth()) {continue;}
+            let n=s.death_pending.len as usize;
+            if n==MAX_DEATH_TRIGGERS {return Err("defeat trigger capacity exceeded (64)".into());}
+            s.death_pending.entries[n]=DeathTrigger {source:id,program,player:s.card(id).owner,after_pc:if s.ability_program!=0 {self.program(s.ability_program-1).event_end}else{0},defer_depth:s.death_depth,keyword:0};
+            s.death_pending.len+=1;
+        }
+        Ok(())
+    }
+    /// Suspend only at an event boundary; movement and the complete lethal set settle first.
+    pub(super) fn open_deaths(&self,s:&mut State,resume:u8)->Result<bool,String> {
+        let ready=|e:&DeathTrigger|e.after_pc==0 || (e.defer_depth==s.death_depth && e.after_pc==s.ability_pc && s.ability_program!=0);
+        if !s.death_pending.entries[..s.death_pending.len as usize].iter().any(ready) {return Ok(false);}
+        if s.event_group!=EventGroupState::default() {return Err("defeat window opened before event group settled".into());}
+        let n=s.death_depth as usize;
+        if n==MAX_DEATH_DEPTH {return Err("nested defeat window capacity exceeded (8)".into());}
+        s.death_frames[n]=DeathFrame {context:ResolutionContext::capture(s),window:s.death_window,resume};
+        s.death_depth+=1;
+        let pending=s.death_pending; s.death_window=DeathWindow::default();s.death_pending=DeathWindow::default();
+        for e in &pending.entries[..pending.len as usize] {
+            let w=if e.after_pc==0 || (e.defer_depth==s.death_depth-1 && e.after_pc==s.ability_pc && s.ability_program!=0) {&mut s.death_window}else{&mut s.death_pending};
+            w.entries[w.len as usize]=*e;w.len+=1;
+        }
+        // Engine active player is the action's player, even during opponent-owned nested triggers.
+        s.death_window.initiator=if n==0 {if resume==4 {s.initiative}else{s.active}}else{s.death_frames[n].window.initiator};
+        s.ability_program=0;s.pending_programs=0;s.pending_triggers=0;s.event_group=EventGroupState::default();
+        self.process_deaths(s)?;Ok(true)
+    }
+    pub(super) fn merge_enter_deaths(&self,s:&mut State)->Result<(),String> {
+        if s.trigger_context!=1 || s.death_pending.len==0 || (s.pending_programs==0 && s.pending_triggers==0) {return Ok(());}
+        let old=s.death_pending;let mut merged=DeathWindow::default();
+        for (i,&program) in self.card_programs(s,s.source).iter().enumerate() {
+            if s.pending_programs&(1<<i)==0 {continue;}
+            let n=merged.len as usize;if n==MAX_DEATH_TRIGGERS {return Err("merged trigger window capacity exceeded".into());}
+            merged.entries[n]=DeathTrigger {source:s.source,program,player:s.active,..DeathTrigger::default()};merged.len+=1;
+        }
+        for keyword in self.trigger_bits(s) {
+            let n=merged.len as usize;if n==MAX_DEATH_TRIGGERS {return Err("merged trigger window capacity exceeded".into());}
+            merged.entries[n]=DeathTrigger {source:s.source,keyword,player:s.active,..DeathTrigger::default()};merged.len+=1;
+        }
+        for e in &old.entries[..old.len as usize] {let n=merged.len as usize;if n==MAX_DEATH_TRIGGERS {return Err("merged trigger window capacity exceeded".into());}merged.entries[n]=*e;merged.len+=1;}
+        s.death_pending=merged;s.pending_programs=0;s.pending_triggers=0;Ok(())
+    }
+    fn death_title(&self,s:&State,e:DeathTrigger,static_title:bool)->String {
+        let mut c=*s;c.source=e.source;c.active=e.player;
+        if e.keyword!=0 {let title=self.trigger_title(&c,e.keyword);if !static_title&&!self.trigger_effect(&c,e.keyword) {format!("(No effect) {title}")}else{title}}
+        else if static_title {self.program(e.program).title.clone()}else{self.program_menu_title(&c,e.source,e.program)}
+    }
+    fn same_death_group(&self,s:&State,a:DeathTrigger,b:DeathTrigger)->bool {
+        self.def(s,a.source).info.internal_name==self.def(s,b.source).info.internal_name && self.death_title(s,a,true)==self.death_title(s,b,true)
+    }
+    fn batch_member(&self,s:&State,e:DeathTrigger)->bool {self.same_death_group(s,e,DeathTrigger {source:s.death_window.group_source,program:s.death_window.group_program,keyword:s.death_window.group_keyword,player:s.active,..DeathTrigger::default()})}
+    fn death_groups(&self,s:&State)->Vec<Vec<usize>> {
+        let mut groups:Vec<Vec<usize>>=vec![];
+        for (i,e) in s.death_window.entries[..s.death_window.len as usize].iter().enumerate() {
+            if e.player!=s.death_window.player {continue;}
+            if let Some(g)=groups.iter_mut().find(|g| {let first=s.death_window.entries[g[0]]; self.same_death_group(s,first,*e)}) {g.push(i);} else {groups.push(vec![i]);}
+        }
+        groups.sort_by_key(|g|!g.iter().any(|i|self.death_has_effect(s,s.death_window.entries[*i])));
+        groups
+    }
+    fn death_has_effect(&self,s:&State,e:DeathTrigger)->bool {
+        let mut context=*s;context.active=e.player;context.source=e.source;
+        if e.keyword!=0 {self.trigger_effect(&context,e.keyword)}else{self.program_has_effect(&context,e.source,e.program)}
+    }
+    fn remove_death(&self,s:&mut State,i:usize)->DeathTrigger {
+        let e=s.death_window.entries[i];let n=s.death_window.len as usize;
+        s.death_window.entries.copy_within(i+1..n,i);s.death_window.len-=1;
+        s.death_window.entries[n-1]=DeathTrigger::default();e
+    }
+    fn resolve_death(&self,s:&mut State,i:usize)->Result<(),String> {
+        let e=self.remove_death(s,i);s.source=e.source;s.active=e.player;s.target=0;s.trigger_context=0;
+        if e.keyword!=0 {s.trigger_context=4;self.resolve_trigger(s,e.keyword)}else{self.begin_program(s,e.program,2)}
+    }
+    pub(super) fn process_deaths(&self,s:&mut State)->Result<(),String> {
+        loop {
+            if !s.death_window.player_chosen {
+                let mask=s.death_window.entries[..s.death_window.len as usize].iter().fold(0u8,|m,e|m|(1<<e.player.index()));
+                if mask==3 {s.active=s.death_window.initiator;s.decision=Decision::DeathPlayer;return Ok(());}
+                s.death_window.player=if mask==2 {Seat::P2}else{Seat::P1};s.death_window.player_chosen=true;
+            }
+            let groups=self.death_groups(s);
+            if groups.is_empty() || !groups.iter().flatten().any(|i|self.death_has_effect(s,s.death_window.entries[*i])) {
+                let player=s.death_window.player;
+                let mut i=0;while i<s.death_window.len as usize {if s.death_window.entries[i].player==player {self.remove_death(s,i);}else{i+=1;}}
+                if s.death_window.len>0 {s.death_window.player=player.other();s.death_window.resolve_all=false;continue;}
+                let n=s.death_depth as usize-1;let frame=s.death_frames[n];s.death_frames[n]=DeathFrame::default();s.death_depth-=1;
+                s.death_window=frame.window;frame.context.restore(s);
+                return match frame.resume {1=>self.run_program(s),2=>self.process_triggers(s),3=>self.finish(s),4=>self.advance_after_expiry(s),5=>self.combat_after_damage(s),_=>Err("invalid defeat continuation".into())};
+            }
+            s.active=s.death_window.player;
+            if s.death_window.resolve_all {
+                if let Some(i)=groups.iter().flatten().find(|i| {let e=s.death_window.entries[**i];self.batch_member(s,e)}) {return self.resolve_death(s,*i);}
+                s.death_window.resolve_all=false;
+            }
+            if groups.len()>1 {s.decision=Decision::DeathOrder;return Ok(());}
+            self.choose_death_group(s,&groups[0])?;return Ok(());
+        }
+    }
+    fn choose_death_group(&self,s:&mut State,g:&[usize])->Result<(),String> {
+        if g.len()==1 {return self.resolve_death(s,g[0]);}
+        let first=s.death_window.entries[g[0]];s.death_window.group_source=first.source;s.death_window.group_program=first.program;s.death_window.group_keyword=first.keyword;
+        s.decision=Decision::DeathBatch;Ok(())
+    }
+
+    fn coordinate_active(&self,s:&State,source:CardId)->bool {
+        let p=s.player(s.card(source).owner);
+        self.in_arena(s,source) && p.ground.len as u16+p.space.len as u16>=3
+    }
     pub(super) fn queue_programs(&self, s: &mut State, trigger: &str) {
         s.pending_programs = 0;
         if self.catalogue.is_none() {
@@ -1853,6 +2091,7 @@ impl Engine {
         for (i, p) in self.card_programs(s, s.source).iter().enumerate() {
             let p = self.program(*p);
             if p.trigger == trigger
+                && (!p.coordinate || self.coordinate_active(s,s.source))
                 && p.condition
                     .as_ref()
                     .is_none_or(|e| self.eval(s, s.source, 0, e).truth())

@@ -1,0 +1,88 @@
+{
+  "games": 202,
+  "decisions": 27718,
+  "windows": 12057,
+  "errors": [],
+  "corpora": [
+    {
+      "directory": "death",
+      "games": 27,
+      "decisions": 5506,
+      "windows": 2231,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "alias",
+      "games": 6,
+      "decisions": 1272,
+      "windows": 522,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "coordinate",
+      "games": 11,
+      "decisions": 2418,
+      "windows": 1010,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "token-unit",
+      "games": 22,
+      "decisions": 5427,
+      "windows": 2292,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "discard",
+      "games": 18,
+      "decisions": 4304,
+      "windows": 1806,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "incidental",
+      "games": 8,
+      "decisions": 1907,
+      "windows": 823,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "play-first90",
+      "games": 90,
+      "decisions": 5597,
+      "windows": 2795,
+      "poolSha256": "315ddcf99fea615ac0c0724c91286a34f3ffd6e7b90f8a2285591a5d71ab9fc0"
+    },
+    {
+      "directory": "play-last13",
+      "games": 13,
+      "decisions": 838,
+      "windows": 412,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "discard-fatigue",
+      "games": 3,
+      "decisions": 162,
+      "windows": 56,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "proof-forward",
+      "games": 2,
+      "decisions": 123,
+      "windows": 43,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    },
+    {
+      "directory": "death-raid",
+      "games": 2,
+      "decisions": 164,
+      "windows": 67,
+      "poolSha256": "42eef77f7d8bc87a03c5bf83209846b7a95ee410212c459d41bfddd58c5215f9"
+    }
+  ],
+  "receiptIndexSha256": "32096d48a050cb1ece84bf278ba4ae0e86ec7196137a76f66a8b38db50a9dc35",
+  "allHashesAndTerminalResultsChecked": true,
+  "windowDefinition": "type=state records, matching check.rs counter"
+}
