@@ -66,3 +66,23 @@ resources, later only when the hand needs it. Targets: the prompt's intent is ap
 scored. Damage splits: lethal on the enemy base, then kills with the most value per point, then shields, then the base;
 indirect damage on its own side goes to its own base first. Cancels on "will have no effect" prompts, and a move that
 led to a Cancel is not retried that round.
+
+## Results
+
+One build, one ladder (`results/lisp-ladder-1`, 10 games per pair, seeds 301-305 from both seats, real cards, forceteki
+`2be4fcd`; aggro/tempo with the base-danger fix from PR #10, rust-greedy2 from PR #9):
+
+| Bot | W-L | Win rate | BT Elo | ms per decision (harness) |
+| --- | --- | --- | --- | --- |
+| aggro | 40-10 | 80% | 1839 | 174 |
+| **lisp** | **38-11** | **78%** | **1818** | **2.2** |
+| rust-greedy2 | 36-14 | 72% | 1765 | 3.2 |
+| tempo | 20-29 | 41% | 1471 | 173 |
+| rush | 14-35 | 29% | 1357 | 0.1 |
+| random | 0-49 | 0% | 751 | 0.0 |
+
+Head to head: lisp 7-3 vs rust-greedy2, 5-5 vs aggro, 8-1 vs tempo, 8-2 vs rush, 10-0 vs random.
+
+Known issue: one game (tempo vs lisp, seed 312) hit the 6,000-step cap. In a "Choose units to deal 1 damage to"
+multi-select prompt the bot kept clicking the same card, and the prompt never took it. The repeat guard lowers that
+card's score but still picks it when it is the only card and no minimum is met.
