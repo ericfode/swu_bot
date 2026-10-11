@@ -133,7 +133,9 @@ async function playOne({ server, cardDir, seed, bots, isPrivate, pester, maxMs, 
         }
         await sleep(startAfterMs);
 
-        clients.push(...bots.map((b) => loadClient(b)));
+        for (const b of bots) {
+            clients.push(loadClient(b)); // one at a time, so the finally below closes any that started
+        }
         const log = (i) => (line) => verbose && console.error(`[seed ${seed} ${bots[i]}] ${line}`);
         const seats = [host, guest].map((s, i) => new KarabastSeat(s, users[i].id, clients[i], { deck: decks[i], seed: `${seed}-${i}`, log: log(i) }));
         const plays = seats.map((s) => s.play());

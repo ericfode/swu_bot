@@ -87,15 +87,17 @@ async function watch(server, lobbyId, out, opts) {
     let file = null;
     let fd = null;
     let counted = false;
+    let stopped = false;
+    let timer = null;
     let predict = predictor(opts.predict);
     const ended = new Promise((resolve) => {
-        const timer = setTimeout(() => resolve('time limit'), opts.maxMs);
+        timer = setTimeout(() => resolve('time limit'), opts.maxMs);
         sock.on('disconnect', (why) => {
             clearTimeout(timer);
             resolve(why);
         });
         sock.on('gamestate', (gs) => {
-            if (!gs?.players || Object.keys(gs.players).length < 2) {
+            if (stopped || !gs?.players || Object.keys(gs.players).length < 2) {
                 return;
             }
             if (!counted) {
@@ -103,6 +105,8 @@ async function watch(server, lobbyId, out, opts) {
                 try {
                     opts.onPlayers?.(Object.keys(gs.players));
                 } catch (e) {
+                    // over the people cap: leave before anything is saved
+                    stopped = true;
                     clearTimeout(timer);
                     resolve(e.message);
                     return;
@@ -130,11 +134,17 @@ async function watch(server, lobbyId, out, opts) {
             }
         });
     });
-    await sock.connect();
-    const why = await ended;
-    sock.close();
-    if (fd) {
-        fs.closeSync(fd);
+    let why;
+    try {
+        await sock.connect();
+        why = await ended;
+    } finally {
+        stopped = true;
+        clearTimeout(timer);
+        sock.close();
+        if (fd) {
+            fs.closeSync(fd);
+        }
     }
     console.error(`${frames.length} frames -> ${file ?? '(nothing saved)'} (${why})`);
     return frames.length;
