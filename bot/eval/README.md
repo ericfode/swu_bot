@@ -16,8 +16,8 @@ recorded games from any source (including upstream tournaments) and positions in
 | name | kind | idea |
 |---|---|---|
 | `base` | hand-made | remaining base HP difference; the floor |
-| `material` | hand-made | the shipped heuristic weights, including its low-base term |
-| `material-fixed` | hand-made | same weights, but a low base counts against you |
+| `material` | hand-made | the heuristic weights before the sign fix (heuristic.js `legacy` profile) |
+| `material-fixed` | hand-made | same weights with the fix (heuristic.js's current default) |
 | `race` | hand-made | rounds each side needs to kill the other base, compared as a log ratio |
 | `linear` | fitted | logistic regression on the 30 per-side feature differences |
 | `linear-deck` | fitted | same, opponent's hidden hand valued from their known decklist |
@@ -31,9 +31,10 @@ quality, deck, initiative, a damage-pressure ratio, round, who acts next).
 **Views.** `subjective`: the judge sees its own hand; the opponent hand is a count (or, for `-deck` models, the count
 times the average unseen card of their decklist). `objective`: both hands visible.
 
-**Note on the shipped heuristic.** `bot/players/heuristic.js` scores base HP as `hp*0.9 + (12-hp)^2/6` when
-`hp <= 12`. The second term grows as the base drops, so below about 9 HP each point of damage *raises* that
-side's value. `material-fixed` flips the sign; compare it with `material` to see what the term costs.
+**Note on the heuristic's base term.** Until 2026-10-11 `bot/players/heuristic.js` scored base HP as `hp*0.9 + (12-hp)^2/6`
+when `hp <= 12`. The second term grows as the base drops, so below about 9 HP each point of damage *raised* that
+side's value. heuristic.js now subtracts it (the old behaviour is its `legacy` profile). `material` keeps the old
+sign and `material-fixed` the new one, so the pair measures what the bug cost.
 
 ## Run it
 

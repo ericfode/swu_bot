@@ -129,6 +129,12 @@ async function main() {
     for (const d of ['games', 'parts', 'positions', 'decks']) {
         fs.mkdirSync(path.join(out, d), { recursive: true });
     }
+    // shards append, so a rerun into the same folder would duplicate positions and pick up stale index parts
+    for (const d of ['parts', 'positions', 'decks']) {
+        for (const f of fs.readdirSync(path.join(out, d))) {
+            fs.rmSync(path.join(out, d, f), { force: true });
+        }
+    }
     const index = { id: path.basename(out), createdAt: new Date().toISOString(), engine: engineRev(), bots: names, gamesPerPairing: perPair, games: [] };
     const merge = () => {
         const byId = new Map();
@@ -149,11 +155,16 @@ async function main() {
     const timer = setInterval(merge, 3000);
     const procs = Array.from({ length: Math.min(workers, jobs.length) }, (_, k) => new Promise((resolve) => {
         const p = spawn(process.execPath, [__filename, ...process.argv.slice(2), '--shard', String(k), '--workers', String(workers)], { stdio: 'inherit' });
-        p.on('exit', resolve);
+        p.on('error', (e) => resolve(`shard ${k}: ${e.message}`));
+        p.on('exit', (code, signal) => resolve(code === 0 ? null : `shard ${k} exited with ${signal ?? code}`));
     }));
-    await Promise.all(procs);
+    const failures = (await Promise.all(procs)).filter(Boolean);
     clearInterval(timer);
     merge();
+    if (failures.length) {
+        console.error(`incomplete run: ${failures.join('; ')}`);
+        process.exitCode = 1;
+    }
     const won = index.games.filter((g) => g.outcome === 'won').length;
     console.log(`wrote ${index.games.length} games (${won} decided) to ${out}`);
 }

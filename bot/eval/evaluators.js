@@ -8,8 +8,9 @@
  *
  * Kinds:
  *   base            remaining base HP difference only (the floor any evaluator should beat)
- *   material        the weights of bot/players/heuristic.js (as shipped, including its low-base term)
- *   material-fixed  same, but a low base counts against you (the shipped term adds value as your base drops)
+ *   material        the heuristic.js weights before the 2026-10-11 sign fix (its `legacy` profile): the low-base
+ *                   "danger" term is added, so below ~9 HP more damage raises a side's value
+ *   material-fixed  the same weights with the danger term subtracted (heuristic.js's current default)
  *   race            damage race: rounds each side needs to kill the other's base, compared as a log ratio
  *   linear          logistic regression on feature differences, fitted on game outcomes (fit.js)
  *   mlp             tiny antisymmetric neural net, logit = g(me, opp) - g(opp, me), fitted on game outcomes
