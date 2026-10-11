@@ -16,6 +16,8 @@ analysis/.cache/
 analysis/out/
 results/
 data/
+# the viewer keeps source code in studio/src/data
+!studio/src/data/
 __pycache__/
 .perch/*
 !.perch/closed.jsonl
