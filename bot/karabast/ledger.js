@@ -15,18 +15,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const LOCK_WAIT_MS = 10000;
-// a lock this old was left by a run that died while holding it
-const LOCK_STALE_MS = 30000;
 
 function sleepSync(ms) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 class PeopleLedger {
-    constructor(file, max = 10) {
+    constructor(file, max = 10, { lockWaitMs = 10000 } = {}) {
         this.file = file;
         this.max = max;
+        this.lockWaitMs = lockWaitMs;
         this.load();
     }
 
@@ -68,7 +66,10 @@ class PeopleLedger {
         });
     }
 
-    /** Runs fn on the file's current data while holding `<file>.lock` (created exclusively). */
+    /**
+     * Runs fn on the file's current data while holding `<file>.lock` (created exclusively). A lock is never taken
+     * over: one left by a run that died stops the next run, which says which file to remove.
+     */
     locked(fn) {
         fs.mkdirSync(path.dirname(this.file), { recursive: true });
         const lock = `${this.file}.lock`;
@@ -83,19 +84,10 @@ class PeopleLedger {
                     throw e;
                 }
             }
-            let age = 0;
-            try {
-                age = Date.now() - fs.statSync(lock).mtimeMs;
-            } catch {
-                continue; // released in between
+            if (Date.now() - t0 > this.lockWaitMs) {
+                throw new Error(`people ledger ${this.file} stayed locked for ${this.lockWaitMs / 1000} s; if no other run is using it, remove ${lock}`);
             }
-            if (age > LOCK_STALE_MS) {
-                fs.rmSync(lock, { force: true });
-            } else if (Date.now() - t0 > LOCK_WAIT_MS) {
-                throw new Error(`people ledger ${this.file} stayed locked for ${LOCK_WAIT_MS / 1000} s`);
-            } else {
-                sleepSync(50);
-            }
+            sleepSync(50);
         }
         try {
             this.load();

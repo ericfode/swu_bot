@@ -249,6 +249,12 @@ test('two ledgers on one file share the cap', () => {
     assert.throws(() => a.add(['user-c'], 'played'), /cap/);
     assert.strictEqual(new PeopleLedger(file, 2).count, 2);
     assert.ok(!fs.existsSync(`${file}.lock`));
+    // a lock someone else holds is never taken over, however old
+    fs.writeFileSync(`${file}.lock`, '');
+    fs.utimesSync(`${file}.lock`, new Date(0), new Date(0));
+    assert.throws(() => new PeopleLedger(file, 5, { lockWaitMs: 100 }).add(['user-d'], 'played'), /stayed locked.*remove/);
+    assert.ok(fs.existsSync(`${file}.lock`));
+    assert.strictEqual(new PeopleLedger(file, 5).count, 2);
 });
 
 test('a bad split is a bot failure, and the seat concedes at maxFailures', async () => {
