@@ -26,7 +26,10 @@ REPLAYS_DIR=$PWD/fixtures/replays npm run dev
 npm run build:static                               # one self-contained HTML file with the fixtures baked in -> dist-static/
 STATIC_REPLAYS=../replays npm run build:static     # same, with real tournaments instead (colon-separate several folders)
 STATIC_EVALS=… STATIC_LENS=… npm run build:static  # also bake in evaluations and lens files (one <gameId>.json each)
+STATIC_DATA=files STATIC_REPLAYS=… npm run build:static  # keep the data out of the page: staged in static-data/data/ to publish beside it
 ```
+
+A single-file page has to stay under 16 MB, which holds about 28 games. With `STATIC_DATA=files` the page is ~1 MB and fetches `data/manifest.json`, `data/<tournament>/…` and `data/_evals|_lens/<gameId>.json` relative to itself when opened, so a preview can carry over a hundred games. Pair it with an art pack (`scripts/art-pack.py`, split into parts when big) published as `art-pack.json` beside the page.
 
 The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/replays node viewer/server.cjs`.
 
@@ -35,7 +38,7 @@ The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/r
 - **Tournaments**: standings with Elo (same K=24 sequential rules as `viewer/`), recent form, the Elo race over the tournament, a head-to-head heat map, first-seat win rate, and a filterable game list. Indexes with running games refresh every 2 s.
 - **Replay**: the table laid out as in SWU (ground arena, base and leader, space arena per seat), units animated in and out, damage and healing pop-ups, base HP rings, the initiative token sliding between seats, exhausted cards turned, hidden hands per perspective.
 - **Momentum timeline**: base HP, board power, hand size and the omni score (the omniscient bot's board score for player 1) for every decision, with round bands; position evaluations add four P(p1 wins) curves. Click or drag it to seek.
-- **Lens** (header button): every card's value in the omni bot's board score drawn on the card, with its search verdicts on the boards it searched (`src/data/lens.ts`, format in `/mnt/project-files/omni/LENS.md`).
+- **Card values** (header button, a card with a value chip): every card's value in the omni bot's board score drawn on the card, with its search verdicts on the boards it searched (`src/data/lens.ts`, format in `/mnt/project-files/omni/LENS.md`). Each part of the score has one colour and icon (`TERM_COLOR`, `components/TermIcon.tsx`) used on the cards, the totals, the legend and the breakdown, so a number leads to its row.
 - **Card inspector**: the hovered card at a readable size in the side panel, or next to the pointer when there is no side panel. Leader fronts and bases are drawn landscape.
 - **Decision log** grouped by round, with what each decision changed (units entering or defeated, base damage, resources).
 - Keyboard: ← → step, shift for 10, `[` `]` (or ↑ ↓) jump a round, space play, Home/End, ⌘K / Ctrl+K command palette.

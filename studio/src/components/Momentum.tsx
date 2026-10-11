@@ -268,7 +268,7 @@ function Markers({ markers, last, step, bots, onSeek, width, stepN, rounds }: {
                                 <ActionIcon cls={m.cls} seat={m.seat} card={m.card} outcome={m.outcome} size={SIZE} title="" />
                             </span>
                             <span className="absolute left-1/2 -translate-x-1/2 -bottom-2 rounded px-0.5 text-[9px] leading-tight num font-semibold bg-bg/90"
-                                style={{ color: `var(--color-${gain})` }}>{m.swing >= 0 ? '▲' : '▼'}{Math.abs(m.swing).toFixed(0)}</span>
+                                style={{ color: `var(--color-${gain})` }} title={`${m.swing >= 0 ? '+' : '−'}${Math.abs(m.swing).toFixed(1)} points of ${bots[m.seat]}'s chance to win (from the evaluations, or from the omni score's curve without them)`}>{m.swing >= 0 ? '▲' : '▼'}{Math.abs(m.swing).toFixed(0)}</span>
                         </button>
                         <AnimatePresence>
                             {hover === k && (
@@ -276,7 +276,7 @@ function Markers({ markers, last, step, bots, onSeek, width, stepN, rounds }: {
                                     initial={{ opacity: 0, y: 6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0 }}>
                                     <ActionIcon cls={m.cls} seat={m.seat} card={m.card} outcome={m.outcome} size={110} caption={describe(m, bots[m.seat])} />
                                     <span className="text-[11px] num text-dim whitespace-nowrap">
-                                        step {stepN(m.index)} · R{rounds[m.index]} · {classInfo(m.cls).label.toLowerCase()} · <b style={{ color: `var(--color-${gain})` }}>{m.swing >= 0 ? '+' : '−'}{Math.abs(m.swing).toFixed(1)}</b> for {bots[m.seat]}
+                                        step {stepN(m.index)} · R{rounds[m.index]} · {classInfo(m.cls).label.toLowerCase()} · <b style={{ color: `var(--color-${gain})` }}>{m.swing >= 0 ? '+' : '−'}{Math.abs(m.swing).toFixed(1)} pts</b> for {bots[m.seat]}
                                     </span>
                                 </motion.div>
                             )}

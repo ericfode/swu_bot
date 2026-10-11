@@ -297,9 +297,17 @@ export function mountBoard(el: HTMLElement, state: Snapshot, opts: { bots?: Reco
     };
 }
 
+/**
+ * Every decision of a game grouped into actions. Pass the game's evals file (dashboard/evals) and lens file (swu-lens/1)
+ * when there are any: swings then come from the evaluations, or from the omni bot's exact board score.
+ */
+function classify(game: Game, evals?: EvalFile | null, lens?: LensFile | null): Action[] {
+    return classifyGame(game, evalsByIndex(game, evals), lensByIndex(game, lens));
+}
+
 /** The k most game-changing actions, using the evaluations' swing when given, else the omni board score's (exact with a lens file). */
 export function pivotal(game: Game, evals?: EvalFile | null, k = 8, lens?: LensFile | null): Action[] {
-    return pivotalActions(classifyGame(game, evalsByIndex(game, evals), lensByIndex(game, lens)), k);
+    return pivotalActions(classify(game, evals, lens), k);
 }
 
 /** Turn the card-value Lens on or off for every viewer on the page. */
@@ -314,5 +322,5 @@ export function setCardArt(on: boolean) {
 
 export { setArtResolver, loadArtPack };
 export type { ArtResolver };
-export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES, estimateLens, lensAt, lensByIndex };
+export { GameViewer, Glyph, Spine, ActionIcon, EdgeBreakdown, parseGame, classify as classifyGame, pivotalActions, describe, edgeTerms, tierFor, ACTION_CLASSES, estimateLens, lensAt, lensByIndex };
 export type { EvalFile, Game, Action, ActionClass, ActionIconProps, LensFile, LensStep };
