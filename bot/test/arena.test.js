@@ -557,3 +557,22 @@ test('a held-out round is compared with the last training round and stays out of
     assert.strictEqual(rulesText(null), '');
     assert.match(rulesText({ holdout: { fraction: 0.3, trainPool: '/a/train.json', trainCards: 1400, holdoutCards: 600 } }), /30% of the leaders and main-deck cards are held out.*1400 training cards.*600 held-out cards/s);
 });
+
+test('a holdout tournament\'s extra ladder does not count as a planned round', () => {
+    const { clock, TOURNAMENT } = require('../arena/api');
+    const now = new Date().toISOString();
+    const work = (n) => ({ n, ladder: `arena-tz-r${n}`, workStart: now, workEnd: now, ladderStart: now, ladderEnd: now, bots: ['rush'] });
+    writeJson(TOURNAMENT(), { id: 'arena-tz', state: 'running', plannedRounds: 3, rounds: [work(1), work(2), work(3), { ...work(4), kind: 'holdout', ladderEnd: undefined }],
+                              rules: { holdout: { fraction: 0.3, train: 'rules/arena-tz/train.json', holdout: 'rules/arena-tz/holdout.json', counts: { train: 1400, holdout: 599 } } } });
+    try {
+        const c = clock();
+        assert.strictEqual(c.roundIndex, 3, 'three of three work rounds');
+        assert.strictEqual(c.plannedRounds, 3);
+        assert.strictEqual(c.holdout, true);
+        assert.strictEqual(c.phase, 'ladder');
+        assert.strictEqual(c.tournament.rules.holdout.holdoutCards, 599);
+        assert.strictEqual(c.tournament.rules.holdout.trainPool, path.join(HOME, 'rules/arena-tz/train.json'));
+    } finally {
+        fs.rmSync(TOURNAMENT(), { force: true });
+    }
+});

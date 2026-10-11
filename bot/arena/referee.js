@@ -260,8 +260,9 @@ function ladderIdOf(round, t = null) {
 }
 
 /** What standings.json says about the tournament in progress (progress on the dashboard). */
-const tourInfo = (t) => (t ? { id: t.id, title: t.title, plannedRounds: t.plannedRounds, rounds: t.rounds.map((r) => r.n),
-                                ...(t.rules ? { rules: rulesInfo(t.rules) } : {}) } : null);
+// rounds lists the work rounds (plannedRounds counts those); a holdout tournament's extra ladder is holdoutRound
+const tourInfo = (t) => (t ? { id: t.id, title: t.title, plannedRounds: t.plannedRounds, rounds: t.rounds.filter((r) => r.kind !== 'holdout').map((r) => r.n),
+                                ...(t.rules ? { rules: rulesInfo(t.rules) } : {}), ...(t.rounds.some((r) => r.kind === 'holdout') ? { holdoutRound: t.rounds.find((r) => r.kind === 'holdout').n } : {}) } : null);
 
 /** The public summary of a tournament's rules (standings, the API clock and the brief show it). */
 function rulesInfo(rules) {

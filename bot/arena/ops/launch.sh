@@ -107,11 +107,16 @@ setup() {
     if [ ! -x "$BASE/tools/memo" ]; then
         install -m 755 "$MEMO_SRC" "$BASE/tools/memo"
     fi
-    # after a new container: the running tournament's round ladders the mirror kept (tournament.json names them), and the
-    # backup of the logs
+    # after a new container: every round ladder the mirror kept that standings.json or tournament.json names (games and the
+    # replay server read them here; a running round resumes from its copy), and the backup of the logs
     local id ids
-    ids=$(node -e "const t=require(process.argv[1]); if (t.state==='running') for (const r of t.rounds) console.log(r.ladder ?? 'arena-r'+r.n)" \
-        "$LAUNCH_TOURNAMENT" 2>/dev/null || true)
+    ids=$(node -e "
+const fs = require('fs');
+const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+const ids = new Set();
+for (const rd of read(process.argv[1])?.rounds ?? []) ids.add(rd.ladderId ?? 'arena-r' + rd.round);
+for (const r of read(process.argv[2])?.rounds ?? []) ids.add(r.ladder ?? 'arena-r' + r.n);
+console.log([...ids].join('\n'));" "$ARENA_HOME/standings.json" "$LAUNCH_TOURNAMENT" 2>/dev/null || true)
     for id in $ids; do
         [[ "$id" =~ ^arena-[A-Za-z0-9_-]+$ ]] || continue
         if [ -d "$SHARED_RESULTS/$id" ] && [ ! -e "$BASE/results/$id" ]; then

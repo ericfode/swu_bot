@@ -100,8 +100,10 @@ function clock(now = Date.now()) {
     const h = t.rules?.holdout;
     // a holdout tournament's card rule: what competitors may build and test with (the held-out list stays unnamed here)
     const rules = h ? { holdout: { fraction: h.fraction, trainPool: path.join(home.HOME, h.train), trainCards: h.counts?.train ?? null, holdoutCards: h.counts?.holdout ?? null } } : null;
+    // roundIndex counts work rounds (plannedRounds counts those): a holdout tournament's extra ladder is `holdout: true`
+    const holdout = cur?.kind === 'holdout';
     return { tournament: { id: t.id, title: t.title, rounds: t.plannedRounds, roundMinutes: t.roundMinutes, task: t.task ?? null, rules }, round: cur?.n ?? null,
-             roundIndex: cur ? t.rounds.length : null, plannedRounds: t.plannedRounds ?? null, phase, deadline,
+             roundIndex: cur ? t.rounds.filter((r) => r.kind !== 'holdout').length : null, plannedRounds: t.plannedRounds ?? null, ...(holdout ? { holdout } : {}), phase, deadline,
              minutesLeft: deadline ? Math.max(0, Math.round((Date.parse(deadline) - now) / 60000)) : null };
 }
 
