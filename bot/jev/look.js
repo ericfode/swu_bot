@@ -63,8 +63,15 @@ function boardReply(eg, pid, acts) {
     return best ?? acts.find(isPass) ?? null;
 }
 
-/** Follow-up prompts: attacks go to the base when allowed (aggressive), the rest use the rule-based defaults. */
-function followUp(eg, pid, acts) {
+/**
+ * Follow-up prompts: attacks go to the base when allowed (aggressive), the rest use the rule-based defaults.
+ * When the opponent must pick among cards hidden from the bot (e.g. from its hand), it picks at random: defaultChoose
+ * would rank them by their real cost and type, which the bot must not learn from.
+ */
+function followUp(eg, pid, acts, hidden, rng) {
+    if (acts.some((a) => (a.kind === 'card' && a.card && hidden.has(a.card.uuid)) || (a.kind === 'displayCard' && hidden.has(a.arg)))) {
+        return acts[Math.floor(rng() * acts.length)];
+    }
     const pl = eg.player(pid);
     const prompt = pl.currentPrompt();
     if (/attack/i.test(`${prompt.menuTitle ?? ''} ${prompt.promptTitle ?? ''}`)) {
@@ -222,7 +229,7 @@ class LookaheadBot extends ExternalBot {
                     if (kind === 'round' && eg.round !== startRound) {
                         break;
                     }
-                    a = followUp(eg, actor, acts);
+                    a = followUp(eg, actor, acts, actor === pid ? new Set() : hidden, this.lookRng);
                 }
                 if (!a) {
                     break;
