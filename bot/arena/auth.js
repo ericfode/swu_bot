@@ -113,21 +113,24 @@ function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchIm
         return logins(env.ARENA_INVITES).includes(l) || extra.includes(l) ? 'friend' : 'anon';
     }
 
-    /** {role, login?}: role 'bad' means a bearer token was sent and is wrong. */
+    /**
+     * {role, via, login?}: `via` is 'bearer' or 'cookie' (writes need 'bearer'); role 'bad' means a bearer token was
+     * sent and is wrong.
+     */
     function who(req) {
         const h = String(req.headers.authorization ?? '');
         if (h.startsWith('Bearer ')) {
             const t = h.slice(7).trim();
             if (env.ARENA_ADMIN_TOKEN && same(t, env.ARENA_ADMIN_TOKEN)) {
-                return { role: 'admin' };
+                return { role: 'admin', via: 'bearer' };
             }
             if (env.ARENA_PUSH_TOKEN && same(t, env.ARENA_PUSH_TOKEN)) {
-                return { role: 'project' };
+                return { role: 'project', via: 'bearer' };
             }
-            return { role: 'bad' };
+            return { role: 'bad', via: 'bearer' };
         }
         const s = verify(parseCookies(req.headers.cookie)[SESSION]);
-        return s ? { role: roleOf(s.l), login: s.l } : { role: 'anon' };
+        return s ? { role: roleOf(s.l), login: s.l, via: 'cookie' } : { role: 'anon', via: 'cookie' };
     }
 
     // a local path to return to after signing in; anything else goes home

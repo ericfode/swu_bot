@@ -33,9 +33,15 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # until the deploy token is added, merges run the tests and deploy nothing
+      - if: env.FLY_API_TOKEN == ''
+        run: echo "::notice::FLY_API_TOKEN is not set, so nothing was deployed"
+      - if: env.FLY_API_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.FLY_API_TOKEN != ''
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      - if: env.FLY_API_TOKEN != ''
+        run: flyctl deploy --remote-only

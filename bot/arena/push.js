@@ -9,7 +9,8 @@
  *                                                              a ladder run: its index, report and replays; --follow keeps
  *                                                              sending new games and lines until the run (or PID) ends
  *   node bot/arena/push.js arena [--every 20] [--once]          the arena's state from its own API, and its round ladders
- *   node bot/arena/push.js invites <login>[,<login>...]         who may sign in, besides ARENA_ADMINS (replaces the list)
+ *   node bot/arena/push.js invites <login>[,<login>...]         who may sign in, besides ARENA_ADMINS (replaces the list;
+ *                                                              needs SWU_WINDOW_TOKEN set to the admin token)
  *
  * SWU_WINDOW is the window's address (default https://swu-arena.fly.dev). In the project's cloud sessions the egress
  * proxy adds the push token for that host, so no thread holds it; elsewhere set SWU_WINDOW_TOKEN.
@@ -158,7 +159,7 @@ async function pushRunOnce(dir, mem) {
         }
     }
     const going = running.size > 0 || lad?.status === 'running';
-    return { going, sent };
+    return { going, sent, started: Boolean(lad) };
 }
 
 /** A run folder: once, or (follow) until it is done, or until the parent process ends, then a last pass. */
@@ -166,7 +167,7 @@ async function pushRun(dir, { follow = false, parent = null, everyMs = 3000 } = 
     const mem = { docs: new Map(), replays: new Map() };
     let quietDone = 0;
     for (;;) {
-        let r = { going: false, sent: 0 };
+        let r = { going: false, sent: 0, started: false };
         try {
             r = await pushRunOnce(dir, mem);
         } catch (e) {
@@ -176,7 +177,8 @@ async function pushRun(dir, { follow = false, parent = null, everyMs = 3000 } = 
             return r;
         }
         const parentGone = parent && !alive(parent);
-        quietDone = !r.going ? quietDone + 1 : 0;
+        // while the parent lives, a run with no ladder.json yet is starting, not done
+        quietDone = !r.going && (r.started || !parent) ? quietDone + 1 : 0;
         if (parentGone || quietDone >= 3) {
             if (parentGone) {
                 await pushRunOnce(dir, mem).catch(() => {});
@@ -332,7 +334,7 @@ async function main(argv) {
         await putDoc('admin', 'invites', { logins, updatedAt: new Date().toISOString() });
         return `${logins.length} invited`;
     }
-    throw new Error(fs.readFileSync(__filename, 'utf8').split('\n').slice(3, 14).map((l) => l.replace(/^ \* ?/, '')).join('\n'));
+    throw new Error(fs.readFileSync(__filename, 'utf8').split('\n').slice(3, 15).map((l) => l.replace(/^ \* ?/, '')).join('\n'));
 }
 
 if (require.main === module) {

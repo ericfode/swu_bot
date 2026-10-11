@@ -30,22 +30,24 @@ Reads (a signed-in friend, or the project token):
 - `GET /api/docs/<collection>[/<id>]`: raw documents. Friends may read `arena`, `runs`, `evals`, `lens` and `meta`;
   the rest reaches them only through `/api/app`.
 
-Writes (the project token only; a session cookie never writes):
+Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role:
 
 - `PUT /api/docs/<collection>/<id>` with a JSON body; `DELETE` removes one. Collections: arena, runs, ladders, league,
-  experiments, evals, panels, bots, threads, lens, meta, research, admin.
+  experiments, evals, panels, bots, threads, lens, meta, research, admin. The `admin` collection needs the admin token
+  to read or write: the proxy adds the project token to every process in the project, competitor bots included.
 - `POST /api/replays/<run>/<game>?at=<bytes>` appends lines at that offset, which must be the replay's current size;
   otherwise 409 with the size to resend from, so a retry never doubles a line. `PUT` replaces a whole replay.
 - `PUT /api/docs/admin/invites` with `{"logins": [...]}` changes who may sign in, without a deploy
-  (`node bot/arena/push.js invites a,b,c`).
+  (`SWU_WINDOW_TOKEN=<ARENA_ADMIN_TOKEN> node bot/arena/push.js invites a,b,c`).
 
 ## Who may do what (auth.js)
 
 - Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
   invite document is a friend; anyone else sees who to ask. Sessions last 14 days and survive deploys.
-- The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>`. In cloud sessions the egress proxy adds it
-  for swu-arena.fly.dev (a network secret in the environment's settings), so no thread holds the token. Elsewhere set
-  `SWU_WINDOW_TOKEN`.
+- The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). In cloud sessions the egress
+  proxy adds it for swu-arena.fly.dev (a network secret in the environment's settings), so no thread holds the token.
+  Elsewhere set `SWU_WINDOW_TOKEN`.
+- `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
 
 ## Deploys
 
@@ -56,8 +58,9 @@ replay recorded so far).
 
 One-time setup (Eric): the network secret and allowed domain for swu-arena.fly.dev with the same value set as the Fly
 secret `ARENA_PUSH_TOKEN`; a GitHub OAuth App with callback `https://swu-arena.fly.dev/auth/github/callback`, its
-client ID and secret as `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`; and a deploy token as the repository secret
-`FLY_API_TOKEN`. Threads send data when `SWU_WINDOW=https://swu-arena.fly.dev` is set in their environment.
+client ID and secret as `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`; an `ARENA_ADMIN_TOKEN` Fly secret, if invites
+should change without a deploy; and a deploy token as the repository secret `FLY_API_TOKEN` (until it is set, merges
+run the tests and deploy nothing). Threads send data when `SWU_WINDOW=https://swu-arena.fly.dev` is set in their environment.
 
 ## Run it locally
 

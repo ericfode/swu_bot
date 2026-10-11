@@ -43,6 +43,9 @@ test('store: a replay grows only at its current size, and reads back whole acros
     const fresh = new Store(s.dir); // sizes come back from disk after a restart
     assert.strictEqual(fresh.replaySize('run-1', 'g1'), 28);
     assert.deepStrictEqual(fresh.listReplays('run-1'), ['g1']);
+    // appends cannot grow a replay past the size a whole PUT may have (32 MB)
+    s.sizes.set('run-1/long', 32e6 - 5);
+    assert.throws(() => s.appendReplay('run-1', 'long', 32e6 - 5, Buffer.from('0123456789')), (e) => e.code === 'too_large');
     assert.throws(() => s.putDoc('nope', 'x', '{}'), (e) => e.code === 'not_found');
     assert.throws(() => s.putDoc('runs', '../x', '{}'), (e) => e.code === 'bad_request');
 });
@@ -79,12 +82,12 @@ test('auth: bearer tokens give roles, a wrong one is refused, and a session cook
     let now = Date.now();
     const auth = createAuth({ dir: path.join(tmp, 'auth1'), env: ENV, now: () => now });
     const req = (h) => ({ headers: h });
-    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer push-secret' })), { role: 'project' });
-    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer admin-secret' })), { role: 'admin' });
-    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer guess' })), { role: 'bad' });
-    assert.deepStrictEqual(auth.who(req({})), { role: 'anon' });
+    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer push-secret' })), { role: 'project', via: 'bearer' });
+    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer admin-secret' })), { role: 'admin', via: 'bearer' });
+    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer guess' })), { role: 'bad', via: 'bearer' });
+    assert.deepStrictEqual(auth.who(req({})), { role: 'anon', via: 'cookie' });
     const pal = auth.sign({ l: 'pal', exp: now + 60000 });
-    assert.deepStrictEqual(auth.who(req({ cookie: `swu_session=${pal}` })), { role: 'friend', login: 'pal' });
+    assert.deepStrictEqual(auth.who(req({ cookie: `swu_session=${pal}` })), { role: 'friend', login: 'pal', via: 'cookie' });
     assert.strictEqual(auth.who(req({ cookie: `swu_session=${auth.sign({ l: 'EricFode', exp: now + 60000 })}` })).role, 'admin');
     assert.strictEqual(auth.who(req({ cookie: `swu_session=${auth.sign({ l: 'stranger', exp: now + 60000 })}` })).role, 'anon');
     const [body, sig] = pal.split('.');
@@ -113,6 +116,11 @@ test('window: friends read, only the project token pushes, and friends never see
         const status = { round: 3, phase: 'work', competitors: [{ name: 'duel_opus', owner: 'some thread', harness: { kind: 'claude-code' } }] };
         assert.strictEqual((await go('/api/docs/arena/status', { method: 'PUT', token: 'push-secret', body: JSON.stringify(status) })).status, 200);
         assert.strictEqual((await go('/api/docs/arena/status', { method: 'PUT', cookie: friend, body: '{}' })).status, 403);
+        // signing in only reads, even for an admin
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        assert.strictEqual((await go('/api/docs/arena/status', { method: 'PUT', cookie: eric, body: '{}' })).status, 403);
+        assert.strictEqual((await go('/api/replays/r/g?at=0', { method: 'POST', cookie: eric, body: '{}\n' })).status, 403);
+        assert.strictEqual((await go('/api/docs/arena/status', { cookie: eric })).status, 200);
         assert.strictEqual((await go('/api/docs/arena/status', { method: 'PUT', token: 'push-secret', body: 'not json' })).status, 400);
 
         const seen = await (await go('/api/status', { cookie: friend })).json();
@@ -207,7 +215,13 @@ test('the invite list can change without a deploy', async () => {
     try {
         const newcomer = `swu_session=${w.auth.sign({ l: 'newcomer', exp: Date.now() + 60000 })}`;
         assert.strictEqual((await go('/api/status', { cookie: newcomer })).status, 401);
-        await go('/api/docs/admin/invites', { method: 'PUT', token: 'push-secret', body: JSON.stringify({ logins: ['Newcomer'] }) });
+        // the proxy adds the project token to every process in the project, so it cannot change who may sign in
+        const invite = (token) => go('/api/docs/admin/invites', { method: 'PUT', token, body: JSON.stringify({ logins: ['Newcomer'] }) });
+        assert.strictEqual((await invite('push-secret')).status, 403);
+        assert.strictEqual((await go('/api/docs/admin/invites', { token: 'push-secret' })).status, 403);
+        assert.strictEqual((await go('/api/docs/admin/invites', { method: 'DELETE', token: 'push-secret' })).status, 403);
+        assert.strictEqual((await go('/api/status', { cookie: newcomer })).status, 401);
+        assert.strictEqual((await invite('admin-secret')).status, 200);
         assert.strictEqual((await go('/api/status', { cookie: newcomer })).status, 200);
     } finally {
         await close();

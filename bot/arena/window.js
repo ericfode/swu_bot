@@ -49,6 +49,11 @@ function need(cond, code, msg) {
     }
 }
 
+/** Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. */
+function canWrite(who) {
+    need(who.via === 'bearer' && atLeast(who.role, 'project'), 'forbidden', 'pushing needs the project token (a bearer token; signing in only reads)');
+}
+
 function writeAtomic(file, data) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
@@ -171,6 +176,7 @@ class Store {
         if (at !== size) {
             throw new WindowError('conflict', `the replay has ${size} bytes, not ${at}: resend from ${size}`, { size });
         }
+        need(size + buf.length <= MAX_REPLAY, 'too_large', `a replay may hold at most ${MAX_REPLAY} bytes`);
         const isNew = size === 0 && !fs.existsSync(file);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.appendFileSync(file, zlib.gzipSync(buf));
@@ -477,6 +483,9 @@ function createWindow(opts = {}) {
             const [, ns, id] = parts;
             need(parts.length <= 3 && ns, 'not_found', 'use /api/docs/<collection>[/<id>]');
             need(NS.has(ns), 'not_found', `unknown collection "${ns}"`);
+            // The proxy adds the project token to every process in the project, competitor bots included, so the
+            // invite list and anything else in `admin` needs the admin token (or Eric's own sign-in, to read).
+            need(ns !== 'admin' || who.role === 'admin', 'forbidden', 'the admin collection needs the admin token');
             if (req.method === 'GET') {
                 need(!friend || FRIEND_NS.has(ns), 'forbidden', `"${ns}" is shown to friends through the app, not raw`);
                 if (!id) {
@@ -490,7 +499,7 @@ function createWindow(opts = {}) {
                 need(text != null, 'not_found', `no ${ns}/${id}`);
                 return friend ? sendJson(res, 200, { result: scrub(JSON.parse(text)) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
             }
-            need(atLeast(who.role, 'project'), 'forbidden', 'pushing needs the project token');
+            canWrite(who);
             need(id, 'bad_request', 'use /api/docs/<collection>/<id>');
             if (req.method === 'PUT') {
                 const body = (await readBody(req, MAX_DOC)).toString('utf8');
@@ -521,7 +530,7 @@ function createWindow(opts = {}) {
                 const to = q.length ? Math.min(buf.length, from + Math.max(0, Number(q.length) || 0)) : buf.length;
                 return sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from, to), { 'x-size': String(buf.length) });
             }
-            need(atLeast(who.role, 'project'), 'forbidden', 'pushing needs the project token');
+            canWrite(who);
             need(game, 'bad_request', 'use /api/replays/<run>/<game>');
             const body = await readBody(req, req.method === 'PUT' ? MAX_REPLAY : MAX_APPEND);
             if (req.method === 'POST') {
