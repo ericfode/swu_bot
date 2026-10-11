@@ -117,14 +117,16 @@ function ruleChoice(eg, pid, acts) {
  * Everything the rest of the game depends on: public board, both hands, both deck orders, resources, pass state,
  * whose window it is, and the engine RNG. Two positions with the same key play out the same.
  * (Per-card "used this round" flags are not read, so very rarely two different positions share a key.)
- * withRng = false leaves the RNG and the deck orders out: for blind searches, which reseed the RNG and shuffle
- * both decks before every move, so neither carries information there.
+ * withRng = false leaves the RNG and the deck orders out (each deck counts as a sorted list of cards): for blind
+ * searches, which reseed the RNG and shuffle both decks before every move, so neither carries information there.
  */
 function stateKey(eg, withRng = true) {
     const parts = [JSON.stringify(snapshot(eg))];
     for (const id of eg.ids) {
         const p = eg.player(id);
-        parts.push(withRng ? p.drawDeck.map((c) => c.internalName).join(',') : String(p.drawDeck.length));
+        const deck = p.drawDeck.map((c) => c.internalName);
+        // blind: the order is hidden but which cards are left still matters
+        parts.push((withRng ? deck : deck.sort()).join(','));
         parts.push(p.resources.map((c) => `${c.internalName}${c.exhausted ? '*' : ''}`).join(','));
         parts.push(p.passedActionPhase ? 'P' : '-', eg.isActionWindow(id) ? 'W' : '-');
     }
