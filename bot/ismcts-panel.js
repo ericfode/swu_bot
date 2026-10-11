@@ -149,6 +149,8 @@ function build(runDirs, thoughtsDir, prev) {
         widgets.push({ type: 'bars', title: `Visits at ${newest.bot}'s last decision (round ${newest.round})`,
             items: newest.top.map((x) => ({ label: x.label, value: x.visits })) });
     }
+    widgets.push({ type: 'text', title: 'Findings so far',
+        body: 'Beta changes the moves but almost never the winner: on the same decks, beta 0 and beta 4 had the same winner in 24 of 24 games. The peek control, which sees the real hidden cards, wins no more often, and neither do tempo/aggro leaf scores or a 2.3x bigger search. Hidden information is not the bottleneck yet; the position value and the opponent model are.' });
     if (newest?.tree) {
         widgets.push({ type: 'tree', title: `${newest.bot}: search tree at its last decision`,
             caption: 'Root = the real position. Children = the end of one imagined world after that action and the opponent\'s reply (hidden cards are sampled, not real). Value = P(p1 wins).',
@@ -179,9 +181,9 @@ function build(runDirs, thoughtsDir, prev) {
         plan: [
             { text: 'Belief model + world sampler with exact rollback', state: 'done' },
             { text: 'ISMCTS over my turn, opponent replies from sampled hand', state: 'done' },
-            { text: 'Sweep beta against heuristic, tempo and rush', state: running ? 'doing' : 'done' },
-            { text: 'Unfair peek control: what hidden info is worth', state: running ? 'doing' : 'done' },
-            { text: 'Better opponent model and deeper horizon', state: 'todo' }
+            { text: 'Sweep beta 0/1/4 and the peek control vs rush, heuristic, tempo', state: 'done' },
+            { text: 'Try tempo/aggro leaf evaluations and a bigger budget', state: 'done' },
+            { text: 'Attack the bottleneck Eric picks on the results page', state: running ? 'doing' : 'todo' }
         ],
         thoughts: thoughts.slice(-40),
         widgets
