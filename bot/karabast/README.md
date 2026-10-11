@@ -29,7 +29,7 @@ Then, from this repo (card data from the same checkout; `make -C bot/c` for c-cl
 export SWU_CARD_JSON=<forceteki checkout>/test/json
 node bot/karabast/selfplay.js --bots c-clock,js-random --games 4 --pester-undo 0.5     # public lobbies: timer and undo requests on
 node bot/karabast/selfplay.js --bots c-clock,c-clock --decks bot/decks/ash-meta-2026-09.json
-node bot/karabast/spectate.js --public --games 1 --gap 1 --out captures --predict race   # while a game runs
+node bot/karabast/spectate.js --public --games 1 --gap 1 --out captures --predict mlp-g5   # while a game runs
 node importer/import.js captures --out replays/karabast-local --source karabast-spectate
 node bot/karabast/queue.js --bot c-clock --deck admiral-piett_jtl_blue --out runs/q     # needs a second player in the queue
 node bot/karabast/fidelity.js --games 20                                               # needs forceteki/build
@@ -50,7 +50,10 @@ node bot/karabast/fidelity.js --games 20                                        
 - A bot that fails (error, bad answer, no answer before the prompt timer) gets a random legal action played for it and
   is restarted. After 2 failures in a game the seat concedes, so a human is never left waiting on a dead bot's clock.
 - The server ignores an answer it cannot take (a third card in "select 2"). After 1 s with no change the seat asks the
-  bot again without that action.
+  bot again without that action. Each ignored answer is an error in the server's log, so after 4 in a row at one
+  decision (a game the server can no longer move) the seat concedes.
+- Two players with the same name break a game: the engine finds a player's opponent by name
+  (`Game.getOtherPlayer`), and the first frame fails to serialize. Give each local bot run its own `--username`.
 
 ## What a bot sees (`fidelity.js`)
 
@@ -85,7 +88,10 @@ people. Before any live run:
 - Behind an HTTPS proxy (Claude Code cloud sessions) run it with `NODE_USE_ENV_PROXY=1`, or Node's fetch and
   WebSocket go around the proxy and fail; `socket.js` refuses a non-local host without it.
 - A run against a non-local host needs `--allow-host <host>` and `--ledger <file>`. The ledger stops a run before a
-  game that would pass `--max-people` (default 10). `--stop-file <file>` stops it before the next game.
+  game that would pass `--max-people` (default 10). Places are reserved before each game (1 for a bot game, 2 for a
+  watched one), so a bot run and a recorder can share one ledger. A place stays counted whenever someone may have
+  been reached without being identified: a bot run that entered the queue and failed or waited with no match, a
+  recorder that joined a game and saw no frame. `--stop-file <file>` stops a run before the next game.
 - Karabast logs every engine error and sends severe ones to its developers' Discord (Lobby `handleError`), so
   `queue.js` refuses decks with cards that are known to throw (Barriss Offee, ASH_044).
 - Spectating needs a login (anonymous spectators are a development-only setting): a session token in the variable

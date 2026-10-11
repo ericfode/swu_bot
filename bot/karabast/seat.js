@@ -11,11 +11,13 @@
  *   allowed `allowUndos` times per game and denied after that, never with "Deny and Block Requests". When a cost can
  *   no longer be paid, the seat picks Abandon, then a free Undo, and asks for an undo only when nothing else is offered.
  *   Any other button with "undo" in its label is hidden from the bot.
- * - A bot that fails (an error, a bad answer, no answer in time) is restarted at its next decision and a random legal
- *   action is played for it. After `maxFailures` failures in one game the seat concedes instead of letting the clock
- *   run out on the other player.
+ * - A bot that fails (an error, a bad answer or split, no answer in time) is restarted at its next decision and a
+ *   random legal action is played for it. At `maxFailures` failures in one game the seat concedes instead of letting
+ *   the clock run out on the other player.
  * - The server ignores an answer it cannot take (no new decision follows). After `retryMs` the seat asks the bot
- *   again without that action; when every action was tried, it plays a random one.
+ *   again without that action; when every action was tried, it plays a random one. Each ignored answer is an error in
+ *   the server's log, so after `maxIgnored` ignored answers in a row at one decision (a game the server can no longer
+ *   move, say) the seat concedes rather than keep sending them.
  *
  * play() resolves when the game has a winner, the socket closes or the seat concedes: { result: 'win'|'loss'|'none',
  * reason, stats }.
@@ -51,13 +53,14 @@ class KarabastSeat {
     /**
      * sock: a connected KarabastSocket in the lobby; me: this seat's user id; client: a protocol client
      * ({ name, hello?, decide, over?, close? }, e.g. a StdioClient). opts: deck (our deck list, for hello), seed,
-     * decideMs (10000), allowUndos (2), retryMs (1000), maxFailures (2), chat (a line to send once, or null), log.
+     * decideMs (10000), allowUndos (2), retryMs (1000), maxFailures (2), maxIgnored (4), chat (a line to send once, or
+     * null), log.
      */
     constructor(sock, me, client, opts = {}) {
         this.sock = sock;
         this.me = me;
         this.client = client;
-        this.opts = { decideMs: 10000, allowUndos: 2, retryMs: 1000, maxFailures: 2, chat: null, log: () => undefined, seed: 1, ...opts };
+        this.opts = { decideMs: 10000, allowUndos: 2, retryMs: 1000, maxFailures: 2, maxIgnored: 4, chat: null, log: () => undefined, seed: 1, ...opts };
         this.rng = seededRng(`karabast-seat-${this.opts.seed}`);
         this.obs = new Observer(me);
         this.latest = null;
@@ -67,6 +70,7 @@ class KarabastSeat {
         this.busy = false;
         this.sent = null; // { key, action, at } of the last answer, until the decision changes
         this.tried = new Map(); // decision key -> Set of action keys the server ignored
+        this.ignored = null; // { key, n }: answers ignored in a row at decision `key`
         this.seq = 0;
         this.stats = { decisions: 0, botMs: [], rejected: 0, failures: [], fallbacks: 0, undoAllowed: 0, undoDenied: 0, payRecovery: [], waitMs: [], conceded: false };
     }
@@ -107,6 +111,7 @@ class KarabastSeat {
         if ((gs.newMessages ?? []).some((m) => ROLLED_BACK.test(lineText(m)))) {
             // a rollback can bring back the decision we just answered: it is a new decision, not an ignored answer
             this.sent = null;
+            this.ignored = null;
         }
         this.latest = gs;
         if (gs.winners?.length) {
@@ -128,6 +133,9 @@ class KarabastSeat {
             return; // checkIgnored decides when the server ignored it
         }
         this.sent = null;
+        if (this.ignored && this.ignored.key !== key) {
+            this.ignored = null; // the game moved on
+        }
         this.busy = true;
         const seen = Date.now();
         this.answer(gs, key)
@@ -151,8 +159,19 @@ class KarabastSeat {
             return;
         }
         this.stats.rejected++;
+        this.ignored = this.ignored?.key === s.key ? { key: s.key, n: this.ignored.n + 1 } : { key: s.key, n: 1 };
         const p = this.latest.players[this.me].promptState ?? {};
         this.opts.log(`server ignored ${s.action.kind} ${short(s.action.label)}${s.action.card ? ` in ${s.action.card.zone}` : ''} at "${p.menuTitle ?? p.promptTitle ?? ''}"`);
+        if (this.ignored.n >= this.opts.maxIgnored) {
+            this.stats.conceded = true;
+            try {
+                this.send('concede');
+            } catch {
+                // the socket is gone: nothing more to send
+            }
+            this.done('loss', `conceded after the server ignored ${this.ignored.n} answers in a row`);
+            return;
+        }
         if (!this.tried.has(s.key)) {
             this.tried.set(s.key, new Set());
         }
@@ -219,12 +238,16 @@ class KarabastSeat {
         if (action.kind !== 'distribute') {
             return { action };
         }
+        // like the referee: no split gets a random one, a bad split is the bot's failure
         const given = r.split ?? r.distribution;
-        const split = given === undefined ? null : this.obs.split(action, given);
-        if (given !== undefined && !split) {
-            this.opts.log(`bad split ${short(given)}; using a random one`);
+        if (given === undefined) {
+            return { action, split: randomSplit(action, this.rng) };
         }
-        return { action, split: split ?? randomSplit(action, this.rng) };
+        const split = this.obs.split(action, given);
+        if (!split) {
+            throw new Error(`bad split ${short(given)}`);
+        }
+        return { action, split };
     }
 
     async hello(gs) {
@@ -252,7 +275,7 @@ class KarabastSeat {
         this.opts.log(`bot failure ${this.stats.failures.length}: ${why}`);
         this.helloDone = false;
         await Promise.resolve(this.client.close?.()).catch(() => undefined);
-        if (this.stats.failures.length > this.opts.maxFailures) {
+        if (this.stats.failures.length >= this.opts.maxFailures) {
             this.stats.conceded = true;
             this.send('concede');
             this.done('loss', `conceded after ${this.stats.failures.length} bot failures`);

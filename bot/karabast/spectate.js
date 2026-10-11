@@ -5,19 +5,19 @@
  * `node importer/import.js <dir> --out <replays>` turns into replays (seen as a spectator: both hands hidden).
  *
  *   node bot/karabast/spectate.js --out captures [--lobby <id> | --public] [--games 1] [--gap 30]
- *                                 [--server http://127.0.0.1:9500] [--predict race] [--max-minutes 90]
+ *                                 [--server http://127.0.0.1:9500] [--predict mlp-g5] [--max-minutes 90]
  *                                 [--allow-host <host> --token-env KARABAST_TOKEN --ledger <file> [--max-people 10]]
  *                                 [--stop-file <file>]
  *
  * --lobby watches one game by its lobby id (from a spectate link `.../spectate?lobbyId=<id>`). --public watches
  * games listed by `/api/ongoing-games` that allow spectators, one at a time, oldest listing skipped once seen.
  * --predict prints P(win) after each decision with a bot/eval evaluator (card data: SWU_CARD_JSON or
- * forceteki/test/json). `race` and `base` only use the public board; the fitted evaluators need the spectator view
- * (both hands hidden) in bot/eval.
+ * forceteki/test/json), using bot/eval's spectator view (both hands hidden, only their counts). `mlp-g5` is the best
+ * one without decklists: Brier 0.213 on 181 real KaraBuddy games, 0.171 on engine games.
  *
- * People cap: a run against a non-local server needs --ledger (bot/karabast/ledger.js). A game is watched only while
- * two more people fit under --max-people, and both players are counted when the first frame arrives. The run stops
- * before the next game when --stop-file exists.
+ * People cap: a run against a non-local server needs --ledger (bot/karabast/ledger.js). Two places under --max-people
+ * are reserved before joining a game, or the run stops; both players are counted in them when the first frame
+ * arrives. The run stops before the next game when --stop-file exists.
  *
  * Only localhost is allowed unless --allow-host names the host. The live site needs a login to spectate (anonymous
  * spectators are a development-only setting), so a live run also needs a session token, read from the environment
@@ -81,6 +81,8 @@ async function watch(server, lobbyId, out, opts) {
     if (!res.body?.success) {
         throw new Error(`spectate-game refused: ${res.body?.message ?? res.status}`);
     }
+    // from here on the players may see us in the spectator list
+    opts.onJoined?.();
     const sock = new KarabastSocket(server, { user, spectator: true, token: opts.token, allowHosts: opts.allowHosts });
     const scrub = makeScrubber([user.id, user.username]);
     const frames = [];
@@ -173,9 +175,6 @@ async function main() {
         throw new Error('a run against a non-local server needs --ledger <file> (the people cap)');
     }
     const ledger = arg('ledger') ? new PeopleLedger(arg('ledger'), Number(arg('max-people', 10))) : null;
-    if (ledger) {
-        opts.onPlayers = (ids) => ledger.add(ids, 'watched');
-    }
     const stopFile = arg('stop-file');
     fs.mkdirSync(out, { recursive: true });
     const games = Number(arg('games', 1));
@@ -206,7 +205,24 @@ async function main() {
             }
         }
         seen.add(id);
-        await watch(server, id, out, opts);
+        // both players' places are held before joining, so another run sharing the ledger cannot take them
+        const hold = ledger ? ledger.reserve(2) : null;
+        if (ledger && !hold) {
+            console.error(`people cap reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max}); stopping`);
+            break;
+        }
+        let joined = false;
+        try {
+            const counted = { onJoined: () => { joined = true; }, onPlayers: (ids) => ledger.add(ids, 'watched', hold) };
+            await watch(server, id, out, ledger ? { ...opts, ...counted } : opts);
+        } finally {
+            // joined but no frame told us who played: the two places stay counted
+            if (joined) {
+                ledger?.spend(hold, 'watched');
+            } else {
+                ledger?.release(hold);
+            }
+        }
         if (lobby) {
             break;
         }

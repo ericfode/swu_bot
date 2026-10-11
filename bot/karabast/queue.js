@@ -11,8 +11,9 @@
  *
  * Safety:
  * - Only localhost unless --allow-host names the server's host (socket.js).
- * - A non-local run needs --ledger: before each game the run stops if one more person would pass --max-people
- *   (ledger.js). The opponent is counted as soon as the match is made.
+ * - A non-local run needs --ledger: before entering the queue the run reserves one place under --max-people, or stops
+ *   (ledger.js). The opponent is counted in that place as soon as the match is made. A run that fails after entering
+ *   the queue, a wait with no match included, keeps the place counted: only the server knows whether it matched us.
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -50,15 +51,16 @@ function checkDeck(deck) {
 }
 
 /**
- * Enters the queue and plays one match. onMatched(opponentId) runs when the opponent is known, before play starts;
- * it may throw to leave. Resolves to a result row.
+ * Enters the queue and plays one match. onQueued() runs once the server took the queue entry. onMatched(opponentId)
+ * runs when the opponent is known, before play starts; it may throw to leave. Resolves to a result row.
  */
-async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, onMatched, log }) {
+async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, onQueued, onMatched, log }) {
     const opts = { allowHosts };
     const entered = await post(server, '/api/enter-queue', { user, format, cardPool, gamesToWinMode: 'bestOfOne', deck }, opts);
     if (!entered.body?.success) {
         throw new Error(`enter-queue refused: ${entered.body?.message ?? entered.status}`);
     }
+    onQueued?.();
     const sock = new KarabastSocket(server, { user, allowHosts });
     const client = loadClient(bot);
     const scrub = makeScrubber([user.id, user.username]);
@@ -140,20 +142,39 @@ async function main() {
             log(`stop file ${stopFile} exists; stopping`);
             break;
         }
-        if (ledger && !ledger.room(1)) {
-            log(`people cap reached (${ledger.count} of ${ledger.max}); stopping`);
+        // the opponent's place is held before entering the queue, so another run sharing the ledger cannot take it
+        const hold = ledger ? ledger.reserve(1) : null;
+        if (ledger && !hold) {
+            log(`people cap reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max}); stopping`);
             break;
         }
-        const row = await queueOnce({
-            server, user, deck, bot: arg('bot', 'c-clock'), format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
-            waitMs: Number(arg('wait-minutes', 10)) * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
-            seed: `${seed}-${g}`, out, log,
-            onMatched: async (opponent) => {
-                if (ledger) {
-                    ledger.add([opponent], 'played');
+        let row;
+        let queued = false;
+        let matched = false;
+        try {
+            row = await queueOnce({
+                server, user, deck, bot: arg('bot', 'c-clock'), format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
+                waitMs: Number(arg('wait-minutes', 10)) * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
+                seed: `${seed}-${g}`, out, log,
+                onQueued: () => {
+                    queued = true;
+                },
+                onMatched: async (opponent) => {
+                    matched = true;
+                    if (ledger) {
+                        ledger.add([opponent], 'played', hold);
+                    }
                 }
+            });
+        } finally {
+            // once queued, the server may have matched us before we heard of it, even as our wait ran out, or add()
+            // failed: the place stays counted
+            if (matched || queued) {
+                ledger?.spend(hold, 'played');
+            } else {
+                ledger?.release(hold);
             }
-        });
+        }
         console.log(JSON.stringify(row));
         if (out) {
             fs.appendFileSync(path.join(out, 'games.jsonl'), JSON.stringify(row) + '\n');

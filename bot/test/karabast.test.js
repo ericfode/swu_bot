@@ -236,4 +236,119 @@ test('the people ledger caps distinct people and keeps no ids', () => {
     assert.strictEqual(again.count, 2);
     assert.ok(again.has('user-b'));
     assert.ok(!fs.readFileSync(file, 'utf8').includes('user-'));
+    for (const bad of [NaN, Number('ten'), Number(undefined), -1, 2.5, Infinity]) {
+        assert.throws(() => new PeopleLedger(file, bad), /people cap/);
+    }
+});
+
+test('two ledgers on one file share the cap', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const a = new PeopleLedger(file, 2);
+    const b = new PeopleLedger(file, 2);
+    assert.strictEqual(a.add(['user-a'], 'played'), 1);
+    assert.strictEqual(b.add(['user-b'], 'watched'), 1);
+    // a's own snapshot still says 1; the file says 2
+    assert.ok(!a.room(1));
+    assert.throws(() => a.add(['user-c'], 'played'), /cap/);
+    assert.strictEqual(new PeopleLedger(file, 2).count, 2);
+    assert.ok(!fs.existsSync(`${file}.lock`));
+    // a lock someone else holds is never taken over, however old
+    fs.writeFileSync(`${file}.lock`, '');
+    fs.utimesSync(`${file}.lock`, new Date(0), new Date(0));
+    assert.throws(() => new PeopleLedger(file, 5, { lockWaitMs: 100 }).add(['user-d'], 'played'), /stayed locked.*remove/);
+    assert.ok(fs.existsSync(`${file}.lock`));
+    assert.strictEqual(new PeopleLedger(file, 5).count, 2);
+});
+
+test('a bad split is a bot failure, and the seat concedes at maxFailures', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0, split: [{ id: 'c99', amount: 3 }] }), over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client);
+    const done = seat.play();
+    const dist = (uuid) => {
+        const f = frame({ promptUuid: uuid, distributeAmongTargets: { type: 'distributeIndirectDamage', amount: 3, canDistributeLess: false, canChooseNoTargets: false, maxTargets: null } },
+            { groundArena: [unit('U1', { selectable: true })] });
+        f.players['user-a'].leaders[0].selectable = false;
+        f.players['user-a'].base.selectable = true;
+        return f;
+    };
+    sock.emit('gamestate', dist('P1'));
+    await new Promise((r) => setTimeout(r, 20));
+    // the first failure plays a random split for the bot
+    assert.strictEqual(sock.sent.at(-1)[1], 'statefulPromptResults');
+    sock.emit('gamestate', dist('P2'));
+    // a seat that never concedes would keep the test waiting: end it after 2 s
+    const timer = setTimeout(() => seat.done('none', 'the seat did not concede'), 2000);
+    const r = await done;
+    clearTimeout(timer);
+    assert.strictEqual(r.result, 'loss');
+    assert.strictEqual(r.stats.failures.length, 2);
+    assert.match(r.stats.failures[0], /bad split/);
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
+});
+
+test('a seat concedes when the server keeps ignoring its answers at one decision', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0 }), over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client, { retryMs: 50, maxIgnored: 3 });
+    const done = seat.play();
+    // the server never moves on from this frame, as when it can no longer serialize the game
+    sock.emit('gamestate', frame({ promptUuid: 'P1', menuTitle: 'Choose an action', buttons: ['Pass', 'Claim'].map((t) => ({ text: t, arg: t, uuid: 'P1', command: 'menuButton' })) }));
+    const timer = setTimeout(() => seat.done('none', 'the seat did not concede'), 5000);
+    const r = await done;
+    clearTimeout(timer);
+    assert.strictEqual(r.result, 'loss');
+    assert.strictEqual(r.stats.rejected, 3);
+    assert.match(r.reason, /ignored 3 answers/);
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
+});
+
+test('a quick-match run that fails after entering the queue keeps the place counted', async () => {
+    const http = require('http');
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const { spawn } = require('child_process');
+    // a server that takes the queue entry, then drops the socket before any lobbystate
+    const server = http.createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+    });
+    server.on('upgrade', (req, socket) => socket.destroy());
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-queue-'));
+    const ledgerFile = path.join(dir, 'people.json');
+    const child = spawn(process.execPath, [path.join(__dirname, '..', 'karabast', 'queue.js'), '--server', `http://127.0.0.1:${server.address().port}`,
+        '--bot', 'js-random', '--deck', 'luke-skywalker_jtl_data-vault', '--games', '1', '--ledger', ledgerFile, '--max-people', '10'], { stdio: 'ignore' });
+    const code = await new Promise((r) => child.on('exit', r));
+    server.close();
+    assert.strictEqual(code, 1);
+    const data = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    assert.strictEqual(Object.keys(data.people).length, 1);
+    assert.match(Object.keys(data.people)[0], /^unidentified-/);
+    assert.deepStrictEqual(data.held, {});
+});
+
+test('a reservation holds places until it is used or released', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const a = new PeopleLedger(file, 3);
+    const b = new PeopleLedger(file, 3);
+    a.add(['user-a'], 'played');
+    const hold = a.reserve(2);
+    assert.ok(hold);
+    // 1 counted + 2 held: nothing left for b, whether it reserves or adds directly
+    assert.strictEqual(b.reserve(1), null);
+    assert.ok(!b.room(1));
+    assert.throws(() => b.add(['user-x'], 'played'), /reserved/);
+    // the watched game had one new player: the unused place goes back with the reservation
+    assert.strictEqual(a.add(['user-a', 'user-b'], 'watched', hold), 1);
+    const again = b.reserve(1);
+    assert.ok(again);
+    b.release(again);
+    assert.ok(b.room(1));
+    assert.strictEqual(new PeopleLedger(file, 3).reserved(), 0);
+    // a place held for a game that was joined but never identified stays counted
+    const seen = b.reserve(1);
+    b.spend(seen, 'watched');
+    b.release(seen);
+    assert.strictEqual(new PeopleLedger(file, 3).count, 3);
+    assert.ok(!b.room(1));
 });
