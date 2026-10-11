@@ -13,7 +13,7 @@
  * - Only localhost unless --allow-host names the server's host (socket.js).
  * - A non-local run needs --ledger: before entering the queue the run reserves one place under --max-people, or stops
  *   (ledger.js). The opponent is counted in that place as soon as the match is made. A run that fails after entering
- *   the queue keeps the place counted, unless the wait ended with no match.
+ *   the queue, a wait with no match included, keeps the place counted: only the server knows whether it matched us.
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -52,8 +52,7 @@ function checkDeck(deck) {
 
 /**
  * Enters the queue and plays one match. onQueued() runs once the server took the queue entry. onMatched(opponentId)
- * runs when the opponent is known, before play starts; it may throw to leave. Resolves to a result row. A wait that
- * ends with no match rejects with an error marked `noMatch`.
+ * runs when the opponent is known, before play starts; it may throw to leave. Resolves to a result row.
  */
 async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, onQueued, onMatched, log }) {
     const opts = { allowHosts };
@@ -71,7 +70,7 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
     try {
         // the socket must be listening before the match frames arrive
         const matched = new Promise((resolve, reject) => {
-            const timer = setTimeout(() => reject(Object.assign(new Error(`no match within ${waitMs / 60000} minutes`), { noMatch: true })), waitMs);
+            const timer = setTimeout(() => reject(new Error(`no match within ${waitMs / 60000} minutes`)), waitMs);
             const onLobby = (ls) => {
                 const others = (ls?.users ?? []).map((u) => u.id).filter((id) => id && id !== user.id);
                 if (others.length) {
@@ -152,7 +151,6 @@ async function main() {
         let row;
         let queued = false;
         let matched = false;
-        let noMatch = false;
         try {
             row = await queueOnce({
                 server, user, deck, bot: arg('bot', 'c-clock'), format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
@@ -168,13 +166,10 @@ async function main() {
                     }
                 }
             });
-        } catch (e) {
-            noMatch = e.noMatch === true;
-            throw e;
         } finally {
-            // once queued, the server may have matched us before we heard of it (or add() failed): unless the wait
-            // ended with no match, the place stays counted
-            if (matched || (queued && !noMatch)) {
+            // once queued, the server may have matched us before we heard of it, even as our wait ran out, or add()
+            // failed: the place stays counted
+            if (matched || queued) {
                 ledger?.spend(hold, 'played');
             } else {
                 ledger?.release(hold);
