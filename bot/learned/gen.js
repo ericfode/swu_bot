@@ -68,8 +68,11 @@ async function playOne(env, seed, opts, gameNo) {
             if (label >= 0 && rng() < opts.follow) {
                 played = label;
             } else if (opts.student) {
+                // the recorded features use this code's version; the student gets the encoding it was trained on
+                const sv = opts.student.featureVersion;
+                const sA = sv === F.VERSION ? f.A : f.plain.map((a) => F.action(a, f.obs, sv));
                 const z = opts.student.encode(f.s);
-                const pr = softmax(opts.student.logits(z, f.p, f.A).map((l) => l / opts.temp));
+                const pr = softmax(opts.student.logits(z, f.p, sA).map((l) => l / opts.temp));
                 let r = rng(), k = 0;
                 while (k < pr.length - 1 && (r -= pr[k]) > 0) {
                     k++;

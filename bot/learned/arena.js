@@ -139,7 +139,8 @@ async function main() {
         const idx = { ...index, games: index.games.filter((g) => g.outcome !== 'queued') };
         fs.writeFileSync(tmp(path.join(out, 'index.json')), JSON.stringify(idx));
         fs.renameSync(tmp(path.join(out, 'index.json')), path.join(out, 'index.json'));
-        fs.writeFileSync(tmp(path.join(out, 'ladder.json')), JSON.stringify(ladder(idx, cfg, status)));
+        // the ladder counts queued games as scheduled; the tournament index lists started games only
+        fs.writeFileSync(tmp(path.join(out, 'ladder.json')), JSON.stringify(ladder(index, cfg, status)));
         fs.renameSync(tmp(path.join(out, 'ladder.json')), path.join(out, 'ladder.json'));
     };
     const entries = new Map();
