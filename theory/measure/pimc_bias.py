@@ -1,6 +1,6 @@
 """Summarize omni-pimc output: the PIMC (omniscient sampling) gap on real SWU endgames.
 
-    python3 theory/measure/pimc_bias.py <dir-or-jsonl>... [--json out.json]
+    python3 theory/measure/pimc_bias.py <dir-or-jsonl>... [--json out.json] [--deals 8]
 
 Input lines come from target/release/omni-pimc (bot/omni-rs/src/bin/omni-pimc.rs): one action window
 each, with f(deal, move) in {1, 0, null} from the mover's view. For a complete window
@@ -8,8 +8,9 @@ each, with f(deal, move) in {1, 0, null} from the mover's view. For a complete w
     gap = E_deal[max_move f] - max_move E_deal[f]
 
 is the expected loss of the PIMC move against the omniscient value (Hidden.lean, pimc_choice_loss).
-Sums along a game use the windows of one mover along the recorded path; a window that is not complete
-is left out, so a sum covers the complete windows only.
+Sums along a game use the windows of one mover along the recorded path. `gameSums` adds the complete
+windows only; `gameSumBounds` adds the bounds of every window whose deals were all solved, and counts
+the players that also have windows with no proven move (no bound at all).
 """
 import json
 import os
@@ -42,7 +43,7 @@ def bounds(r):
 
 def summarize(rows, deals):
     for r in rows:
-        r['solvedDeals'] = len(r['values']) == deals
+        r['solvedDeals'] = len(r['values']) == r.get('deals', deals)
         if r['solvedDeals']:
             r['gapLo'], r['gapHi'] = bounds(r)
             r['determined'] = r['gapHi'] - r['gapLo'] < 1e-12
@@ -60,6 +61,22 @@ def summarize(rows, deals):
         'moveValueVariesAcrossDeals': sum(1 for r in known if any(
             len({row[a] for row in r['values'] if row[a] is not None}) > 1 for a in range(len(r['moves'])))),
         'distinctDealsMean': sum(r['distinctDeals'] for r in known) / len(known) if known and 'distinctDeals' in known[0] else None,
+    }
+    per = defaultdict(lambda: [0.0, 0.0, 0, 0])  # gap sum lower, upper, windows bounded, windows unbounded
+    for r in rows:
+        g = per[(r['game'], r['mover'])]
+        if r['solvedDeals']:
+            g[0] += r['gapLo']
+            g[1] += r['gapHi']
+            g[2] += 1
+        else:
+            g[3] += 1
+    extra['gameSumBounds'] = {
+        'players': len(per),
+        'lowerPositive': sum(g[0] > 1e-12 for g in per.values()),
+        'upperZero': sum(g[1] < 1e-12 and g[3] == 0 for g in per.values()),
+        'upperMean': sum(g[1] for g in per.values()) / len(per) if per else None,
+        'withUnboundedWindows': sum(g[3] > 0 for g in per.values()),
     }
     base = summarize_complete(rows)
     base.update(extra)
@@ -117,8 +134,13 @@ def main():
         i = args.index('--json')
         out = args[i + 1]
         args = args[:i] + args[i + 2:]
-    rows = load(args)
-    s = summarize(rows, max((len(r['values']) for r in rows), default=0))
+    # rows written before omni-pimc recorded `deals` fall back to --deals (default 8)
+    deals = 8
+    if '--deals' in args:
+        i = args.index('--deals')
+        deals = int(args[i + 1])
+        args = args[:i] + args[i + 2:]
+    s = summarize(load(args), deals)
     text = json.dumps(s, indent=1)
     if out:
         with open(out, 'w') as fh:
