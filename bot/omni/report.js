@@ -136,45 +136,58 @@ function solveStats() {
 
 // ---------- matches ----------
 
+/** One row per pairing (bot vs opponent), summed over every omni-ref-* run of that pairing. */
 function matchStats() {
-    const runs = [];
-    for (const d of list(path.join(root, 'results')).filter((x) => x.startsWith('omni-ref'))) {
+    const pairs = new Map();
+    for (const d of list(path.join(root, 'results')).filter((x) => x.startsWith('omni-ref')).sort()) {
         const idx = readJson(path.join(root, 'results', d, 'index.json'));
         if (!idx) {
             continue;
         }
         const omni = idx.bots.find((b) => b.startsWith('omni'));
-        const done = idx.games.filter((g) => g.outcome !== 'running');
+        const opponent = idx.bots.find((b) => b !== omni);
+        const key = `${omni} vs ${opponent}`;
+        const p = pairs.get(key) ?? { pair: key, bot: omni, opponent, runs: [], scheduled: 0, games: [] };
+        p.runs.push(d);
+        p.scheduled += idx.gamesPerPairing;
+        p.games.push(...idx.games.map((g) => ({ id: g.id, run: d, seed: g.seed, winner: g.winner, rounds: g.rounds, outcome: g.outcome })));
+        pairs.set(key, p);
+    }
+    return [...pairs.values()].map((p) => {
+        const done = p.games.filter((g) => g.outcome !== 'running');
         const decided = done.filter((g) => g.outcome === 'won');
-        const wins = decided.filter((g) => g.winner === omni).length;
+        const wins = decided.filter((g) => g.winner === p.bot).length;
         const curve = [];
         let w = 0;
         decided.forEach((g, i) => {
-            w += g.winner === omni ? 1 : 0;
+            w += g.winner === p.bot ? 1 : 0;
             curve.push([i + 1, r(w / (i + 1))]);
         });
-        runs.push({
-            run: d, bot: omni, opponent: idx.bots.find((b) => b !== omni), scheduled: idx.bots.length > 1 ? idx.gamesPerPairing : 0,
-            played: done.length, decided: decided.length, wins, winRate: decided.length ? r(wins / decided.length) : null,
-            errors: done.filter((g) => g.outcome === 'ERROR').length, avgRounds: r(mean(decided.map((g) => g.rounds)), 1), curve,
-            games: done.map((g) => ({ id: g.id, seed: g.seed, winner: g.winner, rounds: g.rounds, outcome: g.outcome }))
-        });
-    }
-    return runs;
+        const rate = decided.length ? wins / decided.length : null;
+        // normal-approximation 95% interval, enough to say whether a gap is real
+        const ci = decided.length ? 1.96 * Math.sqrt((rate * (1 - rate)) / decided.length) : null;
+        return {
+            ...p, played: done.length, decided: decided.length, wins, winRate: r(rate), ci95: r(ci),
+            errors: done.filter((g) => g.outcome === 'ERROR').length, avgRounds: r(mean(decided.map((g) => g.rounds)), 1), curve, games: done
+        };
+    });
 }
 
 // ---------- decisions ----------
 
 function decisionStats() {
-    const dir = path.join(root, 'omni', 'decisions');
-    const files = list(dir).filter((f) => f.endsWith('.jsonl'));
+    const top = path.join(root, 'omni', 'decisions');
+    // one sub-folder per run (OMNI_LOG_DIR=<top>/<run>)
+    const files = list(top).filter((d) => fs.statSync(path.join(top, d)).isDirectory())
+        .flatMap((d) => list(path.join(top, d)).filter((f) => f.endsWith('.jsonl')).map((f) => path.join(d, f)));
+    const dir = top;
     let all = [];
     let latest = null;
     let latestT = 0;
     for (const f of files) {
         const full = path.join(dir, f);
         const lines = fs.readFileSync(full, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-        all = all.concat(lines.map((l) => ({ ...l, bot: f.replace(/^\d+-|-p\d\.jsonl$/g, '') })));
+        all = all.concat(lines.map((l) => ({ ...l, bot: path.basename(f).replace(/^\d+-|-p\d\.jsonl$/g, '') })));
         const t = fs.statSync(full).mtimeMs;
         if (t > latestT && lines.length) {
             latestT = t;
@@ -195,8 +208,10 @@ function decisionStats() {
 }
 
 function trees() {
-    const dir = path.join(root, 'omni', 'decisions');
-    return list(dir).filter((f) => /^latest-tree-.*\.json$/.test(f)).map((f) => readJson(path.join(dir, f))).filter(Boolean)
+    const top = path.join(root, 'omni', 'decisions');
+    const files = list(top).filter((d) => fs.statSync(path.join(top, d)).isDirectory())
+        .flatMap((d) => list(path.join(top, d)).filter((f) => /^latest-tree-.*\.json$/.test(f)).map((f) => path.join(top, d, f)));
+    return files.map((f) => readJson(f)).filter(Boolean)
         .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 1);
 }
 
@@ -218,8 +233,8 @@ function main() {
         hypothesis: 'Seeing both hands, deck order and future draws, plus a 2-window search, beats the fair 1-ply heuristic by a wide margin; most of the gain comes from knowing the draws.',
         status: running ? 'running' : 'done', startedAt: '2026-10-11T07:15:00Z', updatedAt: now,
         progress: { done: matches.reduce((a, m) => a + m.played, 0), total: matches.reduce((a, m) => a + m.scheduled, 0), unit: 'games' },
-        metrics: matches.map((m) => ({ label: `${m.bot} win rate`, value: m.winRate ?? 0, format: 'pct' })),
-        chart: { x: 'games played', y: 'win rate vs heuristic', yFormat: 'pct', series: matches.map((m) => ({ name: m.bot, points: m.curve })) },
+        metrics: matches.map((m) => ({ label: `${m.pair} win rate`, value: m.winRate ?? 0, format: 'pct' })),
+        chart: { x: 'games played', y: 'win rate', yFormat: 'pct', series: matches.slice(0, 4).map((m) => ({ name: m.pair, points: m.curve })) },
         conclusion: null
     });
 
@@ -249,7 +264,7 @@ function main() {
     }
     for (const m of matches) {
         if (m.decided) {
-            thoughts.push({ t: now, text: `${m.bot} vs ${m.opponent}: ${m.wins}/${m.decided} wins so far (${Math.round(m.winRate * 100)}%).` });
+            thoughts.push({ t: now, text: `${m.pair}: ${m.wins}/${m.decided} wins (${Math.round(m.winRate * 100)}% +/- ${Math.round(m.ci95 * 100)}).` });
         }
     }
     for (const d of dec.latest?.recent ?? []) {
@@ -285,9 +300,9 @@ function main() {
                 { label: 'moves per window', value: solve.movesPerWindow ?? 0 },
                 { label: 'game tree (log10)', value: solve.treeLog10 ?? 0 },
                 { label: 'solve horizon (windows)', value: solve.horizon.mean ?? 0 },
-                ...matches.map((m) => ({ label: `${m.bot} win %`, value: m.winRate === null ? 0 : Math.round(m.winRate * 100) }))
+                ...matches.map((m) => ({ label: `${m.pair} win %`, value: m.winRate === null ? 0 : Math.round(m.winRate * 100) }))
             ] },
-            { type: 'line', title: 'Win rate vs heuristic', x: 'games', yFormat: 'pct', series: matches.map((m) => ({ name: m.bot, points: m.curve })) },
+            { type: 'line', title: 'Win rate by pairing', x: 'games', yFormat: 'pct', series: matches.slice(0, 4).map((m) => ({ name: m.pair, points: m.curve })) },
             { type: 'bars', title: 'Endgames solved, by windows before the end', items: solve.solveRateByFromEnd.slice(0, 12).map((b) => ({ label: `${b.fromEnd} from end`, value: Math.round(b.rate * 100) })) },
             { type: 'bars', title: 'Distinct moves per window, by round', items: solve.movesByRound.map(([round, v]) => ({ label: `R${round}`, value: v })) },
             ...trees().map((t) => ({ type: 'tree', title: `Search tree at the last decision (${t.bot})`, caption: 'Values are the search score squashed to P(p1 wins) with a 15-point logistic (not calibrated yet). Children: its 8 best moves; under each, the replies it expects.', root: t.root })),

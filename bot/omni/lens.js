@@ -55,11 +55,21 @@ function unitValue(u) {
         parts.sentinel = W.sentinel;
     }
     const mult = u.x ? W.exhaustedMult : 1;
+    // parts are the card's value split by term, after the exhausted multiplier, so they sum to the value
+    for (const k of Object.keys(parts)) {
+        parts[k] = r2(parts[k] * mult);
+    }
     return { v: v * mult, exhausted: !!u.x, parts };
 }
 
 function baseValue(b) {
     return baseTermHp(b.hp - b.d);
+}
+
+function baseParts(b) {
+    const left = Math.max(0, b.hp - b.d);
+    const danger = left <= W.dangerHp ? ((W.dangerHp - left) ** 2) * W.danger * W.baseMult : 0;
+    return { hp: r2(left * W.baseHp * W.baseMult), danger: r2(-danger) };
 }
 
 /** Per-card values for one side of a recorder snapshot. Arrays line up with the snapshot's arrays. */
@@ -75,6 +85,8 @@ function sideLens(p, hasInitiative) {
         initiative: hasInitiative ? W.initiative : 0
     };
     out.total = r2(out.base + out.ground.reduce((a, b) => a + b, 0) + out.space.reduce((a, b) => a + b, 0) + out.hand.length * W.hand + out.resources + out.initiative);
+    // per-card split by term; the term names are listed in the file's evaluator.terms
+    out.parts = { base: baseParts(p.base), ground: ground.map((x) => x.parts), space: space.map((x) => x.parts) };
     return out;
 }
 
@@ -117,6 +129,38 @@ function searchLens(decision, state) {
     };
 }
 
+/**
+ * Which score produced the numbers. Viewers should read term names and labels from here rather than assume a fixed
+ * list: a later evaluator may have other terms, weights that change per step (then `constantWeights` is false and
+ * each step carries `weights`), or no weights at all (a learned model: `weights` null, `parts` may be missing).
+ */
+const EVALUATOR = {
+    id: 'omni-linear-v1',
+    source: 'bot/omni/evaluate.js',
+    description: 'Hand-set linear score from the original heuristic bot, with the low-base-HP penalty subtracted. Not fitted to data yet.',
+    constantWeights: true,
+    scale: { unit: 'points', toWinProb: null },
+    terms: {
+        unit: [
+            { key: 'power', label: 'Power', rule: 'power x 1.3' },
+            { key: 'hp', label: 'HP left', rule: 'remaining HP x 0.9' },
+            { key: 'cost', label: 'Cost', rule: 'printed cost x 0.25' },
+            { key: 'upgrades', label: 'Upgrades', rule: '2.2 per Shield, 0.6 per other upgrade' },
+            { key: 'sentinel', label: 'Sentinel', rule: '+1' }
+        ],
+        unitNote: 'every unit part is multiplied by 0.85 when the unit is exhausted',
+        base: [
+            { key: 'hp', label: 'Base HP', rule: 'HP left x 0.9 x 1.5' },
+            { key: 'danger', label: 'Danger', rule: '-(12 - HP left)^2 / 6 x 1.5 under 12 HP' }
+        ],
+        side: [
+            { key: 'hand', label: 'Hand', rule: '1.8 per card' },
+            { key: 'resources', label: 'Resources', rule: '1.4 per resource' },
+            { key: 'initiative', label: 'Initiative', rule: '2.5 for the side holding it' }
+        ]
+    }
+};
+
 function readJsonl(file) {
     return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
@@ -155,6 +199,7 @@ function buildLens(gameFile, decisionsDir) {
         schema: 'swu-lens/1', gameId, seed: header?.seed ?? null,
         players: (header?.players ?? []).map((p) => ({ id: p.id, bot: p.bot })),
         source: 'bot/omni/lens.js: static = omni leaf evaluation (bot/omni/evaluate.js); search = omni decision logs',
+        evaluator: EVALUATOR,
         weights: W,
         steps
     };

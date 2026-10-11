@@ -21,7 +21,8 @@
  *
  * With OMNI_LOG_DIR set, every action-window decision is appended to <dir>/<seed>-<bot>-<seat>.jsonl (value, depth,
  * principal variation, the top moves and their values). bot/omni/lens.js joins these with the replay: the k-th line
- * is the bot's k-th actionWindow step.
+ * is the bot's k-th actionWindow step. Give each tournament run its own OMNI_LOG_DIR: two runs with the same bot
+ * name and seeds would append to the same files.
  */
 
 const fs = require('fs');
@@ -171,8 +172,8 @@ OmniscientBot.prototype.writeTree = function writeTree(eg, pid, best, rootState)
         }
     };
     const file = path.join(process.env.OMNI_LOG_DIR, `latest-tree-${this.name}.json`);
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify(tree));
-    fs.renameSync(`${file}.tmp`, file);
+    fs.writeFileSync(`${file}.${process.pid}.tmp`, JSON.stringify(tree));
+    fs.renameSync(`${file}.${process.pid}.tmp`, file);
 };
 
 module.exports = { OmniscientBot };
