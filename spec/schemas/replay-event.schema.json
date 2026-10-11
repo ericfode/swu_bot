@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/replay-event.schema.json",
+  "title": "SWU bot replay event (one line of games/<id>.jsonl), format v1",
+  "description": "A game file is JSON Lines: one header, step n=0 (opening board), one step per decision, one end. Unknown fields and unknown event types must be ignored by readers. See spec/replay-format.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/Header" },
+    { "$ref": "#/$defs/Step" },
+    { "$ref": "#/$defs/End" }
+  ],
+  "$defs": {
+    "Seat": { "enum": ["p1", "p2"] },
+    "SetCode": {
+      "description": "Set code <SET>_<NNN>, e.g. SOR_010; null when the card has no set number.",
+      "type": ["string", "null"]
+    },
+    "Flag": { "enum": [0, 1] },
+    "CardRef": {
+      "type": "object",
+      "required": ["n", "s"],
+      "properties": {
+        "n": { "type": "string", "description": "Card title (no subtitle)." },
+        "s": { "$ref": "#/$defs/SetCode" }
+      }
+    },
+    "UpgradeRef": {
+      "allOf": [{ "$ref": "#/$defs/CardRef" }],
+      "required": ["t"],
+      "properties": { "t": { "$ref": "#/$defs/Flag", "description": "1 = token upgrade (Shield, Experience)." } }
+    },
+    "UnitRef": {
+      "allOf": [{ "$ref": "#/$defs/CardRef" }],
+      "required": ["p", "h", "d"],
+      "properties": {
+        "p": { "type": "number", "description": "Current power." },
+        "h": { "type": "number", "description": "Current max HP." },
+        "d": { "type": "number", "description": "Damage." },
+        "x": { "const": 1, "description": "Present when exhausted." },
+        "sn": { "const": 1, "description": "Present when the unit has Sentinel." },
+        "u": { "type": "array", "items": { "$ref": "#/$defs/UpgradeRef" }, "description": "Attached upgrades; absent when none." }
+      }
+    },
+    "LeaderRef": {
+      "allOf": [{ "$ref": "#/$defs/CardRef" }],
+      "required": ["dep", "x"],
+      "properties": {
+        "dep": { "$ref": "#/$defs/Flag", "description": "1 = deployed (also listed as a unit in its arena)." },
+        "x": { "$ref": "#/$defs/Flag", "description": "1 = exhausted." }
+      }
+    },
+    "BaseRef": {
+      "allOf": [{ "$ref": "#/$defs/CardRef" }],
+      "required": ["hp", "d"],
+      "properties": {
+        "hp": { "type": "number", "description": "Printed HP." },
+        "d": { "type": "number", "description": "Damage." }
+      }
+    },
+    "PlayerSnap": {
+      "type": "object",
+      "required": ["name", "base", "leader", "res", "hand", "deck", "discard", "ground", "space"],
+      "properties": {
+        "name": { "type": "string" },
+        "base": { "$ref": "#/$defs/BaseRef" },
+        "leader": { "oneOf": [{ "$ref": "#/$defs/LeaderRef" }, { "type": "null" }] },
+        "res": {
+          "type": "object",
+          "required": ["ready", "total"],
+          "properties": { "ready": { "type": "integer", "minimum": 0 }, "total": { "type": "integer", "minimum": 0 } }
+        },
+        "hand": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
+        "deck": { "type": "integer", "minimum": 0, "description": "Cards left in the draw deck." },
+        "discard": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
+        "ground": { "type": "array", "items": { "$ref": "#/$defs/UnitRef" }, "description": "Units this player controls." },
+        "space": { "type": "array", "items": { "$ref": "#/$defs/UnitRef" } }
+      }
+    },
+    "Snapshot": {
+      "type": "object",
+      "description": "Omniscient board after the step's action (both hands listed).",
+      "required": ["round", "phase", "initiative", "players"],
+      "properties": {
+        "round": { "type": "integer" },
+        "phase": { "type": ["string", "null"], "description": "setup, action or regroup." },
+        "initiative": { "oneOf": [{ "$ref": "#/$defs/Seat" }, { "type": "null" }] },
+        "players": {
+          "type": "object",
+          "required": ["p1", "p2"],
+          "properties": { "p1": { "$ref": "#/$defs/PlayerSnap" }, "p2": { "$ref": "#/$defs/PlayerSnap" } }
+        }
+      }
+    },
+    "Header": {
+      "type": "object",
+      "required": ["t", "v", "seed", "engine", "players"],
+      "properties": {
+        "t": { "const": "header" },
+        "v": { "type": "integer", "description": "Format version; 1." },
+        "seed": { "type": "number" },
+        "engine": { "type": ["string", "null"], "description": "forceteki short git revision." },
+        "players": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["id", "bot", "deck"],
+            "properties": {
+              "id": { "$ref": "#/$defs/Seat" },
+              "bot": { "type": "string" },
+              "deck": { "type": "string", "description": "Deck metadata name, e.g. '<leader> / <base>' internal names." }
+            }
+          }
+        }
+      }
+    },
+    "Step": {
+      "type": "object",
+      "required": ["t", "n", "state"],
+      "properties": {
+        "t": { "const": "step" },
+        "n": { "type": "integer", "minimum": 0, "description": "0 = opening board, then 1, 2, ... per decision." },
+        "pid": { "$ref": "#/$defs/Seat" },
+        "prompt": { "type": "string", "description": "Prompt signature at decision time." },
+        "title": { "type": ["string", "null"] },
+        "action": {
+          "type": "object",
+          "required": ["kind", "label"],
+          "properties": {
+            "kind": { "enum": ["button", "card", "option", "displayCard", "perCardButton", "distribute"] },
+            "label": { "type": "string" }
+          }
+        },
+        "legal": { "type": "integer", "minimum": 1 },
+        "label": { "type": "string", "description": "Only on step 0: 'Game start'." },
+        "state": { "$ref": "#/$defs/Snapshot" }
+      },
+      "if": { "properties": { "n": { "const": 0 } } },
+      "then": { "required": ["label"] },
+      "else": { "required": ["pid", "prompt", "action", "legal"] }
+    },
+    "End": {
+      "type": "object",
+      "required": ["t", "winner", "round", "steps", "outcome", "error"],
+      "properties": {
+        "t": { "const": "end" },
+        "winner": { "enum": ["p1", "p2", "draw", null] },
+        "round": { "type": "integer" },
+        "steps": { "type": "integer", "minimum": 0 },
+        "outcome": { "enum": ["won", "STEP_CAP", "STUCK", "ERROR"] },
+        "error": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

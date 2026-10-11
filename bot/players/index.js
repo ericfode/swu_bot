@@ -10,11 +10,24 @@
  *
  * `-dN` sets search depth (my next N actions). Anything after `#` is ignored, so the same bot can be entered twice
  * (`aggro#1,aggro#2`) as a sanity check: the two copies should rate about equal.
+ *
+ * Out-of-process bots (spec/stdio-protocol.md) are listed by name in $SWU_EXTERNAL_BOTS or bot/external-bots.json
+ * and take precedence over the built-in names.
  */
+const fs = require('fs');
+const path = require('path');
 const { createRandomBot } = require('./random');
 const { createRushBot } = require('./rush');
 const { HeuristicBot } = require('./heuristic');
+const { ExternalBot } = require('./external');
 const { PROFILES } = require('./profiles');
+
+// name -> {cmd, args, ...}
+function loadExternalBots() {
+    const file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json');
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+}
+const externalBots = loadExternalBots();
 
 function parseName(name) {
     const base = name.split('#')[0];
@@ -25,6 +38,10 @@ function parseName(name) {
 
 function describeBot(name) {
     const { kind, depth } = parseName(name);
+    const ext = externalBots[name.split('#')[0]];
+    if (ext) {
+        return { name, kind: 'external', profile: null, depth: 0, lang: ext.lang ?? 'external' };
+    }
     if (kind === 'heuristic' || PROFILES[kind]) {
         return { name, kind: 'search', profile: kind === 'heuristic' ? 'balanced' : kind, depth, lang: 'js' };
     }
@@ -40,7 +57,11 @@ function describeBot(name) {
 function makeBot(name) {
     const info = describeBot(name);
     if (!info) {
-        throw new Error(`unknown bot "${name}" (known: random*, rush, heuristic, ${Object.keys(PROFILES).join(', ')}; optional -dN)`);
+        const known = ['random*', 'rush', 'heuristic', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
+        throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
+    }
+    if (info.kind === 'external') {
+        return new ExternalBot(name, externalBots[name.split('#')[0]]);
     }
     if (info.kind === 'search') {
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
