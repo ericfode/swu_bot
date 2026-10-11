@@ -77,7 +77,14 @@ function fingerprint(eg) {
             parts.push(u.uuid, u.damage, u.exhausted ? 1 : 0, u.getPower(), u.getHp(), (u.upgrades ?? []).length);
         }
         const leader = p.getAllDeckLeaders()[0];
-        parts.push(leader ? `${leader.exhausted ? 1 : 0}${leader.deployed ? 1 : 0}` : '-');
+        // a leader deployed as a pilot sits in an arena as an upgrade, where reading `exhausted` throws
+        let exhausted = 0;
+        try {
+            exhausted = leader?.exhausted ? 1 : 0;
+        } catch {
+            exhausted = 'u';
+        }
+        parts.push(leader ? `${exhausted}${leader.deployed ? 1 : 0}` : '-');
     }
     return parts.join('|');
 }
