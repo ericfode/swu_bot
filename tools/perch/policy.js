@@ -430,8 +430,11 @@ function appendNew(from, before, to) {
   const now = readBytes(from);
   if (now.equals(before)) return;
   if (now.length > before.length && now.subarray(0, before.length).equals(before)) {
+    const added = now.subarray(before.length);
+    // A torn last line has no newline; start on a new line so the added issues stay readable.
+    const last = readBytes(to, null)?.at(-1);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.appendFileSync(to, now.subarray(before.length));
+    fs.appendFileSync(to, last === undefined || last === 10 ? added : Buffer.concat([Buffer.from('\n'), added]));
   } else {
     console.error(`perch: ${from} was rewritten instead of added to, so its changes were not copied to ${to}.`);
   }

@@ -345,6 +345,11 @@ test('closed issues are added to the shared list, never copied over it', (t) => 
   fs.appendFileSync(local, 'c\n');
   appendNew(local, before, shared);
   assert.strictEqual(fs.readFileSync(shared, 'utf8'), 'a\nb\nc\n');
+  fs.appendFileSync(shared, '{"id":"torn'); // a torn append leaves no newline
+  const again = fs.readFileSync(local);
+  fs.appendFileSync(local, 'd\n');
+  appendNew(local, again, shared);
+  assert.strictEqual(fs.readFileSync(shared, 'utf8'), 'a\nb\nc\n{"id":"torn\nd\n');
 });
 
 test('the lock admits one holder and is taken over from a dead one', (t) => {
