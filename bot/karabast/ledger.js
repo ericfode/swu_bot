@@ -25,6 +25,10 @@ function sleepSync(ms) {
 
 class PeopleLedger {
     constructor(file, max = 10, { lockWaitMs = 10000 } = {}) {
+        // a typo in --max-people gives NaN, and every check against NaN passes: refuse it rather than run uncapped
+        if (!Number.isInteger(max) || max < 0) {
+            throw new Error(`people cap must be a whole number of 0 or more, got ${max}`);
+        }
         this.file = file;
         this.max = max;
         this.lockWaitMs = lockWaitMs;

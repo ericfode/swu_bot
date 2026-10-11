@@ -236,6 +236,9 @@ test('the people ledger caps distinct people and keeps no ids', () => {
     assert.strictEqual(again.count, 2);
     assert.ok(again.has('user-b'));
     assert.ok(!fs.readFileSync(file, 'utf8').includes('user-'));
+    for (const bad of [NaN, Number('ten'), Number(undefined), -1, 2.5, Infinity]) {
+        assert.throws(() => new PeopleLedger(file, bad), /people cap/);
+    }
 });
 
 test('two ledgers on one file share the cap', () => {
