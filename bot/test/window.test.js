@@ -219,33 +219,37 @@ test('a feed token writes only what carries its name, and reads like a friend', 
     const w = makeWindow('w-feed');
     const { go, close } = await serve(w);
     try {
-        const doc = (ns, id, method = 'PUT', body = JSON.stringify({ id, games: [] })) => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body });
+        const doc = (ns, id, method = 'PUT', body = JSON.stringify({ id, createdAt: '2026-10-11T21:00:00Z', games: [] })) => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body });
         assert.strictEqual((await doc('runs', 'karabast')).status, 200);
-        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"arena-t1-r1","games":[]}')).status, 400, 'the run inside must carry the same name');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"arena-t1-r1","createdAt":"2026-10-11T21:00:00Z","games":[]}')).status, 400, 'the run inside must carry the same name');
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"games":[]}')).status, 400);
-        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","games":[null]}')).status, 400, 'games the loaders cannot read');
-        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","games":[{"id":"karabast-1","p1":"c-clock"}]}')).status, 400);
-        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","bots":[1],"games":[]}')).status, 400);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","createdAt":"2026-10-11T21:00:00Z","games":[null]}')).status, 400, 'games the loaders cannot read');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","createdAt":"2026-10-11T21:00:00Z","games":[{"id":"karabast-1","p1":"c-clock","outcome":"running"}]}')).status, 400);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","createdAt":"2026-10-11T21:00:00Z","bots":[1],"games":[]}')).status, 400);
         for (const bad of ['__proto__', 'constructor', 'toString']) {
-            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [{ id: 'karabast-1', p1: bad, p2: 'opponent', outcome: 'running' }] }))).status, 400, `${bad} as a seat`);
+            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'karabast-1', p1: bad, p2: 'opponent', outcome: 'running' }] }))).status, 400, `${bad} as a seat`);
         }
-        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [{ id: 'g1', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] }))).status, 400, 'game ids carry the feed name');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'g1', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] }))).status, 400, 'game ids carry the feed name');
         const row = { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running' };
-        for (const [bad, why] of [[{ outcome: 'ERROR', error: { toString: null } }, 'an error that is not text'], [{ outcome: 'ERROR', by: 'p1' }, 'an outcome feeds do not send'], [{ winnerSeat: 'p3' }, 'a seat that does not exist'], [{ outcome: undefined }, 'no outcome']]) {
-            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [{ ...row, ...bad }] }))).status, 400, why);
+        for (const [bad, why] of [[{ outcome: 'ERROR', error: { toString: null } }, 'an error that is not text'], [{ outcome: 'ERROR', by: 'p1' }, 'an outcome feeds do not send'], [{ outcome: 'won', winnerSeat: 'p3' }, 'a seat that does not exist'], [{ outcome: 'won' }, 'a won game with no winner'], [{ outcome: undefined }, 'no outcome']]) {
+            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [{ ...row, ...bad }] }))).status, 400, why);
         }
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: 12, games: [] }))).status, 400, 'createdAt is a date string');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [] }))).status, 400, 'and is required, since runs are ordered by it');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [row, row] }))).status, 400, 'game ids are distinct');
         // the shape bot/karabast/feed.js sends; the window keeps only the fields the app reads
         const sent = { id: 'karabast', createdAt: '2026-10-11T21:00:00Z', engine: null, bots: ['c-clock'], gamesPerPairing: 1, games: [
             { ...row, seed: 0, winner: null, winnerSeat: null, rounds: 2, steps: 40, error: null, ms: 0, timing: { p1: { n: 1, ms: 5 } } },
             { id: 'karabast-2', seed: 0, p1: 'opponent', p2: 'c-clock', winner: 'c-clock', winnerSeat: 'p2', rounds: 7, steps: 300, outcome: 'won', error: null, ms: 0 },
-            { id: 'karabast-3', seed: 0, p1: 'c-clock', p2: 'opponent', winner: null, winnerSeat: null, rounds: 0, steps: 1, outcome: 'abandoned', error: 'no result', ms: 0 },
+            { id: 'karabast-3', seed: 0, p1: 'c-clock', p2: 'opponent', winner: null, winnerSeat: 'draw', rounds: 0, steps: 1, outcome: 'abandoned', error: 'no result', ms: 0 },
+            { id: 'karabast-4', p1: 'c-clock', p2: 'opponent', winnerSeat: null, rounds: 9, steps: 500, outcome: 'draw' },
         ] };
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify(sent))).status, 200);
         assert.deepStrictEqual((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result, { id: 'karabast', feed: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock'], gamesPerPairing: 1, games: [
             { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running', winnerSeat: null, winner: null, rounds: 2, steps: 40, error: null },
             { id: 'karabast-2', p1: 'opponent', p2: 'c-clock', outcome: 'won', winnerSeat: 'p2', winner: 'c-clock', rounds: 7, steps: 300, error: null },
             { id: 'karabast-3', p1: 'c-clock', p2: 'opponent', outcome: 'abandoned', winnerSeat: null, winner: null, rounds: 0, steps: 1, error: 'no result' },
+            { id: 'karabast-4', p1: 'c-clock', p2: 'opponent', outcome: 'draw', winnerSeat: 'draw', winner: 'draw', rounds: 9, steps: 500, error: null },
         ] }, 'rebuilt from the fields the app reads; timing, seed and the rest are dropped');
         assert.strictEqual((await doc('lens', 'karabast-g1')).status, 200);
         assert.strictEqual((await doc('runs', 'karabastx')).status, 403, 'a name that only starts the same is not its own');

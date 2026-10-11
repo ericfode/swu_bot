@@ -62,19 +62,22 @@ const count = (x) => (Number.isSafeInteger(x) && x >= 0 ? x : null);
 function feedRun(doc, feed, id) {
     if (!doc || typeof doc !== 'object' || doc.id !== id || !Array.isArray(doc.games)) return null;
     if (doc.bots !== undefined && !(Array.isArray(doc.bots) && doc.bots.every(isName))) return null;
-    if (doc.createdAt !== undefined && !(typeof doc.createdAt === 'string' && doc.createdAt.length <= 40 && Number.isFinite(Date.parse(doc.createdAt)))) return null;
-    const games = [];
+    // runs are ordered by createdAt, so a feed's run needs one
+    if (!(typeof doc.createdAt === 'string' && doc.createdAt.length <= 40 && Number.isFinite(Date.parse(doc.createdAt)))) return null;
+    const games = [], seen = new Set();
     for (const g of doc.games) {
-        const ok = g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`)
+        const ok = g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`) && !seen.has(g.id)
             && isName(g.p1) && isName(g.p2) && FEED_OUTCOMES.has(g.outcome)
-            && (g.winnerSeat == null || ['p1', 'p2', 'draw'].includes(g.winnerSeat)) && (g.error == null || typeof g.error === 'string');
+            && (g.outcome !== 'won' || g.winnerSeat === 'p1' || g.winnerSeat === 'p2') && (g.error == null || typeof g.error === 'string');
         if (!ok) return null;
-        const seat = g.winnerSeat ?? null;
+        seen.add(g.id);
+        // the seat follows from the outcome: only a won game names a winner, a draw is always 'draw'
+        const seat = g.outcome === 'won' ? g.winnerSeat : g.outcome === 'draw' ? 'draw' : null;
         games.push({ id: g.id, p1: g.p1, p2: g.p2, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? g[seat] : null,
             rounds: count(g.rounds), steps: count(g.steps), error: g.error ? g.error.slice(0, 200) : null });
     }
     const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small
-    return { id, feed, ...(doc.createdAt ? { createdAt: doc.createdAt } : {}), ...(doc.bots ? { bots: doc.bots } : {}), ...(per && per <= 20 ? { gamesPerPairing: per } : {}), games };
+    return { id, feed, createdAt: doc.createdAt, ...(doc.bots ? { bots: doc.bots } : {}), ...(per && per <= 20 ? { gamesPerPairing: per } : {}), games };
 }
 
 /**
@@ -551,7 +554,7 @@ function createWindow(opts = {}) {
                 if (who.role === 'feed' && ns === 'runs') {
                     need(doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
                     const run = feedRun(doc, who.feed, id);
-                    need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
+                    need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with distinct ids, a createdAt date, and seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
                     // the run keeps which feed sent it, so the app never rates its games (model.cjs)
                     text = JSON.stringify(run);
                 }
