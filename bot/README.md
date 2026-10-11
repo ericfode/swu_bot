@@ -31,7 +31,7 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - Registry: `players/index.js` (`makeBot(name)`), used by `tournament.js` and `ladder.js`.
   - `random*` — uniform random. `rush` — rule-based, no lookahead: plays its most expensive card, attacks face, then passes.
   - `heuristic`, `aggro`, `tempo`, `control` — the same one-ply rollback search (`players/heuristic.js`) with different
-    evaluation profiles (`players/profiles.js`); `heuristic` is the original evaluation, bit-for-bit. Add `-dN` for depth N.
+    evaluation profiles (`players/profiles.js`); `heuristic` is the original weights with the base-danger sign fixed, `legacy` is the original evaluation bit-for-bit (inverted danger term included). Add `-dN` for depth N.
   - `ismcts[-bB][-hH][-nN]` — known-decklist Information Set MCTS (`players/ismcts.js`, `players/belief.js`). Both
     decklists are known; each iteration samples one world (my deck order; which unseen opponent cards are in hand,
     resources or deck), searches my turn with UCB in one shared tree, lets the opponent reply from its sampled hand and
