@@ -4,10 +4,9 @@ const path = require('path');
 const { setCodeToString } = require(path.join(__dirname, '..', 'forceteki', 'build/server', 'Util.js'));
 
 /**
- * Plain-JSON view of an EnvGame from one seat, for bots that cannot hold engine objects (see spec/stdio-protocol.md).
- * Same fields as the replay snapshot in recorder.js, plus an `id` (the engine card uuid, which is what `card` actions
- * and distribute targets refer to) on every card, your own hand and resources listed, and the opponent's hand reduced to a count.
- * Only reads engine state.
+ * Plain-JSON views of an EnvGame: the board a bot sees (view(eg, pid)), the board a replay records (snapshot(eg)),
+ * and the prompt and legal actions of a decision. Shapes are specified in spec/protocol.md and spec/replay-format.md.
+ * Everything here only reads engine state.
  */
 
 const ZONE = { hand: 'hand', discard: 'discard', resource: 'resource', ground: 'groundArena', space: 'spaceArena' };
@@ -20,6 +19,7 @@ function setCode(card) {
     }
 }
 
+// `id` is the engine card uuid: stable for the whole game, and what actions and distribute targets refer to
 const cardRef = (card) => ({ id: card.uuid, n: card.title, s: setCode(card) });
 
 function unitRef(card, player) {
@@ -35,10 +35,16 @@ function unitRef(card, player) {
     if (ups.length) {
         out.u = ups.map((u) => ({ ...cardRef(u), t: u.isToken?.() ? 1 : 0 }));
     }
+    // captured cards are open information
+    const cap = card.capturedUnits ?? [];
+    if (cap.length) {
+        out.cap = cap.map(cardRef);
+    }
     return out;
 }
 
-function playerView(player, isMe) {
+/** One player's side. The hand is listed when `seen`; resource cards (face down to the opponent) when `own`. */
+function playerView(player, seen, own) {
     const cards = (zone) => player.getCardsInZone(zone) ?? [];
     const base = player.base;
     const baseSum = base.getSummary(player, true);
@@ -53,37 +59,47 @@ function playerView(player, isMe) {
         handCount: hand.length,
         deck: player.drawDeck?.length ?? 0,
         discard: cards(ZONE.discard).map(cardRef),
+        // attached upgrades live in the arena zone too; they are reported under their host unit instead
         ground: cards(ZONE.ground).filter((c) => c.isUnit()).map((c) => unitRef(c, player)),
         space: cards(ZONE.space).filter((c) => c.isUnit()).map((c) => unitRef(c, player))
     };
-    if (isMe) {
+    if (seen) {
         out.hand = hand.map(cardRef);
-        // own resources are known to their owner and can be played from (Smuggle); the opponent's are face down
+    }
+    if (own) {
         out.resources = cards(ZONE.resource).map((c) => (c.exhausted ? { ...cardRef(c), x: 1 } : cardRef(c)));
     }
     return out;
 }
 
-const seatOf = (eg, player) => {
-    const i = player ? eg.ids.indexOf(player.id) : -1;
-    return i < 0 ? null : `p${i + 1}`;
-};
-
-/** Board from `pid`'s side: own hand visible, opponent hand as a count, deck order never shown. */
-function observe(eg, pid) {
+/**
+ * The board as seat `you` sees it, or with both hands when `you` is null (replays). Deck order is never shown;
+ * resource cards only to their owner, so replays stay small (they add about half again to a replay file).
+ */
+function view(eg, you = null) {
     const players = {};
-    eg.ids.forEach((id, i) => {
-        players[`p${i + 1}`] = playerView(eg.player(id), id === pid);
-    });
-    const init = eg.ids.findIndex((id) => eg.player(id).hasInitiative());
-    return { round: eg.round, phase: eg.phase, initiative: init < 0 ? null : `p${init + 1}`, players };
+    for (const id of eg.ids) {
+        const seat = eg.seatOf(id);
+        players[seat] = playerView(eg.player(id), you === null || seat === you, seat === you);
+    }
+    const init = eg.ids.find((id) => eg.player(id).hasInitiative());
+    return { round: eg.round, phase: eg.phase, initiative: init ? eg.seatOf(init) : null, players };
 }
 
-/** The prompt `pid` is answering, minus engine objects. */
+/** Replay snapshot: the whole board. */
+const snapshot = (eg) => view(eg);
+
+/** A card with where it is: `zone` and controlling seat `ctl`. */
+const placedRef = (eg, c) => ({ ...cardRef(c), zone: c.zoneName ?? null, ctl: c.controller ? eg.seatOf(c.controller.id) : null });
+
+/**
+ * The prompt `pid` is answering, minus engine objects. `cards` are the cards the prompt shows, with their selection
+ * state `st` (selectable, selected, unselectable, invalid or viewOnly): what a player looking at the screen sees.
+ */
 function promptView(eg, pid) {
     const pl = eg.player(pid);
     const p = pl.currentPrompt();
-    return {
+    const out = {
         type: p.promptType || null,
         signature: eg.promptSignature(pid),
         title: p.menuTitle ?? null,
@@ -92,9 +108,16 @@ function promptView(eg, pid) {
         selected: (pl.promptState.selectedCards ?? []).map((c) => c.uuid),
         actionWindow: eg.isActionWindow(pid)
     };
+    if (p.displayCards?.length) {
+        out.cards = p.displayCards.map((dc) => {
+            const c = eg.game.findAnyCardInAnyList(dc.cardUuid);
+            return { ...(c ? placedRef(eg, c) : { id: dc.cardUuid, n: dc.internalName, s: null, zone: null, ctl: null }), st: dc.selectionState };
+        });
+    }
+    return out;
 }
 
-/** One legal action as plain JSON. `i` is its index in legalActions(pid), which is what a bot answers with. */
+/** Legal action `a` as plain JSON; `i` is its index in legalActions(pid), which is what a bot answers with. */
 function actionView(eg, a, i) {
     const out = { i, kind: a.kind, label: a.label };
     if (a.arg !== undefined) {
@@ -103,8 +126,8 @@ function actionView(eg, a, i) {
     if (a.cardUuid !== undefined) {
         out.cardUuid = a.cardUuid;
     }
-    if (a.kind === 'card' && a.card) {
-        out.card = { id: a.card.uuid, n: a.card.title, s: setCode(a.card), zone: a.card.zoneName ?? null, ctl: seatOf(eg, a.card.controller) };
+    if (a.kind === 'card') {
+        out.card = placedRef(eg, a.card);
     }
     if (a.kind === 'distribute') {
         const s = a.spec;
@@ -118,4 +141,4 @@ function actionView(eg, a, i) {
     return out;
 }
 
-module.exports = { observe, promptView, actionView, seatOf };
+module.exports = { view, snapshot, promptView, actionView, cardRef, placedRef };

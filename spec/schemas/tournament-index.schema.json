@@ -27,8 +27,29 @@
           "steps": { "type": "integer", "minimum": 0 },
           "outcome": { "enum": ["running", "won", "STEP_CAP", "STUCK", "ERROR"] },
           "error": { "type": ["string", "null"] },
-          "ms": { "type": "number", "minimum": 0 }
+          "by": { "enum": ["p1", "p2", null], "description": "For ERROR: the seat whose bot caused it (added)." },
+          "ms": { "type": "number", "minimum": 0 },
+          "timing": {
+            "type": "object",
+            "description": "Referee-timed decision milliseconds per seat (added).",
+            "required": ["p1", "p2"],
+            "properties": { "p1": { "$ref": "#/$defs/Timing" }, "p2": { "$ref": "#/$defs/Timing" } }
+          }
         }
+      }
+    },
+    "key": { "type": ["string", "null"], "description": "Secret the run's random streams came from, written when the run ends; null = seed alone (added)." }
+  },
+  "$defs": {
+    "Timing": {
+      "type": "object",
+      "required": ["n", "ms", "p50", "p95", "max"],
+      "properties": {
+        "n": { "type": "integer", "minimum": 0, "description": "Decisions." },
+        "ms": { "type": "number", "minimum": 0, "description": "Total." },
+        "p50": { "type": "number", "minimum": 0 },
+        "p95": { "type": "number", "minimum": 0 },
+        "max": { "type": "number", "minimum": 0 }
       }
     }
   }

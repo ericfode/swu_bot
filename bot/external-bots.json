@@ -1,3 +1,5 @@
 {
-    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" }
+    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore", "lang": "python" },
+    "node-random": { "cmd": "node", "args": ["bot/examples/random-bot.js", "node-random"], "lang": "js" },
+    "node-search": { "cmd": "node", "args": ["bot/examples/search-bot.js", "node-search"], "lang": "js" }
 }

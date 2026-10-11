@@ -11,6 +11,7 @@
  *   game.apply(pid, action)
  */
 const path = require('path');
+const { seededRng } = require('./rng');
 
 // Quiet the engine's rollback logging and Discord reporting (same switch the test harness uses). Must be set before the engine loads.
 process.env.NODE_ENV ??= 'test';
@@ -160,6 +161,21 @@ class EnvGame {
         return [...this.game.winnerNames];
     }
 
+    /** Seat ('p1' | 'p2') of an engine player id, and back. */
+    seatOf(pid) {
+        return `p${this.ids.indexOf(pid) + 1}`;
+    }
+
+    pidOf(seat) {
+        return this.ids[Number(seat.slice(1)) - 1];
+    }
+
+    /** Winning seat, 'draw', or null while the game is on. */
+    get winner() {
+        const w = this.winners;
+        return w.length === 0 ? null : w.length > 1 ? 'draw' : this.seatOf(this.ids[this.names.indexOf(w[0])]);
+    }
+
     get phase() {
         return this.game.currentPhase;
     }
@@ -264,23 +280,66 @@ class EnvGame {
         return this.legalActions(pid).find((x) => x.kind === a.kind && x.label === a.label && x.cardUuid === a.cardUuid && x.arg === a.arg) ?? null;
     }
 
-    /** Apply one action, then let the engine run until it needs input again. */
+    /**
+     * Apply one action, then let the engine run until it needs input again. A distribute action uses `a.split`
+     * ([{id, amount}], see splitError) when set, otherwise a random legal split drawn from `rng`. Returns the split sent.
+     */
     apply(pid, a, rng = Math.random) {
         const g = this.game;
+        let split;
         switch (a.kind) {
             case 'button': g.menuButton(pid, a.arg, a.uuid, a.method); break;
             case 'card': g.cardClicked(pid, a.cardUuid); break;
             case 'option': g.menuButton(pid, a.arg, a.uuid); break;
             case 'displayCard': g.menuButton(pid, a.arg, a.uuid, 'menuButton'); break;
             case 'perCardButton': g.perCardMenuButton(pid, a.arg, a.cardUuid, a.uuid); break;
-            case 'distribute': g.statefulPromptResults(pid, randomDistribution(a, rng), a.uuid); break;
+            case 'distribute':
+                split = (a.split ?? randomSplit(a, rng)).filter((e) => e.amount > 0);
+                g.statefulPromptResults(pid, { type: a.spec.type, valueDistribution: split.map((e) => ({ uuid: e.id, amount: e.amount })) }, a.uuid);
+                break;
             default: throw new EngineError(`unknown action kind ${a.kind}`);
         }
         g.continue();
+        return split;
     }
 }
 
-function randomDistribution(a, rng) {
+/**
+ * Why `split` is not a legal answer to distribute action `a`, or null if it is: listed targets only, each once,
+ * integer amounts 0..cap, at most maxTargets non-zero entries, total = amount (<= amount with canDistributeLess,
+ * 0 only with canChooseNoTargets).
+ */
+function splitError(a, split) {
+    const { spec, targets, caps } = a;
+    if (!Array.isArray(split)) {
+        return 'split is not an array';
+    }
+    const seen = new Set();
+    let sum = 0,
+        used = 0;
+    for (const e of split) {
+        const k = targets.indexOf(e?.id);
+        if (k < 0 || seen.has(e.id)) {
+            return `unknown or repeated target ${e?.id}`;
+        }
+        if (!Number.isInteger(e.amount) || e.amount < 0 || e.amount > caps[k]) {
+            return `amount ${e.amount} for ${e.id} is outside 0..${caps[k]}`;
+        }
+        seen.add(e.id);
+        sum += e.amount;
+        used += e.amount > 0 ? 1 : 0;
+    }
+    if (spec.maxTargets != null && used > spec.maxTargets) {
+        return `more than ${spec.maxTargets} targets`;
+    }
+    if (sum === 0 ? !spec.canChooseNoTargets : spec.canDistributeLess ? sum > spec.amount : sum !== spec.amount) {
+        return `total ${sum} is not allowed for amount ${spec.amount}`;
+    }
+    return null;
+}
+
+/** A random legal split. Draws from rng exactly as upstream's randomDistribution, so seeded games match upstream. */
+function randomSplit(a, rng) {
     const { spec, targets, caps } = a;
     const max = Math.min(spec.maxTargets ?? targets.length, targets.length);
     const order = targets.map((_, i) => i).sort(() => rng() - 0.5);
@@ -311,25 +370,7 @@ function randomDistribution(a, rng) {
         const idx = open[Math.floor(rng() * open.length)];
         given.set(idx, given.get(idx) + 1);
     }
-    return {
-        type: spec.type,
-        valueDistribution: chosen.map((idx) => ({ uuid: targets[idx], amount: given.get(idx) })).filter((e) => e.amount > 0)
-    };
+    return chosen.map((idx) => ({ id: targets[idx], amount: given.get(idx) })).filter((e) => e.amount > 0);
 }
 
-/** Small seeded PRNG (mulberry32) so bot decisions are reproducible too. */
-function seededRng(seedStr) {
-    let h = 1779033703 ^ String(seedStr).length;
-    for (let i = 0; i < String(seedStr).length; i++) {
-        h = Math.imul(h ^ String(seedStr).charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19);
-    }
-    let a = h >>> 0;
-    return () => {
-        a |= 0; a = (a + 0x6D2B79F5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
-
-module.exports = { Env, EnvGame, EngineError, seededRng };
+module.exports = { Env, EnvGame, EngineError, seededRng, splitError };

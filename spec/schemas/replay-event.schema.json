@@ -19,8 +19,29 @@
       "type": "object",
       "required": ["n", "s"],
       "properties": {
+        "id": { "type": "string", "description": "Engine card id, stable for the game (added). Ids of cards created during play depend on engine rollbacks." },
         "n": { "type": "string", "description": "Card title (no subtitle)." },
         "s": { "$ref": "#/$defs/SetCode" }
+      }
+    },
+    "Split": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "amount"], "properties": { "id": { "type": "string" }, "amount": { "type": "integer", "minimum": 0 } } }
+    },
+    "DeckEntry": {
+      "type": "object",
+      "required": ["id", "count"],
+      "properties": { "id": { "type": "string", "description": "Set code <SET>_<NNN>." }, "count": { "type": "integer", "minimum": 1 } }
+    },
+    "DeckList": {
+      "type": "object",
+      "description": "A deck list in the format Env.newGame takes.",
+      "required": ["leader", "base", "deck"],
+      "properties": {
+        "metadata": { "type": "object", "properties": { "name": { "type": "string" }, "author": { "type": "string" } } },
+        "leader": { "$ref": "#/$defs/DeckEntry" },
+        "base": { "$ref": "#/$defs/DeckEntry" },
+        "deck": { "type": "array", "items": { "$ref": "#/$defs/DeckEntry" } }
       }
     },
     "UpgradeRef": {
@@ -37,7 +58,8 @@
         "d": { "type": "number", "description": "Damage." },
         "x": { "const": 1, "description": "Present when exhausted." },
         "sn": { "const": 1, "description": "Present when the unit has Sentinel." },
-        "u": { "type": "array", "items": { "$ref": "#/$defs/UpgradeRef" }, "description": "Attached upgrades; absent when none." }
+        "u": { "type": "array", "items": { "$ref": "#/$defs/UpgradeRef" }, "description": "Attached upgrades; absent when none." },
+        "cap": { "type": "array", "items": { "$ref": "#/$defs/CardRef" }, "description": "Captured cards (added); absent when none." }
       }
     },
     "LeaderRef": {
@@ -68,6 +90,7 @@
           "required": ["ready", "total"],
           "properties": { "ready": { "type": "integer", "minimum": 0 }, "total": { "type": "integer", "minimum": 0 } }
         },
+        "handCount": { "type": "integer", "minimum": 0, "description": "Cards in hand (added)." },
         "hand": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
         "deck": { "type": "integer", "minimum": 0, "description": "Cards left in the draw deck." },
         "discard": { "type": "array", "items": { "$ref": "#/$defs/CardRef" } },
@@ -108,9 +131,16 @@
             "properties": {
               "id": { "$ref": "#/$defs/Seat" },
               "bot": { "type": "string" },
-              "deck": { "type": "string", "description": "Deck metadata name, e.g. '<leader> / <base>' internal names." }
+              "deck": { "type": "string", "description": "Deck metadata name, e.g. '<leader> / <base>' internal names." },
+              "lang": { "type": "string", "description": "Language label of the bot (added)." }
             }
           }
+        },
+        "decks": {
+          "type": "object",
+          "description": "Both deck lists (added).",
+          "required": ["p1", "p2"],
+          "properties": { "p1": { "$ref": "#/$defs/DeckList" }, "p2": { "$ref": "#/$defs/DeckList" } }
         }
       }
     },
@@ -128,7 +158,10 @@
           "required": ["kind", "label"],
           "properties": {
             "kind": { "enum": ["button", "card", "option", "displayCard", "perCardButton", "distribute"] },
-            "label": { "type": "string" }
+            "label": { "type": "string" },
+            "i": { "type": "integer", "minimum": -1, "description": "Index among the legal actions (added); -1 if a native bot returned an action not in the list." },
+            "id": { "type": "string", "description": "Card id the action acts on, when it has one (added)." },
+            "split": { "$ref": "#/$defs/Split", "description": "Split sent for a distribute action, zero amounts left out (added)." }
           }
         },
         "legal": { "type": "integer", "minimum": 1 },
@@ -148,7 +181,8 @@
         "round": { "type": "integer" },
         "steps": { "type": "integer", "minimum": 0 },
         "outcome": { "enum": ["won", "STEP_CAP", "STUCK", "ERROR"] },
-        "error": { "type": ["string", "null"] }
+        "error": { "type": ["string", "null"] },
+        "by": { "enum": ["p1", "p2", null], "description": "For ERROR: the seat whose bot caused it; null = engine or referee (added)." }
       }
     }
   }
