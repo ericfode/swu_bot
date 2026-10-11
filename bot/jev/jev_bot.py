@@ -18,7 +18,8 @@ Environment:
   JEV_MODEL             default jev-latest
   JEV_TIMEOUT           seconds per API attempt, default 20
   JEV_PANEL             if set, path of a dashboard strategy panel to keep updated (dashboard/README.md section 5)
-  JEV_LOG               if set, append one JSON line per decision (what Jev saw and answered) to this file
+  JEV_LOG               if set, append one JSON line per decision (what Jev saw and answered) to this file;
+                        "{pid}" in the path is replaced by the process id, so parallel games don't share a file
   SWU_CARD_JSON         card data folder, default forceteki/test/json next to this repo
 """
 import json
@@ -422,7 +423,7 @@ class Panel:
             ],
         }
         try:
-            tmp = self.path + ".tmp"
+            tmp = f"{self.path}.{os.getpid()}.tmp"
             with open(tmp, "w", encoding="utf8") as f:
                 json.dump(doc, f)
             os.replace(tmp, self.path)
@@ -482,7 +483,8 @@ def main():
     rng = random.Random(0)
     guard = Guard()
     panel = Panel(os.environ.get("JEV_PANEL"))
-    logf = open(os.environ["JEV_LOG"], "a", encoding="utf8") if os.environ.get("JEV_LOG") else None
+    logp = os.environ.get("JEV_LOG", "").replace("{pid}", str(os.getpid()))
+    logf = open(logp, "a", encoding="utf8") if logp else None
     for line in sys.stdin:
         line = line.strip()
         if not line:

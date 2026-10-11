@@ -32,6 +32,8 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - `observe.js` — the plain-JSON board/prompt/action view those bots receive (replay snapshot plus card uuids, opponent hand hidden).
 - `examples/random_bot.py` — reference client. `node bot/stdio-smoke.js -- <cmd> [args]` checks a bot against a fake game (needs `forceteki/build`, no card data).
 - The full interface and replay format are written up in `spec/`.
+- `jev/jev_bot.py` — `jev`: each move is picked by TypeSafe's Jev model (a Choice over the legal actions). See `jev/README.md`.
+- `learned/gen.js` — writes training data for learned bots: every decision as the stdio `decide` view, the chosen index and the board right after, gzipped per game.
 
 ## Bots and the ladder
 - Registry: `players/index.js` (`makeBot(name)`), used by `tournament.js` and `ladder.js`.

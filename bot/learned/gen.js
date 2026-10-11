@@ -24,28 +24,11 @@ const zlib = require('zlib');
 const { Env } = require('../env');
 const { playGame } = require('../match');
 const { observe, promptView, actionView } = require('../observe');
-const { createRandomBot } = require('../players/random');
-const { HeuristicBot } = require('../players/heuristic');
+const { makeBot } = require('../players');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
-}
-
-function makeBot(name) {
-    if (/^heuristic/.test(name)) {
-        return new HeuristicBot(name, { depth: 1 });
-    }
-    if (/^random/.test(name)) {
-        return createRandomBot(name);
-    }
-    // anything else must be a stdio bot from bot/external-bots.json
-    const { ExternalBot } = require('../players/external');
-    const reg = JSON.parse(fs.readFileSync(process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json'), 'utf8'));
-    if (!reg[name]) {
-        throw new Error(`unknown bot ${name}`);
-    }
-    return new ExternalBot(name, reg[name]);
 }
 
 function stripNames(o) {
