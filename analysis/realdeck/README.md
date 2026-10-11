@@ -8,54 +8,95 @@ the decks that win for humans.
 ```bash
 node analysis/realdeck/compare.js --runs <run dir>[,<run dir>...] \
      --decks bot/decks/ash-meta-2026-09.json --human bot/decks/ash-meta-2026-09.human.json \
-     [--online /mnt/project-files/human-meta/swustats/human-summary.json] [--out realdeck.json] [--permute 1000] [--min-games 10]
+     [--online /mnt/project-files/human-meta/swustats/human-summary.json] [--out realdeck.json] [--permute 1000] \
+     [--min-games 10] [--max-incomplete 0.10]
 ```
 
 A run directory needs `index.json` (and `ladder.json` when present). A run that is still going is fine: it is read
-as a smaller run. Each run is named by its bot, without the `#a` tag. Tests: `cd analysis && npm test`.
+as a smaller run. Each run is keyed by the `id` in its `index.json` (or the directory name when there is none, with
+`#2`, `#3` added to repeats); its bot (entry names without the `#a` tag) is a separate field. Games are matched to decks
+by the deck names in each index entry, never by seed. Tests: `cd analysis && npm test`.
+
+Decks are read the way `bot/decklists.js` `normalizeDeck` reads them (padded card ids, the same default name). The
+sha256 of the `--decks` file's raw bytes (the hash `loadDecks` writes to `ladder.json` `config.decks.sha256`) is
+checked against each run, with a warning when they differ.
 
 ## What counts
 
 - Decided games only: `winnerSeat` p1 or p2. A draw counts half.
 - Games that end in ERROR, STEP_CAP, STUCK or anything else are left out of every rate and model, but each deck
-  reports them as `incomplete` (by outcome). A deck with a buggy card can lose games to engine errors, so look at this
-  column before you trust a low deck. Games still running are ignored.
+  reports them as `incomplete` (by outcome, and as a share of its finished games). Games still running are ignored.
+- A deck whose finished games are more than `--max-incomplete` incomplete (default 0.10) is **left out of every
+  correlation**: deck, pair (every pair with it), leader, style, split-half and run vs run. A deck that crashes the
+  engine in a third of its games only shows the games where the bug did not fire, so its rate is not a fair one. It
+  stays in the strength model (its decided games still count for its opponents) and in the deck table, marked
+  `left out`; the console and `runs[].leftOut` say which decks and why. As a check, the deck correlations are also
+  given with those decks put back (`withLeft`). In the c-clock run this leaves out `lando-calrissian_law_blue`
+  (185 of 520 games incomplete, 184 of them the Barriss Offee engine bug, CLAUDE.md known engine bugs).
+
+## The human side
+
+- **Human BT strength (like for like).** One Bradley-Terry model `P(a beats b) = σ(h[a] − h[b])` over every human
+  cell between two of these 27 decks, thin cells included, from the cell's games `[wins, losses, draws]`. A draw counts
+  half a win for each side (as on the bot side). The same small ridge as the bot model; strengths are centred with an
+  SE each. The bot plays a uniform round robin of these 27 main decks, so this is the comparison on the same deck pool.
+- **Field game win rate.** Each archetype's game win rate against the whole real meta (best of three, with
+  sideboards, every list of that archetype). Kept for reference; it is not like for like.
 
 ## What it computes (per run)
 
-1. **Per deck**: decided games, wins, win rate with a Wilson 95% CI, incomplete games, and a strength from one logistic
-   model `P(p1 wins) = σ(s[p1 deck] − s[p2 deck] + seat)`. Strengths have a small ridge (prior SD 1.4 logit) and are
-   centred; the SE is for the centred value. The run also reports the P1 win rate and the seat term.
-2. **Deck agreement**: bot strength (and bot win rate, as a centred logit) vs the human archetype game win rate (centred
-   logit). Pearson with a Fisher-z 95% CI, tie-aware Spearman, the slope (bot logit per human logit), and a one-sided
-   permutation p-value: the human values are shuffled across decks N times, p = (k + 1) / (N + 1).
+1. **Per deck**: decided games, wins, win rate with a Wilson 95% CI, incomplete games and share, and a strength from
+   one logistic model `P(p1 wins) = σ(s[p1 deck] − s[p2 deck] + seat)`. Strengths have a small ridge (prior SD 1.4
+   logit) and are centred; the SE is for the centred value. The run also reports the P1 win rate and the seat term.
+2. **Deck agreement**, over decks with enough decided games that are not left out:
+   - bot strength vs human BT strength: Pearson with a Fisher-z 95% CI, tie-aware Spearman, the slope, and a one-sided
+     permutation p-value (the human values are shuffled across decks N times, p = (k + 1) / (N + 1)). Reliability of
+     each side from its SEs, (observed variance − mean SE²) / observed variance, and the disattenuated
+     r = r / sqrt(rel bot · rel human): marked and clamped to ±1 when it comes out above 1 in size, null when a
+     reliability is not above 0. The split-half value of the bot side is shown next to its SE-based one.
+   - bot strength (and bot win rate, as a centred logit) vs the field game win rate (centred logit), the same way.
 3. **Pair agreement**: for each deck pair, the bot's win rate of a over b (both seat orders) vs the human cell for a over
    b. Thin human cells (fewer than 10 matches, about 56% of them) are left out. Pearson weighted by the human games in
-   the cell, and the share of pairs where both pick the same favourite (pairs within 2 points of 50% on either side do
-   not count), with a sign test.
+   the cell (unweighted Pearson and Spearman are shown too), and the share of pairs where both pick the same favourite
+   (pairs within 2 points of 50% on either side do not count). Pairs share decks, so they are not independent: the
+   p-values for both come from a deck-label permutation test (QAP / Mantel). The deck labels on the bot side are
+   shuffled, rows and columns of the pair matrix together, N times (`--permute`, deterministic shuffles),
+   p = (k + 1) / (N + 1). The sign test on the favourite count is kept only as a description (it would be right if
+   the pairs were independent).
 4. **Leader agreement** (with `--online`): decks pooled by leader (games-weighted mean strength) vs the centred logit of
    the SWU Stats online leader win rate, leaders with at least 200 plays.
-5. **Reliability**: even vs odd seeds give two independent fits; their correlation and the Spearman-Brown value for the
-   full run. With 2+ runs, the strength correlation between every pair of runs (bot vs bot).
-6. **Style** (hyperaggro, softaggro, midrange, softcontrol, hardcontrol): pooled bot win rate of the decks of that style,
-   the same against other styles only, and the human mean game win rate of those decks.
+5. **Reliability**: split-half. Within each deck pair the seeds are ranked; games of an even-ranked seed form half A,
+   odd ones half B. Both games of a seed stay together and every pair is split, whatever the number of pairs (splitting
+   by seed parity would put all of a pair's seeds in one half when the deal walks an even number of pairs). Two
+   independent fits, their correlation and the Spearman-Brown value for the full run. With 2+ runs, the strength
+   correlation between every two runs: run vs run when they use the same bot, bot vs bot agreement when they do not.
+6. **Style** (hyperaggro, softaggro, midrange, softcontrol, hardcontrol): the bot win rate of the decks of that style in
+   games against other styles, with a Wilson CI; the rate over all games (`allGamesInclSameStyle`, no CI: a same-style
+   game adds a win and a loss to the same pool, which pulls it toward 50%); and the human mean field game win rate of
+   those decks.
 
-Output JSON: `{credit, generatedAt, options, runs, decks, agreement: {deck, pair, leader, style, splitHalf, betweenRuns}}`.
-The console gets a short summary and a deck table sorted by bot strength.
+Output JSON: `{credit, generatedAt, options, deckFile, humanSource, onlineSource, humanModel, runs, decks, agreement:
+{deck, pair, leader, style, splitHalf, betweenRuns}}`. `deckFile` has the deck count and sha256, `humanModel` the
+human BT summary (pairs, thin pairs, games, draws, reliability), each `decks[]` entry its `humanBT` strength, SE and
+games, `runs[]` the `leftOut` decks and `warnings`. The console gets a short summary and a deck table sorted by bot
+strength.
 
 ## Read with care
 
-- The human rate is for the archetype (leader + base group) over every list of it in 53 events, not for this exact list.
-- 27 decks share 19 leaders, so decks are not fully independent; the permutation test treats them as exchangeable.
+- The human field rate is for the archetype (leader + base group) over every list of it in 53 events, not for this
+  exact list. The cells (and so the human BT strengths) are archetype against archetype too.
+- Human games are best of three with sideboards; the bot plays single games with the main deck.
+- 27 decks share 19 leaders, so decks are not fully independent; the deck permutation test treats them as exchangeable.
 - Pair rates are noisy on the bot side too: a full run of 7,020 games gives each pair 20 games.
 - Online (SWU Stats) rates run high (about 58%) because only the side with an imported deck is counted. Compare leaders
-  with each other, not with 50%.
+  with each other, not with 50%. The online data is "format premier, all weeks", so an older leader's rate carries the
+  earlier metas it was played in.
 - A run with two different bots (not a mirror) gets a warning: bot and deck effects can mix.
 
 ## Credit
 
-- Tournament deck lists and results: TCGEngine / SWU Stats (github.com/TCG-Engine/TCGEngine, MIT), from public melee.gg
-  decklists.
+- Tournament deck lists and match results: TCGEngine / SWU Stats (github.com/TCG-Engine/TCGEngine, MIT), from public
+  melee.gg Premier events (event list via swu-competitivehub.com).
 - Online leader win rates: SWU Stats (swustats.net).
 
 Every page or report that shows these numbers keeps these lines (the JSON carries them in `credit`).
