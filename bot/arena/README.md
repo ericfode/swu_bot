@@ -33,7 +33,9 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 - **Forfeits.** Your bot loses the game (outcome `forfeit`, rated as a loss) when `createBot()` throws or does not return
   a bot, `choose()` throws, returns something that is not one of the legal actions, goes over the time cap, or does not
   answer for 30 s past the cap (the call is stopped). Only engine errors outside your bot are unrated `ERROR` games.
-- **Secret seeds.** Each round's game seeds come from a secret the referee keeps, so they cannot be known in advance.
+- **Secret seeds.** Each round's game seeds come from a secret the referee keeps (`~/.arena-secret`, or
+  `ARENA_SECRET_FILE`), so they cannot be known in advance. Neither you nor your bot may read that file. Bots run with
+  the referee's file rights, so this is a rule, not a sandbox (a hosted arena for strangers needs one).
 
 ## Tools (run from the swu_bot repo root, after `bash bot/arena/setup.sh` once per container)
 

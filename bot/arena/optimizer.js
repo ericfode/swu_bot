@@ -38,7 +38,11 @@ const TOKEN = arg('token', process.env.ARENA_COMPETITOR_TOKEN);
 async function arena(method, args = {}) {
     const a = TOKEN && args.token === undefined ? { ...args, token: TOKEN } : args;
     const out = process.env.ARENA_URL
-        ? await (await fetch(`${process.env.ARENA_URL.replace(/\/$/, '')}/api/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(a) })).json()
+        ? await (await fetch(`${process.env.ARENA_URL.replace(/\/$/, '')}/api/${method}`, {
+            method: 'POST', body: JSON.stringify(a),
+            // ARENA_TOKEN: the server-wide gate (server.js), as cli.js and mcp.js send it
+            headers: { 'content-type': 'application/json', ...(process.env.ARENA_TOKEN ? { authorization: `Bearer ${process.env.ARENA_TOKEN}` } : {}) }
+        })).json()
         : await directApi.call(method, a);
     if (out.error) {
         throw new Error(`${method}: ${out.error.message}`);
@@ -190,7 +194,10 @@ async function main() {
     fs.rmSync(scratch, { recursive: true, force: true });
 }
 
-main().catch((e) => {
-    console.error(e.message || e);
-    process.exit(1);
-});
+// only as a program: requiring this file must not start a run against the arena
+if (require.main === module) {
+    main().catch((e) => {
+        console.error(e.message || e);
+        process.exit(1);
+    });
+}

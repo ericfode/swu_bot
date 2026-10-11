@@ -104,3 +104,20 @@ test('guard: a bot cannot reset its counters, unwrap the guard, or play an actio
     sleeper.choose(ctx);
     assert.throws(() => sleeper.choose(ctx), /TIME_FORFEIT/, 'waiting off-CPU still counts against the wall cap');
 });
+
+test('guard keeps a bot\'s own damage split on the live distribute action, and refuses one that is not legal', () => {
+    const live = { kind: 'distribute', label: 'distribute 3', spec: { amount: 3, maxTargets: 3 }, targets: ['a', 'b', 'c'], caps: [3, 2, 3], uuid: 'now' };
+    const ctx = { pid: 'x', actions: [live], game: { refetch: () => live } };
+    const split = (targets, caps) => guard({ name: 's', choose: () => ({ ...live, uuid: 'old', targets, caps, spec: { ...live.spec, maxTargets: targets.length } }) });
+    assert.deepStrictEqual(split(['c', 'a'], [2, 1]).choose(ctx), { ...live, targets: ['c', 'a'], caps: [2, 1], spec: { amount: 3, maxTargets: 2 } });
+    assert.deepStrictEqual(guard({ name: 'r', choose: (c) => c.actions[0] }).choose(ctx), live, 'the plain action stays a random split');
+    // refetch builds new objects, and uncapped targets have cap Infinity: a copy of the live action is legal
+    const open = { ...live, label: 'distribute 2', spec: { amount: 2 }, caps: [Infinity, 1, Infinity] };
+    const copy = guard({ name: 'c', choose: (c) => ({ ...c.actions[0] }) });
+    assert.deepStrictEqual(copy.choose({ pid: 'x', actions: [open], game: { refetch: () => ({ ...open }) } }), open);
+    for (const [targets, caps] of [[['b'], [3]], [['z'], [3]], [['a'], [2]], [['a', 'a'], [1, 2]]]) {
+        const bot = split(targets, caps);
+        assert.throws(() => bot.choose(ctx), /not one of the legal actions/, JSON.stringify([targets, caps]));
+        assert.strictEqual(bot.fault.kind, 'error');
+    }
+});

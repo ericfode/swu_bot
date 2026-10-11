@@ -47,8 +47,8 @@ function writeJson(file, data) {
     fs.renameSync(tmp, file);
 }
 
-/** The games of an earlier run in the same folder, when its bots and schedule match this one; else null. */
-function readPrevious(file, config) {
+/** The games of an earlier run in the same folder, when its bots, schedule, limits and engine match this one; else null. */
+function readPrevious(file, config, engine) {
     if (!fs.existsSync(file)) {
         return null;
     }
@@ -61,9 +61,10 @@ function readPrevious(file, config) {
     }
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const c = doc?.config ?? {};
-    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || (c.capMs ?? null) !== (config.capMs ?? null)
-        || !same(c.vs ?? null, config.vs ?? null)) {
-        console.log('resume: the earlier run used other bots, seeds, format or time cap, starting over');
+    // everything that changes a game's result: who plays, which seeds, the step cap, the time cap and watchdog, the engine
+    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
+        || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine) {
+        console.log('resume: the earlier run used other bots, seeds, format, limits or engine, starting over');
         return null;
     }
     return { games: Array.isArray(doc.games) ? doc.games : [] };
@@ -110,7 +111,7 @@ async function main() {
                      ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
-    const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config) : null;
+    const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;
     const save = () => {
         const doc = summarize({ id, createdAt, status, engine, config, botInfo, games, scheduled: schedule.length });
         writeJson(path.join(out, 'ladder.json'), doc);

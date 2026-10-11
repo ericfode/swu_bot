@@ -13,7 +13,8 @@
  * starts the CPU counter.
  *
  * A throw from the bot, or a return value that is not a legal action now (matched on kind, label, cardUuid and arg
- * by env.refetch), sets fault = { kind: 'error', message } and throws. Going over a cap sets
+ * by env.refetch; a distribute action's own split is kept, see narrowed), sets fault = { kind: 'error', message } and
+ * throws. Going over a cap sets
  * fault = { kind: 'time', ms } and throws TIME_FORFEIT. Either way the game ends there, and the game runner reads
  * fault (never the error text) to decide who forfeits. The engine's own live action (not the bot's object) is played.
  *
@@ -32,6 +33,39 @@ const cpuClock = typeof process.threadCpuUsage === 'function'
 
 const firstLine = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 200);
 const same = (a, b) => a.kind === b.kind && a.label === b.label && a.cardUuid === b.cardUuid && a.arg === b.arg;
+
+/**
+ * A distribute action may carry the bot's own split as narrowed targets and caps (players/external.js
+ * forcedDistribution: each chosen target with its exact amount); env.apply then plays that split. Keep it on the live
+ * action when every target is a live one, no cap grows past the live cap and the caps can still hold the amount;
+ * null when they cannot (an illegal split).
+ */
+function narrowed(live, a) {
+    if (live.kind !== 'distribute' || a === live) {
+        return live;
+    }
+    const { targets, caps } = a;
+    if (!Array.isArray(targets) || !Array.isArray(caps) || targets.length !== caps.length || new Set(targets).size !== targets.length) {
+        return null;
+    }
+    if (targets.length === live.targets.length && targets.every((t, i) => t === live.targets[i] && caps[i] === live.caps[i])) {
+        return live; // the bot left the split to the engine
+    }
+    let sum = 0;
+    for (let i = 0; i < targets.length; i++) {
+        const k = live.targets.indexOf(targets[i]);
+        // live caps are Infinity where the amount is uncapped (env.js), so a copy of the live action passes too
+        if (k < 0 || !(Number.isInteger(caps[i]) || caps[i] === Infinity) || caps[i] < 0 || caps[i] > live.caps[k]) {
+            return null;
+        }
+        sum += caps[i];
+    }
+    const spec = live.spec;
+    if (sum < spec.amount && !spec.canDistributeLess && !(sum === 0 && spec.canChooseNoTargets)) {
+        return null;
+    }
+    return { ...live, targets: [...targets], caps: [...caps], spec: { ...spec, maxTargets: Math.min(targets.length, spec.maxTargets ?? targets.length) } };
+}
 
 function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnter = null, onExit = null } = {}) {
     const inner = bot.choose.bind(bot);
@@ -64,6 +98,7 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, onEnt
         let legal = null;
         if (action && typeof action === 'object') {
             legal = typeof ctx.game?.refetch === 'function' ? ctx.game.refetch(ctx.pid, action) : ctx.actions.find((a) => a === action || same(a, action)) ?? null;
+            legal = legal && narrowed(legal, action);
         }
         if (!legal) {
             const what = action && typeof action === 'object' ? `${action.kind} "${action.label}"` : String(action);

@@ -19,8 +19,8 @@ How you weigh, prune, budget and combine these is up to you. That is what is bei
 
 ## Rules
 
-- Your bot is the folder `{{agentDir}}`. Edit only that folder. Read anything; never edit the repo (`{{repo}}`),
-  other competitors' folders, `versions/` or `forceteki/`.
+- Your bot is the folder `{{agentDir}}`. Edit only that folder. Read anything except the referee's seed secret
+  (`~/.arena-secret`); never edit the repo (`{{repo}}`), other competitors' folders, `versions/` or `forceteki/`.
 - `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }`; it requires only files in
   your folder and Node built-ins. Set `needsUndo = true` on the bot if you use rollback search.
 - **Hidden information:** the decklists are public, so you may use the multiset of all cards each player owns. You may
