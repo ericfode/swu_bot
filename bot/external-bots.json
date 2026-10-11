@@ -1,4 +1,5 @@
 {
     "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
-    "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" }
+    "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" },
+    "haskell": { "cmd": "bot/haskell/build/swu-bot-hs", "args": [], "lang": "haskell" }
 }
