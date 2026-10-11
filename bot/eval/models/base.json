@@ -1,13 +1,14 @@
 {
  "kind": "hand",
  "base": "base",
- "scale": 0.11295513898577181,
+ "scale": 0.12866970919309342,
  "trainedOn": [
-  "random"
+  "random",
+  "heur"
  ],
- "trainPositions": 8987,
- "trainGames": 295,
- "fittedAt": "2026-10-11T07:09:48.660Z",
- "trainLogloss": 0.6057,
- "trainBrier": 0.2106
+ "trainPositions": 28831,
+ "trainGames": 859,
+ "fittedAt": "2026-10-11T11:20:20.145Z",
+ "trainLogloss": 0.5776,
+ "trainBrier": 0.1986
 }

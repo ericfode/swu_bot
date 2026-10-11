@@ -2,7 +2,7 @@
 /**
  * Fit every candidate evaluator on recorded positions and write bot/eval/models/<name>.json.
  *
- *   node bot/eval/fit.js --data <dir>[,<dir>...] [--out bot/eval/models] [--only linear,mlp] [--hidden 16] [--epochs 30]
+ *   node bot/eval/fit.js --data <dir>[,<dir>...] [--out bot/eval/models] [--only linear,mlp] [--hidden 8] [--l2 1e-3] [--epochs 30]
  *
  * Training rows: the train split (by game) of every decided checkpoint, seen subjectively by each player in turn,
  * labelled with whether that player won. Hand-made evaluators get only their logistic scale fitted.
@@ -270,7 +270,7 @@ function main() {
             const valIds = new Set([...new Set(rows.map((r) => r.id))].filter((id, i) => i % 10 === 0));
             const tr = rows.filter((r) => !valIds.has(r.id));
             const va = rows.filter((r) => valIds.has(r.id));
-            const model = fitMlp(tr, va, std, { hidden: Number(arg('hidden', 16)), epochs: Number(arg('epochs', 30)) });
+            const model = fitMlp(tr, va, std, { hidden: Number(arg('hidden', 8)), epochs: Number(arg('epochs', 30)), l2: Number(arg('l2', 1e-3)) });
             save(`mlp${suffix}`, { ...model, decks: withDecks }, rows);
         }
     }
