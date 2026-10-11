@@ -352,3 +352,232 @@ test('a reservation holds places until it is used or released', () => {
     assert.strictEqual(new PeopleLedger(file, 3).count, 3);
     assert.ok(!b.room(1));
 });
+
+/** A tiny watched game as spectate.js writes it: one scrubbed gamestate per line, both hands hidden. */
+function watchedStates() {
+    const card = (uuid, name, number, extra = {}) => ({ id: `id-${uuid}`, setId: { set: 'SOR', number }, uuid, name, ...extra });
+    const player = (id, n) => ({
+        id, name: id, hasInitiative: id === 'player1', availableResources: 0, numCardsInDeck: 40, isActionPhaseActivePlayer: false,
+        leaders: [card(`L${n}`, `Leader ${n}`, n, { type: 'leader', zone: 'base', controllerId: id, exhausted: false })],
+        base: card(`B${n}`, `Base ${n}`, 20 + n, { type: 'base', hp: 30, damage: 0, controllerId: id }),
+        cardPiles: { hand: [{ controllerId: id, zone: 'hand' }], resources: [], groundArena: [], spaceArena: [], discard: [], outsideTheGame: [], capturedZone: [], credits: [] }
+    });
+    const P = (id) => ({ type: 'player', id, name: id, uuid: `Player_${id}` });
+    const s0 = { id: 'g1', phase: 'setup', winners: [], players: { player1: player('player1', 1), player2: player('player2', 2) }, newMessages: [] };
+    const s1 = structuredClone(s0);
+    s1.phase = 'action';
+    s1.players.player1.isActionPhaseActivePlayer = true;
+    s1.newMessages = [{ date: '2026-10-01T12:00:01.000Z', message: { alert: { type: 'notification', message: ['Round: 1 - Action Phase'] } } }];
+    const s2 = structuredClone(s1);
+    s2.players.player2.base.damage = 4;
+    s2.newMessages = [{ date: '2026-10-01T12:00:02.000Z', message: [P('player1'), ' attacks ', P('player2'), "'s base with ", { type: 'card', name: 'Leader 1', uuid: 'L1' }] }];
+    const s3 = structuredClone(s2);
+    s3.winners = ['player1'];
+    s3.newMessages = [{ date: '2026-10-01T12:00:03.000Z', message: [P('player2'), ' concedes the game'] }];
+    return [s0, s1, s2, s3];
+}
+
+test('the live view serves a game being played without an end line, and refuses ids outside the runs folder', () => {
+    const { Games, LIVE_MS } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    fs.mkdirSync(path.join(runs, 'w-1'));
+    const file = path.join(runs, 'w-1', 'abcdef012345.jsonl');
+    const states = watchedStates().map((s) => JSON.stringify(s));
+    // three boards and the recorder halfway through writing the fourth
+    fs.writeFileSync(file, `${states.slice(0, 3).join('\n')}\n${states[3].slice(0, 40)}`);
+    const games = new Games(runs);
+    const [entry] = games.list();
+    assert.deepStrictEqual([entry.id, entry.kind], ['w-1/abcdef012345', 'watched']);
+    let g = games.get(entry.id);
+    assert.ok(g.live);
+    let lines = games.replay(g).trim().split('\n').map((l) => JSON.parse(l));
+    assert.strictEqual(lines[0].t, 'header');
+    assert.ok(lines.length > 1 && !lines.some((e) => e.t === 'end'));
+    // the game ends: the end line is served and the game is no longer live
+    fs.writeFileSync(file, `${states.join('\n')}\n`);
+    g = games.get(entry.id);
+    assert.ok(!g.live);
+    lines = games.replay(g).trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual([lines.at(-1).t, lines.at(-1).winner], ['end', 'p1']);
+    assert.strictEqual(games.summary(entry).winner, 'p1');
+    // a capture that stopped with no winner is live only for a while
+    fs.writeFileSync(file, `${states.slice(0, 3).join('\n')}\n`);
+    assert.ok(games.get(entry.id).live);
+    assert.ok(!new Games(runs, { now: () => Date.now() + LIVE_MS + 1000 }).get(entry.id).live);
+    for (const bad of ['../w-1/abcdef012345', 'w-1/../../abcdef012345', '.w/abcdef012345', 'w-1/abcdef01234', 'w-1/other/abcdef012345', 'w-1/frames/../abcdef012345']) {
+        assert.strictEqual(games.get(bad), null, bad);
+    }
+});
+
+test('the live view lists every game it can open, a game with only its first board included', () => {
+    const { Games } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    const first = `${JSON.stringify(watchedStates()[0])}\n`;
+    // a folder name a game id cannot carry is left out, so no listed game is a 404
+    fs.mkdirSync(path.join(runs, 'run 1'));
+    fs.writeFileSync(path.join(runs, 'run 1', 'abcdef012345.jsonl'), first);
+    fs.mkdirSync(path.join(runs, 'w-1'));
+    for (let i = 0; i < 45; i++) {
+        fs.writeFileSync(path.join(runs, 'w-1', `${String(i).padStart(12, '0')}.jsonl`), first);
+    }
+    fs.writeFileSync(path.join(runs, 'w-1', 'ffffffffffff.jsonl'), 'not a frame file\n');
+    const games = new Games(runs);
+    const all = games.list().map((e) => games.summary(e));
+    assert.strictEqual(all.length, 46);
+    assert.ok(all.every((g) => g.id.startsWith('w-1/')));
+    const one = all.find((g) => g.id === 'w-1/000000000000');
+    assert.deepStrictEqual([one.board, one.steps, one.live], [true, 0, true]);
+    assert.strictEqual(all.find((g) => g.id === 'w-1/ffffffffffff').board, false);
+});
+
+test('the live view gzips only when the client allows it', () => {
+    const { acceptsGzip } = require('../karabast/live-view');
+    const cases = { 'gzip': true, 'gzip, deflate, br': true, 'br;q=1.0, gzip;q=0.8': true, '*': true, 'gzip;q=0': false, 'gzip;q=0.0, br': false, '*;q=0': false, 'br, *;q=0.5': true, 'identity': false, '': false };
+    for (const [header, want] of Object.entries(cases)) {
+        assert.strictEqual(acceptsGzip(header), want, header);
+    }
+});
+
+test('the live view answers only under its key', async () => {
+    const { Games, makeServer, checkBinding } = require('../karabast/live-view');
+    // beyond this machine a key is required: a live bot game shows our hand
+    assert.throws(() => checkBinding('0.0.0.0', null), /--key/);
+    assert.doesNotThrow(() => checkBinding('0.0.0.0', 'k3y-for-tests'));
+    assert.doesNotThrow(() => checkBinding('127.0.0.1', null));
+    const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
+    fs.writeFileSync(path.join(kit, 'swu-viewer-kit.js'), '// kit');
+    fs.writeFileSync(path.join(kit, 'card-text.json'), '{}');
+    fs.writeFileSync(path.join(kit, 'secret.txt'), 'no');
+    const server = makeServer({ games: new Games(fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'))), kit, key: 'k3y-for-tests' });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const at = (p) => fetch(`http://127.0.0.1:${server.address().port}${p}`).then((r) => r.status);
+    try {
+        assert.deepStrictEqual(
+            await Promise.all(['/', '/games', '/k3y-for-tests/', '/k3y-for-tests/games', '/k3y-for-tests/kit/swu-viewer-kit.js', '/k3y-for-tests/kit/secret.txt', '/k3y-for-tests/game/w-1/abcdef012345'].map(at)),
+            [404, 404, 200, 200, 200, 404, 404]
+        );
+        // odd paths get an answer, and the server keeps serving
+        assert.deepStrictEqual(await Promise.all(['//', '//k3y-for-tests/', '/k3y-for-tests/%E0%A4%A', '/k3y-for-tests/games'].map(at)), [404, 404, 400, 200]);
+    } finally {
+        server.close();
+    }
+});
+
+test('the queue loop keeps going after a wait with no match, and stops after maxErrors failures in a row', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const ledger = new PeopleLedger(path.join(out, 'people.json'), 10);
+    const seen = [];
+    // game 0: no match; 1: a win; 2: a loss; 3-5: failures (the loop stops at the third)
+    const play = async (g, hooks) => {
+        hooks.onQueued();
+        seen.push(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).state);
+        if (g === 0) {
+            throw new Error('no match within 10 minutes');
+        }
+        if (g >= 3) {
+            throw new Error('socket closed while queued: transport error');
+        }
+        await hooks.onMatched(`person-${g}`);
+        hooks.onGameFile(`00000000000${g}.jsonl`);
+        seen.push(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).file);
+        return { result: g === 1 ? 'win' : 'loss', file: `00000000000${g}.jsonl` };
+    };
+    const end = await runLoop({ games: 10, gapS: 25, maxErrors: 3, ledger, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual(seen, ['queued', 'queued', '000000000001.jsonl', 'queued', '000000000002.jsonl', 'queued', 'queued', 'queued']);
+    assert.deepStrictEqual([end.state, end.played, end.won, end.lost, end.errors, end.ok], ['stopped', 2, 1, 1, 3, false]);
+    assert.match(end.reason, /3 failures in a row/);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).state, 'stopped');
+    const rows = fs.readFileSync(path.join(out, 'games.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual(rows.map((r) => r.result), ['no match', 'win', 'loss', 'error', 'error', 'error']);
+    // every queued game keeps its place: 2 known people and 4 that may have been matched unseen
+    assert.strictEqual(new PeopleLedger(path.join(out, 'people.json'), 10).count, 6);
+});
+
+test('the queue loop counts a game with no result as a failure and says why it stopped', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const results = ['none', 'loss', 'none'];
+    const play = async (g, hooks) => {
+        hooks.onQueued();
+        return { result: results[g], reason: results[g] === 'none' ? 'socket closed: transport close' : 'game over' };
+    };
+    const end = await runLoop({ games: 3, gapS: 25, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([end.played, end.lost, end.errors, end.ok], [1, 1, 2, false]);
+    assert.strictEqual(end.reason, 'the last game failed: socket closed: transport close');
+    // a failure earlier in the run does not stick to a run that ends well
+    const ok = await runLoop({ games: 2, gapS: 25, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([ok.ok, ok.reason], [true, 'played the 2 game(s) asked for']);
+});
+
+test('the queue loop retries a wait with no match without using up a game, up to maxWaits in a row', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const quiet = (n) => async (g, hooks) => {
+        hooks.onQueued();
+        if (g < n) {
+            throw new Error('no match within 10 minutes');
+        }
+        return { result: 'win' };
+    };
+    const one = await runLoop({ games: 1, gapS: 25, out, bot: 'c-clock', deck: 'd', play: quiet(2), log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([one.played, one.won, one.ok, one.reason], [1, 1, true, 'played the 1 game(s) asked for']);
+    const none = await runLoop({ games: 1, gapS: 25, maxWaits: 3, out, bot: 'c-clock', deck: 'd', play: quiet(99), log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([none.played, none.ok, none.reason], [0, false, 'no match in 3 waits in a row']);
+    // a ledger that fails still leaves a stopped status that says why
+    const broken = { reserve: () => { throw new Error('people ledger stayed locked'); } };
+    const end = await runLoop({ games: 3, gapS: 25, ledger: broken, out, bot: 'c-clock', deck: 'd', play: quiet(0), log: () => {}, wait: async () => {} });
+    const st = JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8'));
+    assert.deepStrictEqual([end.ok, st.state, st.reason], [false, 'stopped', 'stopped on an error: people ledger stayed locked']);
+});
+
+test('the queue loop stops at the people cap and on the stop file', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const ledger = new PeopleLedger(path.join(out, 'people.json'), 2);
+    let n = 0;
+    const play = async (g, hooks) => {
+        hooks.onQueued();
+        await hooks.onMatched(`person-${n++}`);
+        return { result: 'loss' };
+    };
+    const capped = await runLoop({ games: 10, gapS: 25, ledger, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([capped.played, capped.ok], [2, true]);
+    assert.match(capped.reason, /people cap is reached \(2 counted/);
+    const stop = path.join(out, 'STOP');
+    fs.writeFileSync(stop, '');
+    const stopped = await runLoop({ games: 10, gapS: 25, stopFile: stop, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([stopped.played, stopped.reason], [0, 'the stop file exists']);
+});
+
+test('the live view names our bot in a bot game and reports the queue run', () => {
+    const { Games, STATUS_STALE_MS } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    const dir = path.join(runs, 'q-1');
+    fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
+    // our seat is player2 here: the frames of a bot game are its own view
+    const hand = [{ id: 'id-H1', setId: { set: 'SOR', number: 9 }, uuid: 'H1', name: 'Wampa', zone: 'hand', controllerId: 'a spectator' }];
+    const states = watchedStates().map((s) => {
+        const me = { ...s.players.player2, id: 'a spectator', name: 'a spectator' };
+        me.cardPiles = { ...me.cardPiles, hand };
+        return { ...s, players: { player1: s.players.player1, 'a spectator': me } };
+    });
+    fs.writeFileSync(path.join(dir, 'frames', 'abcdef012345.jsonl'), states.map((s) => JSON.stringify(s)).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'games.jsonl'), JSON.stringify({ bot: 'c-clock', result: 'loss', file: 'abcdef012345.jsonl' }) + '\n');
+    let now = Date.now();
+    const games = new Games(runs, { now: () => now });
+    const g = games.get('q-1/frames/abcdef012345');
+    const h = g.events[0];
+    const ours = h.source.pov;
+    assert.ok(['p1', 'p2'].includes(ours));
+    assert.deepStrictEqual(h.players.map((p) => [p.id === ours, p.bot]), [[ours === 'p1', ours === 'p1' ? 'c-clock (ours)' : 'opponent'], [ours === 'p2', ours === 'p2' ? 'c-clock (ours)' : 'opponent']]);
+    const s = games.summary(games.list()[0]);
+    assert.deepStrictEqual([s.bot, s.ours], ['c-clock', ours]);
+
+    assert.strictEqual(games.status(), null);
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ bot: 'c-clock', state: 'playing', file: 'abcdef012345.jsonl', token: 'never sent', played: 1 }));
+    const st = games.status();
+    assert.deepStrictEqual([st.state, st.game, st.played, st.stale, 'token' in st], ['playing', 'q-1/frames/abcdef012345', 1, false, false]);
+    now += STATUS_STALE_MS + 1000;
+    assert.strictEqual(games.status().stale, true);
+});
