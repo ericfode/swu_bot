@@ -25,6 +25,15 @@ function decideBody(eg, pid, actions) {
 
 const { makeBot } = require('../players');
 
+/**
+ * Index of the chosen action in the legal list. Search bots (heuristic) roll the game back and return a refetched copy,
+ * so match by the same stable fields as EnvGame.refetch, not by object identity.
+ */
+function indexOfAction(actions, a) {
+    const i = actions.indexOf(a);
+    return i >= 0 ? i : actions.findIndex((x) => x.kind === a?.kind && x.label === a?.label && x.cardUuid === a?.cardUuid && x.arg === a?.arg);
+}
+
 /** Wraps a bot so every choice it makes is written as a trajectory line. */
 function recording(bot, write, all) {
     let seq = 0;
@@ -34,8 +43,8 @@ function recording(bot, write, all) {
         get stats() {
             return bot.stats;
         },
-        reset() {
-            seq = 0;
+        close() {
+            bot.close?.();
         },
         choose(ctx) {
             const { game, pid, actions } = ctx;
@@ -43,7 +52,7 @@ function recording(bot, write, all) {
             const a = bot.choose(ctx);
             seq++;
             if (obs) {
-                write({ t: 'd', seq, you: obs.you, prompt: obs.prompt, state: obs.state, actions: obs.actions, i: actions.indexOf(a) });
+                write({ t: 'd', seq, you: obs.you, prompt: obs.prompt, state: obs.state, actions: obs.actions, i: indexOfAction(actions, a) });
             }
             return a;
         }
@@ -64,12 +73,12 @@ async function worker(first, count, out, botNames, all) {
         fs.appendFileSync(out, zlib.gzipSync(`${lines.join('\n')}\n`));
         lines = [];
     };
-    const bots = botNames.map((n) => recording(makeBot(n), write, all));
     let wins = { p1: 0, p2: 0 };
     for (let seed = first; seed < first + count; seed++) {
+        // fresh bots every game, as tournament.js does: bots like heuristic keep state (loop guard, plan) that must not carry over
+        const bots = botNames.map((n) => recording(makeBot(n), write, all));
         // alternate seats so each bot plays both sides
         const seats = (seed % 2 === 0) ? [bots[0], bots[1]] : [bots[1], bots[0]];
-        seats.forEach((b) => b.reset());
         write({ t: 'game', seed, bots: seats.map((b) => b.name) });
         const r = await playGame(env, { seed, bots: seats });
         write({ t: 'end', seed, winner: r.winner, outcome: r.outcome, round: r.round, steps: r.steps, error: r.error ?? null });
