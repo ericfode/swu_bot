@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { atlasKit } from './vite.atlas.ts';
 
 // The viewer kit: src/kit/index.tsx as a self-contained library (React, styles and all), for embedding in other pages.
 //   npm run build:kit  ->  dist-kit/swu-viewer-kit.js (IIFE, global SWUViewer) and dist-kit/swu-viewer-kit.mjs (ES module)
 export default defineConfig({
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), atlasKit()],
     define: { 'process.env.NODE_ENV': '"production"' },
     build: {
         outDir: 'dist-kit',

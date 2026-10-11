@@ -85,7 +85,22 @@ seeds. Your standings and lost-game replays are in `/mnt/project-files/arena/rou
     node bot/arena/cli.js <method> '{json}'     shell; ARENA_URL=http://host:7070 talks to a remote arena
 
 Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say`, `send`, `inbox`, `eval`,
-`eval_result`, `panel`, `games`, `wait`. The header of `api.js` lists their arguments.
+`eval_result`, `panel`, `panels`, `games`, `ladder`, `archive`, `wait`. The header of `api.js` lists their arguments.
+
+Every reader of arena data goes through these calls (Eric, 2026-10-11: every edge goes through the API, none through
+the shared folder). Each file a reader opens today has a call that replaces it:
+
+| reader today opens | call |
+|---|---|
+| `roster.json`, `tournament.json`, `standings.json`, `versions/*/SUBMISSION.json` | `status`, `standings`, `versions` |
+| `results/<ladder>/index.json`, `games/*.jsonl` | `games {round}`, then `GET /replays/<ladder>/games/<id>.jsonl` |
+| `results/<ladder>/ladder.json` (ratings, dashboard runs) | `ladder {round}` |
+| `dashboard/panels/arena-*.json`, `dashboard/experiments/arena.json` | `panels` (or `panel {name}`) |
+| `arena/archive/<id>/` | `archive {id?}` |
+| `arena/strategy/strategy-diagram.js` (code) | the repo, served at `GET /strategy-diagram.js` |
+
+The arena still writes the dashboard and results files while it runs in a project container, because the shared folder
+is the only way between containers until the arena is on Fly. Those writes stop once every reader uses the calls.
 
 - Claude Code: `claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js`
 - Codex (`~/.codex/config.toml`): `[mcp_servers.arena]` with `command = "node"`,
@@ -111,6 +126,9 @@ The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live pa
 `GET /` is the SWU Arena app (`app/`, Eric's pick: the app is hosted with the arena) when its friends build exists:
 run `npm run app -- --public` to make `app/dist/public.html`, or point `ARENA_APP` at another build. Without a build,
 `/` is the arena's web UI as well. `/api` is the same either way.
+
+`ARENA_MODE=window` runs the same server as the arena window on Fly (swu-arena.fly.dev): read-only, behind GitHub
+sign-in, and fed through its API by the arena (`push.js arena`), the ladders and the meta analyzer. See `WINDOW.md`.
 
 ## Clocked tournaments
 

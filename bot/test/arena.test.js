@@ -576,3 +576,57 @@ test('a holdout tournament\'s extra ladder does not count as a planned round', (
         fs.rmSync(TOURNAMENT(), { force: true });
     }
 });
+
+test('readers get every panel, a round\'s ladder and archived tournaments from the API, not from the arena\'s files', async () => {
+    const { RESULTS } = require('../arena/home');
+    const { call } = require('../arena/api');
+    setRoster(['pa', 'pb']);
+    const win = (id, w, l) => ({ id, p1: w, p2: l, outcome: 'won', winner: w, winnerSeat: 'p1', timing: t(5, 5), rounds: 5 });
+    const rd = { ...scoreRound(7, ladderOf(['pa-v0', 'pb-v0', 'rush'], [win('g1', 'pa-v0', 'pb-v0'), win('g2', 'pa-v0', 'rush')], 'done')), ladderId: 'arena-tp-r7' };
+    const before = readJson(path.join(HOME, 'standings.json'), null);
+    writeJson(path.join(HOME, 'standings.json'), { status: 'running', rounds: [rd], global: globalElo([rd]) });
+    try {
+        dash.publishStandings({ status: 'running', rounds: [rd], global: globalElo([rd]) });
+        dash.updatePanel('pa', { now: 'thinking' });
+        const p = (await call('panels')).result;
+        assert.deepStrictEqual(p.leaderboard, dashFile('panels', 'arena-leaderboard.json'), 'the dashboard file is a copy of what the API serves');
+        assert.deepStrictEqual(p.experiment, dashFile('experiments', 'arena.json'));
+        assert.deepStrictEqual(p.panels.map((x) => x.id), ['arena-pa', 'arena-pb']);
+        assert.deepStrictEqual(p.panels[0], dashFile('panels', 'arena-pa.json'));
+        assert.strictEqual(p.panels[0].now, 'thinking');
+        assert.ok(fs.existsSync(path.join(HOME, 'panels', 'leaderboard.json')) && fs.existsSync(path.join(HOME, 'panels', 'experiment.json')));
+
+        // a round's ladder: found through the ladder id the standings name
+        assert.strictEqual((await call('ladder', { round: 7 })).error.code, 'not_found');
+        writeJson(path.join(RESULTS, 'arena-tp-r7', 'ladder.json'), { schema: 'swu-ladder/1', id: 'arena-tp-r7', games: [{ id: 'g1' }] });
+        const l = (await call('ladder')).result;
+        assert.deepStrictEqual([l.round, l.ladderId, l.ladder.schema, l.ladder.games.length], [7, 'arena-tp-r7', 'swu-ladder/1', 1]);
+        assert.strictEqual((await call('ladder', { round: -1 })).error.code, 'bad_request');
+
+        // archives: hand-made copies of the dashboard files, in panels/ (t0) or dash/ (later)
+        const arch = (...p) => path.join(HOME, 'archive', ...p);
+        assert.deepStrictEqual((await call('archive')).result, { tournaments: [] });
+        writeJson(arch('t0', 'README.json'), { note: 'smoke round' });
+        writeJson(arch('t0', 'standings.json'), { rounds: [{ round: 0 }] });
+        writeJson(arch('t0', 'panels', 'arena-coach.json'), { id: 'arena-coach' });
+        writeJson(arch('t0', 'panels', 'arena-leaderboard.json'), { id: 'arena-leaderboard' });
+        writeJson(arch('t0', 'experiment-arena.json'), { id: 'arena', old: true });
+        writeJson(arch('s1', 'dash', 'arena-x.json'), { id: 'arena-x' });
+        writeJson(arch('s1', 'dash', 'arena.json'), { id: 'arena' });
+        writeJson(arch('s1', 'panels', 'x.rated.json'), { bots: [] });
+        assert.deepStrictEqual((await call('archive')).result.tournaments, [{ id: 's1', note: null, rounds: 0 }, { id: 't0', note: 'smoke round', rounds: 1 }]);
+        const t0 = (await call('archive', { id: 't0' })).result;
+        assert.deepStrictEqual([t0.note, t0.standings.rounds.length, t0.leaderboard.id, t0.experiment.old, t0.panels.map((x) => x.id)], ['smoke round', 1, 'arena-leaderboard', true, ['arena-coach']]);
+        const s1 = (await call('archive', { id: 's1' })).result;
+        assert.deepStrictEqual([s1.leaderboard, s1.experiment.id, s1.panels.map((x) => x.id)], [null, 'arena', ['arena-x']]);
+        assert.strictEqual((await call('archive', { id: '..' })).error.code, 'bad_request');
+        assert.strictEqual((await call('archive', { id: 'none' })).error.code, 'not_found');
+    } finally {
+        fs.rmSync(path.join(HOME, 'archive'), { recursive: true, force: true });
+        if (before) {
+            writeJson(path.join(HOME, 'standings.json'), before);
+        } else {
+            fs.rmSync(path.join(HOME, 'standings.json'), { force: true });
+        }
+    }
+});

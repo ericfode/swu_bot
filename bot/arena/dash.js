@@ -12,6 +12,8 @@
  * (publishStandings: versions, standings widgets, status). Each keeps its half in its own file in ARENA_HOME,
  *   panels/<agent>.say.json   panels/<agent>.rated.json
  * and every write of either half recomposes the dashboard panel from both, so neither overwrites the other's fields.
+ * The leaderboard and the experiment are kept in ARENA_HOME too (panels/leaderboard.json, panels/experiment.json), so
+ * the API serves every panel (api.js `panels`) without the dashboard folder; the dashboard files are copies.
  */
 const fs = require('fs');
 const path = require('path');
@@ -28,6 +30,7 @@ function enabled() {
 
 const panelFile = (agent) => path.join(DASH, 'panels', `arena-${agent}.json`);
 const halfFile = (agent, side) => path.join(HOME, 'panels', `${agent}.${side}.json`);
+const boardFile = (name) => path.join(HOME, 'panels', `${name}.json`);
 const agentInfo = (agent) => roster().agents.find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
 
 /** A trimmed string of at most max chars, or undefined (null, empty, objects). */
@@ -148,15 +151,11 @@ function publishStandings(st) {
         });
         writePanel(a.name);
     }
-    if (!enabled()) {
-        return;
-    }
-
     // a round without rated games has no ranks yet: keep its bots in lineup order
     const board = last ? [...last.bots].sort((x, y) => (x.rank ?? Infinity) - (y.rank ?? Infinity)) : [];
     const noGames = !!last && !last.bots.some((b) => b.rank !== null && b.rank !== undefined);
     const leader = last ? last.leader ?? (noGames ? NO_GAMES : '-') : '-';
-    writeJson(path.join(DASH, 'panels', 'arena-leaderboard.json'), {
+    const leaderboard = {
         // a summary panel: its bots are on the competitors' own panels
         schema: 1, id: 'arena-leaderboard', title: 'Arena leaderboard: competing Claudes', thread: THREAD,
         bots: [], status: st.status ?? 'running', updatedAt: t,
@@ -171,14 +170,14 @@ function publishStandings(st) {
             { type: 'line', title: 'Elo by round', x: 'round', series: eloSeries() },
             { type: 'bars', title: 'Think time, ms per decision (latest round)', items: board.map((b) => ({ label: b.name, value: b.msPerDecision ?? 0 })) }
         ]
-    });
+    };
 
     // progress: rounds done of the tournament's planned rounds (outside a tournament, of the rounds so far)
     const tour = st.tournament;
     const progress = tour?.plannedRounds
         ? { done: rounds.filter((rd) => rd.status === 'done' && (tour.rounds ?? []).includes(rd.round)).length, total: tour.plannedRounds, unit: 'rounds' }
         : { done: rounds.filter((rd) => rd.status === 'done').length, total: rounds.length, unit: 'rounds' };
-    writeJson(path.join(DASH, 'experiments', 'arena.json'), {
+    const experiment = {
         schema: 1, id: 'arena', title: 'Arena: competing Claudes improving their own bots', owner: THREAD,
         hypothesis: 'Different research prompts (search, tuning, card knowledge, replay coaching) improve a bot at different speeds.',
         status: st.status ?? 'running', startedAt: st.startedAt, updatedAt: t, progress,
@@ -188,7 +187,22 @@ function publishStandings(st) {
         ],
         chart: { x: 'round', y: 'Elo (all-round Bradley-Terry)', series: eloSeries() },
         conclusion: st.conclusion ?? null
-    });
+    };
+    writeJson(boardFile('leaderboard'), leaderboard);
+    writeJson(boardFile('experiment'), experiment);
+    if (enabled()) {
+        writeJson(path.join(DASH, 'panels', 'arena-leaderboard.json'), leaderboard);
+        writeJson(path.join(DASH, 'experiments', 'arena.json'), experiment);
+    }
 }
 
-module.exports = { updatePanel, publishStandings, composePanel, enabled, DASH };
+/** The leaderboard and experiment last published (null before the first round); older arenas kept them only in the dashboard. */
+function boards() {
+    const read = (name, dashFile) => readJson(boardFile(name), null) ?? (enabled() ? readJson(dashFile, null) : null);
+    return {
+        leaderboard: read('leaderboard', path.join(DASH, 'panels', 'arena-leaderboard.json')),
+        experiment: read('experiment', path.join(DASH, 'experiments', 'arena.json'))
+    };
+}
+
+module.exports = { updatePanel, publishStandings, composePanel, boards, enabled, DASH };

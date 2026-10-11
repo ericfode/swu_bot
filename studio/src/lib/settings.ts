@@ -6,23 +6,31 @@ export type Perspective = 'god' | Seat;
 
 export interface Settings {
     art: boolean;
-    /** draw each card's value (the omni bot's board score) on the board */
-    lens: boolean;
+    /**
+     * card values forced on or off from outside (the kit's showLens option, setLensView); null lets each game decide (on
+     * when it has a lens file for the chosen score). Never saved: the Card values button only overrides the game in view.
+     */
+    lens: boolean | null;
+    /** the score source last picked (a lens dir, '' = the default path), opened on in games that have it */
+    score: string | null;
     perspective: Perspective;
     speed: number;
     /** bumps when a card-art source changes, so cards re-resolve their images */
     artVersion: number;
     setArt: (v: boolean) => void;
-    setLens: (v: boolean) => void;
+    setLens: (v: boolean | null) => void;
+    setScore: (v: string | null) => void;
     setPerspective: (v: Perspective) => void;
     setSpeed: (v: number) => void;
 }
 
-type Saved = Pick<Settings, 'art' | 'lens' | 'perspective' | 'speed'>;
+type Saved = Pick<Settings, 'art' | 'perspective' | 'speed' | 'score'>;
 
 function load(key: string): Partial<Saved> {
     try {
-        return JSON.parse(localStorage.getItem(key) ?? '{}');
+        // earlier builds also saved 'lens' (card values on or off for every game): no longer applied
+        const { art, perspective, speed, score } = JSON.parse(localStorage.getItem(key) ?? '{}') ?? {};
+        return { art, perspective, speed, ...(typeof score === 'string' ? { score } : {}) };
     } catch {
         return {};
     }
@@ -32,7 +40,7 @@ function save(key: string | null, s: Saved) {
         return;
     }
     try {
-        localStorage.setItem(key, JSON.stringify({ art: s.art, lens: s.lens, perspective: s.perspective, speed: s.speed }));
+        localStorage.setItem(key, JSON.stringify({ art: s.art, perspective: s.perspective, speed: s.speed, score: s.score }));
     } catch {
         // storage blocked: settings just don't persist
     }
@@ -47,16 +55,18 @@ const live = new Set<StoreApi<Settings>>();
  * One viewer's settings. Holotable shares one store saved under 'holotable.settings'; each embedded viewer (kit mount)
  * gets its own, saved only when the host asks for a key, so viewers on one page don't switch each other.
  */
-export function createSettingsStore(persistKey: string | null = null, initial: Partial<Saved> = {}): StoreApi<Settings> {
-    const saved = { ...(persistKey ? load(persistKey) : {}), ...initial };
+export function createSettingsStore(persistKey: string | null = null, initial: Partial<Saved & Pick<Settings, 'lens'>> = {}): StoreApi<Settings> {
+    const saved: Partial<Saved & Pick<Settings, 'lens'>> = { ...(persistKey ? load(persistKey) : {}), ...initial };
     const store = createStore<Settings>((set, get) => ({
         art: saved.art ?? true,
-        lens: saved.lens ?? false,
+        lens: saved.lens ?? null,
+        score: saved.score ?? null,
         artVersion: 0,
         perspective: saved.perspective ?? 'god',
         speed: saved.speed ?? 1,
         setArt: (art) => (set({ art }), save(persistKey, { ...get(), art })),
-        setLens: (lens) => (set({ lens }), save(persistKey, { ...get(), lens })),
+        setLens: (lens) => set({ lens }),
+        setScore: (score) => (set({ score }), save(persistKey, { ...get(), score })),
         setPerspective: (perspective) => (set({ perspective }), save(persistKey, { ...get(), perspective })),
         setSpeed: (speed) => (set({ speed }), save(persistKey, { ...get(), speed }))
     }));
@@ -89,7 +99,7 @@ export const useSettings: UseSettings = <T,>(selector?: (s: Settings) => T) =>
     useStore(useContext(SettingsContext), selector ?? ((s: Settings) => s as unknown as T));
 
 /** Change a setting in every live viewer on the page. */
-export function setEverywhere(patch: Partial<Saved>) {
+export function setEverywhere(patch: Partial<Saved & Pick<Settings, 'lens'>>) {
     for (const s of live) {
         const st = s.getState();
         if (patch.art != null) {

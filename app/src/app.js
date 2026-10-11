@@ -10,7 +10,7 @@ const pref = {
   set(k, v) { try { localStorage.setItem('swuapp.' + k, JSON.stringify(v)); } catch {} },
 };
 // audience is fixed at build time: 'project' (Eric and the threads, with Lab) or 'public' (friends: no Lab, no thread names)
-const S = { aud: DATA.audience === 'public' ? 'public' : 'project', seen: pref.get('seen', null), live: false, files: null, reader: null, prefix: '', syncedAt: null, botSort: ['rating', -1], botFam: new Set(), botQ: '', botAll: false, botStyle: new Set(), gamesPage: 0, gamesF: { bot: '', run: '', res: 'all', replay: false }, cmp: null };
+const S = { aud: DATA.audience === 'public' ? 'public' : 'project', seen: pref.get('seen', null), live: false, api: false, apiVersion: null, files: null, reader: null, prefix: '', syncedAt: null, botSort: ['rating', -1], botFam: new Set(), botQ: '', botAll: false, botStyle: new Set(), gamesPage: 0, gamesF: { bot: '', run: '', res: 'all', replay: false }, cmp: null };
 // live mode reads the project's shared folder through the files capability; the public build never does (pick 6)
 const CAN_LIVE = S.aud === 'project';
 // served by the arena web server (app at /, the arena's own page with its forms at /arena), not as a file or a Claude artifact
@@ -145,7 +145,7 @@ function bottomLine(F) {
 const runById = id => M.runs.find(r => r.id === id);
 const gameRow = g => ({ run: M.runs[g[0]], id: g[1], p1: M.botList[g[2]], p2: M.botList[g[3]], res: g[4], rounds: g[5], steps: g[6], forfeit: g[7] });
 const gameIdx = new Map(); function indexGames() { gameIdx.clear(); M.games.forEach((g, i) => gameIdx.set(`${M.runs[g[0]].id}/${g[1]}`, i)); }
-const hasReplay = i => M.replay?.[i] === '1' || (S.live && !!M.runs[M.games[i][0]]?.dir);
+const hasReplay = i => M.replay?.[i] === '1' || (S.live && !S.api && !!M.runs[M.games[i][0]]?.dir); // the window's model marks its replays
 function resText(g) {
   const x = gameRow(g);
   if (x.res === 3) return '<span class="pill live">playing</span>';
@@ -401,7 +401,7 @@ function renderPivotal(v) {
 }
 if (KIT) {
   const artKey = (code, back) => { const m = String(code || '').match(/([A-Z0-9]+)[_/\- ]?(\d+)/); return m ? `${m[1]}_${m[2].padStart(3, '0')}${back ? '-b' : ''}` : null; };
-  try { KIT.setArtResolver?.((code, back) => { const k = artKey(code, back); if (!k) return null; if (ART[k]) return ART[k]; if (!artTried.has(k)) artWant.add(k); return null; }); KIT.setCardArt?.(true); } catch {}
+  try { KIT.setArtResolver?.((code, back) => { const k = artKey(code, back); if (!k) return null; if (ART[k]) return ART[k]; if (HOSTED) { const [set, rest] = k.split('_'); return `https://cdn.swu-db.com/images/cards/${set}/${rest}.png`; } if (!artTried.has(k)) artWant.add(k); return null; }); KIT.setCardArt?.(true); } catch {}
 }
 async function loadArt() {
   if (!S.files || !artWant.size) return;
@@ -560,6 +560,50 @@ function gridGames({ run = null, max = 24, finished = 8 } = {}) {
   return { playing, done };
 }
 // ---------- live data ----------
+// On the arena window (bot/arena/window.js) the page is a shell and everything comes from the window's API: the model
+// from /api/app, replays from /api/replays. In the project, live data comes from the shared folder (files capability).
+const enc = encodeURIComponent;
+const REPLAY_PATH = /^(?:results|games)\/([^/]+)\/games\/([^/]+)\.jsonl$/;
+function apiFiles() {
+  return {
+    async read(p, { offset = 0, length } = {}) {
+      const m = REPLAY_PATH.exec(p); if (!m) throw { code: 'not_found' };
+      const r = await fetch(`/api/replays/${enc(m[1])}/${enc(m[2])}?from=${offset}${length ? `&length=${length}` : ''}`, { credentials: 'same-origin' });
+      if (!r.ok) throw { code: r.status === 404 ? 'not_found' : r.status === 429 ? 'rate_limited' : 'error' };
+      return { bytes: new Uint8Array(await r.arrayBuffer()), size: Number(r.headers.get('x-size')) || 0 };
+    },
+  };
+}
+function apiReader() {
+  const json = async u => { const r = await fetch(u, { credentials: 'same-origin' }); return r.ok ? (await r.json()).result : null; };
+  return {
+    async list(d) { const m = /^(?:results|games)\/([^/]+)\/games$/.exec(d); return m ? ((await json(`/api/replays/${enc(m[1])}`)) || []).map(id => ({ name: `${id}.jsonl`, path: `${d}/${id}.jsonl`, isDirectory: false })) : []; },
+    async text(p) {
+      const m = REPLAY_PATH.exec(p);
+      if (m) { const r = await fetch(`/api/replays/${enc(m[1])}/${enc(m[2])}`, { credentials: 'same-origin' }); return r.ok ? r.text() : null; }
+      const d = /^dashboard\/(evals|lens)\/([^/]+)\.json$/.exec(p);
+      if (d) { const j = await json(`/api/docs/${d[1]}/${enc(d[2])}`); return j ? JSON.stringify(j) : null; }
+      return null;
+    },
+  };
+}
+async function syncApi() {
+  const r = await fetch('/api/app', { credentials: 'same-origin' });
+  if (r.status === 401) { location.href = `/auth/github?next=${enc(location.pathname + location.hash)}`; return false; }
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = (await r.json()).result;
+  if (S.api && d.version === S.apiVersion) return true;
+  if (!S.live) TILES.clear(); GFILES.clear();
+  M = d.model; DATA.t0panels = d.t0panels || []; S.api = true; S.apiVersion = d.version; S.live = true; S.syncedAt = new Date().toISOString();
+  indexGames(); buildColors(); buildSearch(); setChip();
+  if (!document.querySelector('dialog[open]') && !document.activeElement?.matches('input,select')) render(true);
+  return true;
+}
+async function startApi() {
+  S.files = apiFiles(); S.reader = apiReader(); S.api = true;
+  $('livetext').textContent = 'Connecting to the arena…';
+  try { await syncApi(); } catch (e) { S.api = false; S.files = null; S.reader = null; $('livetext').textContent = `Offline (${e?.message || 'error'}) · showing snapshot`; }
+}
 function liveGame() {
   // the arena's running game first, then any running game, then the newest finished game with a replay
   const order = [...M.runs].reverse();
@@ -598,6 +642,7 @@ function filesReader() {
 let syncing = false;
 async function sync() {
   if (syncing || !S.reader) return; syncing = true;
+  if (S.api) { try { await syncApi(); } catch (e) { $('livetext').textContent = `Offline (${e?.message || 'error'}) · showing the last data`; } finally { syncing = false; } return; }
   try {
     const src = await SWU.loadSources(S.reader), extra = await SWUApp.loadExtra(S.reader);
     const next = SWUApp.buildModel(src, extra, SWU);
@@ -1402,3 +1447,4 @@ indexGames(); buildColors(); buildSearch(); setChip();
 window.addEventListener('hashchange', () => render(false));
 render(false);
 if (window.claude?.use) setTimeout(() => startLive(false), 400);
+else if (HOSTED) startApi();

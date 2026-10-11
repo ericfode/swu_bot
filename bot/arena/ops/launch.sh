@@ -8,7 +8,13 @@
 #                                              referee.js)
 #   bot/arena/ops/launch.sh resume             set up whatever is missing and resume the tournament in tournament.json
 #                                              (the commit comes from <ARENA_HOME>/launch.json)
-#   bot/arena/ops/launch.sh referee|runner     restart only that process, on the existing setup (keeper.sh uses these)
+#   bot/arena/ops/launch.sh referee|runner|uplink   restart only that process, on the existing setup (keeper.sh uses these)
+#   bot/arena/ops/launch.sh uplink-stop        one last push to the window, then stop the uplink (keeper.sh, at the end)
+#
+# With SWU_WINDOW set at start (e.g. https://swu-arena.fly.dev; kept in launch.json as "window"), a third process, the
+# uplink (push.js arena), sends the arena's state and its round ladders to the arena window's API every 20 s (WINDOW.md).
+# It is the only process that gets the egress proxy, which adds the window's push token, and it runs only our own code
+# (push.js and api.js's read methods). The referee and the bots never get the proxy: a bot could push as the project.
 #
 # Layout under $BASE (default /root/arena-run, local disk):
 #   referee/        frozen git worktree of the commit; forceteki/ and node_modules/ link to $SRC's built engine
@@ -37,6 +43,7 @@ CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PRO
 # a rehearsal points these elsewhere too (defaults: the project's dashboard folder and ~/.arena-secret)
 [ -n "${ARENA_DASH:-}" ] && CLEAN+=("ARENA_DASH=$ARENA_DASH")
 [ -n "${ARENA_SECRET_FILE:-}" ] && CLEAN+=("ARENA_SECRET_FILE=$ARENA_SECRET_FILE")
+UPLINK_LOOP='bot/arena/push.js arena --every'
 
 say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
 # a launch setting from launch.json, or $2 when it has none
@@ -147,27 +154,70 @@ start_runner() {
     say "runner started (pid $!)"
 }
 
+# the window's address: from the environment, else the one the tournament started with
+window_url() { printf '%s' "${SWU_WINDOW:-$(setting window)}"; }
+
+# the uplink's environment: CLEAN plus the egress proxy, and its ladders read from the local results (the freshest copy)
+uplink_env() {
+    UPLINK=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
+            "HTTPS_PROXY=${HTTPS_PROXY:-}" "https_proxy=${https_proxy:-}" "NODE_USE_ENV_PROXY=1" "NODE_OPTIONS=--disable-warning=UNDICI-EHPA"
+            "NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}" "SSL_CERT_FILE=${SSL_CERT_FILE:-}" "ARENA_HOME=$ARENA_HOME"
+            "ARENA_RESULTS=$BASE/results" "ARENA_PUBLIC_RESULTS=$BASE/results" "SWU_WINDOW=$1")
+    [ -n "${ARENA_DASH:-}" ] && UPLINK+=("ARENA_DASH=$ARENA_DASH")
+    [ -n "${SWU_WINDOW_TOKEN:-}" ] && UPLINK+=("SWU_WINDOW_TOKEN=$SWU_WINDOW_TOKEN")
+    return 0
+}
+
+start_uplink() {
+    local window
+    window=$(window_url)
+    if [ -z "$window" ]; then
+        say "no SWU_WINDOW: the window uplink is off"
+        return 0
+    fi
+    uplink_env "$window"
+    cd "$BASE/referee"
+    "${UPLINK[@]}" setsid nohup node bot/arena/push.js arena --every 20 >> "$BASE/uplink.log" 2>&1 < /dev/null &
+    say "uplink to $window started (pid $!)"
+}
+
+stop_uplink() {
+    local window pids
+    window=$(window_url)
+    pids=$(pgrep -f "$UPLINK_LOOP" || true)
+    if [ -n "$window" ]; then
+        uplink_env "$window"
+        (cd "$BASE/referee" && "${UPLINK[@]}" node bot/arena/push.js arena --once >> "$BASE/uplink.log" 2>&1) || say "the last push to $window failed (see $BASE/uplink.log)"
+    fi
+    [ -n "$pids" ] && kill $pids && say "uplink stopped"
+    return 0
+}
+
 case "$MODE" in
     start)
         COMMIT=${2:?usage: launch.sh start <commit>}
         COMMIT=$(git -C "$SRC" rev-parse "$COMMIT")
         mkdir -p "$ARENA_HOME/tools"
         [ -e "$ARENA_HOME/tools/memo" ] || cp "${MEMO_FROM:?MEMO_FROM: path to OptMem memo}" "$ARENA_HOME/tools/memo"
-        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), startedAt: new Date().toISOString()}, null, 1))" \
-            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}"
+        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), window: process.argv[5] || null, startedAt: new Date().toISOString()}, null, 1))" \
+            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}" "${SWU_WINDOW:-}"
         setup "$COMMIT"
         (cd "$BASE/referee" && "${CLEAN[@]}" npm run -s gate)
         start_referee 0
         sleep 5
         start_runner
+        start_uplink
         ;;
     resume)
         setup "$(setting commit)"
         pgrep -f 'bot/arena/referee.js --tournament' > /dev/null || start_referee 1
         sleep 5
         pgrep -f 'bot/arena/runner.js --repo' > /dev/null || start_runner
+        pgrep -f "$UPLINK_LOOP" > /dev/null || start_uplink
         ;;
     referee) start_referee 1 ;;
     runner) start_runner ;;
+    uplink) start_uplink ;;
+    uplink-stop) stop_uplink ;;
     *) echo "unknown mode $MODE" >&2; exit 1 ;;
 esac

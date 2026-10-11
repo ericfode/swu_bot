@@ -11,6 +11,8 @@
  * submit). GET / is the SWU Arena app (app/README.md) when its friends build exists (ARENA_APP, default
  * app/dist/public.html from `npm run app -- --public`), else the arena's web UI too.
  * Hosted: ARENA_AUTH=1 makes competitor tokens required (see api.js); ARENA_TOKEN additionally gates all of /api.
+ * ARENA_MODE=window serves the arena window instead (window.js): the read-only arena and research for invited friends,
+ * fed through its API by the arena and the project's other parts, behind GitHub sign-in (auth.js).
  */
 const fs = require('fs');
 const http = require('http');
@@ -155,7 +157,13 @@ function handler(req, res) {
 if (require.main === module) {
     const port = Number(arg('port', process.env.PORT ?? 7070));
     const host = arg('host', '127.0.0.1');
-    http.createServer(handler).listen(port, host, () => console.log(`arena API on http://${host}:${port}/api`));
+    if (process.env.ARENA_MODE === 'window') {
+        const { createWindow } = require('./window');
+        const w = createWindow();
+        http.createServer((req, res) => w.handle(req, res)).listen(port, host, () => console.log(`arena window on http://${host}:${port}/ (data in ${w.store.dir})`));
+    } else {
+        http.createServer(handler).listen(port, host, () => console.log(`arena API on http://${host}:${port}/api`));
+    }
 }
 
 module.exports = { handler, acceptsGzip };
