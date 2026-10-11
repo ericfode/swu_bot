@@ -152,8 +152,10 @@ class OmniSearch {
         // the maximizing side; values are from its point of view (p1 unless `side` says otherwise)
         this.p1 = side ?? eg.ids[0];
         // optional () => string: reseed the engine RNG and shuffle both decks before every move, so the search
-        // cannot see the real deck order (future draws) or the real random results
+        // cannot see the real deck order (future draws) or the real random results. Called once for a salt; the seed
+        // of each move is a hash of salt, position and move, so replaying a child gives the same sample.
         this.reseed = reseed;
+        this.salt = reseed ? reseed() : null;
         this.followUps = followUps;
         this.maxMoves = maxMoves;
         this.budget = budget;
@@ -200,7 +202,8 @@ class OmniSearch {
         const eg = this.eg;
         const rng = seededRng('omni-move');
         if (this.reseed) {
-            eg.game.setRandomSeed(this.reseed());
+            const basis = `${this.salt}|${this.key()}|${JSON.stringify(seq.map(strip))}`;
+            eg.game.setRandomSeed(crypto.createHash('sha1').update(basis).digest('hex'));
             for (const id of eg.ids) {
                 eg.player(id).shuffleDeck();
             }

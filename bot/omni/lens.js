@@ -173,7 +173,7 @@ function readJsonl(file) {
 }
 
 function buildLens(gameFile, decisionsDir) {
-    const lines = readJsonl(gameFile);
+    const lines = readJsonl(gameFile).filter(Boolean);
     const header = lines.find((l) => l.t === 'header');
     const gameId = path.basename(gameFile, '.jsonl');
     // decisions of omni bots in this game, per seat, in order
