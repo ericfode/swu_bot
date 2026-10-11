@@ -30,6 +30,9 @@ LAUNCH=$ARENA_HOME/launch.json
 # a minimal environment for the referee and the runner (the runner passes even less on to competitors)
 CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
        "NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}" "SSL_CERT_FILE=${SSL_CERT_FILE:-}" "ARENA_HOME=$ARENA_HOME" "ARENA_RESULTS=$BASE/results")
+# a rehearsal points these elsewhere too (defaults: the project's dashboard folder and ~/.arena-secret)
+[ -n "${ARENA_DASH:-}" ] && CLEAN+=("ARENA_DASH=$ARENA_DASH")
+[ -n "${ARENA_SECRET_FILE:-}" ] && CLEAN+=("ARENA_SECRET_FILE=$ARENA_SECRET_FILE")
 
 say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
 setting() { node -e "const j=require('$LAUNCH'); process.stdout.write(String(j[process.argv[1]] ?? ''))" "$1"; }
