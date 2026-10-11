@@ -27,7 +27,7 @@ pub enum Request {
 }
 
 /// Sent at the start of every game; the process may serve several games in a row.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Hello {
     #[serde(default)]
     pub protocol: String,
@@ -42,6 +42,30 @@ pub struct Hello {
     /// v2: protocol versions the referee speaks (absent from a v1 referee).
     #[serde(default)]
     pub versions: Vec<u32>,
+    /// v2: both deck lists (they are open): this seat's and the opponent's.
+    #[serde(default)]
+    pub deck: Option<DeckList>,
+    #[serde(default)]
+    pub opponent: Option<DeckList>,
+}
+
+/// A deck list from `hello`: set codes with counts, in the order the engine numbers the cards.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct DeckList {
+    #[serde(default)]
+    pub leader: DeckEntry,
+    #[serde(default)]
+    pub base: DeckEntry,
+    #[serde(default)]
+    pub deck: Vec<DeckEntry>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct DeckEntry {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub count: u32,
 }
 
 /// v2 `over`: the game ended.
@@ -72,7 +96,7 @@ pub struct Simulated {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Decide {
     #[serde(default)]
     pub seq: u64,
@@ -111,7 +135,7 @@ pub struct Prompt {
     pub action_window: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Action {
     #[serde(default)]
@@ -213,6 +237,17 @@ pub struct PlayerView {
     #[serde(default)]
     pub deck: u32,
     #[serde(default)]
+    pub discard: Vec<CardRef>,
+    /// Own seat only: resources, `x: 1` when exhausted.
+    #[serde(default)]
+    pub resources: Option<Vec<ResourceRef>>,
+    /// Action phase: 1 when the player passed its last action.
+    #[serde(default)]
+    pub passed: u8,
+    /// Action phase: 1 when the player is done for the phase (it claimed the initiative).
+    #[serde(default)]
+    pub out: u8,
+    #[serde(default)]
     pub ground: Vec<UnitView>,
     #[serde(default)]
     pub space: Vec<UnitView>,
@@ -229,6 +264,18 @@ pub struct CardRef {
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
+pub struct ResourceRef {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub n: Option<String>,
+    #[serde(default)]
+    pub s: Option<String>,
+    #[serde(default)]
+    pub x: u8,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct LeaderView {
     #[serde(default)]
     pub id: String,
@@ -241,6 +288,9 @@ pub struct LeaderView {
     pub dep: u8,
     #[serde(default)]
     pub x: u8,
+    /// 1 once its deploy (epic action) is used
+    #[serde(default)]
+    pub epic: u8,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
