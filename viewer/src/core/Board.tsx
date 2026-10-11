@@ -69,7 +69,6 @@ export function Board({ state, bots, actor, onFocus }: { state: Snapshot; bots: 
     return (
         <div className="board">
             <Side seat="p2" p={state.players.p2} botName={bots.p2} active={actor === 'p2'} hasInitiative={state.initiative === 'p2'} onFocus={onFocus} />
-            <div className="mid"><span>round {state.round}</span><span>{state.phase} phase</span></div>
             <Side seat="p1" p={state.players.p1} botName={bots.p1} active={actor === 'p1'} hasInitiative={state.initiative === 'p1'} onFocus={onFocus} />
         </div>
     );

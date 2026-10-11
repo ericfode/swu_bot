@@ -12,6 +12,8 @@
     "viewer": "npm --prefix viewer run build && node viewer/server.cjs",
     "viewer:dev": "npm --prefix viewer run dev",
     "studio": "npm --prefix studio run build && npm --prefix studio run preview",
-    "studio:dev": "npm --prefix studio run dev"
+    "studio:dev": "npm --prefix studio run dev",
+    "ladder": "node bot/ladder.js",
+    "test": "node --test bot/test/*.test.js"
   }
 }
