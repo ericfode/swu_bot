@@ -25,6 +25,11 @@ if (!env.PERCH_API_KEY && !env.TYPESAFE_API_KEY && env.CLAUDE_CODE_REMOTE === 't
   env.PERCH_API_KEY = 'injected-by-proxy';
 }
 if ((env.HTTPS_PROXY || env.https_proxy) && !env.NODE_USE_ENV_PROXY) {
+  // Node reads NODE_USE_ENV_PROXY from v22.21 and v24.0; older versions would bypass the proxy.
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major < 22 || major === 23 || (major === 22 && minor < 21)) {
+    console.error(`perch: Node ${process.version} ignores HTTPS_PROXY for fetch, so Jev may be unreachable. Use Node 22.21+ or 24+.`);
+  }
   env.NODE_USE_ENV_PROXY = '1';
   // Node prints an "EnvHttpProxyAgent is experimental" warning on every start otherwise.
   env.NODE_OPTIONS = [env.NODE_OPTIONS, '--disable-warning=UNDICI-EHPA'].filter(Boolean).join(' ');
