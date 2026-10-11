@@ -58,7 +58,10 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 
 - `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
   viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
-  running games; a finished one has `outcome: "won"` and `winnerSeat`. The window stamps `"feed": "karabast"` on the run,
+  running games; a finished one has `outcome` `"won"` (with `winnerSeat` `p1` or `p2`), `"draw"` or `"abandoned"`. The
+  window keeps only the fields the app reads, each checked for its type: on the run `createdAt`, `bots` and
+  `gamesPerPairing`; on each game `id`, `p1`, `p2`, `outcome`, `winnerSeat`, `rounds`, `steps` and `error` (text). It
+  drops every other field and refuses a document that does not fit with a 400. It stamps `"feed": "karabast"` on the run,
   and the app lists every run a feed sent as games against people, kept out of bot records and ratings.
 - `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
   whole file when it ends. `push.js run <folder> --follow` does both for a folder laid out like a ladder run.

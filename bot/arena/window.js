@@ -51,14 +51,31 @@ function need(cond, code, msg) {
 }
 
 /**
- * The shape the app's loaders rely on in a run index, checked for runs sent by an outside machine: games are objects
- * with ids <feed>-<id>, and seat names are plain words that are never an Object.prototype key (the model indexes
- * plain objects by them).
+ * A run document sent by an outside machine is rebuilt from the fields the app's loaders read (dashboard/site/core.cjs
+ * loadSources, app/src/model.cjs), each of a known type, and every other field is dropped, so nothing a feed sends can
+ * break the model build. Games are objects with ids <feed>-<id>; seat names are plain words that are never an
+ * Object.prototype key (the model indexes plain objects by them). Returns null for a document that does not fit.
  */
 const isName = (x) => typeof x === 'string' && /^[A-Za-z0-9][\w .@#+()-]{0,63}$/.test(x) && !(x in Object.prototype);
-const feedRunOk = (doc, feed) => Array.isArray(doc.games)
-    && doc.games.every((g) => g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`) && isName(g.p1) && isName(g.p2))
-    && (doc.bots === undefined || (Array.isArray(doc.bots) && doc.bots.every(isName)));
+const FEED_OUTCOMES = new Set(['running', 'won', 'draw', 'abandoned']);
+const count = (x) => (Number.isSafeInteger(x) && x >= 0 ? x : null);
+function feedRun(doc, feed, id) {
+    if (!doc || typeof doc !== 'object' || doc.id !== id || !Array.isArray(doc.games)) return null;
+    if (doc.bots !== undefined && !(Array.isArray(doc.bots) && doc.bots.every(isName))) return null;
+    if (doc.createdAt !== undefined && !(typeof doc.createdAt === 'string' && doc.createdAt.length <= 40 && Number.isFinite(Date.parse(doc.createdAt)))) return null;
+    const games = [];
+    for (const g of doc.games) {
+        const ok = g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`)
+            && isName(g.p1) && isName(g.p2) && FEED_OUTCOMES.has(g.outcome)
+            && (g.winnerSeat == null || ['p1', 'p2', 'draw'].includes(g.winnerSeat)) && (g.error == null || typeof g.error === 'string');
+        if (!ok) return null;
+        const seat = g.winnerSeat ?? null;
+        games.push({ id: g.id, p1: g.p1, p2: g.p2, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? g[seat] : null,
+            rounds: count(g.rounds), steps: count(g.steps), error: g.error ? g.error.slice(0, 200) : null });
+    }
+    const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small
+    return { id, feed, ...(doc.createdAt ? { createdAt: doc.createdAt } : {}), ...(doc.bots ? { bots: doc.bots } : {}), ...(per && per <= 20 ? { gamesPerPairing: per } : {}), games };
+}
 
 /**
  * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
@@ -533,9 +550,10 @@ function createWindow(opts = {}) {
                 let text = body;
                 if (who.role === 'feed' && ns === 'runs') {
                     need(doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
-                    need(feedRunOk(doc, who.feed), 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, ...}] with seats (and bots, if any) named in plain words`);
+                    const run = feedRun(doc, who.feed, id);
+                    need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
                     // the run keeps which feed sent it, so the app never rates its games (model.cjs)
-                    text = JSON.stringify({ ...doc, feed: who.feed });
+                    text = JSON.stringify(run);
                 }
                 store.putDoc(ns, id, text);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);

@@ -116,6 +116,8 @@ test('buildModel: a run any outside feed sent is never rated, whatever its name'
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'records unchanged');
     src.runs.push({ id: 'sprite-2', feed: 'sprite', createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-2', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] });
     assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-2').bots, ['c-clock', 'opponent'], 'a run with no bots list and no finished game still names its seats');
+    src.runs.push({ id: 'sprite-3', feed: 'sprite', bots: [], createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-3', p1: 'opponent', p2: 'c-clock', outcome: 'running' }] });
+    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-3').bots, ['opponent', 'c-clock'], 'an empty or partial bots list still names every seat');
 });
 
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {

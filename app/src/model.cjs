@@ -157,8 +157,8 @@
                 if (forfeit) R(forfeit === 'p1' ? p1 : p2).faults++;
             }
             const table = Object.entries(st).map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
-            // a people run names everyone who sat down, so its grid shows before any game ends
-            const bots = [...new Set([...(people ? [...names] : r.bots || []).map(can), ...table.map(t => t.id)])];
+            // a people run names everyone who sat down (its bots list may leave the people out), so its grid shows before any game ends
+            const bots = [...new Set([...(r.bots || []), ...(people ? r.games.flatMap(g => [g.p1, g.p2]) : [])].map(can).concat(table.map(t => t.id)))];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
             return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
