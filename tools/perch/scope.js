@@ -2,7 +2,8 @@
 // What Perch reads. Eric's call (2026-10-11): the shared core of the project, meaning game running,
 // coordination, the bot protocol, viewers, analysis, research tooling and dashboards, and not the
 // code of specific bots. Tests are left out too. Only source files are read, and built bundles
-// (over 256 KB or minified) are skipped.
+// (over 256 KB or minified) are skipped. perch runs in a snapshot that holds only these files, so
+// Jev never sees anything else, not even as the caller or callee of a core method.
 // It is an allow-list: a new bot in bot/players/ or in its own folder under bot/ is out of scope with
 // no change here, and a new shared folder must be added to `include`. Globs: `*` stays within one
 // directory, `**` crosses directories.

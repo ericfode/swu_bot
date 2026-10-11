@@ -8,7 +8,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { plan, inScope, readDay, holdLock, snapshotShared } = require('../perch/policy');
+const { plan, inScope, readDay, holdLock, snapshotRepo, snapshotShared, appendNew } = require('../perch/policy');
 const scopes = require('../perch/scope');
 
 const preload = path.join(__dirname, '../perch/jev-cache.mjs');
@@ -135,7 +135,7 @@ test('plan lists the in-scope files for scan and coverage, and keeps other comma
   const scope = { include: ['bot/*.js', 'bot/players/index.js', 'viewer/**'], exclude: [] };
   const p = (...args) => plan(args, { repo, scope, cwd: repo, git });
 
-  for (const args of [['scan'], ['scan', '.'], ['scan', repo], ['scan', '--paths', '.'], ['scan', '--paths=./'], ['scan', '--paths', 'bot/..'], ['coverage', '--since', 'base'], ['--json', 'scan']]) {
+  for (const args of [['scan'], ['scan', '.'], ['scan', repo], ['scan', '--paths', '.'], ['scan', '--paths=./'], ['scan', '--paths', 'bot/..'], ['coverage'], ['--json', 'scan']]) {
     assert.match(p(...args).error || '', /no scope/, args.join(' '));
   }
   assert.match(p('scan', '--since', 'nope').error, /not a commit/);
@@ -144,11 +144,18 @@ test('plan lists the in-scope files for scan and coverage, and keeps other comma
   assert.deepStrictEqual(p('--since=base', '--json', 'scan').args, ['scan', '--json', '--parallel', '8', '--paths', 'bot/env.js']);
   assert.deepStrictEqual(p('scan', '--full', '--min', '70').args, ['scan', '--min', '70', '--parallel', '8', '--paths', 'bot/env.js,bot/players/index.js,viewer/src/api.ts']);
   assert.deepStrictEqual(p('scan', 'bot', '--parallel=2').args, ['scan', '--parallel=2', '--paths', 'bot/env.js,bot/players/index.js']);
-  assert.deepStrictEqual(p('coverage', '--since', 'base', '--paths', 'viewer').args, ['coverage', '--since', 'base', '--parallel', '8', '--paths', 'viewer/src/api.ts']);
+  assert.deepStrictEqual(p('coverage', '--since', 'base').args, ['coverage', '--parallel', '8', '--paths', 'bot/env.js']);
+  assert.deepStrictEqual(p('coverage', '--paths', 'viewer').args, ['coverage', '--parallel', '8', '--paths', 'viewer/src/api.ts']);
   assert.match(p('scan', 'bot/rust').nothing, /out of scope/);
   assert.match(p('check', 'bot/players/rush.js::RushBot.choose').error, /outside Perch's scope/);
   assert.deepStrictEqual(p('check', 'bot/env.js', '--force'), { command: 'check', asksJev: true, args: ['check', 'bot/env.js', '--force'], env: { PERCH_CACHE_READ: '0' } });
   assert.strictEqual(p('check', '66f80128').error, undefined, 'an issue id names no path');
+  // perch reads a check path from the repo root, so the path checked here is the one passed on.
+  const from = (dir, ...args) => plan(args, { repo, scope, cwd: path.join(repo, dir), git });
+  assert.deepStrictEqual(from('viewer', 'check', 'bot/players/rush.js::RushBot.choose').args, ['check', 'viewer/bot/players/rush.js::RushBot.choose']);
+  assert.deepStrictEqual(from('bot', 'check', 'env.js::EnvGame.start').args, ['check', 'bot/env.js::EnvGame.start']);
+  assert.match(from('bot', 'check', 'players/rush.js').error, /outside Perch's scope/);
+  assert.match(from('bot', 'check', '../../x.js').error, /outside this repo/);
   for (const args of [['scan', '--help'], ['scan', '-h'], ['scan', '--version'], ['issues'], ['close', 'abc', '--reason', 'scan']]) {
     assert.strictEqual(p(...args).asksJev, false, args.join(' '));
     assert.deepStrictEqual(p(...args).args, args);
@@ -165,27 +172,116 @@ test('the repo scope reads the shared core and leaves the bots out', () => {
   }
 });
 
-test('the shared snapshot copies in-scope source files, commits them and drops removed ones', (t) => {
+const lsTree = (dir) => spawnSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', 'HEAD'], { encoding: 'utf8' }).stdout.trim().split('\n');
+const commits = (dir) => Number(spawnSync('git', ['-C', dir, 'rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).stdout);
+const writer = (root) => (file, text) => {
+  fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+  fs.writeFileSync(path.join(root, file), text);
+};
+
+test('the shared snapshot holds the in-scope source files and nothing of perch\'s own', (t) => {
   const root = scratch(t);
   const dir = path.join(scratch(t), 'snap');
-  const write = (file, text) => {
-    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-    fs.writeFileSync(path.join(root, file), text);
-  };
+  const write = writer(root);
   write('dashboard/build.mjs', 'export const a = 1;\n');
   write('dashboard/data.json', '{}');
   write('arena/agents/x/bot.js', 'module.exports = 1;\n');
   write('arena/strategy/diagram.js', 'module.exports = 2;\n');
+  write('bend/score.js', 'module.exports = 3;\n');
   write('dashboard/bundle.js', `var a=${'x'.repeat(5000)};\n`); // minified: one long line
-  const scope = { root, include: ['dashboard/**', 'arena/**'], exclude: ['arena/agents/**'] };
-  const files = () => spawnSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', 'HEAD'], { encoding: 'utf8' }).stdout.trim().split('\n');
-  snapshotShared(scope, dir, path.join(root, 'closed.jsonl'));
-  assert.deepStrictEqual(files(), ['arena/strategy/diagram.js', 'dashboard/build.mjs']);
+  const scope = { root, include: ['dashboard/**', 'arena/**', 'bend/score.js'], exclude: ['arena/agents/**'] };
+  const closures = path.join(root, 'closed.jsonl');
+  snapshotShared(scope, dir, closures);
+  assert.deepStrictEqual(lsTree(dir), ['arena/strategy/diagram.js', 'bend/score.js', 'dashboard/build.mjs']);
   fs.rmSync(path.join(root, 'arena/strategy/diagram.js'));
   write('closed.jsonl', '{"id":"x"}\n');
-  snapshotShared(scope, dir, path.join(root, 'closed.jsonl'));
-  assert.deepStrictEqual(files(), ['dashboard/build.mjs']);
+  snapshotShared(scope, dir, closures);
+  assert.deepStrictEqual(lsTree(dir), ['bend/score.js', 'dashboard/build.mjs']);
   assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/closed.jsonl'), 'utf8'), '{"id":"x"}\n');
+  // perch's findings and closed issues stay out of the snapshot's commits, so an unchanged folder
+  // makes no new commit.
+  const count = commits(dir);
+  writer(dir)('.perch/scan.jsonl', '{}\n');
+  writer(dir)('.perch/.gitignore', '/*\n!closed.jsonl\n'); // as perch writes it
+  snapshotShared(scope, dir, closures);
+  assert.strictEqual(commits(dir), count);
+});
+
+test('the repo snapshot holds only in-scope code at HEAD, so bot code never reaches perch', (t) => {
+  const root = scratch(t);
+  const dir = path.join(scratch(t), 'snap');
+  const write = writer(root);
+  const git = (...argv) => assert.strictEqual(spawnSync('git', ['-C', root, ...argv]).status, 0, argv.join(' '));
+  git('init', '-q');
+  write('bot/match.js', "const { choose } = require('./players/rush');\nmodule.exports = (s) => choose(s);\n");
+  write('bot/players/rush.js', 'exports.choose = (s) => s[0];\n');
+  write('bot/test/match.test.js', "require('../match');\n");
+  write('perch.yaml', 'rules: []\n');
+  write('.perch/closed.jsonl', '{"id":"a"}\n');
+  write('.perch/rules/r.md', 'rule\n');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one');
+  write('bot/ratings.js', 'module.exports = 1;\n'); // not committed
+  const scope = { include: ['bot/*.js'], exclude: ['**/test/**'] };
+  snapshotRepo(root, scope, dir);
+  assert.deepStrictEqual(lsTree(dir), ['bot/match.js', 'perch.yaml']);
+  assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/closed.jsonl'), 'utf8'), '{"id":"a"}\n');
+  assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/rules/r.md'), 'utf8'), 'rule\n');
+});
+
+test('end to end, Jev sees no out-of-scope code, not even as a callee', async (t) => {
+  // A small repo with its own copy of tools/ and a stand-in for Jev that records each request.
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      seen.push(body);
+      res.statusCode = 400;
+      res.end('{}');
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const root = scratch(t);
+  const write = writer(root);
+  fs.cpSync(path.join(repo, 'tools/bin'), path.join(root, 'tools/bin'), { recursive: true });
+  fs.cpSync(path.join(repo, 'tools/perch'), path.join(root, 'tools/perch'), { recursive: true });
+  fs.symlinkSync(path.join(repo, 'node_modules'), path.join(root, 'node_modules'));
+  write('tools/perch/scope.js', "module.exports = { repo: { include: ['bot/*.js'], exclude: [] }, shared: { root: '/nonexistent', include: [], exclude: [] } };\n");
+  write('bot/match.js', "const { secretMove } = require('./players/rush');\nfunction play(state) {\n  if (!state) return null;\n  return secretMove(state.cards);\n}\nmodule.exports = { play };\n");
+  write('bot/players/rush.js', 'function secretMove(cards) {\n  return cards.sort()[0];\n}\nmodule.exports = { secretMove };\n');
+  write('.gitignore', 'node_modules\n.perch/*\n!.perch/closed.jsonl\n');
+  const git = (...argv) => assert.strictEqual(spawnSync('git', ['-C', root, ...argv]).status, 0, argv.join(' '));
+  git('init', '-q');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one');
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, PERCH_BASE_URL: `http://127.0.0.1:${server.address().port}/v1/systemone`, PERCH_API_KEY: 'x', PERCH_JEV_DIR: scratch(t) };
+  const run = (args) => new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(root, 'tools/bin/perch'), ...args], { cwd: root, env });
+    let out = '';
+    child.stdout.on('data', (chunk) => (out += chunk));
+    child.stderr.on('data', (chunk) => (out += chunk));
+    child.on('close', (status) => resolve({ status, out }));
+  });
+  const scan = await run(['scan', '--full']);
+  assert.ok(seen.length > 0, scan.out);
+  assert.ok(seen.some((body) => body.includes('play')), 'asked about bot/match.js');
+  for (const body of seen) assert.ok(!body.includes('cards.sort()') && !body.includes('bot/players/rush.js'), 'no bot code in a request');
+  assert.deepStrictEqual(lsTree(path.join(root, '.perch/core')), ['bot/match.js']);
+});
+
+test('closed issues are added to the shared list, never copied over it', (t) => {
+  const dir = scratch(t);
+  const local = path.join(dir, 'local.jsonl');
+  const shared = path.join(dir, 'shared', 'closed.jsonl');
+  fs.writeFileSync(local, 'a\n');
+  const before = fs.readFileSync(local);
+  writer(dir)('shared/closed.jsonl', 'a\nb\n'); // closed in another checkout meanwhile
+  appendNew(local, before, shared); // this run closed nothing
+  fs.appendFileSync(local, 'c\n');
+  appendNew(local, before, shared);
+  assert.strictEqual(fs.readFileSync(shared, 'utf8'), 'a\nb\nc\n');
 });
 
 test('the lock admits one holder and is taken over from a dead one', (t) => {
@@ -199,6 +295,11 @@ test('the lock admits one holder and is taken over from a dead one', (t) => {
   assert.strictEqual(again.held, true);
   again.release();
   assert.strictEqual(fs.existsSync(file), false);
+  holdLock(file);
+  fs.writeFileSync(file, String(process.ppid));
+  const started = Date.now();
+  assert.strictEqual(holdLock(file, 300).held, false);
+  assert.ok(Date.now() - started >= 300, 'waited for the holder');
 });
 
 test('the wrapper refuses an unscoped scan, checks --since and honors the off switch', (t) => {
