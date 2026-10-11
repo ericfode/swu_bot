@@ -707,6 +707,7 @@ test('one game at a time: a live run holds playing.pid, a dead one is taken over
     const { holdPlayLock } = require('../karabast/queue');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'play-lock-'));
     const file = path.join(dir, 'playing.pid');
+    const ledger = new PeopleLedger(path.join(dir, 'people.json'), Infinity, { lockWaitMs: 200 });
     // a stand-in bot run: a live process whose command line names queue.js
     const run = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'bot/karabast/queue.js'], { stdio: 'ignore' });
     try {
@@ -724,20 +725,23 @@ test('one game at a time: a live run holds playing.pid, a dead one is taken over
             await new Promise((r) => setTimeout(r, 20));
         }
         fs.writeFileSync(file, String(run.pid));
-        assert.throws(() => holdPlayLock(file), /one game at a time/);
+        assert.throws(() => holdPlayLock(file, ledger), /one game at a time/);
     } finally {
         run.kill();
     }
     if (fs.existsSync('/proc/self/cmdline')) {
         fs.writeFileSync(file, String(process.ppid)); // alive, but another program (a pid reused after a restart)
-        holdPlayLock(file);
+        holdPlayLock(file, ledger);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
         fs.unlinkSync(file);
     }
     fs.writeFileSync(file, '999999999'); // no such process
-    holdPlayLock(file);
+    fs.writeFileSync(`${ledger.file}.lock`, ''); // another starter is checking: wait for it, never take over beside it
+    assert.throws(() => holdPlayLock(file, ledger), /stayed locked/);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), '999999999');
+    fs.unlinkSync(`${ledger.file}.lock`);
+    holdPlayLock(file, ledger);
     assert.strictEqual(fs.readFileSync(file, 'utf8'), String(process.pid));
-    const ledger = new PeopleLedger(path.join(dir, 'people.json'), Infinity);
     for (let i = 0; i < 40; i++) {
         ledger.add([`u${i}`], 'played', ledger.reserve(1));
     }

@@ -166,45 +166,36 @@ const playing = (pid) => {
 };
 
 /**
- * Takes `file` (our pid in it, created exclusively) so only one run plays at a time, or throws while another live run
- * holds it. A file left by a run that died (killed, or the machine restarted) is taken over, also when its pid now
+ * Writes our pid to `file` so only one run plays at a time, or throws while another live run holds it. The check and
+ * the write happen under the people ledger's lock, which every run on the machine shares, so two starters cannot both
+ * take it. A file left by a run that died (killed, or the machine restarted) is taken over, also when its pid now
  * belongs to another program. Released at exit; a killed run leaves it for the next one to take over.
  */
-function holdPlayLock(file) {
-    for (let tries = 0; tries < 3; tries++) {
-        try {
-            fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
-            process.on('exit', () => {
-                try {
-                    if (fs.readFileSync(file, 'utf8') === String(process.pid)) {
-                        fs.unlinkSync(file);
-                    }
-                } catch {
-                    // already gone
-                }
-            });
-            return;
-        } catch (e) {
-            if (e.code !== 'EEXIST') {
-                throw e;
-            }
-        }
+function holdPlayLock(file, ledger) {
+    ledger.locked(() => {
         let pid = 0;
         try {
             pid = Number(fs.readFileSync(file, 'utf8'));
         } catch {
-            continue; // released between our write and our read: try again
+            // free
         }
         if (pid > 0 && pid !== process.pid && playing(pid)) {
             throw new Error(`another bot run (pid ${pid}) is playing: one game at a time (${file})`);
         }
+        const tmp = `${file}.${process.pid}.tmp`;
+        fs.writeFileSync(tmp, String(process.pid));
+        fs.renameSync(tmp, file);
+    });
+    process.on('exit', () => {
+        // nobody replaces the file while our pid is alive, so read-then-remove cannot remove another run's
         try {
-            fs.unlinkSync(file); // left by a run that died
+            if (fs.readFileSync(file, 'utf8') === String(process.pid)) {
+                fs.unlinkSync(file);
+            }
         } catch {
-            // another starter took it over first: try again
+            // already gone
         }
-    }
-    throw new Error(`could not take ${file}`);
+    });
 }
 
 async function main() {
@@ -218,7 +209,7 @@ async function main() {
     const maxPeople = arg('max-people', '10');
     const ledger = ledgerFile ? new PeopleLedger(ledgerFile, maxPeople === 'none' ? Infinity : Number(maxPeople)) : null;
     if (!local) {
-        holdPlayLock(path.join(path.dirname(path.resolve(ledgerFile)), 'playing.pid'));
+        holdPlayLock(path.join(path.dirname(path.resolve(ledgerFile)), 'playing.pid'), ledger);
     }
     const decks = JSON.parse(fs.readFileSync(arg('decks', path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json')), 'utf8'));
     const name = arg('deck');
