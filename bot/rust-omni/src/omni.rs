@@ -77,7 +77,12 @@ impl OmniSearch {
             max_steps: env_or("SWU_OMNI_STEPS", 400),
             rounds: env_or("SWU_OMNI_ROUNDS", 0),
             targets: env_or("SWU_OMNI_TARGETS", 1) == 1,
-            w: Weights::from_env(),
+            w: Weights {
+                // the pool's units are keyword-only, and racing the base matters more there: base 2.0 (rust-search's
+                // 1.35) won 20 of 56 against c-clock instead of 14, and 33-23 against rust-search instead of 31-25
+                base: env_or("SWU_EVAL_BASE", 2.0),
+                ..Weights::from_env()
+            },
         }
     }
 
