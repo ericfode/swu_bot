@@ -142,7 +142,7 @@ async function analyzeGame(game, opt, evaluator) {
         promptVersion: P.PROMPT_VERSION,
         game: {
             id: game.id,
-            file: path.relative(process.cwd(), game.file),
+            file: path.relative(process.cwd(), game.file).startsWith('..') ? game.file : path.relative(process.cwd(), game.file),
             seed: game.header.seed,
             engine: game.header.engine,
             players: game.header.players,

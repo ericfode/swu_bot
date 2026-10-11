@@ -91,6 +91,17 @@ turns (turns that cost more than 12 points). Regroup draws land on whoever acted
 games. It also scores each view against the result (Brier) and reports the mean information and hindsight gaps,
 which is how to tell whether an LLM evaluator knows more than the heuristic one.
 
+## Example
+
+`examples/random-b-vs-random-a-2.*` is a real recorded game (random bots, demo tournament seed 2) at 40 checkpoints.
+The `.claude.json` answers were produced by Claude through Claude Code subagents answering the `--dump-prompts`
+requests one at a time in order (no API key was available), then loaded with `--answers`; the raw answers are in
+`.answers.jsonl`. `.heuristic.json` is the baseline on the same checkpoints.
+
+```bash
+node analysis/report.js analysis/examples/random-b-vs-random-a-2.claude.json --baseline analysis/examples/random-b-vs-random-a-2.heuristic.json --game <path to the replay>
+```
+
 ## Fixture
 
 `fixtures/fixture-game.jsonl` is a game from `fixtures/sim.js`, a small SWU-like simulator that writes the exact
