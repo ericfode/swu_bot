@@ -28,6 +28,8 @@
     "jepa-pure": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v2p.safetensors", "--name", "jepa-pure"], "stderr": "ignore", "lang": "python" },
     "jepa-sim-v": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--score", "sim-v", "--name", "jepa-sim-v"], "stderr": "ignore", "lang": "python" },
     "jepa-sim-eval": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--score", "sim-eval", "--name", "jepa-sim-eval"], "stderr": "ignore", "lang": "python" },
+    "jepa-h1b": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1b.safetensors", "--mix", "0", "--name", "jepa-h1b"], "stderr": "ignore", "lang": "python" },
+    "jepa-b": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1b.safetensors", "--name", "jepa-b"], "stderr": "ignore", "lang": "python" },
     "rust-random-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-random"], "lang": "rust" },
     "rust-greedy-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-greedy"], "lang": "rust" },
     "rust-greedy2-wasm": { "cmd": "python3", "args": ["bot/compiled/run.py", "build/compiled/rust-greedy2"], "lang": "rust" },
