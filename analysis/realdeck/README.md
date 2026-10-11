@@ -107,8 +107,10 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
 - **Agreement** per bot, from its mirror run in `compare.json` (the biggest when there are several): deck r against the
   human BT strengths (and disattenuated), the same-favourite share, the aggro-minus-control gap in win rate against
   other styles beside the same gap in the human field rates (`styleExcess` = bot gap − human gap, `styleDistance` its
-  size), and the r of its deck strengths with the reference bot's. When compare.js left out different decks for
-  different bots, a warning says their measures are not on the same decks.
+  size), and the r of its deck strengths with the reference bot's. When compare.js left different decks out of
+  different bots' deck correlations (too many incomplete or too few decided games), a warning says their measures are
+  not on the same decks. A deck file sha256 that differs between `compare.json` and a gauntlet gets a warning too, and
+  gauntlets from different deck files never pair.
 - **Trend**: Spearman of skill against each of those over the bots that have both, with an exact two-sided permutation
   p for up to 8 bots. With a handful of bots this describes; it does not prove a rule.
 

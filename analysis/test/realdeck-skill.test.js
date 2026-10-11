@@ -240,9 +240,28 @@ const cmpFixture = () => {
     const plain = sk.skillVsAgreement([{ ...gl, decks: null }], cmpFixture());
     assert.match(plain.warnings.join('\n'), /gl: no deck list in ladder.json/);
     const left = cmpFixture();
-    left.runs.find((x) => x.id === 'heu').leftOut = [{ deck: 'lando', reason: 'too many incomplete' }];
+    for (const id of ['ccl', 'heu', 'rs']) {
+        left.agreement.deck[id].left = [{ deck: 'no-human-data', reason: 'no human BT strength' }];
+    }
+    assert.deepStrictEqual(sk.skillVsAgreement([gl], left).warnings, [], 'a deck every bot leaves out is no difference');
+    left.agreement.deck.heu.left.push({ deck: 'lando', reason: 'fewer than 10 decided games' });
     const r3 = sk.skillVsAgreement([gl], left);
-    assert.match(r3.warnings.join('\n'), /different deck sets \(decks compare.js left out: c-clock: none; heuristic: lando; rust-search: none\)/);
+    assert.match(r3.warnings.join('\n'), /different deck sets \(decks outside a bot's deck correlation that other bots keep: heuristic: lando\)/);
+    assert.deepStrictEqual(r3.bots.find((b) => b.bot === 'heuristic').agreement.leftOut, ['no-human-data', 'lando']);
+
+    // deck files: a gauntlet from another file gets a warning and never pairs with one from this file
+    const sha = (c) => c.repeat(64);
+    const withFile = cmpFixture();
+    withFile.deckFile = { decks: 5, sha256: sha('a') };
+    const split = [
+        { ...gl, id: 'g-a', decksSha256: sha('a'), games: games.filter((x) => x.p1 !== 'random' && x.p2 !== 'random') },
+        { ...gl, id: 'g-b', decksSha256: sha('b'), games: games.filter((x) => x.p1 === 'random' || x.p2 === 'random') }
+    ];
+    const r4 = sk.skillVsAgreement(split, withFile);
+    assert.match(r4.warnings.join('\n'), /deck files differ \(sha256 compare.json aaaaaaaaaaaa, g-a aaaaaaaaaaaa, g-b bbbbbbbbbbbb\)/);
+    const cross = r4.paired.find((p) => p.b === 'random' && p.a === 'heuristic');
+    assert.deepStrictEqual([cross.seeds, cross.mismatched], [0, 10]);
+    assert.strictEqual(r4.paired.find((p) => p.a === 'rust-search' && p.b === 'heuristic').seeds, 10, 'same file still pairs');
 }
 
 // 6. the command line, on a run directory written like ladder.js writes a gauntlet

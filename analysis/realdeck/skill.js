@@ -35,8 +35,9 @@
  *    `styleDistance` its size. Pooled from compare.js's style rows, so a hyperaggro vs softaggro game sits in the aggro
  *    pool as a win and a loss;
  *  - r with the reference: the bot's deck strengths vs the reference bot's own (compare.js betweenRuns).
- * compare.js leaves out decks with too many incomplete games per run; when the bots' left-out decks differ, their
- * measures are not on the same decks and a warning says so.
+ * compare.js leaves decks out of a run's deck correlation (too many incomplete games, too few decided games); when
+ * different bots lose different decks, their measures are not on the same decks and a warning says so. So does a deck
+ * file sha256 that differs between compare.json and a gauntlet (gauntlets from different deck files never pair).
  *
  * Trend: Spearman of skill against each agreement measure, over the bots that have both (the reference included at
  * 50%, except for its r with itself), with an exact two-sided permutation p-value for up to 8 bots. A handful of bots:
@@ -139,7 +140,7 @@ function gauntletTallies(runs) {
             let t = tallies.get(bot);
             if (!t) {
                 t = {
-                    bot, entry: g[seat], run: run.id, games: 0, decided: 0, score: 0, draws: 0, incomplete: 0, incompleteOutcomes: {},
+                    bot, entry: g[seat], run: run.id, decksSha256: run.decksSha256 ?? null, games: 0, decided: 0, score: 0, draws: 0, incomplete: 0, incompleteOutcomes: {},
                     bySeat: { p1: { decided: 0, score: 0 }, p2: { decided: 0, score: 0 } }, seeds: new Map()
                 };
                 tallies.set(bot, t);
@@ -201,6 +202,7 @@ const sameDecks = (x, y) => !!x && !!y && x.p1 === y.p1 && x.p2 === y.p2;
 
 /** Paired score difference of challengers A and B over the seeds both played with the same deals (see the header). */
 function pairedDifference(A, B) {
+    const filesDiffer = !!A.decksSha256 && !!B.decksSha256 && A.decksSha256 !== B.decksSha256;
     const ds = [];
     let mismatched = 0;
     let incomplete = 0;
@@ -215,7 +217,7 @@ function pairedDifference(A, B) {
             continue;
         }
         const keysDiffer = ['p1', 'p2'].some((s) => a[s].key !== b[s].key);
-        if (!sameDecks(a.p1.decks, b.p1.decks) || !sameDecks(a.p2.decks, b.p2.decks) || keysDiffer) {
+        if (filesDiffer || !sameDecks(a.p1.decks, b.p1.decks) || !sameDecks(a.p2.decks, b.p2.decks) || keysDiffer) {
             mismatched++;
             continue;
         }
@@ -298,7 +300,7 @@ function agreementOf(cmp, pick, refRun) {
     const style = styleGap(cmp.agreement?.style?.[id]);
     return {
         run: id, otherRuns: pick.others, decided: pick.run.decided ?? null, incomplete: pick.run.incomplete ?? null,
-        leftOut: (pick.run.leftOut ?? []).map((x) => x.deck),
+        leftOut: (deck?.left ?? pick.run.leftOut ?? []).map((x) => x.deck),
         deckR: deck?.bt?.strength?.pearson ?? null, deckRCI: deck?.bt?.strength?.pearsonCI95 ?? null,
         deckRho: deck?.bt?.strength?.spearman ?? null, deckP: deck?.bt?.strength?.permutationP?.pearson ?? null,
         deckRDisattenuated: deck?.bt?.disattenuated?.value ?? null, deckN: deck?.bt?.n ?? null,
@@ -383,9 +385,15 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
                 `so decks do not sit on both sides equally often and the reference's 50% is not on the same deals (--games ${2 * P} plays one pass)`);
         }
     }
-    const leftSets = bots.filter((b) => b.agreement).map((b) => [b.bot, [...b.agreement.leftOut].sort().join(', ')]);
-    if (new Set(leftSets.map(([, l]) => l)).size > 1) {
-        warnings.push(`agreement measures use different deck sets (decks compare.js left out: ${leftSets.map(([b, l]) => `${b}: ${l || 'none'}`).join('; ')})`);
+    const withAgreement = bots.filter((b) => b.agreement);
+    const common = withAgreement.length ? withAgreement.map((b) => new Set(b.agreement.leftOut)).reduce((x, y) => new Set([...x].filter((d) => y.has(d)))) : new Set();
+    const extra = withAgreement.map((b) => [b.bot, b.agreement.leftOut.filter((d) => !common.has(d)).sort()]).filter(([, l]) => l.length);
+    if (extra.length) {
+        warnings.push(`agreement measures use different deck sets (decks outside a bot's deck correlation that other bots keep: ${extra.map(([b, l]) => `${b}: ${l.join(', ')}`).join('; ')})`);
+    }
+    const files = [...(cmp?.deckFile?.sha256 ? [['compare.json', cmp.deckFile.sha256]] : []), ...gauntlets.filter((g) => g.decksSha256).map((g) => [g.id, g.decksSha256])];
+    if (new Set(files.map(([, h]) => h)).size > 1) {
+        warnings.push(`deck files differ (sha256 ${files.map(([w, h]) => `${w} ${h.slice(0, 12)}`).join(', ')}): skill and agreement may not be on the same card lists, and gauntlets from different files do not pair`);
     }
     bots.sort((p, q) => (q.skill?.winRate ?? -1) - (p.skill?.winRate ?? -1) || p.bot.localeCompare(q.bot));
     const rate = (t) => (t.decided ? t.score / t.decided : -1);
