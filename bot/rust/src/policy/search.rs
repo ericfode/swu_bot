@@ -151,7 +151,8 @@ impl Policy for Search {
                     break;
                 }
                 let begin = sim.sim(SimOp::Begin(Some(deal)));
-                if begin.error.is_some() {
+                // a slow begin can use up the budget: then no act either
+                if begin.error.is_some() || Instant::now() >= deadline {
                     break;
                 }
                 let split = if req.actions[i].kind == "distribute" { self.g.distribution(req, i) } else { None };
