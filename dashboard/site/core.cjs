@@ -98,7 +98,8 @@
     // ratings: meta/ratings.json (or null). Rows are ranked by that rating; the running Elo stays as "form" (its
     // history draws the chart, `trend` is its change over the last 30 games).
     function computeLeague(runs, meta, ratings) {
-        const K = 24, rating = {}, stats = {}, history = {}, h2h = {};
+        // bot-keyed maps have no prototype, so a bot named constructor or __proto__ is an ordinary key
+        const K = 24, rating = Object.create(null), stats = Object.create(null), history = Object.create(null), h2h = Object.create(null);
         const bot = b => {
             if (!(b in rating)) { rating[b] = 1500; stats[b] = { games: 0, wins: 0, losses: 0, draws: 0, faults: 0, rounds: 0, firstSeen: null }; history[b] = []; }
             return stats[b];
@@ -158,7 +159,7 @@
     // falls back to a bot's self-reported botStats {windows, ms} (search bots), else nothing.
     function computePerf(runs, meta, ladderBots) {
         const metaBy = Object.fromEntries((meta || []).map(m => [m.id, m]));
-        const per = {};
+        const per = Object.create(null);
         const add = (bot, s, source) => { const b = (per[bot] ||= { id: bot, games: 0, n: 0, ms: 0, p50s: [], p95s: [], max: 0, sources: new Set(), samples: [] });
             b.games++; b.n += s.n; b.ms += s.ms; if (s.p50 != null) b.p50s.push(s.p50); if (s.p95 != null) b.p95s.push(s.p95); b.max = Math.max(b.max, s.max ?? 0); b.sources.add(source); b.samples.push(+(s.ms / s.n).toFixed(3)); };
         for (const r of runs) for (const g of r.games) {
