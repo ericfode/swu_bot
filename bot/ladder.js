@@ -17,8 +17,11 @@
  * --key to play the same games again (two runs with the same --key and --seed get the same decks). --key none: seed alone.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
  * --decks <file> plays fixed deck lists instead of random decks (bot/decklists.js: format, checks and how decks are
- * dealt to seeds). Each index entry then carries decks {p1, p2} (the deck names). With a mirror
- * (--bots c-clock#a,c-clock#b) the bots cancel out and the ratings that matter are the decks'.
+ * dealt). Seed --seed + s plays deck pair s mod P (P = n(n-1)/2 pairs, in round-robin rounds), so the deal depends on
+ * the seed minus --seed, not on the seed alone; both games of a seed give each bot the same deck. Give each bot pair a
+ * whole number of passes (--games a multiple of 2P) or some deck pairs play more than others (a warning says so).
+ * Each index entry then carries decks {p1, p2} (the deck names). With a mirror (--bots c-clock#a,c-clock#b) the bots
+ * cancel out and the ratings that matter are the decks'.
  */
 const fs = require('fs');
 const os = require('os');
@@ -29,11 +32,18 @@ const { describeBot } = require('./players');
 const { runKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
-const { loadDecks, dealDecks } = require('./decklists');
+const { loadDecks, dealDecks, deckPairs } = require('./decklists');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
-    return i > 0 ? process.argv[i + 1] : dflt;
+    if (i < 0) {
+        return dflt;
+    }
+    const v = process.argv[i + 1];
+    if (v === undefined || v.startsWith('--')) {
+        throw new Error(`--${name} needs a value`);
+    }
+    return v;
 }
 
 function engineRev() {
@@ -78,13 +88,20 @@ async function main() {
     const out = path.join(path.resolve(arg('out', defaultOut())), id);
     const record = process.argv.includes('--record');
     const key = runKey(arg('key', null));
+    const decksFile = arg('decks', null);
+    // the engine loads in this thread only to check the deck lists before any game starts (and before <out> is made)
+    const deckSet = decksFile ? loadDecks(decksFile, new (require('./env').Env)()) : null;
+    const decks = deckSet?.decks ?? null;
+    if (decks) {
+        const seeds = (perPair + (perPair % 2)) / 2;
+        const P = deckPairs(decks.length).length;
+        if (seeds % P !== 0) {
+            console.warn(`warning: ${seeds} seeds per bot pair is not a whole number of passes over the ${P} deck pairs, so some deck pairs will play more than others (--games ${2 * P} or a multiple of it plays every pair equally often)`);
+        }
+    }
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
-    const decksFile = arg('decks', null);
-    // the engine loads in this thread only to check the deck lists before any game starts
-    const deckSet = decksFile ? loadDecks(decksFile, new (require('./env').Env)()) : null;
-    const decks = deckSet?.decks ?? null;
     const plain = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     const schedule = decks ? dealDecks(plain, decks.length, firstSeed) : plain;
     const config = {

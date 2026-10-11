@@ -25,7 +25,7 @@ const { UnitTestCardDataGetter } = b('utils/cardData/UnitTestCardDataGetter.js')
 const { getUserWithDefaultsSet } = b('Settings.js');
 const { setCodeToString } = b('Util.js');
 const { UndoMode } = b('game/core/snapshot/SnapshotManager.js');
-const { cards: implementedCards } = b('game/cards/Index.js');
+const { cards: implementedCards, overrideNotImplementedCards } = b('game/cards/Index.js');
 const { Card } = b('game/core/card/Card.js');
 
 const scheduler = {
@@ -57,9 +57,13 @@ class Env {
         this._index = null;
     }
 
-    /** forceteki's rule (Card.isImplemented): the card has a class, or no ability text beyond keywords. */
+    /**
+     * forceteki's rule (Card.isImplemented, DeckValidator): the class does not mark the card as not implemented, and the
+     * card has a class or no ability text beyond keywords.
+     */
     isImplemented(c) {
-        return implementedCards.has(c.id) || implementedCards.has(c.internalName) || !Card.checkHasNonKeywordAbilityText(c);
+        return !overrideNotImplementedCards.has(c.id) &&
+            (implementedCards.has(c.id) || implementedCards.has(c.internalName) || !Card.checkHasNonKeywordAbilityText(c));
     }
 
     /** Index of usable cards, built lazily by reading every card json once. */

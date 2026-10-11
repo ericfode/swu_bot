@@ -71,8 +71,13 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
 - `--vs a,b,c` turns the ladder into a gauntlet: each `--bots` entry plays each `--vs` entry on the same seeds (not each
   other), which is what a parameter sweep needs: `node bot/ladder.js --bots ismcts-b0,ismcts-b1,ismcts-b4 --vs rush,heuristic --games 8`.
 - `--decks <file>` plays fixed deck lists instead of random decks (`decklists.js`; real tournament decks in `decks/`, see
-  `decks/README.md`). Seed s plays deck pair `s mod pairs`; each bot keeps its deck when the seats swap, and every second
-  pass over the pairs swaps the decks between the bots. Index entries then carry `decks: {p1, p2}`. A mirror
-  (`--bots c-clock#a,c-clock#b`) cancels the bots out, so it rates the decks: `analysis/realdeck/compare.js` compares
-  that with human results.
+  `decks/README.md`). Seed `--seed + s` plays deck pair `s mod P` (P = n(n-1)/2), so the deal depends on the seed minus
+  `--seed`, not on the seed alone. The pairs come in round-robin rounds, so a run cut after whole rounds has given every
+  deck the same number of games (when n is odd, a deck that sat out a round has one seed less: 2 games less per bot
+  pair). Each bot keeps its deck when the seats swap; both games of a seed use the same engine seed, but the seats get
+  the same shuffles only when both decks have the same size. In one pass over the pairs each bot holds each deck about half the time, and the next pass
+  gives each bot the other deck of every pair. Give each bot pair whole passes (`--games` a multiple of 2P, e.g. 702 or
+  7020 for 27 decks), otherwise some pairs play more than others (the ladder warns). Index entries then carry
+  `decks: {p1, p2}`. A mirror (`--bots c-clock#a,c-clock#b`) cancels the bots out, so it rates the decks:
+  `analysis/realdeck/compare.js` compares that with human results.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
