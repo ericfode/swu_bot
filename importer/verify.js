@@ -18,6 +18,10 @@ const { readFrames } = require('./karabast');
 
 const readJsonl = (f) => fs.readFileSync(f, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
 
+// Board fields the referee adds that no capture carries (spec/MIGRATION.md): card ids, epic, captured cards.
+const REFEREE_ONLY = new Set(['id', 'epic', 'cap']);
+const capturable = (x) => JSON.parse(JSON.stringify(x, (k, v) => (REFEREE_ONLY.has(k) ? undefined : v)));
+
 function normUnits(units) {
     return units.map((u) => ({ ...u, u: u.u ? [...u.u].sort((a, b) => `${a.n}${a.s}`.localeCompare(`${b.n}${b.s}`)) : undefined }));
 }
@@ -34,7 +38,7 @@ function diffSnapshot(truth, got, hiddenSeats) {
     cmp('phase', truth.phase, got.phase);
     cmp('initiative', truth.initiative, got.initiative);
     for (const seat of ['p1', 'p2']) {
-        const t = truth.players[seat];
+        const t = capturable(truth.players[seat]);
         const g = got.players[seat];
         for (const k of ['base', 'leader', 'res', 'deck', 'discard']) {
             cmp(`${seat}.${k}`, t[k], g[k]);

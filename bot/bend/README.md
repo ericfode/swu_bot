@@ -19,7 +19,7 @@ Measured on 60 paired games vs `rush`: `bend-jev` won 34 where `bend` won 40; `b
 cd forceteki && npm run get-cards && cd ..             # card data, once
 BEND2=~/bend/bend2/main.ts bot/bend/build.sh           # card tables + native binary bot/bend/swu-bend
 node bot/ladder.js --bots bend,rush --games 20         # play
-node bot/stdio-smoke.js -- bot/bend/run.sh             # protocol check against a fake game
+node bot/tournament.js --bots bend,node-random --games 2 --out replays/bend-check   # protocol check
 ```
 
 `build.sh` needs node, bun and clang. `run.sh` (bash) execs the binary with its stdin fed through `cat`: Bend reads
@@ -56,7 +56,7 @@ Everything is scored in tenths of a point of enemy base damage, around a zero po
   stats and keywords, my hand with card text); the question is a `choice` over the bot's top four candidates, plus a
   `noul` "will I win?" for an outlook. Jev cannot pick a move the bot thinks is clearly bad (score below `Z - 20`).
 
-Thoughts go to stderr, one line per decision, e.g. `[bend] r4 #68 window: play Card_232 (+164, 9 options) | jev m1/4 win 62%`.
+Thoughts go to stderr, one line per decision, e.g. `[bend] r4 #68 window: play c232 (+164, 9 options) | jev m1/4 win 62%`.
 
 ## Files
 

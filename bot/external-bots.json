@@ -1,5 +1,5 @@
 {
-    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
+    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore", "lang": "python" },
     "jev": { "cmd": "python3", "args": ["bot/jev/jev_bot.py"], "timeoutMs": 120000, "startTimeoutMs": 60000, "lang": "python" },
     "jev-look": { "cmd": "python3", "args": ["bot/jev/jev_bot.py", "--look"], "adapter": "bot/jev/look.js", "maxImagine": 3,
                   "timeoutMs": 180000, "startTimeoutMs": 60000, "lang": "python" },
@@ -21,6 +21,8 @@
     "rust-learned-bc": { "cmd": "bot/rust-learned/target/release/swu-learned", "lang": "rust", "args": ["play", "--model", "bot/rust-learned/models/bc-g2.safetensors", "--prior", "100", "--prior-all", "--name", "rust-learned-bc"], "stderr": "ignore" },
     "c-clock": { "cmd": "bot/c/swu-c", "args": [], "lang": "c" },
     "py-clock": { "cmd": "python3", "args": ["bot/python/swu_clock.py"], "lang": "python" },
+    "node-random": { "cmd": "node", "args": ["bot/examples/random-bot.js", "node-random"], "lang": "js" },
+    "node-search": { "cmd": "node", "args": ["bot/examples/search-bot.js", "node-search"], "lang": "js" },
     "jepa": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--name", "jepa"], "stderr": "ignore", "lang": "python" },
     "jepa-h1": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--name", "jepa-h1"], "stderr": "ignore", "lang": "python" },
     "jepa-pure": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v2p.safetensors", "--name", "jepa-pure"], "stderr": "ignore", "lang": "python" }
