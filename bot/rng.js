@@ -49,4 +49,7 @@ function gameStreams(seed, key = null) {
     };
 }
 
-module.exports = { seededRng, keyedRng, gameStreams };
+/** The key of one game of a run: publishing it after the game reveals nothing about the run's other games. */
+const gameKey = (key, seed) => hmac(key, `game:${seed}`);
+
+module.exports = { seededRng, keyedRng, gameStreams, gameKey };

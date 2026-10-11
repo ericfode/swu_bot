@@ -3,7 +3,8 @@
 // games. Needs the engine build and card data. Prints one line per check; exits 1 if any fails.
 const crypto = require('crypto');
 const path = require('path');
-const { Env, seededRng } = require('./env');
+const { Env } = require('./env');
+const { seededRng } = require('./rng');
 const { playGame } = require('./match');
 const { snapshot } = require('./view');
 const { StdioClient, answer } = require('./stdio');
@@ -12,14 +13,9 @@ const randomBot = require('./examples/random-bot');
 const searchBot = require('./examples/search-bot');
 
 const hash = (r) => crypto.createHash('sha1').update(r.events.map((e) => JSON.stringify(e)).join('\n')).digest('hex');
-// engine rollbacks do not rewind the id counter, so cards created later (tokens) get other ids; play is the same
-const canon = (xs) => {
-    const ids = new Map();
-    return xs.map((x) => JSON.stringify(x).replace(/"Card_\d+"/g, (id) => (ids.has(id) || ids.set(id, `"#${ids.size}"`), ids.get(id))));
-};
-const sameUpToIds = (a, b) => a.length === b.length && canon(a).every((x, i) => x === canon(b)[i]);
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const pickRandom = (m, rng) => ({ t: 'act', i: Math.floor(rng() * m.actions.length) });
-const program = (name, file, opts = {}) => new StdioClient(name, { cmd: process.execPath, args: [path.join(__dirname, 'examples', file), name], ...opts });
+const program = (name, file) => new StdioClient(name, { cmd: process.execPath, args: [path.join(__dirname, 'examples', file), name] });
 const inline = (name, src, opts = {}) => new StdioClient(name, { cmd: process.execPath, args: ['-e', src], ...opts });
 
 /** Wraps a client and keeps every message it is sent. */
@@ -81,7 +77,7 @@ async function check(name, fn) {
                 let r;
                 do {
                     r = await sim({ t: 'sim', op: 'begin' });
-                } while (!r.error); // sims answer 'out of time' once the budget is spent
+                } while (!r.error); // past the budget a sim gets no reply, so this loop cannot hold up the referee
                 return { t: 'act', i: 0 };
             }
         };
@@ -104,10 +100,18 @@ async function check(name, fn) {
 
     let searched = null;
     await check('simulations leave no trace in the real game', async () => {
-        searched = await play(4, [searchBot.create(), createRandomBot('r')]);
-        const picks = searched.events.filter((e) => e.pid === 'p1').map((e) => e.action.i);
-        const replayed = await play(4, [{ name: 'js-search', decide: (m) => ({ t: 'act', i: picks[m.seq - 1] }) }, createRandomBot('r')]);
-        return searched.timing.p1.n < 50 ? 'too few decisions' : !sameUpToIds(searched.events, replayed.events) && 'different events';
+        for (const seed of [4, 9, 12]) {
+            const r = await play(seed, [searchBot.create(), searchBot.create('js-search-2')]);
+            searched ??= r;
+            // the same moves without simulations
+            const picks = { p1: [], p2: [] };
+            r.events.filter((e) => e.t === 'step' && e.pid).forEach((e) => picks[e.pid].push(e.action.i));
+            const blind = (name, seat) => ({ name, decide: (m) => ({ t: 'act', i: picks[seat][m.seq - 1] }) });
+            const replayed = await play(seed, [blind('js-search', 'p1'), blind('js-search-2', 'p2')]);
+            if (r.outcome !== 'won' || r.timing.p1.n < 50 || hash(r) !== hash(replayed)) {
+                return `seed ${seed}: ${r.outcome} ${r.error ?? ''}, ${r.timing.p1.n} decisions, ${hash(r) === hash(replayed) ? 'same' : 'different'} events`;
+            }
+        }
     });
 
     await check('a numbered deal repeats its cards and outcomes, a new deal does not', async () => {
@@ -122,7 +126,7 @@ async function check(name, fn) {
                         states.push(r.state);
                         r = await sim({ t: 'sim', op: 'act', i: (r.actions.find((a) => /^pass$/i.test(a.label)) ?? r.actions[0]).i });
                     }
-                    return canon(states).join('\n');
+                    return JSON.stringify(states);
                 };
                 runs ??= m.sim ? [await run(3), await run(3), await run(), await run()] : null;
                 return { t: 'act', i: 0 };
@@ -147,11 +151,11 @@ async function check(name, fn) {
                 if (actions.length !== s.legal || a?.label !== s.action.label) {
                     return `step ${s.n}: action ${s.action.i} is ${a?.label}, recorded ${s.action.label}`;
                 }
-                eg.apply(pid, s.action.split ? { ...a, split: s.action.split } : a);
+                eg.apply(pid, s.action.split ? { ...a, split: s.action.split.map((e) => ({ id: eg.uuidOf(e.id), amount: e.amount })) } : a);
             }
             boards.push(snapshot(eg));
         }
-        return !sameUpToIds(boards, recorded.map((s) => s.state)) && 'boards differ';
+        return !sameJson(boards, recorded.map((s) => s.state)) && 'boards differ';
     });
 
     await check('v1 bots get v1 messages and may send distribution', async () => {
@@ -229,10 +233,35 @@ async function check(name, fn) {
             const r = await play(8, [bot, opp]);
             bot.close?.();
             const over = opp.seen.find((m) => m.t === 'over');
-            if (r.outcome !== 'ERROR' || !want.test(r.error) || over?.outcome !== 'ERROR') {
-                return `${bot.name}: ${r.outcome} ${r.error} (opponent over: ${over?.outcome})`;
+            if (r.outcome !== 'ERROR' || !want.test(r.error) || r.by !== 'p1' || r.winner !== 'p2' || over?.winner !== 'p2') {
+                return `${bot.name}: ${r.outcome} ${r.error} by ${r.by}, winner ${r.winner} (opponent heard ${over?.winner})`;
             }
         }
+        // a native bot's mistakes are its own too, not the engine's
+        for (const [choose, want] of [[() => ({ kind: 'button', label: 'nope' }), /^p2 cheat: chose an action that is not legal/], [() => {
+            throw new Error('bug');
+        }, /^p2 cheat: bug/]]) {
+            const r = await play(8, [createRandomBot('r'), { name: 'cheat', choose }]);
+            if (r.by !== 'p2' || r.winner !== 'p1' || !want.test(r.error)) {
+                return `native: ${r.outcome} ${r.error} by ${r.by}`;
+            }
+        }
+    });
+
+    await check('limits: none means no clock, and hello is a copy', async () => {
+        const seen = [];
+        const vandal = {
+            name: 'vandal',
+            hello: (m) => {
+                seen.push(m.ms);
+                m.deck.deck.length = 0; // must not reach the game
+                return { t: 'ready', v: 2 };
+            },
+            decide: (m) => (seen.push(m.ms), { t: 'act', i: 0 })
+        };
+        const [r, plain] = [await play(10, [vandal, createRandomBot('r')], { limits: { hello: null, decide: Infinity }, maxSteps: 30 }),
+            await play(10, [{ name: 'vandal', decide: () => ({ t: 'act', i: 0 }) }, createRandomBot('r')], { maxSteps: 30 })];
+        return seen.some((ms) => ms !== null) ? `ms ${seen.slice(0, 3)}` : !sameJson(r.events[0].decks, plain.events[0].decks) && 'hello changed the decks';
     });
 
     process.exit(results.every(Boolean) ? 0 : 1);

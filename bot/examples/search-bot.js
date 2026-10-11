@@ -1,6 +1,6 @@
 'use strict';
-// One-ply search through simulations (spec/protocol.md#sim): at each action window, try every action on a private
-// copy of the game, all on the same deal of the hidden cards, play on until my next action window (the opponent
+// One-ply search through simulations (spec/protocol.md#sim): at each action window, try up to `width` actions on a
+// private copy of the game, all on the same deal of the hidden cards, play on until my next action window (the opponent
 // passes when it can), score the board, keep the best. Runs in process or as a program, like random-bot.js:  node bot/examples/search-bot.js
 const { seededRng } = require('../rng');
 const { serve } = require('../stdio');
@@ -15,7 +15,7 @@ function score(state, you) {
 }
 
 function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
-    let rng = seededRng(name);
+    let rng = null; // seeded at hello
     const pick = (r, you) => {
         const pass = r.actions.find((a) => a.kind === 'button' && /^pass$/i.test(a.label));
         return r.actor !== you && pass ? pass.i : Math.floor(rng() * r.actions.length);
@@ -37,11 +37,8 @@ function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
                 for (let k = 0; k < horizon && !r.error && !r.over && !(r.actor === msg.you && r.prompt.actionWindow); k++) {
                     r = await sim({ t: 'sim', op: 'act', i: pick(r, msg.you) });
                 }
-                // an error reply has already ended the simulation
                 const s = r.error ? -Infinity : r.over ? (r.over.winner === msg.you ? 1e6 : -1e6) : score(r.state, msg.you);
-                if (!r.error) {
-                    await sim({ t: 'sim', op: 'end' });
-                }
+                await sim({ t: 'sim', op: 'end' }); // after an error there is nothing to end, which is fine
                 if (best === null || s > best.s) {
                     best = { i: a.i, s };
                 }
@@ -51,7 +48,7 @@ function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
     };
 }
 
-module.exports = { create, score };
+module.exports = { create };
 if (require.main === module) {
     serve(create(process.argv[2]));
 }

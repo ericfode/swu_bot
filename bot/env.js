@@ -142,6 +142,11 @@ class EnvGame {
             userTimeoutDisconnect: () => undefined,
             undoMode: undo ? UndoMode.Free : UndoMode.Disabled
         }, { router: makeRouter(this.sink) });
+        if (undo) {
+            // with undo on, an unpayable cost would offer an 'Undo' that rolls the game back; keep the rules of undo off
+            this.game.costPaymentRecoveryPolicy = { allowRollback: () => false, rollbackRequiresApproval: () => false, allowAbandon: () => true };
+        }
+        this.idx = new Map();
         this.game.setRandomSeed(String(seed));
         this.game.selectDeck(this.ids[0], new Deck(deck1, env.cardDataGetter));
         this.game.selectDeck(this.ids[1], new Deck(deck2, env.cardDataGetter));
@@ -168,6 +173,26 @@ class EnvGame {
 
     pidOf(seat) {
         return this.ids[Number(seat.slice(1)) - 1];
+    }
+
+    /**
+     * Stable id of a card for bots and replays: 'c' + its index in the engine's list of all cards (deck-list order,
+     * then tokens in creation order). Engine uuids drift across rollbacks, since the counter that names new objects is
+     * not rolled back; the list is game state, so a rollback restores it.
+     */
+    cardId(uuid) {
+        const all = this.game.state.allCards;
+        let i = this.idx.get(uuid);
+        if (all[i] !== uuid) {
+            i = all.indexOf(uuid);
+            this.idx.set(uuid, i);
+        }
+        return i < 0 ? uuid : `c${i}`;
+    }
+
+    /** Engine uuid of a card id (an unknown id comes back unchanged). */
+    uuidOf(id) {
+        return (typeof id === 'string' && /^c\d+$/.test(id) && this.game.state.allCards[Number(id.slice(1))]) || id;
     }
 
     /** Winning seat, 'draw', or null while the game is on. */
@@ -277,7 +302,7 @@ class EnvGame {
 
     /** Prompt uuids change across a rollback, so a stale action object is rejected. Find the live equivalent of `a`. */
     refetch(pid, a) {
-        return this.legalActions(pid).find((x) => x.kind === a.kind && x.label === a.label && x.cardUuid === a.cardUuid && x.arg === a.arg) ?? null;
+        return this.legalActions(pid).find((x) => sameAction(x, a)) ?? null;
     }
 
     /**
@@ -303,6 +328,9 @@ class EnvGame {
         return split;
     }
 }
+
+/** The same action, maybe from another prompt (prompt uuids change across a rollback). */
+const sameAction = (a, b) => a.kind === b.kind && a.label === b.label && a.cardUuid === b.cardUuid && a.arg === b.arg;
 
 /**
  * Why `split` is not a legal answer to distribute action `a`, or null if it is: listed targets only, each once,
@@ -370,7 +398,7 @@ function randomSplit(a, rng) {
         const idx = open[Math.floor(rng() * open.length)];
         given.set(idx, given.get(idx) + 1);
     }
-    return chosen.map((idx) => ({ id: targets[idx], amount: given.get(idx) })).filter((e) => e.amount > 0);
+    return chosen.map((idx) => ({ id: targets[idx], amount: given.get(idx) }));
 }
 
-module.exports = { Env, EnvGame, EngineError, seededRng, splitError };
+module.exports = { Env, EnvGame, EngineError, seededRng, sameAction, splitError, randomSplit };

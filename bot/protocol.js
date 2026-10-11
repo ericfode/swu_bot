@@ -7,19 +7,24 @@
  *   NativeSeat  a JS bot with engine access, { name, choose({ game, pid, actions, rng }), needsUndo? }.
  *
  * Both have hello(), decide(eg, pid, actions, rng) -> action, reveal(cards), over(result) and `times` (ms per decision).
+ * Simulations run on a Shadow, a second engine that follows the real game, so the real game is never rolled back.
  */
 
 const path = require('path');
-const { splitError } = require('./env');
-const { view, promptView, actionView } = require('./view');
+const { splitError, randomSplit } = require('./env');
+const { view, promptView, actionView, actionKey } = require('./view');
 const { answer } = require('./stdio');
 const { DeckZoneDestination } = require(path.join(__dirname, '..', 'forceteki', 'build/server', 'game/core/Constants.js'));
 
 const PROTOCOL = 'swu-bot-stdio';
+const VERSIONS = [1, 2];
 const LIMITS = { hello: 30000, decide: 10000, over: 10000 };
+const MAX_MS = 2 ** 31 - 1; // a longer timer would fire at once
+const OPS = new Set(['begin', 'act', 'end']);
 const LATE = Symbol('late');
+const NEVER = new Promise(() => undefined);
 
-/** A failure the named bot caused: the game ends with outcome ERROR, `by` that seat, and the bot gets no `over`. */
+/** A failure the named bot caused: the game ends with outcome ERROR, `by` that seat, and the other seat wins. */
 class BotError extends Error {
     constructor(seat, name, why) {
         super(`${seat} ${name}: ${why}`);
@@ -27,10 +32,35 @@ class BotError extends Error {
     }
 }
 
-const same = (a, b) => a.kind === b.kind && a.label === b.label && a.cardUuid === b.cardUuid && a.arg === b.arg;
 const short = (x) => JSON.stringify(x)?.slice(0, 160);
+const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 const now = () => process.hrtime.bigint();
 const msSince = (t) => Number(now() - t) / 1e6;
+/** A split as bots send it (card ids) in engine terms (uuids); anything malformed is left for splitError. */
+const toEngine = (eg, split) => (Array.isArray(split) ? split.map((e) => ({ id: eg.uuidOf(e?.id), amount: e?.amount })) : split);
+
+/** Distribute action `a` with an engine split, checked; any other action, or no split, as it is. */
+function withSplit(a, split) {
+    if (a.kind !== 'distribute' || split === undefined) {
+        return a;
+    }
+    const why = splitError(a, split);
+    if (why) {
+        throw new Error(`bad split (${why})`);
+    }
+    return { ...a, split };
+}
+
+/** A time limit in ms, or null for none (also for limits too long for a timer). */
+function budget(ms) {
+    if (ms === null || ms >= MAX_MS) {
+        return null;
+    }
+    if (!(ms > 0)) {
+        throw new Error(`bad time limit ${ms}`);
+    }
+    return Math.ceil(ms);
+}
 
 class NativeSeat {
     constructor(bot, seat) {
@@ -42,11 +72,26 @@ class NativeSeat {
 
     async hello() {}
 
-    decide(eg, pid, actions, rng) {
+    /** choose may return a promise. A throw, an action that is not legal or a bad split is the bot's failure. */
+    async decide(eg, pid, actions, rng) {
         const t = now();
-        const action = this.bot.choose({ game: eg, pid, actions, rng });
+        let action;
+        try {
+            action = await this.bot.choose({ game: eg, pid, actions, rng });
+        } catch (e) {
+            throw new BotError(this.seat, this.bot.name, firstLine(e));
+        }
         this.times.push(msSince(t));
-        return action;
+        try {
+            // the live action: after the bot's own rollbacks, prompt uuids in `actions` (and maybe in its answer) are stale
+            const live = action ? eg.refetch(pid, action) : null;
+            if (!live) {
+                throw new Error(`chose an action that is not legal: ${short(action?.label)}`);
+            }
+            return withSplit(live, action.split);
+        } catch (e) {
+            throw new BotError(this.seat, this.bot.name, e.message);
+        }
     }
 
     reveal() {}
@@ -55,19 +100,25 @@ class NativeSeat {
 }
 
 class ClientSeat {
-    /** game: { players, decks: { p1, p2 }, botSeed, deals(label) -> rng, limits } */
-    constructor(client, seat, game) {
+    /**
+     * setup: { players, decks: { p1, p2 }, botSeed, deals(label) -> rng, limits }; match.js sets `shadow` after hello.
+     * Time limits: the referee's LIMITS, then the bot's own timeoutMs/startTimeoutMs, then the game's `limits`.
+     */
+    constructor(client, seat, setup) {
         this.client = client;
         this.seat = seat;
-        this.game = game;
-        this.limits = {
-            ...LIMITS, ...game.limits,
+        this.setup = setup;
+        const limits = {
+            ...LIMITS,
             ...(client.startTimeoutMs ? { hello: client.startTimeoutMs } : {}),
-            ...(client.timeoutMs ? { decide: client.timeoutMs, over: client.timeoutMs } : {})
+            ...(client.timeoutMs ? { decide: client.timeoutMs, over: client.timeoutMs } : {}),
+            ...setup.limits
         };
+        this.limits = Object.fromEntries(Object.entries(limits).map(([k, v]) => [k, budget(v)]));
+        this.splits = setup.deals('split'); // random splits for a client that sends none
+        this.shadow = null;
         this.v = 1;
-        this.needsUndo = false;
-        this.joined = false;
+        this.wantsSims = false;
         this.seq = 0;
         this.times = [];
         this.revealed = [];
@@ -83,19 +134,19 @@ class ClientSeat {
     async call(msg, sim) {
         const start = Date.now();
         let timer;
-        const late = new Promise((resolve) => {
+        const late = msg.ms === null ? NEVER : new Promise((resolve) => {
             timer = setTimeout(() => resolve(LATE), msg.ms);
         });
         let reply;
         try {
             reply = await Promise.race([answer(this.client, msg, sim), late]);
         } catch (e) {
-            this.fail(e?.message ?? String(e));
+            this.fail(firstLine(e));
         } finally {
             clearTimeout(timer);
         }
         // the clock also catches an in-process client that blocked the event loop past its budget
-        if (reply === LATE || Date.now() - start > msg.ms) {
+        if (reply === LATE || (msg.ms !== null && Date.now() - start > msg.ms)) {
             this.fail(`no reply to '${msg.t}' within ${msg.ms} ms`);
         }
         if (reply?.t === 'error') {
@@ -105,21 +156,22 @@ class ClientSeat {
     }
 
     async hello() {
-        const { players, decks, botSeed } = this.game;
-        this.joined = true;
-        // hello is the same in every version (v: 1), so any bot can read it; the bot picks the version in ready
-        const r = await this.call({
-            t: 'hello', protocol: PROTOCOL, v: 1, versions: [1, 2], bot: this.client.name, you: this.seat, seed: botSeed,
+        const { players, decks, botSeed } = this.setup;
+        // the same in every version (v: 1), so any bot can read it; the bot picks the version in ready. A copy, so an
+        // in-process client cannot change the deck lists the game is built from.
+        const r = await this.call(JSON.parse(JSON.stringify({
+            t: 'hello', protocol: PROTOCOL, v: 1, versions: VERSIONS, bot: this.client.name, you: this.seat, seed: botSeed,
             players, deck: decks[this.seat], opponent: decks[this.seat === 'p1' ? 'p2' : 'p1'], ms: this.limits.hello
-        });
+        })));
         if (r?.t !== 'ready') {
             this.fail(`expected ready, got ${short(r)}`);
         }
-        if (r.v != null && r.v !== 1 && r.v !== 2) {
-            this.fail(`speaks protocol v${r.v}; the referee speaks 1 and 2`);
+        const v = r.v ?? 1;
+        if (!VERSIONS.includes(v)) {
+            this.fail(`speaks protocol v${short(v)}; the referee speaks ${VERSIONS.join(' and ')}`);
         }
-        this.v = r.v ?? 1;
-        this.needsUndo = this.v === 2 && r.sim === true;
+        this.v = v;
+        this.wantsSims = v === 2 && r.sim === true;
     }
 
     reveal(cards) {
@@ -129,10 +181,12 @@ class ClientSeat {
     async decide(eg, pid, actions) {
         const ms = this.limits.decide;
         const seq = ++this.seq;
-        const sim = this.needsUndo && eg.isActionWindow(pid) ? simulator(eg, pid, (deal) => this.game.deals(`${seq}:${deal}`), Date.now() + ms) : null;
+        // the copy catches up with the real game before the clock starts
+        const copy = this.wantsSims && eg.isActionWindow(pid) ? await this.shadow.sync(eg) : null;
+        const sim = copy ? simulator(this.shadow, pid, (deal) => this.setup.deals(`${seq}:${deal}`), ms === null ? null : Date.now() + ms) : null;
         const msg = {
             t: 'decide', seq, you: this.seat, sim: !!sim, ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
-            actions: actions.map((a, i) => actionView(eg, a, i)), revealed: this.revealed.splice(0)
+            actions: actions.map((a, i) => actionView(eg, a, i, pid)), revealed: this.revealed.splice(0)
         };
         const t = now();
         let r;
@@ -145,28 +199,21 @@ class ClientSeat {
         if (r?.t !== 'act' || !Number.isInteger(r.i) || r.i < 0 || r.i >= actions.length) {
             this.fail(`expected {"t":"act","i":0..${actions.length - 1}}, got ${short(r)}`);
         }
-        let action = actions[r.i];
-        if (sim?.used) {
-            // a rollback renews prompt ids, so take the same action from the restored position
-            const live = eg.legalActions(pid)[r.i];
-            if (!live || !same(live, action)) {
-                throw new Error(`legal actions changed across a simulation at decision ${msg.seq}`);
-            }
-            action = live;
+        const action = actions[r.i];
+        const given = r.split ?? r.distribution; // `distribution` is the v1 name
+        if (action.kind === 'distribute' && given === undefined) {
+            return { ...action, split: randomSplit(action, this.splits) };
         }
-        const split = r.split ?? r.distribution; // `distribution` is the v1 name
-        if (split !== undefined && action.kind === 'distribute') {
-            const why = splitError(action, split);
-            if (why) {
-                this.fail(`bad split (${why}): ${short(split)}`);
-            }
-            action = { ...action, split };
+        try {
+            return withSplit(action, toEngine(eg, given));
+        } catch (e) {
+            this.fail(`${e.message}: ${short(given)}`);
         }
-        return action;
     }
 
     async over({ winner, outcome, round, steps, error, by }) {
-        if (this.v < 2 || !this.joined) {
+        // v1 bots, and bots that never got hello (v stays 1), get no over
+        if (this.v < 2) {
             return;
         }
         const r = await this.call({ t: 'over', you: this.seat, winner, outcome, round, steps, error: error ?? null, by: by ?? null, ms: this.limits.over });
@@ -176,7 +223,79 @@ class ClientSeat {
     }
 }
 
-const noSim = async (req) => ({ t: 'simulated', op: req?.op ?? null, error: 'simulations are off for this decision' });
+const noSim = async (req) => (req?.op === 'end' ? { t: 'simulated', op: 'end' }
+    : { t: 'simulated', op: OPS.has(req?.op) ? req.op : null, error: 'simulations are off for this decision' });
+
+/** Everything that tells two engines apart: the whole board, both deck orders, resources and prompts. */
+const fingerprint = (eg) => JSON.stringify([view(eg), eg.ids.map((id) => {
+    const p = eg.player(id);
+    return [p.drawDeck.map((c) => eg.cardId(c.uuid)), p.resources.map((c) => eg.cardId(c.uuid) + (c.exhausted ? 'x' : '')), eg.promptSignature(id)];
+})]);
+
+/**
+ * A second engine that plays the real game's moves and runs the simulations. A rollback does not restore every
+ * engine detail (the order of simultaneous triggers, some prompt texts, the names of new cards), so the real game is
+ * never rolled back. When the copy no longer matches the real game it is built again from the moves; when even that
+ * fails, simulations are off for the rest of the game.
+ */
+class Shadow {
+    /** setup: the real game's newGame options (seed, deck1, deck2). */
+    constructor(env, setup) {
+        this.env = env;
+        this.setup = setup;
+        this.moves = [];
+        this.eg = null;
+        this.at = 0;
+        this.lost = false;
+    }
+
+    /** A real move { pid, i, legal, key, split }: action i of `legal` (actionKey `key`), split in card ids. */
+    record(move) {
+        this.moves.push(move);
+    }
+
+    /** The copy at the real game's position, or null when simulations are off. */
+    async sync(real) {
+        for (let attempt = 0; attempt < 2 && !this.lost; attempt++) {
+            if (!this.eg) {
+                this.eg = this.env.newGame({ ...this.setup, undo: true });
+                await this.eg.start();
+                this.at = 0;
+            }
+            if (this.follow() && fingerprint(this.eg) === fingerprint(real)) {
+                return this.eg;
+            }
+            this.eg = null;
+        }
+        if (!this.lost) {
+            this.lost = true;
+            console.error(`seed ${this.setup.seed}: simulations are off for the rest of the game (the copy cannot follow it)`);
+        }
+        return null;
+    }
+
+    follow() {
+        try {
+            for (; this.at < this.moves.length; this.at++) {
+                const m = this.moves[this.at];
+                const acts = this.eg.legalActions(m.pid);
+                const a = acts[m.i];
+                if (acts.length !== m.legal || !a || actionKey(this.eg, a) !== m.key) {
+                    return false;
+                }
+                this.eg.apply(m.pid, withSplit(a, toEngine(this.eg, m.split)));
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /** Throw the copy away (after a failed rollback); the next sync builds a new one. */
+    drop() {
+        this.eg = null;
+    }
+}
 
 /**
  * Deal again every card hidden from `pid`: its own deck order, and the opponent's hand, face-down resources and deck,
@@ -201,30 +320,33 @@ function determinize(eg, pid, rng) {
 }
 
 /**
- * The `sim` requests of one decision (spec/protocol.md#sim). Two states: idle and open. The first `begin` bookmarks
- * the real position; `end`, every error and the decision's end return to it. Only `begin` and `act` can fail, and an
- * error reply always leaves the simulation idle. A failed rollback is the referee's fault, so finish() throws it.
- * `deals(label)` is the random stream of one deal: the same `deal` number replays the same cards and random outcomes.
+ * The `sim` requests of one decision (spec/protocol.md#sim), on the shadow's engine. Two states: idle and open. The
+ * first `begin` bookmarks the position; `end`, every error and the decision's end return to it. Only `begin` and `act`
+ * can fail, and an error reply always leaves the simulation idle. Past the deadline, and after the decision, requests
+ * get no reply, so a client looping on them cannot hold up the referee. `deals(label)` is the random stream of one deal.
  */
-function simulator(eg, pid, deals, deadline) {
+function simulator(shadow, pid, deals, deadline) {
+    const eg = shadow.eg;
     const you = eg.seatOf(pid);
     const opp = eg.player(pid).opponent.id;
     let mark = null,
         open = false,
         done = false,
+        broken = false,
         actor = null,
         acts = null,
         rng = null,
-        fresh = 0,
-        broken = null;
+        fresh = 0;
+    const left = () => (deadline === null ? null : Math.max(0, deadline - Date.now()));
 
     const close = () => {
         if (open) {
             open = false;
             try {
                 eg.restore(pid, mark);
-            } catch (e) {
-                broken ??= e;
+            } catch {
+                broken = true;
+                shadow.drop();
             }
         }
     };
@@ -232,9 +354,9 @@ function simulator(eg, pid, deals, deadline) {
     const position = (op) => {
         if (eg.over) {
             acts = null;
-            return { t: 'simulated', op, over: { winner: eg.winner } };
+            return { t: 'simulated', op, ms: left(), over: { winner: eg.winner } };
         }
-        // when both seats have a prompt (regroup resources), yours comes first
+        // when both seats have a prompt (setup and regroup resources), yours comes first
         actor = pid;
         acts = eg.legalActions(pid);
         if (!acts.length) {
@@ -245,18 +367,18 @@ function simulator(eg, pid, deals, deadline) {
             throw new Error('neither player can act');
         }
         return {
-            t: 'simulated', op, actor: eg.seatOf(actor), prompt: promptView(eg, actor), state: view(eg, you),
-            actions: acts.map((a, i) => actionView(eg, a, i))
+            t: 'simulated', op, ms: left(), actor: eg.seatOf(actor), prompt: promptView(eg, actor), state: view(eg, you),
+            actions: acts.map((a, i) => actionView(eg, a, i, actor))
         };
     };
 
     const step = (req) => {
         if (req.op === 'end') {
             close();
-            return { t: 'simulated', op: 'end' };
+            return { t: 'simulated', op: 'end', ms: left() };
         }
-        if (Date.now() > deadline) {
-            throw new Error('out of time for this decision');
+        if (broken) {
+            throw new Error('simulations failed for this decision');
         }
         if (req.op === 'begin') {
             if (req.deal !== undefined && !(Number.isSafeInteger(req.deal) && req.deal >= 0)) {
@@ -280,38 +402,25 @@ function simulator(eg, pid, deals, deadline) {
         if (!a) {
             throw new Error(acts ? `no action ${short(req.i)}` : 'the simulated game is over');
         }
-        const split = a.kind === 'distribute' ? req.split : undefined;
-        const why = split === undefined ? null : splitError(a, split);
-        if (why) {
-            throw new Error(`bad split (${why})`);
-        }
-        eg.apply(actor, split === undefined ? a : { ...a, split }, rng);
+        eg.apply(actor, withSplit(a, toEngine(eg, req.split)), rng);
         return position('act');
     };
 
     return {
-        get used() {
-            return mark !== null;
-        },
-        handle: async (req) => {
-            const op = req?.op ?? null;
-            // a late call (after act, or from a search still running in the background) must not touch the engine
-            if (done) {
-                return { t: 'simulated', op, error: 'this decision is over' };
+        handle(req) {
+            if (done || (deadline !== null && Date.now() > deadline)) {
+                return NEVER;
             }
             try {
-                return step(req ?? {});
+                return Promise.resolve(step(req ?? {}));
             } catch (e) {
                 close();
-                return { t: 'simulated', op, error: String(e?.message ?? e).split('\n')[0] };
+                return Promise.resolve({ t: 'simulated', op: OPS.has(req?.op) ? req.op : null, ms: left(), error: firstLine(e) });
             }
         },
         finish() {
             done = true;
             close();
-            if (broken) {
-                throw broken;
-            }
         }
     };
 }
@@ -326,4 +435,4 @@ function seatFor(bot, seat, game) {
     throw new Error(`${seat}: a bot needs decide() (protocol client) or choose() (native bot)`);
 }
 
-module.exports = { seatFor, ClientSeat, NativeSeat, BotError, determinize, PROTOCOL, LIMITS };
+module.exports = { seatFor, ClientSeat, NativeSeat, Shadow, BotError, determinize, PROTOCOL, VERSIONS, LIMITS };

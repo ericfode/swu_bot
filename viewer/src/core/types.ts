@@ -1,11 +1,11 @@
 export type Seat = 'p1' | 'p2';
 
-/** `id` (engine card id, stable for the game) is in replays written since protocol v2. */
+/** `id` (card id, `c<n>`, stable for the game) is in replays written since protocol v2. */
 export interface CardRef { id?: string; n: string; s: string | null }
 export interface UpgradeRef extends CardRef { t: 0 | 1 }
 export interface UnitRef extends CardRef { p: number; h: number; d: number; x?: 1; sn?: 1; u?: UpgradeRef[]; cap?: CardRef[] }
-export interface LeaderRef extends CardRef { dep: 0 | 1; x: 0 | 1 }
-export interface BaseRef extends CardRef { hp: number; d: number }
+export interface LeaderRef extends CardRef { dep: 0 | 1; x: 0 | 1; epic?: 1 }
+export interface BaseRef extends CardRef { hp: number; d: number; epic?: 1 }
 
 export interface PlayerSnap {
     name: string;
@@ -15,6 +15,9 @@ export interface PlayerSnap {
     handCount?: number;
     force?: 1;
     credits?: number;
+    /** action phase: passed its last action / done for the phase */
+    passed?: 1;
+    out?: 1;
     hand: CardRef[];
     deck: number;
     discard: CardRef[];
@@ -65,6 +68,7 @@ export interface End {
     outcome: string;
     error: string | null;
     by?: Seat | null;
+    key?: string;
 }
 
 export interface Game {
@@ -87,6 +91,7 @@ export interface IndexGame {
     by?: Seat | null;
     ms: number;
     timing?: Record<Seat, Timing>;
+    key?: string;
 }
 
 /** Harness-measured decision times in ms: count, total, median, 95th percentile, max. */
@@ -99,6 +104,7 @@ export interface TournamentIndex {
     bots: string[];
     gamesPerPairing: number;
     games: IndexGame[];
+    /** older indexes: one key for the run (newer ones have games[].key) */
     key?: string | null;
 }
 

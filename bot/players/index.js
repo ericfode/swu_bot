@@ -1,0 +1,208 @@
+'use strict';
+
+/**
+ * Bot registry: a bot name resolves to a fresh bot instance. Shared by tournament.js and ladder.js.
+ *
+ *   random, random-a, ...       uniform random
+ *   rush                        rule-based, no lookahead
+ *   heuristic[-dN]              one-ply rollback search, original ("balanced") evaluation
+ *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
+ *   ismcts[-bB][-hH][-nN][-eP]  known-decklist ISMCTS (players/ismcts.js): belief sharpness B (default 1, 0 = uniform),
+ *                               horizon H exchanges (default 1), N iterations per legal action (default 6).
+ *                               `-e<profile>` scores leaves with an evaluation profile (`-etempo`, `-eaggro`, ...).
+ *                               `-peek` is an UNFAIR control that searches the real hidden cards (no sampling), to
+ *                               measure what hidden information is worth; keep it out of competitive ladders.
+ *
+ *   omni[-dN][-nN][-blind]      UNFAIR reference bot (players/omniscient.js): full-information alpha-beta, depth N windows
+ *                               (default 2), -n node budget per window, -blind hides future draws from its search.
+ *                               Keep it out of competitive ladders.
+ *
+ * `-dN` sets search depth (my next N actions). Anything after `#` is ignored, so the same bot can be entered twice
+ * (`aggro#1,aggro#2`) as a sanity check: the two copies should rate about equal.
+ *
+ * Bot programs (spec/protocol.md) are listed by name in $SWU_EXTERNAL_BOTS or bot/external-bots.json and take
+ * precedence over the built-in names. A program serves game after game until closeBots(); a second copy is started
+ * only when one game needs two. `js-random` and `js-search` are the in-process example clients (bot/examples).
+ */
+const fs = require('fs');
+const path = require('path');
+const { createRandomBot } = require('./random');
+const { createRushBot } = require('./rush');
+const { HeuristicBot } = require('./heuristic');
+const { StdioClient } = require('../stdio');
+const examples = { 'js-random': require('../examples/random-bot').create, 'js-search': require('../examples/search-bot').create };
+const { PROFILES } = require('./profiles');
+const { IsmctsBot } = require('./ismcts');
+const { OmniscientBot } = require('./omniscient');
+
+/** omni-d1-n300-blind -> {depth: 1, budget: 300, blind: true}; null when the name is not an omni name. Plain letter
+ * tags (omni-a, omni-b) only tell copies apart. */
+function parseOmni(kindAndOpts) {
+    const [head, ...parts] = kindAndOpts.split('-');
+    if (head !== 'omni') {
+        return null;
+    }
+    const opts = { depth: 2, blind: false };
+    for (const p of parts) {
+        const m = /^([dn])(\d+)$/.exec(p);
+        if (m) {
+            opts[m[1] === 'd' ? 'depth' : 'budget'] = Number(m[2]);
+        } else if (p === 'blind') {
+            opts.blind = true;
+        } else if (!/^[a-z]+$/.test(p)) {
+            return null;
+        }
+    }
+    return opts;
+}
+
+/** ismcts-b2-h1-n8 -> {beta: 2, horizon: 1, iterPerAction: 8}; null when the name is not an ismcts name. */
+function parseIsmcts(kindAndOpts) {
+    const m = /^ismcts((?:-[bhn][0-9.]+)*)(-e[a-z]+)?(-peek)?$/.exec(kindAndOpts);
+    if (!m) {
+        return null;
+    }
+    const opts = { beta: 1, horizon: 1, iterPerAction: 6, peek: !!m[3] };
+    if (m[2]) {
+        const prof = m[2].slice(2);
+        if (!PROFILES[prof]) {
+            return null;
+        }
+        opts.evalProfile = prof;
+    }
+    for (const [, k, v] of m[1].matchAll(/-([bhn])([0-9.]+)/g)) {
+        opts[{ b: 'beta', h: 'horizon', n: 'iterPerAction' }[k]] = Number(v);
+    }
+    return opts;
+}
+
+// name -> {cmd, args, ...}
+function loadExternalBots() {
+    const file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json');
+    try {
+        return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    } catch (e) {
+        throw new Error(`${file}: ${e.message}`);
+    }
+}
+const externalBots = loadExternalBots();
+const programOf = (name) => (Object.hasOwn(externalBots, name.split('#')[0]) ? externalBots[name.split('#')[0]] : null);
+
+const running = new Map();
+/** The program client for `name` that is not one of `taken` (the bots already seated in this game). */
+function program(name, taken) {
+    const pool = running.get(name) ?? [];
+    running.set(name, pool);
+    let c = pool.find((x) => !taken.includes(x));
+    if (!c) {
+        const spec = programOf(name);
+        // an entry may name its own bot class, built as new Class(name, entry) (bot/jev/look.js)
+        const Client = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : StdioClient;
+        c = new Client(name, spec);
+        pool.push(c);
+    }
+    return c;
+}
+
+/** Ends every bot program started by makeBot. */
+function closeBots() {
+    [...running.values()].flat().forEach((c) => c.close());
+    running.clear();
+}
+
+function parseName(name) {
+    const base = name.split('#')[0];
+    const d = /-d(\d+)$/.exec(base);
+    const kind = d ? base.slice(0, d.index) : base;
+    return { kind, depth: d ? Number(d[1]) : 1 };
+}
+
+/**
+ * With ISMCTS_THOUGHTS=<dir> set, ISMCTS bots write their latest search summary to <dir>/<name>.json (at most once
+ * a second, atomically) for the dashboard panel (bot/ismcts-panel.js). Off by default; it never changes play.
+ */
+function thoughtsWriter(name) {
+    const dir = process.env.ISMCTS_THOUGHTS;
+    if (!dir) {
+        return null;
+    }
+    const fs = require('fs');
+    const path = require('path');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${name.replace(/[^\w.#-]/g, '_')}.json`);
+    let lastWrite = 0;
+    return (bot) => {
+        const now = Date.now();
+        if (now - lastWrite < 1000) {
+            return;
+        }
+        lastWrite = now;
+        const tmp = `${file}.${process.pid}.${require('worker_threads').threadId}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify({ bot: name, beta: bot.beta, peek: bot.peek, t: new Date(now).toISOString(), stats: bot.stats, ...bot.last }));
+        fs.renameSync(tmp, file);
+    };
+}
+
+function describeBot(name) {
+    const omni = parseOmni(name.split('#')[0]);
+    if (omni) {
+        return { name, kind: 'omniscient', profile: omni.blind ? 'omni-blind' : 'omni', depth: omni.depth, lang: 'js' };
+    }
+    const ism = parseIsmcts(name.split('#')[0]);
+    if (ism) {
+        return { name, kind: 'search', profile: (ism.peek ? 'ismcts-peek' : `ismcts-b${ism.beta}`) + (ism.evalProfile ? `-${ism.evalProfile}` : ''), depth: ism.horizon, lang: 'js', beta: ism.beta };
+    }
+    const { kind, depth } = parseName(name);
+    const ext = programOf(name);
+    if (ext) {
+        return { name, kind: 'external', profile: null, depth: 0, lang: ext.lang ?? 'external' };
+    }
+    if (Object.hasOwn(examples, kind)) {
+        return { name, kind: 'client', profile: null, depth: 0, lang: 'js' };
+    }
+    if (kind === 'heuristic' || PROFILES[kind]) {
+        return { name, kind: 'search', profile: kind === 'heuristic' ? 'balanced' : kind, depth, lang: 'js' };
+    }
+    if (kind === 'rush') {
+        return { name, kind: 'rules', profile: 'rush', depth: 0, lang: 'js' };
+    }
+    if (/^random/.test(kind)) {
+        return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
+    }
+    return null;
+}
+
+/**
+ * A bot for `name`. `taken`: the bots already seated in this game, so a program is not handed out twice (anything
+ * else, such as the index from `names.map(makeBot)`, counts as none).
+ */
+function makeBot(name, taken) {
+    const info = describeBot(name);
+    if (!info) {
+        const known = ['random*', 'rush', 'heuristic', 'omni', ...Object.keys(PROFILES), ...Object.keys(examples), ...Object.keys(externalBots)];
+        throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
+    }
+    if (info.kind === 'external') {
+        return program(name, Array.isArray(taken) ? taken : []);
+    }
+    if (info.kind === 'client') {
+        return examples[parseName(name).kind](name);
+    }
+    if (info.kind === 'omniscient') {
+        return new OmniscientBot(name, parseOmni(name.split('#')[0]));
+    }
+    const ism = parseIsmcts(name.split('#')[0]);
+    if (ism) {
+        const { evalProfile, ...rest } = ism;
+        return new IsmctsBot(name, { ...rest, profile: evalProfile ? PROFILES[evalProfile] : null, thoughts: thoughtsWriter(name) });
+    }
+    if (info.kind === 'search') {
+        return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
+    }
+    if (info.kind === 'rules') {
+        return createRushBot(name);
+    }
+    return createRandomBot(name);
+}
+
+module.exports = { makeBot, closeBots, describeBot, parseName, parseIsmcts, parseOmni };

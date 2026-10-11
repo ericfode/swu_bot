@@ -41,14 +41,17 @@ def reply(msg, rng):
     if msg["t"] == "over":
         print(f"[py-random] game over: {msg['winner']} ({msg['outcome']})", file=sys.stderr)
         return {"t": "ok"}
+    if msg["t"] == "bye":
+        return None  # the session is over; no reply
     return {"t": "error", "error": f"unknown message {msg['t']}"}
 
 
 def main():
     rng = random.Random(0)
     for line in sys.stdin:
-        if line.strip():
-            sys.stdout.write(json.dumps(reply(json.loads(line), rng)) + "\n")
+        out = reply(json.loads(line), rng) if line.strip() else None
+        if out is not None:
+            sys.stdout.write(json.dumps(out) + "\n")
             sys.stdout.flush()
 
 

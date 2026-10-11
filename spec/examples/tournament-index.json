@@ -1,1 +1,199 @@
-{"id":"example","createdAt":"2026-10-11T08:13:19.381Z","engine":"2be4fcd","bots":["node-search","py-random","random-a"],"gamesPerPairing":2,"games":[{"id":"node-search-vs-py-random-11","seed":11,"p1":"node-search","p2":"py-random","winner":"node-search","winnerSeat":"p1","rounds":7,"steps":198,"outcome":"won","error":null,"ms":6741,"by":null,"timing":{"p1":{"n":104,"ms":5812.001,"p50":0.482,"p95":380.453,"max":467.032},"p2":{"n":94,"ms":60.24,"p50":0.428,"p95":2.063,"max":11.986}}},{"id":"py-random-vs-node-search-12","seed":12,"p1":"py-random","p2":"node-search","winner":"node-search","winnerSeat":"p2","rounds":8,"steps":236,"outcome":"won","error":null,"ms":9684,"by":null,"timing":{"p1":{"n":104,"ms":63.017,"p50":0.348,"p95":3.078,"max":6.512},"p2":{"n":132,"ms":8841.756,"p50":0.439,"p95":386.526,"max":719.834}}},{"id":"node-search-vs-random-a-13","seed":13,"p1":"node-search","p2":"random-a","winner":"node-search","winnerSeat":"p1","rounds":7,"steps":210,"outcome":"won","error":null,"ms":14273,"by":null,"timing":{"p1":{"n":131,"ms":13422.878,"p50":0.425,"p95":467.785,"max":529.176},"p2":{"n":79,"ms":0.94,"p50":0.009,"p95":0.029,"max":0.064}}},{"id":"random-a-vs-node-search-14","seed":14,"p1":"random-a","p2":"node-search","winner":"node-search","winnerSeat":"p2","rounds":17,"steps":411,"outcome":"won","error":null,"ms":23034,"by":null,"timing":{"p1":{"n":209,"ms":1.548,"p50":0.006,"p95":0.012,"max":0.129},"p2":{"n":202,"ms":21152.613,"p50":0.605,"p95":403.966,"max":572.643}}},{"id":"py-random-vs-random-a-15","seed":15,"p1":"py-random","p2":"random-a","winner":"random-a","winnerSeat":"p2","rounds":15,"steps":426,"outcome":"won","error":null,"ms":1824,"by":null,"timing":{"p1":{"n":232,"ms":127.115,"p50":0.42,"p95":1.875,"max":4.378},"p2":{"n":194,"ms":1.384,"p50":0.006,"p95":0.013,"max":0.056}}},{"id":"random-a-vs-py-random-16","seed":16,"p1":"random-a","p2":"py-random","winner":"py-random","winnerSeat":"p2","rounds":16,"steps":477,"outcome":"won","error":null,"ms":2179,"by":null,"timing":{"p1":{"n":220,"ms":1.492,"p50":0.006,"p95":0.011,"max":0.056},"p2":{"n":257,"ms":158.994,"p50":0.485,"p95":1.942,"max":4.591}}}],"key":"5390598e2b00ae9a5726ce4d43433c1d"}
+{
+  "id": "v2-check2",
+  "createdAt": "2026-10-11T12:20:58.922Z",
+  "engine": "2be4fcd",
+  "bots": [
+    "rust-learned",
+    "node-random",
+    "rust-search"
+  ],
+  "gamesPerPairing": 2,
+  "games": [
+    {
+      "id": "rust-learned-vs-node-random-1",
+      "seed": 1,
+      "p1": "rust-learned",
+      "p2": "node-random",
+      "winner": "rust-learned",
+      "winnerSeat": "p1",
+      "rounds": 8,
+      "steps": 200,
+      "outcome": "won",
+      "error": null,
+      "ms": 1844,
+      "by": null,
+      "timing": {
+        "p1": {
+          "n": 124,
+          "ms": 149.512,
+          "p50": 0.47,
+          "p95": 5.893,
+          "max": 12.409
+        },
+        "p2": {
+          "n": 76,
+          "ms": 94.68,
+          "p50": 0.478,
+          "p95": 6.23,
+          "max": 8.123
+        }
+      },
+      "key": "c025ac280e8d745faeb5c0da02a79da3ed99287a43e3b69b5701d8b14ad08105"
+    },
+    {
+      "id": "node-random-vs-rust-learned-2",
+      "seed": 2,
+      "p1": "node-random",
+      "p2": "rust-learned",
+      "winner": "rust-learned",
+      "winnerSeat": "p2",
+      "rounds": 7,
+      "steps": 181,
+      "outcome": "won",
+      "error": null,
+      "ms": 1214,
+      "by": null,
+      "timing": {
+        "p1": {
+          "n": 101,
+          "ms": 140.727,
+          "p50": 0.536,
+          "p95": 5.778,
+          "max": 9.769
+        },
+        "p2": {
+          "n": 80,
+          "ms": 126.786,
+          "p50": 0.573,
+          "p95": 6.193,
+          "max": 10.694
+        }
+      },
+      "key": "c08d451ed47a06f7571bbe1a4070850e697dfe85be812ff48b59fb4cd7df4ead"
+    },
+    {
+      "id": "rust-learned-vs-rust-search-3",
+      "seed": 3,
+      "p1": "rust-learned",
+      "p2": "rust-search",
+      "winner": "rust-learned",
+      "winnerSeat": "p1",
+      "rounds": 7,
+      "steps": 189,
+      "outcome": "won",
+      "error": null,
+      "ms": 17806,
+      "by": null,
+      "timing": {
+        "p1": {
+          "n": 130,
+          "ms": 88.777,
+          "p50": 0.529,
+          "p95": 2.476,
+          "max": 4.14
+        },
+        "p2": {
+          "n": 59,
+          "ms": 16020.08,
+          "p50": 2.166,
+          "p95": 1209.754,
+          "max": 1339.551
+        }
+      },
+      "key": "677c81b59cc604de5f5e8ac02fb7abad9aa1fbf5647f42da83f2006add049ff3"
+    },
+    {
+      "id": "rust-search-vs-rust-learned-4",
+      "seed": 4,
+      "p1": "rust-search",
+      "p2": "rust-learned",
+      "winner": "rust-learned",
+      "winnerSeat": "p2",
+      "rounds": 7,
+      "steps": 210,
+      "outcome": "won",
+      "error": null,
+      "ms": 13824,
+      "by": null,
+      "timing": {
+        "p1": {
+          "n": 51,
+          "ms": 12197.072,
+          "p50": 1.457,
+          "p95": 987.649,
+          "max": 1029.288
+        },
+        "p2": {
+          "n": 159,
+          "ms": 112.33,
+          "p50": 0.538,
+          "p95": 2.002,
+          "max": 11.375
+        }
+      },
+      "key": "42cbe4fa62683da5d4e773676b0cbcbed9cbbd6f275b0f108786c43572484778"
+    },
+    {
+      "id": "node-random-vs-rust-search-5",
+      "seed": 5,
+      "p1": "node-random",
+      "p2": "rust-search",
+      "winner": "rust-search",
+      "winnerSeat": "p2",
+      "rounds": 6,
+      "steps": 103,
+      "outcome": "won",
+      "error": null,
+      "ms": 8728,
+      "by": null,
+      "timing": {
+        "p1": {
+          "n": 46,
+          "ms": 31.935,
+          "p50": 0.602,
+          "p95": 1.597,
+          "max": 4.095
+        },
+        "p2": {
+          "n": 57,
+          "ms": 7907.298,
+          "p50": 0.412,
+          "p95": 779.265,
+          "max": 1003.41
+        }
+      },
+      "key": "06f38acbc8025d4d46092179152929795ed557a816193605a28e96e2847a0ae6"
+    },
+    {
+      "id": "rust-search-vs-node-random-6",
+      "seed": 6,
+      "p1": "rust-search",
+      "p2": "node-random",
+      "winner": "rust-search",
+      "winnerSeat": "p1",
+      "rounds": 6,
+      "steps": 154,
+      "outcome": "won",
+      "error": null,
+      "ms": 12935,
+      "by": null,
+      "timing": {
+        "p1": {
+          "n": 77,
+          "ms": 11888.642,
+          "p50": 0.463,
+          "p95": 937.1,
+          "max": 1119.505
+        },
+        "p2": {
+          "n": 77,
+          "ms": 42.978,
+          "p50": 0.48,
+          "p95": 0.828,
+          "max": 3.038
+        }
+      },
+      "key": "efefeece8f7c51b39ded10273691713d1c5ffd04347e4ce2cbfbbc4efbf7acd3"
+    }
+  ]
+}

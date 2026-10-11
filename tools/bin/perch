@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+// Runs perch (the @lakeday/perch semantic linter) against TypeSafe Jev instead of Perch Cloud.
+// Only fills in what the caller has not set:
+// - PERCH_BASE_URL: the TypeSafe System One endpoint. perch then defaults the model to jev-latest.
+// - PERCH_API_KEY: perch falls back to TYPESAFE_API_KEY. In a Claude Code cloud session any value
+//   works, because the egress proxy injects the real Jev key for api.typesafe.ai.
+// - NODE_USE_ENV_PROXY: Node's fetch ignores HTTPS_PROXY without it, so perch could not reach Jev.
+'use strict';
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+// The repo's own install first, then a global `npm install -g` next to this node binary.
+const searchPaths = [path.resolve(__dirname, '../..'), path.resolve(process.execPath, '../../lib')];
+let bin;
+try {
+  bin = require.resolve('@lakeday/perch/bin/perch.mjs', { paths: searchPaths });
+} catch {
+  console.error('perch is not installed: run `npm install` in the swu_bot repo root.');
+  process.exit(1);
+}
+
+const env = { ...process.env };
+env.PERCH_BASE_URL ||= 'https://api.typesafe.ai/v1/systemone';
+if (!env.PERCH_API_KEY && !env.TYPESAFE_API_KEY && env.CLAUDE_CODE_REMOTE === 'true') {
+  env.PERCH_API_KEY = 'injected-by-proxy';
+}
+if ((env.HTTPS_PROXY || env.https_proxy) && !env.NODE_USE_ENV_PROXY) {
+  // Node reads NODE_USE_ENV_PROXY from v22.21 and v24.0; older versions would bypass the proxy.
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major < 22 || major === 23 || (major === 22 && minor < 21)) {
+    console.error(`perch: Node ${process.version} ignores HTTPS_PROXY for fetch, so Jev may be unreachable. Use Node 22.21+ or 24+.`);
+  }
+  env.NODE_USE_ENV_PROXY = '1';
+  // Node prints an "EnvHttpProxyAgent is experimental" warning on every start otherwise.
+  env.NODE_OPTIONS = [env.NODE_OPTIONS, '--disable-warning=UNDICI-EHPA'].filter(Boolean).join(' ');
+}
+
+const run = spawnSync(process.execPath, [bin, ...process.argv.slice(2)], { stdio: 'inherit', env });
+if (run.error) throw run.error;
+process.exit(run.status ?? 1);

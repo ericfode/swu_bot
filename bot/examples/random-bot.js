@@ -6,7 +6,7 @@ const { seededRng } = require('../rng');
 const { serve } = require('../stdio');
 
 function create(name = 'js-random') {
-    let rng = seededRng(name);
+    let rng = null; // seeded at hello
     return {
         name,
         hello(msg) {

@@ -18,15 +18,17 @@ Schemas (JSON Schema 2020-12) in [`schemas/`](schemas/):
 - `tournament-index.schema.json`: `index.json`.
 - `tournament-list.schema.json`: `GET /api/tournaments`.
 
-Any JSON Schema 2020-12 validator works (ajv: `new (require('ajv/dist/2020'))()`); for `.jsonl` files validate each
-line on its own. The schemas reference nothing outside their own file.
+Any JSON Schema 2020-12 validator works (ajv: `new (require('ajv/dist/2020'))({ validateFormats: false })`, or add
+`ajv-formats` for `date-time`); for `.jsonl` files validate each line on its own. The schemas reference nothing
+outside their own file.
 
 Examples in [`examples/`](examples/), from a real keyed game (engine `2be4fcd`, real card data):
 
-- `transcript-v2.jsonl`: messages between the referee and `bot/examples/search-bot.js` running as a program, in
-  order: `hello`, the first decision, a decision with simulations (one simulation, cut after its first move), and
-  `over`. The referee sends `hello`, `decide`, `simulated` and `over`; the bot sends the rest.
-- `tournament-index.json`: the index of a 6-game run (search, Python and native random bots), with `timing` and `key`.
+- `transcript-v2.jsonl`: messages between the referee and `bot/examples/search-bot.js` running as a program (against
+  the Python bot), in order: `hello`, the first decision, a decision with simulations (one simulation, cut after its
+  first move), and `over`. The referee sends `hello`, `decide`, `simulated` and `over`; the bot sends the rest.
+- `tournament-index.json`: the index of a 6-game run (the learned Rust bot, the Rust search bot and a JavaScript
+  random program), with per-game `timing` and `key`.
 
 Real replays: `/mnt/project-files/games/demo/` (v1 fields) and `/mnt/project-files/games/protocol-v2/` (all fields).
 
@@ -41,14 +43,14 @@ Real replays: `/mnt/project-files/games/demo/` (v1 fields) and `/mnt/project-fil
 ## Checking a bot
 
 `node bot/protocol-test.js` runs the conformance checks (determinism, keyed seeds, time budgets, stdio/in-process
-parity, simulations leave no trace, replays play again, v1 bots, splits, simulation mistakes, bot failures). To try
-your own program, register it in `bot/external-bots.json` and play it:
+parity, simulations leave no trace, numbered deals, replays play again, v1 bots, splits, simulation mistakes, bot
+failures and forfeits, untimed limits). To try your own program, register it in `bot/external-bots.json` and play it:
 `node bot/tournament.js --bots my-bot,node-random --games 4 --out replays/try`, then validate the replays and check
 `index.json` for `ERROR` games and their `by`.
 
 ## Verified against real games
 
-With real card data (2026-10-11): `npm run gate` gives 594/342/486 steps (p2 wins). A keyed game between the search
-bot and the Python bot (5,196 protocol messages, simulations included), the replays of that game and of two
-tournaments (27 games, 8,278 lines) and both indexes validate against the schemas; the schemas reject 10 hand-made
-bad messages.
+With real card data (2026-10-11): `npm run gate` gives 594/342/486 steps (p2 wins). Bots in C, Python, WebAssembly,
+Clojure, Rust (rules, search and learned) and JavaScript (programs, in process and native) played 62 games on v2. All
+15,088 protocol messages of three keyed games between programs (simulations included), the 62 replays (8,199 lines
+in one run) and the indexes validate against the schemas; the schemas reject 13 hand-made bad messages.

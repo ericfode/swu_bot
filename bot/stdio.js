@@ -14,12 +14,20 @@ const { spawn } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 
-/** Reply of an in-process client `{ name, hello?, decide, over? }` to `msg`; `sim(request)` resolves to the `simulated` reply. */
+// bot programs still running when this process exits are killed, hung or not
+const live = new Set();
+process.on('exit', () => live.forEach((c) => c.kill('SIGKILL')));
+
+/**
+ * Reply of an in-process client `{ name, hello?, decide, over? }` to `msg`; `sim(request)` resolves to the `simulated`
+ * reply. `bye` gets none (undefined).
+ */
 async function answer(client, msg, sim) {
     switch (msg.t) {
         case 'hello': return client.hello ? client.hello(msg) : { t: 'ready', v: 2, name: client.name };
         case 'decide': return client.decide(msg, sim);
         case 'over': return client.over ? client.over(msg) : { t: 'ok' };
+        case 'bye': return undefined;
         default: return { t: 'error', error: `unknown message '${msg.t}'` };
     }
 }
@@ -27,8 +35,9 @@ async function answer(client, msg, sim) {
 /**
  * A bot program as a protocol client. The process starts at a hello and serves game after game until close().
  * A transport failure (exit, a line that is not JSON or that nobody asked for) or close() ends the process, since
- * later lines could no longer be matched to requests; the next hello starts a new one. Time limits are the referee's
- * (protocol.js); `timeoutMs` and `startTimeoutMs`, when given, override its per-message budgets for this bot.
+ * later lines could no longer be matched to requests; the next hello starts a new one. Ending means end of stdin,
+ * then SIGKILL 2 s later, so `cmd` must be the bot itself (a wrapper script must exec it). Time limits are the
+ * referee's (protocol.js); `timeoutMs` and `startTimeoutMs`, when given, override its budgets for this bot.
  */
 class StdioClient {
     constructor(name, { cmd, args = [], cwd = ROOT, env = {}, stderr = 'inherit', timeoutMs, startTimeoutMs, lang } = {}) {
@@ -47,6 +56,11 @@ class StdioClient {
     }
 
     hello(msg) {
+        if (this.stray !== null && !this.dead) {
+            // a line written after the last game belongs to that game: start afresh rather than blame this one
+            console.error(`${this.name}: wrote a line nobody asked for: ${this.stray.slice(0, 120)}`);
+            this.fail('stray line');
+        }
         if (!this.child || this.dead) {
             this.start();
         }
@@ -98,8 +112,12 @@ class StdioClient {
             }
         });
         const fail = (why) => this.child === child && this.fail(why);
+        live.add(child);
         child.on('error', (e) => fail(`could not start ${cmd}: ${e.message}`));
-        child.on('exit', (code, signal) => fail(`exited (code ${code}${signal ? `, ${signal}` : ''})`));
+        child.on('exit', (code, signal) => {
+            live.delete(child);
+            fail(`exited (code ${code}${signal ? `, ${signal}` : ''})`);
+        });
         child.stdin.on('error', () => undefined);
         // an idle bot never keeps node running; the referee's timer does while it waits for a reply
         for (const h of [child, child.stdin, child.stdout]) {
@@ -112,9 +130,10 @@ class StdioClient {
         if (this.dead === null) {
             this.dead = why;
             const child = this.child;
-            if (child && child.exitCode === null) {
+            if (child && live.has(child)) {
                 child.stdin.end();
-                setTimeout(() => child.kill(), 2000).unref();
+                const kill = setTimeout(() => child.kill('SIGKILL'), 2000);
+                child.once('exit', () => clearTimeout(kill));
             }
         }
         const w = this.waiter;
@@ -165,18 +184,26 @@ async function serve(client, { input = process.stdin, output = process.stdout } 
         }
     };
     const send = (m) => output.write(`${JSON.stringify(m)}\n`);
-    const sim = async (request) => {
-        send(request);
-        return (await next()) ?? Promise.reject(new Error('referee closed the stream'));
-    };
     for (let msg; (msg = await next());) {
+        // a sim call after the decision ended (a search left running) is answered here, never sent
+        let open = true;
+        const sim = async (request) => {
+            if (!open) {
+                return { t: 'simulated', op: request?.op ?? null, error: 'this decision is over' };
+            }
+            send(request);
+            return (await next()) ?? Promise.reject(new Error('referee closed the stream'));
+        };
         let reply;
         try {
             reply = await answer(client, msg, sim);
         } catch (e) {
             reply = { t: 'error', error: String(e?.message ?? e) };
         }
-        send(reply);
+        open = false;
+        if (reply !== undefined) {
+            send(reply);
+        }
     }
 }
 
