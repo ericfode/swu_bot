@@ -1,7 +1,7 @@
 use super::greedy2::{unit_value, Greedy2};
 use super::{Policy, SimOp, Simulator};
 use crate::cards::CardDb;
-use crate::protocol::{other, Decide, DistShare, Hello, PlayerView, Simulated, State};
+use crate::protocol::{other, Decide, DistShare, Hello, Over, PlayerView, Simulated, State};
 use std::time::Instant;
 
 /// Search: greedy2 plus a look ahead with protocol v2 simulations.
@@ -45,6 +45,14 @@ pub fn evaluate(state: &State, me: &str) -> f64 {
 const WIN: f64 = 10_000.0;
 
 impl Search {
+    fn outcome(&self, over: &Over) -> f64 {
+        match over.winner.as_deref() {
+            Some(w) if w == self.me => WIN,
+            Some(w) if w == other(&self.me) => -WIN,
+            _ => 0.0,
+        }
+    }
+
     /// Plays the simulation from `pos` with greedy2 on both seats; the score at the end, or None if it failed.
     fn playout(&self, mut pos: Simulated, sim: &mut dyn Simulator, round: u32) -> Option<f64> {
         let mut mine = self.g.clone();
@@ -55,11 +63,7 @@ impl Search {
                 return None;
             }
             if let Some(over) = pos.over.as_ref() {
-                return Some(match over.winner.as_deref() {
-                    Some(w) if w == self.me => WIN,
-                    Some(w) if w == other(&self.me) => -WIN,
-                    _ => 0.0,
-                });
+                return Some(self.outcome(over));
             }
             let state = pos.state.take()?;
             if state.round != round || state.phase.as_deref().is_some_and(|ph| ph != "action") {
@@ -81,7 +85,12 @@ impl Search {
                 return Some(evaluate(&d.state, &self.me));
             }
         }
-        pos.state.as_ref().map(|s| evaluate(s, &self.me))
+        // step cap
+        match (&pos.error, &pos.over, &pos.state) {
+            (Some(_), ..) => None,
+            (_, Some(over), _) => Some(self.outcome(over)),
+            (_, _, state) => state.as_ref().map(|s| evaluate(s, &self.me)),
+        }
     }
 }
 
