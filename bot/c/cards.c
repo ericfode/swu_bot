@@ -14,7 +14,7 @@ typedef struct {
     unsigned cap, n;
 } Map;
 
-static Map by_set, by_internal, by_title;
+static Map by_primary, by_set, by_internal, by_title; /* by_primary: each card's own setId; by_set: reprint codes */
 
 static unsigned hash(const char *s) {
     unsigned h = 2166136261u;
@@ -69,7 +69,11 @@ static const Card *map_get(const Map *m, const char *key) {
     return NULL;
 }
 
-const Card *card_by_set(const char *set) { return map_get(&by_set, set); }
+const Card *card_by_set(const char *set) {
+    /* a reprint code can be another card's own number: the card's own setId wins whatever the load order */
+    const Card *c = map_get(&by_primary, set);
+    return c ? c : map_get(&by_set, set);
+}
 const Card *card_by_internal(const char *name) { return map_get(&by_internal, name); }
 const Card *card_by_title(const char *title) { return map_get(&by_title, title); }
 
@@ -157,6 +161,12 @@ static void add_card(JVal *j) {
     }
     if (c->kw & K_RESTORE) {
         c->restore = keyword_amount(c->text, "Restore");
+    }
+    const JVal *sid = jget(j, "setId");
+    if (sid && jget(sid, "number")) {
+        char key[32];
+        snprintf(key, sizeof key, "%s_%03d", jstr(jget(sid, "set"), "?"), jint(jget(sid, "number"), 0));
+        map_put(&by_primary, key, c);
     }
     for (JVal *s = jget(j, "setCodes") ? jget(j, "setCodes")->child : NULL; s; s = s->next) {
         char key[32];
