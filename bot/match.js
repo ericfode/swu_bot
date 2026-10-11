@@ -50,11 +50,11 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
             await s.hello();
         }
         const setup = { seed: streams.engine, deck1: decks.p1, deck2: decks.p2 };
-        eg = env.newGame({ ...setup, undo: seats.some((s) => s.needsUndo) });
-        // simulations run on a copy of the game (protocol.js Shadow) that follows every real move
-        const shadow = seats.some((s) => s.wantsSims) ? new Shadow(env, setup) : null;
+        eg = env.newGame(setup);
+        // every lookahead runs on a copy of the game (protocol.js Shadow) that follows every real move
+        const shadow = seats.some((s) => s.wantsSims || s.needsUndo) ? new Shadow(env, setup) : null;
         seats.forEach((s) => (s.shadow = shadow));
-        // cards revealed in the real game (not in a native bot's lookahead) are shown to both seats at their next decision
+        // cards revealed by a real move are shown to both seats at their next decision
         let live = false;
         eg.game.on('onCardRevealed', (e) => live && seats.forEach((s) => s.reveal((e.cards ?? []).map((c) => placedRef(eg, c)))));
         await eg.start();
@@ -70,10 +70,10 @@ async function playGame(env, { seed, bots, record = false, maxSteps = 6000, snap
             const prompt = eg.promptSignature(pid);
             const title = eg.player(pid).currentPrompt().menuTitle ?? null;
             const action = await seats[eg.ids.indexOf(pid)].decide(eg, pid, actions, rng);
-            // a native bot hands back the live action, which after its own rollbacks is an equal copy
+            // a seat answers with one of `actions`, or a copy of it that carries a split
             const i = actions.findIndex((a) => a === action || actionKey(eg, a) === actionKey(eg, action));
             if (i < 0) {
-                throw new Error(`the legal actions changed during a lookahead: ${action.label} is gone`);
+                throw new Error(`${action.label} is not one of the legal actions`);
             }
             const move = { pid, i, legal: actions.length, key: actionKey(eg, actions[i]) };
             live = true;

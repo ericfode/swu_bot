@@ -23,17 +23,17 @@
  *   round  `after`, then both sides keep playing like that until the round ends (or 40 actions)
  *
  * Hidden information: the opponent never plays a card from its hand (or resources/discard) at its action windows in
- * an imagined line, the engine RNG is reseeded from a bot-private stream and both decks are shuffled with it (so draws
- * and reveals do not follow the real deck order), `state` is view() from the bot's own seat
- * (the opponent's hand stays a count), and any card that was hidden before (the opponent's hand, resources and deck,
- * and the bot's own deck) is blanked to "hidden card" in `state` and `steps` if the simulation moves it into view.
+ * an imagined line, every card hidden from the bot is dealt again from a bot-private stream first (determinize, so
+ * nothing follows the real hidden cards), `state` is view() from the bot's own seat (the opponent's hand stays a
+ * count), and any card that was hidden before (the opponent's hand, resources and deck, and the bot's own deck) is
+ * blanked to "hidden card", without its id, in `state` and `steps` if the simulation moves it into view.
  *
  * Registered in external-bots.json with "adapter": "bot/jev/look.js".
  */
 
 const { StdioClient } = require('../stdio');
 const { view, promptView, actionView } = require('../view');
-const { LIMITS, PROTOCOL } = require('../protocol');
+const { LIMITS, PROTOCOL, determinize } = require('../protocol');
 const { defaultChoose } = require('../players/heuristic');
 const { attackChoice } = require('../players/rush');
 const { seededRng } = require('../env');
@@ -118,8 +118,8 @@ function maskHidden(o, hidden) {
     }
     if (o && typeof o === 'object') {
         if (typeof o.id === 'string' && hidden.has(o.id)) {
-            // keep only where it is: stats, keywords and upgrades would narrow down which card it is
-            const r = { id: o.id, n: 'hidden card', s: null, hidden: 1 };
+            // keep only where it is: its id, stats, keywords and upgrades would narrow down which card it is
+            const r = { id: 'hidden', n: 'hidden card', s: null, hidden: 1 };
             for (const k of ['zone', 'ctl']) {
                 if (k in o) {
                     r[k] = o[k];
@@ -253,11 +253,8 @@ class LookaheadBot {
         const startRound = eg.round;
         let out;
         try {
-            eg.game.setRandomSeed(String(Math.floor(this.lookRng() * 1e9)));
-            // the real deck order is hidden from the bot: imagine with both decks shuffled (the rollback restores them)
-            for (const id of eg.ids) {
-                eg.player(id).shuffleDeck();
-            }
+            // imagine on a fresh deal of every card hidden from the bot (the rollback restores the real ones)
+            determinize(eg, pid, this.lookRng);
             const first = eg.refetch(pid, actions[i]);
             if (!first) {
                 throw new Error('action vanished');

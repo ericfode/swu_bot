@@ -124,7 +124,7 @@ It is the bot's board view (protocol.md, `state`) with both hands shown and no `
 | card refs `n`, `s` | Card title (no subtitle) and set code `<SET>_<NNN>`, or `s: null` when the card has no set number. |
 | `base.hp`, `base.d` | Printed HP and damage. Remaining = `hp - d`. |
 | `base.epic`, `leader.epic` *(added)* | `1` once the base's epic action or the leader's deploy is used; absent before. |
-| `leader.dep`, `leader.x` | `1` if deployed (it then also appears as a unit in `ground`/`space`), `1` if exhausted. `leader` may be `null`. |
+| `leader.dep`, `leader.x` | `1` if deployed (it then also appears as a unit in `ground`/`space`) or, for a double-sided leader such as Chancellor Palpatine, flipped (no unit); `1` if exhausted. `leader` may be `null`. |
 | `passed`, `out` *(added)* | Action phase only: `passed: 1` when the player passed its last action, `out: 1` when it is done for the phase (claimed the initiative, or both passed). |
 | `res.ready`, `res.total` | Ready resources, total resources. |
 | `handCount` *(added)* | Cards in hand. |
@@ -182,3 +182,7 @@ analysis.
 ## Gaps worth knowing
 
 - Snapshots do not list deck order or resource cards; re-run the replay (above) to get them.
+- Games imported from human play (`importer/`, see `importer/README.md`) use this format as one player saw the game,
+  or both players when two captures are merged (`header.source.pov`). They have no card ids, no legal actions
+  (`legal: 1`), no `decks` (known deck lists are in `source.decklists`) and no engine seed, and show the cards that
+  view could not see as `{ "n": "Hidden card", "s": null, "hid": 1 }`. They cannot be played again.

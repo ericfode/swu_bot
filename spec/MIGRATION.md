@@ -63,8 +63,12 @@ it says nothing about the hidden cards.
   protocol client in both seats, and closes no bot. `makeBot(name, taken)` in `bot/players/index.js` hands out one
   process per bot name for the whole run (`taken`: the bots already seated in this game); call `closeBots()` at the
   end. `bot/ladder-worker.js`, `bot/learn/*.js` and `bot/rust/check.js` do.
+- A native bot with `needsUndo` gets the referee's copy of the game as `ctx.game`, never the real one, and the real
+  game runs without rollback. Before, its rollbacks could change how the real game played out (seen with an ISMCTS bot:
+  a later "will have no effect" check came out differently, so the opponent lost its simulations and the replay could
+  not be played again). Nothing changes in how such a bot reads or searches the game.
 - `bot/jev/look.js` (the Jev look-ahead adapter) is a native bot now: it runs the v1 Jev program and imagines on the
-  engine as before.
+  copy, after dealing every card hidden from Jev again, so an imagined line no longer follows the real opponent hand.
 
 ## Replay readers (viewers, analysis, dashboards)
 

@@ -120,7 +120,7 @@ such as an opponent's hand shown by a "look at" effect.
 |---|---|
 | `name` | Engine user name. |
 | `base` | `{ id, n, s, hp, d, epic? }`: printed HP and damage; `epic: 1` once its epic action is used. |
-| `leader` | `{ id, n, s, dep, x, epic? }` (`dep` 1 = deployed, then also listed as a unit; `x` 1 = exhausted; `epic: 1` once its deploy is used, so a defeated leader shows `dep: 0, epic: 1`), or `null`. |
+| `leader` | `{ id, n, s, dep, x, epic? }` (`dep` 1 = deployed, then also listed as a unit, or a double-sided leader such as Chancellor Palpatine on its flipped side, which is no unit; `x` 1 = exhausted; `epic: 1` once its deploy is used, so a defeated leader shows `dep: 0, epic: 1`), or `null`. |
 | `passed`, `out` | Action phase only. `passed: 1`: the player passed its last action, so the phase ends if the other player passes now. `out: 1`: the player is done for this phase (it claimed the initiative, or both passed). Absent otherwise. |
 | `res` | `{ ready, total }` resources. |
 | `handCount`, `deck` | Cards in hand and left in the deck. |

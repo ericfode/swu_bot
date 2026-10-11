@@ -201,7 +201,7 @@
       "properties": {
         "dep": {
           "$ref": "#/$defs/Flag",
-          "description": "1 = deployed (also listed as a unit in its arena)."
+          "description": "1 = deployed (also listed as a unit in its arena), or a double-sided leader on its flipped side (no unit)."
         },
         "x": {
           "$ref": "#/$defs/Flag",

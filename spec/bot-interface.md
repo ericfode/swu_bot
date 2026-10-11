@@ -14,14 +14,14 @@ client, which can also run in process.
 |---|---|---|---|
 | `name` | string | yes | Shown in replays and used in game file names (`<p1>-vs-<p2>-<seed>.jsonl`), so keep it file-name safe: no `/`, `\`, spaces. |
 | `choose(ctx)` | function | yes | Called once per decision. Returns one of `ctx.actions`, or a promise of one. |
-| `needsUndo` | boolean | no | The game is created with rollback enabled, for the search API below. |
+| `needsUndo` | boolean | no | The bot searches by rollback (search API below). `game` is then a copy with rollback enabled that follows the real game; the real game is never rolled back. |
 | `stats` | object | no | Copied into the match result as `botStats`. |
 
-`ctx` is `{ game, pid, actions, rng }`: the `EnvGame`, the engine player id of the deciding player (`'111'` is seat
+`ctx` is `{ game, pid, actions, rng }`: the `EnvGame` (the copy for a `needsUndo` bot; the same object for the whole game), the engine player id of the deciding player (`'111'` is seat
 `p1`, `'222'` is `p2`), `game.legalActions(pid)` (never empty) and the match rng (see Determinism).
 
 `choose` returns an element of `actions`, or a copy with the same `kind`, `label`, `cardUuid` and `arg` (after its own
-rollbacks the prompt uuids in `actions` are stale; the referee plays the live equal action). For a `distribute` action
+rollbacks the prompt uuids in `actions` are stale; the referee matches the answer by those fields). For a `distribute` action
 the copy may add `split` (below). A throw, an action that is not legal or a bad split is the bot's failure: the game
 ends as `ERROR` with `by` its seat, and the other seat wins. So a bot that searches catches engine errors in its own
 lookahead, as the heuristic bot does.
@@ -128,12 +128,13 @@ Each bot is a protocol client or a native bot; it gets a seat object from `bot/p
 
 1. Random streams come from `gameStreams(seed, key)` (`bot/rng.js`): the match rng, the engine seed, each seat's
    `hello.seed` and each seat's simulation stream. Two decks are drawn from the match rng.
-2. The replay header is written; each protocol client gets `hello`, one after the other. The engine game is created
-   (rollback enabled when a native bot sets `needsUndo`) and started. When a client asks for simulations, a second
-   engine (`Shadow` in `bot/protocol.js`) follows the real moves; simulations run on it, so the real game is never
-   rolled back. Before each simulated decision it checks that it matches the real game (board, deck orders,
-   resources, prompts) and rebuilds itself from the moves when it does not; if that fails too, simulations are off
-   for the rest of the game.
+2. The replay header is written; each protocol client gets `hello`, one after the other. The engine game is created,
+   always without rollback, and started. When a client asks for simulations or a native bot sets `needsUndo`, a
+   second engine (`Shadow` in `bot/protocol.js`) follows the real moves, and every lookahead runs on it, so the real
+   game is never rolled back. Before each lookahead it checks that it matches the real game (board, deck orders,
+   resources, prompts, the legal actions of the seat to move) and rebuilds itself from the moves, in the same object,
+   when it does not. If that fails too, simulations are off for the rest of the game, and a native bot that needs the
+   copy ends the game as `ERROR` with `by: null`.
 3. Each step: `order = rng() < 0.5 ? [p1, p2] : [p2, p1]`. The first seat in `order` with a legal action decides, and
    `game.apply(pid, action, rng)` plays it. That is one step. (Usually only one seat has actions; the coin flip only
    matters when both do.)
@@ -168,10 +169,11 @@ checks it: two random bots on seeds 1-3 give 594/342/486 steps, p2 winning each,
 | `refetch(pid, action)` | Live equivalent of an action after a rollback, or `null`. |
 
 A rollback restores the engine rng but not everything: the counter that numbers new cards (so engine uuids drift;
-card ids do not), and some state outside snapshots, such as the order of simultaneous triggers. A native bot that
-rolls back the real game can therefore change how it plays out later; protocol clients cannot, since their
-simulations run on a copy. The heuristic bot (`bot/players/heuristic.js`) is the worked example: at each action window it marks, plays
-each candidate on the real engine, scores the board, restores, and plays the best. Protocol clients get the same
+card ids do not), and some state outside snapshots, such as the order of simultaneous triggers or whether an ability
+"will have no effect". A game that was rolled back can therefore play out differently later, which is why a
+`needsUndo` bot searches on the referee's copy: the copy is rebuilt when it drifts, and the real game plays out as its
+moves say. The heuristic bot (`bot/players/heuristic.js`) is the worked example: at each action window it marks, plays
+each candidate on its copy, scores the board, restores, and plays the best. Protocol clients get the same
 power, without seeing hidden cards, through [simulations](protocol.md#sim--simulated).
 
 ## Known engine bugs

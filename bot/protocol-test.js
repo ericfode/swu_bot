@@ -6,6 +6,7 @@ const path = require('path');
 const { Env } = require('./env');
 const { seededRng } = require('./rng');
 const { playGame } = require('./match');
+const { determinize } = require('./protocol');
 const { snapshot } = require('./view');
 const { StdioClient, answer } = require('./stdio');
 const { createRandomBot } = require('./players/random');
@@ -112,6 +113,24 @@ async function check(name, fn) {
                 return `seed ${seed}: ${r.outcome} ${r.error ?? ''}, ${r.timing.p1.n} decisions, ${hash(r) === hash(replayed) ? 'same' : 'different'} events`;
             }
         }
+    });
+
+    await check('a native bot\'s lookahead cannot change the real game', async () => {
+        // a rollback bot that deals the hidden cards again and never restores: only its copy may change
+        const picks = [];
+        const vandal = (rng = seededRng('vandal')) => ({
+            name: 'vandal', needsUndo: true,
+            choose({ game, pid, actions }) {
+                const a = actions[Math.floor(rng() * actions.length)];
+                picks.push(actions.indexOf(a));
+                determinize(game, pid, rng);
+                return a;
+            }
+        });
+        const r = await play(7, [vandal(), createRandomBot('r')]);
+        const blind = { name: 'vandal', decide: (m) => ({ t: 'act', i: picks[m.seq - 1] }) };
+        const replayed = await play(7, [blind, createRandomBot('r')]);
+        return r.outcome !== 'won' ? `${r.outcome} ${r.error ?? ''}` : hash(r) !== hash(replayed) && 'the real game changed';
     });
 
     await check('a numbered deal repeats its cards and outcomes, a new deal does not', async () => {

@@ -7,7 +7,8 @@
  *   NativeSeat  a JS bot with engine access, { name, choose({ game, pid, actions, rng }), needsUndo? }.
  *
  * Both have hello(), decide(eg, pid, actions, rng) -> action, reveal(cards), over(result) and `times` (ms per decision).
- * Simulations run on a Shadow, a second engine that follows the real game, so the real game is never rolled back.
+ * Every lookahead (simulations, a native bot's rollback search) runs on a Shadow, a second engine that follows the
+ * real game, so the real game is never rolled back.
  */
 
 const path = require('path');
@@ -67,28 +68,39 @@ class NativeSeat {
         this.bot = bot;
         this.seat = seat;
         this.needsUndo = !!bot.needsUndo;
+        this.shadow = null;
         this.times = [];
     }
 
     async hello() {}
 
-    /** choose may return a promise. A throw, an action that is not legal or a bad split is the bot's failure. */
+    /**
+     * A bot that searches by rollback gets the copy, never the real game. choose may return a promise. A throw, an
+     * action that is not legal or a bad split is the bot's failure.
+     */
     async decide(eg, pid, actions, rng) {
+        const game = this.needsUndo ? await this.shadow.sync(eg, pid) : eg;
+        if (!game) {
+            throw new Error(`${this.seat} ${this.bot.name}: the lookahead copy cannot follow the game`);
+        }
+        const legal = game === eg ? actions : game.legalActions(pid);
         const t = now();
         let action;
         try {
-            action = await this.bot.choose({ game: eg, pid, actions, rng });
+            action = await this.bot.choose({ game, pid, actions: legal, rng });
         } catch (e) {
             throw new BotError(this.seat, this.bot.name, firstLine(e));
         }
         this.times.push(msSince(t));
         try {
-            // the live action: after the bot's own rollbacks, prompt uuids in `actions` (and maybe in its answer) are stale
-            const live = action ? eg.refetch(pid, action) : null;
-            if (!live) {
+            // matched by key: after the bot's own rollbacks its answer may hold stale prompt uuids
+            const key = action ? actionKey(game, action) : null;
+            const i = legal.findIndex((a) => actionKey(game, a) === key);
+            if (i < 0) {
                 throw new Error(`chose an action that is not legal: ${short(action?.label)}`);
             }
-            return withSplit(live, action.split);
+            const split = Array.isArray(action.split) ? action.split.map((e) => ({ id: eg.uuidOf(game.cardId(e?.id)), amount: e?.amount })) : action.split;
+            return withSplit(actions[i], split);
         } catch (e) {
             throw new BotError(this.seat, this.bot.name, e.message);
         }
@@ -182,7 +194,7 @@ class ClientSeat {
         const ms = this.limits.decide;
         const seq = ++this.seq;
         // the copy catches up with the real game before the clock starts
-        const copy = this.wantsSims && eg.isActionWindow(pid) ? await this.shadow.sync(eg) : null;
+        const copy = this.wantsSims && eg.isActionWindow(pid) ? await this.shadow.sync(eg, pid) : null;
         const sim = copy ? simulator(this.shadow, pid, (deal) => this.setup.deals(`${seq}:${deal}`), ms === null ? null : Date.now() + ms) : null;
         const msg = {
             t: 'decide', seq, you: this.seat, sim: !!sim, ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
@@ -226,6 +238,8 @@ class ClientSeat {
 const noSim = async (req) => (req?.op === 'end' ? { t: 'simulated', op: 'end' }
     : { t: 'simulated', op: OPS.has(req?.op) ? req.op : null, error: 'simulations are off for this decision' });
 
+const legalKeys = (eg, pid) => eg.legalActions(pid).map((a) => actionKey(eg, a)).join('\n');
+
 /** Everything that tells two engines apart: the whole board, both deck orders, resources and prompts. */
 const fingerprint = (eg) => JSON.stringify([view(eg), eg.ids.map((id) => {
     const p = eg.player(id);
@@ -233,10 +247,11 @@ const fingerprint = (eg) => JSON.stringify([view(eg), eg.ids.map((id) => {
 })]);
 
 /**
- * A second engine that plays the real game's moves and runs the simulations. A rollback does not restore every
- * engine detail (the order of simultaneous triggers, some prompt texts, the names of new cards), so the real game is
- * never rolled back. When the copy no longer matches the real game it is built again from the moves; when even that
- * fails, simulations are off for the rest of the game.
+ * A second engine that plays the real game's moves and runs every lookahead: simulations and the rollback searches of
+ * native bots. A rollback does not restore every engine detail (the order of simultaneous triggers, some prompt
+ * texts, the names of new cards, whether an ability "will have no effect"), so the real game is never rolled back.
+ * When the copy no longer matches the real game it is built again from the moves, in the same object (native bots
+ * tell games apart by it); when even that fails, the copy is lost for the rest of the game.
  */
 class Shadow {
     /** setup: the real game's newGame options (seed, deck1, deck2). */
@@ -245,6 +260,7 @@ class Shadow {
         this.setup = setup;
         this.moves = [];
         this.eg = null;
+        this.stale = true;
         this.at = 0;
         this.lost = false;
     }
@@ -254,22 +270,24 @@ class Shadow {
         this.moves.push(move);
     }
 
-    /** The copy at the real game's position, or null when simulations are off. */
-    async sync(real) {
+    /** The copy at the real game's position, with the same legal actions for `pid`; null once the copy is lost. */
+    async sync(real, pid) {
         for (let attempt = 0; attempt < 2 && !this.lost; attempt++) {
-            if (!this.eg) {
-                this.eg = this.env.newGame({ ...this.setup, undo: true });
-                await this.eg.start();
+            if (this.stale) {
+                const fresh = this.env.newGame({ ...this.setup, undo: true });
+                await fresh.start();
+                this.eg = this.eg ? Object.assign(this.eg, fresh) : fresh;
+                this.stale = false;
                 this.at = 0;
             }
-            if (this.follow() && fingerprint(this.eg) === fingerprint(real)) {
+            if (this.follow() && fingerprint(this.eg) === fingerprint(real) && legalKeys(this.eg, pid) === legalKeys(real, pid)) {
                 return this.eg;
             }
-            this.eg = null;
+            this.stale = true;
         }
         if (!this.lost) {
             this.lost = true;
-            console.error(`seed ${this.setup.seed}: simulations are off for the rest of the game (the copy cannot follow it)`);
+            console.error(`seed ${this.setup.seed}: the lookahead copy cannot follow the game`);
         }
         return null;
     }
@@ -291,9 +309,9 @@ class Shadow {
         }
     }
 
-    /** Throw the copy away (after a failed rollback); the next sync builds a new one. */
+    /** Throw the copy's state away (after a failed rollback); the next sync builds it again. */
     drop() {
-        this.eg = null;
+        this.stale = true;
     }
 }
 
