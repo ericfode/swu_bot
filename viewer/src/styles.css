@@ -45,8 +45,6 @@ main { padding: 20px 16px 48px; }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-width: 0; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
-.games-split { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); align-items: start; }
-@media (max-width: 900px) { .games-split { grid-template-columns: minmax(0, 1fr); } }
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .btn { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 5px 12px; font-weight: 500; text-decoration: none; color: var(--fg); display: inline-block; }
@@ -69,16 +67,20 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .elo-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) 48px auto; gap: 8px; align-items: center; }
 .bar { height: 12px; background: var(--surface2); border-radius: 2px; }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
-.game-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; max-height: 70vh; overflow: auto; }
+.game-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px; }
 .game-list button { width: 100%; display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 8px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font-size: 12.5px; }
 .game-list button:hover { border-color: var(--muted); }
 .game-list button.on { border-color: var(--accent); background: var(--accent-soft); }
 
 /* replay */
-.replay { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-@media (max-width: 1000px) { .replay { grid-template-columns: minmax(0, 1fr); } }
+.replay-wrap { container-type: inline-size; }
+.replay { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.replay-head { display: grid; gap: 2px; }
+.replay-head .vs { font-family: var(--f-display); font-size: 17px; font-weight: 700; }
+.replay-head .now { min-height: 22px; }
+.replay-head .decks { overflow-wrap: anywhere; }
 .replay-main { display: grid; gap: 10px; min-width: 0; }
-.board { display: grid; gap: 8px; }
+.board { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
 .side { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: grid; gap: 8px; }
 .side.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .side-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
@@ -100,8 +102,8 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .counts { font-size: 12px; font-family: var(--f-mono); }
 .deployed-note { align-self: center; font-size: 12px; color: var(--muted); max-width: 120px; }
 .arena-l { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.units { display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; padding: 6px; border: 1px dashed var(--line); border-radius: 4px; align-items: flex-start; }
-.hand-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
+.units { display: flex; flex-wrap: wrap; gap: 8px; min-height: 142px; box-sizing: border-box; padding: 6px; border: 1px dashed var(--line); border-radius: 4px; align-items: flex-start; }
+.hand-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; min-height: 90px; }
 .mid { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 12px; color: var(--muted); padding-inline: 4px; }
 
 .card { position: relative; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); overflow: hidden; flex: none; }
@@ -136,7 +138,7 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .preview .card { width: 168px; height: 234px; }
 .preview .card.hand .tile-name { font-size: 13px; }
 .preview-name { font-weight: 600; }
-.log { list-style: none; margin: 0; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; max-height: 520px; overflow: auto; position: relative; }
+.log { list-style: none; margin: 0; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; max-height: max(320px, calc(100vh - 360px)); overflow: auto; position: relative; }
 .log button { width: 100%; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 6px; text-align: left; background: none; border: 0; border-radius: 4px; padding: 4px 6px; font-size: 12.5px; }
 .log button:hover { background: var(--surface2); }
 .log button[aria-current='step'] { background: var(--accent-soft); }
@@ -147,3 +149,14 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .btn.live { color: var(--muted); }
 .btn.live.on { color: var(--bad); border-color: var(--bad); font-weight: 600; }
 .live-tag { color: var(--bad); font-weight: 600; }
+
+/* wide (kept last so it wins over the base .board rule): log and card preview move to a right column; wider still: the two boards sit side by side (player 1 left) */
+@container (min-width: 820px) { .replay { grid-template-columns: minmax(0, 1fr) 320px; } .replay-side { position: sticky; top: 8px; } }
+@container (min-width: 1100px) { .board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "p1 p2"; } .board .side.p1 { grid-area: p1; } .board .side.p2 { grid-area: p2; } }
+/* wide: the right column is exactly as tall as the board column and the log scrolls inside it (no empty space under the board) */
+@container (min-width: 820px) {
+  .replay-side { position: static; display: flex; flex-direction: column; align-self: stretch; height: 0; min-height: 100%; }
+  .replay-side .preview { flex: none; }
+  .replay-side .log { flex: 1 1 0; min-height: 120px; max-height: none; }
+}
+@container (min-width: 820px) { .replay-main { min-height: 620px; align-content: start; } }
