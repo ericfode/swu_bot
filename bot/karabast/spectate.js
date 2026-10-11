@@ -5,15 +5,15 @@
  * `node importer/import.js <dir> --out <replays>` turns into replays (seen as a spectator: both hands hidden).
  *
  *   node bot/karabast/spectate.js --out captures [--lobby <id> | --public] [--games 1] [--gap 30]
- *                                 [--server http://127.0.0.1:9500] [--predict race] [--max-minutes 90]
+ *                                 [--server http://127.0.0.1:9500] [--predict mlp-g5] [--max-minutes 90]
  *                                 [--allow-host <host> --token-env KARABAST_TOKEN --ledger <file> [--max-people 10]]
  *                                 [--stop-file <file>]
  *
  * --lobby watches one game by its lobby id (from a spectate link `.../spectate?lobbyId=<id>`). --public watches
  * games listed by `/api/ongoing-games` that allow spectators, one at a time, oldest listing skipped once seen.
  * --predict prints P(win) after each decision with a bot/eval evaluator (card data: SWU_CARD_JSON or
- * forceteki/test/json). `race` and `base` only use the public board; the fitted evaluators need the spectator view
- * (both hands hidden) in bot/eval.
+ * forceteki/test/json), using bot/eval's spectator view (both hands hidden, only their counts). `mlp-g5` is the best
+ * one without decklists: Brier 0.213 on 181 real KaraBuddy games, 0.171 on engine games.
  *
  * People cap: a run against a non-local server needs --ledger (bot/karabast/ledger.js). A game is watched only while
  * two more people fit under --max-people, and both players are counted when the first frame arrives. The run stops

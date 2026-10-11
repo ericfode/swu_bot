@@ -29,7 +29,7 @@ Then, from this repo (card data from the same checkout; `make -C bot/c` for c-cl
 export SWU_CARD_JSON=<forceteki checkout>/test/json
 node bot/karabast/selfplay.js --bots c-clock,js-random --games 4 --pester-undo 0.5     # public lobbies: timer and undo requests on
 node bot/karabast/selfplay.js --bots c-clock,c-clock --decks bot/decks/ash-meta-2026-09.json
-node bot/karabast/spectate.js --public --games 1 --gap 1 --out captures --predict race   # while a game runs
+node bot/karabast/spectate.js --public --games 1 --gap 1 --out captures --predict mlp-g5   # while a game runs
 node importer/import.js captures --out replays/karabast-local --source karabast-spectate
 node bot/karabast/queue.js --bot c-clock --deck admiral-piett_jtl_blue --out runs/q     # needs a second player in the queue
 node bot/karabast/fidelity.js --games 20                                               # needs forceteki/build
