@@ -69,7 +69,9 @@ function boardReply(eg, pid, acts) {
  * defaultChoose would rank them by their real cost and type, which the bot must not learn from.
  */
 function followUp(eg, pid, acts, hidden, rng) {
-    if (acts.some((a) => (a.kind === 'card' && a.card && hidden.has(a.card.uuid)) || (a.kind === 'displayCard' && hidden.has(a.arg)))) {
+    const isHidden = (a) => (a.kind === 'card' && a.card && hidden.has(a.card.uuid)) || (a.kind === 'displayCard' && hidden.has(a.arg)) ||
+        (a.kind === 'perCardButton' && hidden.has(a.cardUuid));
+    if (acts.some(isHidden)) {
         return acts[Math.floor(rng() * acts.length)];
     }
     const pl = eg.player(pid);
@@ -90,7 +92,7 @@ function describeStep(eg, actor, a, hidden) {
     if (a.kind === 'card' && a.card) {
         return hidden.has(a.card.uuid) ? { who, at, what: 'a hidden card', zone: null } : { who, at, what: a.card.title ?? a.label, zone: a.card.zoneName ?? null };
     }
-    if (a.kind === 'displayCard' && hidden.has(a.arg)) {
+    if ((a.kind === 'displayCard' && hidden.has(a.arg)) || (a.kind === 'perCardButton' && hidden.has(a.cardUuid))) {
         return { who, at, what: 'a hidden card' };
     }
     return { who, at, what: String(a.label) };

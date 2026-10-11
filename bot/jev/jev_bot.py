@@ -263,6 +263,9 @@ def brief_side(p):
     units = []
     for zone in ("ground", "space"):
         for u in p.get(zone) or []:
+            if u.get("hidden"):  # a card the bot could not see before imagining: no stats or status
+                units.append("hidden card (unknown stats)")
+                continue
             units.append(f"{card_name(u)} {u.get('p')}/{(u.get('h') or 0) - (u.get('d') or 0)}" + (" exhausted" if u.get("x") else ""))
     return {"base_hp_left": p["base"]["hp"] - p["base"]["d"], "ready_resources": p["res"]["ready"],
             "cards_in_hand": p.get("handCount"), "units": units}
