@@ -1,0 +1,284 @@
+/**
+ * Strategy Atlas kit: the one shared picture language and vocabulary for describing bots.
+ * Spots (game situations) with their icons, play styles, bot families and the Atlas's terms.
+ *
+ * Works as a browser script (sets window.AtlasKit) and as a Node module (require). No dependencies.
+ * The Strategy Atlas page is built from this file, and meta/export-kit.js copies it with ready-made SVGs
+ * to /mnt/project-files/meta/kit/ on every refresh, so every page that uses it stays in step with the Atlas.
+ */
+(function (root, factory) {
+  const kit = factory();
+  if (typeof module === 'object' && module.exports) module.exports = kit;
+  else root.AtlasKit = kit;
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const VERSION = 1;
+
+  /** Groups, in display order. */
+  const GROUPS = [
+    { id: 'Behind', label: 'When behind' },
+    { id: 'Even', label: 'Close or long' },
+    { id: 'Ahead', label: 'When ahead' },
+  ];
+
+  /**
+   * Spots: a round start seen from one player. A game enters a spot at the first round start where `rule` holds.
+   * `label` and `short` must match meta/analyze.js SITUATIONS (build-page.js checks this).
+   * `board` is the icon's final frame; `focus` is the part of the table the spot is about.
+   */
+  const SPOTS = [
+    { id: 'base_behind', group: 'Behind', label: 'Base behind', short: 'your base 5+ HP lower', rule: 'round 2 or later and your base has 5+ HP less than theirs',
+      say: 'Your base has 5 or more HP less left than theirs.', focus: 'base', gap: true,
+      board: { you: { base: 12, units: [3, 2], hand: 3 }, them: { base: 21, units: [2, 3], hand: 3 }, round: 4 } },
+    { id: 'board_behind', group: 'Behind', label: 'Board behind', short: '4+ less power on board', rule: 'round 2 or later and your units have 4+ less total power than theirs',
+      say: 'Their units on the table have 4 or more power more than yours.', focus: 'units', gap: true,
+      board: { you: { base: 24, units: [2, 1], hand: 3 }, them: { base: 24, units: [3, 4, 2, 3], hand: 3 }, round: 3 } },
+    { id: 'low_base', group: 'Behind', label: 'Near death', short: 'your base at 8 HP or less', rule: 'your base has 8 HP or less',
+      say: 'Your base is down to 8 HP or less. One or two more hits and you lose.', focus: 'base', only: 'you',
+      board: { you: { base: 7, units: [2], hand: 2 }, them: { base: 18, units: [3, 2], hand: 3 }, round: 6 } },
+    { id: 'cards_behind', group: 'Behind', label: 'Fewer cards', short: '2+ fewer cards in hand', rule: 'round 2 or later and you hold 2+ fewer cards than they do',
+      say: 'You hold 2 or more fewer cards than they do, so you have fewer options.', focus: 'hand', gap: true,
+      board: { you: { base: 26, units: [2, 3], hand: 1 }, them: { base: 26, units: [2, 3], hand: 5 }, round: 3 } },
+    { id: 'close_mid', group: 'Even', label: 'Close at R4', short: 'even at round 4', rule: 'round 4 and both base HP and board power are within 3',
+      say: 'Round 4 starts and both sides are level: base and board within 3.', focus: 'round', even: true,
+      board: { you: { base: 22, units: [3, 2, 3], hand: 3 }, them: { base: 21, units: [2, 3, 3], hand: 3 }, round: 4 } },
+    { id: 'long_game', group: 'Even', label: 'Long game', short: 'round 8 or later', rule: 'round 8 or later',
+      say: 'The game reaches round 8. Most games are over by then.', focus: 'round', late: true,
+      board: { you: { base: 13, units: [4, 2], hand: 2 }, them: { base: 15, units: [3, 3], hand: 2 }, round: 8 } },
+    { id: 'base_ahead', group: 'Ahead', label: 'Base ahead', short: 'your base 5+ HP higher', rule: 'round 2 or later and your base has 5+ HP more than theirs',
+      say: 'Your base has 5 or more HP more left than theirs.', focus: 'base', gap: true,
+      board: { you: { base: 21, units: [2, 3], hand: 3 }, them: { base: 12, units: [3, 2], hand: 3 }, round: 4 } },
+    { id: 'board_ahead', group: 'Ahead', label: 'Board ahead', short: '4+ more power on board', rule: 'round 2 or later and your units have 4+ more total power than theirs',
+      say: 'Your units on the table have 4 or more power more than theirs.', focus: 'units', gap: true,
+      board: { you: { base: 24, units: [3, 4, 2, 3], hand: 3 }, them: { base: 24, units: [2, 1], hand: 3 }, round: 3 } },
+    { id: 'kill_range', group: 'Ahead', label: 'Lethal range', short: 'their base at 8 HP or less', rule: 'their base has 8 HP or less',
+      say: 'Their base is down to 8 HP or less. You can finish them soon.', focus: 'base', only: 'them',
+      board: { you: { base: 18, units: [3, 2], hand: 3 }, them: { base: 6, units: [2], hand: 2 }, round: 6 } },
+  ];
+  const SPOT = Object.fromEntries(SPOTS.map((s) => [s.id, s]));
+
+  /** The even opening every animated icon starts from. */
+  const OPEN = { you: { base: 30, units: [2, 3], hand: 4 }, them: { base: 30, units: [2, 3], hand: 4 }, round: 1 };
+
+  /** Icon anatomy, for legends. */
+  const ICON_PARTS = [
+    { part: 'halves', text: 'Top half is the opponent (THEM, orange), bottom half is you (YOU, blue).' },
+    { part: 'base', text: 'Tower = base HP left (30 at the start). It turns red at 8 HP or less.' },
+    { part: 'units', text: 'Cards on the table = units, with their power.' },
+    { part: 'hand', text: 'Fanned cards = cards in hand.' },
+    { part: 'round', text: 'Badge on the centre line = round number (R8+ = round 8 or later).' },
+    { part: 'focus', text: 'In the small icons, the part the spot is about stays bright; the rest is dimmed.' },
+  ];
+
+  /**
+   * Play styles, from per-round stats measured in replays (meta/analyze.js describe()). "High" = top third of the field.
+   * The order is the order of the tests: the first that holds wins.
+   */
+  const STYLES = [
+    { id: 'Racer', quadrant: 'Racers · hit the base', test: '80%+ of attacks at the base and high base damage', text: '80%+ of attacks at the base, high base damage' },
+    { id: 'Bruiser', quadrant: 'Bruisers · do both', test: 'many units removed and high base damage', text: 'high base damage and many kills' },
+    { id: 'Controller', quadrant: 'Controllers · clear the board', test: 'many units removed and under 60% of attacks at the base', text: 'many kills, attacks units more than the base' },
+    { id: 'Cautious', quadrant: 'Passive', test: 'base damage in the bottom third', text: 'low base damage' },
+    { id: 'Balanced', quadrant: null, test: 'none of the above', text: 'none of these' },
+    { id: 'Random', quadrant: null, test: 'the random bot family', text: 'plays random legal moves' },
+  ];
+
+  /** Style traits, per round of the bot's own decisions. */
+  const TRAITS = [
+    { id: 'baseDmg', label: 'Base damage / round', fmt: 'num' },
+    { id: 'baseShare', label: 'Attacks at base', fmt: 'pct' },
+    { id: 'attacks', label: 'Attacks / round', fmt: 'num' },
+    { id: 'kills', label: 'Units killed / round', fmt: 'num' },
+    { id: 'deploys', label: 'Units added / round', fmt: 'num' },
+    { id: 'passShare', label: 'Passes', fmt: 'pct' },
+    { id: 'initiative', label: 'Initiative claims / round', fmt: 'num' },
+    { id: 'rounds', label: 'Game length (rounds)', fmt: 'num' },
+  ];
+
+  /** Bot families: colour = family everywhere (dashboard bot cards use the same `family` values). */
+  const FAMILIES = [
+    { id: 'heur', family: 'heuristic', label: 'Rules', light: '#2a78d6', dark: '#3987e5' },
+    { id: 'search', family: 'search', label: 'Search', light: '#eb6834', dark: '#d95926' },
+    { id: 'llm', family: 'llm', label: 'LLM', light: '#1baf7a', dark: '#199e70' },
+    { id: 'learned', family: 'learned', label: 'Learned', light: '#c98500', dark: '#c98500' },
+    { id: 'arena', family: 'other', label: 'Arena entrant', light: '#d55181', dark: '#d55181' },
+    { id: 'random', family: 'random', label: 'Random', light: '#8a90a0', dark: '#7d8494' },
+    { id: 'human', family: 'human', label: 'Humans', light: '#0f1420', dark: '#eef0f4' },
+  ];
+  const FAM_BY_FAMILY = Object.fromEntries(FAMILIES.map((f) => [f.family, f]));
+  /** Family key ('heur', 'search', ...) for a bot's `family` field; anything unknown is an arena entrant. */
+  const famKey = (family) => (FAM_BY_FAMILY[family] || FAM_BY_FAMILY.other).id;
+  const famLabel = (family) => (FAM_BY_FAMILY[family] || FAM_BY_FAMILY.other).label;
+  const famColor = (family) => `var(--f-${famKey(family)})`;
+
+  /** The Atlas's words. Use them as written so every page reads the same. */
+  const TERMS = {
+    spot: 'A kind of game situation, checked at the start of each round from one player\'s side. A game counts in a spot from the first round start where its rule holds.',
+    averageBot: 'What a 1500-rated bot is expected to win from the same position against the same opponent (a logistic fit on every round start).',
+    edge: 'Points of win chance above (+) or below (−) an average bot in the same spot. +10 = wins 10% more of those games.',
+    vsOwn: 'The same, measured against the bot\'s own level. A bot\'s best and worst spot use this, so a strong bot still has a weak spot.',
+    best: 'The bot with the highest edge in a spot, among bots with 8+ games there.',
+    rating: 'Overall strength from every finished game (Bradley-Terry, 1500 = average). Counts all games; a spot counts only games that reach it.',
+    clock: '⏱ = games lost by a late or broken reply (a timeout, or a protocol error by that bot). Each one counts as a loss.',
+    thin: 'Hollow dot or hatched cell = fewer than 5 games in that spot: treat it as a hint.',
+    style: 'How a bot plays, from its own moves: base damage, units removed and where its attacks go (see STYLES).',
+    humans: 'Real karabast.net games, both seats as one competitor, scored like an average bot facing an equal opponent. Never ranked among bots.',
+  };
+
+  /** Edge as signed points: +12, −3, 0. */
+  const pp = (x) => { const v = Math.round(x * 100); return v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v); };
+  /** Diverging colour step for an edge: { bg, fg } as CSS vars (--pos-1..5, --neg-1..5, --mid). */
+  function edgeColor(e) {
+    const a = Math.abs(e);
+    const step = a < 0.03 ? 0 : a < 0.08 ? 1 : a < 0.14 ? 2 : a < 0.22 ? 3 : a < 0.32 ? 4 : 5;
+    if (!step) return { bg: 'var(--mid)', fg: 'var(--ink-2)' };
+    return { bg: `var(--${e > 0 ? 'pos' : 'neg'}-${step})`, fg: step >= 4 ? 'var(--panel)' : 'var(--ink)' };
+  }
+
+  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const powerOf = (units) => units.reduce((a, b) => a + b, 0);
+
+  /**
+   * SVG body (no <svg> wrapper, viewBox 0 0 240 150) of a spot's table at tween position k (0 = opening, 1 = the spot).
+   * `mini` drops text and dims what the spot is not about; `glow` (0..1) pulses the focus outline.
+   */
+  function drawBoard(id, k = 1, { mini = false, glow = 0 } = {}) {
+    const S = SPOT[id], A = OPEN, B = S.board;
+    const dim = (part) => (k > 0.55 && S.focus !== part ? (mini ? 0.22 : 0.4) : 1);
+    const side = (who, top) => {
+      const a = A[who], b = B[who];
+      const ink = who === 'you' ? 'var(--you)' : 'var(--them)';
+      const yB = top ? 8 : 82, yU = top ? 22 : 96, yH = top ? 28 : 102;
+      const hp = lerp(a.base, b.base, k), hpFrac = hp / 30, low = hp <= 8.5;
+      let g = '';
+      const bh = 58, fill = bh * hpFrac;
+      const hot = S.focus === 'base' && (!S.only || S.only === who) && k > 0.6;
+      g += `<g opacity="${dim('base')}"><rect x="8" y="${yB}" width="34" height="${bh}" rx="4" fill="var(--panel)" stroke="${hot ? 'var(--ink)' : 'var(--line-2)'}" stroke-width="${hot ? 2 + glow * 2 : 1.5}"/>`;
+      g += `<rect x="11" y="${yB + bh - fill + 2}" width="28" height="${Math.max(0, fill - 4)}" rx="2" fill="${low ? 'var(--neg-4)' : ink}"/>`;
+      if (!mini) g += `<text x="25" y="${yB + bh / 2 + 5}" text-anchor="middle" class="bd-num" style="fill:${hpFrac > 0.45 ? 'var(--panel)' : 'var(--ink)'}">${Math.round(hp)}</text>`;
+      g += '</g>';
+      // Units: slots fade in or out across the tween.
+      const n0 = a.units.length, n1 = b.units.length, slots = Math.max(n0, n1);
+      g += `<g opacity="${dim('units')}">`;
+      for (let i = 0; i < slots; i++) {
+        let op = 1;
+        if (i >= Math.min(n0, n1)) { const j = i - Math.min(n0, n1), m = Math.abs(n1 - n0), t0 = j / (m + 1), t1 = (j + 1) / (m + 1); const f = Math.max(0, Math.min(1, (k - t0) / (t1 - t0))); op = n1 > n0 ? f : 1 - f; }
+        if (op <= 0.01) continue;
+        const pw = (n1 >= n0 ? b.units : a.units)[i] ?? b.units[i] ?? a.units[i];
+        const x = 52 + i * 27, sc = 0.6 + 0.4 * op;
+        g += `<g opacity="${op}" transform="translate(${x + 12} ${yU + 16}) scale(${sc}) translate(${-(x + 12)} ${-(yU + 16)})"><rect x="${x}" y="${yU}" width="24" height="32" rx="3" fill="${ink}"/>`;
+        if (!mini) g += `<text x="${x + 12}" y="${yU + 21}" text-anchor="middle" class="bd-num" style="fill:var(--panel)">${pw}</text>`;
+        g += '</g>';
+      }
+      if (!mini && k > 0.6 && S.focus === 'units') g += `<text x="52" y="${top ? yU - 4 : yU + 43}" class="bd-lab">total power ${powerOf(b.units)}</text>`;
+      g += '</g>';
+      // Hand: fanned cards.
+      const h = Math.round(lerp(a.hand, b.hand, k));
+      g += `<g opacity="${dim('hand')}">`;
+      for (let i = 0; i < h; i++) g += `<rect x="${170 + i * 9}" y="${yH}" width="13" height="20" rx="2" fill="var(--panel)" stroke="${ink}" stroke-width="1.6" transform="rotate(${(i - (h - 1) / 2) * 6} ${176 + i * 9} ${yH + 26})"/>`;
+      if (!mini) g += `<text x="${170}" y="${top ? yH - 6 : yH + 34}" class="bd-lab">${h} in hand</text>`;
+      g += '</g>';
+      if (!mini) g += `<text x="236" y="${top ? 11 : 146}" text-anchor="end" class="bd-who" style="fill:${ink}">${who === 'you' ? 'YOU' : 'THEM'}</text>`;
+      return g;
+    };
+    const r = Math.round(lerp(A.round, B.round, ease(Math.min(1, k * 1.1))));
+    let g = `<line x1="4" x2="236" y1="75" y2="75" stroke="var(--line-2)" stroke-dasharray="3 4"/>`;
+    g += side('them', true) + side('you', false);
+    const rHot = S.focus === 'round' && k > 0.6;
+    g += `<g opacity="${dim('round')}"><circle cx="214" cy="75" r="${mini ? 15 : 14}" fill="var(--panel)" stroke="${rHot ? 'var(--ink)' : 'var(--line-2)'}" stroke-width="${rHot ? 2 + glow * 2 : 1.5}"/><text x="214" y="${mini ? 81 : 80}" text-anchor="middle" class="bd-round" style="${mini ? 'font-size:17px' : ''}">R${r}${S.late && k > 0.95 ? '+' : ''}</text></g>`;
+    // The measured gap, as a pill on the centre line once the tween lands.
+    if (!mini && k > 0.6) {
+      let txt = null;
+      const you = B.you, them = B.them;
+      if (S.gap && S.focus === 'base') { const d = you.base - them.base; txt = `you ${d > 0 ? '+' : '−'}${Math.abs(d)} HP`; }
+      if (S.gap && S.focus === 'units') { const d = powerOf(you.units) - powerOf(them.units); txt = `you ${d > 0 ? '+' : '−'}${Math.abs(d)} power`; }
+      if (S.gap && S.focus === 'hand') { const d = you.hand - them.hand; txt = `you ${d > 0 ? '+' : '−'}${Math.abs(d)} cards`; }
+      if (S.only) txt = `${S.only === 'you' ? 'your' : 'their'} base ${B[S.only].base} HP`;
+      if (S.even) txt = 'level: base and board within 3';
+      if (S.late) txt = 'round 8 or later';
+      if (txt) {
+        const w = txt.length * 6.1 + 14, op = Math.min(1, (k - 0.6) * 3);
+        g += `<g opacity="${op}"><rect x="${128 - w / 2}" y="66" width="${w}" height="18" rx="9" fill="var(--ink)"/><text x="128" y="79" text-anchor="middle" class="bd-pill">${txt}</text></g>`;
+      }
+    }
+    return g;
+  }
+
+  /** A whole <svg> for a spot. Defaults to the small final-frame icon. */
+  function spotSvg(id, { k = 1, mini = true, cls = 'pict', label = true } = {}) {
+    const S = SPOT[id];
+    const aria = label ? `role="img" aria-label="${S.label}: ${S.short}"` : 'aria-hidden="true"';
+    return `<svg class="${cls}" viewBox="0 0 240 150" ${aria}>${drawBoard(id, k, { mini })}</svg>`;
+  }
+
+  /**
+   * Plays the guide animation in an <svg viewBox="0 0 240 150"> element: tween from the opening into each spot, hold, next.
+   * Returns { stop(), show(id) }. `onSpot(spot)` is called when a new spot starts (for captions).
+   * Honours prefers-reduced-motion by showing final frames only.
+   */
+  const TIMING = { hold0: 700, tween: 1900, hold1: 2400 };
+  function animate(svg, { ids = SPOTS.map((s) => s.id), onSpot = null, loop = true } = {}) {
+    let i = 0, t0 = performance.now(), raf = 0, auto = loop, last = null;
+    const total = TIMING.hold0 + TIMING.tween + TIMING.hold1;
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const draw = (id, k, glow) => { svg.innerHTML = drawBoard(id, k, { glow }); if (onSpot && last !== id) { last = id; onSpot(SPOT[id]); } };
+    const frame = (now) => {
+      if (!svg.isConnected) { raf = 0; return; }
+      let t = now - t0;
+      if (t > total) { if (auto) { i = (i + 1) % ids.length; t0 = now; t = 0; } else t = total; }
+      const k = t < TIMING.hold0 ? 0 : t < TIMING.hold0 + TIMING.tween ? ease((t - TIMING.hold0) / TIMING.tween) : 1;
+      draw(ids[i], k, k === 1 ? 0.5 + 0.5 * Math.sin((t - TIMING.hold0 - TIMING.tween) / 160) : 0);
+      raf = requestAnimationFrame(frame);
+    };
+    if (reduce) draw(ids[0], 1, 0); else raf = requestAnimationFrame(frame);
+    return {
+      stop() { cancelAnimationFrame(raf); raf = 0; },
+      show(id) { i = Math.max(0, ids.indexOf(id)); t0 = performance.now(); auto = false; if (reduce) draw(ids[i], 1, 0); },
+      play() { auto = true; t0 = performance.now(); },
+    };
+  }
+
+  /** Colour tokens the icons and family dots use. Same values as the Atlas page. */
+  const TOKENS = {
+    light: { '--ink': '#0f1420', '--ink-2': '#4a5263', '--panel': '#ffffff', '--line-2': '#c9ced8', '--mid': '#eef0f3', '--you': '#2a5bd7', '--them': '#d0603a', '--neg-4': '#cc4632',
+      '--pos-1': '#dbe8fb', '--pos-2': '#a9c8f3', '--pos-3': '#5f9be8', '--pos-4': '#2a6fd0', '--pos-5': '#184f95', '--neg-1': '#fbe0dc', '--neg-2': '#f4b0a6', '--neg-3': '#e8735f', '--neg-5': '#962a1c', '--clock': '#b4361f' },
+    dark: { '--ink': '#eef0f4', '--ink-2': '#b4bac8', '--panel': '#161a23', '--line-2': '#343a48', '--mid': '#1e232e', '--you': '#6f9cf0', '--them': '#e58258', '--neg-4': '#d9654f',
+      '--pos-1': '#1d2c45', '--pos-2': '#23467a', '--pos-3': '#2f66b3', '--pos-4': '#4a8ae6', '--pos-5': '#8db8f5', '--neg-1': '#3a2220', '--neg-2': '#6a2f27', '--neg-3': '#a5412f', '--neg-5': '#f2a092', '--clock': '#f08a72' },
+  };
+  const famTokens = (mode) => Object.fromEntries(FAMILIES.map((f) => [`--f-${f.id}`, f.id === 'human' ? 'var(--ink)' : f[mode]]));
+  const decl = (o) => Object.entries(o).map(([k, v]) => `${k}: ${v};`).join(' ');
+
+  /**
+   * CSS for the icons: tokens (light, dark by system preference, and [data-theme] overrides) plus the text classes.
+   * `base: false` leaves out the general tokens (ink, panel, you, them, ...) for a page that defines its own.
+   * `scope` is the selector the tokens go on (':root' for a page, 'svg' inside a standalone SVG file).
+   */
+  function css({ base = true, scope = ':root' } = {}) {
+    const light = { ...(base ? TOKENS.light : {}), ...famTokens('light') }, dark = { ...(base ? TOKENS.dark : {}), ...famTokens('dark') };
+    const dk = scope === ':root' ? ':root:not([data-theme="light"])' : scope;
+    return [
+      `${scope} { ${decl(light)} }`,
+      `@media (prefers-color-scheme: dark) { ${dk} { ${decl(dark)} } }`,
+      scope === ':root' ? `:root[data-theme="dark"] { ${decl(dark)} }` : '',
+      '.bd-num { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; font-weight: 600; }',
+      '.bd-lab { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 9.5px; fill: var(--ink-2); }',
+      '.bd-who { font-family: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .12em; }',
+      '.bd-round { font-family: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif; font-size: 12px; font-weight: 700; fill: var(--ink); }',
+      '.bd-pill { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 10px; font-weight: 600; fill: var(--panel); }',
+    ].filter(Boolean).join('\n');
+  }
+
+  /** Adds css() to the page once. */
+  function injectCss(opts) {
+    if (typeof document === 'undefined' || document.getElementById('atlas-kit-css')) return;
+    const st = document.createElement('style');
+    st.id = 'atlas-kit-css';
+    st.textContent = css(opts);
+    document.head.appendChild(st);
+  }
+
+  return { VERSION, GROUPS, SPOTS, SPOT, OPEN, ICON_PARTS, STYLES, TRAITS, FAMILIES, TERMS, TIMING,
+    famKey, famLabel, famColor, pp, edgeColor, ease, drawBoard, spotSvg, animate, TOKENS, css, injectCss };
+});
