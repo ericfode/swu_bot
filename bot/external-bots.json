@@ -2,5 +2,6 @@
     "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
     "jev": { "cmd": "python3", "args": ["bot/jev/jev_bot.py"], "timeoutMs": 120000, "startTimeoutMs": 60000, "lang": "python" },
     "jev-look": { "cmd": "python3", "args": ["bot/jev/jev_bot.py", "--look"], "adapter": "bot/jev/look.js", "maxImagine": 3,
-                  "timeoutMs": 180000, "startTimeoutMs": 60000, "lang": "python" }
+                  "timeoutMs": 180000, "startTimeoutMs": 60000, "lang": "python" },
+    "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" }
 }
