@@ -16,6 +16,9 @@ This folder builds 9 of our bots that way and plays them like any other bot prog
 | `py-clock` | `bot/python` | the `.py` files, copied (not `test_*`) | `python-3.14-wasi` | 15 KB |
 | `node-random`, `node-search` | `bot/examples/*.js` | `js/bundle.js` packs the program and its requires into one script, Javy compiles it with QuickJS | `wasi-p1` | 514 KB |
 
+`c-clock` and `py-clock` still answer `ready` with protocol v1, so their manifests say `"protocol": 1`. The packaging
+design rates only v2 bots; moving them is the small change in `spec/MIGRATION.md`, not made here.
+
 ## Use
 
 ```bash

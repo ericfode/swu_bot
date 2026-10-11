@@ -35,7 +35,7 @@ BOTS = {
     "rust-greedy": {"lang": "rust", "args": ["greedy"]},
     "rust-greedy2": {"lang": "rust", "args": ["greedy2"]},
     "rust-search": {"lang": "rust", "args": ["search"]},
-    "c-clock": {"lang": "c"},
+    "c-clock": {"lang": "c", "protocol": 1},
     "py-random": {"lang": "python", "files": ["bot/examples/random_bot.py"], "cards": False, "protocol": 2},
     "py-clock": {"lang": "python", "dir": "bot/python", "entry": "swu_clock.py", "cards": True, "protocol": 1},
     "node-random": {"lang": "js", "entry": "bot/examples/random-bot.js", "args": ["node-random"]},

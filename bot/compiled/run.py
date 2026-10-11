@@ -37,6 +37,9 @@ T0 = time.perf_counter()
 
 import wasmtime  # noqa: E402  (pip install wasmtime; tested with 49.0.0)
 from wasmtime import _ffi as ffi  # noqa: E402
+from importlib.metadata import version as _version  # noqa: E402
+
+WASMTIME = _version("wasmtime")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bundle  # noqa: E402
@@ -109,7 +112,8 @@ def main():
     wasm_bytes = open(wasm_path, "rb").read()
     cache_dir = os.environ.get("SWU_WASM_CACHE") or os.path.join(ROOT, "build", "compiled", ".cache")
     os.makedirs(cache_dir, exist_ok=True)
-    key = hashlib.sha256(wasm_bytes + repr((wasmtime.__name__, o.fuel > 0, o.wall_s > 0)).encode()).hexdigest()
+    # machine code depends on the wasmtime version and on the fuel and epoch settings, so they are part of the key
+    key = hashlib.sha256(wasm_bytes + repr((WASMTIME, o.fuel > 0, o.wall_s > 0)).encode()).hexdigest()
     cpath = os.path.join(cache_dir, key + ".cwasm")
     module = None
     if os.path.exists(cpath):
