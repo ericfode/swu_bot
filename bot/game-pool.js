@@ -16,8 +16,10 @@
  *     by the parent's own clock: whoever the control array says is thinking forfeits (faultKind 'hang'), else ERROR.
  *     This one holds even when a bot fakes its `since` from inside the worker.
  * A worker that dies mid-game (crash, out of memory, a bot calling process.exit) is replaced the same way; the game is
- * that seat's forfeit (faultKind 'error') when a bot was running, else an ERROR. Only a worker that dies before it has
- * loaded the engine fails the whole run.
+ * that seat's forfeit (faultKind 'error') when a bot was running, else an ERROR (ladder-worker.js also names the seat
+ * when a timer or promise a bot started kills it). A worker that dies between games (async work a bot left behind) has
+ * not started the job it was sent, so that job goes back to the front of the queue (twice at most) instead of getting
+ * a result. Only a worker that dies before it has loaded the engine fails the whole run.
  */
 const fs = require('fs');
 const path = require('path');
@@ -30,6 +32,7 @@ const SLOTS = 7;
 const PHASE = { idle: 0, engine: 1, load: 2, choose: 3 };
 const CHECK_MS = 2000;
 const KILL_AFTER_MS = 5000;
+const MAX_REQUEUE = 2;
 const POOL_WORKER = 'SWU_POOL_WORKER';
 const DEFAULT_GAME_MS = (capMs) => (Number.isFinite(capMs) && capMs > 0 ? 4 * capMs + 600000 : 0);
 let workerIds = 0;
@@ -152,6 +155,7 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             }
         };
         const nameOf = (job, seat) => (seat === 1 ? job.p1 : job.p2);
+        const requeued = new Map(); // job -> times it went back to the queue unplayed
         const feed = (s) => {
             const job = queue.shift();
             if (!job) {
@@ -160,7 +164,9 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             }
             s.job = job;
             s.jobStart = Date.now();
-            onStart(job);
+            if (!requeued.has(job)) {
+                onStart(job);
+            }
             s.w.postMessage(job);
         };
         // records the game a worker could not finish and retires that worker; a replacement takes over the queue
@@ -204,8 +210,18 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 s.exited = true;
                 slots.delete(s);
                 if (!s.retired) {
-                    if (s.job) {
-                        const st = readControl(s.ctl);
+                    const st = readControl(s.ctl);
+                    if (s.job && st.phase === PHASE.idle && (requeued.get(s.job) ?? 0) < MAX_REQUEUE) {
+                        // it died before starting this job: play the job again on a fresh worker
+                        const why = String(s.error?.message ?? `exit code ${code}`).split('\n')[0].slice(0, 160);
+                        console.error(`game-pool: a worker died between games (${why}); playing ${s.job.id ?? 'its job'} again`);
+                        requeued.set(s.job, (requeued.get(s.job) ?? 0) + 1);
+                        queue.unshift(s.job);
+                        s.job = null;
+                        if (!ended) {
+                            spawn();
+                        }
+                    } else if (s.job) {
                         const seat = st.phase === PHASE.choose || st.phase === PHASE.load ? st.seat : 0;
                         const why = String(s.error?.message ?? `exit code ${code}`).split('\n')[0].slice(0, 160);
                         const error = seat ? `CRASH ${nameOf(s.job, seat)}: worker died (${why})` : `worker died (${why})`;

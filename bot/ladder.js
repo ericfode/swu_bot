@@ -5,7 +5,8 @@
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
  *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--resume]
  *       [--cap-ms 60000] [--hang-ms 600000]
- * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest.
+ * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine
+ * and same bot/ code too: config.harness is the git tree of bot/, plus a hash of uncommitted changes there).
  * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot forfeits. --hang-ms is the
  * watchdog (game-pool.js): one choose() call running longer than that (wall clock) forfeits the game, and its worker is
  * replaced. A bot that fails to load or throws also forfeits; ladder.json games carry fault / faultKind.
@@ -22,6 +23,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { describeBot } = require('./players');
 const { roundRobin, gauntlet } = require('./ratings');
@@ -36,6 +38,30 @@ function arg(name, dflt) {
 function engineRev() {
     try {
         return execFileSync('git', ['-C', path.join(__dirname, '..', 'forceteki'), 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The revision of the harness and built-in bots: the git tree id of bot/ at HEAD, plus a hash of uncommitted changes and
+ * new files under bot/ when there are any. Arena versions live outside the repo and never change. null without git.
+ */
+function harnessRev() {
+    const root = path.join(__dirname, '..');
+    const git = (...a) => execFileSync('git', ['-C', root, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    try {
+        const tree = git('rev-parse', '--short', 'HEAD:bot').trim();
+        const extra = git('ls-files', '--others', '--exclude-standard', '-z', '--', 'bot').split('\0').filter(Boolean).sort();
+        const diff = git('diff', 'HEAD', '--', 'bot');
+        if (!diff && !extra.length) {
+            return tree;
+        }
+        const h = crypto.createHash('sha256').update(diff);
+        for (const f of extra) {
+            h.update(`\0${f}\0`).update(fs.readFileSync(path.join(root, f)));
+        }
+        return `${tree}+${h.digest('hex').slice(0, 10)}`;
     } catch {
         return null;
     }
@@ -62,9 +88,11 @@ function readPrevious(file, config, engine) {
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const c = doc?.config ?? {};
     // everything that changes a game's result: who plays, which seeds, the step cap, the time cap and watchdog, the engine
+    // and the harness code (guard, game runner, env, built-in bots)
     if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps
-        || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine) {
-        console.log('resume: the earlier run used other bots, seeds, format, limits or engine, starting over');
+        || (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || !same(c.vs ?? null, config.vs ?? null) || (doc.engine ?? null) !== engine
+        || (c.harness ?? null) !== (config.harness ?? null)) {
+        console.log('resume: the earlier run used other bots, seeds, format, limits, engine or bot/ code, starting over');
         return null;
     }
     return { games: Array.isArray(doc.games) ? doc.games : [] };
@@ -108,7 +136,7 @@ async function main() {
     const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
-                     ...(vs ? { format: 'gauntlet', vs } : {}) };
+                     harness: harnessRev(), ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config, engine) : null;

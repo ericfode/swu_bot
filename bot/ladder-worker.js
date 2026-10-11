@@ -21,6 +21,7 @@ const { parentPort, workerData } = require('worker_threads');
 for (const k of ['parentPort', 'workerData']) {
     Object.defineProperty(require('worker_threads'), k, { value: null, writable: false, configurable: false });
 }
+const { AsyncLocalStorage } = require('async_hooks');
 const { Env } = require('./env');
 const { playGame, timingSummary } = require('./match');
 const { snapshot } = require('./recorder');
@@ -33,6 +34,23 @@ env.engineRev = workerData.engineRev ?? null;
 const capMs = workerData.capMs ?? Infinity;
 const ctl = workerControl(workerData.control, workerData.base);
 const firstLine = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 200);
+
+// Which bot started the async work that is running. Timers and promises a bot creates in createBot() or choose() carry
+// { game, seat } from that call, so a delayed throw or rejection that kills the worker is that bot's forfeit (the parent
+// reads the seat from the control array) rather than an unrated ERROR. Work left over from an earlier game (whose result
+// is already in) marks the worker idle, so the parent plays the interrupted job again on a fresh worker.
+const origin = new AsyncLocalStorage();
+let thisGame = null;
+process.on('uncaughtException', (e) => {
+    const o = origin.getStore();
+    if (o && o.game === thisGame) {
+        ctl.set(PHASE.choose, o.seat);
+    } else if (o) {
+        ctl.set(PHASE.idle);
+        throw new Error(`async work left by ${o.name} from an earlier game: ${firstLine(e)}`);
+    }
+    throw e; // the worker dies as before
+});
 const r3 = (x) => Math.round(x * 1000) / 1000;
 const cpuMs = () => {
     const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
@@ -41,7 +59,9 @@ const cpuMs = () => {
 
 /** Builds and guards the bot for seat i (0 or 1); { bot } or { error }. */
 function load(name, i) {
+    const mine = { game: thisGame, seat: i + 1, name };
     ctl.set(PHASE.load, i + 1);
+    origin.enterWith(mine);
     try {
         const t0 = cpuMs();
         const bot = makeBot(name);
@@ -55,8 +75,10 @@ function load(name, i) {
             onEnter: (ctx) => {
                 game = ctx?.game ?? null;
                 ctl.set(PHASE.choose, i + 1);
+                origin.enterWith(mine);
             },
             onExit: () => {
+                origin.enterWith(undefined);
                 ctl.chose(i + 1, game?.round, guarded.thinkMs);
                 ctl.set(PHASE.engine);
             }
@@ -67,6 +89,7 @@ function load(name, i) {
     } catch (e) {
         return { error: firstLine(e) };
     } finally {
+        origin.enterWith(undefined);
         ctl.set(PHASE.engine);
     }
 }
@@ -76,6 +99,7 @@ parentPort.on('message', async (job) => {
         process.exit(0);
     }
     const t0 = Date.now();
+    thisGame = job;
     ctl.newGame();
     const names = [job.p1, job.p2];
     const loaded = names.map(load);
@@ -105,6 +129,9 @@ parentPort.on('message', async (job) => {
             };
         }
         r = await playGame(env, { seed: job.seed, bots, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
+        // the game runs without yielding, so a bot's timers and rejected promises can only fire now: let the ones that
+        // are due run while this game is still the current one (a throw there is that bot's forfeit, see origin)
+        await new Promise((resolve) => setTimeout(resolve, 1));
         delete r.events;
         r.winnerSeat = r.winner;
         r.winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
@@ -121,6 +148,7 @@ parentPort.on('message', async (job) => {
             fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, fault: r.fault, faultKind: r.faultKind })}\n`);
         }
     }
+    thisGame = null;
     ctl.set(PHASE.idle);
     parentPort.postMessage({ job, result: r });
 });
