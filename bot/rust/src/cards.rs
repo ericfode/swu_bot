@@ -38,6 +38,9 @@ pub struct CardInfo {
     types: Option<Vec<String>>,
     #[serde(default)]
     set_id: Option<SetId>,
+    /// Every printing (alternate art, reprints), `set_id` among them.
+    #[serde(default)]
+    set_codes: Option<Vec<SetId>>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -99,10 +102,13 @@ impl CardDb {
     }
 
     pub fn insert(&mut self, card: CardInfo) {
-        if let Some(s) = card.set_id.as_ref().filter(|s| !s.set.is_empty()) {
-            if let Some(n) = s.number {
-                self.by_set.insert(format!("{}_{:03}", s.set, n), card.internal_name.clone());
-            }
+        let code = |s: &SetId| s.number.filter(|_| !s.set.is_empty()).map(|n| format!("{}_{:03}", s.set, n));
+        if let Some(c) = card.set_id.as_ref().and_then(code) {
+            self.by_set.insert(c, card.internal_name.clone());
+        }
+        // other printings never take a code that is some card's own set_id
+        for c in card.set_codes.iter().flatten().filter_map(code) {
+            self.by_set.entry(c).or_insert_with(|| card.internal_name.clone());
         }
         self.by_title.entry(card.title.clone()).or_insert_with(|| card.internal_name.clone());
         self.by_name.insert(card.internal_name.clone(), card);
@@ -138,4 +144,24 @@ pub fn test_card(name: &str, json: &str) -> CardInfo {
     let mut c: CardInfo = serde_json::from_str(json).unwrap();
     c.internal_name = name.into();
     c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_a_card_by_any_printing() {
+        let mut db = CardDb::default();
+        db.insert(test_card(
+            "tauntaun-mount",
+            r#"{"title":"Tauntaun Mount","setId":{"set":"IBH","number":15},
+                "setCodes":[{"set":"IBH","number":15},{"set":"IBH","number":28},{"set":"SOR","number":7}]}"#,
+        ));
+        // SOR_007 is another card's own number: its set_id wins whatever the load order
+        db.insert(test_card("other", r#"{"title":"Other","setId":{"set":"SOR","number":7}}"#));
+        assert_eq!(db.by_set_code("IBH_028").map(|c| c.title.as_str()), Some("Tauntaun Mount"));
+        assert_eq!(db.by_set_code("IBH_015").map(|c| c.title.as_str()), Some("Tauntaun Mount"));
+        assert_eq!(db.by_set_code("SOR_007").map(|c| c.title.as_str()), Some("Other"));
+    }
 }
