@@ -196,9 +196,6 @@ pub fn train(d: &Decisions, init: &Path, out: &Path, epochs: usize, batch: usize
         let mut tot = 0.0;
         let mut nb = 0;
         for chunk in tr.chunks(batch) {
-            if chunk.len() < batch {
-                break;
-            }
             let (ce, _) = batch_loss(&net, (!full).then_some(&frozen), d, chunk, &dev);
             tot += ce.clone().into_scalar::<f32>();
             nb += 1;
