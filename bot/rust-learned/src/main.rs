@@ -94,7 +94,14 @@ fn main() {
             let teachers: Vec<String> = flag(&args, "teacher-bots").expect("--teacher-bots").split(',').map(String::from).collect();
             let init = PathBuf::from(flag(&args, "init").expect("--init"));
             let out = PathBuf::from(flag(&args, "out").expect("--out"));
+            if let Some(dir) = out.parent() {
+                std::fs::create_dir_all(dir).unwrap();
+            }
             let d = prior::load(&data, &card_db(), &teachers);
+            if d.n == 0 {
+                eprintln!("swu-learned: no decisions by {teachers:?} in {data:?}; check --teacher-bots and --data");
+                std::process::exit(2);
+            }
             prior::train(&d, &init, &out, num(&args, "epochs", 3), num(&args, "batch", 256), num(&args, "lr", 0.002), args.iter().any(|a| a == "--full"));
         }
         "explain" => {

@@ -89,7 +89,7 @@ head to pick what the teacher picked (cross-entropy over the legal actions of ea
 | Model | How | Head-to-head |
 |---|---|---|
 | learned-v4 + rust-greedy prior | prior head only, on v4's frozen features; 229k decisions, 68.6% same move | blended into Q: no gain (`--prior 0.02`: 422-175 vs rust-greedy over 600 games, plain v4 430-168) |
-| **bc-g2** | `--full`: the whole network imitates rust-greedy2; 3,000 greedy2 self-play games + 1,200 v5-vs-greedy2 games (654k decisions), 6 epochs, 80% same move | **61-138 vs rust-greedy2** (v4: 28-169), **150-48 vs v4**, 197-1 vs random-a |
+| **bc-g2** | `--full`: the whole network imitates rust-greedy2; 3,000 greedy2 self-play games + 1,200 v5-vs-greedy2 games (654k decisions), 6 epochs, 79% same move on held-out games | **68-132 vs rust-greedy2** (v4: 28-169), **152-46 vs v4**, 196-2 vs random-a |
 
 Why the frozen prior failed: in card-pick prompts (which cards to resource, which target) it cannot tell
 *which* card the teacher takes, so its probability piles onto the one button (Skip, Done). Blended in,

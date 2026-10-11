@@ -36,6 +36,9 @@ pub struct Decisions {
     /// legal action count per decision
     pub count: Vec<usize>,
     pub chosen: Vec<usize>,
+    /// game of each decision (numbered across all files), so validation can hold out whole games
+    pub game: Vec<usize>,
+    pub games: usize,
 }
 
 fn read(path: &Path, db: &CardDb, teachers: &[String], out: &mut Decisions) {
@@ -54,6 +57,7 @@ fn read(path: &Path, db: &CardDb, teachers: &[String], out: &mut Decisions) {
         }
         let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
         if v["t"] == "game" {
+            out.games += 1;
             seats = v["bots"].as_array().map(|a| a.iter().map(|b| b.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default();
             continue;
         }
@@ -76,6 +80,7 @@ fn read(path: &Path, db: &CardDb, teachers: &[String], out: &mut Decisions) {
         }
         out.count.push(n);
         out.chosen.push(i as usize);
+        out.game.push(out.games - 1);
         out.n += 1;
     }
 }
@@ -105,6 +110,8 @@ pub fn load(dirs: &[PathBuf], db: &CardDb, teachers: &[String]) -> Decisions {
         all.ids.append(&mut p.ids);
         all.count.append(&mut p.count);
         all.chosen.append(&mut p.chosen);
+        all.game.extend(p.game.iter().map(|g| g + all.games));
+        all.games += p.games;
     }
     eprintln!("{} teacher decisions from {:?}", all.n, teachers);
     all
@@ -175,7 +182,9 @@ pub fn train(d: &Decisions, init: &Path, out: &Path, epochs: usize, batch: usize
     frozen.load_from(&mut SafetensorsStore::from_file(init).allow_partial(true)).expect("load base model");
     let frozen = frozen.valid();
     let mut opt = AdamWConfig::new().with_weight_decay(0.01).init();
-    let (tr, va): (Vec<usize>, Vec<usize>) = (0..d.n).partition(|i| i % 20 != 0);
+    // hold out every 20th game (whole games: decisions of one game are strongly correlated)
+    let (tr, va): (Vec<usize>, Vec<usize>) = (0..d.n).partition(|&i| d.game[i] % 20 != 0);
+    assert!(!tr.is_empty() && !va.is_empty(), "need teacher decisions in both training and held-out games ({} decisions)", d.n);
     let mut tr = tr;
     let mut seed = 11u64;
     let mut best = f32::MAX;
