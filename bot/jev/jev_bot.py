@@ -312,12 +312,15 @@ def describe_imagined(sit_text, res, msg):
 # ---------- code-owned parts ----------
 
 def split(action, msg):
-    """Damage: kill the strongest enemy units that can be killed, rest on the enemy base. Heal: most damaged own first."""
+    """Damage: kill the strongest enemy units that can be killed, rest on the enemy base. Heal: most damaged own first.
+    Token upgrades (Experience, Shield): own units only, strongest first, spread one each before stacking."""
     d = action["distribute"]
     you = msg["you"]
     units = unit_lookup(msg)
     bases = {p["base"]["id"]: seat for seat, p in msg["state"]["players"].items()}
     heal = "Heal" in (d.get("type") or "")
+    buff = "TokenUpgrade" in (d.get("type") or "")
+    good = heal or buff  # goes on own targets
 
     def owner(tid):
         if tid in bases:
@@ -331,6 +334,8 @@ def split(action, msg):
     def key(t):
         u = units.get(t["id"])
         friendly = owner(t["id"]) == you
+        if buff:
+            return (0 if friendly else 1, -((u or {}).get("p") or 0))
         if heal:
             dmg = (u or {}).get("d", 0) if u else 0
             return (0 if friendly else 1, -dmg)
@@ -347,6 +352,8 @@ def split(action, msg):
     def useful(t):
         # damage: lethal on a unit is enough; healing: no more than the damage it has
         u = units.get(t["id"])
+        if buff:
+            return 1 if owner(t["id"]) == you else 0
         if not u:
             return None
         return (u.get("d") or 0) if heal else max(0, (u.get("h") or 0) - (u.get("d") or 0))
@@ -357,7 +364,7 @@ def split(action, msg):
             if not left:
                 break
             # damage goes on friendly targets (sorted last) and healing on enemy ones only when it must all be placed
-            if d.get("canDistributeLess") and (owner(t["id"]) == you) != heal:
+            if d.get("canDistributeLess") and (owner(t["id"]) == you) != good:
                 continue
             room = float("inf") if t["cap"] is None else t["cap"]
             if limit_useful and useful(t) is not None:
