@@ -306,6 +306,8 @@ async function main() {
         }
     }
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
+    // with SWU_WINDOW set, a helper process sends this run to the arena window's API as it plays (arena/push.js)
+    require('./arena/push').followRun(out);
 
     const engine = engineRev();
     const plain = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);

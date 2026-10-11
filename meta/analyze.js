@@ -473,6 +473,12 @@ function main() {
     fs.writeFileSync(OUT + '.tmp', JSON.stringify(out));
     fs.renameSync(OUT + '.tmp', OUT);
     writeRatings(botIds, results, rating, out.generatedAt);
+    // with SWU_WINDOW set, the arena window gets the model and the ratings through its API (bot/arena/push.js)
+    if (process.env.SWU_WINDOW) {
+        for (const [id, file] of [['atlas', OUT], ['ratings', RATINGS]]) {
+            require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'bot', 'arena', 'push.js'), 'doc', 'meta', id, file], { stdio: 'inherit' });
+        }
+    }
     console.log(`meta: ${bots.length} bots, ${games.length} games, ${out.totals.replays} replays, ${snapRows.length} snapshots, ${humanGames.length} human games in ${out.ms} ms -> ${OUT}`);
 }
 
