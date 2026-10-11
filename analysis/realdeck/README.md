@@ -94,8 +94,9 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
 ```
 
 - **Whole passes**: `--games` should be a multiple of 2P (P = 351 deck pairs for 27 decks, so 702). Then every deck
-  sits on the challenger's side as often as on the reference's, and deck luck cancels. A challenger whose finished
-  seeds (both games done) are not a whole number of passes gets a warning, so a run read while it is going is flagged.
+  sits on the challenger's side as often as on the reference's, and deck luck cancels. The script checks this on the
+  seeds that finished (both games done) and warns per challenger when a deck sits on one side more often, as in a part
+  pass or a run read while it is going (seeds finish out of order). Run ids must be unique.
 - **Skill**: the challenger's score against the reference in decided games (draws half), a Wilson 95% CI and an Elo
   difference. An ERROR game a bot caused (`by` set: it threw, made an illegal move or timed out) is a loss for that bot,
   as in `bot/ladder-report.js`. Engine errors, STEP_CAP and STUCK games are counted by outcome and left out. The
@@ -110,8 +111,8 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
   other styles beside the same gap in the human field rates (`styleExcess` = bot gap − human gap, `styleDistance` its
   size), and the r of its deck strengths with the reference bot's. When compare.js left different decks out of
   different bots' deck correlations (too many incomplete or too few decided games), a warning says their measures are
-  not on the same decks. A deck file sha256 that differs between `compare.json` and a gauntlet gets a warning too, and
-  gauntlets from different deck files never pair.
+  not on the same decks. A deck file sha256 that differs between `compare.json`, the mirror runs used and the gauntlets
+  gets a warning too, and gauntlets from different deck files never pair.
 - **Trend**: Spearman of skill against each of those over the bots that have both, with an exact two-sided permutation
   p for up to 8 bots. With a handful of bots this describes; it does not prove a rule.
 
