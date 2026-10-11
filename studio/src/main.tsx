@@ -7,7 +7,13 @@ import { HomePage } from './pages/HomePage';
 import { TournamentPage } from './pages/TournamentPage';
 import { IconsPage } from './pages/IconsPage';
 import { useRoute } from './lib/route';
+import { loadArtPack } from './lib/cards';
 import './styles.css';
+
+// The static build can't reach the image CDN (published pages block external images); it ships art-pack.json beside the page.
+if (import.meta.env.MODE === 'static') {
+    loadArtPack('./art-pack.json').catch(() => undefined);
+}
 
 function App() {
     const route = useRoute();

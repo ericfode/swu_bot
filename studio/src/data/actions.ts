@@ -1,5 +1,6 @@
 import { deltas as diff, edgeTerms } from './derive';
 import type { EvalPoint } from './evals';
+import type { LensStep } from './lens';
 import type { CardRef, Game, PlayerSnap, Seat, Snapshot } from './types';
 
 /**
@@ -93,7 +94,7 @@ function findAnywhere(s: Snapshot, label: string): CardRef | null {
 const isTop = (prompt: string | undefined) => !!prompt && prompt.startsWith('actionWindow');
 
 /** Groups a game's decisions into actions. Steps that only answer a follow-up prompt fold into the action they belong to. */
-export function classifyGame(game: Game, evals?: Map<number, EvalPoint>): Action[] {
+export function classifyGame(game: Game, evals?: Map<number, EvalPoint>, lens?: Map<number, LensStep>): Action[] {
     const steps = game.steps;
     const out: Action[] = [];
     let i = 1;
@@ -164,7 +165,7 @@ export function classifyGame(game: Game, evals?: Map<number, EvalPoint>): Action
         const outcome = cls === 'pass' || cls === 'initiative' || cls === 'resource' || cls === 'setup'
             ? { baseDamage: 0, defeated: 0, entered: 0 }
             : outcomeOf(steps[i - 1].state, steps[until].state, seat);
-        out.push({ index: i, until, seat, cls, card, target, outcome, swing: swingOf(game, i - 1, until, seat, outcome, evals) });
+        out.push({ index: i, until, seat, cls, card, target, outcome, swing: swingOf(game, i - 1, until, seat, outcome, evals, lens) });
         i = until + 1;
     }
     return out;
@@ -184,8 +185,8 @@ function outcomeOf(a: Snapshot, b: Snapshot, seat: Seat): Outcome {
     };
 }
 
-/** Swing toward the acting player: evaluation change when annotated (0..1 scale × 100), else material change + outcome. */
-function swingOf(game: Game, from: number, to: number, seat: Seat, o: Outcome, evals?: Map<number, EvalPoint>): number {
+/** Swing toward the acting player: evaluation change when annotated (0..1 scale × 100), else board-score change + outcome. */
+function swingOf(game: Game, from: number, to: number, seat: Seat, o: Outcome, evals?: Map<number, EvalPoint>, lens?: Map<number, LensStep>): number {
     const sign = seat === 'p1' ? 1 : -1;
     if (evals?.size) {
         const at = (i: number) => {
@@ -204,7 +205,8 @@ function swingOf(game: Game, from: number, to: number, seat: Seat, o: Outcome, e
             return ev + o.baseDamage * 0.5 + o.defeated;
         }
     }
-    const m = (edgeTerms(game.steps[to].state).sum - edgeTerms(game.steps[from].state).sum) * sign;
+    const score = (i: number) => edgeTerms(game.steps[i].state, lens?.get(i) ?? null).sum;
+    const m = (score(to) - score(from)) * sign;
     return m + o.baseDamage * 0.6 + o.defeated * 2;
 }
 

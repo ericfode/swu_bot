@@ -27,8 +27,15 @@ export function Spine({ game, step, evals, onSeek }: { game: Game; step: number;
     }, [game]);
     const current = marks.reduce((best, m, k) => (m.i <= step ? k : best), 0);
     useEffect(() => {
-        const el = box.current?.children[current] as HTMLElement | undefined;
-        el?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        // scroll the strip only: scrollIntoView would also scroll the page to bring the strip into view
+        const b = box.current;
+        const el = b?.children[current] as HTMLElement | undefined;
+        if (b && el) {
+            const left = el.getBoundingClientRect().left - b.getBoundingClientRect().left + b.scrollLeft;
+            if (left < b.scrollLeft || left + el.offsetWidth > b.scrollLeft + b.clientWidth) {
+                b.scrollTo({ left: Math.max(0, left - b.clientWidth / 2), behavior: 'smooth' });
+            }
+        }
     }, [current]);
     return (
         <div ref={box} className="flex gap-1.5 overflow-x-auto pb-1" role="list" aria-label="Game spine: the board at the start of each round">

@@ -30,6 +30,10 @@ export const staticSource: DataSource = {
         const t = byPath.get(`_evals/${gid}.json`);
         return t ? JSON.parse(t) : null;
     },
+    async loadLens(_tid, gid) {
+        const t = byPath.get(`_lens/${gid}.json`);
+        return t ? JSON.parse(t) : null;
+    },
     kind: 'static',
     async listTournaments() {
         const out: TournamentSummary[] = [];
