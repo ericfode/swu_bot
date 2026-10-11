@@ -304,7 +304,8 @@ def describe_imagined(sit_text, res, msg):
     out = {"situation": sit_text, "what_happened": steps[:12], "changes": changes(msg["state"], after, you) or ["nothing visible"],
            "board_after": {"you": brief_side(after["players"][you]), "opponent": brief_side(after["players"][opp])}}
     if res.get("over"):
-        out["game_over"] = "you win" if res.get("winner") == you else ("opponent wins" if res.get("winner") else "draw")
+        w = res.get("winner")
+        out["game_over"] = "you win" if w == you else ("draw" if w in (None, "draw") else "opponent wins")
     return out
 
 
