@@ -150,7 +150,7 @@ function build(runDirs, thoughtsDir, prev) {
             items: newest.top.map((x) => ({ label: x.label, value: x.visits })) });
     }
     widgets.push({ type: 'text', title: 'Findings so far',
-        body: 'Beta changes the moves but almost never the winner: on the same decks, beta 0 and beta 4 had the same winner in 24 of 24 games. The peek control, which sees the real hidden cards, wins no more often, and neither do tempo/aggro leaf scores or a 2.3x bigger search. Hidden information is not the bottleneck yet; the position value and the opponent model are.' });
+        body: 'Beta changes the moves but almost never the winner: on the same decks, beta 0 and beta 4 had the same winner in 24 of 24 games. The peek control, which sees the real hidden cards, wins no more often, and neither do tempo/aggro leaf scores or a 2.3x bigger search. Hidden information is not the bottleneck yet; the position value and the opponent model are. Fitted position evaluators as leaf values (-v, from the position-evaluation bench) did not beat the plain heuristic either: plain ismcts-b1 wins 8/24; race 12/24 with gen-1 models but 8/24 with gen-2, linear-deck 7 then 8, mlp-deck 4 then 6, linear 5. With 24 games a gap under about 5 wins is noise. Next: fit an evaluator on the states ISMCTS actually scores (research/position-eval/ismcts-leaves).' });
     if (newest?.tree) {
         widgets.push({ type: 'tree', title: `${newest.bot}: search tree at its last decision`,
             caption: 'Root = the real position. Children = the end of one imagined world after that action and the opponent\'s reply (hidden cards are sampled, not real). Value = P(p1 wins).',
@@ -183,7 +183,9 @@ function build(runDirs, thoughtsDir, prev) {
             { text: 'ISMCTS over my turn, opponent replies from sampled hand', state: 'done' },
             { text: 'Sweep beta 0/1/4 and the peek control vs rush, heuristic, tempo', state: 'done' },
             { text: 'Try tempo/aggro leaf evaluations and a bigger budget', state: 'done' },
-            { text: 'Attack the bottleneck Eric picks on the results page', state: running ? 'doing' : 'todo' }
+            { text: 'Eric picked "better position value": score leaves with the bench evaluators (-v)', state: 'done' },
+            { text: 'Dump ISMCTS leaf states so the bench can fit on them', state: 'doing' },
+            { text: 'Rerun with a leaf-fitted evaluator and more games per pairing', state: 'todo' }
         ],
         thoughts: thoughts.slice(-40),
         widgets

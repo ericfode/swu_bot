@@ -73,6 +73,10 @@ test('ismcts names parse into options', () => {
     assert.equal(parseIsmcts('ismctsx'), null);
     assert.equal(parseIsmcts('ismcts-b2-etempo').evalProfile, 'tempo');
     assert.equal(parseIsmcts('ismcts-enosuchprofile'), null);
+    assert.equal(parseIsmcts('ismcts-b0-vlinear-deck').evaluator, 'linear-deck');
+    const pv = parseIsmcts('ismcts-vmlp-peek');
+    assert.equal(pv.evaluator, 'mlp');
+    assert.equal(pv.peek, true);
     assert.equal(describeBot('ismcts-b0#2').profile, 'ismcts-b0');
 });
 

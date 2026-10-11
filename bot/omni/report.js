@@ -36,6 +36,7 @@ function writeJson(f, obj) {
 
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const r = (x, d = 2) => (x === null || x === undefined ? null : Math.round(x * 10 ** d) / 10 ** d);
+const { readJsonl } = require('./lens');
 const list = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
 
 // ---------- solve horizon ----------
@@ -129,7 +130,7 @@ function solveStats() {
         horizon: { mean: r(mean(horizons), 2), max: Math.max(0, ...horizons), perGame: horizons },
         decided: noReturn,
         proofDepths: [1, 2, 3, 4, 5, 6, 7, 8].map((d) => [d, proofDepths.filter((x) => x === d).length]).filter(([, n]) => n),
-        evalAgreement: evalChecks.total ? { agree: evalChecks.agree, total: evalChecks.total, rate: r(evalChecks.agree / evalChecks.total) } : null,
+        evalAgreement: positionsAgreement() ?? (evalChecks.total ? { agree: evalChecks.agree, total: evalChecks.total, rate: r(evalChecks.agree / evalChecks.total) } : null),
         blunders
     };
 }
@@ -173,6 +174,20 @@ function matchStats() {
     });
 }
 
+/**
+ * Score vs proof on omni/positions-hh.jsonl (export-positions.js, current prover and current omni score). The solve
+ * runs' own `eval` field is the score that was current when they ran, so this file wins when it exists.
+ */
+function positionsAgreement() {
+    const f = path.join(root, 'omni', 'positions-hh.jsonl');
+    if (!fs.existsSync(f)) {
+        return null;
+    }
+    const proven = readJsonl(f).filter((x) => x?.proven && x.omniScore !== 0);
+    const agree = proven.filter((x) => (x.omniScore > 0) === (x.proven === 'p1')).length;
+    return proven.length ? { agree, total: proven.length, rate: r(agree / proven.length), from: 'omni/positions-hh.jsonl' } : null;
+}
+
 // ---------- decisions ----------
 
 function decisionStats() {
@@ -186,7 +201,7 @@ function decisionStats() {
     let latestT = 0;
     for (const f of files) {
         const full = path.join(dir, f);
-        const lines = fs.readFileSync(full, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        const lines = readJsonl(full).filter(Boolean);
         all = all.concat(lines.map((l) => ({ ...l, bot: path.basename(f).replace(/^\d+-|-p\d\.jsonl$/g, '') })));
         const t = fs.statSync(full).mtimeMs;
         if (t > latestT && lines.length) {

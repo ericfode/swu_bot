@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 ///
 /// At each decision with simulations it takes greedy2's best few actions, and for each one: starts a simulation (hidden
 /// cards dealt again at random, the same deals for every candidate), plays the action, then lets greedy2 play both seats
-/// until the round's action phase ends (or `rounds` more rounds) or a step cap, and scores the board from its own seat. It plays the action with
-/// the best average score; greedy2's own order breaks near-ties. Without simulations (a v1 referee, or any error) it is
-/// greedy2.
+/// until the round's action phase ends (or `rounds` more rounds) or a step cap, and scores the board from its own seat.
+/// It plays the action with the best average score; greedy2's own order breaks near-ties. Without simulations (a v1
+/// referee, or any error) it is greedy2.
 pub struct Search {
     g: Greedy2,
     seed: u64,
@@ -20,6 +20,7 @@ pub struct Search {
     pub deals: usize,
     pub max_steps: usize,
     pub rounds: u32,
+    pub w: Weights,
 }
 
 /// `$name` as a number, or `default` (for experiments: `env` in `bot/external-bots.json`).
@@ -37,21 +38,59 @@ impl Search {
             deals: env_or("SWU_SEARCH_DEALS", 1),
             max_steps: env_or("SWU_SEARCH_STEPS", 60),
             rounds: env_or("SWU_SEARCH_ROUNDS", 0),
+            w: Weights::from_env(),
+        }
+    }
+}
+
+/// Weights of the board score.
+#[derive(Clone, Copy)]
+pub struct Weights {
+    /// Per point of base HP left (the danger term below 12 HP comes on top).
+    pub base: f64,
+    /// Times greedy2's unit value (power, HP left, shields, sentinel).
+    pub unit: f64,
+    /// Share of its value an exhausted unit keeps.
+    pub exhausted: f64,
+    pub hand: f64,
+    pub resource: f64,
+    pub initiative: f64,
+}
+
+impl Default for Weights {
+    fn default() -> Self {
+        // unit 3: a unit keeps dealing damage every round, so it is worth more than the same base HP now
+        // (vs greedy2 over 96 games: unit 1 57%, 2 67% (48), 3 71%, 4 65%, 5 67% (48))
+        Weights { base: 1.35, unit: 3.0, exhausted: 0.85, hand: 1.8, resource: 1.4, initiative: 2.5 }
+    }
+}
+
+impl Weights {
+    fn from_env() -> Self {
+        let d = Weights::default();
+        Weights {
+            base: env_or("SWU_EVAL_BASE", d.base),
+            unit: env_or("SWU_EVAL_UNIT", d.unit),
+            exhausted: env_or("SWU_EVAL_EXHAUSTED", d.exhausted),
+            hand: env_or("SWU_EVAL_HAND", d.hand),
+            resource: env_or("SWU_EVAL_RESOURCE", d.resource),
+            initiative: env_or("SWU_EVAL_INITIATIVE", d.initiative),
         }
     }
 }
 
 /// Board score from `me`'s seat: base HP (steeper when low), units, cards in hand, resources, initiative.
-pub fn evaluate(state: &State, me: &str) -> f64 {
+pub fn evaluate(state: &State, me: &str, w: &Weights) -> f64 {
     let empty = PlayerView::default();
     let side = |seat: &str| -> f64 {
         let p = state.players.get(seat).unwrap_or(&empty);
         let hp = p.base_left() as f64;
-        let mut v = hp * 0.9 * 1.5 + if hp <= 12.0 { (12.0 - hp).powi(2) / 6.0 * -1.5 } else { 0.0 };
+        let mut v = hp * w.base + if hp <= 12.0 { (12.0 - hp).powi(2) / 6.0 * -1.5 } else { 0.0 };
         for u in p.units() {
-            v += unit_value(u) * if u.ready() { 1.0 } else { 0.85 };
+            v += unit_value(u) * w.unit * if u.ready() { 1.0 } else { w.exhausted };
         }
-        v + p.hand_count as f64 * 1.8 + p.res.total as f64 * 1.4 + if state.initiative.as_deref() == Some(seat) { 2.5 } else { 0.0 }
+        let initiative = if state.initiative.as_deref() == Some(seat) { w.initiative } else { 0.0 };
+        v + p.hand_count as f64 * w.hand + p.res.total as f64 * w.resource + initiative
     };
     side(me) - side(other(me))
 }
@@ -83,12 +122,12 @@ impl Search {
             let state = pos.state.take()?;
             let last = round + self.rounds;
             if state.round > last || (state.round == last && state.phase.as_deref().is_some_and(|ph| ph != "action")) {
-                return Some(evaluate(&state, &self.me));
+                return Some(evaluate(&state, &self.me, &self.w));
             }
             let actor = pos.actor.take()?;
             let d = Decide { seq: 0, you: actor.clone(), prompt: pos.prompt.take()?, state, actions: pos.actions.take()?, sim: false, ms: None };
             if d.actions.is_empty() {
-                return Some(evaluate(&d.state, &self.me));
+                return Some(evaluate(&d.state, &self.me, &self.w));
             }
             let who = if actor == self.me { &mut mine } else { &mut theirs };
             let i = who.choose(&d);
@@ -98,14 +137,14 @@ impl Search {
                 continue;
             }
             if pos.state.is_none() {
-                return Some(evaluate(&d.state, &self.me));
+                return Some(evaluate(&d.state, &self.me, &self.w));
             }
         }
         // step cap
         match (&pos.error, &pos.over, &pos.state) {
             (Some(_), ..) => None,
             (_, Some(over), _) => Some(self.outcome(over)),
-            (_, _, state) => state.as_ref().map(|s| evaluate(s, &self.me)),
+            (_, _, state) => state.as_ref().map(|s| evaluate(s, &self.me, &self.w)),
         }
     }
 }

@@ -11,6 +11,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 - `forceteki/` — **git submodule** of `SWU-Karabast/forceteki`, pinned to upstream `2be4fcd`. It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
 - `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.
 
 **Do not modify anything inside `forceteki/` without asking the user first.** Bug workarounds belong in `bot/`. Upgrading the engine means moving the submodule pin and committing it in this repo.
@@ -42,7 +43,8 @@ npm run viewer               # build viewer/, serve on http://localhost:5180 (PO
 npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
-npm test                     # unit tests (ratings, ladder report, bot logic on mock boards); no card data needed
+npm test                     # unit tests (ratings, ladder report, bot logic on mock boards, importer); no card data needed
+node importer/import.js <capture>... --out replays/human   # import human Karabast games
 npm run lint                 # Perch semantic lint with Jev (see "Linting" below)
 ```
 

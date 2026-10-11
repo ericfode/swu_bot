@@ -17,7 +17,8 @@
  *
  * Options: depth (default 2), budget (nodes per window, default 600), ms (time per window, default 6000), beam
  * (moves that get a deeper look, default 8), followUps (target options tried for our own move, default 8),
- * blind (true: reseed the engine RNG inside the search so it cannot see future draws; the "fair luck" ablation).
+ * blind (true: inside the search, reseed the engine RNG and shuffle both decks before every move, so it cannot see
+ * the deck order or random results; it still sees both hands).
  *
  * With OMNI_LOG_DIR set, every action-window decision is appended to <dir>/<seed>-<bot>-<seat>.jsonl (value, depth,
  * principal variation, the top moves and their values). bot/omni/lens.js joins these with the replay: the k-th line

@@ -8,12 +8,15 @@
  *   heuristic[-dN]              one-ply rollback search, "balanced" evaluation (original weights, danger sign fixed)
  *   legacy[-dN]                 same search with the original evaluation exactly, inverted danger term included
  *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
- *   ismcts[-bB][-hH][-nN][-eP]  known-decklist ISMCTS (players/ismcts.js): belief sharpness B (default 1, 0 = uniform),
+ *   ismcts[-bB][-hH][-nN][-eP][-vV] known-decklist ISMCTS (players/ismcts.js): belief sharpness B (default 1, 0 = uniform),
  *                               horizon H exchanges (default 1), N iterations per legal action (default 6).
+ *                               `-v<evaluator>` scores leaves with a calibrated P(win) from bot/eval (`-vlinear-deck`).
  *                               `-e<profile>` scores leaves with an evaluation profile (`-etempo`, `-eaggro`, ...).
  *                               `-peek` is an UNFAIR control that searches the real hidden cards (no sampling), to
  *                               measure what hidden information is worth; keep it out of competitive ladders.
  *
+ *   h@<evaluator>, hN@<evaluator>  the heuristic search scoring positions with a fitted or hand-made evaluator
+ *                               from bot/eval (h@linear, h@mlp-deck, h@race, ...); N = depth
  *   omni[-dN][-nN][-blind]      UNFAIR reference bot (players/omniscient.js): full-information alpha-beta, depth N windows
  *                               (default 2), -n node budget per window, -blind hides future draws from its search.
  *                               Keep it out of competitive ladders.
@@ -55,13 +58,32 @@ function parseOmni(kindAndOpts) {
     return opts;
 }
 
+/**
+ * `-v<name>`: score ISMCTS leaves with an evaluator from the position-evaluation bench (bot/eval/evaluators.js:
+ * base, material-fixed, race, linear, linear-deck, mlp, mlp-deck, ...). Returns (eg, pid) -> P(pid wins).
+ */
+function benchValue(name) {
+    let ev, snapshotEvaluate;
+    try {
+        ({ snapshotEvaluate } = require('../eval/bot'));
+        ev = require('../eval/evaluators').loadEvaluator(name);
+    } catch (e) {
+        throw new Error(`ismcts -v${name}: cannot load evaluator "${name}" from bot/eval (${String(e.message).split('\n')[0]})`);
+    }
+    const logit = snapshotEvaluate(ev); // decided games are handled by the bot itself
+    return (eg, pid) => 1 / (1 + Math.exp(-logit(eg, pid)));
+}
+
 /** ismcts-b2-h1-n8 -> {beta: 2, horizon: 1, iterPerAction: 8}; null when the name is not an ismcts name. */
 function parseIsmcts(kindAndOpts) {
-    const m = /^ismcts((?:-[bhn][0-9.]+)*)(-e[a-z]+)?(-peek)?$/.exec(kindAndOpts);
+    const m = /^ismcts((?:-[bhn][0-9.]+)*)(-e[a-z]+)?(-v[a-z0-9-]+?)?(-peek)?$/.exec(kindAndOpts);
     if (!m) {
         return null;
     }
-    const opts = { beta: 1, horizon: 1, iterPerAction: 6, peek: !!m[3] };
+    const opts = { beta: 1, horizon: 1, iterPerAction: 6, peek: !!m[4] };
+    if (m[3]) {
+        opts.evaluator = m[3].slice(2);
+    }
     if (m[2]) {
         const prof = m[2].slice(2);
         if (!PROFILES[prof]) {
@@ -116,13 +138,17 @@ function thoughtsWriter(name) {
 }
 
 function describeBot(name) {
+    const ev = /^h(\d)?@(.+)$/.exec(name.split('#')[0]);
+    if (ev) {
+        return { name, kind: 'search', profile: `eval:${ev[2]}`, depth: ev[1] ? Number(ev[1]) : 1, lang: 'js' };
+    }
     const omni = parseOmni(name.split('#')[0]);
     if (omni) {
         return { name, kind: 'omniscient', profile: omni.blind ? 'omni-blind' : 'omni', depth: omni.depth, lang: 'js' };
     }
     const ism = parseIsmcts(name.split('#')[0]);
     if (ism) {
-        return { name, kind: 'search', profile: (ism.peek ? 'ismcts-peek' : `ismcts-b${ism.beta}`) + (ism.evalProfile ? `-${ism.evalProfile}` : ''), depth: ism.horizon, lang: 'js', beta: ism.beta };
+        return { name, kind: 'search', profile: (ism.peek ? 'ismcts-peek' : `ismcts-b${ism.beta}`) + (ism.evalProfile ? `-${ism.evalProfile}` : '') + (ism.evaluator ? `-v${ism.evaluator}` : ''), depth: ism.horizon, lang: 'js', beta: ism.beta };
     }
     const { kind, depth } = parseName(name);
     const ext = externalBots[name.split('#')[0]];
@@ -144,7 +170,7 @@ function describeBot(name) {
 function makeBot(name) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', 'omni', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
@@ -153,13 +179,16 @@ function makeBot(name) {
         const Adapter = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : ExternalBot;
         return new Adapter(name, spec);
     }
+    if (info.profile?.startsWith('eval:')) {
+        return require('../eval/bot').makeEvalBot(name.split('#')[0], name);
+    }
     if (info.kind === 'omniscient') {
         return new OmniscientBot(name, parseOmni(name.split('#')[0]));
     }
     const ism = parseIsmcts(name.split('#')[0]);
     if (ism) {
-        const { evalProfile, ...rest } = ism;
-        return new IsmctsBot(name, { ...rest, profile: evalProfile ? PROFILES[evalProfile] : null, thoughts: thoughtsWriter(name) });
+        const { evalProfile, evaluator, ...rest } = ism;
+        return new IsmctsBot(name, { ...rest, profile: evalProfile ? PROFILES[evalProfile] : null, value: evaluator ? benchValue(evaluator) : null, thoughts: thoughtsWriter(name) });
     }
     if (info.kind === 'search') {
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
