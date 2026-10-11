@@ -68,10 +68,13 @@ function main() {
     const opts = { drop: Number(arg('drop', 0.25)), ahead: Number(arg('ahead', 0.5)), lethal: Number(arg('lethal', 0)) };
     const tournament = arg('tournament', null);
     const games = new Map();
-    for (const p of loadPositions(dirs, { testShare: 0 })) {
-        // the same game id can appear in two datasets (same bot names and seeds), so key by source too
-        const key = `${p.source}\u0000${p.id}`;
-        (games.get(key) ?? games.set(key, []).get(key)).push(p);
+    // the same game id can appear in two datasets (same bot names and seeds, even the same folder name), so key by the
+    // dataset's place in --data too
+    for (const [di, dir] of dirs.entries()) {
+        for (const p of loadPositions([dir], { testShare: 0 })) {
+            const key = `${di}\u0000${p.id}`;
+            (games.get(key) ?? games.set(key, []).get(key)).push(p);
+        }
     }
     const pOf = (p, seat) => ev.predict(p.state, seat, { view: 'spectator', decks: p.decks, toAct: p.toAct });
     const link = (id, n) => (tournament ? `#/t/${tournament}/g/${id}?step=${n}` : undefined);
