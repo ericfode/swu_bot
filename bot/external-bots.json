@@ -3,5 +3,7 @@
     "rust-random": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["random"], "lang": "rust" },
     "rust-greedy": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy"], "lang": "rust" },
     "rust-greedy2": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["greedy2"], "lang": "rust" },
-    "rust-search": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["search"], "lang": "rust" }
+    "rust-search": { "cmd": "bot/rust/target/release/swu-bot-rs", "args": ["search"], "lang": "rust" },
+    "lisp": { "cmd": "bot/lisp/swu-lisp", "args": [], "lang": "lisp" },
+    "haskell": { "cmd": "bot/haskell/build/swu-bot-hs", "args": [], "lang": "haskell" }
 }
