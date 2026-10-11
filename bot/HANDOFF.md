@@ -1,5 +1,7 @@
 # Handoff: single-player SWU bot on the forceteki engine
 
+> Update 2026-10-10: the repo is now `swu_bot/` with `forceteki/` as a submodule (pinned 2be4fcd) and `bot/` moved up a level. Recorder, tournament runner and the viewer are built; see the root `CLAUDE.md`. Paths below that say `forceteki/bot` mean `bot/`.
+
 Written 2026-10-10 at the end of a cloud session. Everything below was observed or run, except where marked **untested**.
 
 ## Goal

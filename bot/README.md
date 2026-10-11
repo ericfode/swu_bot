@@ -19,3 +19,10 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
   (it is sent via `statefulPromptResults`); in "cards with buttons" prompts only the per-card buttons are legal;
   indirect damage on a unit may not exceed its remaining HP.
 - Undo/snapshots are disabled by default (`newGame({ undo: true })` enables `UndoMode.Full` for search experiments).
+
+## Recording and tournaments
+- `recorder.js` — read-only per-step board snapshots (`snapshot(envGame)`); `match.js` — `playGame(env, {seed, bots, record, snapshot})`.
+- `players/random.js` — bots are `{name, choose({game, pid, actions, rng}) -> action}`; register new ones in `tournament.js` `makeBot`.
+- `node bot/tournament.js --bots a,b,c --games 10 --out replays/my-run [--seed 1]` writes `index.json` + `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
+- `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording. Run it after touching `recorder.js` or `match.js`.
+- View results with `npm run viewer` (see viewer/ in the repo CLAUDE.md).

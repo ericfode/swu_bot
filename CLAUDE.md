@@ -9,7 +9,9 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 ## Repo layout (tiered git repos)
 
 - `forceteki/` — **git submodule** of `SWU-Karabast/forceteki`, pinned to upstream `2be4fcd`. It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
-- `bot/` — all new code lives here (plain CommonJS JS, no build step).
+- `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
+- `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.
 
 **Do not modify anything inside `forceteki/` without asking the user first.** Bug workarounds belong in `bot/`. Upgrading the engine means moving the submodule pin and committing it in this repo.
 
@@ -31,6 +33,20 @@ node bot/debug-seed.js <seed>                           # replay one seed, dump 
 ```
 
 There is no test suite or linter for `bot/` of its own; the sanity check is the random-run command above (seeds 1-3 give 594/342/486 steps, p2/p2/p2 winners — runs are deterministic).
+
+## Recording and viewing
+
+```bash
+npm run demo                 # 3 random bots, 4 games per pairing -> replays/demo
+npm run viewer               # build viewer/, serve on http://localhost:5180 (PORT, REPLAYS_DIR to override)
+npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
+npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
+```
+
+- Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format and snapshot fields: `bot/recorder.js`, types in `viewer/src/core/types.ts`.
+- `viewer/src/core/` (Board, CardView, Replay, api, stats) is shared by the tournament page and the single-game page; both embed the same `<Replay game={...} />`.
+- Card art comes from `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png` (`-b` suffix = deployed leader side). Tokens and unreleased sets (e.g. TS26) have no art and fall back to stat tiles automatically; Card art can also be toggled off.
+- Deep link to a step: `#/t/<tournament>/g/<game>?step=300`.
 
 ## Architecture of `bot/env.js`
 
