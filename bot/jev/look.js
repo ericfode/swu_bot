@@ -111,7 +111,8 @@ class LookaheadBot extends ExternalBot {
             state: observe(eg, pid), actions: actions.map((a, i) => actionView(eg, a, i)),
             imagine: eg.isActionWindow(pid) ? { kinds: [...KINDS], left: this.maxImagine } : null
         }, this.timeoutMs);
-        for (let n = 0; reply.t === 'imagine'; n++) {
+        let imagined = 0;
+        for (let n = 0; reply.t === 'imagine'; n++, imagined++) {
             const answer = n < this.maxImagine ? this.imagine(eg, pid, actions, reply.situation) : { ok: false, error: 'no imaginations left' };
             reply = this.call({ t: 'imagined', seq, situation: reply.situation ?? null, left: Math.max(0, this.maxImagine - n - 1), ...answer }, this.timeoutMs);
         }
@@ -120,7 +121,11 @@ class LookaheadBot extends ExternalBot {
         if (reply.t !== 'act' || !Number.isInteger(reply.i) || reply.i < 0 || reply.i >= actions.length) {
             throw new Error(`external bot ${this.name}: expected {t:'act', i: 0..${actions.length - 1}}, got ${JSON.stringify(reply).slice(0, 120)}`);
         }
-        const action = actions[reply.i];
+        let action = actions[reply.i];
+        if (imagined) {
+            // prompt uuids change across a rollback: a button from before the imagination would be rejected by the engine
+            action = eg.refetch(pid, action) ?? action;
+        }
         if (action.kind === 'distribute' && reply.distribution) {
             return forcedDistribution(this.name, action, reply.distribution);
         }
