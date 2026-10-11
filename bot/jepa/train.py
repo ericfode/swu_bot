@@ -169,6 +169,68 @@ def train_value(a, d, npj, w, train_idx, held_idx, rng):
     return {"best_step": best[1], "held_bce": best[0], "acc_z": best[3][0], "acc_pred1": best[3][1], "acc_pred4": best[3][2], "curve": curve}
 
 
+def train_value_predictor(a, d, net, train_idx, held_idx, rng):
+    """Stage 2, "predictor" mode: fine-tune the predictor, action encoder and V together, encoder frozen.
+
+    The value loss goes through the predictor (V(P(z, a)) against the outcome) while the JEPA loss keeps the
+    predictor pointed at the target latents, as in EfficientZero's value-plus-consistency training. The frozen
+    encoder cannot memorise games; early stopping on held-out V(ẑ_1) guards the heads.
+    """
+    t0 = time.time()
+    heads = [k for k in M.HEADS]
+    opt = nn.optim.AdamW([net.p[k] for k in heads], lr=3e-4, weight_decay=1e-3)
+    B = a.batch
+    h1 = Tensor(np.tile(np.array([[1.0, 0.0]], np.float32), (B, 1)))
+    h4 = Tensor(np.tile(np.array([[0.0, 1.0]], np.float32), (B, 1)))
+    frozen = {k: net.p[k].detach() for k in M.ENCODER}
+
+    def parts(b):
+        z = net.encode(frozen, b["x_state"], b["x_tid"], b["x_tf"], b["x_tm"]).detach()
+        y1 = net.encode(net.t, b["y1_state"], b["y1_tid"], b["y1_tf"], b["y1_tm"]).detach()
+        y4 = net.encode(net.t, b["y4_state"], b["y4_tid"], b["y4_tf"], b["y4_tm"]).detach()
+        w = net.p
+        av = net.lin(w, "act2", net.lin(w, "act1", b["act"].cat(M.embed(frozen, b["aid"]), dim=-1)).relu()).relu()
+        p1 = net.predict(z, av, h1)
+        p4 = net.predict(z, av, h4)
+        l_p = ((p1 - y1) ** 2).mean() + (((p4 - y4) ** 2).mean(axis=1) * b["m4"]).sum() / b["m4"].sum().maximum(1.0)
+        win = b["win"]
+        v1 = bce(net.value(p1), win)
+        l_v = bce(net.value(z), win) + v1 + 0.5 * bce(net.value(p4), win)
+        return l_p, l_v, v1
+
+    @TinyJit
+    def step(b):
+        with Context(TRAINING=1):
+            opt.zero_grad()
+            l_p, l_v, v1 = parts(b)
+            (l_p + a.w_value_ft * l_v).backward()
+            opt.step()
+            return Tensor.stack(l_p, l_v, v1).realize()
+
+    @TinyJit
+    def held(b):
+        l_p, l_v, v1 = parts(b)
+        return Tensor.stack(l_p, l_v, v1).realize()
+
+    to_t = lambda b: {k: Tensor(v) for k, v in b.items()}
+    erng = np.random.default_rng(2)
+    eval_batches = [erng.choice(held_idx, B, replace=False) for _ in range(16)]
+    best, curve = None, []
+    for it in range(1, a.value_steps + 1):
+        step(to_t(batch_arrays(d, rng.choice(train_idx, B, replace=False)))).numpy()
+        if it % 100 == 0:
+            hv = np.mean([held(to_t(batch_arrays(d, eb))).numpy() for eb in eval_batches], axis=0)
+            curve.append({"step": it, "held_pred": float(hv[0]), "held_value": float(hv[1]), "held_bce_pred1": float(hv[2])})
+            if best is None or hv[2] < best[0]:
+                best = (float(hv[2]), it, {k: net.p[k].numpy().copy() for k in heads}, hv)
+            if it % 500 == 0:
+                print(f"  value-ft step {it}: held pred {hv[0]:.4f} value {hv[1]:.4f} V(ẑ1) {hv[2]:.4f}", file=sys.stderr)
+    for k, v in best[2].items():
+        net.p[k].assign(Tensor(v)).realize()
+    print(f"value fine-tune: best held-out BCE of V(ẑ1) {best[0]:.4f} at step {best[1]} ({time.time() - t0:.0f}s)", file=sys.stderr)
+    return {"mode": "predictor", "best_step": best[1], "held_bce": best[0], "held_pred": float(best[3][0]), "curve": curve}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
@@ -181,6 +243,10 @@ def main():
     ap.add_argument("--w-cov", type=float, default=0.04)
     ap.add_argument("--w-value", type=float, default=0.0, help="value loss during stage 1 (0 = pure self-supervised encoder)")
     ap.add_argument("--value-steps", type=int, default=3000, help="stage 2: value head on frozen latents")
+    ap.add_argument("--value-mode", choices=["frozen", "predictor"], default="frozen",
+                    help="stage 2: fit V alone on frozen latents, or fine-tune predictor + action encoder + V together")
+    ap.add_argument("--w-value-ft", type=float, default=1.0, help="value weight in predictor-mode stage 2")
+    ap.add_argument("--init", help="start from this model file (with --steps 0: run stage 2 only)")
     ap.add_argument("--token-dropout", type=float, default=0.15)
     ap.add_argument("--holdout", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
@@ -201,7 +267,12 @@ def main():
     held_idx = np.where(ok & is_held)[0]
     print(f"loaded {n} decisions ({len(games)} games) in {time.time() - t0:.0f}s; train {len(train_idx)}, held-out {len(held_idx)}", file=sys.stderr)
 
-    net = TgJepa(init_params(rng))
+    params = init_params(rng)
+    if a.init:
+        loaded, _ = M.load_safetensors(a.init)
+        params.update({k: v for k, v in loaded.items() if k in params})
+        print(f"initialised from {a.init}", file=sys.stderr)
+    net = TgJepa(params)
     opt = nn.optim.AdamW(list(net.p.values()), lr=a.lr, weight_decay=1e-4)
     h1 = Tensor(np.tile(np.array([[1.0, 0.0]], np.float32), (a.batch, 1)))
     h4 = Tensor(np.tile(np.array([[0.0, 1.0]], np.float32), (a.batch, 1)))
@@ -283,9 +354,12 @@ def main():
             evals.append(row)
             print("  held-out " + " ".join(f"{k}={v:.4f}" for k, v in row.items() if k != "step"), file=sys.stderr)
 
+    if a.value_mode == "predictor":
+        value_info = train_value_predictor(a, d, net, train_idx, held_idx, rng)
     w = {k: v.numpy().copy() for k, v in net.p.items()}
     npj = M.NumpyJepa(w)
-    value_info = train_value(a, d, npj, w, train_idx, held_idx, rng)
+    if a.value_mode == "frozen":
+        value_info = train_value(a, d, npj, w, train_idx, held_idx, rng)
 
     pidx = rng.choice(train_idx, min(20000, len(train_idx)), replace=False)
     hidx = rng.choice(held_idx, min(5000, len(held_idx)), replace=False)
