@@ -165,7 +165,15 @@ function repair(out) {
     }
     const gl = path.join(out, 'games.jsonl');
     if (fs.existsSync(gl)) {
-        const lines = fs.readFileSync(gl, 'utf8').split('\n').filter(Boolean).filter((l) => JSON.parse(l).game < games);
+        // a line cut off mid-write (killed process, full disk) is dropped like any game past the meta rows
+        const keep = (l) => {
+            try {
+                return JSON.parse(l).game < games;
+            } catch {
+                return false;
+            }
+        };
+        const lines = fs.readFileSync(gl, 'utf8').split('\n').filter(Boolean).filter(keep);
         fs.writeFileSync(gl, lines.map((l) => l + '\n').join(''));
     }
     return games;
