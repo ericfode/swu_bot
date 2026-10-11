@@ -6,7 +6,8 @@
  *
  *   node bot/eval/replays.js --from /mnt/project-files/results/omni-ref-1,... --out data/omni [--every 2]
  *
- * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state, hidden?}) and <out>/decks/0.jsonl. Positions
+ * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state, endLeft, hidden?}; endLeft = base HP left
+ * per seat on the final frame) and <out>/decks/0.jsonl. Positions
  * are the action-window checkpoints arena.js records (see replayPositions). Decklists are redrawn from the seed the way
  * match.js draws them and checked (see deckLists). Draws, errors and decided boards are skipped. A game id already seen
  * gets the source's position in --from and its folder name as a prefix; the same game recorded twice is kept once.
@@ -107,6 +108,13 @@ function replayPositions(file, id, every = 1) {
     // unpaired frame of a merged capture): fit.js and score.js skip those judges and the objective view
     const header = lines[0]?.source?.hiddenHands ?? [];
     const hiddenAt = (st) => ['p1', 'p2'].filter((seat) => header.includes(seat) || (st.players?.[seat]?.hand ?? []).some((c) => c?.hid));
+    // base HP left on the final frame (checkpoints stop before the deciding action): flags.js tells lethal from concession
+    const lastState = steps[steps.length - 1]?.state;
+    const leftOf = (seat) => {
+        const b = lastState?.players?.[seat]?.base;
+        return b ? b.hp - b.d : null;
+    };
+    const endLeft = { p1: leftOf('p1'), p2: leftOf('p2') };
     const out = [];
     let seen = 0;
     for (let i = 0; i + 1 < steps.length; i++) {
@@ -115,11 +123,17 @@ function replayPositions(file, id, every = 1) {
         if (e.prompt?.startsWith('actionWindow') && prev.state?.phase === 'action' && seen++ % every === 0 && terminal(prev.state, 'p1') === null) {
             const hidden = hiddenAt(prev.state);
             // a position with both hands hidden (a spectator capture) has no judge for fit.js, only score.js's spectator view
-            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, ...(hidden.length ? { hidden } : {}) });
+            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, endLeft, ...(hidden.length ? { hidden } : {}) });
         }
     }
+    // a game that ends without a deciding blow (a concession, timeout or disconnect) keeps its final board too, marked
+    // final: it is the board the losing player gave up on (flags.js); it has no actor
+    if (lastState && terminal(lastState, 'p1') === null && steps.length && out[out.length - 1]?.n !== steps[steps.length - 1].n) {
+        const hidden = hiddenAt(lastState);
+        out.push({ id, winner: end.winner, outcome: end.outcome, n: steps[steps.length - 1].n, round: lastState.round, toAct: null, state: lastState, endLeft, final: true, ...(hidden.length ? { hidden } : {}) });
+    }
     // the same game recorded twice (a folder listed twice, or a copied replay) has the same content digest
-    const key = require('crypto').createHash('sha1').update(fs.readFileSync(file)).digest('hex');
+    const key = require('crypto').createHash('sha1').update(JSON.stringify(lines)).digest('hex');
     return { positions: out, decks: deckLists(lines[0]?.seed, lines[0], lines), key };
 }
 
@@ -149,9 +163,9 @@ function main() {
             console.error(`skipping ${t}: no games/ folder`);
             continue;
         }
-        for (const f of fs.readdirSync(g).filter((f) => f.endsWith('.jsonl')).sort()) {
+        for (const f of fs.readdirSync(g).filter((f) => f.endsWith('.jsonl') || f.endsWith('.jsonl.gz')).sort()) {
             // a game id seen before (same file name in another source) gets the source's index as a prefix
-            let id = f.slice(0, -6);
+            let id = f.replace(/\.jsonl(\.gz)?$/, '');
             if (seen.has(id)) {
                 id = `${ti}:${path.basename(t)}/${id}`;
             }
