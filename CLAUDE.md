@@ -43,12 +43,28 @@ npm run viewer:dev           # Vite dev server; proxies /api and /replays to :51
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
 npm test                     # unit tests (ratings, ladder report, bot logic on mock boards); no card data needed
+npm run lint                 # Perch semantic lint with Jev (see "Linting" below)
 ```
 
 - Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format and snapshot fields: `bot/recorder.js`, types in `viewer/src/core/types.ts`.
 - `viewer/src/core/` (Board, CardView, Replay, api, stats) is shared by the tournament page and the single-game page; both embed the same `<Replay game={...} />`.
 - Card art comes from `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png` (`-b` suffix = deployed leader side). Tokens and unreleased sets (e.g. TS26) have no art and fall back to stat tiles automatically; Card art can also be toggled off.
 - Deep link to a step: `#/t/<tournament>/g/<game>?step=300`.
+
+## Linting (Perch + Jev)
+
+[Perch](https://github.com/lakeday-org/perch) (`@lakeday/perch`, a root devDependency) is a semantic linter: it asks TypeSafe's Jev model about each method and reports likely defects with a confidence.
+
+```bash
+npm install                  # once, at the repo root
+npm run lint                 # scan the repo at HEAD (committed code only); exit 3 = findings
+npm run lint:changed         # only what changed since origin/main
+npm run perch -- issues      # any perch command: issues, check <file::method>, close <id> --reason ...
+```
+
+- `tools/bin/perch` sets `PERCH_BASE_URL` to TypeSafe System One (model `jev-latest`) and turns on `NODE_USE_ENV_PROXY` when `HTTPS_PROXY` is set. Locally, export `PERCH_API_KEY` or `TYPESAFE_API_KEY`. In Claude Code cloud sessions the egress proxy injects the Jev key, so no key is needed.
+- Config is `perch.yaml` (ignores `forceteki/` and generated output; no custom rules yet). Results go to `.perch/` (gitignored, except `.perch/rules/` and `.perch/closed.jsonl`, which are committed).
+- Findings are probabilities, not facts. Read the code before changing it, and `perch close <id> --reason "..."` false positives. `perch ci`, `perch cloud` and `perch login` need Perch Cloud, which this repo does not use.
 
 ## Architecture of `bot/env.js`
 
