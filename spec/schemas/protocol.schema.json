@@ -228,6 +228,11 @@
         "sim": {
           "type": "boolean",
           "description": "v2: ask for simulations."
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The build of the bot that plays this game (a git commit, a bundle id). Recorded with the result."
         }
       }
     },

@@ -50,6 +50,10 @@ async function playGame(env, { seed, bots, decks: given = null, record = false, 
         for (const s of seats) {
             await s.hello();
         }
+        const versions = Object.fromEntries(seats.filter((s) => s.version).map((s) => [s.seat, s.version]));
+        if (Object.keys(versions).length) {
+            res.versions = versions;
+        }
         const setup = { seed: streams.engine, deck1: decks.p1, deck2: decks.p2 };
         eg = env.newGame(setup);
         // every lookahead runs on a copy of the game (protocol.js Shadow) that follows every real move

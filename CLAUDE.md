@@ -46,6 +46,7 @@ npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   
 npm test                     # unit tests (ratings, ladder report, bot logic on mock boards, importer); no card data needed
 node importer/import.js <capture>... --out replays/human   # import human Karabast games
 npm run lint                 # Perch semantic lint with Jev (see "Linting" below)
+python3 bot/compiled/build.py   # 9 bots as sandboxed WebAssembly bundles in build/compiled, played as <name>-wasm (bot/compiled/README.md)
 ```
 
 - Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format: `spec/replay-format.md`; snapshot fields: `bot/view.js`, types in `viewer/src/core/types.ts`.
