@@ -126,7 +126,7 @@ function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
   if (listed.status !== 0) return { ...out, error: `perch: git could not list the files to read: ${String(listed.stderr).trim()}` };
   let files = listed.stdout.split('\n').filter(Boolean);
   if (narrow.length) files = files.filter((f) => narrow.some((p) => f === p || f.startsWith(p + '/')));
-  if (scope) files = files.filter((f) => inScope(f, scope));
+  if (scope) files = files.filter((f) => inScope(f, scope) && handWritten(path.join(root, f)));
   if (!files.length) {
     out.nothing = (since ? `perch: no code in Perch's scope changed since ${since}.` : "perch: nothing in Perch's scope there.") +
       ' Bot code is out of scope (tools/perch/scope.js).';
@@ -139,6 +139,13 @@ function plan(args, { repo, scope, cwd = process.cwd(), git = runGit(repo) }) {
   out.args = [command, ...kept, ...parallel, '--paths', files.join(',')];
   out.files = files;
   return out;
+}
+
+/** False for built bundles: files over 256 KB or minified (long lines). A missing file passes. */
+function handWritten(file) {
+  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  if (!stat?.isFile()) return true;
+  return stat.size <= 256 << 10 && stat.size / fs.readFileSync(file, 'utf8').split('\n').length < 300;
 }
 
 const outside = (file) => `perch: ${file} is outside Perch's scope: bot code is not linted (tools/perch/scope.js).`;
@@ -253,7 +260,7 @@ function snapshotShared(scope, dir, closures) {
     must('config', 'user.name', 'perch shared snapshot');
     must('config', 'user.email', 'perch@localhost');
   }
-  // Source files only, so data, art and anything over 1 MB (built bundles) stay out.
+  // Source files only: data and art stay out, and so do built bundles (large or minified).
   const source = /\.(?:[cm]?js|jsx|tsx?|py|rs|go|sh|c|h|cc|cpp|hs|clj|lisp)$/;
   const tops = new Set(scope.include.map((glob) => glob.split('/').filter((part, i, all) => all.slice(0, i + 1).every((p) => !/[*?]/.test(p))).join('/')));
   const wanted = new Map();
@@ -268,7 +275,7 @@ function snapshotShared(scope, dir, closures) {
       const file = path.posix.join(top, String(name).split(path.sep).join('/'));
       if (!source.test(file) || !inScope(file, scope)) continue;
       const stat = fs.statSync(path.join(scope.root, file), { throwIfNoEntry: false });
-      if (stat?.isFile() && stat.size <= 1 << 20) wanted.set(file, path.join(scope.root, file));
+      if (stat?.isFile() && handWritten(path.join(scope.root, file))) wanted.set(file, path.join(scope.root, file));
     }
   }
   for (const file of must('ls-files').split('\n').filter(Boolean)) if (!wanted.has(file)) fs.rmSync(path.join(dir, file), { force: true });

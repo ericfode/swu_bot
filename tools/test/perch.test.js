@@ -175,6 +175,7 @@ test('the shared snapshot copies in-scope source files, commits them and drops r
   write('dashboard/data.json', '{}');
   write('arena/agents/x/bot.js', 'module.exports = 1;\n');
   write('arena/strategy/diagram.js', 'module.exports = 2;\n');
+  write('dashboard/bundle.js', `var a=${'x'.repeat(5000)};\n`); // minified: one long line
   const scope = { root, include: ['dashboard/**', 'arena/**'], exclude: ['arena/agents/**'] };
   const files = () => spawnSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', 'HEAD'], { encoding: 'utf8' }).stdout.trim().split('\n');
   snapshotShared(scope, dir, path.join(root, 'closed.jsonl'));

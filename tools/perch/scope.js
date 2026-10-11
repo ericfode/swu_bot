@@ -33,7 +33,7 @@ module.exports = {
       'arena/agents/**', // copies of arena players' bots
       'arena/versions/**',
       'arena/archive/**',
-      'viewer-kit/swu-viewer-kit.mjs', // built from studio/ in the repo
+      'viewer-kit/swu-viewer-kit.*', // built from studio/ in the repo (minified files are skipped anyway)
       '**/node_modules/**',
     ],
   },
