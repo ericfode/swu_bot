@@ -409,3 +409,42 @@ test('server: a queued eval\'s lost-game replay is served, and eval_result names
         srv.close();
     }
 });
+
+test('server: / is the app when its build exists, /arena is always the arena UI', async () => {
+    const http = require('http');
+    const { handler } = require('../arena/server');
+    const app = path.join(HOME, 'public.html');
+    fs.writeFileSync(app, '<!doctype html><title>SWU Arena app</title>');
+    const before = process.env.ARENA_APP;
+    const srv = http.createServer(handler).listen(0, '127.0.0.1');
+    await new Promise((r) => srv.once('listening', r));
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const ui = fs.readFileSync(path.join(__dirname, '..', 'arena', 'web', 'index.html'), 'utf8');
+    try {
+        process.env.ARENA_APP = app;
+        assert.match(await (await fetch(`${base}/`)).text(), /SWU Arena app/);
+        assert.strictEqual(await (await fetch(`${base}/arena`)).text(), ui);
+        assert.ok((await (await fetch(`${base}/api/status`)).json()).result, '/api is unchanged');
+        process.env.ARENA_APP = '';
+        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui, 'no app build: / stays the arena UI');
+        process.env.ARENA_APP = path.join(HOME, 'missing.html');
+        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui);
+    } finally {
+        srv.close();
+        if (before === undefined) {
+            delete process.env.ARENA_APP;
+        } else {
+            process.env.ARENA_APP = before;
+        }
+    }
+});
+
+test('server: gzip only when Accept-Encoding allows it', () => {
+    const { acceptsGzip } = require('../arena/server');
+    for (const h of ['gzip', 'deflate, gzip', 'GZIP;Q=0.5', 'br, *', 'gzip;q=1, *;q=0']) {
+        assert.strictEqual(acceptsGzip(h), true, h);
+    }
+    for (const h of [undefined, '', 'identity', 'gzip;q=0', 'deflate, gzip;q=0', '*;q=0', 'gzip;q=0, *', 'gzip;q=0.000']) {
+        assert.strictEqual(acceptsGzip(h), false, String(h));
+    }
+});
