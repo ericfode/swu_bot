@@ -274,9 +274,15 @@ export function chooseDefault(sources: ScoreSource[], opts: { requested?: string
 export const zonesFit = (l: Pick<LensSide, 'ground' | 'space' | 'hand'>, p: PlayerSnap) => Array.isArray(l.ground) && Array.isArray(l.space) && Array.isArray(l.hand)
     && l.ground.length === p.ground.length && l.space.length === p.space.length && l.hand.length === p.hand.length;
 
-/** the same cards, by name and in order, in ground, space and hand: a held value's chips still sit on the cards it scored */
+/** one card: by `id` when both copies have one (protocol v2 replays), else by name (older replays) */
+const sameCard = (a: CardRef, b: CardRef) => (a.id != null && b.id != null ? a.id === b.id : a.n === b.n);
+
+/**
+ * the same cards, in order, in ground, space and hand: a held value's chips still sit on the cards it scored (a copy
+ * with the same name that came in after the scored one left is another card)
+ */
 const sameCards = (a: PlayerSnap, b: PlayerSnap) => (['ground', 'space', 'hand'] as const)
-    .every((z) => a[z].length === b[z].length && a[z].every((c, k) => c.n === b[z][k].n));
+    .every((z) => a[z].length === b[z].length && a[z].every((c, k) => sameCard(c, b[z][k])));
 
 const weightsKey = (w: Weights | null) => (w ? JSON.stringify(Object.keys(w).sort().map((k) => [k, w[k]])) : '');
 

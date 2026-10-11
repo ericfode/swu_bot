@@ -1162,6 +1162,39 @@ function selftest(args: Args): number {
         const copy = () => JSON.parse(JSON.stringify(raw)) as LensFile & { steps: Obj[] };
         const seriesOf = (f: unknown) => resolveScore(game, sourcesFor(game, [{ dir: '', file: f }])[0]);
         const swings = (f: unknown) => classifyGame(game, undefined, seriesOf(f));
+        // card values are held only while the cards they scored are still there, by id when the replay has ids (v2):
+        // omni-today kept on every 4th step and marked sparse, then the ids of one held step's cards set or swapped
+        const sparse = copy() as unknown as { evaluator: Obj; steps: Obj[] };
+        sparse.evaluator.sampling = 'decisions';
+        sparse.steps = sparse.steps.filter((_, k) => k % 4 === 0);
+        const sparseSeries = seriesOf(sparse);
+        const h = sparseSeries.steps.find((x) => x.status === 'held' && x.seats && game.steps[x.i].state.players.p1.ground.length > 0);
+        const heldWithIds = (swap: boolean) => {
+            const steps = game.steps.map((st, i) => {
+                if (!h || (i !== h.heldFrom && i !== h.i)) {
+                    return st;
+                }
+                const state = structuredClone(st.state);
+                for (const seat of ['p1', 'p2'] as const) {
+                    for (const z of ['ground', 'space', 'hand'] as const) {
+                        state.players[seat][z].forEach((c, k) => { c.id = `${seat}-${z}-${k}`; });
+                    }
+                }
+                if (swap && i === h.i) {
+                    // another copy of the same card in the scored one's place
+                    state.players.p1.ground[0].id = 'another-copy';
+                }
+                return { ...st, state };
+            });
+            const g2 = { ...game, steps };
+            return resolveScore(g2, sourcesFor(g2, [{ dir: '', file: sparse }])[0]).steps[h!.i];
+        };
+        const same = h ? heldWithIds(false) : null;
+        const other = h ? heldWithIds(true) : null;
+        check('held card values stay on the same card ids, and go when another copy of the card took its place (edge kept)',
+            !!same && !!other && same.status === 'held' && !!same.seats && other.status === 'held' && other.seats == null && other.edge === same.edge,
+            h ? `held step n ${h.n}: same ids ${same?.seats ? 'values' : 'none'}, another copy ${other?.seats ? 'values' : 'none'}` : 'no held step with card values on a p1 ground unit');
+
         const partial = copy();
         let withP = 0;
         for (const st of partial.steps) {
