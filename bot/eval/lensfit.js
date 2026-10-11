@@ -135,7 +135,7 @@ function main() {
             continue;
         }
         const steps = new Map(lines.filter((l) => l.t === 'step').map((l) => [l.n, l]));
-        const decks = deckLists(lens.seed, lines[0]);
+        const decks = deckLists(lens.seed, lines[0], lines);
         for (const s of lens.steps) {
             // lens step n = the board after step n's move, so the next actor is step n+1's pid (as in arena.js)
             const st = steps.get(s.n)?.state;

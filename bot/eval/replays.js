@@ -39,10 +39,11 @@ function engineRev() {
 }
 
 /**
- * Both decklists as set codes, redrawn from the seed. The draw depends on the engine's card pool, so it is trusted only
- * when the replay header names the same engine commit as this checkout and the deck names match; otherwise null.
+ * Both decklists as set codes, redrawn from the seed. The draw depends on the engine's card pool and on env.js's deck
+ * builder, so it is trusted only when the replay header names this engine commit, the deck names match, and every card
+ * the replay shows in a player's hand or discard pile is in that player's redrawn list; otherwise null.
  */
-function deckLists(seed, header) {
+function deckLists(seed, header, lines = []) {
     const rev = engineRev();
     if (header?.t !== 'header' || !header.engine || !rev || !rev.startsWith(header.engine)) {
         return null;
@@ -54,7 +55,18 @@ function deckLists(seed, header) {
         return null;
     }
     const flat = (x) => x.deck.flatMap((c) => Array(c.count).fill(c.id));
-    return { p1: flat(d[0]), p2: flat(d[1]) };
+    const decks = { p1: flat(d[0]), p2: flat(d[1]) };
+    // hand and discard hold only the owner's real deck cards (no tokens, no leader or base)
+    for (const pid of ['p1', 'p2']) {
+        const have = new Set(decks[pid]);
+        for (const l of lines) {
+            const ps = l.t === 'step' ? l.state?.players?.[pid] : null;
+            if (ps && [...(ps.hand ?? []), ...(ps.discard ?? [])].some((c) => c.s && !have.has(c.s))) {
+                return null;
+            }
+        }
+    }
+    return decks;
 }
 
 /** Positions of one replay file: every `every`-th undecided step with a known next actor. */
@@ -73,7 +85,7 @@ function replayPositions(file, id, every = 1) {
         }
         out.push({ id, winner: end.winner, outcome: end.outcome, n: s.n, round: s.state.round, toAct: steps[i + 1].pid ?? null, state: s.state });
     }
-    return { positions: out, decks: deckLists(lines[0]?.seed, lines[0]) };
+    return { positions: out, decks: deckLists(lines[0]?.seed, lines[0], lines) };
 }
 
 function main() {
