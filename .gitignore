@@ -5,3 +5,4 @@ viewer/dist/
 analysis/node_modules/
 analysis/.cache/
 analysis/out/
+results/
