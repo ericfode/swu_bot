@@ -46,13 +46,24 @@ function reprove(eg, pid, config) {
     return { result: r.result, depth: r.depth };
 }
 
+/** Bots are closed after the replay: external bots run as child processes. */
 async function replay(env, g) {
+    const bots = g.bots.map(makeBot);
+    try {
+        return await replayWith(env, g, bots);
+    } finally {
+        for (const b of bots) {
+            b.close?.();
+        }
+    }
+}
+
+async function replayWith(env, g, bots) {
     const rng = seededRng('bot' + g.seed);
     const deck1 = env.randomDeck(rng);
     const deck2 = env.randomDeck(rng);
     const eg = env.newGame({ seed: g.seed, deck1, deck2, undo: true });
     await eg.start();
-    const bots = g.bots.map(makeBot);
     const out = [];
     const tried = new Set(flags.has('--reprove') ? g.solves.map((s) => s.i) : []);
     let steps = 0;

@@ -38,13 +38,24 @@ function seedList(spec) {
     });
 }
 
+/** Bots are closed when the game is solved: external bots run as child processes. */
 async function solveGame(env, seed, names, opts) {
+    const bots = names.map(makeBot);
+    try {
+        return await playAndSolve(env, seed, names, opts, bots);
+    } finally {
+        for (const b of bots) {
+            b.close?.();
+        }
+    }
+}
+
+async function playAndSolve(env, seed, names, opts, bots) {
     const rng = seededRng('bot' + seed);
     const deck1 = env.randomDeck(rng);
     const deck2 = env.randomDeck(rng);
     const eg = env.newGame({ seed, deck1, deck2, undo: true });
     await eg.start();
-    const bots = names.map(makeBot);
     const windows = [];
     let steps = 0;
     const t0 = Date.now();
@@ -64,7 +75,9 @@ async function solveGame(env, seed, names, opts) {
             }
             windows.push(w);
         }
-        const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions, rng });
+        // sampling rolled the engine back, which renews prompt ids: hand the bot fresh actions
+        const fresh = w?.moves !== undefined ? eg.legalActions(pid) : actions;
+        const action = bots[eg.ids.indexOf(pid)].choose({ game: eg, pid, actions: fresh, rng });
         if (w) {
             w.played = action.label;
         }
