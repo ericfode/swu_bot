@@ -237,3 +237,42 @@ test('the people ledger caps distinct people and keeps no ids', () => {
     assert.ok(again.has('user-b'));
     assert.ok(!fs.readFileSync(file, 'utf8').includes('user-'));
 });
+
+test('two ledgers on one file share the cap', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const a = new PeopleLedger(file, 2);
+    const b = new PeopleLedger(file, 2);
+    assert.strictEqual(a.add(['user-a'], 'played'), 1);
+    assert.strictEqual(b.add(['user-b'], 'watched'), 1);
+    // a's own snapshot still says 1; the file says 2
+    assert.ok(!a.room(1));
+    assert.throws(() => a.add(['user-c'], 'played'), /cap/);
+    assert.strictEqual(new PeopleLedger(file, 2).count, 2);
+    assert.ok(!fs.existsSync(`${file}.lock`));
+});
+
+test('a bad split is a bot failure, and the seat concedes at maxFailures', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0, split: [{ id: 'c99', amount: 3 }] }), over: () => ({ t: 'ok' }) };
+    const { sock, seat } = fakeSeat(client);
+    const done = seat.play();
+    const dist = (uuid) => {
+        const f = frame({ promptUuid: uuid, distributeAmongTargets: { type: 'distributeIndirectDamage', amount: 3, canDistributeLess: false, canChooseNoTargets: false, maxTargets: null } },
+            { groundArena: [unit('U1', { selectable: true })] });
+        f.players['user-a'].leaders[0].selectable = false;
+        f.players['user-a'].base.selectable = true;
+        return f;
+    };
+    sock.emit('gamestate', dist('P1'));
+    await new Promise((r) => setTimeout(r, 20));
+    // the first failure plays a random split for the bot
+    assert.strictEqual(sock.sent.at(-1)[1], 'statefulPromptResults');
+    sock.emit('gamestate', dist('P2'));
+    // a seat that never concedes would keep the test waiting: end it after 2 s
+    const timer = setTimeout(() => seat.done('none', 'the seat did not concede'), 2000);
+    const r = await done;
+    clearTimeout(timer);
+    assert.strictEqual(r.result, 'loss');
+    assert.strictEqual(r.stats.failures.length, 2);
+    assert.match(r.stats.failures[0], /bad split/);
+    assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
+});

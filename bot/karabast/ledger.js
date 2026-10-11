@@ -6,16 +6,32 @@
  *
  * The file keeps no ids or names: only salted SHA-256 digests (the salt is made once and kept in the file), so it can
  * say "already counted" without saying who. It is written with a temporary file and a rename after each change.
+ *
+ * Several runs may share one file (a bot run and a recorder at the same time). Each check reads the file again, and
+ * add() reads, checks and writes while holding a lock file, so two processes on one machine cannot both take the
+ * last place under the cap.
  */
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const LOCK_WAIT_MS = 10000;
+// a lock this old was left by a run that died while holding it
+const LOCK_STALE_MS = 30000;
+
+function sleepSync(ms) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 class PeopleLedger {
     constructor(file, max = 10) {
         this.file = file;
         this.max = max;
-        this.data = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { salt: crypto.randomBytes(16).toString('hex'), people: {} };
+        this.load();
+    }
+
+    load() {
+        this.data = fs.existsSync(this.file) ? JSON.parse(fs.readFileSync(this.file, 'utf8')) : { salt: crypto.randomBytes(16).toString('hex'), people: {} };
     }
 
     digest(userId) {
@@ -26,8 +42,9 @@ class PeopleLedger {
         return Object.keys(this.data.people).length;
     }
 
-    /** True when `n` more new people fit under the cap. */
+    /** True when `n` more new people fit under the cap, by the file as it is now. */
     room(n = 1) {
+        this.load();
         return this.count + n <= this.max;
     }
 
@@ -37,16 +54,56 @@ class PeopleLedger {
 
     /** Counts `userIds` (what: 'played' or 'watched'); returns how many were new. Throws past the cap. */
     add(userIds, what) {
-        const fresh = [...new Set(userIds)].filter((id) => !this.has(id));
-        if (this.count + fresh.length > this.max) {
-            throw new Error(`people cap reached: ${this.count} of ${this.max} counted, ${fresh.length} more would pass it`);
+        return this.locked(() => {
+            const fresh = [...new Set(userIds)].filter((id) => !this.has(id));
+            if (this.count + fresh.length > this.max) {
+                throw new Error(`people cap reached: ${this.count} of ${this.max} counted, ${fresh.length} more would pass it`);
+            }
+            const at = new Date().toISOString();
+            for (const id of fresh) {
+                this.data.people[this.digest(id)] = { at, what };
+            }
+            this.save();
+            return fresh.length;
+        });
+    }
+
+    /** Runs fn on the file's current data while holding `<file>.lock` (created exclusively). */
+    locked(fn) {
+        fs.mkdirSync(path.dirname(this.file), { recursive: true });
+        const lock = `${this.file}.lock`;
+        const t0 = Date.now();
+        let fd;
+        for (;;) {
+            try {
+                fd = fs.openSync(lock, 'wx');
+                break;
+            } catch (e) {
+                if (e.code !== 'EEXIST') {
+                    throw e;
+                }
+            }
+            let age = 0;
+            try {
+                age = Date.now() - fs.statSync(lock).mtimeMs;
+            } catch {
+                continue; // released in between
+            }
+            if (age > LOCK_STALE_MS) {
+                fs.rmSync(lock, { force: true });
+            } else if (Date.now() - t0 > LOCK_WAIT_MS) {
+                throw new Error(`people ledger ${this.file} stayed locked for ${LOCK_WAIT_MS / 1000} s`);
+            } else {
+                sleepSync(50);
+            }
         }
-        const at = new Date().toISOString();
-        for (const id of fresh) {
-            this.data.people[this.digest(id)] = { at, what };
+        try {
+            this.load();
+            return fn();
+        } finally {
+            fs.closeSync(fd);
+            fs.rmSync(lock, { force: true });
         }
-        this.save();
-        return fresh.length;
     }
 
     save() {
