@@ -63,11 +63,15 @@ function renderBoard(state, { pov = null, names = {} } = {}) {
 /**
  * Why a decision is private to its maker, or null: resource choices put a card face down, and picks from a hidden
  * zone (deck searches and top/bottom choices show the cards as a display prompt; other prompts say so in the title).
+ * Plain buttons on those prompts are controls (Done, Take nothing, Cancel) and stay visible.
  */
 function privateKind(step) {
     const kind = step.action?.kind;
     if (/^resource/.test(step.prompt ?? '') && kind === 'card') {
         return 'resourced a card (hidden)';
+    }
+    if (kind === 'button') {
+        return null;
     }
     if (kind === 'displayCard' || kind === 'perCardButton' || /^displayCards/.test(step.prompt ?? '') || /hidden zone/i.test(step.title ?? '')) {
         return 'chose from a hidden zone (hidden)';

@@ -61,6 +61,9 @@ const { gameFitness } = require('../fitness');
     const log = renderLog(steps, 3, { pov: 'p1' });
     assert(!/secret/.test(log) && /public unit/.test(log), log);
     assert(/secret card/.test(renderLog(steps, 3, { pov: 'p2' })));
+    // ...but control buttons on those prompts stay visible
+    const ctl = [{}, step(1, 'p2', 'displayCards|single|disp', 'button', 'Take nothing', 'Select a card')];
+    assert(/Take nothing/.test(renderLog(ctl, 1, { pov: 'p1' })), renderLog(ctl, 1, { pov: 'p1' }));
 
     console.log('ok: subsampling, fitness, answer files, parsing, privacy');
 })().catch((e) => {
