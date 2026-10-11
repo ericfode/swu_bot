@@ -2,3 +2,4 @@ node_modules/
 replays/
 replays-*.log
 viewer/dist/
+data/
