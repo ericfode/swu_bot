@@ -105,7 +105,8 @@ function stoppedResult(job, st, { seat, kind, error, ms, key = null }) {
         Object.assign(r, forfeit(job, seat - 1, kind));
     }
     if (job.replayFile && fs.existsSync(job.replayFile)) {
-        fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error, by: r.by, faultKind: r.faultKind, ...(key ? { key } : {}) })}\n`);
+        // no key: the runner adds it once every game dealt from it has ended (ladder.js)
+        fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error, by: r.by, faultKind: r.faultKind })}\n`);
     }
     return r;
 }

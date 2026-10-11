@@ -7,9 +7,10 @@
  *       [--resume] [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine,
  * uncommitted engine source changes included (config.engineDiff), and same bot code and models: config.harness is the
- * git trees of bot/ and models/, plus a hash of uncommitted changes there and of the $SWU_LEARNED_MODEL file when set;
+ * git trees of bot/ and models/, plus a hash of uncommitted changes there, of the $SWU_LEARNED_MODEL file and of the
+ * other $SWU_* settings when set;
  * config.programs hashes the bot programs' entries and the files they name). Without the earlier run's --key, the rest is dealt from a
- * new run key; the games kept have their own keys in their entries.
+ * new run key; the games kept have their own keys in their entries, and a seed not played out is played again whole.
  * --cap-ms caps each bot's thinking per game (players/guard.js; default none): over it, that bot loses. --hang-ms is the
  * watchdog (game-pool.js): one bot call running longer than that (wall clock) loses the game, and its worker is
  * replaced. A bot that fails to load, throws or answers wrong also loses. Such a game is an ERROR with `by` set to the
@@ -78,9 +79,10 @@ function engineDiff() {
 
 /**
  * The revision of the harness and the built-in bots with their models: the git tree ids of bot/ and models/ at HEAD,
- * plus a hash of uncommitted changes and new files there, and of the file $SWU_LEARNED_MODEL names (the learned bots
- * read it instead of models/learned/current.json), when there are any. Arena versions live outside the repo and never
- * change. null without git.
+ * plus a hash of uncommitted changes and new files there, of the file $SWU_LEARNED_MODEL names (the learned bots
+ * read it instead of models/learned/current.json) and of the other $SWU_* settings bots read ($SWU_LEARNED_BLEND,
+ * $SWU_CARD_JSON, ...; not the *_THOUGHTS and *_TRACE outputs), when there are any. Arena versions live outside the
+ * repo and never change. null without git.
  */
 function harnessRev() {
     const root = path.join(__dirname, '..');
@@ -91,7 +93,11 @@ function harnessRev() {
         const extra = git('ls-files', '--others', '--exclude-standard', '-z', '--', ...dirs).split('\0').filter(Boolean).sort();
         const diff = git('diff', 'HEAD', '--', ...dirs);
         const model = process.env.SWU_LEARNED_MODEL;
-        if (!diff && !extra.length && !model) {
+        // $SWU_EXTERNAL_BOTS is covered by programsRev, the model file just above
+        const settings = Object.entries(process.env)
+            .filter(([k]) => k.startsWith('SWU_') && !/_(THOUGHTS|TRACE)$/.test(k) && k !== 'SWU_EXTERNAL_BOTS' && k !== 'SWU_LEARNED_MODEL')
+            .sort(([a], [b]) => (a < b ? -1 : 1));
+        if (!diff && !extra.length && !model && !settings.length) {
             return tree;
         }
         const h = crypto.createHash('sha256').update(diff);
@@ -100,6 +106,9 @@ function harnessRev() {
         }
         if (model) {
             h.update(`\0model\0`).update(fs.existsSync(model) ? fs.readFileSync(model) : 'missing');
+        }
+        for (const [k, v] of settings) {
+            h.update(`\0env\0${k}=${v}`);
         }
         return `${tree}+${h.digest('hex').slice(0, 10)}`;
     } catch {
@@ -110,7 +119,9 @@ function harnessRev() {
 /**
  * A hash of the bot programs in this ladder ($SWU_EXTERNAL_BOTS or bot/external-bots.json): each one's entry and the
  * files it names (its program, the scripts and model files in its arguments, its adapter), which may be built files git
- * does not track (bot/c/swu-c) or live outside the repo. null when no bot program plays.
+ * does not track (bot/c/swu-c) or live outside the repo. For a named file outside the repo (harnessRev covers bot/ and
+ * models/) the other files in its folder count too, as a program may import or load them; an entry lists anything
+ * else its program reads in `inputs` (files or folders, from its cwd). null when no bot program plays.
  */
 function programsRev(names) {
     const root = path.join(__dirname, '..');
@@ -125,18 +136,38 @@ function programsRev(names) {
         h.update(`\0${n}\0${JSON.stringify(spec)}`);
         const cwd = path.resolve(root, spec.cwd ?? '.');
         const named = [spec.cmd, ...(Array.isArray(spec.args) ? spec.args : [])].filter((a) => typeof a === 'string').flatMap((a) => a.split('='));
-        const files = [...named.map((a) => path.resolve(cwd, a)), ...(typeof spec.adapter === 'string' ? [path.join(root, spec.adapter)] : [])];
-        for (const f of files) {
-            try {
-                if (fs.statSync(f).isFile()) {
-                    h.update(`\0${f}\0`).update(fs.readFileSync(f));
-                }
-            } catch {
-                // not a file (a program on PATH, a flag, a word)
-            }
+        const files = [...named.map((a) => path.resolve(cwd, a)), ...(typeof spec.adapter === 'string' ? [path.join(root, spec.adapter)] : [])]
+            .filter((f) => isFile(f));
+        const outside = files.filter((f) => path.relative(root, f).startsWith('..'));
+        const near = outside.flatMap((f) => fs.readdirSync(path.dirname(f)).map((x) => path.join(path.dirname(f), x)).filter((x) => isFile(x)));
+        const inputs = (Array.isArray(spec.inputs) ? spec.inputs : []).filter((x) => typeof x === 'string').flatMap((x) => filesIn(path.resolve(cwd, x)));
+        for (const f of [...new Set([...files, ...near, ...inputs])].sort()) {
+            h.update(`\0${f}\0`).update(fs.readFileSync(f));
         }
     }
     return any ? h.digest('hex').slice(0, 12) : null;
+}
+
+const isFile = (f) => {
+    try {
+        return fs.statSync(f).isFile();
+    } catch {
+        return false; // not a file: a program on PATH, a flag, a word
+    }
+};
+
+/** The files in a file or folder (recursively, skipping .git and node_modules); [] when it does not exist. */
+function filesIn(p) {
+    if (isFile(p)) {
+        return [p];
+    }
+    let entries;
+    try {
+        entries = fs.readdirSync(p, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+    return entries.filter((e) => e.name !== '.git' && e.name !== 'node_modules').flatMap((e) => filesIn(path.join(p, e.name)));
 }
 
 /** Adds a game's key to the end event (the last line) of its finished replay, atomically; nothing when there is none. */
@@ -197,7 +228,7 @@ function readPrevious(file, config, engine) {
         return null;
     }
     if (c.keyId !== config.keyId) {
-        console.log('resume: the earlier run had another key, so the games left are dealt from this run\'s key (kept games keep theirs)');
+        console.log('resume: the earlier run had another key, so the games left are dealt from this run\'s key (kept games keep theirs; a seed whose games are not all done is played again)');
     }
     return { games: Array.isArray(doc.games) ? doc.games : [], sameKey: c.keyId === config.keyId };
 }
@@ -255,7 +286,13 @@ async function main() {
     const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
     let queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     if (prev) {
-        const kept = prev.games.filter((g) => g?.id && g.outcome !== 'running' && queue.some((q) => q.id === g.id));
+        let kept = prev.games.filter((g) => g?.id && g.outcome !== 'running' && queue.some((q) => q.id === g.id));
+        if (!prev.sameKey) {
+            // the games on a seed share one deal: under a new key, the games still to play on a seed would get other cards
+            // than the ones kept, so the kept games on such a seed are played again too
+            const open = new Set(queue.filter((q) => !kept.some((g) => g.id === q.id)).map((q) => q.seed));
+            kept = kept.filter((g) => !open.has(g.seed));
+        }
         games.push(...kept);
         tIndex.games.push(...kept.map(({ botStats, think, ...g }) => g));
         queue = queue.filter((q) => !kept.some((g) => g.id === q.id));
