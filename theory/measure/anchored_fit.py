@@ -44,7 +44,7 @@ def sigmoid(z):
 
 
 def load_frames(d):
-    games = []
+    games = {}  # by seed: a rerun that appends to an old file must not count a game twice (or split it across folds)
     for f in sorted(glob.glob(os.path.join(d, '*.jsonl'))):
         for line in open(f):
             line = line.strip()
@@ -55,9 +55,8 @@ def load_frames(d):
             except json.JSONDecodeError:
                 continue  # a game still being written
             if g.get('winner') in ('p1', 'p2') and g['windows']:
-                games.append(g)
-    games.sort(key=lambda g: g['seed'])
-    return games
+                games[g['seed']] = g
+    return [games[k] for k in sorted(games)]
 
 
 def load_proven(path):
