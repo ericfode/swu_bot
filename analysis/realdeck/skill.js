@@ -9,26 +9,34 @@
  * A gauntlet run is one `node bot/ladder.js --decks <file> --bots a,b,c --vs <ref> --key K --seed 1` directory
  * (index.json, ladder.json with config.format 'gauntlet'). Every challenger plays the one reference bot on the same
  * seeds; with the same --key and --seed (also across runs) the deals are the same, so challengers can be compared
- * game for game. All runs must share the reference bot, and each challenger plays in one run only.
+ * game for game. All runs must share the reference bot, and each challenger plays in one run only (one copy: no
+ * `bot#1`, `bot#2`). Play whole passes (--games a multiple of 2P, P = n(n−1)/2 deck pairs: 702 for 27 decks), so every
+ * deck sits on the challenger's side as often as on the reference's; otherwise deck luck is left in the skill and the
+ * reference's 50% is not on the same deals (a warning says so).
  *
  * Skill: the challenger's score against the reference in decided games (a draw counts half), a Wilson 95% CI, and the
- * same as an Elo difference. Games that end in ERROR, STEP_CAP, STUCK or anything else are counted, by outcome, and
- * left out, as in compare.js. Games still running are ignored. The reference itself is 50% by definition.
+ * same as an Elo difference. An ERROR game a bot caused (`by` set: it threw, made an illegal move or timed out) is a
+ * loss for that bot, as in bot/ladder-report.js. Games that end in an engine ERROR (`by` null), STEP_CAP, STUCK or
+ * anything else are counted, by outcome, and left out. Games still running are ignored. The reference itself is 50% by
+ * definition.
  *
- * Paired: for every two challengers, the seeds both played with the same decks from the same seats (and the same game
- * key when both have one) with all four games decided. Per seed d = (A's score − B's score) / 2 over its two games;
- * the mean d with a normal 95% CI (clamped to ±1), and how many seeds each side did better. A is the challenger with
- * the higher win rate. Seeds whose decks differ are counted as
- * `mismatched` (different --seed or deck file), never paired.
+ * Paired: for every two challengers, the seeds both played with the same decks from the same seats and the same game
+ * key (or none on both) with all four games decided. Per seed d = (A's score − B's score) / 2 over its two games; the
+ * mean d with a normal 95% CI (clamped to ±1), and how many seeds each side did better. A is the challenger with the
+ * higher win rate. Seeds whose deals differ are counted as `mismatched` (different --key, --seed or deck file), never
+ * paired.
  *
  * Agreement, per bot, from compare.js (`--out` of compare.js, with every bot's mirror run in it; the run with the most
  * decided games when a bot has several):
  *  - deck r: bot deck strength vs human BT strength (Pearson, Fisher CI, permutation p, disattenuated r);
  *  - favourite share: deck pairs where bot and humans pick the same favourite, with its deck-label permutation p;
  *  - style: pooled win rate vs other styles of aggro decks (hyperaggro, softaggro) minus control decks (softcontrol,
- *    hardcontrol), beside the same gap in the human field rates; `excess` is the bot gap minus the human gap. Pooled
- *    from compare.js's style rows, so a hyperaggro vs softaggro game sits in the aggro pool as a win and a loss;
+ *    hardcontrol), beside the same gap in the human field rates; `excess` is the bot gap minus the human gap and
+ *    `styleDistance` its size. Pooled from compare.js's style rows, so a hyperaggro vs softaggro game sits in the aggro
+ *    pool as a win and a loss;
  *  - r with the reference: the bot's deck strengths vs the reference bot's own (compare.js betweenRuns).
+ * compare.js leaves out decks with too many incomplete games per run; when the bots' left-out decks differ, their
+ * measures are not on the same decks and a warning says so.
  *
  * Trend: Spearman of skill against each agreement measure, over the bots that have both (the reference included at
  * 50%, except for its r with itself), with an exact two-sided permutation p-value for up to 8 bots. A handful of bots:
@@ -48,7 +56,7 @@ const MEASURES = [
     ['deckR', 'deck r vs human BT', 'higher = closer to humans'],
     ['deckRDisattenuated', 'deck r, disattenuated', 'higher = closer to humans'],
     ['favouriteShare', 'same favourite as humans', 'higher = closer to humans'],
-    ['styleExcess', 'aggro-minus-control gap beyond the human gap', 'nearer 0 = closer to humans'],
+    ['styleDistance', 'distance of the aggro-minus-control gap from the human gap', 'lower = closer to humans'],
     ['withReference', 'deck r with the reference bot', 'lower = further from the reference']
 ];
 
@@ -92,7 +100,10 @@ function readGauntlet(dir) {
     if (config?.format !== 'gauntlet' || !Array.isArray(config.vs) || !config.vs.length) {
         throw new Error(`${dir}: not a gauntlet run (ladder.json needs config.format 'gauntlet' and config.vs)`);
     }
-    return { ...run, vs: config.vs, challengers: run.entries.filter((b) => !config.vs.includes(b)), firstSeed: config.firstSeed ?? null };
+    return {
+        ...run, vs: config.vs, challengers: run.entries.filter((b) => !config.vs.includes(b)), firstSeed: config.firstSeed ?? null,
+        gamesPerPair: config.gamesPerPair ?? null, decks: Array.isArray(config.decks?.names) ? config.decks.names.length : null
+    };
 }
 
 /**
@@ -128,16 +139,19 @@ function gauntletTallies(runs) {
             let t = tallies.get(bot);
             if (!t) {
                 t = {
-                    bot, run: run.id, games: 0, decided: 0, score: 0, draws: 0, incomplete: 0, incompleteOutcomes: {},
+                    bot, entry: g[seat], run: run.id, games: 0, decided: 0, score: 0, draws: 0, incomplete: 0, incompleteOutcomes: {},
                     bySeat: { p1: { decided: 0, score: 0 }, p2: { decided: 0, score: 0 } }, seeds: new Map()
                 };
                 tallies.set(bot, t);
             } else if (t.run !== run.id) {
                 throw new Error(`${bot} plays in two gauntlet runs (${t.run}, ${run.id}): give each challenger once`);
+            } else if (t.entry !== g[seat]) {
+                throw new Error(`${t.entry} and ${g[seat]} are copies of one bot (${bot}): enter one copy per gauntlet`);
             }
             const s = g.winnerSeat;
-            const decided = (g.outcome ?? 'won') === 'won' && (s === 'p1' || s === 'p2' || s === 'draw');
-            const y = !decided ? null : s === 'draw' ? 0.5 : s === seat ? 1 : 0;
+            const forfeit = g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2');
+            const decided = forfeit || ((g.outcome ?? 'won') === 'won' && (s === 'p1' || s === 'p2' || s === 'draw'));
+            const y = !decided ? null : forfeit ? (g.by === seat ? 0 : 1) : s === 'draw' ? 0.5 : s === seat ? 1 : 0;
             const rec = t.seeds.get(g.seed) ?? {};
             if (rec[seat]) {
                 duplicates++;
@@ -200,7 +214,7 @@ function pairedDifference(A, B) {
             partial++;
             continue;
         }
-        const keysDiffer = ['p1', 'p2'].some((s) => a[s].key && b[s].key && a[s].key !== b[s].key);
+        const keysDiffer = ['p1', 'p2'].some((s) => a[s].key !== b[s].key);
         if (!sameDecks(a.p1.decks, b.p1.decks) || !sameDecks(a.p2.decks, b.p2.decks) || keysDiffer) {
             mismatched++;
             continue;
@@ -291,7 +305,7 @@ function agreementOf(cmp, pick, refRun) {
         botReliability: cmp.agreement?.splitHalf?.[id]?.spearmanBrown ?? null,
         favouriteShare: pair?.favourite?.share ?? null, favouriteN: pair?.favourite?.n ?? null,
         favouriteP: pair?.permutationP?.favouriteShare ?? null, pairR: pair?.pearsonWeighted ?? null,
-        style, styleExcess: style.excess,
+        style, styleExcess: style.excess, styleDistance: style.excess === null ? null : Math.abs(style.excess),
         withReference: between ? between.pearson : null, withReferenceCI: between ? between.pearsonCI95 : null
     };
 }
@@ -359,6 +373,19 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
     });
     if (tallies.has(reference)) {
         warnings.push(`the reference bot ${reference} also plays as a challenger; its row is the reference`);
+    }
+    for (const g of gauntlets) {
+        const P = g.decks ? (g.decks * (g.decks - 1)) / 2 : null;
+        if (!P) {
+            warnings.push(`${g.id}: no deck list in ladder.json, so not a real-deck gauntlet`);
+        } else if (g.gamesPerPair && (g.gamesPerPair / 2) % P !== 0) {
+            warnings.push(`${g.id}: ${g.gamesPerPair / 2} seeds per challenger is not a whole number of passes over the ${P} deck pairs, ` +
+                `so decks do not sit on both sides equally often and the reference's 50% is not on the same deals (--games ${2 * P} plays one pass)`);
+        }
+    }
+    const leftSets = bots.filter((b) => b.agreement).map((b) => [b.bot, [...b.agreement.leftOut].sort().join(', ')]);
+    if (new Set(leftSets.map(([, l]) => l)).size > 1) {
+        warnings.push(`agreement measures use different deck sets (decks compare.js left out: ${leftSets.map(([b, l]) => `${b}: ${l || 'none'}`).join('; ')})`);
     }
     bots.sort((p, q) => (q.skill?.winRate ?? -1) - (p.skill?.winRate ?? -1) || p.bot.localeCompare(q.bot));
     const rate = (t) => (t.decided ? t.score / t.decided : -1);

@@ -63,13 +63,26 @@ function seedGames(bot, ref, seed, [y1, y2], decks = { p1: `d${seed % 5}`, p2: `
     assert.strictEqual(dup.tallies.get('heuristic').games, 2);
     assert.match(dup.warnings[0], /1 games skipped \(a second game/);
 
-    // one reference per analysis, one run per challenger
+    // an ERROR game a bot caused (`by` set) is a loss for that bot; an engine ERROR (`by` null) stays incomplete
+    const forfeits = sk.gauntletTallies([{ id: 'g1', vs: ['c-clock'], games: [
+        { seed: 1, p1: 'ismcts', p2: 'c-clock', outcome: 'ERROR', by: 'p1', winner: 'c-clock', winnerSeat: 'p2' },
+        { seed: 1, p1: 'c-clock', p2: 'ismcts', outcome: 'won', winnerSeat: 'p2' },
+        { seed: 2, p1: 'ismcts', p2: 'c-clock', outcome: 'ERROR', by: 'p2', winner: 'ismcts', winnerSeat: 'p1' },
+        { seed: 2, p1: 'c-clock', p2: 'ismcts', outcome: 'ERROR', by: null, winnerSeat: null }
+    ] }]);
+    const f = sk.skillOf(forfeits.tallies.get('ismcts'));
+    assert.deepStrictEqual([f.decided, f.score, f.incomplete], [3, 2, 1]);
+    assert.deepStrictEqual(f.incompleteOutcomes, { ERROR: 1 });
+
+    // one reference per analysis, one run per challenger, one copy of a bot
     assert.throws(() => sk.gauntletTallies([{ id: 'a', vs: ['c-clock'], games: [] }, { id: 'b', vs: ['heuristic'], games: [] }]), /share one reference/);
     assert.throws(() => sk.gauntletTallies([{ id: 'a', vs: ['c-clock', 'heuristic'], games: [] }]), /exactly one reference/);
     assert.throws(() => sk.gauntletTallies([
         { id: 'a', vs: ['c-clock'], games: seedGames('heuristic', 'c-clock', 1, [1, 1]) },
         { id: 'b', vs: ['c-clock'], games: seedGames('heuristic', 'c-clock', 2, [1, 1]) }
     ]), /plays in two gauntlet runs/);
+    assert.throws(() => sk.gauntletTallies([{ id: 'a', vs: ['c-clock'], games: [...seedGames('x#1', 'c-clock', 1, [1, 1]), ...seedGames('x#2', 'c-clock', 1, [1, 1])] }]),
+        /x#1 and x#2 are copies of one bot \(x\)/);
 }
 
 // 2. paired difference: only seeds with the same decks, seats and keys, and four decided games
@@ -88,10 +101,12 @@ function seedGames(bot, ref, seed, [y1, y2], decks = { p1: `d${seed % 5}`, p2: `
     b.push(...seedGames('B', 'ref', 43, [0, 0]));
     a.push(seedGames('A', 'ref', 44, [1, 1])[0]); // only one seat played so far
     b.push(...seedGames('B', 'ref', 44, [0, 0]));
+    a.push(...seedGames('A', 'ref', 45, [1, 1]));
+    b.push(...seedGames('B', 'ref', 45, [0, 0], undefined, { key: null })); // a run without --key does not pair with one
     const g = sk.gauntletTallies([{ id: 'g', vs: ['ref'], games: [...a, ...b] }]);
     const p = sk.pairedDifference(g.tallies.get('A'), g.tallies.get('B'));
     assert.strictEqual(p.seeds, 40);
-    assert.strictEqual(p.mismatched, 2);
+    assert.strictEqual(p.mismatched, 3);
     assert.strictEqual(p.incomplete, 1);
     assert.strictEqual(p.partial, 1);
     close(p.meanDiff, 0.75, 1e-12, 'mean difference'); // A scores 1 a seed; B 0.5 on odd seeds and 0 on even ones
@@ -178,7 +193,8 @@ const cmpFixture = () => {
         games.push(...seedGames('rust-search', 'c-clock', s, s <= 8 ? [1, 1] : [0, 0]));
         games.push(...seedGames('random', 'c-clock', s, [0, 0]));
     }
-    const r = sk.skillVsAgreement([{ id: 'gl', vs: ['c-clock'], challengers: ['heuristic', 'rust-search', 'random'], games }], cmpFixture(), { now: new Date('2026-10-11T12:00:00Z') });
+    const gl = { id: 'gl', vs: ['c-clock'], challengers: ['heuristic', 'rust-search', 'random'], games, decks: 5, gamesPerPair: 20 };
+    const r = sk.skillVsAgreement([gl], cmpFixture(), { now: new Date('2026-10-11T12:00:00Z') });
     assert.strictEqual(r.reference, 'c-clock');
     assert.deepStrictEqual(r.bots.map((b) => b.bot), ['rust-search', 'heuristic', 'c-clock', 'random']);
     const by = Object.fromEntries(r.bots.map((b) => [b.bot, b]));
@@ -191,13 +207,14 @@ const cmpFixture = () => {
     assert.strictEqual(by['rust-search'].skill.winRate, 0.8);
     assert.strictEqual(by.random.agreement, null);
     close(by.heuristic.agreement.styleExcess, 0.2, 1e-12, 'style excess');
+    close(by.heuristic.agreement.styleDistance, 0.2, 1e-12, 'style distance');
     assert.strictEqual(r.paired.length, 3);
     assert.deepStrictEqual(r.trend.deckR.bots, ['rust-search', 'heuristic', 'c-clock']);
     assert.strictEqual(r.trend.deckR.rho, 1);
     close(r.trend.deckR.p, 2 / 6, 1e-12, 'three bots in perfect order');
     assert.deepStrictEqual(r.trend.withReference.bots, ['rust-search', 'heuristic']);
     assert.strictEqual(r.trend.withReference.rho, null, 'two points have no Spearman');
-    assert.strictEqual(r.trend.styleExcess.rho, -1);
+    assert.strictEqual(r.trend.styleDistance.rho, -1);
     assert.deepStrictEqual(r.credit, ['deck credit']);
     assert.strictEqual(r.humanReliability, 0.61);
     assert.strictEqual(r.generatedAt, '2026-10-11T12:00:00.000Z');
@@ -213,9 +230,19 @@ const cmpFixture = () => {
 
     const noRef = cmpFixture();
     noRef.runs = noRef.runs.filter((x) => x.bot !== 'c-clock');
-    const r2 = sk.skillVsAgreement([{ id: 'gl', vs: ['c-clock'], games }], noRef);
+    const r2 = sk.skillVsAgreement([gl], noRef);
     assert.match(r2.warnings[0], /no mirror run of the reference bot c-clock/);
     assert.strictEqual(r2.bots.find((b) => b.bot === 'heuristic').agreement.withReference, null);
+
+    // warnings: a part pass, a gauntlet without decks, and bots whose left-out decks differ
+    const part = sk.skillVsAgreement([{ ...gl, gamesPerPair: 10 }], cmpFixture());
+    assert.match(part.warnings.join('\n'), /gl: 5 seeds per challenger is not a whole number of passes over the 10 deck pairs/);
+    const plain = sk.skillVsAgreement([{ ...gl, decks: null }], cmpFixture());
+    assert.match(plain.warnings.join('\n'), /gl: no deck list in ladder.json/);
+    const left = cmpFixture();
+    left.runs.find((x) => x.id === 'heu').leftOut = [{ deck: 'lando', reason: 'too many incomplete' }];
+    const r3 = sk.skillVsAgreement([gl], left);
+    assert.match(r3.warnings.join('\n'), /different deck sets \(decks compare.js left out: c-clock: none; heuristic: lando; rust-search: none\)/);
 }
 
 // 6. the command line, on a run directory written like ladder.js writes a gauntlet
@@ -245,6 +272,7 @@ const cmpFixture = () => {
         const script = path.join(__dirname, '..', 'realdeck', 'skill.js');
         const stdout = execFileSync(process.execPath, [script, '--gauntlet', run, '--compare', cmp, '--out', out], { encoding: 'utf8' });
         assert.match(stdout, /gauntlets: g1 done/);
+        assert.match(stdout, /warning: g1: no deck list in ladder.json/);
         assert.match(stdout, /heuristic\s+12\s+75\.0/);
         const json = JSON.parse(fs.readFileSync(out, 'utf8'));
         assert.deepStrictEqual(Object.keys(json), ['credit', 'generatedAt', 'reference', 'gauntlets', 'compare', 'humanReliability', 'bots', 'paired', 'trend', 'warnings']);

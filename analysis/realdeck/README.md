@@ -88,21 +88,27 @@ one reference bot, then joins it with that bot's agreement from `compare.js`.
 
 ```bash
 K=$(openssl rand -hex 32)   # keep it: every gauntlet that should share deals uses the same --key and --seed
-node bot/ladder.js --decks bot/decks/ash-meta-2026-09.json --bots heuristic,rust-search --vs c-clock --games 352 --key $K --seed 1 --id gauntlet-1
+node bot/ladder.js --decks bot/decks/ash-meta-2026-09.json --bots heuristic,rust-search --vs c-clock --games 702 --key $K --seed 1 --id gauntlet-1
 node analysis/realdeck/compare.js --runs <c-clock mirror>,<heuristic mirror>,<rust-search mirror> ... --out compare.json
 node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --compare compare.json [--out skill.json]
 ```
 
+- **Whole passes**: `--games` should be a multiple of 2P (P = 351 deck pairs for 27 decks, so 702). Then every deck
+  sits on the challenger's side as often as on the reference's, and deck luck cancels. A part pass gets a warning.
 - **Skill**: the challenger's score against the reference in decided games (draws half), a Wilson 95% CI and an Elo
-  difference. Incomplete games are counted by outcome and left out. The reference is 50% by definition. All gauntlet
-  runs must share the reference, and each challenger plays in one run only.
+  difference. An ERROR game a bot caused (`by` set: it threw, made an illegal move or timed out) is a loss for that bot,
+  as in `bot/ladder-report.js`. Engine errors, STEP_CAP and STUCK games are counted by outcome and left out. The
+  reference is 50% by definition. All gauntlet runs must share the reference, and each challenger plays in one run
+  only, as one copy.
 - **Paired**: every two challengers over the seeds both played with the same decks from the same seats (and the same
-  game key), all four games decided: the mean score difference per seed with a 95% CI. With the same `--key` and
-  `--seed`, two gauntlet runs deal the same games, so ISMCTS can run apart from the faster bots and still pair.
+  game key, or none on both), all four games decided: the mean score difference per seed with a 95% CI. With the same
+  `--key` and `--seed`, two gauntlet runs deal the same games, so ISMCTS can run apart from the faster bots and still
+  pair.
 - **Agreement** per bot, from its mirror run in `compare.json` (the biggest when there are several): deck r against the
   human BT strengths (and disattenuated), the same-favourite share, the aggro-minus-control gap in win rate against
-  other styles beside the same gap in the human field rates (`styleExcess` = bot gap − human gap), and the r of its
-  deck strengths with the reference bot's.
+  other styles beside the same gap in the human field rates (`styleExcess` = bot gap − human gap, `styleDistance` its
+  size), and the r of its deck strengths with the reference bot's. When compare.js left out different decks for
+  different bots, a warning says their measures are not on the same decks.
 - **Trend**: Spearman of skill against each of those over the bots that have both, with an exact two-sided permutation
   p for up to 8 bots. With a handful of bots this describes; it does not prove a rule.
 
