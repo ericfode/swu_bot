@@ -80,7 +80,7 @@ async function watch(server, lobbyId, out, opts) {
     const frames = [];
     let file = null;
     let fd = null;
-    const predict = predictor(opts.predict);
+    let predict = predictor(opts.predict);
     const ended = new Promise((resolve) => {
         const timer = setTimeout(() => resolve('time limit'), opts.maxMs);
         sock.on('disconnect', (why) => {
@@ -99,7 +99,13 @@ async function watch(server, lobbyId, out, opts) {
             fs.writeSync(fd, JSON.stringify(clean) + '\n');
             frames.push(clean);
             if (predict) {
-                predict(frames);
+                // the recording matters more than the prediction: an evaluator error turns prediction off
+                try {
+                    predict(frames);
+                } catch (e) {
+                    console.error(`prediction off: ${e.message}`);
+                    predict = null;
+                }
             }
             if (gs.winners?.length) {
                 clearTimeout(timer);
