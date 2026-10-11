@@ -122,13 +122,13 @@ function searchLens(decision, state) {
             buttons[head] = r2(v - chosen);
         }
     }
-    // |value| >= 9000: the search saw a forced result (9999: `by` wins, -9998: `by` loses)
-    const forced = Math.abs(decision.value ?? 0) >= 9000 ? (decision.value > 0 ? decision.seat : decision.seat === 'p1' ? 'p2' : 'p1') : null;
     return {
         by: decision.seat, value: decision.value, depth: decision.depth, nodes: decision.nodes, ms: decision.ms,
         pv: decision.pv, ground: side.ground.map(rel), space: side.space.map(rel), hand: side.hand.map(rel),
         leader: side.leader ? rel(side.leader) : null, buttons,
-        frame: 'by', kind: 'alpha-beta', unit: 'points', tolerance: 0.05, ...(forced ? { proven: forced } : {})
+        // no `proven` here: |value| >= 9000 (9999 / -9998) means the capped alpha-beta saw the game end on every line it
+        // searched, which is not a proof (moves past maxMoves, followUps and the beam were not tried)
+        frame: 'by', kind: 'alpha-beta', unit: 'points', tolerance: 0.05
     };
 }
 
