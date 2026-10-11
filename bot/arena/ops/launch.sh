@@ -40,10 +40,16 @@ say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
 setting() { node -e "const j=require('$LAUNCH'); process.stdout.write(String(j[process.argv[1]] ?? process.argv[2] ?? ''))" "$1" "${2:-}"; }
 
 engine() {
-    if [ ! -d "$SRC/forceteki/build/server" ] || [ ! -d "$SRC/forceteki/test/json/Card" ]; then
-        say "building the engine in $SRC/forceteki"
-        git -C "$SRC" submodule update --init
-        (cd "$SRC/forceteki" && npm install --no-audit --no-fund && npm run build)
+    [ -e "$SRC/forceteki/package.json" ] || git -C "$SRC" submodule update --init
+    # the build records the forceteki revision it was made from; another one (or none recorded) is built again
+    local rev stamp="$SRC/forceteki/build/.built-from"
+    rev=$(git -C "$SRC/forceteki" rev-parse HEAD)
+    if [ ! -d "$SRC/forceteki/build/server" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$rev" ]; then
+        say "building the engine in $SRC/forceteki ($rev)"
+        (cd "$SRC/forceteki" && npm install --no-audit --no-fund && rm -rf build && npm run build)
+        echo "$rev" > "$stamp"
+    fi
+    if [ ! -d "$SRC/forceteki/test/json/Card" ]; then
         mkdir -p "$SRC/forceteki/test/json"
         cp -a /mnt/project-files/games/card-data/. "$SRC/forceteki/test/json/"
     fi

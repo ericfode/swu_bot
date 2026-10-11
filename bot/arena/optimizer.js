@@ -103,6 +103,14 @@ function latestGenome() {
     }
 }
 
+/** Submits genome g as this competitor's new version and remembers it in STATE (for runs against a remote arena). */
+async function submitGenome(g, note, label = 'start') {
+    const r = await arena('submit', { name: NAME, note, bot: { kind: 'js', files: { 'bot.js': botSource(g, label), 'heuristic.js': HEURISTIC_SRC } } });
+    fs.mkdirSync(path.dirname(STATE), { recursive: true });
+    fs.writeFileSync(STATE, JSON.stringify({ version: r.version, genome: g }));
+    return r;
+}
+
 function mutate(g, rng) {
     const out = { ...g };
     const gauss = () => Math.sqrt(-2 * Math.log(rng() || 1e-9)) * Math.cos(2 * Math.PI * rng());
@@ -187,11 +195,17 @@ async function main() {
     const status0 = await arena('status');
     const round = status0.round ?? 0;
     const rng = seededRng(`optimizer-${NAME}-r${round}`);
-    let best = latestGenome() ?? genomeFrom(arg('start', 'tempo'));
+    const kept = latestGenome();
+    let best = kept ?? genomeFrom(arg('start', 'tempo'));
     let prev = null;
     let gen = 0;
     let seed = 30001 + 1000 * round;
     await arena('say', { name: NAME, now: 'Starting the evolution strategy', diagram: diagramFor(best, null, 0), idea: `(1+${LAMBDA}) evolution strategy over ${Object.keys(GENES).length} evaluation weights and search-budget genes; fitness = win rate vs the incumbent and vs rush.` });
+    if (!kept) {
+        // the first run: the starter it registered with is not this genome (it searches wider and often runs out of
+        // time), so the incumbent is submitted before any generation has to beat it
+        await submitGenome(best, 'ES incumbent (start)');
+    }
     const status = await arena('status');
     const roundEnd = process.argv.includes('--until-round-end') && status.deadline ? Date.parse(status.deadline) : Infinity;
     while (gen < GENERATIONS && Date.now() < roundEnd) {
@@ -216,9 +230,7 @@ async function main() {
         if (improved) {
             prev = best;
             best = top.g;
-            const r = await arena('submit', { name: NAME, note: `ES generation ${gen}: fitness ${top.fit.toFixed(2)} vs ${incFit.toFixed(2)}`, bot: { kind: 'js', files: { 'bot.js': botSource(best, `generation ${gen}`), 'heuristic.js': HEURISTIC_SRC } } });
-            fs.mkdirSync(path.dirname(STATE), { recursive: true });
-            fs.writeFileSync(STATE, JSON.stringify({ version: r.version, genome: best }));
+            const r = await submitGenome(best, `ES generation ${gen}: fitness ${top.fit.toFixed(2)} vs ${incFit.toFixed(2)}`, `generation ${gen}`);
             await arena('say', { name: NAME, text: `${msg} -> submitted ${r.version}`, now: `Generation ${gen + 1}`, diagram: diagramFor(best, prev, gen) });
         } else {
             await arena('say', { name: NAME, text: msg, now: `Generation ${gen + 1}` });

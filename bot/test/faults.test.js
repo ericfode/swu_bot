@@ -152,6 +152,8 @@ test('guard: loadMs given as a clock is read after the bot\'s getters, so their 
     const bot = guard({ name: 'g', get choose() { burn(30); return (c) => c.actions[0]; } }, { capMs: 1000, loadMs: () => cpuNow() - t0 });
     assert.ok(bot.thinkMs >= 30, `thinkMs ${bot.thinkMs}`);
     assert.strictEqual(guard({ name: 'n', choose: (c) => c.actions[0] }, { loadMs: 7 }).thinkMs, 7, 'a number still works');
+    const waited = guard({ name: 'w', choose: (c) => c.actions[0] }, { capMs: 100, wallCapMs: 200, loadWallMs: () => 250 });
+    assert.strictEqual(waited.wallMs, 250, 'a wait while loading counts on the wall clock');
 });
 
 test('guard: a bot that claims external or stdio is still timed and tracked as a bot that runs here', async () => {

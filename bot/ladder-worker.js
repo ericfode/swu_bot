@@ -114,9 +114,12 @@ function load(name, i, taken) {
     try {
         return origin.run(mine, () => {
             const t0 = cpuMs();
+            const w0 = perfNow();
             const raw = makeBot(name, taken);
-            // read by guard() once it has read the bot's properties (getters run bot code too): all of it is load time
+            // read by guard() once it has read the bot's properties (getters run bot code too): all of it is load time, on
+            // both clocks (a wait while loading, for work done off this thread, is not free either)
             const loadMs = () => Math.max(0, cpuMs() - t0);
+            const loadWallMs = () => Math.max(0, perfNow() - w0);
             if (!raw || (typeof raw.choose !== 'function' && typeof raw.decide !== 'function')) {
                 throw new Error('createBot() did not return a bot with a choose() or decide() method');
             }
@@ -146,7 +149,7 @@ function load(name, i, taken) {
                 }
             };
             // the engine only ever sees the guard's object, so a bot cannot unwrap the guard or reset its counters
-            guarded = guard(raw, { capMs, loadMs, ...hooks });
+            guarded = guard(raw, { capMs, loadMs, loadWallMs, ...hooks });
             return { bot: guarded, raw };
         });
     } catch (e) {

@@ -389,10 +389,13 @@ async function main() {
                 hold(job.seed, job.id, r.key);
             }
             unplayed.set(job.seed, unplayed.get(job.seed) - 1);
+            // the game is saved as done before its seed's key goes out: a run that dies in between resumes with it done
+            // (and publishes the key then), so no game is played again under a key a replay already shows
+            let doc = save();
             if (!unplayed.get(job.seed)) {
                 publish(job.seed);
+                doc = save();
             }
-            const doc = save();
             const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
             const fault = r.by ? ` (${r.by} ${r.faultKind})` : '';
             console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome}${fault} ${r.winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);

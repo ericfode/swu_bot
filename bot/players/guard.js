@@ -2,7 +2,7 @@
 /**
  * Time cap and fault tracking around a bot, the same for every bot (baselines included).
  *
- *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, program, enter, leave, within }) -> what match.js plays instead:
+ *   guard(bot, { capMs = Infinity, wallCapMs, loadMs = 0, loadWallMs = 0, program, enter, leave, within }) -> what match.js plays:
  *     a native bot ({ name, choose })      { name, lang, needsUndo, stats, choose, close, thinkMs, wallMs, fault }
  *     a protocol client ({ name, decide }) { name, lang, stats, hello, decide, over, close, thinkMs, wallMs, fault }
  *   plus charge(used) and excuse(used) for the game runner (below). Getters and the guard's own functions: the bot never
@@ -12,8 +12,8 @@
  * + system) for bots that run here, so a busy engine on another worker does not count against them, and wall time
  * for bot programs (bot/stdio.js StdioClient, or a bot the caller marks with program: true). Wall time is also capped for
  * bots that run here, at wallCapMs (default 2 x capMs), so work moved off this thread (worker threads, Atomics.wait,
- * child processes, waiting on a timer) is not free. loadMs (the time createBot took, or a function giving it, read
- * after the bot's properties) starts the CPU counter.
+ * child processes, waiting on a timer) is not free. loadMs and loadWallMs (the CPU and wall time createBot took, or
+ * functions giving them, read after the bot's properties) start the two counters.
  *
  * A call ends the game as the bot's loss (match.js makes a throw from it an ERROR with `by` = the bot's seat) when
  *   - the bot throws or its promise rejects: fault = { kind: 'error', message };
@@ -74,7 +74,7 @@ function plainAction(a) {
 /** A client's reply as plain JSON data. */
 const plainReply = (r) => (r === undefined ? undefined : JSON.parse(JSON.stringify(r) ?? 'null'));
 
-function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, program: isProgram = false, enter = () => {}, leave = () => {}, within = (fn) => fn() } = {}) {
+function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, loadWallMs = 0, program: isProgram = false, enter = () => {}, leave = () => {}, within = (fn) => fn() } = {}) {
     // read once, now (while the bot loads): these may be getters, and the game runner reads them outside any bot call
     const fns = {};
     for (const k of ['choose', 'hello', 'decide', 'over', 'close']) {
@@ -101,7 +101,7 @@ function guard(bot, { capMs = Infinity, wallCapMs = 2 * capMs, loadMs = 0, progr
     const own = program ? (fn) => fn() : within;
     // loadMs may be a clock read now, so reading the bot's properties above (they may be getters) is charged to it too
     let thinkMs = program ? 0 : (typeof loadMs === 'function' ? loadMs() : loadMs);
-    let wallMs = 0;
+    let wallMs = program ? 0 : (typeof loadWallMs === 'function' ? loadWallMs() : loadWallMs);
     let fault = null;
     // the call in progress: what other bots' async work took from it (ms), so it can be given back
     let call = null;
