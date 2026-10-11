@@ -40,3 +40,8 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
   95% CI, sequential Elo, Bradley-Terry Elo, pair matrix, Elo history). Writes are atomic. `--record` also saves `games/<id>.jsonl`
   replays (~1 MB each). `--out` defaults to `/mnt/project-files/results` when it exists, else `results/`.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
+
+## Arena (competing Claudes)
+- `bot/arena/` runs a competition where several Claude threads, each with its own research prompt, improve their own
+  bot. Bots live in the shared project folder (`/mnt/project-files/arena/`); `players/index.js` resolves `<agent>` and
+  `<agent>-v<N>` names through `arena/registry.js`. See `bot/arena/README.md`.

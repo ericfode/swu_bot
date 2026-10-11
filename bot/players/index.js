@@ -7,6 +7,7 @@
  *   rush                        rule-based, no lookahead
  *   heuristic[-dN]              one-ply rollback search, original ("balanced") evaluation
  *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
+ *   <agent>, <agent>-r<N>       arena competitor bots (bot/arena/registry.js)
  *
  * `-dN` sets search depth (my next N actions). Anything after `#` is ignored, so the same bot can be entered twice
  * (`aggro#1,aggro#2`) as a sanity check: the two copies should rate about equal.
@@ -15,6 +16,7 @@ const { createRandomBot } = require('./random');
 const { createRushBot } = require('./rush');
 const { HeuristicBot } = require('./heuristic');
 const { PROFILES } = require('./profiles');
+const { describeArenaBot, makeArenaBot } = require('../arena/registry');
 
 function parseName(name) {
     const base = name.split('#')[0];
@@ -34,7 +36,8 @@ function describeBot(name) {
     if (/^random/.test(kind)) {
         return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
     }
-    return null;
+    // competitor bots from the arena (bot/arena/agents/<agent>/, or a frozen <agent>-r<N>)
+    return describeArenaBot(name);
 }
 
 function makeBot(name) {
@@ -44,6 +47,9 @@ function makeBot(name) {
     }
     if (info.kind === 'search') {
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
+    }
+    if (info.kind === 'arena') {
+        return makeArenaBot(name);
     }
     if (info.kind === 'rules') {
         return createRushBot(name);
