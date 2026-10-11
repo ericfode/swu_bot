@@ -66,6 +66,8 @@ Open http://localhost:8080. The page lists every recorded game, newest first, an
 pick another. Each frame file is turned into a replay by the importer whenever it grows. A game with no winner whose
 file changed in the last 5 minutes is served without its `end` line, so the kit re-fetches it every second and follows
 each move. `--predict` adds the evaluator's P(p1 wins) from the public board (no hands) as a score on the timeline.
+Use the shared kit build (`/mnt/project-files/viewer-kit`, 2026-10-11 evening or later): an older kit, such as one
+built from `studio/` on main before the Holotable branch lands, shows the board without card text or the win chance.
 The server reads only the frame files and the two kit files. It listens on 127.0.0.1 unless `--host` says otherwise;
 on a reachable host, add `--key <secret>` so every route sits under `/<secret>/`.
 

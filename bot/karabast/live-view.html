@@ -42,7 +42,11 @@
   let viewer = null;
   let lensTag = null;
 
-  SWUViewer.loadCardText('kit/card-text.json').catch(() => {});
+  // kits built before 2026-10-11 evening have no card text and no chance-only scores: the board still shows
+  const kitReadsScores = typeof SWUViewer.scoreSeries === 'function';
+  if (typeof SWUViewer.loadCardText === 'function') {
+    SWUViewer.loadCardText('kit/card-text.json').catch(() => {});
+  }
 
   function label(g) {
     const when = new Date(g.mtime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -91,7 +95,7 @@
 
   async function loadLens() {
     const id = current;
-    if (!PREDICT || !viewer || !id) {
+    if (!PREDICT || !kitReadsScores || !viewer || !id) {
       return;
     }
     try {
