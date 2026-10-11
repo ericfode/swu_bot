@@ -182,7 +182,7 @@ function gameGrid(run, { maxBots = 14 } = {}) {
 function md(text) {
   const lines = String(text || '').split('\n'); let out = '', inList = false, tbl = null;
   const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-  const flush = () => { if (inList) { out += '</ul>'; inList = false; } if (tbl) { out += `<div class="scroll"><table><thead><tr>${tbl[0].map(c => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${tbl.slice(2).map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; tbl = null; } };
+  const flush = () => { if (inList) { out += '</ul>'; inList = false; } if (tbl) { out += `<div class="scroll"><table><thead><tr>${tbl[0].map(c => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${tbl.slice(tbl[1]?.every(c => /^:?-+:?$/.test(c)) ? 2 : 1).map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; tbl = null; } };
   for (const l of lines) {
     if (/^\|/.test(l)) { if (!tbl) { flush(); tbl = []; } tbl.push(l.replace(/^\||\|$/g, '').split('|').map(s => s.trim())); continue; }
     if (/^- /.test(l)) { if (tbl) flush(); if (!inList) { out += '<ul>'; inList = true; } out += `<li>${inline(l.slice(2))}</li>`; continue; }
