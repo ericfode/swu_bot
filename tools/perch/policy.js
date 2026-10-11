@@ -303,8 +303,6 @@ function snapshot(dir, files, perchFiles = new Map()) {
   if (!fs.existsSync(path.join(dir, '.git'))) {
     fs.mkdirSync(dir, { recursive: true });
     must('init', '-q');
-    must('config', 'user.name', 'perch snapshot');
-    must('config', 'user.email', 'perch@localhost');
   }
   const exclude = path.join(dir, '.git', 'info', 'exclude');
   if (!readOr(exclude, '').split('\n').includes('/.perch/')) {
@@ -318,7 +316,7 @@ function snapshot(dir, files, perchFiles = new Map()) {
   for (const [file, bytes] of files) writeIfChanged(path.join(dir, file), bytes);
   must('add', '-A');
   if (git('diff', '--cached', '--quiet').status !== 0 || git('rev-parse', '-q', '--verify', 'HEAD').status !== 0) {
-    must('commit', '-q', '--allow-empty', '--no-verify', '--no-gpg-sign', '-m', 'perch snapshot');
+    must('-c', 'user.name=perch snapshot', '-c', 'user.email=perch@localhost', 'commit', '-q', '--allow-empty', '--no-verify', '--no-gpg-sign', '-m', 'perch snapshot');
   }
   fs.rmSync(path.join(dir, '.perch', 'rules'), { recursive: true, force: true });
   for (const [file, bytes] of perchFiles) writeIfChanged(path.join(dir, '.perch', file), bytes);
@@ -366,6 +364,7 @@ function readAtHead(repo, files) {
   let at = 0;
   for (const file of files) {
     const end = out.stdout.indexOf(10, at);
+    if (end === -1) break;
     const header = /^\S+ (\w+) (\d+)$/.exec(out.stdout.toString('utf8', at, end)); // "<sha> <type> <size>", or "... missing"
     at = end + 1;
     if (!header) continue;
