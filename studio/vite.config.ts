@@ -13,6 +13,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
  */
 function replays(): Plugin {
     const root = path.resolve(process.env.REPLAYS_DIR ?? path.join(__dirname, '..', 'replays'));
+    // position evaluations, one <gameId>.json per game (the research dashboard's evals contract)
+    const evalsDir = path.resolve(process.env.EVALS_DIR ?? path.join(__dirname, '..', 'evals'));
     const send = (req: IncomingMessage, res: ServerResponse, status: number, body: Buffer, type: string) => {
         const gz = /json|ndjson/.test(type) && body.length > 1024 && String(req.headers['accept-encoding'] ?? '').includes('gzip');
         res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-cache', ...(gz ? { 'Content-Encoding': 'gzip' } : {}) });
@@ -41,6 +43,11 @@ function replays(): Plugin {
         const p = new URL(req.url ?? '/', 'http://x').pathname;
         if (p === '/api/tournaments') {
             return send(req, res, 200, Buffer.from(JSON.stringify(list())), 'application/json');
+        }
+        const ev = p.match(/^\/evals\/([^/]+\.json)$/);
+        if (ev) {
+            const f = path.join(evalsDir, decodeURIComponent(ev[1]));
+            return f.startsWith(evalsDir + path.sep) && fs.existsSync(f) ? send(req, res, 200, fs.readFileSync(f), 'application/json') : send(req, res, 404, Buffer.from('no evals'), 'text/plain');
         }
         if (!p.startsWith('/replays/')) {
             return next();

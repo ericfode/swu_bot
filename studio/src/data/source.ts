@@ -1,3 +1,4 @@
+import type { EvalFile } from './evals';
 import type { End, Game, Header, Step, TournamentIndex, TournamentSummary } from './types';
 
 /** Where replays come from: the replays server (same routes as viewer/server.cjs) or fixtures baked into the build. */
@@ -7,6 +8,8 @@ export interface DataSource {
     loadIndex(tid: string): Promise<TournamentIndex>;
     /** Raw JSON Lines text of one game; a game still being played may end mid-line. */
     loadGameText(tid: string, gid: string): Promise<string>;
+    /** Position evaluations for a game (dashboard evals contract), or null when it has none. */
+    loadEvals(tid: string, gid: string): Promise<EvalFile | null>;
 }
 
 async function get(url: string): Promise<Response> {
@@ -21,7 +24,11 @@ const httpSource: DataSource = {
     kind: 'http',
     listTournaments: async () => (await get('/api/tournaments')).json(),
     loadIndex: async (tid) => (await get(`/replays/${encodeURIComponent(tid)}/index.json`)).json(),
-    loadGameText: async (tid, gid) => (await get(`/replays/${encodeURIComponent(tid)}/games/${encodeURIComponent(gid)}.jsonl`)).text()
+    loadGameText: async (tid, gid) => (await get(`/replays/${encodeURIComponent(tid)}/games/${encodeURIComponent(gid)}.jsonl`)).text(),
+    loadEvals: async (_tid, gid) => {
+        const r = await fetch(`/evals/${encodeURIComponent(gid)}.json`);
+        return r.ok ? r.json() : null;
+    }
 };
 
 let chosen: Promise<DataSource> | null = null;

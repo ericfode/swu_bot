@@ -1,7 +1,19 @@
 /** Card art lives on swu-db's CDN: /images/cards/<SET>/<NNN>.png, with "-b" for the deployed side of a leader. */
-export function cardImageUrl(setCode: string | null, back = false): string | null {
+export function swuDbImageUrl(setCode: string | null, back = false): string | null {
     const [set, num] = (setCode ?? '').split('_');
     return set && num ? `https://cdn.swu-db.com/images/cards/${set}/${num}${back ? '-b' : ''}.png` : null;
+}
+
+export type ArtResolver = (setCode: string, back: boolean) => string | null;
+let resolver: ArtResolver = (s, b) => swuDbImageUrl(s, b);
+
+/** Where card images come from. Pages that can't reach the CDN (published artifacts) point this at bundled art. */
+export function setArtResolver(r: ArtResolver | null) {
+    resolver = r ?? ((s, b) => swuDbImageUrl(s, b));
+}
+
+export function cardImageUrl(setCode: string | null, back = false): string | null {
+    return setCode ? resolver(setCode, back) : null;
 }
 
 /** Engine internal names show up as action labels, e.g. "luke-skywalker#faithful-friend". */

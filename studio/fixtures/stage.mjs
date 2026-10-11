@@ -1,5 +1,6 @@
 // Fills studio/static-replays/, which `npm run build:static` bakes into the single-file build.
 //   STATIC_REPLAYS=dirA:dirB  copy every tournament (a folder with index.json) found in those replays folders
+//   STATIC_EVALS=dir          also bundle position evaluations (<gameId>.json, dashboard evals contract) from dir
 //   (unset)                   generate the fixture tournaments (fixtures/generate.mjs) and use those
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,4 +23,11 @@ if (!dirs.length) {
             }
         }
     }
+}
+if (process.env.STATIC_EVALS) {
+    fs.mkdirSync(path.join(out, '_evals'), { recursive: true });
+    for (const f of fs.readdirSync(process.env.STATIC_EVALS).filter((f) => f.endsWith('.json'))) {
+        fs.copyFileSync(path.join(process.env.STATIC_EVALS, f), path.join(out, '_evals', f));
+    }
+    console.log(`staged evals from ${process.env.STATIC_EVALS}`);
 }

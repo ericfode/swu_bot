@@ -55,19 +55,42 @@ export interface Metrics {
     edge: number;
 }
 
-/**
- * A deliberately simple read of the board, from p1's side: base HP race, board power and toughness, cards and
- * resources, squashed to -1..1. It is a placeholder lane for the real evaluators (heuristic bots, LLM analysis).
- */
-export function materialEdge(s: Snapshot): number {
-    const v = (p: PlayerSnap) => {
-        const myBase = p.base.hp - p.base.d;
-        const urgency = Math.max(0, 12 - myBase) ** 2 / 8;
-        return myBase * 0.6 - urgency + sum(units(p).map((u) => u.p * 1.2 + hpLeft(u) * 0.7)) + p.hand.length * 1.5 + p.res.total * 1.1;
-    };
-    const d = v(s.players.p1) - v(s.players.p2);
-    return Math.tanh(d / 18);
+export interface EdgeTerm {
+    key: 'base' | 'power' | 'toughness' | 'hand' | 'resources';
+    label: string;
+    /** what each side has, in the term's own unit */
+    p1: number;
+    p2: number;
+    /** points toward p1 (negative = toward p2) before squashing */
+    points: number;
+    how: string;
 }
+
+const W = { base: 0.6, power: 1.2, toughness: 0.7, hand: 1.5, resources: 1.1, scale: 18 };
+
+/**
+ * A deliberately simple, explainable read of the board, from p1's side: each term is (p1 - p2) times a weight, a low base
+ * costs extra (urgency), and the sum is squashed to -1..1 with tanh(sum / 18). It is the built-in placeholder lane;
+ * real evaluators (heuristic bots, LLM analysis) arrive as evals.
+ */
+export function edgeTerms(s: Snapshot): { terms: EdgeTerm[]; sum: number; edge: number } {
+    const { p1, p2 } = s.players;
+    const hp = (p: PlayerSnap) => Math.max(0, p.base.hp - p.base.d);
+    const urgency = (p: PlayerSnap) => Math.max(0, 12 - hp(p)) ** 2 / 8;
+    const power = (p: PlayerSnap) => sum(units(p).map((u) => u.p));
+    const tough = (p: PlayerSnap) => sum(units(p).map(hpLeft));
+    const terms: EdgeTerm[] = [
+        { key: 'base', label: 'Base HP', p1: hp(p1), p2: hp(p2), points: W.base * (hp(p1) - hp(p2)) - (urgency(p1) - urgency(p2)), how: `${W.base} per HP, and a base under 12 HP costs (12 − HP)² / 8 more` },
+        { key: 'power', label: 'Board power', p1: power(p1), p2: power(p2), points: W.power * (power(p1) - power(p2)), how: `${W.power} per point of power on units in play` },
+        { key: 'toughness', label: 'Unit HP', p1: tough(p1), p2: tough(p2), points: W.toughness * (tough(p1) - tough(p2)), how: `${W.toughness} per HP left on units in play` },
+        { key: 'hand', label: 'Cards in hand', p1: p1.hand.length, p2: p2.hand.length, points: W.hand * (p1.hand.length - p2.hand.length), how: `${W.hand} per card` },
+        { key: 'resources', label: 'Resources', p1: p1.res.total, p2: p2.res.total, points: W.resources * (p1.res.total - p2.res.total), how: `${W.resources} per resource` }
+    ];
+    const total = sum(terms.map((t) => t.points));
+    return { terms, sum: total, edge: Math.tanh(total / W.scale) };
+}
+
+export const materialEdge = (s: Snapshot) => edgeTerms(s).edge;
 
 export function metrics(game: Game): Metrics[] {
     return game.steps.map((st, i) => {

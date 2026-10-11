@@ -122,9 +122,9 @@ function Side({ seat, props }: { seat: Seat; props: BoardProps }) {
     const pp = prev?.players[seat] ?? null;
     const hasInit = state.initiative === seat;
     const row = (
-        <div className={`grid gap-2 grid-cols-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch rounded-2xl p-2 transition-shadow ${actor === seat ? 'to-act' : ''}`}>
+        <div className={`grid gap-2 grid-cols-2 @2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch rounded-2xl p-2 transition-shadow ${actor === seat ? 'to-act' : ''}`}>
             <Lane label="ground" seat={seat} units={p.ground} ids={ids[seat].ground} prevUnits={pp?.ground ?? null} prevIds={prevIds?.[seat].ground ?? null} leader={p.leader} step={step} onFocus={onFocus} />
-            <div className="relative px-2 py-1 flex flex-col items-center justify-center col-span-2 md:col-span-1 order-first md:order-none">
+            <div className="relative px-2 py-1 flex flex-col items-center justify-center col-span-2 @2xl:col-span-1 order-first @2xl:order-none">
                 <Hq p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} />
                 {hasInit && (
                     <motion.div layoutId="initiative" transition={spring} title="Initiative"

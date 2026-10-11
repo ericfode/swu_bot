@@ -26,6 +26,10 @@ function revealLive(text: string): string {
 }
 
 export const staticSource: DataSource = {
+    async loadEvals(_tid, gid) {
+        const t = byPath.get(`_evals/${gid}.json`);
+        return t ? JSON.parse(t) : null;
+    },
     kind: 'static',
     async listTournaments() {
         const out: TournamentSummary[] = [];

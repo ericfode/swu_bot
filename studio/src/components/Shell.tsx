@@ -11,7 +11,7 @@ function Palette({ open, setOpen, route }: { open: boolean; setOpen: (v: boolean
     const [ts, setTs] = useState<TournamentSummary[]>([]);
     const [idx, setIdx] = useState<TournamentIndex | null>(null);
     const { art, setArt, setPerspective } = useSettings();
-    const tid = route.page === 'home' ? null : route.tid;
+    const tid = route.page === 'home' || route.page === 'icons' ? null : route.tid;
     useEffect(() => {
         if (!open) {
             return;
@@ -52,6 +52,9 @@ function Palette({ open, setOpen, route }: { open: boolean; setOpen: (v: boolean
                                         </Command.Item>
                                     ))}
                                 </Command.Group>
+                                <Command.Group heading="Pages">
+                                    <Command.Item value="action icons gallery" onSelect={() => go('#/icons')}><Gamepad2 size={14} />Action icon gallery</Command.Item>
+                                </Command.Group>
                                 <Command.Group heading="Settings">
                                     <Command.Item value="toggle card art" onSelect={() => { setArt(!art); setOpen(false); }}><Image size={14} />{art ? 'Hide' : 'Show'} card art</Command.Item>
                                     <Command.Item value="show both hands god view" onSelect={() => { setPerspective('god'); setOpen(false); }}>Show both hands</Command.Item>
@@ -82,7 +85,9 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
         return () => window.removeEventListener('keydown', on);
     }, []);
     const crumbs: { label: string; href: string }[] = [{ label: 'Tournaments', href: hrefHome() }];
-    if (route.page !== 'home') {
+    if (route.page === 'icons') {
+        crumbs.push({ label: 'Action icons', href: '#/icons' });
+    } else if (route.page !== 'home') {
         crumbs.push({ label: route.tid, href: hrefTournament(route.tid) });
     }
     return (

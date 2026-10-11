@@ -9,7 +9,8 @@
     "build:static": "node fixtures/stage.mjs && tsc --noEmit && vite build --mode static",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "fixtures": "node fixtures/generate.mjs"
+    "fixtures": "node fixtures/generate.mjs",
+    "build:kit": "tsc --noEmit && vite build --config vite.kit.config.ts --mode kit"
   },
   "dependencies": {
     "cmdk": "^1.1.1",

@@ -4,12 +4,16 @@ import { useEffect, useState } from 'react';
 export type Route =
     | { page: 'home' }
     | { page: 'tournament'; tid: string; g: string | null }
-    | { page: 'game'; tid: string; gid: string; step: number };
+    | { page: 'game'; tid: string; gid: string; step: number }
+    | { page: 'icons'; tid: string | null; gid: string | null };
 
 export function parseRoute(hash: string): Route {
     const [path, query = ''] = hash.replace(/^#\/?/, '').split('?');
     const parts = path.split('/').map(decodeURIComponent);
     const q = new URLSearchParams(query);
+    if (parts[0] === 'icons') {
+        return { page: 'icons', tid: q.get('t'), gid: q.get('g') };
+    }
     if (parts[0] === 't' && parts[1] && parts[2] === 'g' && parts[3]) {
         return { page: 'game', tid: parts[1], gid: parts[3], step: Number(q.get('step') ?? 0) || 0 };
     }
