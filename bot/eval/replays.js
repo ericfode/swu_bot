@@ -9,7 +9,7 @@
  * Writes <out>/positions/0.jsonl ({id, winner, outcome, n, round, toAct, state}) and <out>/decks/0.jsonl. Positions
  * are the action-window checkpoints arena.js records (see replayPositions). Decklists are redrawn from the seed the way
  * match.js draws them and checked (see deckLists). Draws, errors and decided boards are skipped. A game id already seen
- * gets the source's position in --from and its folder name as a prefix.
+ * gets the source's position in --from and its folder name as a prefix; the same game recorded twice is kept once.
  */
 const fs = require('fs');
 const path = require('path');
@@ -103,11 +103,14 @@ function replayPositions(file, id, every = 1) {
             out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state });
         }
     }
-    return { positions: out, decks: deckLists(lines[0]?.seed, lines[0], lines) };
+    // the same game recorded twice (a folder listed twice, or a rerun with the same seed and bots) has the same key
+    const h = lines[0] ?? {};
+    const key = JSON.stringify([h.seed, h.engine, (h.players ?? []).map((p) => [p.bot, p.deck]), end.winner, steps.length]);
+    return { positions: out, decks: deckLists(h.seed, lines[0], lines), key };
 }
 
 function main() {
-    const from = arg('from', '').split(',').filter(Boolean);
+    const from = [...new Set(arg('from', '').split(',').filter(Boolean).map((d) => path.resolve(d)))];
     const out = arg('out', null);
     const every = Number(arg('every', '2'));
     if (!from.length || !out || !Number.isInteger(every) || every < 1) {
@@ -121,7 +124,9 @@ function main() {
     const pos = fs.createWriteStream(path.join(out, 'positions', '0.jsonl'));
     const dk = fs.createWriteStream(path.join(out, 'decks', '0.jsonl'));
     const seen = new Set();
+    const gameKeys = new Set();
     let games = 0,
+        dupes = 0,
         n = 0,
         withDecks = 0;
     for (const [ti, t] of from.entries()) {
@@ -146,6 +151,11 @@ function main() {
             if (!r || !r.positions.length) {
                 continue;
             }
+            if (gameKeys.has(r.key)) {
+                dupes++;
+                continue;
+            }
+            gameKeys.add(r.key);
             games++;
             n += r.positions.length;
             for (const p of r.positions) {
@@ -159,7 +169,7 @@ function main() {
     }
     pos.end();
     dk.end();
-    console.log(`${n} positions from ${games} games (${withDecks} with decklists) -> ${out}`);
+    console.log(`${n} positions from ${games} games (${withDecks} with decklists; ${dupes} duplicate games skipped) -> ${out}`);
 }
 
 if (require.main === module) {
