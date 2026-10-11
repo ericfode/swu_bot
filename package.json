@@ -13,6 +13,7 @@
     "viewer:dev": "npm --prefix viewer run dev",
     "ladder": "node bot/ladder.js",
     "test": "node --test bot/test/*.test.js",
+    "test:py": "python3 -m unittest discover -s bot/python",
     "lint": "node tools/bin/perch scan",
     "lint:changed": "node tools/bin/perch scan --since origin/main",
     "perch": "node tools/bin/perch"

@@ -1,3 +1,4 @@
 {
-    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" }
+    "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore" },
+    "py-clock": { "cmd": "python3", "args": ["bot/python/swu_clock.py"], "lang": "python" }
 }
