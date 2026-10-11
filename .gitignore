@@ -2,3 +2,6 @@ node_modules/
 replays/
 replays-*.log
 viewer/dist/
+analysis/node_modules/
+analysis/.cache/
+analysis/out/
