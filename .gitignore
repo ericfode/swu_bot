@@ -26,3 +26,6 @@ bot/c/*.o
 
 # compiled bot bundles and their tools (bot/compiled)
 /build/
+
+# SWU Arena app builds (app/build.mjs)
+app/dist/
