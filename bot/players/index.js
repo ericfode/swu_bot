@@ -26,13 +26,13 @@ function parseName(name) {
 function describeBot(name) {
     const { kind, depth } = parseName(name);
     if (kind === 'heuristic' || PROFILES[kind]) {
-        return { name, kind: 'search', profile: kind === 'heuristic' ? 'balanced' : kind, depth };
+        return { name, kind: 'search', profile: kind === 'heuristic' ? 'balanced' : kind, depth, lang: 'js' };
     }
     if (kind === 'rush') {
-        return { name, kind: 'rules', profile: 'rush', depth: 0 };
+        return { name, kind: 'rules', profile: 'rush', depth: 0, lang: 'js' };
     }
     if (/^random/.test(kind)) {
-        return { name, kind: 'random', profile: null, depth: 0 };
+        return { name, kind: 'random', profile: null, depth: 0, lang: 'js' };
     }
     return null;
 }

@@ -119,7 +119,7 @@ test('rush attacks the enemy base when it can', () => {
 });
 
 test('registry resolves names, depth and #suffix', () => {
-    assert.deepStrictEqual(describeBot('control-d2#b'), { name: 'control-d2#b', kind: 'search', profile: 'control', depth: 2 });
+    assert.deepStrictEqual(describeBot('control-d2#b'), { name: 'control-d2#b', kind: 'search', profile: 'control', depth: 2, lang: 'js' });
     assert.strictEqual(describeBot('heuristic').profile, 'balanced');
     assert.strictEqual(describeBot('random-a').kind, 'random');
     assert.strictEqual(makeBot('aggro').profile, PROFILES.aggro);

@@ -54,7 +54,7 @@ async function main() {
                 write();
                 const r = await playGame(env, { seed, bots: seats.map(makeBot), record: true, snapshot, onEvent: (e) => fs.appendFileSync(file, `${JSON.stringify(e)}\n`) });
                 const winnerBot = r.winner === 'p1' ? seats[0] : r.winner === 'p2' ? seats[1] : r.winner;
-                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms });
+                Object.assign(entry, { winner: winnerBot, winnerSeat: r.winner, rounds: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, ms: r.ms, timing: r.timing });
                 write();
                 console.log(`${id}: ${r.outcome} ${winnerBot ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''}${statLine(r)}`);
             }

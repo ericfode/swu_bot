@@ -64,3 +64,10 @@ test('summarize counts wins, draws and incomplete games and rates only finished 
     assert.strictEqual(doc.eloHistory.length, 3);
     assert.strictEqual(scoreOf(games[1]), 0);
 });
+
+test('timingSummary reports count, total and percentiles', () => {
+    const { timingSummary } = require('../match');
+    assert.deepStrictEqual(timingSummary([]), { n: 0, ms: 0, p50: 0, p95: 0, max: 0 });
+    const t = timingSummary(Array.from({ length: 100 }, (_, i) => i + 1));
+    assert.deepStrictEqual(t, { n: 100, ms: 5050, p50: 51, p95: 96, max: 100 });
+});
