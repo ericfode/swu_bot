@@ -1,8 +1,9 @@
 //! swu-learned: a tiny learned world model + action model for Star Wars Unlimited, in Rust with Burn.
 //!
-//!   swu-learned play  --model M [--world 0] [--heur 0] [--temp 0] [--epsilon 0] [--name N]
+//!   swu-learned play  --model M [--world 0] [--heur 0] [--prior 0] [--prior-all] [--temp 0] [--epsilon 0] [--name N]
 //!   swu-learned train --data DIR[,DIR] --out M [--epochs 3] [--batch 512] [--lr 0.002] [--init M] [--teacher M --td 0.5]
 //!   swu-learned explain --model M --data DIR
+//!   swu-learned train-prior --data DIR --teacher-bots rust-greedy --init M --out M2 [--epochs 3] [--full]
 //!   swu-learned info
 //!
 //! `play` speaks spec/stdio-protocol.md on stdin/stdout. Card data is read from $SWU_CARD_DATA
@@ -12,6 +13,7 @@ mod cards;
 mod features;
 mod model;
 mod play;
+mod prior;
 mod train;
 
 use burn::prelude::*;
@@ -38,7 +40,7 @@ fn main() {
         "play" => {
             let model = flag(&args, "model").unwrap_or_else(|| "bot/rust-learned/models/learned-v4.safetensors".into());
             let mut net = model::Net::new(&Device::flex());
-            let mut store = SafetensorsStore::from_file(&model);
+            let mut store = SafetensorsStore::from_file(&model).allow_partial(true);
             if let Err(e) = net.load_from(&mut store) {
                 eprintln!("swu-learned: cannot load {model}: {e:?}");
                 std::process::exit(2);
@@ -48,6 +50,8 @@ fn main() {
                 heur: num(&args, "heur", 0.0),
                 temp: num(&args, "temp", 0.0),
                 epsilon: num(&args, "epsilon", 0.0),
+                prior: num(&args, "prior", 0.0),
+                prior_all: args.iter().any(|a| a == "--prior-all"),
                 thoughts: flag(&args, "thoughts").or_else(|| std::env::var("SWU_LEARNED_THOUGHTS").ok()).map(PathBuf::from),
             };
             let name = flag(&args, "name").unwrap_or_else(|| "rust-learned".into());
@@ -85,13 +89,28 @@ fn main() {
             std::fs::write(&log_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
             eprintln!("wrote {} and {}", out.display(), log_path.display());
         }
+        "train-prior" => {
+            let data: Vec<PathBuf> = flag(&args, "data").expect("--data").split(',').map(PathBuf::from).collect();
+            let teachers: Vec<String> = flag(&args, "teacher-bots").expect("--teacher-bots").split(',').map(String::from).collect();
+            let init = PathBuf::from(flag(&args, "init").expect("--init"));
+            let out = PathBuf::from(flag(&args, "out").expect("--out"));
+            if let Some(dir) = out.parent() {
+                std::fs::create_dir_all(dir).unwrap();
+            }
+            let d = prior::load(&data, &card_db(), &teachers);
+            if d.n == 0 {
+                eprintln!("swu-learned: no decisions by {teachers:?} in {data:?}; check --teacher-bots and --data");
+                std::process::exit(2);
+            }
+            prior::train(&d, &init, &out, num(&args, "epochs", 3), num(&args, "batch", 256), num(&args, "lr", 0.002), args.iter().any(|a| a == "--full"));
+        }
         "explain" => {
             // how much the value head moves when one state feature moves by one standard deviation
             let model = flag(&args, "model").expect("--model");
             let data: Vec<PathBuf> = flag(&args, "data").expect("--data").split(',').map(PathBuf::from).collect();
             let dev = Device::flex();
             let mut net = model::Net::new(&dev);
-            net.load_from(&mut SafetensorsStore::from_file(&model)).expect("load model");
+            net.load_from(&mut SafetensorsStore::from_file(&model).allow_partial(true)).expect("load model");
             let db = card_db();
             let d = train::load(&data, &db, 4);
             let rows = d.n.min(20_000);
