@@ -301,6 +301,26 @@ test('a seat concedes when the server keeps ignoring its answers at one decision
     assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
 });
 
+test('a seat ends with no result when the game never starts, and concedes when a started game goes quiet', async () => {
+    const client = { name: 'fake', hello: () => ({ t: 'ready', v: 2 }), decide: () => ({ t: 'act', i: 0 }), over: () => ({ t: 'ok' }) };
+    const early = fakeSeat(client, { startMs: 60, idleMs: 5000 });
+    const r1 = await early.seat.play();
+    assert.strictEqual(r1.result, 'none');
+    assert.match(r1.reason, /did not start/);
+    assert.deepStrictEqual(early.sock.sent, []);
+
+    const quiet = fakeSeat(client, { startMs: 5000, idleMs: 60 });
+    const done = quiet.seat.play();
+    const wait = frame({}); // the opponent's turn: nothing for us to answer
+    wait.players['user-a'].leaders[0].selectable = false;
+    quiet.sock.emit('gamestate', wait);
+    const r2 = await done;
+    assert.strictEqual(r2.result, 'loss');
+    assert.match(r2.reason, /no game frame/);
+    assert.ok(r2.stats.conceded);
+    assert.deepStrictEqual(quiet.sock.sent.at(-1), ['game', 'concede']);
+});
+
 test('a quick-match run that fails after entering the queue keeps the place counted', async () => {
     const http = require('http');
     const os = require('os');
@@ -580,4 +600,35 @@ test('the live view names our bot in a bot game and reports the queue run', () =
     assert.deepStrictEqual([st.state, st.game, st.played, st.stale, 'token' in st], ['playing', 'q-1/frames/abcdef012345', 1, false, false]);
     now += STATUS_STALE_MS + 1000;
     assert.strictEqual(games.status().stale, true);
+});
+
+test('the watchdog restarts a stuck or dead loop, leaves a stopped-on-purpose loop alone, and alerts past its restart budget', () => {
+    const { judge, newestStatus } = require('../karabast/watchdog');
+    const now = Date.parse('2026-10-11T21:30:00Z');
+    const ago = (min) => new Date(now - min * 60000).toISOString();
+    const st = (state, sinceMin, extra = {}) => ({ state, since: ago(sinceMin), at: ago(0.5), ...extra });
+    const act = (o) => judge({ now, ...o }).action;
+    assert.strictEqual(act({ alive: true, status: st('playing', 20) }), 'none');
+    assert.strictEqual(act({ alive: true, status: st('queued', 34) }), 'restart'); // matched, but the game never came
+    assert.strictEqual(act({ alive: true, status: { ...st('playing', 5), at: ago(10) } }), 'restart'); // hung process
+    assert.strictEqual(act({ alive: false, status: st('playing', 5) }), 'restart'); // died mid-game
+    assert.strictEqual(act({ alive: false, status: null }), 'restart');
+    assert.strictEqual(act({ alive: false, status: st('stopped', 1, { ok: true, reason: 'the people cap is reached' }) }), 'report');
+    assert.strictEqual(act({ alive: false, status: st('stopped', 1, { ok: false, reason: '3 failures in a row' }) }), 'restart');
+    assert.strictEqual(act({ alive: false, status: st('stopped', 5, { ok: false, reason: 'no match in 6 waits in a row' }) }), 'none');
+    assert.strictEqual(act({ alive: false, status: st('stopped', 25, { ok: false, reason: 'no match in 6 waits in a row' }) }), 'restart');
+    assert.strictEqual(act({ alive: true, status: null, noStatusSince: now - 60000 }), 'none'); // still starting
+    assert.strictEqual(act({ alive: true, status: null, noStatusSince: now - 6 * 60000 }), 'restart'); // hung before its first status
+    assert.strictEqual(act({ alive: true, status: { ...st('stopped', 1, { ok: true }), at: ago(1) } }), 'none'); // on its way out
+    assert.strictEqual(act({ alive: true, status: { ...st('stopped', 30, { ok: true }), at: ago(30) } }), 'restart'); // a new loop that never wrote
+    assert.strictEqual(act({ alive: false, status: null, stopFile: true }), 'none');
+    assert.strictEqual(act({ alive: false, status: null, lastRestart: now - 60000 }), 'none'); // grace after a restart
+    const three = [now - 100 * 60000, now - 50 * 60000, now - 10 * 60000];
+    assert.strictEqual(act({ alive: false, status: null, restarts: three }), 'alert');
+    assert.strictEqual(act({ alive: false, status: null, restarts: [now - 130 * 60000, ...three.slice(1)] }), 'restart'); // older than 2 hours
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wd-'));
+    assert.strictEqual(newestStatus(dir), null);
+    fs.mkdirSync(path.join(dir, 'q-1'));
+    fs.writeFileSync(path.join(dir, 'q-1', 'status.json'), JSON.stringify(st('queued', 1)));
+    assert.strictEqual(newestStatus(dir).run, 'q-1');
 });
