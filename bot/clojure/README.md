@@ -34,6 +34,26 @@ as plain immutable data and plays candidate moves on it. Every move is a pure fu
   stop ramping around 9-12. Cancels "this will have no effect" prompts and does not retry a card it cancelled
   this round. A loop guard never repeats a choice that led straight back to the same observation.
 
+## Results
+
+One ladder, built once and not tuned on it: `results/clojure-ladder-1` (10 games per pair, seeds 701-705 from both
+seats, the same lineup and seeds as `py-clock-ladder-1`, real card data, forceteki 2be4fcd).
+
+| Bot | W-L | Win rate (95% CI) | BT Elo |
+| --- | --- | --- | --- |
+| rust-greedy2 | 63-7 | 90% (81-95) | 1902 |
+| **clj-forecast** | **59-11** | **84% (74-91)** | **1825** |
+| rush | 38-32 | 54% | 1529 |
+| tempo | 31-38 | 45% | 1455 |
+| control | 30-39 | 44% | 1441 |
+| heuristic | 29-40 | 42% | 1430 |
+| aggro | 23-46 | 33% | 1356 |
+| random | 5-65 | 7% | 1062 |
+
+Head to head: 5-5 vs rust-greedy2, 7-3 vs rush, 10-0 vs aggro and heuristic, 9-1 vs tempo, control and random.
+Decision time (harness-measured, 5,255 decisions): median 3 ms, p95 about 140 ms, mean 60 ms; the first decision
+of a process includes the JVM start and card loading (about 2 s).
+
 ## Files
 
 | File | What |
