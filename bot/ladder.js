@@ -3,13 +3,15 @@
  * Round-robin ladder with ratings, run on worker threads.
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
- *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record]
+ *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c]
  *
  * Each pair plays `--games` games (rounded up to even): every seed twice, once from each seat, so random-deck luck
  * cancels out. Everything goes in <out>/<id>/, rewritten atomically after every finished game:
  *   index.json   the same tournament index tournament.js writes (viewer and dashboard read it as is)
  *   ladder.json  the full report (schema "swu-ladder/1", see ladder-report.js): ratings, CIs, pair matrix, Elo history
  *   games/       per-game recordings (<id>.jsonl, same format as tournament.js), only with --record
+ * --vs a,b,c makes it a gauntlet: each --bots entry plays each --vs entry (and --bots entries do not play each
+ * other). Every challenger gets the same seeds, so a parameter sweep compares variants on the same decks.
  * --out defaults to /mnt/project-files/results when that folder exists, else results/ in the repo.
  */
 const fs = require('fs');
@@ -18,7 +20,7 @@ const path = require('path');
 const { Worker } = require('worker_threads');
 const { execFileSync } = require('child_process');
 const { describeBot } = require('./players');
-const { roundRobin } = require('./ratings');
+const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 
 function arg(name, dflt) {
@@ -45,7 +47,9 @@ function defaultOut() {
 }
 
 async function main() {
-    const names = arg('bots', 'rush,aggro,tempo,control,heuristic,random').split(',');
+    const challengers = arg('bots', 'rush,aggro,tempo,control,heuristic,random').split(',');
+    const vs = arg('vs', null)?.split(',') ?? null;
+    const names = vs ? [...challengers, ...vs] : challengers;
     if (new Set(names).size !== names.length) {
         throw new Error('bot names must be unique (use name#2 to enter the same bot twice)');
     }
@@ -68,8 +72,8 @@ async function main() {
     fs.mkdirSync(path.join(out, 'games'), { recursive: true });
 
     const engine = engineRev();
-    const schedule = roundRobin(names, perPair, firstSeed);
-    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers };
+    const schedule = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
+    const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, ...(vs ? { format: 'gauntlet', vs } : {}) };
     const games = [];
     let status = 'running';
     const save = () => {
