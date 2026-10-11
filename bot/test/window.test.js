@@ -212,7 +212,7 @@ test('sign-in: GitHub confirms the login, invited people get a session, others s
 });
 
 test('a feed token writes only what carries its name, and reads like a friend', async () => {
-    const w = makeWindow('w5');
+    const w = makeWindow('w-feed');
     const { go, close } = await serve(w);
     try {
         const doc = (ns, id, method = 'PUT', body = JSON.stringify({ id, games: [] })) => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body });
@@ -222,6 +222,11 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","games":[null]}')).status, 400, 'games the loaders cannot read');
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","games":[{"id":"karabast-1","p1":"c-clock"}]}')).status, 400);
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","bots":[1],"games":[]}')).status, 400);
+        for (const bad of ['__proto__', 'constructor', 'toString']) {
+            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [{ id: 'karabast-1', p1: bad, p2: 'opponent' }] }))).status, 400, `${bad} as a seat`);
+        }
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [{ id: 'g1', p1: 'c-clock', p2: 'opponent' }] }))).status, 400, 'game ids carry the feed name');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', bots: ['c-clock', 'opponent'], games: [{ id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] }))).status, 200);
         assert.strictEqual((await doc('lens', 'karabast-g1')).status, 200);
         assert.strictEqual((await doc('runs', 'karabastx')).status, 403, 'a name that only starts the same is not its own');
         assert.strictEqual((await doc('runs', 'arena-t1-r1')).status, 403);

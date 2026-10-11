@@ -50,10 +50,15 @@ function need(cond, code, msg) {
     }
 }
 
-/** The shape the app's loaders rely on in a run index, checked for runs sent by an outside machine. */
-const isStr = (x) => typeof x === 'string' && x.length > 0;
-const feedRunOk = (doc) => Array.isArray(doc.games) && doc.games.every((g) => g && typeof g === 'object' && isStr(g.id) && isStr(g.p1) && isStr(g.p2))
-    && (doc.bots === undefined || (Array.isArray(doc.bots) && doc.bots.every(isStr)));
+/**
+ * The shape the app's loaders rely on in a run index, checked for runs sent by an outside machine: games are objects
+ * with ids <feed>-<id>, and seat names are plain words that are never an Object.prototype key (the model indexes
+ * plain objects by them).
+ */
+const isName = (x) => typeof x === 'string' && /^[A-Za-z0-9][\w .@#+()-]{0,63}$/.test(x) && !(x in Object.prototype);
+const feedRunOk = (doc, feed) => Array.isArray(doc.games)
+    && doc.games.every((g) => g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`) && isName(g.p1) && isName(g.p2))
+    && (doc.bots === undefined || (Array.isArray(doc.bots) && doc.bots.every(isName)));
 
 /**
  * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
@@ -527,7 +532,7 @@ function createWindow(opts = {}) {
                 // the loaders name a run by the id inside its index, so a feed's run must carry its own name there too
                 if (who.role === 'feed' && ns === 'runs') {
                     need(doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
-                    need(feedRunOk(doc), 'bad_request', 'a run document needs games: [{id, p1, p2, ...}] with string ids and seats, and bots (if any) as strings');
+                    need(feedRunOk(doc, who.feed), 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, ...}] with seats (and bots, if any) named in plain words`);
                 }
                 store.putDoc(ns, id, body);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
