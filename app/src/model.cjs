@@ -132,13 +132,18 @@
                 else if (g.winnerSeat === 'draw') { res = 2; errors++; }
                 else { res = 4; errors++; }
                 games.push([ri, g.id, bi(p1), bi(p2), res, g.rounds ?? null, g.steps ?? null, forfeit ? 1 : 0]);
+                if (people) {
+                    // a finished game against a person, a draw included, counts in the run's own table only
+                    if (res <= 2 && p1 && p2) {
+                        decided++;
+                        if (res === 2) errors--;
+                        for (const [x, s] of [[p1, res === 0 ? 1 : res === 1 ? 0 : 0.5], [p2, res === 1 ? 1 : res === 0 ? 0 : 0.5]]) { const T = (st[x] ||= { w: 0, l: 0, d: 0 }); s === 1 ? T.w++ : s === 0 ? T.l++ : T.d++; }
+                    }
+                    continue;
+                }
                 if (res > 1 || !p1 || !p2) continue;
                 decided++;
                 const sa = res === 0 ? 1 : 0;
-                if (people) {
-                    for (const [x, s] of [[p1, sa], [p2, 1 - sa]]) { const T = (st[x] ||= { w: 0, l: 0, d: 0 }); s === 1 ? T.w++ : T.l++; }
-                    continue;
-                }
                 results.push({ a: p1, b: p2, score: sa });
                 for (const [x, y, s] of [[p1, p2, sa], [p2, p1, 1 - sa]]) {
                     const q = R(x); q.games++; q.rounds += g.rounds || 0; s === 1 ? q.w++ : q.l++;

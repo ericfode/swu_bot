@@ -219,6 +219,9 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await doc('runs', 'karabast')).status, 200);
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"arena-t1-r1","games":[]}')).status, 400, 'the run inside must carry the same name');
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"games":[]}')).status, 400);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","games":[null]}')).status, 400, 'games the loaders cannot read');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","games":[{"id":"karabast-1","p1":"c-clock"}]}')).status, 400);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","bots":[1],"games":[]}')).status, 400);
         assert.strictEqual((await doc('lens', 'karabast-g1')).status, 200);
         assert.strictEqual((await doc('runs', 'karabastx')).status, 403, 'a name that only starts the same is not its own');
         assert.strictEqual((await doc('runs', 'arena-t1-r1')).status, 403);

@@ -94,15 +94,16 @@ test('buildModel: games against people on Karabast show as their own run and sta
         game('karabast-1', 'c-clock', 'opponent', 'p2'),
         game('karabast-2', 'opponent', 'c-clock', 'p1'),
         { id: 'karabast-3', p1: 'c-clock', p2: 'opponent', outcome: 'running' },
+        { id: 'karabast-4', p1: 'opponent', p2: 'c-clock', outcome: 'won', winnerSeat: 'draw' },
     ] });
     const M = model.buildModel(src, null, null);
     const r = M.runs.find(x => x.id === 'karabast');
     assert.equal(r.kind, 'people');
-    assert.deepEqual([r.decided, r.running], [2, 1]);
-    assert.deepEqual(r.table.find(t => t.id === 'c-clock'), { id: 'c-clock', w: 0, l: 2, d: 0, n: 2, pct: 0 });
+    assert.deepEqual([r.decided, r.running, r.errors], [3, 1, 0], 'a draw is a finished game');
+    assert.deepEqual(r.table.find(t => t.id === 'c-clock'), { id: 'c-clock', w: 0, l: 2, d: 1, n: 3, pct: 1 / 6 });
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
     assert.ok(!M.bots.opponent, 'people are not bots');
-    assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 3, 'every game stays listed');
+    assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 4, 'every game stays listed');
 });
 
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {

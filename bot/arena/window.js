@@ -50,6 +50,11 @@ function need(cond, code, msg) {
     }
 }
 
+/** The shape the app's loaders rely on in a run index, checked for runs sent by an outside machine. */
+const isStr = (x) => typeof x === 'string' && x.length > 0;
+const feedRunOk = (doc) => Array.isArray(doc.games) && doc.games.every((g) => g && typeof g === 'object' && isStr(g.id) && isStr(g.p1) && isStr(g.p2))
+    && (doc.bots === undefined || (Array.isArray(doc.bots) && doc.bots.every(isStr)));
+
 /**
  * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
  * (an outside machine, auth.js) writes only run documents, lens documents and replays named after it: <feed> or
@@ -520,7 +525,10 @@ function createWindow(opts = {}) {
                     throw new WindowError('bad_request', 'body is not JSON');
                 }
                 // the loaders name a run by the id inside its index, so a feed's run must carry its own name there too
-                need(who.role !== 'feed' || ns !== 'runs' || doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
+                if (who.role === 'feed' && ns === 'runs') {
+                    need(doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
+                    need(feedRunOk(doc), 'bad_request', 'a run document needs games: [{id, p1, p2, ...}] with string ids and seats, and bots (if any) as strings');
+                }
                 store.putDoc(ns, id, body);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
             }
