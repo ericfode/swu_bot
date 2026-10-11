@@ -98,6 +98,22 @@ Select `ericfode/swu_bot` in the saved environment, use Node 22, and run
 command. Use `--skip-cards` if the environment cannot reach the card API and
 record that limitation. No secrets are needed for these commands.
 
+Perch's native parser library also needs a writable cache. In restricted Linux
+workspaces, set a task-local cache before preparing parsers or running Perch:
+
+```bash
+export TREE_SITTER_LANGUAGE_PACK_CACHE_DIR="$PWD/.perch/parsers"
+node -e 'const p = require("@xberg-io/tree-sitter-language-pack"); p.download(["javascript", "typescript", "tsx"]); console.log(p.downloadedLanguages());'
+```
+
+This downloads parser libraries; it does not call Jev. The existing Perch
+integration test creates a child environment that keeps `HOME` but drops this
+cache override. On a cloud host with a read-only default home cache, that test
+can still fail even when the explicit cache works. Report the tooling failure
+and the passing application checks separately; a writable/prepopulated default
+parser cache must be provided by that environment before claiming a full-suite
+pass. Keep the test and its scope guards intact.
+
 A credential-free source snapshot may include the pinned `forceteki` tree
 without Git metadata. The same setup command works from that tree. Preserve
 its accompanying provenance and checksums; it is a snapshot, not a clone with
