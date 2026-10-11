@@ -114,10 +114,8 @@ function replayPositions(file, id, every = 1) {
             e = steps[i + 1];
         if (e.prompt?.startsWith('actionWindow') && prev.state?.phase === 'action' && seen++ % every === 0 && terminal(prev.state, 'p1') === null) {
             const hidden = hiddenAt(prev.state);
-            // with both hands hidden there is no judge and no objective view left to use
-            if (hidden.length < 2) {
-                out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, ...(hidden.length ? { hidden } : {}) });
-            }
+            // a position with both hands hidden (a spectator capture) has no judge for fit.js, only score.js's spectator view
+            out.push({ id, winner: end.winner, outcome: end.outcome, n: prev.n, round: prev.state.round, toAct: e.pid, state: prev.state, ...(hidden.length ? { hidden } : {}) });
         }
     }
     // the same game recorded twice (a folder listed twice, or a copied replay) has the same content digest

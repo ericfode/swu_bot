@@ -10,6 +10,7 @@
  * Views:
  *   subjective  the judge sees its own hand; the opponent's hand is only a count
  *   objective   both hands are visible (an observer who sees everything but the future)
+ *   spectator   neither hand is visible, only both counts (what a Karabast spectator sees)
  *
  * Hidden hands: with `decks` (both 50-card decklists, as set codes) the opponent's hidden hand is valued as
  * hand size x the average of the cards of their decklist not yet seen (discard, arena). This is the
@@ -149,14 +150,14 @@ function sideFeatures(ps, opp, state, seat, { handVisible, deck, db }) {
 
 /**
  * Features of `state` in the frame of `judge` ('p1' | 'p2').
- * opts: { view: 'subjective' | 'objective', decks: {p1: [setCode], p2: [setCode]} | null, toAct: 'p1' | 'p2' | null, db }
+ * opts: { view: 'subjective' | 'objective' | 'spectator', decks: {p1: [setCode], p2: [setCode]} | null, toAct: 'p1' | 'p2' | null, db }
  * Returns { me, opp, g } objects; `vector()` flattens in NAMES order.
  */
 function frameFeatures(state, judge, { view = 'subjective', decks = null, toAct = null, db = cardDb() } = {}) {
     const o = other(judge);
     const P = state.players;
     return {
-        me: sideFeatures(P[judge], P[o], state, judge, { handVisible: true, deck: decks?.[judge], db }),
+        me: sideFeatures(P[judge], P[o], state, judge, { handVisible: view !== 'spectator', deck: decks?.[judge], db }),
         opp: sideFeatures(P[o], P[judge], state, o, { handVisible: view === 'objective', deck: decks?.[o], db }),
         g: { round: state.round ?? 0, toAct: toAct == null ? 0 : toAct === judge ? 1 : -1 }
     };
