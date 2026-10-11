@@ -3,3 +3,4 @@ replays/
 replays-*.log
 viewer/dist/
 results/
+__pycache__/
