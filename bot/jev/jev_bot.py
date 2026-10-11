@@ -333,15 +333,33 @@ def split(action, msg):
     targets = sorted(d["targets"], key=key)
     if d.get("maxTargets") is not None:
         targets = targets[: d["maxTargets"]]
-    left, out = d["amount"], []
-    for t in targets:
-        # friendly targets sort last; damage goes on them only when it must all be placed
-        if not heal and owner(t["id"]) == you and d.get("canDistributeLess"):
-            continue
-        give = left if t["cap"] is None else min(left, t["cap"])
-        if give > 0:
-            out.append({"id": t["id"], "amount": give})
-            left -= give
+    left, given = d["amount"], {}
+
+    def useful(t):
+        # damage: lethal on a unit is enough; healing: no more than the damage it has
+        u = units.get(t["id"])
+        if not u:
+            return None
+        return (u.get("d") or 0) if heal else max(0, (u.get("h") or 0) - (u.get("d") or 0))
+
+    # first pass stops at what is useful, the second places what must still go somewhere (up to the real caps)
+    for limit_useful in (True, False):
+        for t in targets:
+            if not left:
+                break
+            # damage goes on friendly targets (sorted last) and healing on enemy ones only when it must all be placed
+            if d.get("canDistributeLess") and (owner(t["id"]) == you) != heal:
+                continue
+            room = float("inf") if t["cap"] is None else t["cap"]
+            if limit_useful and useful(t) is not None:
+                room = min(room, useful(t))
+            give = int(min(left, room - given.get(t["id"], 0)))
+            if give > 0:
+                given[t["id"]] = given.get(t["id"], 0) + give
+                left -= give
+        if heal and d.get("canDistributeLess"):
+            break  # no over-healing when it may be left unplaced
+    out = [{"id": i, "amount": a} for i, a in given.items()]
     if left and not d.get("canDistributeLess"):
         return None
     if not out and not d.get("canChooseNoTargets"):

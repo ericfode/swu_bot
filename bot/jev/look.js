@@ -21,9 +21,10 @@
  *          else pass), with its follow-ups, until the next action window
  *   round  `after`, then both sides keep playing like that until the round ends (or 40 actions)
  *
- * Hidden information: the opponent never plays a card from its hand (or resources/discard) in an imagined line, the
- * engine RNG is reseeded from a bot-private stream so imagined draws and shuffles are not the real ones, and `state`
- * is observe() from the bot's own seat (the opponent's hand stays a count).
+ * Hidden information: the opponent never plays a card from its hand (or resources/discard) at its action windows in
+ * an imagined line, the engine RNG is reseeded from a bot-private stream, `state` is observe() from the bot's own seat
+ * (the opponent's hand stays a count), and any card that was hidden before (the opponent's hand, resources and deck,
+ * and the bot's own deck) is blanked to "hidden card" in `state` and `steps` if the simulation moves it into view.
  *
  * Registered in external-bots.json with "adapter": "bot/jev/look.js".
  */
@@ -76,13 +77,48 @@ function followUp(eg, pid, acts) {
 }
 
 /** `at`: "action" for a move at an action window, "choice" for a follow-up pick (a target, an option). */
-function describeStep(eg, actor, a) {
+function describeStep(eg, actor, a, hidden) {
     const who = seatOf(eg, eg.player(actor));
     const at = eg.isActionWindow(actor) ? 'action' : 'choice';
     if (a.kind === 'card' && a.card) {
-        return { who, at, what: a.card.title ?? a.label, zone: a.card.zoneName ?? null };
+        return hidden.has(a.card.uuid) ? { who, at, what: 'a hidden card', zone: null } : { who, at, what: a.card.title ?? a.label, zone: a.card.zoneName ?? null };
+    }
+    if (a.kind === 'displayCard' && hidden.has(a.arg)) {
+        return { who, at, what: 'a hidden card' };
     }
     return { who, at, what: String(a.label) };
+}
+
+/** Cards the bot could not see before imagining: the opponent's hand, resources and deck, and its own deck. */
+function hiddenCards(eg, pid) {
+    const ids = new Set();
+    const zone = (pl, z) => pl.getCardsInZone(z) ?? [];
+    const me = eg.player(pid);
+    const opp = eg.player(eg.ids.find((id) => id !== pid));
+    for (const c of [...zone(opp, 'hand'), ...zone(opp, 'resource'), ...(opp.drawDeck ?? []), ...(me.drawDeck ?? [])]) {
+        ids.add(c.uuid);
+    }
+    return ids;
+}
+
+/** Blank out every card ref whose id was hidden before the imagination (a simulated draw or discard must not leak it). */
+function maskHidden(o, hidden) {
+    if (Array.isArray(o)) {
+        return o.map((x) => maskHidden(x, hidden));
+    }
+    if (o && typeof o === 'object') {
+        const r = {};
+        for (const k in o) {
+            r[k] = maskHidden(o[k], hidden);
+        }
+        if (typeof o.id === 'string' && hidden.has(o.id)) {
+            r.n = 'hidden card';
+            r.s = null;
+            r.hidden = 1;
+        }
+        return r;
+    }
+    return o;
 }
 
 class LookaheadBot extends ExternalBot {
@@ -113,7 +149,10 @@ class LookaheadBot extends ExternalBot {
         }, this.timeoutMs);
         let imagined = 0;
         for (let n = 0; reply.t === 'imagine'; n++, imagined++) {
-            const answer = n < this.maxImagine ? this.imagine(eg, pid, actions, reply.situation) : { ok: false, error: 'no imaginations left' };
+            if (n >= this.maxImagine) {
+                throw new Error(`external bot ${this.name}: asked to imagine more than ${this.maxImagine} times in one decision`);
+            }
+            const answer = this.imagine(eg, pid, actions, reply.situation);
             reply = this.call({ t: 'imagined', seq, situation: reply.situation ?? null, left: Math.max(0, this.maxImagine - n - 1), ...answer }, this.timeoutMs);
         }
         this.timing.decisions++;
@@ -152,6 +191,7 @@ class LookaheadBot extends ExternalBot {
             return { ok: false, error: 'undo is off' };
         }
         const steps = [];
+        const hidden = hiddenCards(eg, pid);
         const opp = eg.ids.find((id) => id !== pid);
         const startRound = eg.round;
         let out;
@@ -161,7 +201,7 @@ class LookaheadBot extends ExternalBot {
             if (!first) {
                 throw new Error('action vanished');
             }
-            steps.push(describeStep(eg, pid, first));
+            steps.push(describeStep(eg, pid, first, hidden));
             eg.apply(pid, first, this.lookRng);
             // windows passed after the first action: `after` stops at the first, `reply` after the opponent's one
             let windows = 0;
@@ -188,14 +228,14 @@ class LookaheadBot extends ExternalBot {
                     break;
                 }
                 if (eg.isActionWindow(actor) || a.kind === 'card') {
-                    steps.push(describeStep(eg, actor, a));
+                    steps.push(describeStep(eg, actor, a, hidden));
                 }
                 eg.apply(actor, a, this.lookRng);
             }
             const w = eg.over ? eg.winners : [];
             out = {
                 ok: true, over: eg.over, winner: w.length === 1 ? seatOf(eg, eg.player(eg.ids[eg.names.indexOf(w[0])])) : (w.length ? 'draw' : null),
-                state: observe(eg, pid), steps
+                state: maskHidden(observe(eg, pid), hidden), steps
             };
         } catch (e) {
             this.look.failed++;
