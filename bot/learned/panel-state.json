@@ -1,6 +1,6 @@
 {
  "status": "running",
- "now": "Model v3 (feature version 2) is live. The fixed heuristic bot now beats both learned bots 6-0; working on a stronger value head.",
+ "now": "learned-vh (heuristic score + 10 x learned value, model v4) is 2nd of 9 in learned-ladder-v4, behind aggro; it beat the heuristic bot 7-1 there.",
  "plan": [
   {
    "text": "Features from the stdio/replay observation (no hidden info)",
@@ -27,8 +27,8 @@
    "state": "done"
   },
   {
-   "text": "Beat the fixed heuristic: more games for the value head, heuristic score + learned correction",
-   "state": "doing"
+   "text": "Beat the fixed heuristic: more games for the value head, heuristic score + learned correction (learned-vh)",
+   "state": "done"
   },
   {
    "text": "Use the dynamics head for lookahead without the engine",
@@ -75,6 +75,14 @@
   {
    "t": "2026-10-11T14:47:22.074Z",
    "text": "After the shared evaluation fix (PR #10) the heuristic bot went 18-0 here. Its hand-written score is now better than the learned value head, so learned-v loses to it 0-6."
+  },
+  {
+   "t": "2026-10-11T17:01:57.203Z",
+   "text": "Model v4 (~3,500 games) cut the held-out value error to 0.73. Used as a correction on top of the heuristic score (x10), it beat the heuristic bot 28-12; the heuristic score alone went 20-20 on the same seeds."
+  },
+  {
+   "t": "2026-10-11T17:01:57.204Z",
+   "text": "Ladder learned-ladder-v4 (9 bots, 8 games a pair): aggro 59-5, learned-vh 51-13, tempo 43-21, heuristic 40-24. learned-vh beat everyone but aggro (2-6)."
   }
  ],
  "history": [
