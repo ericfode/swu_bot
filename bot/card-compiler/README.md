@@ -66,10 +66,16 @@ effects. It understands bounded expression trees, enum values, readonly callback
 locals, and an explicit query vocabulary. Display-only titles are rendered as
 plain text; dynamic title values become placeholders and are not executed.
 
+Phase stat modifiers capture bounded signed power/HP values when applied and
+expire together at phase end. Constant stat modifiers support static self and
+aura bonuses with bounded conditions and target filters. Arena count/existence
+queries preserve their outer target separately from each queried card. Live
+stat calculations and stat-dependent constant conditions remain rejected.
+
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or
-side-effecting callbacks. Constant abilities, arbitrary event watchers, lasting
-effects, custom inheritance, many zones, and many other rule families remain
+side-effecting callbacks. Other constant abilities, arbitrary event watchers,
+other lasting effects, custom inheritance, many zones, and many other rule families remain
 work items in the coverage report. The Rust operation set is narrower still.
 In particular, source conversion of a simultaneous effect does not imply that
 Rust implements an event batch.
@@ -128,8 +134,17 @@ push tested conversion/runtime increments. That local schedule is not repository
 CI configuration. Each new executable family still requires real-engine
 comparison before its coverage is claimed.
 
+Follow the repository-local [conversion skill](../../.agents/skills/swu-card-conversion/SKILL.md)
+for measured 100-card batches, disjoint low-effort implementation workers,
+independent high-effort review, and native/Wasm witness requirements. The
+`tools/card-batch.js` accounting helper checks catalogue/admission/pool agreement;
+it deliberately does not label admission as gameplay conformance. Batch fixtures
+and their witness ledgers live in `../omni-rs/tests/card-batches/` and run in both
+native and Wasm CI alongside the original corpora.
+
 The committed expanded corpus in `../omni-rs/tests/compiled-fixtures/` currently
 passes all 16 games: 3,748 decisions and 1,274 action windows. It actually plays
 110 distinct cards, 40 with compiled ability programs, and records positive
 witnesses for all eight primitive effect families. This is distinct from the
-450-card runtime admission list.
+original 450-card runtime admission list. Later batch evidence is recorded
+separately, and the current admission count is in `generated/runtime-admission.json`.

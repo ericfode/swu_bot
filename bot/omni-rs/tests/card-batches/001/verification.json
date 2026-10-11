@@ -1,0 +1,216 @@
+{
+  "schema": "swu-card-batch-verification/v1",
+  "baseRevision": "8c66ea613c6bdad67d95d251b0e57f5e5992b6c9",
+  "testedState": "uncommitted worktree; implementation byte hashes below identify tested source; the published commit SHA is recorded in PR86 and the push report",
+  "engineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+  "engineSourceTreeHash": "5f0ca3885bb5d079266e33259dd31d0cea84b65568a49c365b2bd38ed85ab661",
+  "engineIsolation": "Reference source exported from the pinned Git revision and freshly built in an isolated directory because the shared submodule has concurrent edits. Catalog and receipts use this same source/build snapshot.",
+  "compilerHash": "7b784037c9e636b442380ee7e6248d49b8f74c1859fe5796c318e9ded7be0827",
+  "receiptIndexSha256": "ff9c9e90f7cdb8888e82d98e76d81aa482a09c3a4f2d4586902cd3b2dae9ad20",
+  "testedFileSha256": {
+    "bot/card-compiler/compiler.js": "dfa4c0d8c14184a7cec2eafc8c3a4fb34026ecdb0f44fe41a70780c59493f391",
+    "bot/omni-rs/src/ability_ir.rs": "af4840837fddb11b5ae1e42907d1665d159dd489805f0fbf8c4f6949df5cefde",
+    "bot/omni-rs/src/generic_runtime.rs": "6e5fcf9d22b2ce945055752c7c3cf368c33e46f343cb7f396a877de20ef2e9dd",
+    "bot/omni-rs/src/generic_runtime_tests.rs": "d81d01a2553f53f336d8a690c1bbff960d27e3f08fecb9e94ec62a74fd02a36b",
+    "bot/omni-rs/src/model.rs": "8b4b1837f5780abd7085ca5320542c413f2a459edb14e1d072ea7437a9882688",
+    "bot/omni-rs/src/simulator.rs": "973bf9d17bfb20617da0b32423130bf618b1580e129aa3fa4b624182c3e22a62",
+    "bot/omni-rs/src/validation.rs": "a6e107adc83c3f50f71ca641053701680e9deb14d008a3d8f2468c3a070514fb",
+    "bot/omni/rs/state.js": "c430d02db235e2130a9f21478fc5fc98c6b010a70d05461b44699edbaa4d60b3",
+    "bot/omni-rs/tests/card_batch_conformance.rs": "a6efb6ded68a89a149443d8137d43dbcaa5f11970ea6ebd906f20dc3c11d1212",
+    "bot/omni/wasm/test/card-batches.test.js": "cdfb9515658c26e6aba58015711af663e5f8603c5c5383231dd0d79f47724dd7",
+    "tools/card-batch.js": "312765b5231a681e8efa0e5f86983c1b4744d89eb4a0baf73097bc358738e838",
+    ".agents/skills/swu-card-conversion/SKILL.md": "cdabb16658b26a403f70355d4283edb0cf7768a538aae632c96dc1a8a01fddb5",
+    "bot/omni/rs/make-batch-play-fixtures.js": "32bfa5435ef12944ac1af512ebeaf9c4ce9e7482cba4c4049e5356a9841cf698",
+    "bot/omni/rs/make-compiled-fixtures.js": "865ed7d8d172dedec4bc6fd6d0f5d6ea914ab99c9617f1364417bcd26650fe14",
+    "bot/omni/rs/make-constant-fixtures.js": "7a6f0bc8f9a23dbb17669794563244749b22a8b60943549225d0626950b83525",
+    "bot/omni/rs/make-leader-fixtures.js": "4c668b3eedaf31f87590199e6570af8b52247f52192d25595c373032ebc564a9",
+    "bot/omni/rs/make-phase-fixtures.js": "431b38cc99c9add262364dbbee3546f961aa560377066a4e53d1e38e308c1828",
+    "bot/omni/rs/make-query-fixtures.js": "9c5883636715a0490c76991f37e07e486063413dd54bcf46718e2c74f5e52747",
+    "bot/omni/rs/make-unique-aura-fixtures.js": "db3be9382bf0af7ab6e36e6feee927b7d86c6edb0c36f3a02047bd971df2260d"
+  },
+  "nativeReleaseBinarySha256": "e80580c93bcfd6334fc6ef79e68589ccf7225e34cc9ca9de21374910faf37284",
+  "wasmBuild": {
+    "schema": "omni-wasm-build-v1",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "wasmBindgen": "0.2.129",
+    "profile": "release",
+    "stackBytes": 16777216,
+    "artifacts": [
+      {
+        "target": "node",
+        "bytes": 1061432,
+        "sha256": "ac6a862489ca18dda672eb94ec44109af0e1c68dfbce357b1d358433fe9c3593"
+      },
+      {
+        "target": "web",
+        "bytes": 1061432,
+        "sha256": "ac6a862489ca18dda672eb94ec44109af0e1c68dfbce357b1d358433fe9c3593"
+      }
+    ]
+  },
+  "artifactSha256": {
+    "catalog.json": "c99e8f9421d683e91bc9af553a8688b99ed07acc008e50227f8ff3ed34181b8b",
+    "coverage.json": "601cd6d541851715a0df0b9a795d03a1bd239bc1114f8e63b747d98d6a982493",
+    "runtime-admission.json": "b0203bd79bb12b1dc22cfa0e620d2aa42cfc244cbeacceb2e8e337fafa8fbee3",
+    "runtime-pool.json": "bf38b2fe681d716a93c0704ae217643fac1cac9915d90f7198998a081a6156a4"
+  },
+  "commands": [
+    {
+      "command": "npm run cards:compile",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run cards:check",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run cards:test",
+      "exitCode": 0
+    },
+    {
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "command": "cargo test --locked --workspace",
+      "exitCode": 0
+    },
+    {
+      "command": "cargo build --locked -p omni-rs --release",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run wasm:build",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run wasm:test",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run wasm:pack",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run wasm:pack:check",
+      "exitCode": 0
+    },
+    {
+      "command": "target/release/omni-rs check replays/omni-rs-corpus/*.jsonl.gz",
+      "exitCode": 0
+    },
+    {
+      "command": "node bot/omni/wasm/check.js replays/omni-rs-corpus/*.jsonl.gz",
+      "exitCode": 0
+    }
+  ],
+  "unitTests": {
+    "javascriptRepository": 173,
+    "compilerAccountingExporter": 25,
+    "rustWorkspace": 112,
+    "rustCore": 82,
+    "wasmNodeBrowserAdapter": 11
+  },
+  "batchCorpora": [
+    {
+      "directory": "constant",
+      "games": 7,
+      "decisions": 503,
+      "windows": 163,
+      "terminalResults": 7,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "leader",
+      "games": 2,
+      "decisions": 323,
+      "windows": 117,
+      "terminalResults": 2,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "phase",
+      "games": 12,
+      "decisions": 957,
+      "windows": 347,
+      "terminalResults": 12,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "play",
+      "games": 109,
+      "decisions": 10061,
+      "windows": 3430,
+      "terminalResults": 109,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "query",
+      "games": 7,
+      "decisions": 466,
+      "windows": 192,
+      "terminalResults": 7,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "query-edge",
+      "games": 2,
+      "decisions": 200,
+      "windows": 56,
+      "terminalResults": 2,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    },
+    {
+      "directory": "unique",
+      "games": 7,
+      "decisions": 419,
+      "windows": 148,
+      "terminalResults": 7,
+      "native": "matched by card_batch_conformance",
+      "wasm": "matched by card-batches.test.js"
+    }
+  ],
+  "original300Regression": {
+    "native": {
+      "games": 300,
+      "decisions": 57604,
+      "windows": 25949
+    },
+    "wasm": {
+      "games": 300,
+      "decisions": 57604,
+      "windows": 25949
+    }
+  },
+  "earlierCommittedCorpora": {
+    "originalGames": 6,
+    "expandedGames": 16,
+    "native": "passed",
+    "wasm": "passed"
+  },
+  "limitations": [
+    "All 146 new receipts match full states, legal action sets and terminal outcomes in native and Wasm. These finite witnesses do not prove every possible card interaction.",
+    "Generator witness files retain their generation-time unassessed labels; this verification records the subsequent independent comparisons.",
+    "31 newly source-converted cards remain runtime-rejected.",
+    "Unverified collection effect targets and both-player resource readiness remain rejected."
+  ],
+  "review": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "implementationWorkersEffort": "low",
+    "allNewCardSourcesReviewed": 114,
+    "status": "approved: all semantic findings closed and final evidence signed off; third independent low-effort readiness trial found no engineering blocker",
+    "implementationSetDigest": "b50364a5e3acd15aed917195a32af73c9c1a0d3e5db0ef76be995271800ecb73",
+    "implementationSetDigestRecipe": "SHA-256 of UTF-8 JSON.stringify of testedFileSha256 with its keys sorted alphabetically"
+  },
+  "engineBuildTreeSha256": "f15296176e4b144aea87db86691fe8edbd09f5c13d879e8e84c833f6224e07c6",
+  "engineBuildModuleCount": 2489,
+  "engineBuildTreeHashRecipe": "SHA-256 over all *.js files recursively under forceteki/build/server, sorted by path. For each file append its UTF-8 relative POSIX path, one NUL byte, its exact bytes, then one NUL byte. No JSON serialization or per-file digest is used.",
+  "familyWitnessIndexSha256": "c34e228a9a4fedea8cc3222b2e71a3ca66b400066a1312c85aaf5b7df89921f3"
+}

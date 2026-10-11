@@ -237,10 +237,12 @@ pub fn validate_state_with_catalogue(
             &format!("{seat}.base"),
         )?;
         let (_, base_info) = refs.card(base, &format!("{seat}.base"))?;
-        if !has_type(base_info, "base") || number(base, "hp", 30, "base")? != 30 {
-            return Err(format!("{seat}.base must be a plain 30 HP base"));
+        let base_hp = number(base, "hp", 1000, "base")?;
+        if !has_type(base_info, "base") || base_hp == 0 || base_info["hp"].as_u64() != Some(base_hp)
+        {
+            return Err(format!("{seat}.base HP must match admitted base metadata"));
         }
-        dead[seat_index] = number(base, "damage", u16::MAX as u64, "base")? >= 30;
+        dead[seat_index] = number(base, "damage", u16::MAX as u64, "base")? >= base_hp;
         if boolean(base, "epicUsed", "base")? {
             return Err("plain base cannot have a spent epic action".into());
         }
@@ -282,6 +284,7 @@ pub fn validate_state_with_catalogue(
                         "power",
                         "hp",
                         "upgrades",
+                        "phaseStats",
                     ]
                 } else if zone == "resources" {
                     &["id", "setCode", "name", "exhausted"]
@@ -368,6 +371,20 @@ pub fn validate_state_with_catalogue(
                             ));
                         }
                     }
+                    let phase = if let Some(stats) = c.get("phaseStats") {
+                        fields(stats, &["power", "hp"], &format!("{at}.phaseStats"))?;
+                        let power = stats["power"]
+                            .as_i64()
+                            .filter(|n| (-65535..=65535).contains(n))
+                            .ok_or_else(|| format!("{at}: phase power out of range"))?;
+                        let hp = stats["hp"]
+                            .as_i64()
+                            .filter(|n| (-65535..=65535).contains(n))
+                            .ok_or_else(|| format!("{at}: phase HP out of range"))?;
+                        (power, hp)
+                    } else {
+                        (0, 0)
+                    };
                     // Validate composed stat capacity before the compact engine
                     // calculates it. Terminal snapshots may retain a defeated
                     // Grit unit, so damage need not be below its printed HP.
@@ -378,22 +395,17 @@ pub fn validate_state_with_catalogue(
                     let grit = info["keywords"]
                         .as_array()
                         .is_some_and(|ks| ks.iter().any(|k| k == "grit"));
-                    let computed_power = info["power"]
-                        .as_u64()
-                        .unwrap_or(0)
-                        .checked_add(experience)
-                        .and_then(|power| power.checked_add(if grit { damage } else { 0 }));
-                    if !computed_power.is_some_and(|power| power <= u16::MAX as u64) {
+                    let power = info["power"].as_i64().unwrap_or(0)
+                        + experience as i64
+                        + if grit { damage as i64 } else { 0 }
+                        + phase.0;
+                    let hp = info["hp"].as_i64().unwrap_or(0) + experience as i64 + phase.1;
+                    if power > u16::MAX as i64 {
                         return Err(format!(
                             "{at}: computed power exceeds compact state capacity"
                         ));
                     }
-                    if !info["hp"]
-                        .as_u64()
-                        .unwrap_or(0)
-                        .checked_add(experience)
-                        .is_some_and(|hp| hp <= u16::MAX as u64)
-                    {
+                    if hp > u16::MAX as i64 {
                         return Err(format!("{at}: computed HP exceeds compact state capacity"));
                     }
                 }

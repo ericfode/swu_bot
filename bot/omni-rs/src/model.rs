@@ -98,6 +98,8 @@ pub struct Card {
     pub present: bool,
     pub owner: Seat,
     pub damage: u16,
+    pub phase_power: i32,
+    pub phase_hp: i32,
     pub exhausted: bool,
     pub deployed: bool,
     pub epic_used: bool,
@@ -156,6 +158,8 @@ pub struct State {
     pub active: Seat,
     pub decision: Decision,
     pub source: CardId,
+    // Internal entry-registration boundary; zero in every returned position.
+    pub disabled_ongoing_source: CardId,
     pub target: CardId,
     pub ambush: bool,
     pub after_attack_triggers: u8,
@@ -190,6 +194,7 @@ impl Default for State {
             active: Seat::P1,
             decision: Decision::Window,
             source: 0,
+            disabled_ongoing_source: 0,
             target: 0,
             ambush: false,
             after_attack_triggers: 0,
@@ -267,6 +272,7 @@ impl State {
         put(self.ambush as u64);
         put(self.after_attack_triggers as u64);
         put(self.pending_triggers as u64);
+        put(self.disabled_ongoing_source as u64);
         put(self.trigger_context as u64);
         put(self.outcome as u64);
         put(self.pending_programs as u64);
@@ -291,6 +297,8 @@ impl State {
         {
             put(idx as u64);
             put(c.experience as u64);
+            put(c.phase_power as u64);
+            put(c.phase_hp as u64);
             put(c.next_token as u64);
             put(c.def as u64
                 | ((c.present as u64) << 16)

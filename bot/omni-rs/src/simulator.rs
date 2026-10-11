@@ -237,14 +237,17 @@ impl Engine {
     }
     pub fn power(&self, s: &State, id: CardId, attacking: bool) -> u16 {
         let d = self.def(s, id);
-        d.info.power.unwrap_or(0).max(0) as u16
+        (d.info.power.unwrap_or(0) as i64
             + if d.flags & GRIT != 0 {
-                s.card(id).damage
+                s.card(id).damage as i64
             } else {
                 0
             }
-            + if attacking { d.raid } else { 0 }
-            + self.token_count(s, s.card(id).experience)
+            + if attacking { d.raid as i64 } else { 0 }
+            + self.token_count(s, s.card(id).experience) as i64
+            + s.card(id).phase_power as i64
+            + self.constant_stats(s, id).0)
+            .clamp(0, u16::MAX as i64) as u16
     }
     fn leader_available(&self, s: &State) -> (bool, bool) {
         if self.catalogue.is_some() {
@@ -481,7 +484,10 @@ impl Engine {
         match bit {
             T_RESTORE => s.card(s.player(s.active).base).damage > 0,
             T_SABOTEUR => s.card(s.target).shield != 0,
-            T_AMBUSH => !self.attack_targets(s, s.source, true).is_empty(),
+            T_AMBUSH => {
+                self.in_arena(s, s.source) && !self.attack_targets(s, s.source, true).is_empty()
+            }
+            T_SHIELD => self.in_arena(s, s.source),
             _ => true,
         }
     }
@@ -590,7 +596,8 @@ impl Engine {
                         c.exhausted = false;
                     }
                     self.add_arena(&mut t, leader)?;
-                    self.finish(&mut t)?;
+                    t.source = leader;
+                    self.enter_triggers(&mut t)?;
                 } else {
                     if self.catalogue.is_some() {
                         let id = t.player(seat).leader;
@@ -694,8 +701,7 @@ impl Engine {
                 }
             }
             Decision::Unique => {
-                self.defeat(&mut t, id)?;
-                self.enter_triggers(&mut t)?;
+                self.settle_enter_triggers(&mut t, Some(id))?;
             }
             Decision::Ambush => {
                 if arg == "trigger" && !self.attack_targets(&t, t.source, true).is_empty() {
@@ -724,6 +730,7 @@ impl Engine {
             | Decision::AbilityDistribute => unreachable!(),
             Decision::Terminal => return Err("game is over".into()),
         }
+        self.sweep_stat_defeats(&mut t)?;
         Ok(t)
     }
     fn duplicates(&self, s: &State, id: CardId) -> usize {
@@ -807,19 +814,35 @@ impl Engine {
         s.decision = Decision::Window;
     }
     fn enter_triggers(&self, s: &mut State) -> Result<(), String> {
-        if !self.in_arena(s, s.source) {
-            return self.finish(s);
+        self.settle_enter_triggers(s, None)
+    }
+    fn settle_enter_triggers(
+        &self,
+        s: &mut State,
+        unique_defeat: Option<CardId>,
+    ) -> Result<(), String> {
+        // Registration sees pending-defeat cards in the arena, with the chosen
+        // unique copy's ongoing effects disabled. Resolution sees settled deaths.
+        s.decision = Decision::Window;
+        s.disabled_ongoing_source = unique_defeat.unwrap_or(0);
+        self.capture_enter_triggers(s);
+        s.disabled_ongoing_source = 0;
+        if let Some(id) = unique_defeat {
+            self.defeat(s, id)?;
         }
+        self.sweep_stat_defeats(s)?;
+        self.process_triggers(s)
+    }
+    fn capture_enter_triggers(&self, s: &mut State) {
         let flags = self.def(s, s.source).flags;
         s.pending_triggers = if flags & SHIELDED != 0 { T_SHIELD } else { 0 }
-            | if flags & AMBUSH != 0 && !self.attack_targets(s, s.source, true).is_empty() {
-                T_AMBUSH
-            } else {
-                0
-            };
+            | if flags & AMBUSH != 0 { T_AMBUSH } else { 0 };
         s.trigger_context = 1;
-        self.queue_programs(s, "whenPlayed");
-        self.process_triggers(s)
+        // Standard WhenPlayed abilities watch OnCardPlayed, while keyword
+        // Ambush/Shielded also watch OnLeaderDeployed.
+        if !self.def(s, s.source).info.is("leader") {
+            self.queue_programs(s, "whenPlayed");
+        }
     }
     fn process_triggers(&self, s: &mut State) -> Result<(), String> {
         if self.catalogue.is_some() {
@@ -870,6 +893,9 @@ impl Engine {
                 self.check_win(s);
             }
             T_SHIELD => {
+                if !self.in_arena(s, s.source) {
+                    return self.process_triggers(s);
+                }
                 if s.next_id as usize >= MAX_CARDS {
                     return Err("card capacity exceeded while creating Shield".into());
                 }
@@ -884,8 +910,10 @@ impl Engine {
                 s.card_mut(s.source).shield = id;
             }
             T_AMBUSH => {
-                s.decision = Decision::Ambush;
-                return Ok(());
+                if self.trigger_effect(s, T_AMBUSH) {
+                    s.decision = Decision::Ambush;
+                    return Ok(());
+                }
             }
             _ => return Err("unknown trigger".into()),
         }
@@ -970,6 +998,9 @@ impl Engine {
         Ok(())
     }
     fn defeat(&self, s: &mut State, id: CardId) -> Result<(), String> {
+        self.leave_play(s, id)
+    }
+    fn leave_play(&self, s: &mut State, id: CardId) -> Result<(), String> {
         let owner = s.card(id).owner;
         let leader = id == s.player(owner).leader;
         let token = self.def(s, id).info.is("token");
@@ -981,6 +1012,8 @@ impl Engine {
         }
         let c = s.card_mut(id);
         c.damage = 0;
+        c.phase_power = 0;
+        c.phase_hp = 0;
         c.shield = 0;
         c.experience = 0;
         c.exhausted = leader;
@@ -1012,6 +1045,7 @@ impl Engine {
         }
     }
     fn finish(&self, s: &mut State) -> Result<(), String> {
+        self.sweep_stat_defeats(s)?;
         if s.is_terminal() {
             s.prev_passed = false;
             if !s.regroup && !s.player(s.active.other()).out {
@@ -1040,6 +1074,11 @@ impl Engine {
     }
     fn advance(&self, s: &mut State) -> Result<(), String> {
         if s.players.iter().all(|p| p.out) {
+            for id in 1..s.next_id {
+                s.card_mut(id).phase_power = 0;
+                s.card_mut(id).phase_hp = 0;
+            }
+            self.sweep_stat_defeats(s)?;
             s.regroup = true;
             s.players[0].out = false;
             s.players[1].out = false;
@@ -1129,6 +1168,14 @@ impl Engine {
         }
         if v.get("epicUsed").is_some() {
             c.epic_used = b(v, "epicUsed");
+        }
+        if let Some(stats) = v.get("phaseStats") {
+            c.phase_power = stats["power"]
+                .as_i64()
+                .ok_or("phase power must be signed integer")? as i32;
+            c.phase_hp = stats["hp"]
+                .as_i64()
+                .ok_or("phase HP must be signed integer")? as i32;
         }
         s.next_id = s.next_id.max(id + 1);
         if let Some(upgrades) = v["upgrades"].as_array() {
@@ -1242,6 +1289,7 @@ impl Engine {
         if s.outcome != 0 {
             s.decision = Decision::Terminal;
         }
+        self.check_stat_capacity(&s)?;
         Ok(s)
     }
     fn card_ref(&self, s: &State, id: CardId) -> Value {
@@ -1286,6 +1334,9 @@ impl Engine {
                             let mut v = self.card_ref(s, id);
                             let c = s.card(id);
                             v["damage"] = json!(c.damage);
+                            if c.phase_power != 0 || c.phase_hp != 0 {
+                                v["phaseStats"] = json!({"power":c.phase_power,"hp":c.phase_hp});
+                            }
                             v["exhausted"] = json!(c.exhausted);
                             v["power"] = json!(self.power(s, id, false));
                             v["hp"] = json!(self.hp(s, id));

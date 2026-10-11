@@ -1,0 +1,291 @@
+{
+  "conformance": "unassessed; run native and Wasm check",
+  "witnesses": [
+    {
+      "file": "veers-aura-source-leave-lethal.jsonl.gz",
+      "sha256": "21b42e3c1928bbf51812528379e015b9261ff50ba3ea32f0b9d3547467d539b3",
+      "scenario": "veers-aura-source-leave-lethal",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "TWI_226",
+          "target": "c42"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_242",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "SOR_230",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "file": "snoke-aura-source-bounce-restores.jsonl.gz",
+      "sha256": "15f3a8ba05c073b8d672e863d0e68d8af752a4b7a7c8c4cdca7b44507570ddf1",
+      "scenario": "snoke-aura-source-bounce-restores",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "TWI_226",
+          "target": "c95"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_201",
+        "IBH_031",
+        "JTL_042",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_226"
+      ]
+    },
+    {
+      "file": "snoke-entry-defeats-low-hp.jsonl.gz",
+      "sha256": "9a152b99aeb404715c365d58795fad1583f53ea368ccf3cc27c3ea6e9ca2bd48",
+      "scenario": "snoke-entry-defeats-low-hp",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "SHD_037",
+          "target": "c20"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "SEC_206",
+        "SHD_037",
+        "SOR_101",
+        "SOR_216",
+        "TWI_170",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "file": "scimitar-damage-enables-power.jsonl.gz",
+      "sha256": "5659b90abe1d01e4b37fb90f0848e088a952cede5353191d132c70e489a18d9c",
+      "scenario": "scimitar-damage-enables-power",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_170",
+          "target": "c43"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "JTL_042",
+        "LOF_233",
+        "TWI_170"
+      ]
+    },
+    {
+      "file": "base-IBH_002-20-hp-terminal.jsonl.gz",
+      "sha256": "82ad05e67cd9ae68051e12d202c59b336c212eb3bfa96c403ef0ae1f186e0231",
+      "scenario": "base-IBH_002-20-hp-terminal",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "TWI_170",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": false,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "TWI_170"
+      ]
+    },
+    {
+      "file": "base-IBH_054-20-hp-terminal.jsonl.gz",
+      "sha256": "ca6416dfcca9dd4d32c1cfc71062189bb2b261c70a24a87bd00857eaf151963f",
+      "scenario": "base-IBH_054-20-hp-terminal",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_170",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": false,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "TWI_170"
+      ]
+    },
+    {
+      "file": "base-JTL_031-34-hp-terminal.jsonl.gz",
+      "sha256": "0171387b45a6513e4f6dea1cd23373f0f260a3a0068f17618d4864e20f90811d",
+      "scenario": "base-JTL_031-34-hp-terminal",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_170",
+          "target": "c103"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": false,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": true,
+      "constantAfter": true,
+      "constantLater": false,
+      "playedCodes": [
+        "TWI_170"
+      ]
+    }
+  ]
+}

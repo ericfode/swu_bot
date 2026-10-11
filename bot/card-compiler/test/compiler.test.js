@@ -45,6 +45,113 @@ test('simultaneous and sequential effects remain distinct instructions', () => {
     assert.equal(compile(action(`simultaneous(${content})`)).abilities.card[0].effect.kind, 'simultaneous');
     assert.equal(compile(action(`sequential(${content})`)).abilities.card[0].effect.kind, 'sequence');
 });
+test('phase stat modifiers preserve signed values, targeting and captured context', () => {
+    const c = compile(`registrar.addWhenPlayedAbility({title:'Weaken',targetResolver:{cardTypeFilter:'unit',immediateEffect:AbilityHelper.immediateEffects.forThisPhaseCardEffect({title:'Gets -2/-2',effect:AbilityHelper.ongoingEffects.modifyStats({power:-2,hp:-2})})}});`);
+    assert.equal(c.status, 'supported');
+    assert.deepEqual(c.abilities.card[0].effect, {kind:'modifyStats',target:'chosen',duration:'phase',power:{kind:'unary',op:'-',value:{kind:'const',value:2}},hp:{kind:'unary',op:'-',value:{kind:'const',value:2}}});
+    const captured = compile(action('forThisPhaseCardEffect(ctx=>({target:ctx.source,effect:AbilityHelper.ongoingEffects.modifyStats({power:ctx.player.readyResourceCount,hp:0})}))'));
+    assert.equal(captured.status, 'supported');
+    assert.equal(captured.abilities.card[0].effect.target, 'self');
+    assert.deepEqual(captured.abilities.card[0].effect.power,{kind:'ref',path:['player','readyResourceCount']});
+});
+test('phase modifier lowering rejects live calculations and unsupported lasting semantics', () => {
+    for (const modifier of [
+        'effect:AbilityHelper.ongoingEffects.modifyStats((card,ctx)=>({power:ctx.player.readyResourceCount,hp:0}))',
+        'effect:AbilityHelper.ongoingEffects.gainKeyword("sentinel")',
+        'effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1}),condition:ctx=>true',
+        'effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1}),duration:"round"',
+        'effect:AbilityHelper.ongoingEffects.modifyStats({power:1})',
+        'effect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1,extra:1})',
+        'effect:AbilityHelper.ongoingEffects.modifyStats({power:ctx=>ctx.source.damage,hp:0})',
+        'effect:[AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1})]',
+    ]) assert.equal(compile(action(`forThisPhaseCardEffect({${modifier}})`)).status,'unsupported',modifier);
+    const local=compile('const modifier=(card,ctx)=>({power:1,hp:1});'+action('forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.modifyStats(modifier)})'));
+    assert.equal(local.status,'unsupported');
+    assert.equal(local.diagnostics[0].pattern,'dynamic-ongoing-stat-modifier');
+    const alias=compile('const original=(card,ctx)=>({power:1,hp:1});const modifier=original;'+action('forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.modifyStats(modifier)})'));
+    assert.equal(alias.status,'unsupported');
+    assert.equal(alias.diagnostics[0].pattern,'dynamic-ongoing-stat-modifier');
+});
+test('constant static modifiers distinguish self defaults from continuous aura filters', () => {
+    const self=compile(`registrar.addConstantAbility({title:'Initiative',condition:ctx=>ctx.player.hasInitiative(),ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:2,hp:0})});`);
+    assert.equal(self.status,'supported');
+    assert.equal(self.abilities.card[0].trigger,'constant');
+    assert.equal(self.abilities.card[0].effect.duration,'persistent');
+    assert.equal(self.abilities.card[0].effect.target,'self');
+    assert.equal(self.abilities.card[0].targetResolver,undefined);
+    const aura=compile(`registrar.addConstantAbility({title:'Others',matchTarget:(card,ctx)=>card!==ctx.source&&card.hasSomeTrait('rebel'),ongoingEffect:[AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1})]});`);
+    assert.equal(aura.status,'supported');
+    assert.deepEqual({...aura.abilities.card[0].targetResolver,predicate:undefined},{owner:'self',type:'unit',zone:'arena',predicate:undefined});
+    assert.equal(aura.abilities.card[0].effect.target,'chosen');
+    const enemy=compile(`registrar.addConstantAbility({title:'Enemies',targetController:'opponent',targetCardTypeFilter:'nonLeaderUnit',targetZoneFilter:'spaceArena',ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:-2,hp:-2})});`);
+    assert.equal(enemy.status,'supported');
+    assert.deepEqual(enemy.abilities.card[0].targetResolver,{owner:'opponent',type:'nonLeaderUnit',zone:'arena',arena:'space'});
+});
+test('constant modifiers reject live stat dependencies, dynamic amounts and custom zones', () => {
+    for(const fields of [
+        'condition:ctx=>ctx.source.getPower()>2,',
+        'condition:ctx=>ctx.source.hp>2,',
+        'matchTarget:card=>card.remainingHp>2,',
+        'sourceZoneFilter:"any",',
+        'targetZoneFilter:"hand",',
+    ]) assert.equal(compile(`registrar.addConstantAbility({${fields}ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1})});`).status,'unsupported',fields);
+    for(const modifier of [
+        'AbilityHelper.ongoingEffects.modifyStats((target)=>({power:target.damage,hp:0}))',
+        'AbilityHelper.ongoingEffects.modifyStats({power:ctx=>ctx.source.damage,hp:0})',
+        'AbilityHelper.ongoingEffects.modifyStats({power:1.5,hp:0})',
+        'AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0,extra:1})',
+        '[AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0}),AbilityHelper.ongoingEffects.gainKeyword("raid")]',
+    ]) assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:${modifier}});`).status,'unsupported',modifier);
+});
+test('arena existence and count queries preserve bounded intersecting filters', () => {
+    const c=compile(action('draw({amount:1})', `condition:ctx=>ctx.player.hasSomeArenaUnit({arena:ctx.target.zoneName,otherThan:ctx.source,trait:['rebel','jedi'],aspect:'heroism',keyword:'sentinel',condition:unit=>unit.damage>0}),`));
+    assert.equal(c.status,'supported');
+    const q=c.abilities.card[0].condition;
+    assert.equal(q.kind,'query'); assert.equal(q.name,'hasSomeArenaUnit');
+    assert.deepEqual(q.receiver,{kind:'ref',path:['player']});
+    assert.equal(q.args.length,1);
+    assert.equal(q.args[0].op,'&&');
+    assert.deepEqual(q.args[0].right.left,{kind:'ref',path:['card','damage']});
+    const count=compile(action('damage({amount:ctx=>ctx.player.opponent.getArenaUnits({arena:"spaceArena"}).length})'));
+    assert.equal(count.status,'supported');
+    assert.equal(count.abilities.card[0].effect.amount.name,'arenaUnitCount');
+    assert.deepEqual(count.abilities.card[0].effect.amount.receiver,{kind:'ref',path:['opponent']});
+    const noFilter=compile(action('draw()',`condition:ctx=>ctx.player.hasSomeArenaUnit(),`));
+    assert.deepEqual(noFilter.abilities.card[0].condition.args,[{kind:'const',value:true}]);
+});
+test('arena queries reject unsupported filters, collections and captured card registers', () => {
+    for(const condition of [
+        'ctx=>ctx.player.hasSomeArenaUnit({controller:ctx.player.opponent})',
+        'ctx=>ctx.player.hasSomeArenaUnit({type:"base"})',
+        'ctx=>ctx.game.hasSomeArenaUnit()',
+        'ctx=>ctx.player.hasSomeArenaUnit({condition:(unit,context)=>unit===context.source})',
+        'ctx=>ctx.player.hasSomeArenaUnit({condition:unit=>{unit.damage++;return true;}})',
+        'ctx=>ctx.player.hasSomeArenaUnit({}, {})',
+        'ctx=>ctx.player.getArenaUnits().some(unit=>unit.damage>0)',
+    ]) assert.equal(compile(action('draw()',`condition:${condition},`)).status,'unsupported',condition);
+    const captured=compile(`registrar.addWhenPlayedAbility({targetResolver:{cardTypeFilter:'unit',cardCondition:(candidate,ctx)=>ctx.player.hasSomeArenaUnit({condition:unit=>unit!==candidate}),immediateEffect:AbilityHelper.immediateEffects.ready()}});`);
+    assert.equal(captured.status,'unsupported');
+    assert.equal(captured.diagnostics[0].pattern,'arena-query-card-capture');
+    const capturedAlias=compile(`registrar.addWhenPlayedAbility({targetResolver:{cardTypeFilter:'unit',cardCondition:(candidate,ctx)=>{const saved=candidate;return ctx.player.hasSomeArenaUnit({condition:unit=>unit!==saved});},immediateEffect:AbilityHelper.immediateEffects.ready()}});`);
+    assert.equal(capturedAlias.status,'unsupported');
+    assert.equal(capturedAlias.diagnostics[0].pattern,'arena-query-card-capture');
+    const cyclic=compile(`registrar.addConstantAbility({condition:ctx=>ctx.player.hasSomeArenaUnit({condition:unit=>unit.getPower()>2}),ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0})});`);
+    assert.equal(cyclic.status,'unsupported');
+    assert.equal(cyclic.diagnostics[0].pattern,'constant-stat-dependency');
+});
+test('trait aspect and keyword in-play aliases lower to the same arena unit filters', () => {
+    for(const [alias,field] of [['isTraitInPlay','trait'],['isAspectInPlay','aspect'],['isKeywordInPlay','keyword']]) {
+        const aliasCard=compile(action('draw()',`condition:ctx=>ctx.player.${alias}(['rebel','jedi'],ctx.source),`));
+        const direct=compile(action('draw()',`condition:ctx=>ctx.player.hasSomeArenaUnit({${field}:['rebel','jedi'],otherThan:ctx.source}),`));
+        assert.equal(aliasCard.status,'supported');
+        assert.deepEqual(aliasCard.abilities.card[0].condition,direct.abilities.card[0].condition);
+        assert.equal(compile(action('draw()',`condition:ctx=>ctx.player.${alias}(),`)).status,'unsupported');
+        assert.equal(compile(action('draw()',`condition:ctx=>ctx.player.${alias}('rebel',ctx.source,1),`)).status,'unsupported');
+    }
+    const upgraded=compile(action('draw()',`condition:ctx=>ctx.source.isUpgraded(),`));
+    assert.equal(upgraded.status,'supported');
+    assert.equal(upgraded.abilities.card[0].condition.name,'isUpgraded');
+});
 test('target filtering preserves basic-unit exclusion of token units', () => {
     const card = compile(`registrar.addWhenPlayedAbility({title:'Ready', targetResolver:{cardTypeFilter:'basicUnit', controller:'self', cardCondition:(card,ctx)=>card.controller===ctx.player, immediateEffect:AbilityHelper.immediateEffects.ready()}});`);
     assert.equal(card.status, 'supported');

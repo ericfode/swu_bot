@@ -11,6 +11,10 @@ on:
       - bot/omni/rs/**
       - bot/rust/src/cards.rs
       - tools/card-runtime-report.js
+      - tools/card-batch.js
+      - tools/test/card-batch.test.js
+      - bot/test/phase-stats-export.test.js
+      - .agents/skills/swu-card-conversion/**
       - Cargo.lock
       - package.json
       - .github/workflows/card-conversion.yml
@@ -24,6 +28,10 @@ on:
       - bot/omni/rs/**
       - bot/rust/src/cards.rs
       - tools/card-runtime-report.js
+      - tools/card-batch.js
+      - tools/test/card-batch.test.js
+      - bot/test/phase-stats-export.test.js
+      - .agents/skills/swu-card-conversion/**
       - Cargo.lock
       - package.json
       - .github/workflows/card-conversion.yml

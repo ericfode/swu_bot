@@ -4,6 +4,7 @@ use crate::ability_ir::{Cost, Effect, Expr, Instruction, Program, Target, Target
 
 #[derive(Clone, Debug, PartialEq)]
 enum Eval {
+    Array(Vec<Eval>),
     Number(i64),
     Bool(bool),
     Text(String),
@@ -88,11 +89,11 @@ impl Engine {
                         return Err("invalid native token metadata".into());
                     }
                 } else if info.is("base") {
-                    if info.hp != Some(30)
+                    if !info.hp.is_some_and(|n| (1..=1000).contains(&n))
                         || !info.text.as_deref().unwrap_or("").trim().is_empty()
                         || !programs.card.is_empty()
                     {
-                        return Err("only plain 30 HP bases execute".into());
+                        return Err("only plain bases with bounded positive HP execute".into());
                     }
                 } else if info.is("event") {
                     if programs.card.len() != 1
@@ -304,9 +305,114 @@ impl Engine {
         }
         count
     }
+    pub(super) fn check_stat_capacity(&self, s: &State) -> Result<(), String> {
+        for id in 1..s.next_id {
+            if !self.in_arena(s, id) {
+                continue;
+            }
+            let d = self.def(s, id);
+            let (constant_power, constant_hp) = self.constant_stats(s, id);
+            let power = d.info.power.unwrap_or(0) as i64
+                + self.token_count(s, s.card(id).experience) as i64
+                + s.card(id).phase_power as i64
+                + constant_power
+                + if d.flags & GRIT != 0 {
+                    s.card(id).damage as i64
+                } else {
+                    0
+                }
+                + d.raid as i64;
+            let hp = d.info.hp.unwrap_or(0) as i64
+                + self.token_count(s, s.card(id).experience) as i64
+                + s.card(id).phase_hp as i64
+                + constant_hp;
+            if power > 65535 || hp > 65535 {
+                return Err("computed stats exceed compact capacity".into());
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn sweep_stat_defeats(&self, s: &mut State) -> Result<(), String> {
+        // The uniqueness prompt precedes the engine game-state resolution.
+        // Even a newly entered lethal copy remains selectable until it resolves.
+        if s.decision == Decision::Unique {
+            return Ok(());
+        }
+        loop {
+            self.check_stat_capacity(s)?;
+            // The reference arena traverses ground cards, then space cards,
+            // retaining entry order within each arena. Relative order across
+            // controllers cannot affect this subset's per-player discard lists.
+            let dead: Vec<_> = s
+                .players
+                .iter()
+                .flat_map(|p| p.ground.as_slice().iter().chain(p.space.as_slice()))
+                .copied()
+                .filter(|&id| s.card(id).damage >= self.hp(s, id))
+                .collect();
+            if dead.is_empty() {
+                return Ok(());
+            }
+            for id in dead {
+                self.defeat(s, id)?;
+            }
+        }
+    }
+    pub(super) fn constant_stats(&self, s: &State, target: CardId) -> (i64, i64) {
+        if self.catalogue.is_none() || !self.in_arena(s, target) {
+            return (0, 0);
+        }
+        let mut total = (0, 0);
+        for source in 1..s.next_id {
+            // Incoming unique copies have not activated their ongoing abilities:
+            // the engine resolves uniqueness before resolveGameState.
+            if !self.in_arena(s, source)
+                || source == s.disabled_ongoing_source
+                || (s.decision == Decision::Unique && source == s.source)
+            {
+                continue;
+            }
+            for program in self
+                .card_programs(s, source)
+                .iter()
+                .map(|&id| self.program(id))
+            {
+                if program.trigger != "constant"
+                    || program
+                        .condition
+                        .as_ref()
+                        .is_some_and(|c| !self.eval(s, source, target, c).truth())
+                {
+                    continue;
+                }
+                let resolver = program.instructions.iter().find_map(|i| {
+                    if let Instruction::Select(r) = i {
+                        Some(r)
+                    } else {
+                        None
+                    }
+                });
+                if resolver.map_or(source != target, |r| {
+                    !self.matching_targets(s, source, r).contains(&target)
+                }) {
+                    continue;
+                }
+                for instruction in &program.instructions {
+                    if let Instruction::Apply(Effect::ModifyStats { power, hp, .. }) = instruction {
+                        total.0 += self.eval(s, source, target, power).number();
+                        total.1 += self.eval(s, source, target, hp).number();
+                    }
+                }
+            }
+        }
+        total
+    }
     pub fn hp(&self, s: &State, id: CardId) -> u16 {
-        self.def(s, id).info.hp.unwrap_or(0).max(0) as u16
-            + self.token_count(s, s.card(id).experience)
+        (self.def(s, id).info.hp.unwrap_or(0) as i64
+            + self.token_count(s, s.card(id).experience) as i64
+            + s.card(id).phase_hp as i64
+            + self.constant_stats(s, id).1)
+            .clamp(0, u16::MAX as i64) as u16
     }
     fn program(&self, id: u16) -> &Program {
         &self.catalogue.as_ref().expect("IR catalogue").programs[id as usize]
@@ -352,9 +458,28 @@ impl Engine {
             .collect()
     }
     fn eval(&self, s: &State, source: CardId, target: CardId, e: &Expr) -> Eval {
+        self.eval_with_card(s, source, target, target, e)
+    }
+    fn eval_with_card(
+        &self,
+        s: &State,
+        source: CardId,
+        target: CardId,
+        card: CardId,
+        e: &Expr,
+    ) -> Eval {
         let player = s.card(source).owner;
-        let sub = |e| self.eval(s, source, target, e);
+        let sub = |e| self.eval_with_card(s, source, target, card, e);
         match e {
+            Expr::Array { items } => Eval::Array(items.iter().map(sub).collect()),
+            Expr::Math { name, args } => {
+                let values: Vec<i64> = args.iter().map(|a| sub(a).number()).collect();
+                Eval::Number(if name == "min" {
+                    values.into_iter().min().unwrap_or(0)
+                } else {
+                    values.into_iter().max().unwrap_or(0)
+                })
+            }
             Expr::Const { value } => {
                 if let Some(n) = value.as_i64() {
                     Eval::Number(n)
@@ -380,7 +505,13 @@ impl Engine {
                     };
                     return match field {
                         None => Eval::Player(p),
-                        Some("base") => Eval::Card(s.player(p).base),
+                        Some("base") => {
+                            if path.get(2).map(String::as_str) == Some("damage") {
+                                Eval::Number(s.card(s.player(p).base).damage as i64)
+                            } else {
+                                Eval::Card(s.player(p).base)
+                            }
+                        }
                         Some("readyResourceCount") => {
                             Eval::Number(self.ready_resources(s, p) as i64)
                         }
@@ -390,10 +521,17 @@ impl Engine {
                         Some("resources") => Eval::Number(s.player(p).resources.len as i64),
                         Some("hand") => Eval::Number(s.player(p).hand.len as i64),
                         Some("drawDeck") => Eval::Number(s.player(p).deck.len as i64),
+                        Some("discard") => Eval::Number(s.player(p).discard.len as i64),
                         _ => Eval::Null,
                     };
                 }
-                let id = if root == "source" { source } else { target };
+                let id = if root == "source" {
+                    source
+                } else if root == "card" {
+                    card
+                } else {
+                    target
+                };
                 if id == 0 {
                     return Eval::Null;
                 }
@@ -412,6 +550,28 @@ impl Engine {
                     }
                     Some("cost") => Eval::Number(self.def(s, id).info.cost() as i64),
                     Some("exhausted") => Eval::Bool(s.card(id).exhausted),
+                    Some("zoneName") => {
+                        let p = s.player(s.card(id).owner);
+                        let zone = if p.ground.contains(id) {
+                            "groundArena"
+                        } else if p.space.contains(id) {
+                            "spaceArena"
+                        } else if p.hand.contains(id) {
+                            "hand"
+                        } else if p.discard.contains(id) {
+                            "discard"
+                        } else if p.resources.contains(id) {
+                            "resource"
+                        } else if p.deck.contains(id) {
+                            "deck"
+                        } else if p.base == id {
+                            "base"
+                        } else {
+                            "leader"
+                        };
+                        Eval::Text(zone.into())
+                    }
+                    Some("unique") => Eval::Bool(self.def(s, id).info.unique),
                     _ => Eval::Null,
                 }
             }
@@ -464,6 +624,31 @@ impl Engine {
                 receiver,
                 args,
             } => {
+                if name == "hasSomeArenaUnit" || name == "arenaUnitCount" {
+                    let Eval::Player(player) = sub(receiver) else {
+                        return Eval::Null;
+                    };
+                    let predicate = &args[0];
+                    let count = s
+                        .player(player)
+                        .ground
+                        .as_slice()
+                        .iter()
+                        .chain(s.player(player).space.as_slice())
+                        .filter(|&&card| {
+                            self.eval_with_card(s, source, target, card, predicate)
+                                .truth()
+                        })
+                        .count() as i64;
+                    return if name == "hasSomeArenaUnit" {
+                        Eval::Bool(count > 0)
+                    } else {
+                        Eval::Number(count)
+                    };
+                }
+                if name == "hasInitiative" {
+                    return Eval::Bool(matches!(sub(receiver), Eval::Player(p) if s.initiative==p));
+                }
                 let Eval::Card(id) = sub(receiver) else {
                     return Eval::Null;
                 };
@@ -471,14 +656,21 @@ impl Engine {
                     return Eval::Null;
                 }
                 let d = self.def(s, id);
-                let arg = args.first().map(sub);
-                let text = if let Some(Eval::Text(t)) = arg {
-                    t
-                } else {
-                    String::new()
-                };
                 match name.as_str() {
-                    "isUnit" => Eval::Bool(self.in_arena(s, id)),
+                    "isUnit" => Eval::Bool(
+                        d.info.is("unit") || (d.info.is("leader") && s.card(id).deployed),
+                    ),
+                    "isNonLeaderUnit" => Eval::Bool(d.info.is("unit") && !d.info.is("leader")),
+                    "isInPlay" => Eval::Bool(self.in_arena(s, id) || d.info.is("base")),
+                    "canBeExhausted" => Eval::Bool(
+                        d.info.is("unit")
+                            || d.info.is("leader")
+                            || d.info.is("event")
+                            || d.info.is("upgrade"),
+                    ),
+                    "isUpgraded" => {
+                        Eval::Bool(s.card(id).shield != 0 || s.card(id).experience != 0)
+                    }
                     "isBase" => Eval::Bool(d.info.is("base")),
                     "isLeader" => Eval::Bool(d.info.is("leader")),
                     "getPower" => {
@@ -488,9 +680,25 @@ impl Engine {
                     }
                     "getHp" => Eval::Number(self.hp(s, id) as i64),
                     "getCost" => Eval::Number(d.info.cost() as i64),
-                    "hasSomeTrait" => Eval::Bool(d.traits.contains(&text)),
-                    "hasSomeAspect" => Eval::Bool(d.info.aspects().contains(&text)),
-                    "hasSomeKeyword" => Eval::Bool(d.info.has_keyword(&text)),
+                    "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" => {
+                        let values = match args.first().map(sub) {
+                            Some(Eval::Array(v)) => v,
+                            Some(v) => vec![v],
+                            None => vec![],
+                        };
+                        Eval::Bool(values.iter().any(|v| {
+                            if let Eval::Text(t) = v {
+                                match name.as_str() {
+                                    "hasSomeTrait" => d.traits.contains(t),
+                                    "hasSomeAspect" => d.info.aspects().contains(t),
+                                    _ => d.info.has_keyword(t),
+                                }
+                            } else {
+                                false
+                            }
+                        }))
+                    }
+
                     _ => Eval::Null,
                 }
             }
@@ -504,22 +712,26 @@ impl Engine {
                 continue;
             }
             let p = s.player(seat);
-            for id in p
-                .ground
-                .as_slice()
-                .iter()
-                .chain(p.space.as_slice())
-                .copied()
-                .chain(std::iter::once(p.base))
-            {
+            let candidates: Vec<CardId> = if r.zone.as_deref() == Some("discard") {
+                p.discard.as_slice().to_vec()
+            } else {
+                p.ground
+                    .as_slice()
+                    .iter()
+                    .chain(p.space.as_slice())
+                    .copied()
+                    .chain(std::iter::once(p.base))
+                    .collect()
+            };
+            for id in candidates {
                 let d = self.def(s, id);
                 let base = id == p.base;
                 let leader = d.info.is("leader");
                 if match r.card_type.as_str() {
-                    "unit" => base,
+                    "unit" => !(d.info.is("unit") || (leader && s.card(id).deployed)),
                     "base" => !base,
-                    "nonLeaderUnit" => base || leader,
-                    "leaderUnit" => base || !leader,
+                    "nonLeaderUnit" => !d.info.is("unit") || leader,
+                    "leaderUnit" => !leader || !s.card(id).deployed,
                     _ => false,
                 } {
                     continue;
@@ -557,7 +769,8 @@ impl Engine {
         context.source = source;
         context.ability_target = target;
         let (dest, amount) = match e {
-            Effect::Damage { target, amount }
+            Effect::ReadyResources { target, amount }
+            | Effect::Damage { target, amount }
             | Effect::Heal { target, amount }
             | Effect::Draw { target, amount }
             | Effect::GiveShield { target, amount }
@@ -566,6 +779,7 @@ impl Engine {
                 self.eval(&context, source, context.ability_target, amount)
                     .number(),
             ),
+            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -574,8 +788,17 @@ impl Engine {
         self.effect_targets(&context, dest)
             .into_iter()
             .any(|dest| match dest {
-                Eval::Player(_) => {
-                    matches!(e, Effect::Draw { .. }) && (!require_change || amount > 0)
+                Eval::Player(player) => {
+                    if matches!(e, Effect::ReadyResources { .. }) {
+                        !require_change
+                            || s.player(player)
+                                .resources
+                                .as_slice()
+                                .iter()
+                                .any(|&id| s.card(id).exhausted)
+                    } else {
+                        matches!(e, Effect::Draw { .. }) && (!require_change || amount > 0)
+                    }
                 }
                 Eval::Card(id) if id != 0 => {
                     let unit = self.in_arena(s, id);
@@ -591,6 +814,11 @@ impl Engine {
                             unit && (!require_change || !s.card(id).exhausted)
                         }
                         Effect::Defeat { .. } => unit,
+                        Effect::ReturnToHand { .. } => {
+                            !self.def(s, id).info.is("leader")
+                                && (unit || s.player(s.card(id).owner).discard.contains(id))
+                        }
+                        Effect::ModifyStats { .. } => unit,
                         Effect::GiveShield { .. } | Effect::GiveExperience { .. } => {
                             unit && amount > 0
                         }
@@ -613,7 +841,22 @@ impl Engine {
         let mut pc = start;
         while let Some(instruction) = instructions.get(pc) {
             match instruction {
-                Instruction::Select(_) | Instruction::IfResult { .. } => break,
+                Instruction::Commit => {}
+                Instruction::Select(resolver) => {
+                    return self.matching_targets(s, source, resolver).into_iter().any(
+                        |candidate| {
+                            self.instructions_can_affect(
+                                s,
+                                source,
+                                candidate,
+                                p,
+                                pc + 1,
+                                require_change,
+                            )
+                        },
+                    );
+                }
+                Instruction::IfResult { .. } => break,
                 Instruction::Apply(effect) => {
                     if self.effect_can_affect(s, source, target, effect, require_change) {
                         return true;
@@ -729,7 +972,16 @@ impl Engine {
                     out.push(Action::button("Pass", "passAbility"));
                 }
                 if r.optional {
-                    out.push(Action::button("Choose no target", "noTarget"));
+                    if s.ability_pc > 0
+                        && matches!(
+                            p.instructions[s.ability_pc as usize - 1],
+                            Instruction::Commit
+                        )
+                    {
+                        out.push(Action::button("Choose nothing", "done"));
+                    } else {
+                        out.push(Action::button("Choose no target", "noTarget"));
+                    }
                 }
                 for id in self.program_targets(
                     s,
@@ -857,6 +1109,10 @@ impl Engine {
                 return self.end_program(s);
             };
             match instruction {
+                Instruction::Commit => {
+                    self.commit_program(s)?;
+                    s.ability_pc += 1;
+                }
                 Instruction::Select(r) => {
                     if self
                         .program_targets(
@@ -908,7 +1164,21 @@ impl Engine {
     fn effect_targets(&self, s: &State, target: &Target) -> Vec<Eval> {
         let owner = s.card(s.source).owner;
         match target {
-            Target::Expression(e) => vec![self.eval(s, s.source, s.ability_target, e)],
+            Target::Expression(e) => {
+                fn flatten(value: Eval, out: &mut Vec<Eval>) {
+                    match value {
+                        Eval::Array(values) => {
+                            for value in values {
+                                flatten(value, out);
+                            }
+                        }
+                        value => out.push(value),
+                    }
+                }
+                let mut out = vec![];
+                flatten(self.eval(s, s.source, s.ability_target, e), &mut out);
+                out
+            }
             Target::Name(n) => match n.as_str() {
                 "self" => vec![Eval::Card(s.source)],
                 "chosen" => vec![Eval::Card(s.ability_target)],
@@ -931,6 +1201,20 @@ impl Engine {
         };
         if s.next_id as usize >= MAX_CARDS {
             return Err("card capacity exceeded creating token".into());
+        }
+        if experience {
+            let mut check = *s;
+            check.card_mut(target).phase_power = check
+                .card(target)
+                .phase_power
+                .checked_add(1)
+                .ok_or("computed power capacity")?;
+            check.card_mut(target).phase_hp = check
+                .card(target)
+                .phase_hp
+                .checked_add(1)
+                .ok_or("computed HP capacity")?;
+            self.check_stat_capacity(&check)?;
         }
         let id = s.next_id;
         s.next_id += 1;
@@ -960,22 +1244,51 @@ impl Engine {
         u16::try_from(n).map_err(|_| format!("effect amount {n} exceeds bounded runtime"))
     }
     fn apply_effect(&self, s: &mut State, e: &Effect) -> Result<(u16, bool), String> {
+        if matches!(e, Effect::NoAction) {
+            return Ok((0, false));
+        }
         let (target, amount) = match e {
-            Effect::Damage { target, amount }
+            Effect::ReadyResources { target, amount }
+            | Effect::Damage { target, amount }
             | Effect::Heal { target, amount }
             | Effect::Draw { target, amount }
             | Effect::GiveShield { target, amount }
             | Effect::GiveExperience { target, amount } => (target, self.effect_amount(s, amount)?),
+            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
             _ => return Err("nonprimitive instruction reached executor".into()),
         };
+        let modifier = if let Effect::ModifyStats { power, hp, .. } = e {
+            Some((
+                self.eval(s, s.source, s.ability_target, power).number(),
+                self.eval(s, s.source, s.ability_target, hp).number(),
+            ))
+        } else {
+            None
+        };
         let targets = self.effect_targets(s, target);
         let mut result = 0u16;
         let mut replacement_resolved = false;
+        let mut resources_fully_resolved = true;
         for target in targets {
             match target {
+                Eval::Player(seat) if matches!(e, Effect::ReadyResources { .. }) => {
+                    let resources = s.player(seat).resources;
+                    let mut readied = 0;
+                    for &id in resources.as_slice() {
+                        if readied >= amount {
+                            break;
+                        }
+                        if s.card(id).exhausted {
+                            s.card_mut(id).exhausted = false;
+                            readied += 1;
+                            result = result.saturating_add(1);
+                        }
+                    }
+                    resources_fully_resolved &= readied == amount;
+                }
                 Eval::Player(seat) if matches!(e, Effect::Draw { .. }) => {
                     for _ in 0..amount {
                         if let Some(id) = s.player_mut(seat).deck.pop_front() {
@@ -988,7 +1301,11 @@ impl Engine {
                     }
                 }
                 Eval::Card(id)
-                    if id != 0 && (self.in_arena(s, id) || self.def(s, id).info.is("base")) =>
+                    if id != 0
+                        && (self.in_arena(s, id)
+                            || self.def(s, id).info.is("base")
+                            || (matches!(e, Effect::ReturnToHand { .. })
+                                && s.player(s.card(id).owner).discard.contains(id))) =>
                 {
                     let in_arena = self.in_arena(s, id);
                     match e {
@@ -1012,6 +1329,45 @@ impl Engine {
                             result += u16::from(!s.card(id).exhausted);
                             s.card_mut(id).exhausted = true;
                         }
+                        Effect::ReturnToHand { .. } if !self.def(s, id).info.is("leader") => {
+                            let owner = s.card(id).owner;
+                            if in_arena {
+                                self.leave_play(s, id)?;
+                            }
+                            s.player_mut(owner).discard.remove(id);
+                            if !self.def(s, id).info.is("token") {
+                                s.player_mut(owner).hand.push(id)?;
+                            }
+                            result += 1;
+                        }
+                        Effect::ModifyStats { .. } if in_arena => {
+                            let (power, hp) =
+                                modifier.expect("stat modifier captured before event batch");
+                            let next_power = s.card(id).phase_power as i64 + power;
+                            let next_hp = s.card(id).phase_hp as i64 + hp;
+                            if !(-65535..=65535).contains(&next_power)
+                                || !(-65535..=65535).contains(&next_hp)
+                            {
+                                return Err("phase stat capacity exceeded".into());
+                            }
+                            let composed_power = self.def(s, id).info.power.unwrap_or(0) as i64
+                                + self.token_count(s, s.card(id).experience) as i64
+                                + if self.def(s, id).flags & GRIT != 0 {
+                                    s.card(id).damage as i64
+                                } else {
+                                    0
+                                }
+                                + next_power;
+                            let composed_hp = self.def(s, id).info.hp.unwrap_or(0) as i64
+                                + self.token_count(s, s.card(id).experience) as i64
+                                + next_hp;
+                            if composed_power > 65535 || composed_hp > 65535 {
+                                return Err("computed phase stats exceed capacity".into());
+                            }
+                            s.card_mut(id).phase_power = next_power as i32;
+                            s.card_mut(id).phase_hp = next_hp as i32;
+                            result += 1;
+                        }
                         Effect::Defeat { .. } if in_arena => {
                             self.defeat(s, id)?;
                             result += 1;
@@ -1028,15 +1384,20 @@ impl Engine {
                         }
                         _ => {}
                     }
-                    if in_arena && self.in_arena(s, id) && s.card(id).damage >= self.hp(s, id) {
-                        self.defeat(s, id)?;
-                    }
                 }
                 _ => {}
             }
         }
+        self.sweep_stat_defeats(s)?;
         self.check_win(s);
-        Ok((result, result > 0 || replacement_resolved))
+        Ok((
+            result,
+            if matches!(e, Effect::ReadyResources { .. }) {
+                resources_fully_resolved
+            } else {
+                result > 0 || replacement_resolved
+            },
+        ))
     }
     pub(super) fn apply_ability_action(&self, s: &State, a: &Action) -> Result<State, String> {
         let mut t = *s;
@@ -1107,6 +1468,7 @@ impl Engine {
             }
             _ => return Err("not an ability decision".into()),
         }
+        self.sweep_stat_defeats(&mut t)?;
         Ok(t)
     }
     pub(super) fn queue_programs(&self, s: &mut State, trigger: &str) {
@@ -1126,11 +1488,7 @@ impl Engine {
         }
     }
     fn ordered_triggers(&self, s: &State) -> Vec<Trigger> {
-        let mut out: Vec<_> = self
-            .trigger_bits(s)
-            .into_iter()
-            .map(Trigger::Keyword)
-            .collect();
+        let mut out: Vec<_> = vec![];
         if self.catalogue.is_some() {
             for (i, p) in self.card_programs(s, s.source).iter().enumerate() {
                 if s.pending_programs & (1 << i) != 0 {
@@ -1138,6 +1496,7 @@ impl Engine {
                 }
             }
         }
+        out.extend(self.trigger_bits(s).into_iter().map(Trigger::Keyword));
         out.sort_by_key(|t| !match t {
             Trigger::Keyword(bit) => self.trigger_effect(s, *bit),
             Trigger::Program(_, p) => self.program_has_effect(s, s.source, *p),

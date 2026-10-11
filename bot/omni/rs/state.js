@@ -1,5 +1,31 @@
 'use strict';
 
+function phaseStats(card) {
+    let power = 0, hp = 0;
+    for (const effect of card.getOngoingEffects()) {
+        // Constant stat programs are derived from arena sources by Rust; they are
+        // not stored as phase deltas. Persistent lasting effects are a different rule.
+        if (effect.duration === 'persistent' && effect.type === 'modifyStats' &&
+            effect.source?.getConstantAbilities?.().some((ability) => ability.registeredEffects.includes(effect))) continue;
+        if (effect.duration !== 'untilEndOfPhase') {
+            if (effect.type === 'modifyStats') throw new Error(`Unsupported stat effect duration ${effect.duration} on ${card.internalName}`);
+            continue;
+        }
+        if (effect.type !== 'modifyStats') throw new Error(`Unsupported phase effect ${effect.type} on ${card.internalName}`);
+        const value = effect.getValue(card);
+        if (!value || Object.keys(value).some((key) => !['power', 'hp'].includes(key)) ||
+            !Number.isSafeInteger(value.power) || !Number.isSafeInteger(value.hp)) {
+            throw new Error(`Unsupported phase stat value on ${card.internalName}`);
+        }
+        power += value.power;
+        hp += value.hp;
+        if (!Number.isSafeInteger(power) || !Number.isSafeInteger(hp) || Math.abs(power) > 65535 || Math.abs(hp) > 65535) {
+            throw new Error(`Phase stat total outside simulator bounds on ${card.internalName}`);
+        }
+    }
+    return power === 0 && hp === 0 ? {} : { phaseStats: { power, hp } };
+}
+
 function ref(eg, c) {
     const { placedRef } = require('../../view');
     const v = placedRef(eg, c);
@@ -15,7 +41,7 @@ function fullState(eg, actor = null) {
         const bs = p.base.getSummary(p, true);
         const unit = (c) => {
             const s = c.getSummary(p, true);
-            return { ...ref(eg, c), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => ({ ...ref(eg, u), token: !!u.isToken?.() })) };
+            return { ...ref(eg, c), ...phaseStats(c), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => ({ ...ref(eg, u), token: !!u.isToken?.() })) };
         };
         players[eg.seatOf(pid)] = {
             base: { ...ref(eg, p.base), damage: bs.damage ?? 0, hp: p.base.cardData.hp, epicUsed: !!bs.epicActionSpent },
@@ -93,4 +119,4 @@ function stableJson(value) {
     return value;
 }
 const stateHash = (state) => require('crypto').createHash('sha256').update(JSON.stringify(stableJson(state))).digest('hex');
-module.exports = { fullState, stateHash, canonicalAction, expandActions };
+module.exports = { fullState, phaseStats, stateHash, canonicalAction, expandActions };

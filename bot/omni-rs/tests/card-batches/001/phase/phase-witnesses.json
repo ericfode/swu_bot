@@ -1,0 +1,574 @@
+{
+  "conformance": "unassessed; run native and Wasm check",
+  "witnesses": [
+    {
+      "file": "zero-power-from-pain.jsonl.gz",
+      "scenario": "zero-power-from-pain",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "JTL_042",
+          "target": "c19"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": true,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SOR_073",
+        "SOR_216",
+        "TWI_124"
+      ]
+    },
+    {
+      "file": "stack-and-negative-power.jsonl.gz",
+      "scenario": "stack-and-negative-power",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_124",
+          "target": "c18"
+        },
+        {
+          "step": 4,
+          "played": "TWI_124",
+          "target": "c18"
+        },
+        {
+          "step": 7,
+          "played": "SOR_216",
+          "target": "c74"
+        }
+      ],
+      "positivePower": true,
+      "positiveHp": true,
+      "negativePower": true,
+      "negativeHp": false,
+      "stacked": true,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_190",
+        "ASH_201",
+        "ASH_242",
+        "ASH_261",
+        "IBH_031",
+        "JTL_042",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "file": "expiry-lethal.jsonl.gz",
+      "scenario": "expiry-lethal",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_124",
+          "target": "c23"
+        },
+        {
+          "step": 4,
+          "played": "TWI_174",
+          "target": "c23"
+        },
+        {
+          "step": 7,
+          "played": "TWI_170",
+          "target": "c23"
+        }
+      ],
+      "positivePower": true,
+      "positiveHp": true,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": true,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_201",
+        "ASH_242",
+        "LAW_131",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174"
+      ]
+    },
+    {
+      "file": "bounce-cleanup.jsonl.gz",
+      "scenario": "bounce-cleanup",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_124",
+          "target": "c19"
+        },
+        {
+          "step": 4,
+          "played": "TWI_226",
+          "target": "c19"
+        }
+      ],
+      "positivePower": true,
+      "positiveHp": true,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": true,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_201",
+        "ASH_261",
+        "JTL_042",
+        "TWI_124",
+        "TWI_226"
+      ]
+    },
+    {
+      "file": "defeat-cleanup.jsonl.gz",
+      "scenario": "defeat-cleanup",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "SOR_216",
+          "target": "c74"
+        },
+        {
+          "step": 4,
+          "played": "TWI_174",
+          "target": "c74"
+        },
+        {
+          "step": 7,
+          "played": "TWI_170",
+          "target": "c74"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": true,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": true,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_201",
+        "ASH_242",
+        "IBH_031",
+        "LAW_131",
+        "SEC_206",
+        "SOR_216",
+        "TWI_170",
+        "TWI_174"
+      ]
+    },
+    {
+      "file": "negative-hp.jsonl.gz",
+      "scenario": "negative-hp",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "LAW_131",
+          "target": "c76"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": true,
+      "negativeHp": true,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_242",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174"
+      ]
+    },
+    {
+      "file": "leader-expiry-cleanup.jsonl.gz",
+      "scenario": "leader-expiry-cleanup",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "TWI_124",
+          "target": "c51"
+        },
+        {
+          "step": 4,
+          "played": "TWI_174",
+          "target": "c51"
+        },
+        {
+          "step": 7,
+          "played": "TWI_170",
+          "target": "c51"
+        }
+      ],
+      "positivePower": true,
+      "positiveHp": true,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": true,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_131",
+        "ASH_242",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_170",
+        "TWI_174"
+      ]
+    },
+    {
+      "file": "optional-decline.jsonl.gz",
+      "scenario": "optional-decline",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "SEC_206",
+          "target": "c19"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": true,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_131",
+        "ASH_242",
+        "ASH_261",
+        "SEC_206",
+        "SOR_216",
+        "TWI_170",
+        "TWI_174"
+      ]
+    },
+    {
+      "file": "bounce-attached-token.jsonl.gz",
+      "scenario": "bounce-attached-token",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "SOR_073",
+          "target": "c19"
+        },
+        {
+          "step": 4,
+          "played": "TWI_124",
+          "target": "c19"
+        },
+        {
+          "step": 7,
+          "played": "TWI_226",
+          "target": "c19"
+        }
+      ],
+      "positivePower": true,
+      "positiveHp": true,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": true,
+      "tokenBounced": true,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "LAW_131",
+        "SEC_206",
+        "SOR_073",
+        "SOR_101",
+        "TWI_124",
+        "TWI_174",
+        "TWI_226"
+      ]
+    },
+    {
+      "file": "discard-unit-not-event.jsonl.gz",
+      "scenario": "discard-unit-not-event",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "SOR_101",
+          "target": "c38"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": true,
+      "excludedEvent": true,
+      "noAction": false,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_190",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SOR_101"
+      ]
+    },
+    {
+      "file": "conditional-no-action.jsonl.gz",
+      "scenario": "conditional-no-action",
+      "transitions": [
+        {
+          "step": 1,
+          "played": "IBH_031",
+          "target": "c19"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": true,
+      "conditionalReady": false,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_061",
+        "ASH_190",
+        "ASH_201",
+        "ASH_261",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SOR_073",
+        "SOR_101",
+        "SOR_216",
+        "TWI_124",
+        "TWI_174"
+      ]
+    },
+    {
+      "file": "conditional-ready.jsonl.gz",
+      "scenario": "conditional-ready",
+      "transitions": [
+        {
+          "step": 0,
+          "played": "IBH_031",
+          "target": "c18"
+        }
+      ],
+      "positivePower": false,
+      "positiveHp": false,
+      "negativePower": false,
+      "negativeHp": false,
+      "stacked": false,
+      "zeroPlayed": false,
+      "expired": true,
+      "expiryLethal": false,
+      "bounced": false,
+      "defeated": false,
+      "leaderExpired": false,
+      "declined": false,
+      "tokenAttached": false,
+      "tokenBounced": false,
+      "retrievedUnit": false,
+      "excludedEvent": false,
+      "noAction": false,
+      "conditionalReady": true,
+      "constantInitial": false,
+      "constantAfter": false,
+      "constantLater": false,
+      "playedCodes": [
+        "ASH_190",
+        "ASH_261",
+        "IBH_031",
+        "JTL_042",
+        "LAW_131",
+        "SEC_206",
+        "SOR_101",
+        "SOR_216",
+        "TWI_174"
+      ]
+    }
+  ]
+}

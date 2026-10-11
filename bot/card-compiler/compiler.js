@@ -12,7 +12,7 @@ const reference = (...parts) => ({ kind: 'ref', path: parts });
 const BASIC_EFFECTS = new Set(['damage', 'heal', 'draw', 'ready', 'exhaust', 'defeat', 'giveShield', 'giveExperience', 'returnToHand', 'discardSpecificCard', 'resourceCard', 'readyResources', 'noAction']);
 const TRIGGERS = { addActionAbility: 'action', addWhenPlayedAbility: 'whenPlayed', addOnAttackAbility: 'onAttack', addWhenDefeatedAbility: 'whenDefeated', setEventAbility: 'event', setEpicActionAbility: 'epicAction', addOnDefenseAbility: 'onDefense', addWhenAttackEndsAbility: 'whenAttackEnds' };
 const SIDE_METHODS = { setupCardAbilities: 'card', setupLeaderSideAbilities: 'leader', setupLeaderUnitSideAbilities: 'unit', setupLeaderBackSideAbilities: 'unit' };
-const QUERY_NAMES = new Set(['isUnit', 'isBase', 'isLeader', 'isNonLeaderUnit', 'isUpgrade', 'isToken', 'isEvent', 'hasSomeTrait', 'hasEveryTrait', 'hasSomeAspect', 'hasEveryAspect', 'hasSomeKeyword', 'hasEveryKeyword', 'getPower', 'getHp', 'getCost', 'getPrintedCost', 'hasInitiative', 'getAllUnitsInPlay', 'getUnitsInPlay', 'getCardsInZone', 'getOtherUnitsInPlay', 'getNumericKeywordTotal', 'isInPlay', 'isDeployed', 'canBeDamaged', 'canBeExhausted']);
+const QUERY_NAMES = new Set(['isUnit', 'isBase', 'isLeader', 'isNonLeaderUnit', 'isUpgrade', 'isToken', 'isEvent', 'hasSomeTrait', 'hasEveryTrait', 'hasSomeAspect', 'hasEveryAspect', 'hasSomeKeyword', 'hasEveryKeyword', 'getPower', 'getHp', 'getCost', 'getPrintedCost', 'hasInitiative', 'getAllUnitsInPlay', 'getUnitsInPlay', 'getCardsInZone', 'getOtherUnitsInPlay', 'getNumericKeywordTotal', 'isInPlay', 'isDeployed', 'isUpgraded', 'canBeDamaged', 'canBeExhausted']);
 const DISPLAY_FIELDS = new Set(['effect', 'effectArgs', 'activePromptTitle', 'waitingPromptTitle', 'contextTitle', 'effectMessage', 'ongoingEffectDescription']);
 
 class Unsupported extends Error {
@@ -114,10 +114,56 @@ function normalizeRef(parts) {
     if (parts[0] === 'this') parts = ['source', ...parts.slice(1)];
     return parts;
 }
+function arenaQuery(node, ctx, name, filterProps = null) {
+    if (!filterProps && node.arguments.length > 1) fail(ctx, node, 'arena-query-arity');
+    const receiver = expr(node.expression.expression, ctx);
+    if (receiver.kind !== 'ref' || receiver.path.length !== 1 || !['player', 'opponent'].includes(receiver.path[0])) fail(ctx, node, 'arena-query-receiver');
+    const obj = filterProps ? { props: filterProps, ctx, node } : node.arguments.length ? object(node.arguments[0], ctx) : { props: new Map(), ctx, node };
+    for (const value of obj.props.values()) {
+        const visit = (child, bound = new Set()) => {
+            if (ts.isArrowFunction(child) || ts.isFunctionExpression(child)) {
+                const local = new Set(bound);
+                for (const parameter of child.parameters) if (ts.isIdentifier(parameter.name)) local.add(parameter.name.text);
+                visit(child.body, local);
+                return;
+            }
+            if (ts.isIdentifier(child) && !bound.has(child.text) && obj.ctx.scope.get(child.text)?.path?.[0] === 'card' && !(ts.isPropertyAccessExpression(child.parent) && child.parent.name === child)) fail(obj.ctx, child, 'arena-query-card-capture');
+            if (ts.isIdentifier(child) && !bound.has(child.text) && obj.ctx.constants.has(child.text) && !(ts.isPropertyAccessExpression(child.parent) && child.parent.name === child)) {
+                visit(readConstant(child.text, obj.ctx), bound);
+                return;
+            }
+            ts.forEachChild(child, (nested) => visit(nested, bound));
+        };
+        visit(value);
+    }
+    // Player.getArenaUnits fixes controller and unit type; zone filter fields
+    // intersect, while trait/aspect/keyword arrays each use OR semantics.
+    for (const [key, value] of obj.props) if (!['arena', 'trait', 'aspect', 'keyword', 'otherThan', 'condition'].includes(key)) fail(obj.ctx, value, 'arena-query-filter:' + key);
+    let predicate = constant(true);
+    const intersect = (term) => { predicate = { kind: 'binary', op: '&&', left: predicate, right: term }; };
+    if (obj.props.has('arena')) {
+        const arena = expr(obj.props.get('arena'), obj.ctx);
+        intersect({ kind: 'binary', op: '||', left: { kind: 'unary', op: '!', value: arena }, right: { kind: 'binary', op: '||', left: { kind: 'binary', op: '===', left: arena, right: constant('anyArena') }, right: { kind: 'binary', op: '===', left: reference('card', 'zoneName'), right: arena } } });
+    }
+    for (const [field, query] of [['trait', 'hasSomeTrait'], ['aspect', 'hasSomeAspect'], ['keyword', 'hasSomeKeyword']]) if (obj.props.has(field)) {
+        const value = literal(obj.props.get(field), obj.ctx);
+        if (typeof value !== 'string' && !(Array.isArray(value) && value.every((v) => typeof v === 'string'))) fail(ctx, obj.props.get(field), 'arena-query-nonconstant-filter');
+        if (value !== '') intersect({ kind: 'query', name: query, receiver: reference('card'), args: [Array.isArray(value) ? { kind: 'array', items: value.map(constant) } : constant(value)] });
+    }
+    if (obj.props.has('otherThan')) {
+        const excluded = expr(obj.props.get('otherThan'), obj.ctx);
+        const containsCard = (value) => value && typeof value === 'object' && ((value.kind === 'ref' && value.path[0] === 'card') || Object.values(value).some(containsCard));
+        if (containsCard(excluded)) fail(ctx, obj.props.get('otherThan'), 'arena-query-card-capture');
+        intersect({ kind: 'binary', op: '||', left: { kind: 'unary', op: '!', value: excluded }, right: { kind: 'binary', op: '!==', left: reference('card'), right: excluded } });
+    }
+    if (obj.props.has('condition')) intersect(expr(obj.props.get('condition'), obj.ctx, ['card']));
+    return { kind: 'query', name, receiver, args: [predicate] };
+}
 function expr(input, context, params = ['context']) {
     let { node, ctx } = lambda(input, context, params);
     node = unwrap(node);
     if (ts.isIdentifier(node) && ctx.constants?.has(node.text)) return expr(readConstant(node.text, ctx), ctx);
+    if (ts.isPropertyAccessExpression(node) && node.name.text === 'length' && ts.isCallExpression(node.expression) && ts.isPropertyAccessExpression(node.expression.expression) && node.expression.expression.name.text === 'getArenaUnits') return arenaQuery(node.expression, ctx, 'arenaUnitCount');
     if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(node.kind)) return constant(literal(node, ctx));
     if (ts.isIdentifier(node) || ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || node.kind === ts.SyntaxKind.ThisKeyword) {
         const enumValue = ctx.enums[node.getText(ctx.source)];
@@ -148,6 +194,14 @@ function expr(input, context, params = ['context']) {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const call = node.expression;
         const name = call.name.text;
+        if (name === 'hasSomeArenaUnit') return arenaQuery(node, ctx, name);
+        if (['isTraitInPlay', 'isAspectInPlay', 'isKeywordInPlay'].includes(name)) {
+            if (node.arguments.length < 1 || node.arguments.length > 2) fail(ctx, node, 'arena-query-alias-arity');
+            const field = { isTraitInPlay: 'trait', isAspectInPlay: 'aspect', isKeywordInPlay: 'keyword' }[name];
+            const filters = new Map([[field, node.arguments[0]]]);
+            if (node.arguments.length === 2) filters.set('otherThan', node.arguments[1]);
+            return arenaQuery(node, ctx, 'hasSomeArenaUnit', filters);
+        }
         if (call.expression.getText(ctx.source) === 'Math' && ['min', 'max', 'floor', 'ceil', 'abs'].includes(name)) return { kind: 'math', name, args: node.arguments.map((a) => expr(a, ctx)) };
         if (QUERY_NAMES.has(name)) return { kind: 'query', name, receiver: expr(call.expression, ctx), args: node.arguments.map((a) => expr(a, ctx)) };
         if (['some', 'every', 'filter', 'map', 'find', 'includes', 'concat', 'slice'].includes(name)) {
@@ -206,6 +260,31 @@ function effect(input, context, defaultTarget = 'self') {
         return { kind: kind === 'sequential' ? 'sequence' : 'simultaneous', effects: unwrap(node.arguments[0]).elements.map((e) => effect(e, ctx, defaultTarget)) };
     }
     const obj = node.arguments[0] ? object(node.arguments[0], ctx) : { props: new Map(), ctx, node };
+    if (kind === 'forThisPhaseCardEffect') {
+        // Lasting stat modifiers have their values captured when the immediate
+        // system resolves. A function passed to modifyStats itself is different:
+        // the engine keeps reevaluating it as board state changes.
+        const allowed = ['target', 'effect', 'title', 'ongoingEffectTargetDescription'];
+        for (const [key, value] of obj.props) if (!allowed.includes(key) && !DISPLAY_FIELDS.has(key)) fail(obj.ctx, value, 'unsupported-field:' + key);
+        if (!obj.props.has('effect')) fail(ctx, node, 'phase-effect-without-modifier');
+        const modifierCall = unwrap(obj.props.get('effect'));
+        if (!ts.isCallExpression(modifierCall)) fail(obj.ctx, modifierCall, 'phase-modifier-is-not-helper');
+        const modifierPath = access(modifierCall.expression, obj.ctx);
+        if (modifierPath.length !== 3 || !['AbilityHelper', 'abilityHelper', 'StaticAbilityHelper'].includes(modifierPath[0]) || modifierPath[1] !== 'ongoingEffects' || modifierPath[2] !== 'modifyStats') fail(obj.ctx, modifierCall, 'phase-modifier:' + modifierPath.join('.'));
+        if (modifierCall.arguments.length !== 1) fail(obj.ctx, modifierCall, 'stat-modifier-arity');
+        let modifierNode = unwrap(modifierCall.arguments[0]);
+        while (ts.isIdentifier(modifierNode) && obj.ctx.constants.has(modifierNode.text)) modifierNode = unwrap(readConstant(modifierNode.text, obj.ctx));
+        if (ts.isArrowFunction(modifierNode) || ts.isFunctionExpression(modifierNode)) fail(obj.ctx, modifierNode, 'dynamic-ongoing-stat-modifier');
+        const modifier = object(modifierNode, obj.ctx);
+        knownProperties(modifier, ['power', 'hp']);
+        if (!modifier.props.has('power') || !modifier.props.has('hp')) fail(modifier.ctx, modifier.node, 'incomplete-stat-modifier');
+        for (const stat of ['power', 'hp']) {
+            let value = unwrap(modifier.props.get(stat));
+            while (ts.isIdentifier(value) && modifier.ctx.constants.has(value.text)) value = unwrap(readConstant(value.text, modifier.ctx));
+            if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) fail(modifier.ctx, value, 'function-valued-stat-modifier');
+        }
+        return { kind: 'modifyStats', target: target(obj.props.get('target'), obj.ctx, defaultTarget), duration: 'phase', power: expr(modifier.props.get('power'), modifier.ctx), hp: expr(modifier.props.get('hp'), modifier.ctx) };
+    }
     if (kind === 'conditional') {
         knownProperties(obj, ['condition', 'onTrue', 'onFalse']);
         if (!obj.props.has('condition')) fail(ctx, node, 'conditional-without-condition');
@@ -266,6 +345,52 @@ function costs(input, ctx) {
         if (kind === 'abilityActivationResourceCost' && n.arguments.length === 1) return { kind: 'resources', amount: expr(n.arguments[0], ctx) };
         fail(ctx, n, 'cost:' + kind);
     });
+}
+function constantAbility(input, context) {
+    const obj = object(input, context);
+    knownProperties(obj, ['title', 'condition', 'ongoingEffect', 'matchTarget', 'targetController', 'targetCardTypeFilter', 'targetZoneFilter']);
+    const { props, ctx, node } = obj;
+    if (!props.has('ongoingEffect')) fail(ctx, node, 'constant-without-effect');
+    const raw = unwrap(props.get('ongoingEffect'));
+    const modifiers = ts.isArrayLiteralExpression(raw) ? raw.elements : [raw];
+    if (modifiers.length !== 1) fail(ctx, raw, 'constant-modifier-count');
+    const call = unwrap(modifiers[0]);
+    if (!ts.isCallExpression(call)) fail(ctx, call, 'constant-modifier-is-not-helper');
+    const parts = access(call.expression, ctx);
+    if (parts.length !== 3 || !['AbilityHelper', 'abilityHelper', 'StaticAbilityHelper'].includes(parts[0]) || parts[1] !== 'ongoingEffects' || parts[2] !== 'modifyStats') fail(ctx, call, 'constant-modifier:' + parts.join('.'));
+    if (call.arguments.length !== 1) fail(ctx, call, 'stat-modifier-arity');
+    let modifierNode = unwrap(call.arguments[0]);
+    while (ts.isIdentifier(modifierNode) && ctx.constants.has(modifierNode.text)) modifierNode = unwrap(readConstant(modifierNode.text, ctx));
+    if (ts.isArrowFunction(modifierNode) || ts.isFunctionExpression(modifierNode)) fail(ctx, modifierNode, 'dynamic-constant-stat-modifier');
+    const modifier = object(modifierNode, ctx);
+    knownProperties(modifier, ['power', 'hp']);
+    const values = {};
+    for (const stat of ['power', 'hp']) {
+        if (!modifier.props.has(stat)) fail(ctx, modifier.node, 'incomplete-stat-modifier');
+        values[stat] = literal(modifier.props.get(stat), modifier.ctx);
+        if (!Number.isSafeInteger(values[stat])) fail(ctx, modifier.props.get(stat), 'noninteger-stat-modifier');
+    }
+    const result = { trigger: 'constant', title: props.has('title') ? displayText(props.get('title'), ctx) : '', costs: [], effect: { kind: 'modifyStats', target: 'self', duration: 'persistent', power: constant(values.power), hp: constant(values.hp) } };
+    if (props.has('condition')) result.condition = expr(props.get('condition'), ctx);
+    // OngoingCardEffect defaults to source-only when no targeting filters exist.
+    // Any targeting field switches to friendly arena units, including matchTarget.
+    if (['matchTarget', 'targetController', 'targetCardTypeFilter', 'targetZoneFilter'].some((key) => props.has(key))) {
+        const resolverProps = new Map();
+        resolverProps.set('controller', props.get('targetController') || ts.factory.createStringLiteral('self'));
+        resolverProps.set('cardTypeFilter', props.get('targetCardTypeFilter') || ts.factory.createStringLiteral('unit'));
+        resolverProps.set('zoneFilter', props.get('targetZoneFilter') || ts.factory.createStringLiteral('anyArena'));
+        if (props.has('matchTarget')) resolverProps.set('cardCondition', props.get('matchTarget'));
+        result.targetResolver = targetResolverProperties({ props: resolverProps, ctx, node });
+        if (result.targetResolver.zone !== 'arena') fail(ctx, node, 'constant-target-zone');
+        result.effect.target = 'chosen';
+    }
+    const check = (value) => {
+        if (!value || typeof value !== 'object') return;
+        if ((value.kind === 'query' && ['getPower', 'getHp'].includes(value.name)) || (value.kind === 'ref' && value.path.some((p) => ['power', 'hp', 'remainingHp'].includes(p)))) fail(ctx, node, 'constant-stat-dependency');
+        Object.values(value).forEach(check);
+    };
+    check(result.condition); check(result.targetResolver);
+    return result;
 }
 function ability(input, context, trigger = null) {
     const obj = object(input, context);
@@ -394,9 +519,9 @@ function compileSource(text, file, enums = {}) {
                 const call = statement.expression;
                 const parts = access(call.expression, local);
                 const registration = parts.at(-1);
-                if (parts.length !== 2 || parts[0] !== member.parameters[0]?.name.getText(source) || !TRIGGERS[registration]) fail(local, call, 'registrar:' + registration);
+                if (parts.length !== 2 || parts[0] !== member.parameters[0]?.name.getText(source) || (!TRIGGERS[registration] && registration !== 'addConstantAbility')) fail(local, call, 'registrar:' + registration);
                 if (call.arguments.length !== 1) fail(local, call, 'registration-arity');
-                out.abilities[SIDE_METHODS[name]].push(ability(call.arguments[0], local, TRIGGERS[registration]));
+                out.abilities[SIDE_METHODS[name]].push(registration === 'addConstantAbility' ? constantAbility(call.arguments[0], local) : ability(call.arguments[0], local, TRIGGERS[registration]));
             } catch (e) { if (e instanceof Unsupported) diagnostics.push(e.diagnostic); else throw e; }
         }
     }

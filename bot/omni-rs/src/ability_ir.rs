@@ -13,6 +13,13 @@ pub const MAX_ABILITY_NESTING: usize = 8;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Expr {
+    Array {
+        items: Vec<Expr>,
+    },
+    Math {
+        name: String,
+        args: Vec<Expr>,
+    },
     Const {
         value: Value,
     },
@@ -41,6 +48,34 @@ pub enum Expr {
     },
 }
 impl Expr {
+    fn depends_on_stats(&self) -> bool {
+        match self {
+            Self::Const { .. } => false,
+            Self::Ref { path } => path
+                .iter()
+                .any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
+            Self::Array { items } => items.iter().any(Self::depends_on_stats),
+            Self::Math { args, .. } => args.iter().any(Self::depends_on_stats),
+            Self::Binary { left, right, .. } => left.depends_on_stats() || right.depends_on_stats(),
+            Self::Unary { value, .. } => value.depends_on_stats(),
+            Self::Conditional {
+                condition,
+                then,
+                r#else,
+            } => {
+                condition.depends_on_stats() || then.depends_on_stats() || r#else.depends_on_stats()
+            }
+            Self::Query {
+                name,
+                receiver,
+                args,
+            } => {
+                ["getPower", "getHp"].contains(&name.as_str())
+                    || receiver.depends_on_stats()
+                    || args.iter().any(Self::depends_on_stats)
+            }
+        }
+    }
     pub fn number(n: i64) -> Self {
         Self::Const {
             value: Value::from(n),
@@ -52,6 +87,12 @@ impl Expr {
     pub fn validate_number(&self) -> Result<(), String> {
         self.validate()?;
         let numeric = match self {
+            Self::Array { .. } => false,
+            Self::Math { name, args } => {
+                ["min", "max"].contains(&name.as_str())
+                    && !args.is_empty()
+                    && args.iter().all(|a| a.validate_number().is_ok())
+            }
             Self::Const { value } => value.is_i64(),
             Self::Ref { path } => matches!(
                 path.last().map(String::as_str),
@@ -76,7 +117,9 @@ impl Expr {
             Self::Conditional { then, r#else, .. } => {
                 then.validate_number().is_ok() && r#else.validate_number().is_ok()
             }
-            Self::Query { name, .. } => ["getPower", "getHp", "getCost"].contains(&name.as_str()),
+            Self::Query { name, .. } => {
+                ["getPower", "getHp", "getCost", "arenaUnitCount"].contains(&name.as_str())
+            }
         };
         if numeric {
             Ok(())
@@ -90,6 +133,22 @@ impl Expr {
         }
         let sub = |e: &Expr| e.validate_depth(depth + 1);
         match self {
+            Self::Array { items } => {
+                for item in items {
+                    sub(item)?;
+                }
+                Ok(())
+            }
+            Self::Math { name, args } => {
+                if !["min", "max"].contains(&name.as_str()) || args.is_empty() {
+                    return Err("unsupported math expression".into());
+                }
+                for arg in args {
+                    sub(arg)?;
+                    arg.validate_number()?;
+                }
+                Ok(())
+            }
             Self::Const { value }
                 if value.is_i64() || value.is_boolean() || value.is_string() || value.is_null() =>
             {
@@ -107,11 +166,14 @@ impl Expr {
                 {
                     ["source" | "target" | "card" | "player" | "opponent"] => true,
                     ["source" | "target" | "card", "damage" | "power" | "hp" | "cost" | "remainingHp" | "exhausted"
-                    | "controller"] => true,
+                    | "controller" | "unique" | "zoneName"] => true,
                     ["player" | "opponent", "readyResourceCount" | "exhaustedResourceCount" | "base"] => {
                         true
                     }
-                    ["player" | "opponent", "resources" | "hand" | "drawDeck", "length"] => true,
+                    ["player" | "opponent", "resources" | "hand" | "drawDeck" | "discard", "length"] => {
+                        true
+                    }
+                    ["player" | "opponent", "base", "damage"] => true,
                     ["event", "totalDistributed"] => true,
                     _ => false,
                 };
@@ -153,8 +215,11 @@ impl Expr {
                 args,
             } => {
                 let arity = match name.as_str() {
-                    "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp" | "getCost" => 0,
-                    "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" => 1,
+                    "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
+                    | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
+                    | "getCost" => 0,
+                    "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" | "hasSomeArenaUnit"
+                    | "arenaUnitCount" => 1,
                     _ => return Err(format!("unsupported runtime query {name}")),
                 };
                 if args.len() != arity {
@@ -198,7 +263,29 @@ impl Target {
                 Ok(())
             }
             Self::Name(s) => Err(format!("unsupported effect target {s}")),
-            Self::Expression(e) => e.validate(),
+            Self::Expression(e) => {
+                fn is_target(e: &Expr) -> bool {
+                    match e {
+                        Expr::Ref { path } => matches!(
+                            path.iter()
+                                .map(String::as_str)
+                                .collect::<Vec<_>>()
+                                .as_slice(),
+                            ["source" | "target" | "card" | "player" | "opponent"]
+                                | ["player" | "opponent", "base"]
+                                | ["source" | "target" | "card", "controller"]
+                        ),
+                        Expr::Conditional { then, r#else, .. } => {
+                            is_target(then) && is_target(r#else)
+                        }
+                        _ => false,
+                    }
+                }
+                if !is_target(e) {
+                    return Err("effect target must be a bounded card or player reference; array targets require verified event batching".into());
+                }
+                e.validate()
+            }
         }
     }
 }
@@ -242,7 +329,7 @@ impl TargetResolver {
         if self
             .zone
             .as_deref()
-            .is_some_and(|z| !["arena", "base", "anyAttackable"].contains(&z))
+            .is_some_and(|z| !["arena", "base", "anyAttackable", "discard"].contains(&z))
         {
             return Err(format!("unsupported target zone {:?}", self.zone));
         }
@@ -274,6 +361,25 @@ pub enum Effect {
     Draw {
         amount: Expr,
         target: Target,
+    },
+    Select {
+        #[serde(rename = "targetResolver")]
+        target_resolver: TargetResolver,
+        effect: Box<Effect>,
+    },
+    ReadyResources {
+        target: Target,
+        amount: Expr,
+    },
+    NoAction,
+    ReturnToHand {
+        target: Target,
+    },
+    ModifyStats {
+        target: Target,
+        power: Expr,
+        hp: Expr,
+        duration: String,
     },
     Ready {
         target: Target,
@@ -359,6 +465,7 @@ pub struct Sides {
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
+    Commit,
     Select(TargetResolver),
     Conditional { condition: Expr, skip: usize },
     IfResult { skip: usize },
@@ -378,8 +485,67 @@ pub struct Program {
 }
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
-        if !["action", "whenPlayed", "onAttack", "event"].contains(&ability.trigger.as_str()) {
+        if !["action", "whenPlayed", "onAttack", "event", "constant"]
+            .contains(&ability.trigger.as_str())
+        {
             return Err(format!("unsupported runtime trigger {}", ability.trigger));
+        }
+        if ability.trigger == "constant" {
+            if ability.optional
+                || !ability.costs.is_empty()
+                || ability.then.is_some()
+                || ability.if_you_do.is_some()
+            {
+                return Err(
+                    "constant modifiers cannot have costs, choices, or continuations".into(),
+                );
+            }
+            let Effect::ModifyStats {
+                power: Expr::Const { value: power },
+                hp: Expr::Const { value: hp },
+                duration,
+                target: Target::Name(target),
+            } = &ability.effect
+            else {
+                return Err("constant modifiers require literal stat deltas".into());
+            };
+            if duration != "persistent"
+                || target
+                    != if ability.target_resolver.is_some() {
+                        "chosen"
+                    } else {
+                        "self"
+                    }
+                || !power.as_i64().is_some_and(|n| (-1000..=1000).contains(&n))
+                || !hp.as_i64().is_some_and(|n| (-1000..=1000).contains(&n))
+            {
+                return Err("unsupported constant modifier".into());
+            }
+            if ability
+                .condition
+                .as_ref()
+                .is_some_and(Expr::depends_on_stats)
+                || ability
+                    .target_resolver
+                    .as_ref()
+                    .and_then(|r| r.predicate.as_ref())
+                    .is_some_and(Expr::depends_on_stats)
+            {
+                return Err(
+                    "constant stat-dependent conditions would form evaluation cycles".into(),
+                );
+            }
+            if ability.target_resolver.as_ref().is_some_and(|r| {
+                r.optional
+                    || !matches!(
+                        r.zone.as_deref(),
+                        None | Some("arena") | Some("anyAttackable")
+                    )
+            }) {
+                return Err(
+                    "constant target filter must be arena-only without optional choice".into(),
+                );
+            }
         }
         if ability.requires_confirmation {
             return Err("explicit confirmation semantics are not implemented".into());
@@ -483,7 +649,20 @@ impl Program {
                 if !matches!(amount, Expr::Const{value} if value.as_u64().is_some_and(|n|n<=2)){return Err("distribution runtime currently supports up to two healing".into());}
                 self.instructions.push(Instruction::Apply(effect.clone()));
             }
+            Effect::ReadyResources {amount,target} => {
+                amount.validate_number()?;target.validate()?;
+                if matches!(target,Target::Name(name) if name=="bothPlayers") {return Err("multi-player resource ready requires verified event batching".into());}
+                self.instructions.push(Instruction::Apply(effect.clone()));
+            }
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?;target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
+            Effect::Select { target_resolver, effect } => { target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone())); self.compile_effect(effect,depth+1)?; }
+            Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
+            Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
+            Effect::ModifyStats { target, power, hp, duration } => {
+                if duration != "phase" && !(self.trigger=="constant" && duration=="persistent") { return Err("only phase stat modifications execute".into()); }
+                target.validate()?; power.validate_number()?; hp.validate_number()?;
+                self.instructions.push(Instruction::Apply(effect.clone()));
+            }
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => { target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
         }
         Ok(())
