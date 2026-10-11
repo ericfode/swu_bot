@@ -41,9 +41,11 @@ def log(*a):
 
 
 class JepaPlayer:
-    def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round"):
+    def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round", window_model=None):
         w, self.meta = M.load_safetensors(model_path)
         self.net = M.NumpyJepa(w)
+        # optional second model used only in action windows (e.g. a predictor fine-tuned on branches, which only cover windows)
+        self.window_net = M.NumpyJepa(M.load_safetensors(window_model)[0]) if window_model else None
         self.db = db
         self.mix = mix
         self.temp = temp
@@ -73,21 +75,22 @@ class JepaPlayer:
         return self.score != "imagined" or self.log is not None
 
     def think(self, msg):
+        net = self.window_net if self.window_net is not None and (msg.get("prompt") or {}).get("actionWindow") else self.net
         e = F.encode(msg, self.db)
-        z = self.net.encode(e["state"][None], e["tok_ids"][None].astype(np.int64), e["tok_feats"][None], e["tok_mask"][None])
-        a = self.net.action(e["actions"], e["aids"].astype(np.int64))
-        z1 = self.net.predict(z, a, 1)
-        z4 = self.net.predict(z, a, 4)
-        v1 = M.sigmoid(self.net.value(z1))
-        v4 = M.sigmoid(self.net.value(z4))
+        z = net.encode(e["state"][None], e["tok_ids"][None].astype(np.int64), e["tok_feats"][None], e["tok_mask"][None])
+        a = net.action(e["actions"], e["aids"].astype(np.int64))
+        z1 = net.predict(z, a, 1)
+        z4 = net.predict(z, a, 4)
+        v1 = M.sigmoid(net.value(z1))
+        v4 = M.sigmoid(net.value(z4))
         score = (1 - self.mix) * v1 + self.mix * v4
-        return {"z": z[0], "z1": z1, "z4": z4, "v1": v1, "v4": v4, "score": score, "v0": float(M.sigmoid(self.net.value(z))[0])}
+        return {"z": z[0], "z1": z1, "z4": z4, "v1": v1, "v4": v4, "score": score, "v0": float(M.sigmoid(net.value(z))[0])}
 
     def rush_move(self, r, target, seen):
         """A move inside a simulation for the seat to act, played like bot/players/rush.js (the training data's main
         opponent): in its action window a card from hand first, then an attack with a ready unit, then the leader,
         else pass, passing when the same window keeps coming back; attacks go at `target`'s base when it can be
-        picked. Other prompts are random."""
+        picked. Other prompts are random, never Cancel when something else is legal."""
         acts = r["actions"]
         st = r.get("state") or {}
         players = st.get("players") or {}
@@ -132,7 +135,9 @@ class JepaPlayer:
             mine_units = [a for a in cards if a["card"].get("id") in hp]
             if mine_units:
                 return min(mine_units, key=lambda a: hp[a["card"]["id"]])["i"]
-        return self.rng.randrange(len(acts))
+        # a Cancel would undo the move being judged (it then looks like a no-op), so pick among the other answers
+        keep = [a["i"] for a in acts if not (a.get("kind") == "button" and str(a.get("label", "")).lower() == "cancel")]
+        return self.rng.choice(keep) if keep else self.rng.randrange(len(acts))
 
     def real_next(self, msg, i, deal, sim, steps=400):
         """Play action i on the referee's copy, then play on to the moment every move is judged at.
@@ -184,6 +189,8 @@ class JepaPlayer:
                 # as choosing resources toggles a card on and off forever otherwise)
                 pos = {"you": me, "prompt": r.get("prompt"), "state": r.get("state"), "actions": acts}
                 order = [int(k) for k in np.argsort(-self.think(pos)["score"])]
+                cancel = {k for k, x in enumerate(acts) if x.get("kind") == "button" and str(x.get("label", "")).lower() == "cancel"}
+                order = [k for k in order if k not in cancel] + [k for k in order if k in cancel]
                 tried = guard.setdefault(json.dumps([pos["prompt"], pos["state"], [x.get("label") for x in acts]], sort_keys=True), [])
                 j = order[0]
                 if len(tried) >= 2 and j in tried:
@@ -326,6 +333,7 @@ def main():
     ap.add_argument("--deals", type=int, default=1, help="deals of the hidden cards per move in sim modes")
     ap.add_argument("--judge", choices=["round", "window"], default="round",
                     help="when a simulated move is judged: after this round's action phase (round) or at my next action window")
+    ap.add_argument("--window-model", default=None, help="a second model used only in action windows")
     ap.add_argument("--log", default=None, help="append every decision's imagined and simulated scores here (JSON lines)")
     a = ap.parse_args()
 
@@ -333,7 +341,7 @@ def main():
     log(f"{len(db)} card codes, model {a.model}, score {a.score}")
     logf = open(a.log, "a") if a.log else None
     helper = EvalHelper(a.evaluator) if (a.score == "sim-eval" or logf) else None
-    player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge)
+    player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge, window_model=a.window_model)
     thoughts = os.environ.get("SWU_JEPA_THOUGHTS")
     stdin = sys.stdin
 
