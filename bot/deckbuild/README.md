@@ -34,6 +34,7 @@ so only the decks differ (`play.js`).
 - `pod-eval.js`: plays the decks of each pod against each other and scores the drafters.
 - `report.py`: merges field-eval runs and compares deck groups on the same seeds (paired gaps).
 - `dashboard.py`: writes this thread's cards in the research dashboard.
+- `loop.sh`: closes the loop: train on every game so far, build or draft with the new models, play, repeat.
 
 ## Commands (from the repo root)
 
@@ -80,6 +81,19 @@ Every row played all 27 field decks from both seats on the same seeds (1,458 gam
   (held-out log loss 0.598 vs 0.626).
 - Draft (Spark of Rebellion, 8-seat pods, the stat builder makes every 30-card deck): stat drafter 64%, random 39%,
   rarity-first 32% (60 pods); JEPA drafter 51% vs stat drafter 49% (40 pods, a tie).
+
+### Closing the loop (`loop.sh`, 3 rounds)
+
+| round | linear-built | gap to real lists | linear predicted | deep-built | deep predicted | JEPA drafter vs stat |
+|---|---|---|---|---|---|---|
+| 0 | 49.2% | -0.1 | 57.5% | 46.3% | 82.1% | 51.0% |
+| 1 | 53.5% | +4.1 [+0.8, +7.4] | 57.4% | 45.1% | 72.4% | 52.9% |
+| 2 | 55.9% | +6.6 [+3.4, +9.8] | 57.2% | 38.7% | 80.2% | 51.5% |
+| 3 | 56.7% | +7.3 [+4.0, +10.6] | 57.7% | 35.8% | 80.6% | 55.9% [53.8, 57.9] |
+
+- Feeding the builder's own decks back in makes the linear model calibrated (57.7% predicted, 56.7% played) and its
+  decks beat real lists for c-clock. The deep supervised builder gets worse each round: every round it finds a new
+  region its model overrates, so flexible models need a penalty for unearned confidence (ensemble spread) first.
 - Results page: https://claude.ai/artifact/DdoeT9aQ9YaGMbvxNZKNb6. Data: `/mnt/project-files/deckbuild/eval/report.json`.
 
 ## Credits and caveats

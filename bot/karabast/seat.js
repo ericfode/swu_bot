@@ -37,6 +37,7 @@ const UNDO_LABEL = /\bundo\b/i;
 const ROLLED_BACK = /\bhas rolled back to\b/;
 
 const short = (x) => JSON.stringify(x)?.slice(0, 160);
+const minutes = (ms) => `${+(ms / 60000).toFixed(1)} minute${ms === 60000 ? '' : 's'}`;
 const noSim = async (req) => (req?.op === 'end' ? { t: 'simulated', op: 'end' } : { t: 'simulated', op: req?.op ?? null, error: 'simulations are off on Karabast' });
 const actionKey = (a) => `${a.kind}|${a.label}|${a.arg ?? ''}|${a.cardUuid ?? ''}`;
 
@@ -54,13 +55,17 @@ class KarabastSeat {
      * sock: a connected KarabastSocket in the lobby; me: this seat's user id; client: a protocol client
      * ({ name, hello?, decide, over?, close? }, e.g. a StdioClient). opts: deck (our deck list, for hello), seed,
      * decideMs (10000), allowUndos (2), retryMs (1000), maxFailures (2), maxIgnored (4), chat (a line to send once, or
-     * null), log.
+     * null), log, startMs (180000: end with no result when no game frame comes this long after the match) and idleMs
+     * (600000: concede when a started game sends no frame this long).
      */
     constructor(sock, me, client, opts = {}) {
         this.sock = sock;
         this.me = me;
         this.client = client;
-        this.opts = { decideMs: 10000, allowUndos: 2, retryMs: 1000, maxFailures: 2, maxIgnored: 4, chat: null, log: () => undefined, seed: 1, ...opts };
+        this.opts = {
+            decideMs: 10000, allowUndos: 2, retryMs: 1000, maxFailures: 2, maxIgnored: 4, chat: null, log: () => undefined, seed: 1,
+            startMs: 180000, idleMs: 600000, ...opts
+        };
         this.rng = seededRng(`karabast-seat-${this.opts.seed}`);
         this.obs = new Observer(me);
         this.latest = null;
@@ -99,14 +104,42 @@ class KarabastSeat {
             const onClose = (why) => this.done('none', `socket closed: ${why}`);
             this.sock.on('gamestate', onFrame);
             this.sock.on('disconnect', onClose);
-            this.watchdog = setInterval(() => this.checkIgnored(), 250);
+            this.startedAt = Date.now();
+            this.lastFrameAt = null;
+            this.watchdog = setInterval(() => {
+                this.checkIgnored();
+                this.checkIdle();
+            }, 250);
         });
+    }
+
+    /** A game that never starts, or stops sending frames, would hold the seat (and a lobby loop) forever. */
+    checkIdle(now = Date.now()) {
+        if (this.finished) {
+            return;
+        }
+        if (this.lastFrameAt === null) {
+            if (now - this.startedAt >= this.opts.startMs) {
+                this.done('none', `the game did not start within ${minutes(this.opts.startMs)}`);
+            }
+            return;
+        }
+        if (now - this.lastFrameAt >= this.opts.idleMs) {
+            this.stats.conceded = true;
+            try {
+                this.send('concede');
+            } catch {
+                // the socket is gone: nothing more to send
+            }
+            this.done('loss', `conceded after ${minutes(this.opts.idleMs)} with no game frame`);
+        }
     }
 
     onFrame(gs) {
         if (!gs?.players?.[this.me]) {
             return;
         }
+        this.lastFrameAt = Date.now();
         this.obs.absorb(gs);
         if ((gs.newMessages ?? []).some((m) => ROLLED_BACK.test(lineText(m)))) {
             // a rollback can bring back the decision we just answered: it is a new decision, not an ignored answer
