@@ -70,5 +70,5 @@ elsewhere. Any stdio bot can use it by setting `"adapter": "bot/jev/look.js"` in
 | `JEV_BUDGET` | `90` | Seconds all Jev calls may take before the bot answers the harness; then it falls back. Keep it below the harness timeout. |
 | `JEV_PANEL` | off | Path of a dashboard strategy panel to keep updated (`dashboard/README.md`, section 5). `{name}` becomes `jev` or `jev-look`. |
 | `JEV_LOOK_CONFIDENT` | `0.8` | `jev-look` imagines only when the top move is less likely than this. |
-| `JEV_LOG` | off | Append one JSON line per decision: options, probabilities, choice, win estimate, latency. `{pid}` in the path becomes the process id. |
+| `JEV_LOG` | off | Append one JSON line per decision: options, probabilities, choice, win estimate, latency, Jev calls and tokens. `{pid}` in the path becomes the process id. |
 | `SWU_CARD_JSON` | `forceteki/test/json` | Card data folder. |

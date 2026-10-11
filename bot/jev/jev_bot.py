@@ -46,6 +46,7 @@ TIMEOUT = float(os.environ.get("JEV_TIMEOUT", "20"))
 # slow API still ends in a fallback move instead of the harness killing the bot
 BUDGET = float(os.environ.get("JEV_BUDGET", "90"))
 _deadline = [float("inf")]
+_spent = {"calls": 0, "in": 0, "out": 0}  # Jev calls and tokens of the current decision, for JEV_LOG
 LOOK = "--look" in sys.argv[1:]
 NAME = "jev-look" if LOOK else "jev"
 LOOK_CONFIDENT = float(os.environ.get("JEV_LOOK_CONFIDENT", "0.8"))  # skip imagining when the top action is this likely
@@ -553,7 +554,11 @@ def call_jev(panel, state, questions):
     ms = (time.time() - t0) * 1000
     panel.stats["jev_calls"] += 1
     panel.stats["api_ms"].append(ms)
-    panel.stats["tokens"] += sum((res.get("usage") or {}).values())
+    u = res.get("usage") or {}
+    panel.stats["tokens"] += sum(u.values())
+    _spent["calls"] += 1
+    _spent["in"] += u.get("input_tokens", 0)
+    _spent["out"] += u.get("output_tokens", 0)
     return res, ms
 
 
@@ -587,6 +592,7 @@ def ask_action(panel, state, texts, extra=None):
 def decide(msg, rng, guard, panel, logf, io=None):
     """io: (send, recv) for imagine requests, or None when lookahead is off."""
     actions = msg["actions"]
+    _spent.update(calls=0, out=0, **{"in": 0})
     allowed = [a for a in actions if not guard.blocked(msg, a)] or actions
     if len(allowed) == 1:
         a = allowed[0]
@@ -656,7 +662,8 @@ def decide(msg, rng, guard, panel, logf, io=None):
         logf.write(json.dumps({"seq": msg["seq"], "you": msg["you"], "round": msg["state"].get("round"),
                                "prompt": msg["prompt"].get("signature"), "title": msg["prompt"].get("title"),
                                "options": texts, "probs": [round(p, 4) for p in probs], "chosen": k,
-                               "win": win, "ms": round(ms, 1), "fallback": fallback, "imagined": imagined}) + "\n")
+                               "win": win, "ms": round(ms, 1), "fallback": fallback, "imagined": imagined,
+                               "calls": _spent["calls"], "tokens_in": _spent["in"], "tokens_out": _spent["out"]}) + "\n")
         logf.flush()
     return a, win
 
