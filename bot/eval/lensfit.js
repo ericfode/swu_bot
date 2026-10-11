@@ -97,12 +97,17 @@ function indexReplays(root) {
     return out;
 }
 
+/** The replay's header line, or null for a file that is empty or still being written. */
 function firstLine(file) {
     const fd = fs.openSync(file, 'r');
     const buf = Buffer.alloc(4096);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
     fs.closeSync(fd);
-    return JSON.parse(buf.slice(0, n).toString().split('\n')[0]);
+    try {
+        return JSON.parse(buf.slice(0, n).toString().split('\n')[0]);
+    } catch {
+        return null;
+    }
 }
 
 function main() {
@@ -118,7 +123,7 @@ function main() {
         if (!lens.steps || !lens.gameId) {
             continue;
         }
-        const file = (replays.get(lens.gameId) ?? []).find((r) => firstLine(r).seed === lens.seed);
+        const file = (replays.get(lens.gameId) ?? []).find((r) => firstLine(r)?.seed === lens.seed);
         if (!file) {
             skipped++;
             continue;

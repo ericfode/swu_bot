@@ -96,13 +96,22 @@ function main() {
         withDecks = 0;
     for (const t of from) {
         const g = path.join(t, 'games');
+        if (!fs.existsSync(g)) {
+            console.error(`skipping ${t}: no games/ folder`);
+            continue;
+        }
         for (const f of fs.readdirSync(g).filter((f) => f.endsWith('.jsonl')).sort()) {
             let id = f.slice(0, -6);
             if (seen.has(id)) {
                 id = `${path.basename(t)}/${id}`;
             }
             seen.add(id);
-            const r = replayPositions(path.join(g, f), id, every);
+            let r = null;
+            try {
+                r = replayPositions(path.join(g, f), id, every);
+            } catch {
+                // a replay still being written ends in a partial line; it has no result yet anyway
+            }
             if (!r || !r.positions.length) {
                 continue;
             }
