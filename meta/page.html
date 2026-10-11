@@ -183,7 +183,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
 .gpick { display: grid; justify-items: center; gap: 2px; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-size: 11.5px; color: var(--ink-2); line-height: 1.15; text-align: center; }
 .gpick.on { border-color: var(--ink); color: var(--ink); font-weight: 600; }
 .gpick .gp { width: 100%; max-width: 72px; height: auto; }
-.gpick .gbest { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.gpick .gbest { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; max-width: 100%; }
 .ghost { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--panel); cursor: pointer; font-size: 13px; }
 /* Face-off */
 .fo-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
@@ -691,7 +691,7 @@ function renderCards(M) {
     return `<article class="card">
       <div class="top"><h3><span class="botname"><span class="dot" style="background:${famVar(b)}"></span>${esc(b.id)}</span></h3><span class="eyebrow">${esc(FAMLABEL[famKey(b)])} · ${esc(b.lang)}</span></div>
       <div class="row"><b>${b.rating}</b><span>${b.wins}–${b.games - b.wins} in ${b.games} games</span>${b.forfeits ? `<span class="clock">⏱ ${b.forfeits} lost on the clock</span>` : ''}</div>
-      <div class="verdict"><span class="style-tag">${esc(b.summary.style)}</span> ▲ ${esc(best ? best.label.toLowerCase() : '?')} · ▼ ${esc(worst ? worst.label.toLowerCase() : '?')}</div>
+      <div class="verdict"><span class="style-tag">${esc(b.summary.style)}</span> ▲ best: ${esc(best ? best.label.toLowerCase() : '?')} · ▼ worst: ${esc(worst ? worst.label.toLowerCase() : '?')}</div>
       <button class="ghost cmp" type="button" data-cmp="${esc(b.id)}">Compare in face-off</button>
       <div class="chips"><span class="chip">${pct(s.baseShare || 0)} of attacks at base</span><span class="chip">${s.baseDmg.toFixed(1)} base dmg / rd</span><span class="chip">${s.kills.toFixed(2)} kills / rd</span><span class="chip">${s.rounds.toFixed(1)} rounds / game</span>${b.msP50 != null ? `<span class="chip">${b.msP50 < 1 ? '<1' : Math.round(b.msP50)} ms / move</span>` : ''}</div>
       ${b.panel && b.panel.summary ? `<div class="small">${esc(b.panel.summary.length > 200 ? b.panel.summary.slice(0, 197) + '…' : b.panel.summary)}</div>` : ''}
