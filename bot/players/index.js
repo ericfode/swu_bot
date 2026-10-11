@@ -5,7 +5,8 @@
  *
  *   random, random-a, ...       uniform random
  *   rush                        rule-based, no lookahead
- *   heuristic[-dN]              one-ply rollback search, original ("balanced") evaluation
+ *   heuristic[-dN]              one-ply rollback search, "balanced" evaluation (original weights, danger sign fixed)
+ *   legacy[-dN]                 same search with the original evaluation exactly, inverted danger term included
  *   aggro|tempo|control[-dN]    same search with a different evaluation profile (players/profiles.js)
  *   ismcts[-bB][-hH][-nN][-eP]  known-decklist ISMCTS (players/ismcts.js): belief sharpness B (default 1, 0 = uniform),
  *                               horizon H exchanges (default 1), N iterations per legal action (default 6).
