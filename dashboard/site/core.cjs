@@ -17,7 +17,7 @@
                 const ix = await json(`${top}/${e.name}/index.json`);
                 if (ix && Array.isArray(ix.games) && !runs.some(r => r.id === ix.id)) { const lad = await json(`${top}/${e.name}/ladder.json`).catch(() => null); const extra = Object.fromEntries((lad?.games || []).map(g => [g.id, g]));
                     const games = ix.games.map(g => extra[g.id] ? { ...g, botStats: g.botStats ?? extra[g.id].botStats, timing: g.timing ?? extra[g.id].timing } : g);
-                    runs.push({ ...ix, games, _dir: `${top}/${e.name}`, _bots: lad?.bots || null }); }
+                    runs.push({ ...ix, games, _dir: `${top}/${e.name}`, _bots: lad?.bots || null, _scheduled: Number.isFinite(+lad?.progress?.scheduled) && lad.progress.scheduled > 0 ? +lad.progress.scheduled : null }); }
             }
         }
         let botMeta = [];
@@ -124,7 +124,7 @@
                 rating[g.p1] += K * (sa - ea); rating[g.p2] -= K * (sa - ea);
                 n++;
                 for (const [s, r] of [[a, sa], [b, 1 - sa]]) { s.games++; s.rounds += g.rounds || 0; r === 1 ? s.wins++ : r === 0 ? s.losses++ : s.draws++; }
-                if (!draw && !forfeit) { decided++; if (sa === 1) p1Wins++; }
+                if (!draw) { decided++; if (sa === 1) p1Wins++; } // a forfeit is a decided result too (the bot that failed loses), as in bot/ladder-report.js
                 for (const [x, y, r] of [[g.p1, g.p2, sa], [g.p2, g.p1, 1 - sa]]) { const k = `${x}|${y}`; (h2h[k] ||= { s: 0, n: 0 }); h2h[k].s += r; h2h[k].n++; }
                 history[g.p1].push([n, Math.round(rating[g.p1])]); history[g.p2].push([n, Math.round(rating[g.p2])]);
                 recent.push({ run: t.id, id: g.id, p1: g.p1, p2: g.p2, winner: draw ? 'draw' : sa ? g.p1 : g.p2, rounds: g.rounds, n, ...(forfeit ? { failed: by === 'p1' ? g.p1 : g.p2, error: g.error || null } : {}) });
@@ -148,7 +148,8 @@
         return { games: n, errors, running, firstSeatWinRate: decided ? +(p1Wins / decided).toFixed(3) : null,
             runs: runs.map(t => ({ id: t.id, createdAt: t.createdAt, games: t.games.length, bots: t.bots })),
             current: last ? { id: last.id, done: last.games.filter(g => g.outcome !== 'running').length,
-                total: last.gamesPerPairing && last.bots ? last.gamesPerPairing * last.bots.length * (last.bots.length - 1) / 2 : null } : null,
+                // ladder.json's scheduled count is exact (a --vs gauntlet plays only challenger-vs-opponent pairs); else assume a round robin
+                total: last._scheduled || (last.gamesPerPairing && last.bots ? last.gamesPerPairing * last.bots.length * (last.bots.length - 1) / 2 : null) } : null,
             standings, history, marks, h2h: { ids, matrix: ids.map(a => ids.map(b => cell(a, b))) }, recent: recent.slice(-14).reverse() };
     }
 
