@@ -13,6 +13,8 @@
     "viewer:dev": "npm --prefix viewer run dev",
     "ladder": "node bot/ladder.js",
     "test": "node --test bot/test/*.test.js",
+    "lisp:build": "sbcl --non-interactive --load bot/lisp/build.lisp",
+    "lisp:test": "sbcl --script bot/lisp/test.lisp",
     "lint": "node tools/bin/perch scan",
     "lint:changed": "node tools/bin/perch scan --since origin/main",
     "perch": "node tools/bin/perch"
