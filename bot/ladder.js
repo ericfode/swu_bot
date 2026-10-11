@@ -3,7 +3,8 @@
  * Round-robin ladder with ratings, run on worker threads.
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
- *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record]
+ *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--resume]
+ * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest.
  *
  * Each pair plays `--games` games (rounded up to even): every seed twice, once from each seat, so random-deck luck
  * cancels out. Everything goes in <out>/<id>/, rewritten atomically after every finished game:
@@ -40,6 +41,21 @@ function writeJson(file, data) {
     fs.renameSync(tmp, file);
 }
 
+/** The games of an earlier run in the same folder, when its bots and schedule match this one; else null. */
+function readPrevious(file, config) {
+    if (!fs.existsSync(file)) {
+        return null;
+    }
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const c = doc.config ?? {};
+    if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed) {
+        console.log('resume: the earlier run used other bots or seeds, starting over');
+        return null;
+    }
+    return { games: doc.games ?? [] };
+}
+
 function defaultOut() {
     return fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', 'results');
 }
@@ -72,6 +88,7 @@ async function main() {
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers };
     const games = [];
     let status = 'running';
+    const prev = process.argv.includes('--resume') ? readPrevious(path.join(out, 'ladder.json'), config) : null;
     const save = () => {
         const doc = summarize({ id, createdAt, status, engine, config, botInfo, games, scheduled: schedule.length });
         writeJson(path.join(out, 'ladder.json'), doc);
@@ -80,10 +97,17 @@ async function main() {
     };
     // tournament.js-format index (TournamentIndex in viewer/src/core/types.ts)
     const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
+    let queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
+    if (prev) {
+        const kept = prev.games.filter((g) => g.outcome !== 'running' && queue.some((q) => q.id === g.id));
+        games.push(...kept);
+        tIndex.games.push(...kept.map(({ botStats, timing, ...g }) => g));
+        queue = queue.filter((q) => !kept.some((g) => g.id === q.id));
+        console.log(`${id}: resuming, ${kept.length} games already played`);
+    }
     save();
-    console.log(`${id}: ${schedule.length} games, ${names.length} bots, ${workers} workers -> ${out}`);
+    console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${workers} workers -> ${out}`);
 
-    const queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     const t0 = Date.now();
     await new Promise((resolve, reject) => {
         let live = 0;

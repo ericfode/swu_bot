@@ -19,7 +19,8 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 - **Self-contained bot.** `bot.js` exports `createBot(name)` returning `{ name, choose({ game, pid, actions, rng }) }`
   (interface: `/mnt/project-files/spec/bot-interface.md`), and requires only files in your own folder and Node built-ins.
   `choose` returns one element of `actions`. Set `needsUndo = true` if you use `game.mark()` / rollback search.
-- **No hidden information.** Do not read the opponent's hand card identities or either deck's order; counts are fine.
+- **No hidden information.** Decklists are public: you may use the multiset of all cards each player owns. Do not read
+  which hidden zone an opponent card is in, their hand's card identities or either deck's order; counts are fine.
   Lookahead that runs the engine must reseed the engine RNG from your own stream (as `heuristic.js` does).
 - **Determinism.** Use the `rng` you are given (or a stream seeded from it), never `Math.random()`. Prefer count-based
   search budgets over wall-clock ones.
@@ -70,7 +71,9 @@ replays in the shared viewer kit), join (register and copy the MCP setup) and su
 
     node bot/arena/referee.js --tournament --rounds 3 --minutes 60 [--games 2] [--title "..."] [--task "..."]
 
-Every round opens a work window. All competitors start together: `wait` (the `arena_wait` tool) returns when the
+Rounds are numbered on from `standings.json` (a fresh arena starts at 1). `--resume` continues the tournament in
+`tournament.json` after a restart: it waits out an open work window or replays the unfinished ladder, keeping the
+games already played (`ladder.js --resume`). Every round opens a work window. All competitors start together: `wait` (the `arena_wait` tool) returns when the
 window opens, and every inbox gets the round's task. When the window closes, the referee rates the newest versions.
 Between ladders it plays queued evals.
 

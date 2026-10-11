@@ -15,7 +15,7 @@
  *   rounds/r<K>.md     what competitors read: standings, results per opponent, lost games with replay paths
  * plus the dashboard panels and experiment (dash.js), refreshed every 30 s while a round runs.
  *
- *   node bot/arena/referee.js --tournament --rounds 3 --minutes 60 [--games 2] [--title "..."] [--task "..."]
+ *   node bot/arena/referee.js --tournament --rounds 3 --minutes 60 [--games 2] [--title "..."] [--task "..."] [--resume]
  * runs a clocked tournament: every round opens a work window of --minutes (all competitors start together; the API's
  * `wait` returns when it opens, and everyone's inbox gets a message), then rates the newest versions. Between ladders
  * the referee also plays evals queued through the API (`eval`), so clients without the engine can test.
@@ -175,9 +175,9 @@ function lineup() {
     return [...agents, ...roster.baselines];
 }
 
-async function runRound(round, bots) {
-    const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', arg('games', process.argv.includes('--tournament') ? '2' : '4'), '--seed', String(1000 * round + 101),
-        '--id', `arena-r${round}`, '--out', RESULTS, '--workers', arg('workers', '3'), '--record'];
+async function runRound(round, bots, games = Number(arg('games', 4))) {
+    const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(1000 * round + 101),
+        '--id', `arena-r${round}`, '--out', RESULTS, '--workers', arg('workers', '3'), '--record', '--resume'];
     console.log(`round ${round}: ${bots.join(', ')}`);
     const child = spawn(process.execPath, args, { stdio: 'inherit' });
     const tick = setInterval(() => publish(round), 30000);
@@ -215,30 +215,49 @@ async function playQueuedEval() {
     return true;
 }
 
-/** Clocked tournament: rounds of (work window, rated ladder), all competitors on the same clock. */
+/**
+ * Clocked tournament: rounds of (work window, rated ladder), all competitors on the same clock. Round numbers continue
+ * from standings.json (a fresh arena starts at round 1). With --resume it picks up the tournament in tournament.json
+ * where it stopped: it waits out the open work window, or replays the unfinished ladder (finished games are kept).
+ */
 async function tournament() {
-    const rounds = Number(arg('rounds', 3));
-    const minutes = Number(arg('minutes', 60));
     const st = () => readJson(STANDINGS, { rounds: [] });
-    const t = { id: arg('id', `arena-t${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`), title: arg('title', 'Arena tournament'), task: arg('task', null),
-                plannedRounds: rounds, roundMinutes: minutes, gamesPerPair: Number(arg('games', '2')), state: 'running', startedAt: new Date().toISOString(), rounds: [] };
+    const old = readJson(TOURNAMENT(), null);
+    let t;
+    if (process.argv.includes('--resume') && old?.state === 'running') {
+        t = old;
+        console.log(`resuming ${t.id}: ${t.rounds.length} of ${t.plannedRounds} rounds opened`);
+    } else {
+        const rounds = Number(arg('rounds', 3));
+        t = { id: arg('id', `arena-t${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`), title: arg('title', 'Arena tournament'), task: arg('task', null),
+              plannedRounds: rounds, roundMinutes: Number(arg('minutes', 60)), gamesPerPair: Number(arg('games', '2')), state: 'running', startedAt: new Date().toISOString(), rounds: [] };
+    }
     const save = () => writeJson(TOURNAMENT(), t);
-    for (let i = 0; i < rounds; i++) {
-        const n = (st().rounds.map((r) => r.round).pop() ?? -1) + 1;
-        const now = Date.now();
-        const r = { n, workStart: new Date(now).toISOString(), workEnd: new Date(now + minutes * 60000).toISOString() };
-        t.rounds.push(r);
-        save();
-        api.send({ to: 'all', from: 'referee', text: `Round ${n} (${i + 1} of ${rounds}) has started. Submit by ${r.workEnd} (${minutes} min); the referee then rates the newest version of every competitor.${t.task ? ' Task: ' + t.task : ''}` });
-        console.log(`round ${n}: work until ${r.workEnd}`);
-        while (Date.now() < Date.parse(r.workEnd)) {
+    for (;;) {
+        let r = t.rounds[t.rounds.length - 1];
+        if (!r || r.ladderEnd) {
+            if (t.rounds.length >= t.plannedRounds) {
+                break;
+            }
+            const n = Math.max(r?.n ?? 0, st().rounds.map((x) => x.round).pop() ?? 0) + 1;
+            const now = Date.now();
+            r = { n, workStart: new Date(now).toISOString(), workEnd: new Date(now + t.roundMinutes * 60000).toISOString() };
+            t.rounds.push(r);
+            save();
+            api.send({ to: 'all', from: 'referee', text: `Round ${n} (${t.rounds.length} of ${t.plannedRounds}) has started. Submit by ${r.workEnd} (${t.roundMinutes} min); the referee then rates the newest version of every competitor.${t.task ? ' Task: ' + t.task : ''}` });
+        }
+        console.log(`round ${r.n}: work until ${r.workEnd}`);
+        while (!r.ladderStart && Date.now() < Date.parse(r.workEnd)) {
             if (!(await playQueuedEval())) {
                 await new Promise((res) => setTimeout(res, 10000));
             }
         }
-        r.ladderStart = new Date().toISOString();
-        save();
-        await runRound(n, lineup());
+        if (!r.ladderStart) {
+            r.ladderStart = new Date().toISOString();
+            r.bots = lineup();
+            save();
+        }
+        await runRound(r.n, r.bots ?? lineup(), t.gamesPerPair);
         r.ladderEnd = new Date().toISOString();
         save();
     }
