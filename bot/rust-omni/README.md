@@ -42,7 +42,7 @@ Pool decks only, both seats per seed, `--key none`, forceteki 2be4fcd. 56-game r
 | same, playouts to the end of the game (8 / 32 guesses) | | 16-40 / 16-40 | 51 / 201 |
 | same, units x2 / units x1.5 and base 2.0 | | 16-40 / 19-37 | |
 | **base 2.0 (default)** | **33-23** | **20-36** | 8-11 |
-| base 3.0 / 4.0 / 6.0 | 29-27 / / | 22-34 / 21-35 / 20-36 | |
+| base 3.0 / 4.0 / 6.0 | 29-27 (3.0 only) | 22-34 / 21-35 / 20-36 | |
 | (reference) rust-search, rust-greedy2 | | 14-42, 13-43 | 92, 1 |
 
 On 6 other decks (`--seed 1`), seeds 1-15: 18-12 against rust-search with greedy2 picking targets, 20-10 with
