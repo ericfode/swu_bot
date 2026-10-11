@@ -5,7 +5,7 @@
  * cache key, so bump it whenever the wording changes.
  */
 
-const PROMPT_VERSION = 'pos-eval-1';
+const PROMPT_VERSION = 'pos-eval-2'; // 2: subjective logs also hide the opponent's picks from hidden zones
 
 const RULES = `Star Wars: Unlimited (SWU), two players, quick reference:
 - Each player has a base (usually 25-30 HP) and a leader. You win when the opponent's base has no HP left.

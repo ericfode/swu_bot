@@ -5,8 +5,9 @@
  *   node analysis/fitness.js <analysis.json | dir> [...] [--view objective] [--blunder 0.12] [--json]
  *
  * Per game, for every checkpoint the change in the chosen view's P(win) is credited to the player who acted in
- * that turn (in that player's own frame). Summed over a game, a player's credit plus the opponent's equals the
- * final minus the starting value, so credit splits the result between the two players' decisions.
+ * that turn (in that player's own frame). A checkpoint where both players acted (round granularity, or turns
+ * merged by --max-checkpoints) credits nobody; `unattributed` is the share of the curve's total movement that had
+ * no owner. For bot fitness, analyse at turn granularity without subsampling, so nearly every change has an owner.
  *
  *   credit/turn   mean change in own win probability per own turn: the decision-quality fitness
  *   blunders      own turns that cost more than --blunder (default 0.12) win probability
@@ -37,9 +38,17 @@ function gameFitness(a, { view = 'objective', blunder = 0.12 } = {}) {
         seats[p.id] = { bot: p.bot, turns: 0, credit: 0, blunders: 0, worst: null, best: null };
     }
     let prev = null;
+    let unattributed = 0;
+    let movement = 0;
     a.checkpoints.forEach((c, j) => {
         if (v[j] == null) {
             return;
+        }
+        if (prev != null) {
+            movement += Math.abs(v[j] - prev);
+            if (!(c.actor && seats[c.actor])) {
+                unattributed += Math.abs(v[j] - prev);
+            }
         }
         if (prev != null && c.actor && seats[c.actor]) {
             const d = (v[j] - prev) * (c.actor === 'p1' ? 1 : -1);
@@ -82,6 +91,7 @@ function gameFitness(a, { view = 'objective', blunder = 0.12 } = {}) {
         view,
         outcome: a.game.winner,
         seats,
+        unattributed: movement ? unattributed / movement : 0,
         views,
         gaps: { info_p1: gap('subjective_p1', 'objective'), info_p2: gap('subjective_p2', 'objective'), hindsight: gap('objective', 'omniscient') }
     };
@@ -134,7 +144,7 @@ if (require.main === module) {
         console.log('\nevaluator (lower brier = better predictor of the result):');
         for (const r of results) {
             const vs = Object.entries(r.views).map(([k, x]) => `${k} ${f(x.brier)}`).join('  ');
-            console.log(`  ${r.game} [${r.evaluator.model}]: ${vs} | info gap p1 ${f(r.gaps.info_p1)} p2 ${f(r.gaps.info_p2)}, hindsight gap ${f(r.gaps.hindsight)}`);
+            console.log(`  ${r.game} [${r.evaluator.model}]: ${vs} | info gap p1 ${f(r.gaps.info_p1)} p2 ${f(r.gaps.info_p2)}, hindsight gap ${f(r.gaps.hindsight)}, unattributed ${f(100 * r.unattributed, 0)}%`);
         }
     }
 }

@@ -36,6 +36,8 @@ const { ClaudeEvaluator, AnswerFileEvaluator, DEFAULT_MODEL } = require('./lib/l
 
 const ALL_VIEWS = ['subjective_p1', 'subjective_p2', 'objective', 'omniscient'];
 
+const FLAGS = new Set(['batch', 'no-cache']); // options that take no value
+
 function args(argv) {
     const o = { _: [] };
     for (let i = 0; i < argv.length; i++) {
@@ -43,7 +45,7 @@ function args(argv) {
         if (a.startsWith('--')) {
             const k = a.slice(2);
             const v = argv[i + 1];
-            if (v === undefined || v.startsWith('--')) {
+            if (FLAGS.has(k) || v === undefined || v.startsWith('--')) {
                 o[k] = true;
             } else {
                 o[k] = v;
@@ -56,7 +58,8 @@ function args(argv) {
     return o;
 }
 
-const clamp01 = (x) => Math.max(0, Math.min(1, Number(x)));
+/** A probability in [0, 1], or null when the answer has no usable number. */
+const clamp01 = (x) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Math.max(0, Math.min(1, Number(x))));
 const viewSeat = (view) => (view === 'subjective_p2' ? 'p2' : 'p1');
 
 /** Build the Claude requests for one game. */
@@ -123,7 +126,7 @@ function checkpointView(view, out) {
     const seat = viewSeat(view);
     const pWin = clamp01(out.p_win);
     return {
-        p1: seat === 'p1' ? pWin : 1 - pWin,
+        p1: pWin == null ? null : seat === 'p1' ? pWin : 1 - pWin,
         p_win: pWin,
         confidence: out.confidence == null ? null : clamp01(out.confidence),
         factors: out.factors,
@@ -174,7 +177,7 @@ async function analyzeGame(game, opt, evaluator) {
     } else {
         const reqs = buildRequests(game, cps, views, opt);
         result.evaluator = { ...evaluator.describe(), effort: opt.effort, omniEffort: opt.omniEffort };
-        answers = await evaluator.run(reqs);
+        answers = await evaluator.run(reqs, game.id);
     }
 
     let usage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cost_usd: 0, calls: 0, cached: 0, errors: 0 };
@@ -200,7 +203,7 @@ async function analyzeGame(game, opt, evaluator) {
     const omni = answers.get('omniscient');
     let omniAt = () => null;
     if (omni?.output) {
-        const byI = new Map(omni.output.evals.filter((e) => Number.isInteger(e.i)).map((e) => [e.i, { p1: clamp01(e.p1), note: e.note ?? '' }]));
+        const byI = new Map((omni.output.evals ?? []).filter((e) => Number.isInteger(e.i) && clamp01(e.p1) != null).map((e) => [e.i, { p1: clamp01(e.p1), note: e.note ?? '' }]));
         omniAt = interpolate(cps, byI);
         result.omniscient = { turningPoints: omni.output.turning_points ?? [], summary: omni.output.summary ?? '', missing: cps.filter((c) => !byI.has(c.i)).length };
     } else if (omni?.error) {
@@ -332,4 +335,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { analyzeGame, buildRequests, toDashboard, ALL_VIEWS };
+module.exports = { analyzeGame, buildRequests, toDashboard, args, clamp01, ALL_VIEWS };
