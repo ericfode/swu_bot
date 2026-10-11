@@ -28,9 +28,23 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - View results with `npm run viewer` (see viewer/ in the repo CLAUDE.md).
 
 ## Bots in other languages
-- `players/external.js` — `ExternalBot`: runs any program that speaks the stdio JSON Lines protocol in `spec/stdio-protocol.md`, as an ordinary bot. Register programs by name in `external-bots.json` (or `$SWU_EXTERNAL_BOTS`) and use the name in `--bots`.
+- `players/external.js` — `ExternalBot`: runs any program that speaks the stdio JSON Lines protocol in `spec/stdio-protocol.md`, as an ordinary bot. Register programs by name in `external-bots.json` (or `$SWU_EXTERNAL_BOTS`); the registry in `players/index.js` picks them up, so the name works in `--bots` for `tournament.js` and `ladder.js`.
 - `observe.js` — the plain-JSON board/prompt/action view those bots receive (replay snapshot plus card uuids, opponent hand hidden).
 - `examples/random_bot.py` — reference client. `node bot/stdio-smoke.js -- <cmd> [args]` checks a bot against a fake game (needs `forceteki/build`, no card data).
 - The full interface and replay format are written up in `spec/`.
 - `rust/` — Rust bot (`swu-bot-rs`, policies `random` and `greedy`) speaking the stdio protocol; registered as `rust-random` and `rust-greedy` in `external-bots.json`. Build with `cargo build --release --manifest-path bot/rust/Cargo.toml`, test with `cargo test --manifest-path bot/rust/Cargo.toml`, then `node bot/rust/check.js [gamesPerSeat] [startSeed] [cardJsonDir]` plays both against `random-a` on the real engine. Why a subprocess rather than WASM or a native addon: see `rust/README.md`.
 - `tools/synth-cards.js [outDir]` — writes a stand-in card-data folder (real card classes, invented stats, default `replays/.synth-cards`) for machines that cannot download card data. Pass the folder to `new Env(dir)` or as `cardJsonDir` above. Results on it are plumbing checks, not SWU balance numbers.
+
+## Bots and the ladder
+- Registry: `players/index.js` (`makeBot(name)`), used by `tournament.js` and `ladder.js`.
+  - `random*` — uniform random. `rush` — rule-based, no lookahead: plays its most expensive card, attacks face, then passes.
+  - `heuristic`, `aggro`, `tempo`, `control` — the same one-ply rollback search (`players/heuristic.js`) with different
+    evaluation profiles (`players/profiles.js`); `heuristic` is the original evaluation, bit-for-bit. Add `-dN` for depth N.
+  - `name#tag` enters the same bot twice (`aggro#1,aggro#2`) as a sanity check.
+- `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record]`
+  runs a round robin on worker threads. Each seed is played once from each seat (random decks follow the seat, so deck luck cancels).
+  After every game it rewrites `<out>/<id>/index.json` (same tournament index as `tournament.js`, so the viewer and the
+  research dashboard read it unchanged) and `<out>/<id>/ladder.json` (schema `swu-ladder/1`: per-bot W/L/D, win rate with
+  95% CI, sequential Elo, Bradley-Terry Elo, pair matrix, Elo history). Writes are atomic. `--record` also saves `games/<id>.jsonl`
+  replays (~1 MB each). `--out` defaults to `/mnt/project-files/results` when it exists, else `results/`.
+- `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
