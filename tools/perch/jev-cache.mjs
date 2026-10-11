@@ -8,7 +8,7 @@
 //   across every session that shares PERCH_USAGE_DIR. A request over budget gets HTTP 409, which
 //   perch reports as a failed method and moves on, so cached answers are still used.
 // - Ledger. Each run keeps one JSON file in <PERCH_USAGE_DIR>/<YYYY-MM-DD>/, rewritten every few
-//   seconds while it asks Jev, so runs that overlap see each other's requests.
+//   seconds while it asks Jev, so runs that overlap see each other's requests within seconds.
 // PERCH_CACHE_READ=0 (tools/bin/perch sets it for --force) asks Jev again and replaces the entry.
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -33,8 +33,10 @@ const session = env.CLAUDE_CODE_REMOTE_SESSION_ID || env.CLAUDE_CODE_SESSION_ID 
 const runFile = `${session}.${process.pid}.${started.getTime()}.json`;
 const stats = { hits: 0, asked: 0, refused: 0, input_tokens: 0, output_tokens: 0 };
 let others = 0; // requests other runs recorded today, refreshed every SYNC_MS
-let synced = 0;
+let othersAt = 0;
+let dirty = false;
 let warned = false;
+const finished = new Map(); // ledger files of runs that have ended, which never change again
 const realFetch = globalThis.fetch;
 
 if (target && realFetch) {
@@ -43,6 +45,8 @@ if (target && realFetch) {
     return askJev(url, init);
   };
   process.on('exit', (code) => finish(code));
+  // Other runs read this run's ledger file for the daily budget, so keep it current while it asks.
+  setInterval(() => dirty && record(), SYNC_MS).unref();
   // Exit normally on these so the ledger keeps the requests already made (SIGTERM is the timeout).
   for (const [signal, code] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) process.once(signal, () => process.exit(code));
 }
@@ -61,18 +65,20 @@ async function askJev(url, init) {
       return new Response(saved, { status: 200, headers: { 'content-type': 'application/json' } });
     }
   }
-  sync();
+  refreshOthers();
   const why = stats.asked >= runLimit
     ? `this run already asked Jev ${runLimit} times (PERCH_RUN_REQUESTS)`
     : others + stats.asked >= dayLimit
       ? `the project asked Jev ${others + stats.asked} times today, UTC (PERCH_DAILY_REQUESTS=${dayLimit})`
       : null;
   if (why) {
+    dirty = true;
     if (++stats.refused === 1) console.error(`perch budget: ${why}. Methods without a cached answer are skipped.`);
     return new Response(`swu_bot perch budget: ${why}`, { status: 409 });
   }
   stats.asked++;
-  sync(stats.asked === 1);
+  if (stats.asked === 1) record();
+  else dirty = true;
   const response = await realFetch(url, init);
   if (response.status !== 200) return response;
   const text = await response.text();
@@ -118,16 +124,24 @@ async function save(file, text) {
   }
 }
 
-/** Re-reads what other runs spent today and rewrites this run's ledger file, at most every SYNC_MS. */
-function sync(now = false, exit = null) {
-  if (!usageDir || (!now && Date.now() - synced < SYNC_MS)) return;
-  synced = Date.now();
-  others = policy.readDay(usageDir, day, runFile).reduce((total, run) => total + (run.asked || 0), 0);
-  const record = { v: 1, started: started.toISOString(), updated: new Date().toISOString(), session, pid: process.pid, args: process.argv.slice(2), ...stats, exit };
+/** Re-reads what other runs spent today, at most every SYNC_MS. */
+function refreshOthers() {
+  if (!usageDir || Date.now() - othersAt < SYNC_MS) return;
+  othersAt = Date.now();
+  others = policy.readDay(usageDir, day, runFile, finished).reduce((total, run) => total + (run.asked || 0), 0);
+}
+
+/** Writes this run's ledger file. */
+function record(exit = null) {
+  if (!usageDir) return;
+  dirty = false;
+  // The --paths list can hold hundreds of files; the ledger keeps its length.
+  const args = process.argv.slice(2).map((arg, i, all) => (all[i - 1] === '--paths' ? `<${arg.split(',').length} paths>` : arg));
+  const line = { v: 1, started: started.toISOString(), updated: new Date().toISOString(), session, pid: process.pid, args, ...stats, exit };
   const file = path.join(usageDir, day, runFile);
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify(record) + '\n');
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(line) + '\n');
     fs.renameSync(`${file}.tmp`, file);
   } catch (error) {
     if (!warned) console.error(`jev: could not write the usage ledger, so the daily budget cannot count this run (${error.message})`);
@@ -137,7 +151,8 @@ function sync(now = false, exit = null) {
 
 function finish(code) {
   if (!stats.hits && !stats.asked && !stats.refused) return;
-  sync(true, code);
+  refreshOthers();
+  record(code);
   const today = stats.asked || stats.refused ? `; ${others + stats.asked} of ${dayLimit} asked today` : '';
   console.error(`jev: ${stats.hits} cached, ${stats.asked} asked${stats.refused ? `, ${stats.refused} refused` : ''}${today}`);
 }

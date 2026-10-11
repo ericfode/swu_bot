@@ -8,7 +8,8 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { plan, readDay, holdLock } = require('../perch/policy');
+const { plan, inScope, readDay, holdLock, snapshotShared } = require('../perch/policy');
+const scopes = require('../perch/scope');
 
 const preload = path.join(__dirname, '../perch/jev-cache.mjs');
 const wrapper = path.join(__dirname, '../bin/perch');
@@ -123,24 +124,66 @@ test('a run still going counts toward the daily budget, and a killed run keeps i
   assert.deepStrictEqual(ledger(dir).map((r) => [r.asked, r.exit]), [[1, 143], [0, 0]]);
 });
 
-test('plan refuses unscoped scans and keeps help, other commands and scoped runs as they are', () => {
-  const p = (...args) => plan(args, { repo, cwd: repo });
-  for (const args of [['scan'], ['scan', '.'], ['scan', repo], ['scan', '--paths', '.'], ['scan', '--paths=./'], ['coverage', '--since', 'origin/main'], ['--json', 'scan']]) {
+test('plan lists the in-scope files for scan and coverage, and keeps other commands as they are', () => {
+  // A fake git: HEAD holds these files; since "base" only bot/env.js and bot/players/rush.js changed.
+  const tree = ['bot/env.js', 'bot/players/index.js', 'bot/players/rush.js', 'bot/rust/src/main.rs', 'viewer/src/api.ts', 'README.md'];
+  const git = (argv) => {
+    if (argv[0] === 'merge-base') return argv[1] === 'base' ? { status: 0, stdout: 'abc\n' } : { status: 128, stdout: '' };
+    if (argv[0] === 'diff') return { status: 0, stdout: 'bot/env.js\nbot/players/rush.js\n' };
+    return { status: 0, stdout: tree.join('\n') + '\n' };
+  };
+  const scope = { include: ['bot/*.js', 'bot/players/index.js', 'viewer/**'], exclude: [] };
+  const p = (...args) => plan(args, { repo, scope, cwd: repo, git });
+
+  for (const args of [['scan'], ['scan', '.'], ['scan', repo], ['scan', '--paths', '.'], ['scan', '--paths=./'], ['scan', '--paths', 'bot/..'], ['coverage', '--since', 'base'], ['--json', 'scan']]) {
     assert.match(p(...args).error || '', /no scope/, args.join(' '));
   }
-  assert.deepStrictEqual(p('scan', '--since', 'origin/main'), { command: 'scan', asksJev: true, args: ['scan', '--parallel', '8', '--since', 'origin/main'], env: {}, since: 'origin/main' });
-  assert.deepStrictEqual(p('--since=origin/main', 'scan').since, 'origin/main');
-  assert.deepStrictEqual(p('scan', '--full', '--json').args, ['scan', '--parallel', '8', '--json']);
-  assert.deepStrictEqual(p('scan', 'bot', '--parallel=2').args, ['scan', 'bot', '--parallel=2']);
-  assert.deepStrictEqual(p('scan', '--', 'bot').args, ['scan', '--parallel', '8', '--', 'bot']);
-  assert.deepStrictEqual(p('scan', '--min', '70', 'bot').error, undefined);
-  assert.deepStrictEqual(p('coverage', '--paths', 'bot').error, undefined);
+  assert.match(p('scan', '--since', 'nope').error, /not a commit/);
+  assert.match(p('scan', '..').error, /outside this repo/);
+  assert.deepStrictEqual(p('scan', '--since', 'base').args, ['scan', '--parallel', '8', '--paths', 'bot/env.js']);
+  assert.deepStrictEqual(p('--since=base', '--json', 'scan').args, ['scan', '--json', '--parallel', '8', '--paths', 'bot/env.js']);
+  assert.deepStrictEqual(p('scan', '--full', '--min', '70').args, ['scan', '--min', '70', '--parallel', '8', '--paths', 'bot/env.js,bot/players/index.js,viewer/src/api.ts']);
+  assert.deepStrictEqual(p('scan', 'bot', '--parallel=2').args, ['scan', '--parallel=2', '--paths', 'bot/env.js,bot/players/index.js']);
+  assert.deepStrictEqual(p('coverage', '--since', 'base', '--paths', 'viewer').args, ['coverage', '--since', 'base', '--parallel', '8', '--paths', 'viewer/src/api.ts']);
+  assert.match(p('scan', 'bot/rust').nothing, /out of scope/);
+  assert.match(p('check', 'bot/players/rush.js::RushBot.choose').error, /outside Perch's scope/);
   assert.deepStrictEqual(p('check', 'bot/env.js', '--force'), { command: 'check', asksJev: true, args: ['check', 'bot/env.js', '--force'], env: { PERCH_CACHE_READ: '0' } });
-  assert.strictEqual(p('--rules', 'defect', 'check', 'x').command, 'check');
+  assert.strictEqual(p('check', '66f80128').error, undefined, 'an issue id names no path');
   for (const args of [['scan', '--help'], ['scan', '-h'], ['scan', '--version'], ['issues'], ['close', 'abc', '--reason', 'scan']]) {
     assert.strictEqual(p(...args).asksJev, false, args.join(' '));
     assert.deepStrictEqual(p(...args).args, args);
   }
+});
+
+test('the repo scope reads the shared core and leaves the bots out', () => {
+  for (const file of ['bot/env.js', 'bot/match.js', 'bot/ladder.js', 'bot/players/index.js', 'bot/players/external.js', 'spec/schemas/x.json', 'viewer/src/core/api.ts', 'studio/src/main.tsx', 'analysis/lib/llm.js', 'meta/analyze.js', 'importer/import.js', 'tools/bin/perch']) {
+    assert.ok(inScope(file, scopes.repo), file);
+  }
+  for (const file of ['bot/players/heuristic.js', 'bot/players/rush.js', 'bot/rust/src/main.rs', 'bot/haskell/src/Main.hs', 'bot/examples/random_bot.py', 'bot/test/bots.test.js', 'forceteki/server/game/Game.ts', 'README.md']) {
+    assert.ok(!inScope(file, scopes.repo), file);
+  }
+});
+
+test('the shared snapshot copies in-scope source files, commits them and drops removed ones', (t) => {
+  const root = scratch(t);
+  const dir = path.join(scratch(t), 'snap');
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  write('dashboard/build.mjs', 'export const a = 1;\n');
+  write('dashboard/data.json', '{}');
+  write('arena/agents/x/bot.js', 'module.exports = 1;\n');
+  write('arena/strategy/diagram.js', 'module.exports = 2;\n');
+  const scope = { root, include: ['dashboard/**', 'arena/**'], exclude: ['arena/agents/**'] };
+  const files = () => spawnSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', 'HEAD'], { encoding: 'utf8' }).stdout.trim().split('\n');
+  snapshotShared(scope, dir, path.join(root, 'closed.jsonl'));
+  assert.deepStrictEqual(files(), ['arena/strategy/diagram.js', 'dashboard/build.mjs']);
+  fs.rmSync(path.join(root, 'arena/strategy/diagram.js'));
+  write('closed.jsonl', '{"id":"x"}\n');
+  snapshotShared(scope, dir, path.join(root, 'closed.jsonl'));
+  assert.deepStrictEqual(files(), ['dashboard/build.mjs']);
+  assert.strictEqual(fs.readFileSync(path.join(dir, '.perch/closed.jsonl'), 'utf8'), '{"id":"x"}\n');
 });
 
 test('the lock admits one holder and is taken over from a dead one', (t) => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Runs perch (the @lakeday/perch semantic linter) against TypeSafe Jev instead of Perch Cloud,
-// with limits so that every thread can use it without running up Jev requests.
+// on the project's shared core only, with limits so that every thread can use it.
 //
 // Environment, only filled in when the caller has not set it:
 // - PERCH_BASE_URL: the TypeSafe System One endpoint. perch then defaults the model to jev-latest.
@@ -11,49 +11,63 @@
 //   /mnt/project-files/perch when that folder exists (so threads share answers and one daily
 //   budget), else .perch/jev in this repo. tools/perch/jev-cache.mjs does the caching and budget.
 //
-// Limits on the commands that ask Jev (scan, coverage, check):
-// - scan needs a scope (a path, --since or --paths), coverage a path or --paths; the whole repo
-//   needs --full. tools/perch/policy.js reads the arguments.
+// Limits on the commands that ask Jev (scan, coverage, check), set in tools/perch/policy.js:
+// - Only files in tools/perch/scope.js: the shared core, not the bots.
+// - scan needs a scope (a path, --since or --paths), coverage a path or --paths; everything in
+//   scope needs --full.
 // - --parallel defaults to 8 instead of perch's 32.
 // - One run at a time per checkout, stopped after PERCH_TIMEOUT_MIN minutes (default 15).
 // - PERCH_DISABLED=1, or a file named DISABLED in PERCH_JEV_DIR, skips them and exits 0.
+// `perch shared <command>` runs a perch command on the code in the shared project folder.
 // `perch usage [days]` sums the ledger.
 'use strict';
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { plan, readDay, holdLock } = require('../perch/policy.js');
+const { plan, readDay, holdLock, snapshotShared, copyIfChanged } = require('../perch/policy.js');
+const scopes = require('../perch/scope.js');
 
 const repo = path.resolve(__dirname, '../..');
 const env = { ...process.env };
-const shared = '/mnt/project-files';
-const jevDir = env.PERCH_JEV_DIR || (fs.existsSync(shared) ? path.join(shared, 'perch') : path.join(repo, '.perch', 'jev'));
+const sharedFolder = '/mnt/project-files';
+const jevDir = env.PERCH_JEV_DIR || (fs.existsSync(sharedFolder) ? path.join(sharedFolder, 'perch') : path.join(repo, '.perch', 'jev'));
 env.PERCH_CACHE_DIR ||= path.join(jevDir, 'cache');
 env.PERCH_USAGE_DIR ||= path.join(jevDir, 'usage');
 env.PERCH_DAILY_REQUESTS ||= '1000';
 env.PERCH_RUN_REQUESTS ||= '250';
+// perch sends at most 8 questions in its first request until Jev has answered once, so a method
+// could be asked in two different requests. A fixed limit keeps requests, and cache keys, the same.
+env.PERCH_MAX_QUESTIONS ||= '64';
 
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
 if (args[0] === 'usage') {
   printUsage(Number(args[1]) || 1);
   process.exit(0);
 }
-const run = plan(args, { repo });
-if (run.asksJev) {
-  const off = env.PERCH_DISABLED === '1' ? 'PERCH_DISABLED=1' : fs.existsSync(path.join(jevDir, 'DISABLED')) && path.join(jevDir, 'DISABLED');
-  if (off) {
-    console.error(`perch is turned off (${off}); skipped ${run.command}.`);
-    process.exit(0);
-  }
+const off = env.PERCH_DISABLED === '1' ? 'PERCH_DISABLED=1' : fs.existsSync(path.join(jevDir, 'DISABLED')) && path.join(jevDir, 'DISABLED');
+let workRoot = repo;
+let scope = scopes.repo;
+let closures = null;
+if (args[0] === 'shared') {
+  args = args.slice(1);
+  workRoot = path.join(repo, '.perch', 'shared');
+  scope = null; // the snapshot holds only files in scopes.shared
+  closures = path.join(jevDir, 'shared', 'closed.jsonl');
+  if (!off) snapshotShared(scopes.shared, workRoot, closures);
+}
+const run = plan(args, { repo: workRoot, scope, cwd: closures ? workRoot : process.cwd() });
+if (run.asksJev && off) {
+  console.error(`perch is turned off (${off}); skipped ${run.command}.`);
+  process.exit(0);
 }
 if (run.error) {
   console.error(run.error);
   process.exit(2);
 }
-if (run.since && spawnSync('git', ['rev-parse', '--verify', '--quiet', `${run.since}^{commit}`]).status !== 0) {
-  console.error(`perch: ${run.since} is not a commit in this checkout. Run \`git fetch origin main\` first.`);
-  process.exit(2);
+if (run.nothing) {
+  console.log(run.nothing);
+  process.exit(0);
 }
 Object.assign(env, run.env);
 
@@ -93,10 +107,12 @@ if (run.asksJev) {
 const minutes = Number(env.PERCH_TIMEOUT_MIN) > 0 ? Number(env.PERCH_TIMEOUT_MIN) : 15;
 const preload = pathToFileURL(path.join(repo, 'tools/perch/jev-cache.mjs')).href;
 const child = spawnSync(process.execPath, ['--import', preload, bin, ...run.args], {
+  cwd: workRoot,
   stdio: 'inherit',
   env,
   timeout: run.asksJev ? Math.round(minutes * 60e3) : undefined,
 });
+if (closures) copyIfChanged(path.join(workRoot, '.perch', 'closed.jsonl'), closures);
 if (child.error?.code === 'ETIMEDOUT') {
   console.error(`perch: stopped after ${minutes} min (PERCH_TIMEOUT_MIN).`);
   process.exit(1);
