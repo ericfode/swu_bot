@@ -29,6 +29,23 @@ const W = { power: 1.3, hp: 0.9, cost: 0.25, shield: 2.2, upgrade: 0.6, sentinel
  */
 const SIDE = { myBase: 1.5, oppBase: 1.5, myUnits: 1, oppUnits: 1, baseDangerHp: 12, dangerScale: 6 };
 
+/**
+ * Arena units that behave as units right now. A Piloting card attached as an upgrade is still returned by
+ * getArenaUnits() but throws a contract assertion on unit properties such as `exhausted`; skip those.
+ */
+function arenaUnits(p) {
+    return p.getArenaUnits().filter((u) => readExhausted(u) !== null);
+}
+
+/** card.exhausted, or null where the engine says the property does not apply (e.g. a leader deployed as a pilot). */
+function readExhausted(card) {
+    try {
+        return typeof card.exhausted === 'boolean' ? card.exhausted : null;
+    } catch {
+        return null;
+    }
+}
+
 function unitValue(u, w = W) {
     let v = u.getPower() * w.power + Math.max(0, u.remainingHp) * w.hp + (u.cost ?? 0) * w.cost;
     for (const up of u.upgrades ?? []) {
@@ -54,7 +71,7 @@ function baseTerm(base, w = W, s = SIDE) {
 function sideValue(p, w = W, s = SIDE, mine = true) {
     let v = baseTerm(p.base, w, s) * (mine ? s.myBase : s.oppBase);
     const um = mine ? s.myUnits : s.oppUnits;
-    for (const u of p.getArenaUnits()) {
+    for (const u of arenaUnits(p)) {
         v += unitValue(u, w) * um;
     }
     v += p.hand.length * w.hand + p.resources.length * w.resource;
@@ -73,11 +90,11 @@ function fingerprint(eg) {
     for (const id of eg.ids) {
         const p = eg.player(id);
         parts.push(p.base.damage, p.readyResourceCount, p.resources.length, p.hand.length, p.drawDeck.length, p.discard.length, p.hasInitiative() ? 1 : 0);
-        for (const u of p.getArenaUnits()) {
+        for (const u of arenaUnits(p)) {
             parts.push(u.uuid, u.damage, u.exhausted ? 1 : 0, u.getPower(), u.getHp(), (u.upgrades ?? []).length);
         }
         const leader = p.getAllDeckLeaders()[0];
-        parts.push(leader ? `${leader.exhausted ? 1 : 0}${leader.deployed ? 1 : 0}` : '-');
+        parts.push(leader ? `${readExhausted(leader) ? 1 : 0}${leader.deployed ? 1 : 0}${leader.zoneName}` : '-');
     }
     return parts.join('|');
 }
@@ -403,4 +420,4 @@ class HeuristicBot {
     }
 }
 
-module.exports = { HeuristicBot, evaluate, defaultChoose, unitValue, keepScore, targetScore, W, SIDE };
+module.exports = { HeuristicBot, evaluate, defaultChoose, arenaUnits, unitValue, keepScore, targetScore, W, SIDE };
