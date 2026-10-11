@@ -153,7 +153,7 @@ async function main() {
                 }
                 const { job, result: r } = msg;
                 const winner = r.winner === 'p1' ? job.p1 : r.winner === 'p2' ? job.p2 : r.winner;
-                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, by: r.by ?? null, timing: r.timing, ...(r.key ? { key: r.key } : {}) };
+                const done = { winner, winnerSeat: r.winner, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null, by: r.by ?? null, timing: r.timing, ...(r.key ? { key: r.key } : {}), ...(r.versions ? { versions: r.versions } : {}) };
                 Object.assign(games.find((g) => g.id === job.id), done, { botStats: r.botStats });
                 Object.assign(tIndex.games.find((g) => g.id === job.id), done);
                 const doc = save();
