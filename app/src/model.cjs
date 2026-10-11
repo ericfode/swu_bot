@@ -96,6 +96,7 @@
 
     function runKind(id) {
         if (/^arena-/.test(id)) return 'arena';
+        if (/^karabast(-|$)/.test(id)) return 'people'; // our bots against people on karabast.net (the Karabast Sprite's feed)
         if (/eval|ismcts-evaluators|position|oracle/.test(id)) return 'study';
         if (/ladder|league|^demo$/.test(id)) return 'ladder';
         return 'test';
@@ -118,17 +119,31 @@
             const names = new Set(r.bots || r.games.flatMap(g => [g.p1, g.p2]));
             const fixed = metaRaw?.fixedEra?.[r.id] ?? (names.has('legacy') || FIXED_ERA_RUNS.has(r.id) || (typeof r.fixedEra === 'boolean' ? r.fixedEra : Date.parse(r.createdAt) >= FIX_ON_MAIN));
             const can = n => { const c = canonical(n, fixed); (rawOf[c] ||= new Set()).add(n); return c; };
-            const st = {}; let decided = 0, running = 0, errors = 0;
+            const st = {}; let decided = 0, running = 0, errors = 0, abandoned = 0;
+            // games against people show in the grid, the run and the game pages, and stay out of bot records and ratings
+            // a run an outside feed sent (the window stamps `feed` on it) is never rated, whatever its name
+            const kind = typeof r.feed === 'string' && r.feed ? 'people' : runKind(r.id), people = kind === 'people';
             for (const g of r.games) {
                 const p1 = can(g.p1), p2 = can(g.p2);
-                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated
+                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned (people only)
                 if (g.outcome === 'running') { res = 3; running++; }
                 else if (g.outcome === 'won' && (g.winnerSeat === 'p1' || g.winnerSeat === 'p2')) res = g.winnerSeat === 'p1' ? 0 : 1;
                 else if (g.outcome === 'ERROR' && /^TIME_FORFEIT (\S+)/.test(g.error || '')) { forfeit = canonical(RegExp.$1, fixed) === p1 ? 'p1' : 'p2'; res = forfeit === 'p1' ? 1 : 0; }
                 else if (g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2')) { forfeit = g.by; res = g.by === 'p1' ? 1 : 0; }
                 else if (g.winnerSeat === 'draw') { res = 2; errors++; }
                 else { res = 4; errors++; }
+                // a game against people that never started or went silent is abandoned, not an engine error
+                if (people && res === 4 && g.outcome === 'abandoned') { res = 5; errors--; abandoned++; }
                 games.push([ri, g.id, bi(p1), bi(p2), res, g.rounds ?? null, g.steps ?? null, forfeit ? 1 : 0]);
+                if (people) {
+                    // a finished game against a person, a draw included, counts in the run's own table only
+                    if (res <= 2 && p1 && p2) {
+                        decided++;
+                        if (res === 2) errors--;
+                        for (const [x, s] of [[p1, res === 0 ? 1 : res === 1 ? 0 : 0.5], [p2, res === 1 ? 1 : res === 0 ? 0 : 0.5]]) { const T = (st[x] ||= { w: 0, l: 0, d: 0 }); s === 1 ? T.w++ : s === 0 ? T.l++ : T.d++; }
+                    }
+                    continue;
+                }
                 if (res > 1 || !p1 || !p2) continue;
                 decided++;
                 const sa = res === 0 ? 1 : 0;
@@ -142,9 +157,10 @@
                 if (forfeit) R(forfeit === 'p1' ? p1 : p2).faults++;
             }
             const table = Object.entries(st).map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
-            const bots = [...new Set([...(r.bots || []).map(can), ...table.map(t => t.id)])];
+            // a people run names everyone who sat down (its bots list may leave the people out), so its grid shows before any game ends
+            const bots = [...new Set([...(r.bots || []), ...(people ? r.games.flatMap(g => [g.p1, g.p2]) : [])].map(can).concat(table.map(t => t.id)))];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
-            return { id: r.id, createdAt: r.createdAt, kind: runKind(r.id), fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
+            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
 
         // the Atlas's ratings when the meta analyzer wrote them; the app's own fit (same rules) for bots it does not list
@@ -213,7 +229,7 @@
 
         // what's new: one feed from timestamps
         const feed = [];
-        for (const r of runInfo.slice(-12)) feed.push({ t: r.createdAt, kind: 'run', run: r.id, text: `${r.kind === 'arena' ? 'Arena round' : r.kind === 'study' ? 'Study' : r.kind === 'ladder' ? 'Ladder' : 'Test'} ${r.id}: ${r.bots.length} bots, ${r.decided} of ${r.planned || r.n} games rated${r.running ? `, ${r.running} playing` : ''}` });
+        for (const r of runInfo.slice(-12)) feed.push({ t: r.createdAt, kind: 'run', run: r.id, text: r.kind === 'people' ? `Vs people ${r.id}: ${r.decided} games finished${r.running ? `, ${r.running} playing` : ''}` : `${r.kind === 'arena' ? 'Arena round' : r.kind === 'study' ? 'Study' : r.kind === 'ladder' ? 'Ladder' : 'Test'} ${r.id}: ${r.bots.length} bots, ${r.decided} of ${r.planned || r.n} games rated${r.running ? `, ${r.running} playing` : ''}` });
         for (const e of src.experiments || []) feed.push({ t: e.updatedAt || e.startedAt, kind: 'experiment', id: e.id, text: `${e.title}: ${e.status}${e.conclusion ? `. ${String(e.conclusion).slice(0, 140)}` : ''}` });
         for (const p of src.panels || []) { const th = (p.thoughts || []).at(-1); if (th) feed.push({ t: th.t || p.updatedAt, kind: 'thought', panel: p.id, title: p.title, text: th.text }); }
         for (const a of src.about || []) if (a.updatedAt) feed.push({ t: a.updatedAt, kind: 'card', bot: a.id, text: `${a.id}: bot card ${a.source === 'owner' ? 'updated by its builder' : 'drafted'}` });

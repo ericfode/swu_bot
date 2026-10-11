@@ -14,7 +14,7 @@ Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RES
 const { createWindow, Store, storeReader, scrub } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 
-const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
+const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
 
 async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
@@ -87,6 +87,10 @@ test('auth: bearer tokens give roles, a wrong one is refused, and a session cook
     assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer push-secret' })), { role: 'project', via: 'bearer' });
     assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer admin-secret' })), { role: 'admin', via: 'bearer' });
     assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer guess' })), { role: 'bad', via: 'bearer' });
+    assert.deepStrictEqual(auth.who(req({ authorization: 'Bearer feed-secret' })), { role: 'feed', feed: 'karabast', via: 'bearer' });
+    const two = createAuth({ dir: path.join(tmp, 'auth1b'), env: { ARENA_FEED_TOKEN_FOO: 'foo-secret', ARENA_FEED_TOKEN_FOO_BAR: 'foo-bar-secret' } });
+    assert.deepStrictEqual(two.who(req({ authorization: 'Bearer foo-secret' })), { role: 'feed', feed: 'foo', via: 'bearer' });
+    assert.deepStrictEqual(two.who(req({ authorization: 'Bearer foo-bar-secret' })), { role: 'bad', via: 'bearer' }, 'a feed name is letters and digits, so FOO_BAR never owns foo-<id> names');
     assert.deepStrictEqual(auth.who(req({})), { role: 'anon', via: 'cookie' });
     const pal = auth.sign({ l: 'pal', exp: now + 60000 });
     assert.deepStrictEqual(auth.who(req({ cookie: `swu_session=${pal}` })), { role: 'friend', login: 'pal', via: 'cookie' });
@@ -208,6 +212,57 @@ test('sign-in: GitHub confirms the login, invited people get a session, others s
         } finally {
             await close();
         }
+    }
+});
+
+test('a feed token writes only what carries its name, and reads like a friend', async () => {
+    const w = makeWindow('w-feed');
+    const { go, close } = await serve(w);
+    try {
+        const doc = (ns, id, method = 'PUT', body = JSON.stringify({ id, createdAt: '2026-10-11T21:00:00Z', games: [] })) => go(`/api/docs/${ns}/${id}`, { method, token: 'feed-secret', body });
+        assert.strictEqual((await doc('runs', 'karabast')).status, 200);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"arena-t1-r1","createdAt":"2026-10-11T21:00:00Z","games":[]}')).status, 400, 'the run inside must carry the same name');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"games":[]}')).status, 400);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","createdAt":"2026-10-11T21:00:00Z","games":[null]}')).status, 400, 'games the loaders cannot read');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","createdAt":"2026-10-11T21:00:00Z","games":[{"id":"karabast-1","p1":"c-clock","outcome":"running"}]}')).status, 400);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', '{"id":"karabast","createdAt":"2026-10-11T21:00:00Z","bots":[1],"games":[]}')).status, 400);
+        for (const bad of ['__proto__', 'constructor', 'toString']) {
+            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'karabast-1', p1: bad, p2: 'opponent', outcome: 'running' }] }))).status, 400, `${bad} as a seat`);
+        }
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'g1', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] }))).status, 400, 'game ids carry the feed name');
+        const row = { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running' };
+        for (const [bad, why] of [[{ outcome: 'ERROR', error: { toString: null } }, 'an error that is not text'], [{ outcome: 'ERROR', by: 'p1' }, 'an outcome feeds do not send'], [{ outcome: 'won', winnerSeat: 'p3' }, 'a seat that does not exist'], [{ outcome: 'won' }, 'a won game with no winner'], [{ outcome: undefined }, 'no outcome']]) {
+            assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [{ ...row, ...bad }] }))).status, 400, why);
+        }
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: 12, games: [] }))).status, 400, 'createdAt is a date string');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [] }))).status, 400, 'and is required, since runs are ordered by it');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [row, row] }))).status, 400, 'game ids are distinct');
+        // the shape bot/karabast/feed.js sends; the window keeps only the fields the app reads
+        const sent = { id: 'karabast', createdAt: '2026-10-11T21:00:00Z', engine: null, bots: ['c-clock'], gamesPerPairing: 1, games: [
+            { ...row, seed: 0, winner: null, winnerSeat: null, rounds: 2, steps: 40, error: null, ms: 0, timing: { p1: { n: 1, ms: 5 } } },
+            { id: 'karabast-2', seed: 0, p1: 'opponent', p2: 'c-clock', winner: 'c-clock', winnerSeat: 'p2', rounds: 7, steps: 300, outcome: 'won', error: null, ms: 0 },
+            { id: 'karabast-3', seed: 0, p1: 'c-clock', p2: 'opponent', winner: null, winnerSeat: 'draw', rounds: 0, steps: 1, outcome: 'abandoned', error: 'no result', ms: 0 },
+            { id: 'karabast-4', p1: 'c-clock', p2: 'opponent', winnerSeat: null, rounds: 9, steps: 500, outcome: 'draw' },
+        ] };
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify(sent))).status, 200);
+        assert.deepStrictEqual((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result, { id: 'karabast', feed: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock'], gamesPerPairing: 1, games: [
+            { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running', winnerSeat: null, winner: null, rounds: 2, steps: 40, error: null },
+            { id: 'karabast-2', p1: 'opponent', p2: 'c-clock', outcome: 'won', winnerSeat: 'p2', winner: 'c-clock', rounds: 7, steps: 300, error: null },
+            { id: 'karabast-3', p1: 'c-clock', p2: 'opponent', outcome: 'abandoned', winnerSeat: null, winner: null, rounds: 0, steps: 1, error: 'no result' },
+            { id: 'karabast-4', p1: 'c-clock', p2: 'opponent', outcome: 'draw', winnerSeat: 'draw', winner: 'draw', rounds: 9, steps: 500, error: null },
+        ] }, 'rebuilt from the fields the app reads; timing, seed and the rest are dropped');
+        assert.strictEqual((await doc('lens', 'karabast-g1')).status, 200);
+        assert.strictEqual((await doc('runs', 'karabastx')).status, 403, 'a name that only starts the same is not its own');
+        assert.strictEqual((await doc('runs', 'arena-t1-r1')).status, 403);
+        assert.strictEqual((await doc('panels', 'karabast')).status, 403, 'only runs, lens and replays');
+        assert.strictEqual((await doc('admin', 'karabast')).status, 403);
+        const append = (run) => go(`/api/replays/${run}/g1?at=0`, { method: 'POST', token: 'feed-secret', body: '{"t":"header"}\n', type: 'application/x-ndjson' });
+        assert.strictEqual((await append('karabast')).status, 200);
+        assert.strictEqual((await append('arena-t1-r1')).status, 403);
+        assert.deepStrictEqual((await (await go('/api/replays/karabast?sizes=1', { token: 'feed-secret' })).json()).result, [{ id: 'g1', size: 15 }]);
+        assert.strictEqual((await go('/api/docs/panels', { token: 'feed-secret' })).status, 403, 'reads like a friend');
+    } finally {
+        await close();
     }
 });
 

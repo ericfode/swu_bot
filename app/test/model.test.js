@@ -87,6 +87,39 @@ test('buildModel: Atlas names, records, forfeits and running games', () => {
     assert.ok(M.order.every(id => M.bots[id].ratingFrom === 'app'));
 });
 
+test('buildModel: games against people on Karabast show as their own run and stay out of bot records', () => {
+    const src = tinySources();
+    const game = (id, p1, p2, winnerSeat) => ({ id, p1, p2, outcome: 'won', winnerSeat });
+    src.runs.push({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock', 'opponent'], games: [
+        game('karabast-1', 'c-clock', 'opponent', 'p2'),
+        game('karabast-2', 'opponent', 'c-clock', 'p1'),
+        { id: 'karabast-3', p1: 'c-clock', p2: 'opponent', outcome: 'running' },
+        { id: 'karabast-4', p1: 'opponent', p2: 'c-clock', outcome: 'won', winnerSeat: 'draw' },
+        { id: 'karabast-5', p1: 'c-clock', p2: 'opponent', outcome: 'abandoned' },
+    ] });
+    const M = model.buildModel(src, null, null);
+    const r = M.runs.find(x => x.id === 'karabast');
+    assert.equal(r.kind, 'people');
+    assert.deepEqual([r.decided, r.running, r.errors, r.abandoned], [3, 1, 0, 1], 'a draw is a finished game; an abandoned one is neither');
+    assert.deepEqual(r.table.find(t => t.id === 'c-clock'), { id: 'c-clock', w: 0, l: 2, d: 1, n: 3, pct: 1 / 6 });
+    assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
+    assert.ok(!M.bots.opponent, 'people are not bots');
+    assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 5, 'every game stays listed');
+    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');
+});
+
+test('buildModel: a run any outside feed sent is never rated, whatever its name', () => {
+    const src = tinySources();
+    src.runs.push({ id: 'sprite', feed: 'sprite', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'sprite-1', p1: 'c-clock', p2: 'heuristic', outcome: 'won', winnerSeat: 'p1' }] });
+    const M = model.buildModel(src, null, null);
+    assert.equal(M.runs.find(x => x.id === 'sprite').kind, 'people');
+    assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'records unchanged');
+    src.runs.push({ id: 'sprite-2', feed: 'sprite', createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-2', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] });
+    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-2').bots, ['c-clock', 'opponent'], 'a run with no bots list and no finished game still names its seats');
+    src.runs.push({ id: 'sprite-3', feed: 'sprite', bots: [], createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-3', p1: 'opponent', p2: 'c-clock', outcome: 'running' }] });
+    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-3').bots, ['opponent', 'c-clock'], 'an empty or partial bots list still names every seat');
+});
+
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {
     const extra = { ratings: { generatedAt: '2026-10-11T19:06:00Z', rules: 'Strategy Atlas', bots: { 'c-clock': { rating: 1874, se: 35, games: 149 }, heuristic: { rating: 1700, se: 20, games: 600 } } } };
     const M = model.buildModel(tinySources(), extra, null);

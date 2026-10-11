@@ -49,6 +49,26 @@ Writes need a bearer token (the project token, or the admin token); a session co
   Elsewhere set `SWU_WINDOW_TOKEN`.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
 
+## Outside machines (feeds)
+
+A machine outside the project, such as the Karabast Sprite that streams c-clock's games against people, gets its own
+token: the Fly secret `ARENA_FEED_TOKEN_<NAME>` (for example `ARENA_FEED_TOKEN_KARABAST`), stored on that machine and
+never in a thread. `<NAME>` is letters and digits only, so one feed's names never start with another feed's name and a
+hyphen. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
+
+- `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
+  viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
+  running games; a finished one has `outcome` `"won"` (with `winnerSeat` `p1` or `p2`), `"draw"` or `"abandoned"`. The
+  window keeps only the fields the app reads, each checked for its type: on the run `createdAt` (required), `bots` and
+  `gamesPerPairing`; on each game `id` (distinct), `p1`, `p2`, `outcome`, `winnerSeat` (set from the outcome), `rounds`,
+  `steps` and `error` (text). It drops every other field and refuses a document that does not fit with a 400. It stamps `"feed": "karabast"` on the run,
+  and the app lists every run a feed sent as games against people, kept out of bot records and ratings.
+- `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
+  whole file when it ends. `bot/karabast/feed.js` is a working feed that does all three. (`push.js run` is for
+  the project's own runs: it also writes `ladders/<id>`, which a feed token may not.)
+- `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how
+  the viewer finds it.
+
 ## Deploys
 
 Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests, then

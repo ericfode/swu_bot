@@ -28,6 +28,7 @@ const ROOT = path.join(__dirname, '..', '..');
 // the collections a part may push; a friend reads the FRIEND ones raw, and the rest only through the app's public model
 const NS = new Set(['arena', 'runs', 'ladders', 'league', 'experiments', 'evals', 'panels', 'bots', 'threads', 'lens', 'meta', 'research', 'admin']);
 const FRIEND_NS = new Set(['arena', 'runs', 'evals', 'lens', 'meta']);
+const FEED_NS = new Set(['runs', 'lens', 'replays']);
 const ID = /^[A-Za-z0-9][\w.#@+-]{0,159}$/;
 const MAX_DOC = 16e6;
 const MAX_APPEND = 8e6;
@@ -49,8 +50,47 @@ function need(cond, code, msg) {
     }
 }
 
-/** Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. */
-function canWrite(who) {
+/**
+ * A run document sent by an outside machine is rebuilt from the fields the app's loaders read (dashboard/site/core.cjs
+ * loadSources, app/src/model.cjs), each of a known type, and every other field is dropped, so nothing a feed sends can
+ * break the model build. Games are objects with ids <feed>-<id>; seat names are plain words that are never an
+ * Object.prototype key (the model indexes plain objects by them). Returns null for a document that does not fit.
+ */
+const isName = (x) => typeof x === 'string' && /^[A-Za-z0-9][\w .@#+()-]{0,63}$/.test(x) && !(x in Object.prototype);
+const FEED_OUTCOMES = new Set(['running', 'won', 'draw', 'abandoned']);
+const count = (x) => (Number.isSafeInteger(x) && x >= 0 ? x : null);
+function feedRun(doc, feed, id) {
+    if (!doc || typeof doc !== 'object' || doc.id !== id || !Array.isArray(doc.games)) return null;
+    if (doc.bots !== undefined && !(Array.isArray(doc.bots) && doc.bots.every(isName))) return null;
+    // runs are ordered by createdAt, so a feed's run needs one
+    if (!(typeof doc.createdAt === 'string' && doc.createdAt.length <= 40 && Number.isFinite(Date.parse(doc.createdAt)))) return null;
+    const games = [], seen = new Set();
+    for (const g of doc.games) {
+        const ok = g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`) && !seen.has(g.id)
+            && isName(g.p1) && isName(g.p2) && FEED_OUTCOMES.has(g.outcome)
+            && (g.outcome !== 'won' || g.winnerSeat === 'p1' || g.winnerSeat === 'p2') && (g.error == null || typeof g.error === 'string');
+        if (!ok) return null;
+        seen.add(g.id);
+        // the seat follows from the outcome: only a won game names a winner, a draw is always 'draw'
+        const seat = g.outcome === 'won' ? g.winnerSeat : g.outcome === 'draw' ? 'draw' : null;
+        games.push({ id: g.id, p1: g.p1, p2: g.p2, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? g[seat] : null,
+            rounds: count(g.rounds), steps: count(g.steps), error: g.error ? g.error.slice(0, 200) : null });
+    }
+    const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small
+    return { id, feed, createdAt: doc.createdAt, ...(doc.bots ? { bots: doc.bots } : {}), ...(per && per <= 20 ? { gamesPerPairing: per } : {}), games };
+}
+
+/**
+ * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
+ * (an outside machine, auth.js) writes only run documents, lens documents and replays named after it: <feed> or
+ * <feed>-<anything>, so the Karabast Sprite can stream its games and nothing else.
+ */
+function canWrite(who, ns, id) {
+    if (who.via === 'bearer' && who.role === 'feed') {
+        const own = typeof id === 'string' && (id === who.feed || id.startsWith(`${who.feed}-`));
+        need(own && FEED_NS.has(ns), 'forbidden', `the ${who.feed} feed writes only runs, lens documents and replays named ${who.feed} or ${who.feed}-<id>`);
+        return;
+    }
     need(who.via === 'bearer' && atLeast(who.role, 'project'), 'forbidden', 'pushing needs the project token (a bearer token; signing in only reads)');
 }
 
@@ -499,16 +539,26 @@ function createWindow(opts = {}) {
                 need(text != null, 'not_found', `no ${ns}/${id}`);
                 return friend ? sendJson(res, 200, { result: scrub(JSON.parse(text)) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
             }
-            canWrite(who);
+            canWrite(who, ns, id);
             need(id, 'bad_request', 'use /api/docs/<collection>/<id>');
             if (req.method === 'PUT') {
                 const body = (await readBody(req, MAX_DOC)).toString('utf8');
+                let doc;
                 try {
-                    JSON.parse(body);
+                    doc = JSON.parse(body);
                 } catch {
                     throw new WindowError('bad_request', 'body is not JSON');
                 }
-                store.putDoc(ns, id, body);
+                // the loaders name a run by the id inside its index, so a feed's run must carry its own name there too
+                let text = body;
+                if (who.role === 'feed' && ns === 'runs') {
+                    need(doc?.id === id, 'bad_request', `a run document's id must be "${id}", its name in the path`);
+                    const run = feedRun(doc, who.feed, id);
+                    need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with distinct ids, a createdAt date, and seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
+                    // the run keeps which feed sent it, so the app never rates its games (model.cjs)
+                    text = JSON.stringify(run);
+                }
+                store.putDoc(ns, id, text);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
             }
             if (req.method === 'DELETE') {
@@ -530,7 +580,7 @@ function createWindow(opts = {}) {
                 const to = q.length ? Math.min(buf.length, from + Math.max(0, Number(q.length) || 0)) : buf.length;
                 return sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from, to), { 'x-size': String(buf.length) });
             }
-            canWrite(who);
+            canWrite(who, 'replays', run);
             need(game, 'bad_request', 'use /api/replays/<run>/<game>');
             const body = await readBody(req, req.method === 'PUT' ? MAX_REPLAY : MAX_APPEND);
             if (req.method === 'POST') {
