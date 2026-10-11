@@ -28,6 +28,16 @@ engine and both viewers, then downloads official card data. It does not start
 services or require API keys. Native npm dependencies are installed for each
 machine; do not copy `node_modules` between macOS and Linux.
 
+The engine's TypeScript build can exceed Node's default 2 GB heap in a Linux
+workspace. On a machine with enough available RAM, allow a 4 GB heap:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=4096" npm run setup
+```
+
+The process also needs memory outside that heap. If the workspace cannot provide
+enough memory, use a larger workspace rather than repeatedly retrying the build.
+
 The engine revision is the Git submodule pin, currently
 `2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a`. Setup never advances it to a remote
 branch. Card data is fetched from a live upstream API and is not content-pinned
@@ -36,6 +46,8 @@ identical future card data. Record the source revision and card-data snapshot
 when comparing experiments.
 
 `smoke` runs the existing root and analysis tests and builds both viewers.
+It requires a normal Git checkout with history (including commit `5123bc4`), Git
+itself, and local HTTP sockets for the mocked Perch integration tests.
 `gate` runs seeds 1–3 with and without recording. It prints results rather than
 asserting them; compare both runs and check for errors. The documented baseline
 is 594/342/486 steps with p2 winning each game.
@@ -89,9 +101,29 @@ record that limitation. No secrets are needed for these commands.
 A credential-free source snapshot may include the pinned `forceteki` tree
 without Git metadata. The same setup command works from that tree. Preserve
 its accompanying provenance and checksums; it is a snapshot, not a clone with
-Git history or remotes. Restore a normal authenticated clone before pushing or
-collaborating through Git. Never transfer authentication, `.env`, npm caches,
+Git history or remotes. For that limited environment, use:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=4096" npm run setup -- --skip-cards
+npm run smoke:source
+```
+
+`smoke:source` runs bot and importer tests, analysis checks, and both viewer
+builds. It explicitly skips the one legacy-evaluation comparison that reads
+`5123bc4` from Git, and omits the Perch tooling suite (Git snapshots, parser
+cache, and local HTTP mocks). It is narrower than `smoke`; passing it does not
+validate those omitted checks. The original tests remain unchanged. Restore a
+normal authenticated clone and run `npm run smoke` before making a PR.
+
+Never transfer authentication, `.env`, npm caches,
 generated replays, or `node_modules` as part of an environment handoff.
+
+Claude's shared Library (`/mnt/project-files` in its sessions) is separate from
+this repository. Dashboards, research, replay datasets, shared Perch cache and
+usage records, and other Library assets are not included by cloning Git. Export
+only the assets needed for the work, separately from credentials and service
+configuration. Claude's proxy-injected Fly, Jev and Sprites credentials do not
+carry over to other environments; basic setup and fixture development need none.
 
 See `CLAUDE.md`, `bot/README.md`, `studio/README.md`, and `analysis/README.md` for
 the architecture and component-specific workflows.

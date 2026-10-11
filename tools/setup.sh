@@ -58,3 +58,4 @@ if [ "$cards" = true ]; then
 else
     echo 'Setup complete without card data. Run npm run smoke; see README.md for fixture viewing.'
 fi
+echo 'For a source snapshot without Git history, use npm run smoke:source instead of npm run smoke.'
