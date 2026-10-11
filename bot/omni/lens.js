@@ -161,8 +161,15 @@ const EVALUATOR = {
     }
 };
 
+/** One value per line; a line that does not parse (a torn write on the shared drive) becomes null, so line k stays line k. */
 function readJsonl(file) {
-    return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => {
+        try {
+            return JSON.parse(l);
+        } catch {
+            return null;
+        }
+    });
 }
 
 function buildLens(gameFile, decisionsDir) {
@@ -234,4 +241,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { lensFromSnapshot, searchLens, buildLens };
+module.exports = { lensFromSnapshot, searchLens, buildLens, readJsonl };

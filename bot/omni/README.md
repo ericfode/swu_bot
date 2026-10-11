@@ -32,4 +32,6 @@ Results (2026-10-11, 15 solved games, 112 matches; the heuristic opponent used t
 profile): proofs reach about 3 windows from the end (max 10, never more than one round); a window has about 28
 distinct moves, a whole game about 10^145 lines. Omni won 14/16 against the heuristic bot; a 1-ply bot with the fixed
 score won 15/15; omni beat that 1-ply bot 32/48 (67% +/- 13). The first blind runs (results/omni-ref-2/3) only
-reseeded the RNG, so they still saw the deck order; they do not measure what the draws are worth.
+reseeded the RNG, so they still saw the deck order. With decks shuffled too, omni-blind and omni both won 14/16 against
+`legacy` on seeds 101-116 (results/omni-ref-7, -8; 10 of 16 games identical): at depth 2, knowing the draws is worth
+little next to the position score.

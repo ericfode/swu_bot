@@ -36,6 +36,7 @@ function writeJson(f, obj) {
 
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const r = (x, d = 2) => (x === null || x === undefined ? null : Math.round(x * 10 ** d) / 10 ** d);
+const { readJsonl } = require('./lens');
 const list = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
 
 // ---------- solve horizon ----------
@@ -186,7 +187,7 @@ function decisionStats() {
     let latestT = 0;
     for (const f of files) {
         const full = path.join(dir, f);
-        const lines = fs.readFileSync(full, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        const lines = readJsonl(full).filter(Boolean);
         all = all.concat(lines.map((l) => ({ ...l, bot: path.basename(f).replace(/^\d+-|-p\d\.jsonl$/g, '') })));
         const t = fs.statSync(full).mtimeMs;
         if (t > latestT && lines.length) {
