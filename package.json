@@ -16,7 +16,7 @@
     "analysis:fitness": "node analysis/fitness.js",
     "analysis:test": "node analysis/test/mock-llm.test.js",
     "ladder": "node bot/ladder.js",
-    "test": "node --test bot/test/*.test.js",
+    "test": "node --test bot/test/*.test.js importer/test/*.test.js",
     "lint": "node tools/bin/perch scan",
     "lint:changed": "node tools/bin/perch scan --since origin/main",
     "perch": "node tools/bin/perch"
