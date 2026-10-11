@@ -306,6 +306,23 @@ test('KaraBuddy public fetch stops when robots.txt disallows the API', async () 
     assert.strictEqual(site.calls.length, 1);
 });
 
+test('KaraBuddy public fetch stops after three network failures in a row, naming the host', async () => {
+    const os = require('os');
+    const { run } = require('../fetch-karabuddy');
+    const slugs = ['a', 'b', 'c', 'd', 'e'];
+    const site = fakeKaraBuddy({ list: slugs.map((slug) => ({ slug })), replays: Object.fromEntries(slugs.map((s) => [s, { payloadBlobUrl: `https://blocked.r2.dev/${s}` }])) });
+    const fetchImpl = (url, opts) => (url.includes('blocked') ? Promise.reject(Object.assign(new TypeError('fetch failed'), { cause: new Error('403 from proxy') })) : site.fetchImpl(url, opts));
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-public-'));
+    try {
+        const r = await run({ out, limit: 200, delay: 0 }, fetchImpl, () => {});
+        assert.strictEqual(r.failed, 3);
+        assert.strictEqual(r.stopped, 'blocked.r2.dev: 403 from proxy');
+        assert.ok(!site.calls.some((c) => /\/api\/replays\/d$/.test(c.url)), 'nothing requested after the stop');
+    } finally {
+        fs.rmSync(out, { recursive: true, force: true });
+    }
+});
+
 test('compact snapshot of a deployed leader', () => {
     const s = game()[4];
     s.players.u1.leaders[0] = { ...s.players.u1.leaders[0], zone: 'groundArena', type: 'leaderUnit', power: 6, hp: 7, damage: 0, exhausted: true };

@@ -13,7 +13,8 @@
  *     the replay keeps neither (the downloaded file still holds them and is never written to disk), and chat is
  *     dropped as in every import;
  *   - credits KaraBuddy in every header (source.credit, source.url = the replay's page on karabuddy.app).
- * Replays that are encrypted, pruned, or not in the KaraBuddy v1/v2 format are skipped and counted.
+ * Replays that are encrypted, pruned, or not in the KaraBuddy v1/v2 format are skipped and counted. Three network
+ * failures in a row (a blocked or down host) stop the run.
  */
 
 const fs = require('fs');
@@ -25,6 +26,7 @@ const { convertFrames } = require('./karabast');
 const { indexEntry } = require('./import');
 
 const BASE = 'https://karabuddy.app';
+const MAX_NETWORK_FAILURES = 3;
 const USER_AGENT = 'swu_bot-research/0.1 (+https://github.com/ericfode/swu_bot; slow, public replays only)';
 
 function parseArgs(argv) {
@@ -92,7 +94,14 @@ async function payloadJson(res) {
 
 async function run(args, fetchImpl = fetch, log = console.log) {
     const get = async (url) => {
-        const res = await fetchImpl(url, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' } });
+        let res;
+        try {
+            res = await fetchImpl(url, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' } });
+        } catch (e) {
+            const err = new Error(`${new URL(url).host}: ${e.cause?.message ?? e.message}`);
+            err.network = true;
+            throw err;
+        }
         if (!res.ok) {
             throw new Error(`${url}: HTTP ${res.status}`);
         }
@@ -112,6 +121,7 @@ async function run(args, fetchImpl = fetch, log = console.log) {
     const todo = list.filter((r) => r?.slug && /^[A-Za-z0-9_-]+$/.test(r.slug) && !r.encrypted && !have.has(r.slug)).slice(0, args.limit);
     log(`${list.length} public replays listed, ${have.size} already imported, fetching ${todo.length}`);
     const counts = { imported: 0, pruned: 0, failed: 0 };
+    let networkFailures = 0; // in a row; a blocked or down host should not cost the site 200 more requests
     if (args.dryRun) {
         return { listed: list.length, todo: todo.map((r) => r.slug), ...counts };
     }
@@ -145,10 +155,15 @@ async function run(args, fetchImpl = fetch, log = console.log) {
             }
             fs.writeFileSync(indexFile, JSON.stringify(index, null, 2) + '\n');
             counts.imported++;
+            networkFailures = 0;
             log(`${r.slug}: ${events.length - 2} steps, pov ${events[0].source.pov}, winner ${entry.winnerSeat ?? '-'}`);
         } catch (e) {
             counts.failed++;
             log(`${r.slug}: ${e.message}`);
+            if (e.network && ++networkFailures >= MAX_NETWORK_FAILURES) {
+                log(`${networkFailures} network failures in a row; stopping`);
+                return { listed: list.length, ...counts, stopped: e.message };
+            }
         }
     }
     return { listed: list.length, ...counts };
