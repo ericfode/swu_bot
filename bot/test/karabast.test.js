@@ -423,6 +423,8 @@ test('the live view answers only under its key', async () => {
             await Promise.all(['/', '/games', '/k3y-for-tests/', '/k3y-for-tests/games', '/k3y-for-tests/kit/swu-viewer-kit.js', '/k3y-for-tests/kit/secret.txt', '/k3y-for-tests/game/w-1/abcdef012345'].map(at)),
             [404, 404, 200, 200, 200, 404, 404]
         );
+        // odd paths get an answer, and the server keeps serving
+        assert.deepStrictEqual(await Promise.all(['//', '//k3y-for-tests/', '/k3y-for-tests/%E0%A4%A', '/k3y-for-tests/games'].map(at)), [404, 404, 400, 200]);
     } finally {
         server.close();
     }

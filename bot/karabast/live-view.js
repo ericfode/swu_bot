@@ -174,11 +174,17 @@ function makeServer({ games, kit, key = null }) {
     const kitFiles = { 'swu-viewer-kit.js': TYPES.js, 'card-text.json': TYPES.json };
     const prefix = key ? `/${key}/` : '/';
     return http.createServer((req, res) => {
-        const url = new URL(req.url, 'http://x');
-        if (!['GET', 'HEAD'].includes(req.method) || !url.pathname.startsWith(prefix)) {
+        // the raw path, not new URL(): a path like "//x" parses as a host there, or throws
+        const pathname = String(req.url).split('?')[0];
+        if (!['GET', 'HEAD'].includes(req.method) || !pathname.startsWith(prefix)) {
             return send(req, res, 404, 'not found', 'text/plain');
         }
-        const rel = decodeURIComponent(url.pathname.slice(prefix.length));
+        let rel = pathname.slice(prefix.length);
+        try {
+            rel = decodeURIComponent(rel);
+        } catch {
+            return send(req, res, 400, 'bad request', 'text/plain');
+        }
         try {
             if (rel === '') {
                 return send(req, res, 200, page, TYPES.html);
