@@ -1,7 +1,7 @@
 """Build decks with a trained deck model: hill-climb card swaps that raise the predicted win rate against a field.
 
     python3 bot/deckbuild/build.py --model M.npz --out built.json [--field bot/decks/ash-meta-2026-09.json]
-        [--targets field|LEADER/BASE,...] [--starts starts.json] [--random-starts 2] [--steps 150] [--tag NAME]
+        [--targets field|LEADER/BASE,...] [--fold K/N] [--starts starts.json] [--random-starts 2] [--steps 150] [--tag NAME]
 
 For every target leader and base (default: those of the field decks) it starts from each given start deck with that
 leader and base (--starts, e.g. statDeck output) and from --random-starts random aspect-legal decks, then makes the
@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import deck_np as DN  # noqa: E402
-from deck_jepa import as_counts, read_lists  # noqa: E402
+from deck_jepa import as_counts, fold_names, read_lists  # noqa: E402
 
 MAX_COPIES = 3
 
@@ -109,6 +109,7 @@ def main():
     ap.add_argument("--cards", default="/mnt/project-files/deckbuild/cards.json")
     ap.add_argument("--field", default=os.path.join(REPO, "bot/decks/ash-meta-2026-09.json"))
     ap.add_argument("--targets", default="field")
+    ap.add_argument("--fold", default=None, help="K/N: only the field targets of fold K (pairs with deck_jepa.py --exclude-fold)")
     ap.add_argument("--starts", default=None)
     ap.add_argument("--random-starts", type=int, default=1)
     ap.add_argument("--steps", type=int, default=150)
@@ -126,6 +127,9 @@ def main():
     b = Builder(model, idx, field)
     if a.targets == "field":
         targets = [(f["L"], f["B"], f["name"]) for f in field]
+        if a.fold:
+            keep = set(fold_names([f["name"] for f in field], a.fold))
+            targets = [t for t in targets if t[2] in keep]
     else:
         targets = []
         for t in a.targets.split(","):

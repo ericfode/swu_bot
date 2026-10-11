@@ -125,6 +125,19 @@ def deck_paths(run_dirs, real=True):
     return ps
 
 
+def fold_names(field_names, spec):
+    """'K/N' -> the field deck names in fold K of N (every N-th name in sorted order, starting at K)."""
+    k, n = (int(x) for x in spec.split("/"))
+    return [x for i, x in enumerate(sorted(field_names)) if i % n == k]
+
+
+def drop_targets(decks, names):
+    """Leave out the named field decks and every other deck with the same leader and base (their stat, random and
+    mutated decks), so a builder for those targets has never seen their real lists. Games with them go too."""
+    lb = {(decks[n]["L"], decks[n]["B"]) for n in names if n in decks}
+    return {k: v for k, v in decks.items() if k not in names and (v["L"], v["B"]) not in lb}
+
+
 def held_out(name, share):
     h = int(hashlib.sha256(name.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
     return h < share
@@ -184,6 +197,7 @@ def main():
     ap.add_argument("--holdout", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-real", action="store_true", help="leave out the real Premier decks (draft runs)")
+    ap.add_argument("--exclude-fold", default=None, help="K/N: train without the field decks of fold K (see fold_names)")
     ap.add_argument("--pool-ctx", type=float, default=0.7, help="share of JEPA contexts taken from draft pools")
     a = ap.parse_args()
     t0 = time.time()
@@ -191,6 +205,11 @@ def main():
 
     idx = DN.CardIndex(a.cards)
     decks = load_decks(deck_paths(a.runs, real=not a.no_real), idx)
+    if a.exclude_fold:
+        field_names = [as_counts(d)[0] for d in read_lists(deck_paths([], real=True)[0])]
+        gone = fold_names(field_names, a.exclude_fold)
+        decks = drop_targets(decks, set(gone))
+        print(f"left out fold {a.exclude_fold}: {', '.join(gone)}", file=sys.stderr)
     games = [g for g in load_games(a.runs) if g[0] in decks and g[1] in decks]
     names = sorted(decks)
     pos = {n: i for i, n in enumerate(names)}
