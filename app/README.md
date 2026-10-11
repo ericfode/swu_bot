@@ -13,6 +13,7 @@ data and reads the shared folder every 15 s.
 ```bash
 npm run app                          # project build -> app/dist/app.html
 npm run app -- --public              # public build  -> app/dist/public.html
+npm run app -- --public --shell      # no data: the arena window's page, which loads its data from the window's API
 node app/build.mjs --data DIR --out FILE
 ```
 
@@ -76,7 +77,8 @@ Owners' result widgets (dashboard contract section 5) draw with the same pieces:
 
 ## Next
 
-- Hosted build: the arena server serves this page at `/` and keeps `/api`; live mode there reads the arena API
-  instead of the files capability. Both builds share the same page code.
+- Hosted: the arena window (`bot/arena/WINDOW.md`) serves a shell build (`--public --shell`, no data) and the page
+  loads everything from the window's API: the model from `/api/app` (built there by the same loaders), replays from
+  `/api/replays`, card art from the public card CDN.
 - Commit the console's `core.cjs` and `glyph.cjs` into the repo (Research dashboard thread), so a build needs only
   the data folder for data.

@@ -373,6 +373,8 @@ async function main() {
         [...held.keys()].filter((s) => !unplayed.has(s)).forEach(publish);
     }
     save();
+    // with SWU_WINDOW set, a helper process sends this run to the arena window's API as it plays (arena/push.js)
+    require('./arena/push').followRun(out);
     console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${pool ? `${pool.kind} pool of ${pool.cards.length} cards, ` : ''}${workers} workers -> ${out}`);
 
     const t0 = Date.now();

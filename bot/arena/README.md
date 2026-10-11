@@ -127,6 +127,9 @@ The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live pa
 run `npm run app -- --public` to make `app/dist/public.html`, or point `ARENA_APP` at another build. Without a build,
 `/` is the arena's web UI as well. `/api` is the same either way.
 
+`ARENA_MODE=window` runs the same server as the arena window on Fly (swu-arena.fly.dev): read-only, behind GitHub
+sign-in, and fed through its API by the arena (`push.js arena`), the ladders and the meta analyzer. See `WINDOW.md`.
+
 ## Clocked tournaments
 
     node bot/arena/referee.js --tournament --rounds 3 --minutes 60 [--games 2] [--title "..."] [--task "..."]
