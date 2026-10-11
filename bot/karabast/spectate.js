@@ -15,9 +15,9 @@
  * forceteki/test/json), using bot/eval's spectator view (both hands hidden, only their counts). `mlp-g5` is the best
  * one without decklists: Brier 0.213 on 181 real KaraBuddy games, 0.171 on engine games.
  *
- * People cap: a run against a non-local server needs --ledger (bot/karabast/ledger.js). A game is watched only while
- * two more people fit under --max-people, and both players are counted when the first frame arrives. The run stops
- * before the next game when --stop-file exists.
+ * People cap: a run against a non-local server needs --ledger (bot/karabast/ledger.js). Two places under --max-people
+ * are reserved before joining a game, or the run stops; both players are counted in them when the first frame
+ * arrives. The run stops before the next game when --stop-file exists.
  *
  * Only localhost is allowed unless --allow-host names the host. The live site needs a login to spectate (anonymous
  * spectators are a development-only setting), so a live run also needs a session token, read from the environment
@@ -173,9 +173,6 @@ async function main() {
         throw new Error('a run against a non-local server needs --ledger <file> (the people cap)');
     }
     const ledger = arg('ledger') ? new PeopleLedger(arg('ledger'), Number(arg('max-people', 10))) : null;
-    if (ledger) {
-        opts.onPlayers = (ids) => ledger.add(ids, 'watched');
-    }
     const stopFile = arg('stop-file');
     fs.mkdirSync(out, { recursive: true });
     const games = Number(arg('games', 1));
@@ -206,7 +203,17 @@ async function main() {
             }
         }
         seen.add(id);
-        await watch(server, id, out, opts);
+        // both players' places are held before joining, so another run sharing the ledger cannot take them
+        const hold = ledger ? ledger.reserve(2) : null;
+        if (ledger && !hold) {
+            console.error(`people cap reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max}); stopping`);
+            break;
+        }
+        try {
+            await watch(server, id, out, ledger ? { ...opts, onPlayers: (ids) => ledger.add(ids, 'watched', hold) } : opts);
+        } finally {
+            ledger?.release(hold);
+        }
         if (lobby) {
             break;
         }

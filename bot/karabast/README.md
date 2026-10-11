@@ -85,7 +85,9 @@ people. Before any live run:
 - Behind an HTTPS proxy (Claude Code cloud sessions) run it with `NODE_USE_ENV_PROXY=1`, or Node's fetch and
   WebSocket go around the proxy and fail; `socket.js` refuses a non-local host without it.
 - A run against a non-local host needs `--allow-host <host>` and `--ledger <file>`. The ledger stops a run before a
-  game that would pass `--max-people` (default 10). `--stop-file <file>` stops it before the next game.
+  game that would pass `--max-people` (default 10). Places are reserved before each game (1 for a bot game, 2 for a
+  watched one), so a bot run and a recorder can share one ledger. `--stop-file <file>` stops a run before the next
+  game.
 - Karabast logs every engine error and sends severe ones to its developers' Discord (Lobby `handleError`), so
   `queue.js` refuses decks with cards that are known to throw (Barriss Offee, ASH_044).
 - Spectating needs a login (anonymous spectators are a development-only setting): a session token in the variable

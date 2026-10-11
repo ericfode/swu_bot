@@ -282,3 +282,23 @@ test('a bad split is a bot failure, and the seat concedes at maxFailures', async
     assert.match(r.stats.failures[0], /bad split/);
     assert.deepStrictEqual(sock.sent.at(-1), ['game', 'concede']);
 });
+
+test('a reservation holds places until it is used or released', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'people.json');
+    const a = new PeopleLedger(file, 3);
+    const b = new PeopleLedger(file, 3);
+    a.add(['user-a'], 'played');
+    const hold = a.reserve(2);
+    assert.ok(hold);
+    // 1 counted + 2 held: nothing left for b, whether it reserves or adds directly
+    assert.strictEqual(b.reserve(1), null);
+    assert.ok(!b.room(1));
+    assert.throws(() => b.add(['user-x'], 'played'), /reserved/);
+    // the watched game had one new player: the unused place goes back with the reservation
+    assert.strictEqual(a.add(['user-a', 'user-b'], 'watched', hold), 1);
+    const again = b.reserve(1);
+    assert.ok(again);
+    b.release(again);
+    assert.ok(b.room(1));
+    assert.strictEqual(new PeopleLedger(file, 3).reserved(), 0);
+});

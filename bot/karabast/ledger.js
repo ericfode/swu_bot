@@ -7,14 +7,16 @@
  * The file keeps no ids or names: only salted SHA-256 digests (the salt is made once and kept in the file), so it can
  * say "already counted" without saying who. It is written with a temporary file and a rename after each change.
  *
- * Several runs may share one file (a bot run and a recorder at the same time). Each check reads the file again, and
- * add() reads, checks and writes while holding a lock file, so two processes on one machine cannot both take the
- * last place under the cap.
+ * Several runs may share one file (a bot run and a recorder at the same time). A run reserves its places before it
+ * contacts anyone (reserve(), 1 for a bot game, 2 for a watched game), counts the people once it knows them
+ * (add() with the reservation) and gives back what it did not use (release()). Reservations count against the cap,
+ * so two runs cannot both take the last place. Every change reads, checks and writes while holding a lock file, and
+ * every check reads the file again. A run that dies keeps its reservation in the file, which only makes the cap
+ * stricter; remove it from `held` by hand.
  */
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-
 
 function sleepSync(ms) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -30,6 +32,7 @@ class PeopleLedger {
 
     load() {
         this.data = fs.existsSync(this.file) ? JSON.parse(fs.readFileSync(this.file, 'utf8')) : { salt: crypto.randomBytes(16).toString('hex'), people: {} };
+        this.data.held ??= {};
     }
 
     digest(userId) {
@@ -40,26 +43,64 @@ class PeopleLedger {
         return Object.keys(this.data.people).length;
     }
 
+    /** Places held by reservations, except `hold`'s own. */
+    reserved(hold = null) {
+        return Object.entries(this.data.held).reduce((sum, [token, r]) => sum + (token === hold ? 0 : r.n), 0);
+    }
+
     /** True when `n` more new people fit under the cap, by the file as it is now. */
     room(n = 1) {
         this.load();
-        return this.count + n <= this.max;
+        return this.count + this.reserved() + n <= this.max;
+    }
+
+    /** Holds `n` places for one game; returns the reservation, or null when they do not fit. */
+    reserve(n) {
+        return this.locked(() => {
+            if (this.count + this.reserved() + n > this.max) {
+                return null;
+            }
+            const hold = crypto.randomBytes(8).toString('hex');
+            this.data.held[hold] = { n, at: new Date().toISOString() };
+            this.save();
+            return hold;
+        });
+    }
+
+    /** Gives back what is left of a reservation (none once add() used it). */
+    release(hold) {
+        if (!hold) {
+            return;
+        }
+        this.locked(() => {
+            if (Object.hasOwn(this.data.held, hold)) {
+                delete this.data.held[hold];
+                this.save();
+            }
+        });
     }
 
     has(userId) {
         return Object.hasOwn(this.data.people, this.digest(userId));
     }
 
-    /** Counts `userIds` (what: 'played' or 'watched'); returns how many were new. Throws past the cap. */
-    add(userIds, what) {
+    /**
+     * Counts `userIds` (what: 'played' or 'watched') in place of reservation `hold`, which ends; returns how many were
+     * new. Throws past the cap, without counting anyone.
+     */
+    add(userIds, what, hold = null) {
         return this.locked(() => {
             const fresh = [...new Set(userIds)].filter((id) => !this.has(id));
-            if (this.count + fresh.length > this.max) {
-                throw new Error(`people cap reached: ${this.count} of ${this.max} counted, ${fresh.length} more would pass it`);
+            const others = this.reserved(hold);
+            if (this.count + others + fresh.length > this.max) {
+                throw new Error(`people cap reached: ${this.count} of ${this.max} counted and ${others} reserved, ${fresh.length} more would pass it`);
             }
             const at = new Date().toISOString();
             for (const id of fresh) {
                 this.data.people[this.digest(id)] = { at, what };
+            }
+            if (hold) {
+                delete this.data.held[hold];
             }
             this.save();
             return fresh.length;
