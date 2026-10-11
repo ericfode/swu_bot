@@ -7,6 +7,7 @@ analysis/.cache/
 analysis/out/
 results/
 data/
+__pycache__/
 .perch/*
 !.perch/closed.jsonl
 !.perch/rules/

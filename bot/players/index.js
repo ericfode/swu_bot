@@ -61,7 +61,10 @@ function makeBot(name) {
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
-        return new ExternalBot(name, externalBots[name.split('#')[0]]);
+        const spec = externalBots[name.split('#')[0]];
+        // an entry may name its own adapter class (an ExternalBot subclass), e.g. bot/jev/look.js
+        const Adapter = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : ExternalBot;
+        return new Adapter(name, spec);
     }
     if (info.kind === 'search') {
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
