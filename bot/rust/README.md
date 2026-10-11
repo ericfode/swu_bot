@@ -8,6 +8,10 @@ or v2 (`spec/protocol.md`) when the referee offers it. No engine code is needed 
     node bot/tournament.js --bots rust-greedy,heuristic --games 10 --out replays/rust
     node bot/rust/check.js 10 1                  # both Rust bots vs random-a, both seats
 
+This crate and `bot/omni-rs` share the root Cargo workspace. The commands above now write the executable to
+`target/release/swu-bot-rs`; the bot registry uses that path. `omni-rs` imports this crate's card loader, but does
+not change these policies or replace their JavaScript simulation requests.
+
 Policies (first CLI argument, registered as `rust-<policy>` in `bot/external-bots.json`):
 
 - `random`: uniform, seeded from the game's `hello`.

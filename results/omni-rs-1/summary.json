@@ -1,0 +1,735 @@
+{
+  "schema": "omni-rs-measurements/1",
+  "measuredAt": "2026-10-11T18:24:05.541Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5 Max",
+    "logicalCpus": 18,
+    "osVersion": "macOS 26.5.2 (25F84)",
+    "node": "22.22.3",
+    "cargo": "1.98.0",
+    "rustc": "1.98.0",
+    "profile": "release",
+    "threads": 1
+  },
+  "horizon": {
+    "js": {
+      "games": 16,
+      "mean": 4.4375,
+      "max": 10,
+      "perGame": {
+        "aggro-vs-control-101": 3,
+        "aggro-vs-control-102": 6,
+        "aggro-vs-control-103": 4,
+        "aggro-vs-control-104": 7,
+        "aggro-vs-control-105": 3,
+        "aggro-vs-control-106": 3,
+        "aggro-vs-control-107": 10,
+        "aggro-vs-control-108": 6,
+        "tempo-vs-rush-101": 3,
+        "tempo-vs-rush-102": 4,
+        "tempo-vs-rush-103": 3,
+        "tempo-vs-rush-104": 8,
+        "tempo-vs-rush-105": 3,
+        "tempo-vs-rush-106": 1,
+        "tempo-vs-rush-107": 4,
+        "tempo-vs-rush-108": 3
+      }
+    },
+    "rust": {
+      "games": 16,
+      "mean": 6.375,
+      "max": 12,
+      "perGame": {
+        "aggro-vs-control-101": 5,
+        "aggro-vs-control-102": 8,
+        "aggro-vs-control-103": 6,
+        "aggro-vs-control-104": 9,
+        "aggro-vs-control-105": 5,
+        "aggro-vs-control-106": 5,
+        "aggro-vs-control-107": 12,
+        "aggro-vs-control-108": 7,
+        "tempo-vs-rush-101": 5,
+        "tempo-vs-rush-102": 6,
+        "tempo-vs-rush-103": 5,
+        "tempo-vs-rush-104": 10,
+        "tempo-vs-rush-105": 5,
+        "tempo-vs-rush-106": 3,
+        "tempo-vs-rush-107": 6,
+        "tempo-vs-rush-108": 5
+      }
+    },
+    "inputGames": 16,
+    "exportedWindows": 1092,
+    "matchedAttemptedWindows": 103,
+    "jsProofs": 66,
+    "rustProofs": 102,
+    "jsDepthLimit": 8,
+    "rustDepthLimit": 12,
+    "jsBudgetNodesPerCandidate": 2000,
+    "stopAfterUnknownWindows": 2,
+    "seeds": "101-108 for each pairing",
+    "budgetMethod": "Rust receives the observed JS solve elapsed milliseconds for that exact (game, i), via --ms-field jsMs. JS --budget 2000 is a node budget per prove call, not a 2000 ms limit.",
+    "earliestSampledWindowProvedInGames": 15,
+    "rightCensored": true,
+    "caveat": "Only the 103 windows attempted by JS were compared. Rust proves the earliest sampled window in 15/16 games, so its reported horizon is a lower bound on this sample, not its maximum reach. fromEnd is distance in the recorded bot game, not proof depth."
+  },
+  "speed": {
+    "jsNodes": 96002,
+    "jsMs": 447416,
+    "jsMsPerNode": 4.660486239870003,
+    "rustProofNodes": 2661230,
+    "rustProofMs": 12467.586502999993,
+    "rustProofUsPerNode": 4.68489627089729,
+    "actualProverSpeedup": 994.7896325519686,
+    "rustBenchNodes": 3000000,
+    "rustBenchSeconds": 11.180566666999999,
+    "rustBenchUsPerNode": 3.7268555556666665,
+    "rustBenchNodesPerSecond": 268322.71470234595,
+    "simulatorVersusJsProverSpeedup": 1250.5143197148477,
+    "targetUsPerNode": 40,
+    "targetMet": true,
+    "stateBytes": 4670,
+    "benchRuns": [
+      {
+        "benchmark": "complete_action_windows",
+        "checksum": "9078449163456215758",
+        "decisions": 2427081,
+        "games": 6360,
+        "microsecondsPerNode": 3.647339084,
+        "nodes": 1000000,
+        "nodesPerSecond": 274172.4794348734,
+        "profile": "release",
+        "seconds": 3.647339084,
+        "setupExcluded": true,
+        "source": "bot/omni-rs/tests/fixtures/heuristic-vs-heuristic-1.jsonl.gz",
+        "stateBytes": 4670,
+        "threads": 1
+      },
+      {
+        "benchmark": "complete_action_windows",
+        "checksum": "14129644334182428564",
+        "decisions": 2575284,
+        "games": 6167,
+        "microsecondsPerNode": 3.752739333,
+        "nodes": 1000000,
+        "nodesPerSecond": 266472.01184649934,
+        "profile": "release",
+        "seconds": 3.752739333,
+        "setupExcluded": true,
+        "source": "bot/omni-rs/tests/fixtures/heuristic-vs-heuristic-2.jsonl.gz",
+        "stateBytes": 4670,
+        "threads": 1
+      },
+      {
+        "benchmark": "complete_action_windows",
+        "checksum": "5545630307728235084",
+        "decisions": 2545282,
+        "games": 6319,
+        "microsecondsPerNode": 3.78048825,
+        "nodes": 1000000,
+        "nodesPerSecond": 264516.09788762074,
+        "profile": "release",
+        "seconds": 3.78048825,
+        "setupExcluded": true,
+        "source": "bot/omni-rs/tests/fixtures/random-vs-random-1.jsonl.gz",
+        "stateBytes": 4670,
+        "threads": 1
+      }
+    ],
+    "notes": [
+      "Weighted total elapsed time divided by total nodes; single thread, release build, setup excluded.",
+      "bench executes complete sequential windows including prompt inputs and hashing, without AND/OR search or a transposition table.",
+      "Proof cost includes branching at every consequential prompt and the transposition table.",
+      "JS uses its existing macro-move and heuristic follow-up model; node counts are comparable action-window units, not identical search trees."
+    ]
+  },
+  "agreement": {
+    "bothProved": 66,
+    "agreements": [
+      {
+        "game": "aggro-vs-control-101",
+        "i": 167,
+        "fromEnd": 3,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "aggro-vs-control-101",
+        "i": 168,
+        "fromEnd": 2,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "aggro-vs-control-101",
+        "i": 169,
+        "fromEnd": 1,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "aggro-vs-control-102",
+        "i": 48,
+        "fromEnd": 6,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-102",
+        "i": 50,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-102",
+        "i": 51,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-102",
+        "i": 52,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-102",
+        "i": 53,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-103",
+        "i": 41,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-103",
+        "i": 42,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-103",
+        "i": 43,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-103",
+        "i": 44,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 37,
+        "fromEnd": 7,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 38,
+        "fromEnd": 6,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 39,
+        "fromEnd": 5,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 40,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 41,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 42,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-104",
+        "i": 43,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-105",
+        "i": 36,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-105",
+        "i": 37,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-105",
+        "i": 38,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-106",
+        "i": 49,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-106",
+        "i": 50,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-106",
+        "i": 51,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 35,
+        "fromEnd": 10,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 37,
+        "fromEnd": 8,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 39,
+        "fromEnd": 6,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 41,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 42,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 43,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-107",
+        "i": 44,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-108",
+        "i": 66,
+        "fromEnd": 6,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-108",
+        "i": 67,
+        "fromEnd": 5,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-108",
+        "i": 68,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-108",
+        "i": 69,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-108",
+        "i": 70,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "aggro-vs-control-108",
+        "i": 71,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-101",
+        "i": 103,
+        "fromEnd": 3,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "tempo-vs-rush-101",
+        "i": 104,
+        "fromEnd": 2,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "tempo-vs-rush-101",
+        "i": 105,
+        "fromEnd": 1,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "tempo-vs-rush-102",
+        "i": 78,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-102",
+        "i": 79,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-102",
+        "i": 80,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-102",
+        "i": 81,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-103",
+        "i": 58,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-103",
+        "i": 59,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-103",
+        "i": 60,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 45,
+        "fromEnd": 8,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 46,
+        "fromEnd": 7,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 47,
+        "fromEnd": 6,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 48,
+        "fromEnd": 5,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 49,
+        "fromEnd": 4,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 50,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 51,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-104",
+        "i": 52,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-105",
+        "i": 57,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-105",
+        "i": 59,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-106",
+        "i": 81,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-107",
+        "i": 45,
+        "fromEnd": 4,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "tempo-vs-rush-107",
+        "i": 46,
+        "fromEnd": 3,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-107",
+        "i": 47,
+        "fromEnd": 2,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-107",
+        "i": 48,
+        "fromEnd": 1,
+        "js": "p1",
+        "rust": "p1"
+      },
+      {
+        "game": "tempo-vs-rush-108",
+        "i": 75,
+        "fromEnd": 3,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "tempo-vs-rush-108",
+        "i": 76,
+        "fromEnd": 2,
+        "js": "p2",
+        "rust": "p2"
+      },
+      {
+        "game": "tempo-vs-rush-108",
+        "i": 77,
+        "fromEnd": 1,
+        "js": "p2",
+        "rust": "p2"
+      }
+    ],
+    "disagreements": [],
+    "missing": [],
+    "table": "agreement.md",
+    "results": "proof-results.jsonl",
+    "notes": "No disagreements in the 66 overlapping proofs. JS defaults on deeper prompts can omit a defensive choice; Rust enumerates them and gives the defender sight of the prover resource choice. Agreement does not establish equivalence between move models."
+  },
+  "provenance": {
+    "repository": "ericfode/swu_bot",
+    "baseCommit": "817dee6",
+    "engineCommit": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+    "poolFile": "bot/omni/rs/pool.json",
+    "poolSha256": "25af9fe01b6b788bf038e214ec716f23a551aea671b2f48be497564e43c0e0b0"
+  },
+  "pool": {
+    "cards": 100,
+    "bases": 8,
+    "leaders": 3,
+    "units": 88,
+    "tokens": 1,
+    "excludedGroups": [
+      "non-keyword unit text",
+      "events",
+      "non-token upgrades",
+      "Piloting",
+      "Bounty",
+      "Smuggle",
+      "Exploit",
+      "Coordinate",
+      "random effects",
+      "shuffle effects",
+      "capture",
+      "control changes",
+      "lasting effects"
+    ]
+  },
+  "correctness": {
+    "games": 300,
+    "decisions": 57604,
+    "actionWindows": 25949,
+    "mismatches": 0,
+    "pairings": [
+      {
+        "bots": "aggro,control",
+        "seeds": "1-75",
+        "games": 75,
+        "decisions": 8418,
+        "windows": 4391,
+        "mismatches": 0
+      },
+      {
+        "bots": "heuristic,heuristic",
+        "seeds": "1-75",
+        "games": 75,
+        "decisions": 8883,
+        "windows": 4674,
+        "mismatches": 0
+      },
+      {
+        "bots": "random,random",
+        "seeds": "1-75",
+        "games": 75,
+        "decisions": 30375,
+        "windows": 11549,
+        "mismatches": 0
+      },
+      {
+        "bots": "tempo,rush",
+        "seeds": "1-75",
+        "games": 75,
+        "decisions": 9928,
+        "windows": 5335,
+        "mismatches": 0
+      }
+    ],
+    "engineErrors": [],
+    "committedFixtureCount": 6,
+    "committedFixtureBytes": 121908,
+    "receipts": "check-results.jsonl",
+    "coverage": "coverage.json",
+    "coverageTable": "coverage.md",
+    "neverPresent": [
+      "HMW_055"
+    ],
+    "unitsNeverPlayed": [
+      "HMW_055"
+    ],
+    "unitsNeverAttacked": [
+      "HMW_055"
+    ],
+    "unitsNeverDefeated": [
+      "HMW_055",
+      "HMW_069"
+    ]
+  },
+  "validation": {
+    "cargoWorkspaceTests": 69,
+    "npmTests": 155,
+    "protocolChecks": 13,
+    "gate": [
+      {
+        "seed": 1,
+        "steps": 594,
+        "winner": "p2"
+      },
+      {
+        "seed": 2,
+        "steps": 342,
+        "winner": "p2"
+      },
+      {
+        "seed": 3,
+        "steps": 486,
+        "winner": "p2"
+      }
+    ],
+    "existingRustBotGames": 4,
+    "analysisTests": "passed",
+    "viewerBuild": "passed",
+    "studioBuild": "passed",
+    "engineTrackedSourceChanged": false
+  }
+}
