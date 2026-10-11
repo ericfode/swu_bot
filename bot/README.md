@@ -26,3 +26,17 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - `node bot/tournament.js --bots a,b,c --games 10 --out replays/my-run [--seed 1]` writes `index.json` + `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
 - `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording. Run it after touching `recorder.js` or `match.js`.
 - View results with `npm run viewer` (see viewer/ in the repo CLAUDE.md).
+
+## Bots and the ladder
+- Registry: `players/index.js` (`makeBot(name)`), used by `tournament.js` and `ladder.js`.
+  - `random*` — uniform random. `rush` — rule-based, no lookahead: plays its most expensive card, attacks face, then passes.
+  - `heuristic`, `aggro`, `tempo`, `control` — the same one-ply rollback search (`players/heuristic.js`) with different
+    evaluation profiles (`players/profiles.js`); `heuristic` is the original evaluation, bit-for-bit. Add `-dN` for depth N.
+  - `name#tag` enters the same bot twice (`aggro#1,aggro#2`) as a sanity check.
+- `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record]`
+  runs a round robin on worker threads. Each seed is played once from each seat (random decks follow the seat, so deck luck cancels).
+  After every game it rewrites `<out>/<id>/index.json` (same tournament index as `tournament.js`, so the viewer and the
+  research dashboard read it unchanged) and `<out>/<id>/ladder.json` (schema `swu-ladder/1`: per-bot W/L/D, win rate with
+  95% CI, sequential Elo, Bradley-Terry Elo, pair matrix, Elo history). Writes are atomic. `--record` also saves `games/<id>.jsonl`
+  replays (~1 MB each). `--out` defaults to `/mnt/project-files/results` when it exists, else `results/`.
+- `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
