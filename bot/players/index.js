@@ -15,6 +15,8 @@
  *                               `-peek` is an UNFAIR control that searches the real hidden cards (no sampling), to
  *                               measure what hidden information is worth; keep it out of competitive ladders.
  *
+ *   h@<evaluator>, hN@<evaluator>  the heuristic search scoring positions with a fitted or hand-made evaluator
+ *                               from bot/eval (h@linear, h@mlp-deck, h@race, ...); N = depth
  *   omni[-dN][-nN][-blind]      UNFAIR reference bot (players/omniscient.js): full-information alpha-beta, depth N windows
  *                               (default 2), -n node budget per window, -blind hides future draws from its search.
  *                               Keep it out of competitive ladders.
@@ -136,6 +138,10 @@ function thoughtsWriter(name) {
 }
 
 function describeBot(name) {
+    const ev = /^h(\d)?@(.+)$/.exec(name.split('#')[0]);
+    if (ev) {
+        return { name, kind: 'search', profile: `eval:${ev[2]}`, depth: ev[1] ? Number(ev[1]) : 1, lang: 'js' };
+    }
     const omni = parseOmni(name.split('#')[0]);
     if (omni) {
         return { name, kind: 'omniscient', profile: omni.blind ? 'omni-blind' : 'omni', depth: omni.depth, lang: 'js' };
@@ -164,7 +170,7 @@ function describeBot(name) {
 function makeBot(name) {
     const info = describeBot(name);
     if (!info) {
-        const known = ['random*', 'rush', 'heuristic', 'omni', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
+        const known = ['random*', 'rush', 'heuristic', 'omni', 'h@<evaluator>', ...Object.keys(PROFILES), ...Object.keys(externalBots)];
         throw new Error(`unknown bot "${name}" (known: ${known.join(', ')}; optional -dN)`);
     }
     if (info.kind === 'external') {
@@ -172,6 +178,9 @@ function makeBot(name) {
         // an entry may name its own adapter class (an ExternalBot subclass), e.g. bot/jev/look.js
         const Adapter = spec.adapter ? require(path.join(__dirname, '..', '..', spec.adapter)) : ExternalBot;
         return new Adapter(name, spec);
+    }
+    if (info.profile?.startsWith('eval:')) {
+        return require('../eval/bot').makeEvalBot(name.split('#')[0], name);
     }
     if (info.kind === 'omniscient') {
         return new OmniscientBot(name, parseOmni(name.split('#')[0]));
