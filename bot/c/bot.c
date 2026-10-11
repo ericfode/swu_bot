@@ -913,7 +913,7 @@ static double target_score(State *st, const Plan *pl, const Prompt *pr, const Ef
 static const Act *choose_attack_target(State *st, const Prompt *pr, const Act *acts, int n) {
     Plan pl = make_plan(st);
     Unit *a = find_unit(st, G.attacker);
-    if (a && (a->side != 0 || (pr->ptitle && *pr->ptitle && strcmp(a->n, pr->ptitle)))) {
+    if (!a || a->side != 0 || (pr->ptitle && *pr->ptitle && strcmp(a->n, pr->ptitle))) {
         /* not the unit we clicked: an ambush or an ability attack, so find the attacker by the prompt's source name */
         for (int i = 0; i < st->nu; i++) {
             if (st->u[i].side == 0 && !strcmp(st->u[i].n, pr->ptitle)) {
