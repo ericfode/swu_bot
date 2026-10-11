@@ -25,7 +25,9 @@ parentPort.on('message', async (job) => {
         fs.writeFileSync(job.replayFile, '');
         onEvent = (e) => fs.appendFileSync(job.replayFile, `${JSON.stringify(e)}\n`);
     }
-    const r = await playGame(env, { seed: job.seed, bots, key: workerData.key && gameKey(workerData.key, job.seed), maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
+    // a fresh copy per game: the deck objects go into the engine and the replay header
+    const decks = job.decks && { p1: structuredClone(workerData.decks[job.decks[0]]), p2: structuredClone(workerData.decks[job.decks[1]]) };
+    const r = await playGame(env, { seed: job.seed, bots, decks, key: workerData.key && gameKey(workerData.key, job.seed), maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
     delete r.events;
     parentPort.postMessage({ job, result: r });
 });
