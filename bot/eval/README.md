@@ -47,7 +47,9 @@ quality, deck, initiative, a damage-pressure ratio, round, who acts next).
 times the average unseen card of their decklist). `objective`: both hands visible. `spectator`: neither hand visible,
 only both counts, which is what a Karabast spectator sees. On the 665 held-out games it costs about 0.001 Brier against
 the subjective view, so a spectator can call games almost as well as a player. `score.js` reports it for every
-position, including captures where both hands are hidden (which have no subjective or objective view).
+position, including captures where both hands are hidden (which have no subjective or objective view), split by
+source and round. Its `paired` row scores the spectator view on exactly the judges and positions the subjective view
+uses, so the two compare like with like on one-seat captures too (on engine games the two rows agree).
 
 **Note on the heuristic's base term.** Until 2026-10-11 `bot/players/heuristic.js` scored base HP as `hp*0.9 + (12-hp)^2/6`
 when `hp <= 12`. The second term grows as the base drops, so below about 9 HP each point of damage *raised* that

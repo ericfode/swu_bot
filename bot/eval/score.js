@@ -62,6 +62,8 @@ function scorePositions(ev, positions) {
             for (const key of ['all', `src:${pos.source}`, `round:${rk}`]) {
                 get('subjective', key).add(p, y);
             }
+            // the same judge and position seen as a spectator, so 'paired' compares like with like
+            get('spectator', 'paired').add(ev.predict(pos.state, judge, { view: 'spectator', decks: pos.decks, toAct: pos.toAct }), y);
             const c = cal[Math.min(9, Math.floor(p * 10))];
             c.n++;
             c.p += p;
@@ -70,7 +72,7 @@ function scorePositions(ev, positions) {
         // a spectator sees neither hand, so every position has this view, even one with both hands hidden
         const y = pos.winner === 'p1' ? 1 : 0;
         const ps = ev.predict(pos.state, 'p1', { view: 'spectator', decks: pos.decks, toAct: pos.toAct });
-        for (const key of ['all', `src:${pos.source}`]) {
+        for (const key of ['all', `src:${pos.source}`, `round:${rk}`]) {
             get('spectator', key).add(ps, y);
         }
         if (pos.hidden?.length) {
@@ -160,7 +162,8 @@ function main() {
             // a split of one-seat imports only has no objective view (and a fully hidden one no subjective view either)
             const subj = s.all ? `${s.all.brier.toFixed(4)} ll ${s.all.logloss.toFixed(4)} acc ${s.all.acc.toFixed(3)}` : 'n/a';
             const sp = r.spectator.all ? r.spectator.all.brier.toFixed(4) : 'n/a';
-            console.log(`${ev.name.padEnd(16)} subjective brier ${subj} | objective ${o.all ? o.all.brier.toFixed(4) : 'n/a'} | spectator ${sp} | ${src}`);
+            const pair = r.spectator.paired ? r.spectator.paired.brier.toFixed(4) : 'n/a';
+            console.log(`${ev.name.padEnd(16)} subjective brier ${subj} | objective ${o.all ? o.all.brier.toFixed(4) : 'n/a'} | spectator ${sp} (paired ${pair}) | ${src}`);
         }
     }
     if (arg('llm', null)) {
