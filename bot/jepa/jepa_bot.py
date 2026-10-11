@@ -87,7 +87,7 @@ class JepaPlayer:
         """A move inside a simulation for the seat to act, played like bot/players/rush.js (the training data's main
         opponent): in its action window a card from hand first, then an attack with a ready unit, then the leader,
         else pass, passing when the same window keeps coming back; attacks go at `target`'s base when it can be
-        picked. Other prompts are random."""
+        picked. Other prompts are random, never Cancel when something else is legal."""
         acts = r["actions"]
         st = r.get("state") or {}
         players = st.get("players") or {}
@@ -132,7 +132,9 @@ class JepaPlayer:
             mine_units = [a for a in cards if a["card"].get("id") in hp]
             if mine_units:
                 return min(mine_units, key=lambda a: hp[a["card"]["id"]])["i"]
-        return self.rng.randrange(len(acts))
+        # a Cancel would undo the move being judged (it then looks like a no-op), so pick among the other answers
+        keep = [a["i"] for a in acts if not (a.get("kind") == "button" and str(a.get("label", "")).lower() == "cancel")]
+        return self.rng.choice(keep) if keep else self.rng.randrange(len(acts))
 
     def real_next(self, msg, i, deal, sim, steps=400):
         """Play action i on the referee's copy, then play on to the moment every move is judged at.
@@ -184,6 +186,8 @@ class JepaPlayer:
                 # as choosing resources toggles a card on and off forever otherwise)
                 pos = {"you": me, "prompt": r.get("prompt"), "state": r.get("state"), "actions": acts}
                 order = [int(k) for k in np.argsort(-self.think(pos)["score"])]
+                cancel = {k for k, x in enumerate(acts) if x.get("kind") == "button" and str(x.get("label", "")).lower() == "cancel"}
+                order = [k for k in order if k not in cancel] + [k for k in order if k in cancel]
                 tried = guard.setdefault(json.dumps([pos["prompt"], pos["state"], [x.get("label") for x in acts]], sort_keys=True), [])
                 j = order[0]
                 if len(tried) >= 2 and j in tried:
