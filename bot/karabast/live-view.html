@@ -17,6 +17,10 @@
   .dot.on { background: var(--live); animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
   #note { padding: 24px 16px; color: var(--muted); max-width: 60ch; }
+  #status { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 16px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  #status[hidden] { display: none; }
+  #status b { color: var(--fg); font-weight: 600; }
+  #watch { font: inherit; color: var(--bg); background: var(--live); border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-weight: 600; }
   #game { padding: 12px 16px; }
 </style>
 </head>
@@ -26,6 +30,7 @@
   <select id="pick" aria-label="Game"></select>
   <label><input type="checkbox" id="follow" checked> follow the live game</label>
 </header>
+<div id="status" hidden><span id="say"></span><button type="button" id="watch" hidden>Watch it</button></div>
 <div id="note">Looking for games…</div>
 <div id="game"></div>
 <script src="kit/swu-viewer-kit.js"></script>
@@ -37,7 +42,10 @@
   const note = document.getElementById('note');
   const dot = document.getElementById('dot');
   const el = document.getElementById('game');
+  const say = document.getElementById('say');
+  const watch = document.getElementById('watch');
   let list = [];
+  let status = null;
   let current = null;
   let viewer = null;
   let lensTag = null;
@@ -48,24 +56,55 @@
     SWUViewer.loadCardText('kit/card-text.json').catch(() => {});
   }
 
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
   function label(g) {
-    const when = new Date(g.mtime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const state = g.live ? '● live' : g.winner === 'draw' ? 'draw' : g.winner ? `${g.winner} won` : 'ended early';
+    // a bot game names our bot and says whether it won; a watched game is two people, no bot of ours
+    const who = g.bot ? `${g.bot} (${g.ours}) vs a person` : 'two people, no bot';
+    const result = g.live ? '● live' : g.winner === 'draw' ? 'draw'
+      : !g.winner ? 'ended early'
+      : g.bot ? `${g.bot} ${g.winner === g.ours ? 'won' : 'lost'}` : `${g.winner} won`;
     const decks = g.decks ? g.decks.join('  vs  ') : 'waiting for the first board';
-    return `${state} · ${g.kind} · ${when}${g.round ? ` · round ${g.round}` : ''} · ${decks}`;
+    return `${result} · ${who} · ${clock(g.mtime)}${g.round ? ` · round ${g.round}` : ''} · ${decks}`;
+  }
+
+  // one line on what the bot's queue run is doing, and a button when it plays a game this page isn't showing
+  function showStatus() {
+    const s = status;
+    const box = document.getElementById('status');
+    if (!s) {
+      box.hidden = true;
+      return;
+    }
+    const tally = s.played ? ` · ${s.won ?? 0} won, ${s.lost ?? 0} lost so far` : '';
+    const text = s.stale ? `${s.bot} stopped answering at ${clock(s.at)} (the run on the Sprite died)`
+      : s.state === 'queued' ? `${s.bot} is in the queue, waiting for an opponent since ${clock(s.since)}`
+      : s.state === 'playing' ? `${s.bot} is playing a game, started ${clock(s.since)}`
+      : s.state === 'between games' ? `${s.bot} finished a game and queues again in a moment`
+      : s.state === 'stopped' ? `${s.bot} stopped at ${clock(s.since)}: ${s.reason}`
+      : `${s.bot} is starting`;
+    say.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = text;
+    say.append(b, tally);
+    const live = s.state === 'playing' && !s.stale && list.find((g) => g.id === s.game && g.board);
+    watch.hidden = !live || live.id === current;
+    watch.onclick = () => { follow.checked = true; open(live); };
+    box.hidden = false;
   }
 
   async function refresh() {
     try {
-      list = await (await fetch('games', { cache: 'no-store' })).json();
+      [list, status] = await Promise.all(['games', 'status'].map((u) => fetch(u, { cache: 'no-store' }).then((r) => r.json())));
     } catch {
       return;
     }
+    showStatus();
     pick.replaceChildren(...list.map((g) => new Option(label(g), g.id, false, g.id === current)));
     const shown = list.find((g) => g.id === current);
     dot.classList.toggle('on', Boolean(shown?.live));
     if (!list.length) {
-      note.textContent = 'No games recorded yet. A watched game shows up here as soon as its first board arrives.';
+      note.textContent = 'No games recorded yet. A game shows up here as soon as its first board arrives.';
       return;
     }
     const live = list.find((g) => g.live && g.board);
@@ -81,6 +120,7 @@
 
   function open(g) {
     current = g.id;
+    watch.hidden = true;
     lensTag = null;
     pick.value = g.id;
     dot.classList.toggle('on', g.live);
@@ -119,7 +159,8 @@
     }
   });
   refresh();
-  setInterval(refresh, 5000);
+  // every 2 s: a new bot game opens within a few seconds of its first board
+  setInterval(refresh, 2000);
   setInterval(() => {
     if (list.find((g) => g.id === current)?.live) {
       loadLens();

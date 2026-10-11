@@ -13,7 +13,8 @@
  *
  * Routes, under /<key>/ when --key is set (anything else is a 404):
  *   /             the page: a game picker and the viewer; it follows the newest live game unless you pick one
- *   /games        recorded games, newest first, as JSON
+ *   /games        recorded games, newest first, as JSON; in a bot game `ours` is our seat and `bot` our bot's name
+ *   /status       what the newest queue run is doing (queue.js writes <run>/status.json): queued, playing, stopped
  *   /game/<id>    one game as a replay (spec/replay-format.md)
  *   /lens/<id>    with --predict: the evaluator's P(p1 wins) at every step, as a swu-lens/1 file (no hands seen)
  *   /kit/swu-viewer-kit.js, /kit/card-text.json   from --kit
@@ -32,6 +33,8 @@ const RUN = /^[A-Za-z0-9][\w.-]*$/;
 const ID = new RegExp(`^(${RUN.source.slice(1, -1)})\\/(?:(frames)\\/)?([0-9a-f]{12})$`);
 /** Full games kept in memory; the picker's summaries are kept for every file. */
 const KEEP = 8;
+/** queue.js rewrites status.json every 30 s; a running state older than this means the run died. */
+const STATUS_STALE_MS = 2 * 60000;
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', json: 'application/json', jsonl: 'application/x-ndjson' };
 
 function arg(name, dflt) {
@@ -88,6 +91,9 @@ class Games {
         let hit = this.cache.get(file);
         if (!hit || hit.version !== version) {
             hit = { version, game: this.convert(fs.readFileSync(file, 'utf8')) };
+            if (hit.game && ID.exec(id)[2]) {
+                this.nameSeats(hit.game, ID.exec(id)[1], path.basename(file));
+            }
         }
         this.cache.delete(file);
         this.cache.set(file, hit);
@@ -117,6 +123,35 @@ class Games {
         }
     }
 
+    /**
+     * A bot game's frames are our seat's view (source.pov): name that seat after our bot and the other one "opponent",
+     * so the viewer says who is who. The bot's name comes from the run's games.jsonl row or status.json.
+     */
+    nameSeats(game, run, base) {
+        const h = game.events[0];
+        const ours = h.source?.pov;
+        if (!h.players.some((p) => p.id === ours)) {
+            return;
+        }
+        const dir = path.join(this.runs, run);
+        let bot = null;
+        try {
+            const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+            bot = st.file === base ? st.bot : null;
+        } catch {
+            // no status file: an older run
+        }
+        try {
+            const rows = fs.readFileSync(path.join(dir, 'games.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+            bot = rows.find((r) => r.file === base)?.bot ?? bot;
+        } catch {
+            // no rows yet: the first game of a run
+        }
+        bot = typeof bot === 'string' && bot ? bot : 'our bot';
+        h.players = h.players.map((p) => ({ ...p, bot: p.id === ours ? `${bot} (ours)` : 'opponent', human: p.id !== ours }));
+        h.ours = { seat: ours, bot };
+    }
+
     /** One line per game for the picker (an entry from list()). `board` says whether the game can be shown yet. */
     summary(entry) {
         const file = this.file(entry.id);
@@ -128,13 +163,47 @@ class Games {
             const end = g?.events[g.events.length - 1];
             s = {
                 version,
-                info: g && { steps: end.steps, round: end.round, winner: end.winner, how: end.how ?? null, decks: h.players.map((p) => p.deck), pov: h.source.pov }
+                info: g && {
+                    steps: end.steps, round: end.round, winner: end.winner, how: end.how ?? null, decks: h.players.map((p) => p.deck), pov: h.source.pov,
+                    ours: h.ours?.seat ?? null, bot: h.ours?.bot ?? null
+                }
             };
             this.summaries.set(file, s);
         }
         const fresh = this.now() - entry.mtime < LIVE_MS;
         const base = { id: entry.id, kind: entry.kind, mtime: entry.mtime };
         return s.info ? { ...base, ...s.info, board: true, live: !s.info.winner && fresh } : { ...base, board: false, live: fresh, steps: 0 };
+    }
+
+    /**
+     * What the newest queue run says it is doing (its status.json), with `game` the id of the game it is playing and
+     * `stale` when a running state has not been rewritten for STATUS_STALE_MS (the run died). Null when no run has one.
+     */
+    status() {
+        let best = null;
+        const dirs = fs.existsSync(this.runs) ? fs.readdirSync(this.runs, { withFileTypes: true }) : [];
+        for (const d of dirs.filter((x) => x.isDirectory() && RUN.test(x.name))) {
+            const file = path.join(this.runs, d.name, 'status.json');
+            if (fs.existsSync(file)) {
+                const mtime = fs.statSync(file).mtimeMs;
+                if (!best || mtime > best.mtime) {
+                    best = { run: d.name, file, mtime };
+                }
+            }
+        }
+        if (!best) {
+            return null;
+        }
+        let st;
+        try {
+            st = JSON.parse(fs.readFileSync(best.file, 'utf8'));
+        } catch {
+            return null; // queue.js renames a whole file into place, so this is a file someone else wrote
+        }
+        const game = typeof st.file === 'string' && /^[0-9a-f]{12}\.jsonl$/.test(st.file) ? `${best.run}/frames/${st.file.slice(0, -6)}` : null;
+        const keep = ['bot', 'deck', 'state', 'since', 'at', 'played', 'won', 'lost', 'errors', 'reason', 'last'];
+        const out = Object.fromEntries(keep.filter((k) => st[k] != null).map((k) => [k, st[k]]));
+        return { ...out, run: best.run, game, stale: st.state !== 'stopped' && this.now() - best.mtime > STATUS_STALE_MS };
     }
 
     /** The replay text the kit reads: no end line while the game is live. */
@@ -219,6 +288,9 @@ function makeServer({ games, kit, key = null }) {
             if (rel === 'games') {
                 return send(req, res, 200, JSON.stringify(games.list().map((e) => games.summary(e))), TYPES.json);
             }
+            if (rel === 'status') {
+                return send(req, res, 200, JSON.stringify(games.status()), TYPES.json);
+            }
             if (rel.startsWith('kit/') && Object.hasOwn(kitFiles, rel.slice(4))) {
                 return send(req, res, 200, fs.readFileSync(path.join(kit, rel.slice(4))), kitFiles[rel.slice(4)]);
             }
@@ -265,4 +337,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { Games, makeServer, acceptsGzip, LIVE_MS };
+module.exports = { Games, makeServer, acceptsGzip, LIVE_MS, STATUS_STALE_MS };

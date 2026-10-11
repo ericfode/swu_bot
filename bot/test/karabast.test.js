@@ -458,3 +458,85 @@ test('the live view answers only under its key', async () => {
         server.close();
     }
 });
+
+test('the queue loop keeps going after a wait with no match, and stops after maxErrors failures in a row', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const ledger = new PeopleLedger(path.join(out, 'people.json'), 10);
+    const seen = [];
+    // game 0: no match; 1: a win; 2: a loss; 3-5: failures (the loop stops at the third)
+    const play = async (g, hooks) => {
+        hooks.onQueued();
+        seen.push(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).state);
+        if (g === 0) {
+            throw new Error('no match within 10 minutes');
+        }
+        if (g >= 3) {
+            throw new Error('socket closed while queued: transport error');
+        }
+        await hooks.onMatched(`person-${g}`);
+        hooks.onGameFile(`00000000000${g}.jsonl`);
+        seen.push(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).file);
+        return { result: g === 1 ? 'win' : 'loss', file: `00000000000${g}.jsonl` };
+    };
+    const end = await runLoop({ games: 10, gapS: 25, maxErrors: 3, ledger, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual(seen, ['queued', 'queued', '000000000001.jsonl', 'queued', '000000000002.jsonl', 'queued', 'queued', 'queued']);
+    assert.deepStrictEqual([end.state, end.played, end.won, end.lost, end.errors, end.ok], ['stopped', 2, 1, 1, 3, false]);
+    assert.match(end.reason, /3 failures in a row/);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).state, 'stopped');
+    const rows = fs.readFileSync(path.join(out, 'games.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual(rows.map((r) => r.result), ['no match', 'win', 'loss', 'error', 'error', 'error']);
+    // every queued game keeps its place: 2 known people and 4 that may have been matched unseen
+    assert.strictEqual(new PeopleLedger(path.join(out, 'people.json'), 10).count, 6);
+});
+
+test('the queue loop stops at the people cap and on the stop file', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const ledger = new PeopleLedger(path.join(out, 'people.json'), 2);
+    let n = 0;
+    const play = async (g, hooks) => {
+        hooks.onQueued();
+        await hooks.onMatched(`person-${n++}`);
+        return { result: 'loss' };
+    };
+    const capped = await runLoop({ games: 10, gapS: 25, ledger, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([capped.played, capped.ok], [2, true]);
+    assert.match(capped.reason, /people cap is reached \(2 counted/);
+    const stop = path.join(out, 'STOP');
+    fs.writeFileSync(stop, '');
+    const stopped = await runLoop({ games: 10, gapS: 25, stopFile: stop, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual([stopped.played, stopped.reason], [0, 'the stop file exists']);
+});
+
+test('the live view names our bot in a bot game and reports the queue run', () => {
+    const { Games, STATUS_STALE_MS } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    const dir = path.join(runs, 'q-1');
+    fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
+    // our seat is player2 here: the frames of a bot game are its own view
+    const hand = [{ id: 'id-H1', setId: { set: 'SOR', number: 9 }, uuid: 'H1', name: 'Wampa', zone: 'hand', controllerId: 'a spectator' }];
+    const states = watchedStates().map((s) => {
+        const me = { ...s.players.player2, id: 'a spectator', name: 'a spectator' };
+        me.cardPiles = { ...me.cardPiles, hand };
+        return { ...s, players: { player1: s.players.player1, 'a spectator': me } };
+    });
+    fs.writeFileSync(path.join(dir, 'frames', 'abcdef012345.jsonl'), states.map((s) => JSON.stringify(s)).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'games.jsonl'), JSON.stringify({ bot: 'c-clock', result: 'loss', file: 'abcdef012345.jsonl' }) + '\n');
+    let now = Date.now();
+    const games = new Games(runs, { now: () => now });
+    const g = games.get('q-1/frames/abcdef012345');
+    const h = g.events[0];
+    const ours = h.source.pov;
+    assert.ok(['p1', 'p2'].includes(ours));
+    assert.deepStrictEqual(h.players.map((p) => [p.id === ours, p.bot]), [[ours === 'p1', ours === 'p1' ? 'c-clock (ours)' : 'opponent'], [ours === 'p2', ours === 'p2' ? 'c-clock (ours)' : 'opponent']]);
+    const s = games.summary(games.list()[0]);
+    assert.deepStrictEqual([s.bot, s.ours], ['c-clock', ours]);
+
+    assert.strictEqual(games.status(), null);
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ bot: 'c-clock', state: 'playing', file: 'abcdef012345.jsonl', token: 'never sent', played: 1 }));
+    const st = games.status();
+    assert.deepStrictEqual([st.state, st.game, st.played, st.stale, 'token' in st], ['playing', 'q-1/frames/abcdef012345', 1, false, false]);
+    now += STATUS_STALE_MS + 1000;
+    assert.strictEqual(games.status().stale, true);
+});
