@@ -240,6 +240,21 @@ test('swupgn: perspective-scoped files say which hand is hidden and blank its un
     assert.ok(report.keyframeMismatches.some((m) => m.path === 'players.2.hand'));
 });
 
+test('swupgn: a keyframe missing a count the board needs is damaged, and folding carries on', () => {
+    const text = read('minimal').split('\n').map((l) => (l.startsWith('{"seq":"R1.end"') ? l.replace('"seat":1,"baseHp":30,"baseMaxHp":30,', '"seat":1,"baseHp":30,') : l)).join('\n');
+    assert.notStrictEqual(text, read('minimal'));
+    const { events, report } = convertSwuPgn(text);
+    assert.deepStrictEqual(report.damagedKeyframes, ['R1.end']);
+    assert.strictEqual(report.keyframes, 2);
+    assert.deepStrictEqual(report.keyframeMismatches, []);
+    for (const st of steps(events)) {
+        for (const seat of ['p1', 'p2']) {
+            assert.strictEqual(st.state.players[seat].base.hp, 30);
+            assert.ok(Number.isFinite(st.state.players[seat].base.d));
+        }
+    }
+});
+
 test('swupgn: reader errors and leniency follow the spec', () => {
     const text = read('minimal');
     assert.ok(isSwuPgn(text));

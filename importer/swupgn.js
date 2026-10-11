@@ -510,15 +510,24 @@ function reduce(s, e, warn = () => {}) {
     return s;
 }
 
-/** A keyframe a reader may snap to: both seats, with array cards/hand/discard and array upgrades on every card. */
+const PLAYER_NUMBERS = ['baseHp', 'baseMaxHp', 'handSize', 'resourcesReady', 'resourcesExhausted', 'credits'];
+const CARD_NUMBERS = ['damage', 'shields', 'experience'];
+const numbers = (o, keys) => keys.every((k) => Number.isFinite(o[k]));
+
+/**
+ * A keyframe a reader may snap to: both seats, with every field the fold and the snapshot read (array
+ * cards/hand/discard, the counts in PLAYER_NUMBERS, and on every card an id, a zone, CARD_NUMBERS, upgrades and
+ * status tokens). Snapping replaces the whole board, so a keyframe missing one of these is treated as damaged.
+ */
 function isCompleteKeyframe(k) {
     if (!isObj(k) || !isObj(k.players)) {
         return false;
     }
     return [1, 2].every((seat) => {
         const p = k.players[seat];
-        return isObj(p) && Array.isArray(p.cards) && Array.isArray(p.hand) && Array.isArray(p.discard) &&
-            p.cards.every((c) => isObj(c) && Array.isArray(c.upgrades));
+        return isObj(p) && Array.isArray(p.cards) && Array.isArray(p.hand) && Array.isArray(p.discard) && numbers(p, PLAYER_NUMBERS) &&
+            p.cards.every((c) => isObj(c) && typeof c.id === 'string' && typeof c.zone === 'string' && numbers(c, CARD_NUMBERS) &&
+                Array.isArray(c.upgrades) && isObj(c.statusTokens));
     });
 }
 
