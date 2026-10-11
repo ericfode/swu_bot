@@ -31,7 +31,9 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - `players/external.js` — `ExternalBot`: runs any program that speaks the stdio JSON Lines protocol in `spec/stdio-protocol.md`, as an ordinary bot. Register programs by name in `external-bots.json` (or `$SWU_EXTERNAL_BOTS`); the registry in `players/index.js` picks them up, so the name works in `--bots` for `tournament.js` and `ladder.js`.
 - `observe.js` — the plain-JSON board/prompt/action view those bots receive (replay snapshot plus card uuids, opponent hand hidden).
 - `wasm/` — a bot written by hand in WebAssembly text (`bot.wat`) behind a thin stdio shim (`host.js`), registered as `wasm`. See `wasm/README.md`.
+- `python/` — `py-clock`, a Python bot (race-clock evaluation, beam search over attack sequences, card data from the engine JSON); see `python/README.md`.
 - `examples/random_bot.py` — reference client. `node bot/stdio-smoke.js -- <cmd> [args]` checks a bot against a fake game (needs `forceteki/build`, no card data).
+- `c/` — `c-clock`, a bot in C on that protocol (`make -C bot/c` first). See `c/README.md`.
 - The full interface and replay format are written up in `spec/`.
 - `jev/jev_bot.py` — `jev`: each move is picked by TypeSafe's Jev model (a Choice over the legal actions). See `jev/README.md`.
 - `rust/` — Rust bot (`swu-bot-rs`, policies `random`, `greedy`, `greedy2` and `search`) speaking the stdio protocol (v1, or v2 with simulations when offered); registered as `rust-<policy>` in `external-bots.json`. `greedy2` reads card stats from `forceteki/test/json`. Build with `cargo build --release --manifest-path bot/rust/Cargo.toml`, test with `cargo test --manifest-path bot/rust/Cargo.toml`, then `node bot/rust/check.js [gamesPerSeat] [startSeed] [cardJsonDir]` plays both against `random-a` on the real engine. Why a subprocess rather than WASM or a native addon: see `rust/README.md`.
