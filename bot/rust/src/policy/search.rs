@@ -66,7 +66,8 @@ impl Default for Weights {
 }
 
 impl Weights {
-    fn from_env() -> Self {
+    /// The defaults, each overridable by `$SWU_EVAL_<NAME>`.
+    pub fn from_env() -> Self {
         let d = Weights::default();
         Weights {
             base: env_or("SWU_EVAL_BASE", d.base),
@@ -101,6 +102,11 @@ pub fn evaluate(state: &State, me: &str, w: &Weights) -> f64 {
 const WIN: f64 = 10_000.0;
 
 impl Search {
+    /// The greedy2 policy that ranks candidates and decides when there is nothing to search.
+    pub fn greedy2(&mut self) -> &mut Greedy2 {
+        &mut self.g
+    }
+
     fn outcome(&self, over: &Over) -> f64 {
         match over.winner.as_deref() {
             Some(w) if w == self.me => WIN,
@@ -114,7 +120,7 @@ impl Search {
     fn playout(&self, mut pos: Simulated, sim: &mut dyn Simulator, round: u32, deadline: Instant) -> Option<f64> {
         let mut mine = self.g.clone();
         let mut theirs = Greedy2::new(self.g.db());
-        theirs.new_game(&Hello { protocol: String::new(), v: 1, bot: String::new(), you: other(&self.me).into(), seed: self.seed ^ 0x5eed, versions: vec![] });
+        theirs.new_game(&Hello { v: 1, you: other(&self.me).into(), seed: self.seed ^ 0x5eed, ..Default::default() });
         for _ in 0..self.max_steps {
             if pos.error.is_some() || Instant::now() >= deadline {
                 return None;

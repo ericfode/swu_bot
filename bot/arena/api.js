@@ -27,6 +27,10 @@
  *   eval_result {id}                            queued / running / done with results
  *   wait {timeoutSec?, round?}                  long-poll until a round's work window is open (status started /
  *                                               waiting / done)
+ *   panel {name} / panels {}                    one competitor's live panel / all of them + leaderboard + experiment
+ *   games {round?} / ladder {round?}            a round's game list (replays at /replays/...) / its full ladder results
+ *   archive {id?}                               archived tournaments, or one archived tournament's standings and panels
+ * Readers (the app, the dashboard, ratings) use these calls instead of reading the arena's files.
  * A remote client submits its code with submit {bot: {kind:'js', files: {"bot.js": "...", ...}}}.
  * Server-side callers (the referee) message competitors with notify(), which is not a method: no client can call it.
  */
@@ -49,6 +53,7 @@ const INBOX = (n) => path.join(home.HOME, 'inbox', `${n}.jsonl`);
 // error codes a client may see; anything else is reported as 'internal'
 const CODES = new Set(['bad_request', 'unauthorized', 'not_found', 'conflict', 'bad_bot', 'unsupported']);
 const LOAD_CHECK_MS = 30000;
+const ARCHIVE_ID = /^[\w-]{1,64}$/;
 
 class ArenaError extends Error {
     constructor(code, message) {
@@ -384,19 +389,52 @@ const api = {
         return dash.composePanel(name);
     },
 
+    panels() {
+        // every panel the research dashboard shows for the arena, from ARENA_HOME (the dashboard's files are copies)
+        return { ...dash.boards(), panels: home.roster().agents.map((a) => dash.composePanel(a.name)) };
+    },
+
     games({ round } = {}) {
-        const st = api.standings();
-        const k = int(round ?? st.rounds[st.rounds.length - 1]?.round);
-        need(k !== undefined, 'not_found', 'no rounds yet');
-        need(Number.isInteger(k) && k >= 0, 'bad_request', 'round: an integer');
-        // the round's ladder folder: standings name it once the round is published, tournament.json as soon as it opens
-        // (tournament rounds are <tournament id>-r<K>, referee.js ladderIdOf); anything else falls back to arena-r<K>
-        const t = home.readJson(TOURNAMENT(), null);
-        const named = st.rounds.find((x) => x.round === k)?.ladderId ?? (Array.isArray(t?.rounds) ? t.rounds.find((r) => r?.n === k)?.ladder : undefined);
-        const id = typeof named === 'string' && /^arena-[\w-]+$/.test(named) ? named : `arena-r${k}`;
+        const { k, id } = roundLadder(round);
         const idx = home.readJson(path.join(home.RESULTS, id, 'index.json'), null);
         need(idx, 'not_found', `no games for round ${k}`);
         return { round: k, ladderId: id, replayBase: `replays/${id}/games/`, games: idx.games };
+    },
+
+    ladder({ round } = {}) {
+        const { k, id } = roundLadder(round);
+        const doc = home.readJson(path.join(home.RESULTS, id, 'ladder.json'), null);
+        need(doc, 'not_found', `no ladder for round ${k}`);
+        return { round: k, ladderId: id, ladder: doc };
+    },
+
+    archive({ id } = {}) {
+        const dir = path.join(home.HOME, 'archive');
+        if (id === undefined || id === null || id === '') {
+            const ids = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && ARCHIVE_ID.test(d.name)).map((d) => d.name).sort() : [];
+            return { tournaments: ids.map((x) => ({ id: x, note: home.readJson(path.join(dir, x, 'README.json'), null)?.note ?? null,
+                                                    rounds: home.readJson(path.join(dir, x, 'standings.json'), null)?.rounds?.length ?? 0 })) };
+        }
+        need(typeof id === 'string' && ARCHIVE_ID.test(id), 'bad_request', 'id: an archived tournament id (archive {} lists them)');
+        const base = path.join(dir, id);
+        need(fs.existsSync(base), 'not_found', `no archived tournament ${id}`);
+        // archives are copies of the dashboard files: panels/ or dash/ hold arena-<agent>.json and arena-leaderboard.json
+        const panels = [];
+        let leaderboard = null;
+        for (const sub of ['panels', 'dash']) {
+            const d = path.join(base, sub);
+            for (const f of fs.existsSync(d) ? fs.readdirSync(d).filter((x) => /^arena-[\w-]+\.json$/.test(x)).sort() : []) {
+                const p = home.readJson(path.join(d, f), null);
+                if (f === 'arena-leaderboard.json') {
+                    leaderboard ??= p;
+                } else if (p && !panels.some((q) => q.id === p.id)) {
+                    panels.push(p);
+                }
+            }
+        }
+        const experiment = home.readJson(path.join(base, 'dash', 'arena.json'), null) ?? home.readJson(path.join(base, 'experiment-arena.json'), null);
+        return { id, note: home.readJson(path.join(base, 'README.json'), null)?.note ?? null, standings: home.readJson(path.join(base, 'standings.json'), null),
+                 leaderboard, experiment, panels };
     },
 
     async wait({ timeoutSec = 45, round } = {}) {
@@ -431,6 +469,19 @@ const api = {
     }
 };
 
+/** A round number (default: the latest rated round) and its ladder id. Standings name the ladder once the round is
+ *  published, tournament.json as soon as it opens (tournament rounds are <tournament id>-r<K>, referee.js ladderIdOf);
+ *  anything else falls back to arena-r<K>. */
+function roundLadder(round) {
+    const st = api.standings();
+    const k = int(round ?? st.rounds[st.rounds.length - 1]?.round);
+    need(k !== undefined, 'not_found', 'no rounds yet');
+    need(Number.isInteger(k) && k >= 0, 'bad_request', 'round: an integer');
+    const t = home.readJson(TOURNAMENT(), null);
+    const named = st.rounds.find((x) => x.round === k)?.ladderId ?? (Array.isArray(t?.rounds) ? t.rounds.find((r) => r?.n === k)?.ladder : undefined);
+    return { k, id: typeof named === 'string' && /^arena-[\w-]+$/.test(named) ? named : `arena-r${k}` };
+}
+
 /** Calls a method by name with an args object; resolves {result} or {error: {code, message}}. */
 async function call(method, args = {}) {
     if (!Object.prototype.hasOwnProperty.call(METHODS, method) || typeof api[method] !== 'function') {
@@ -460,7 +511,10 @@ const METHODS = {
     eval_result: { readOnly: true, desc: 'State and results of a queued eval: queued, running, done (W-L per opponent, ms per decision, lost games with replay paths).', props: { id: 'string' }, required: ['id'] },
     wait: { readOnly: true, desc: 'Wait for a work window. Call it in a loop: it returns at once if a work window is already open (unless round is given: then it waits for the window of a round after that one), else when one opens or after timeoutSec (default 45, max 200). Result: status started / waiting / done, started, and the status (round, phase, deadline).', props: { timeoutSec: 'integer', round: 'integer' } },
     panel: { readOnly: true, desc: "A competitor's live dashboard panel: now, idea, plan, thoughts, Elo and speed widgets.", props: { name: 'string' }, required: ['name'] },
+    panels: { readOnly: true, desc: 'Every competitor panel, plus the leaderboard and the experiment (Elo over rounds) the research dashboard shows.', props: {} },
     games: { readOnly: true, desc: 'Games of a round (default latest) with outcome, winner and timing; replays at replayBase + id + .jsonl.', props: { round: 'integer' } },
+    ladder: { readOnly: true, desc: "A round's full ladder results (default latest), schema swu-ladder/1: config, bots with Elo and win rates, pairs, every game.", props: { round: 'integer' } },
+    archive: { readOnly: true, desc: 'Archived tournaments. Without id: the list. With id: its standings, leaderboard, experiment and competitor panels.', props: { id: 'string' } },
     inbox: { token: true, readOnly: true, desc: 'Messages for you (from Eric, the referee or others), oldest first. Read it at the start of every round.', props: { name: 'string', since: 'string' }, required: ['name'] }
 };
 

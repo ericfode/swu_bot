@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { dataSource, parseGame } from './source';
+import { dataSource, noBoardReason, parseGame } from './source';
 import type { Game, TournamentIndex, TournamentSummary } from './types';
 
 /** Loads once, then reloads every `everyMs` while `keepPolling(data)` says so. */
@@ -47,7 +47,18 @@ export const useIndex = (tid: string) =>
 /** A game with no end record yet is still being played: it is re-read every second so new moves stream in. */
 export function useGame(tid: string, gid: string | null) {
     const r = usePolled<Game | null>(
-        async () => (gid ? parseGame(await (await dataSource()).loadGameText(tid, gid), true) : null),
+        async () => {
+            if (!gid) {
+                return null;
+            }
+            const text = await (await dataSource()).loadGameText(tid, gid);
+            const g = parseGame(text, true);
+            const why = g ? null : noBoardReason(text);
+            if (why) {
+                throw new Error(why);
+            }
+            return g;
+        },
         [tid, gid], 1000, (g) => !!gid && (g == null || g.end == null)
     );
     return { game: r.data, error: r.error, live: !!r.data && r.data.end == null };

@@ -1,9 +1,11 @@
-import type { DataSource } from './source';
+import { readDirIndex, type DataSource } from './source';
+import { readLensIndex } from './lensFile';
 import type { TournamentIndex, TournamentSummary } from './types';
 
 // Tournaments staged by fixtures/stage.mjs (real replays or generated fixtures). Either bundled into the page as raw
 // text (studio/static-replays), or, with STATIC_DATA=files, published as files beside the page under data/ (with a
 // data/manifest.json listing the tournaments) and fetched when opened, so a preview can carry more games than fit in one file.
+// card-text.json beside the tournaments is the printed card data for cards without art (staged from CARD_TEXT).
 const files = import.meta.glob('../../static-replays/**/*.{json,jsonl}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const PREFIX = '../../static-replays/';
 const byPath = new Map(Object.entries(files).map(([k, v]) => [k.slice(PREFIX.length), v]));
@@ -18,7 +20,17 @@ function get(rel: string): Promise<string | null> {
     }
     let p = fetched.get(rel);
     if (!p) {
-        p = fetch(`data/${rel}`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+        // a missing file (404) stays missing; a network error or server error is tried again next time
+        const url = `data/${rel.split('/').map(encodeURIComponent).join('/')}`;
+        p = fetch(url).then((r) => {
+            if (!r.ok && r.status >= 500) {
+                fetched.delete(rel);
+            }
+            return r.ok ? r.text() : null;
+        }).catch(() => {
+            fetched.delete(rel);
+            return null;
+        });
         fetched.set(rel, p);
     }
     return p;
@@ -47,8 +59,20 @@ export const staticSource: DataSource = {
         const t = await get(`_evals/${gid}.json`);
         return t ? JSON.parse(t) : null;
     },
-    async loadLens(_tid, gid) {
-        const t = await get(`_lens/${gid}.json`);
+    async loadLensIndex() {
+        const t = await get('_lens/evaluators.json');
+        return t ? readLensIndex(JSON.parse(t)) : null;
+    },
+    async loadLensDirIndex(dir) {
+        const t = await get(`_lens/${dir ? `${dir}/` : ''}index.json`);
+        return t ? readDirIndex(JSON.parse(t)) : null;
+    },
+    async loadLens(_tid, gid, dir = '') {
+        const t = await get(`_lens/${dir ? `${dir}/` : ''}${gid}.json`);
+        return t ? JSON.parse(t) : null;
+    },
+    async loadCardText() {
+        const t = await get('card-text.json');
         return t ? JSON.parse(t) : null;
     },
     kind: 'static',
@@ -57,11 +81,12 @@ export const staticSource: DataSource = {
             ? [...byPath.keys()].map((rel) => rel.match(/^([^/]+)\/index\.json$/)?.[1]).filter((x): x is string => !!x)
             : (JSON.parse(await read('manifest.json')) as { tournaments: string[] }).tournaments;
         const out: TournamentSummary[] = [];
-        for (const id of ids) {
+        // _lens and _evals are data folders, not tournaments
+        for (const id of ids.filter((x) => !x.startsWith('_'))) {
             const idx = JSON.parse(await read(`${id}/index.json`)) as TournamentIndex;
             out.push({ id, createdAt: idx.createdAt, engine: idx.engine, bots: idx.bots, games: idx.games.length });
         }
-        return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        return out.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
     },
     async loadIndex(tid) {
         return JSON.parse(await read(`${tid}/index.json`));

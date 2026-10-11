@@ -1,5 +1,5 @@
 [workspace]
-members = ["bot/rust", "bot/omni-rs", "bot/omni-wasm"]
+members = ["bot/rust", "bot/omni-rs", "bot/omni-wasm", "bot/rust-omni"]
 exclude = ["bot/rust-learned"]
 resolver = "2"
 

@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { humanize } from '../lib/cards';
 import { ActionIcon } from '../kit/ActionIcon';
 import { describe, type Action } from '../data/actions';
-import type { Delta } from '../data/derive';
+import { cardById, type Delta } from '../data/derive';
 import type { Game, Seat } from '../data/types';
 
 const KIND_STYLE: Record<Delta['kind'], string> = {
@@ -65,6 +65,10 @@ const Row = memo(function Row({ i, game, bots, deltas, current, onGo, action, hi
     }
     // a folded action reads as the action ("resources Fenn Rau and Doctor Pershing"), not as its first click
     const text = fold && action ? describe(action, '').trim() : s.action ? humanize(s.action.label) : s.label;
+    // v2: a distribute action's split, by card name (as on the board before it)
+    const split = !fold && s.action?.split?.length
+        ? s.action.split.map((x) => `${(i > 0 ? cardById(game.steps[i - 1].state, x.id) : null)?.n ?? cardById(s.state, x.id)?.n ?? x.id} ${x.amount}`).join(', ')
+        : null;
     return (
         <li className="relative">
             {heading}
@@ -77,7 +81,7 @@ const Row = memo(function Row({ i, game, bots, deltas, current, onGo, action, hi
                             : s.pid && <i className="size-2 mx-1 rounded-full shrink-0 opacity-60" style={{ background: s.pid === 'p1' ? 'var(--color-p1)' : 'var(--color-p2)' }} />}
                         <span className="truncate">
                             {s.pid && <b className="font-medium" style={{ color: s.pid === 'p1' ? 'var(--color-p1)' : 'var(--color-p2)' }}>{bots[s.pid]} </b>}
-                            <span className="text-fg">{text}</span>
+                            <span className="text-fg">{text}</span>{split && <span className="text-dim">: {split}</span>}
                         </span>
                     </span>
                     {(s.title || s.legal) && !fold && <span className="block text-[11px] text-faint truncate">{s.title ?? s.prompt}{s.legal ? ` · ${s.legal} options` : ''}</span>}
