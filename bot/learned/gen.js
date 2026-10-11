@@ -9,7 +9,7 @@
  * fraction (--teacher) of action windows get a search label; every other prompt gets its cheap rule-based label.
  * Behaviour: play the teacher's label with probability --follow, otherwise the student model (if given) or random.
  *
- * Files in --out (appended, so a worker can be restarted with a new seed):
+ * Files in --out (appended: a restarted worker goes on from its next seed, --seed + games already done):
  *   S.f32  N x S   state features of the deciding seat      Sn.f32 N x S  same seat, right after the action
  *   P.f32  N x P   prompt features                          A.f32  M x A  features of every legal action, in order
  *   meta.i32 N x 8 [game, seat(0|1), teacher idx or -1, played idx, #actions, isWindow, outcome(+1|-1|0|-9), step]
@@ -201,9 +201,10 @@ async function main() {
     const done = repair(out);
     for (let k = 0; k < games; k++) {
         const t0 = Date.now();
-        const r = await playOne(env, seed0 + k, opts, done + k);
+        // seeds go on from the games already in the folder, so a restart with the same command plays new games
+        const r = await playOne(env, seed0 + done + k, opts, done + k);
         write(out, r);
-        console.log(`${path.basename(out)} game ${done + k} seed ${seed0 + k}: ${r.info.outcome} ${r.info.winner ?? ''} ${r.info.steps} steps, ${r.info.windowLabels} window labels, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+        console.log(`${path.basename(out)} game ${done + k} seed ${seed0 + done + k}: ${r.info.outcome} ${r.info.winner ?? ''} ${r.info.steps} steps, ${r.info.windowLabels} window labels, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     }
 }
 main().catch((e) => {
