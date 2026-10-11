@@ -268,11 +268,20 @@ function main() {
     for (const dir of humanDirs) {
         const idx = readJson(path.join(HUMAN, dir, 'index.json'), null);
         if (!idx || !Array.isArray(idx.games)) continue;
-        humanSources.push({ source: dir, createdAt: idx.createdAt || null, games: idx.games.length });
+        const src = { source: dir, createdAt: idx.createdAt || null, games: idx.games.length, credit: null, url: null };
+        humanSources.push(src);
         for (const g of idx.games) {
             if (g.outcome !== 'won' || !g.winnerSeat) continue;
             const replay = path.join(HUMAN, dir, 'games', `${g.id}.jsonl`);
-            if (fs.existsSync(replay)) humanGames.push({ run: dir, root: 'human-games', id: g.id, winner: g.winnerSeat, replay });
+            if (!fs.existsSync(replay)) continue;
+            humanGames.push({ run: dir, root: 'human-games', id: g.id, winner: g.winnerSeat, replay });
+            // Public games must show their source's credit wherever their data appears (human-games/README.md).
+            if (!src.credit) {
+                let head = null;
+                try { head = JSON.parse(fs.readFileSync(replay, 'utf8').split('\n', 1)[0]); } catch { /* unreadable header */ }
+                const so = head && head.source;
+                if (so && so.credit) { src.credit = so.credit; src.url = so.url || null; }
+            }
         }
     }
 
