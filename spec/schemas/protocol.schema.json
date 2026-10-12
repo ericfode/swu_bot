@@ -746,6 +746,10 @@
               }
             }
           }
+        },
+        "split": {
+          "$ref": "#/$defs/Split",
+          "description": "Rust simulations only (simEngine rust): the one split this distribute action makes; such an action has no distribute object."
         }
       },
       "allOf": [
@@ -773,8 +777,17 @@
             }
           },
           "then": {
-            "required": [
-              "distribute"
+            "anyOf": [
+              {
+                "required": [
+                  "distribute"
+                ]
+              },
+              {
+                "required": [
+                  "split"
+                ]
+              }
             ]
           }
         }
