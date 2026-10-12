@@ -2357,3 +2357,24 @@ fn force_trigger_lethal_fatigue_completes_action_player_handoff() {
 fn terminal_trigger_handoff_does_not_discard_pending_registrations() {
  let e=engine();let mut s=board(&e);s.outcome=2;s.trigger_context=1;s.pending_programs=1;let active=s.active;e.process_all_triggers(&mut s).unwrap();assert_eq!(s.active,active);assert_eq!(s.pending_programs,1);s.pending_programs=0;s.death_pending.len=1;e.process_all_triggers(&mut s).unwrap();assert_eq!(s.active,active);assert_eq!(s.death_pending.len,1);s.death_pending.len=0;s.death_depth=1;e.process_all_triggers(&mut s).unwrap();assert_eq!(s.active,active);
 }
+#[test]
+fn force_continuation_admission_is_exact_eight_and_raw_shapes_fail_closed() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let e=engine();
+ for code in ["LOF_031","LOF_035","LOF_048","LOF_075","LOF_149","LOF_159","LOF_172","LOF_173"]{assert!(e.by_code.contains_key(code),"{code}");}
+ for (field,value) in [("costs",json!([{"kind":"exhaustSelf"}])),("optional",json!(false)),("trigger",json!("onAttack")),("condition",json!({"kind":"const","value":true})),("then",json!({"effect":{"kind":"noAction"}}))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_035").unwrap();card["abilities"]["card"][0][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_035"),"{field}");}
+ for (field,value) in [("optional",json!(true)),("then",json!({"effect":{"kind":"noAction"}})),("condition",json!({"kind":"const","value":true})),("targetResolvers",json!([{}]))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_035").unwrap();card["abilities"]["card"][0]["ifYouDo"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_035"),"child {field}");}
+ for (code,types,class) in [("LOF_035",json!(["event"]),"EventCard"),("LOF_075",json!(["unit"]),"NonLeaderUnitCard"),("LOF_035",json!(["leader","unit"]),"NonLeaderUnitCard")] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]==code).unwrap();card["baseClass"]=json!(class);card["card"]["types"]=types;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key(code));}
+}
+#[test]
+fn force_event_primary_spends_even_without_secondary_and_absent_confirmation_is_prepaid() {
+ let e=engine();let mut absent=board(&e);let event=hand(&e,&mut absent,"LOF_075");let prompt=e.apply(&absent,&e.card_action(&absent,event)).unwrap();assert_eq!(prompt.decision,Decision::AbilityNoEffect);assert!(prompt.players[0].hand.contains(event));assert_eq!(named_button(&e,&prompt,"Cancel").zobrist(),absent.zobrist());let paid=named_button(&e,&prompt,"Play anyway");assert!(paid.players[0].discard.contains(event));assert!(!paid.players[0].force_held);
+ let mut held=absent;held.players[0].force_held=true;let identity=held.players[0].force_id;let next=held.next_id;let done=e.apply(&held,&e.card_action(&held,event)).unwrap();assert_eq!(done.decision,Decision::Window);assert!(!done.players[0].force_held);assert_eq!(done.players[0].force_id,identity);assert_eq!(done.next_id,next);assert!(done.players[0].discard.contains(event));
+}
+#[test]
+fn force_continuation_selects_only_after_spend_and_retains_source_actor() {
+ let e=engine();let mut s=board(&e);s.players[0].force_held=true;let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let source=hand(&e,&mut s,"LOF_149");let next=s.next_id;let optional=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(optional.decision,Decision::AbilityOptional);assert!(optional.players[0].force_held);let selected=named_button(&e,&optional,"Trigger");assert_eq!(selected.active,Seat::P1);assert_eq!(selected.decision,Decision::AbilityTarget);assert!(!selected.players[0].force_held);assert_eq!(selected.next_id,next);assert!(e.legal_actions(&selected).iter().any(|a|a.card==Some(format!("c{}",enemy-1))));assert!(e.legal_actions(&selected).iter().all(|a|a.label!="Cancel"));
+}
+#[test]
+fn force_death_continuation_opponent_chooses_discard_after_source_departure() {
+ let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_159");let card=add(&e,&mut s,Seat::P2,"LOF_256");s.players[1].hand.push(card).unwrap();let program=e.def(&s,source).programs.card[0];e.leave_play(&mut s,source).unwrap();s.source=source;s.players[0].force_held=true;e.begin_program(&mut s,program,0).unwrap();let selected=named_button(&e,&s,"Trigger");assert!(!selected.players[0].force_held);assert_eq!(selected.active,Seat::P2);assert!(e.legal_actions(&selected).iter().any(|a|a.card==Some(format!("c{}",card-1))));let action=e.legal_actions(&selected).into_iter().find(|a|a.card==Some(format!("c{}",card-1))).unwrap();let done=e.apply(&selected,&action).unwrap();assert!(done.players[1].discard.contains(card));assert!(!done.players[1].hand.contains(card));
+}

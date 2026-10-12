@@ -901,12 +901,28 @@ impl Program {
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
         if contains_force(&ability.effect) {
-            let root=depth==0 && ability.trigger=="whenPlayed" && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
-            let gain=matches!(&ability.effect,Effect::GainForce{target:Target::Name(n)} if n=="ownPlayer") && !ability.optional && ability.if_you_do.is_none();
-            let use_force=matches!(&ability.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && ability.optional && ability.if_you_do.as_ref().is_some_and(|next| {
-                next.trigger.is_empty() && !next.coordinate && next.context_title.is_empty() && next.costs.is_empty() && !next.optional && !next.requires_confirmation && next.target_resolver.is_none() && next.target_resolvers.is_empty() && next.condition.is_none() && next.then.is_none() && next.if_you_do.is_none() && (matches!(&next.effect,Effect::Draw{target:Target::Name(n),amount:Expr::Const{value}} if n=="ownPlayer"&&value.as_u64()==Some(2)) || matches!(&next.effect,Effect::Ready{target:Target::Name(n)} if n=="self"))
+            let root=depth==0 && ["whenPlayed","whenDefeated","event"].contains(&ability.trigger.as_str()) && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
+            let gain=ability.trigger=="whenPlayed" && matches!(&ability.effect,Effect::GainForce{target:Target::Name(n)} if n=="ownPlayer") && !ability.optional && ability.if_you_do.is_none();
+            let use_force=matches!(&ability.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && ability.optional==(ability.trigger!="event") && ability.if_you_do.as_ref().is_some_and(|next| {
+                if !next.trigger.is_empty() || next.coordinate || !next.context_title.is_empty() || !next.costs.is_empty() || next.optional || next.requires_confirmation || !next.target_resolvers.is_empty() || next.condition.is_some() || next.then.is_some() || next.if_you_do.is_some() {return false;}
+                fn bounded(e:&Expr)->bool {matches!(e,Expr::Const{value} if value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n))) || matches!(e,Expr::Unary{op,value} if op=="-" && matches!(value.as_ref(),Expr::Const{value} if value.as_u64().is_some_and(|n|n<=65535)))}
+                match (&next.target_resolver,&next.effect) {
+                    (None,Effect::Draw{target:Target::Name(n),amount:Expr::Const{value}})=>ability.trigger=="whenPlayed" && n=="ownPlayer"&&value.as_u64()==Some(2),
+                    (None,Effect::Ready{target:Target::Name(n)})=>ability.trigger=="whenPlayed" && n=="self",
+                    (None,Effect::DiscardOwnHand{target:Target::Name(n),amount:Expr::Const{value}})=>ability.trigger=="whenDefeated" && n=="enemyPlayer"&&value.as_u64()==Some(1),
+                    (Some(r),effect)=> {
+                        let selector=["any","self"].contains(&r.owner.as_str()) && ["unit","base"].contains(&r.card_type.as_str()) && matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) && r.arena.is_none() && !r.optional && r.mode.is_none() && r.count.is_none() && r.prompt_title.is_none() && r.predicate.is_none();
+                        selector && match effect {
+                            Effect::ModifyStats{target:Target::Name(n),duration,power,hp}=>r.card_type=="unit"&&n=="chosen"&&duration=="phase"&&bounded(power)&&bounded(hp),
+                            Effect::Heal{target:Target::Name(n),amount:Expr::Const{value}}=>n=="chosen"&&value.as_u64().is_some_and(|n|(1..=65535).contains(&n)),
+                            Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}}=>r.card_type=="unit"&&n=="chosen"&&value.as_u64().is_some_and(|n|(1..=65535).contains(&n)),
+                            _=>false,
+                        }
+                    },
+                    _=>false,
+                }
             });
-            if !root || !(gain||use_force) {return Err("Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source".into());}
+            if !root || !(gain||use_force) {return Err("Force requires standalone ordinary play/death/event use and one bounded independent success continuation".into());}
         }
 
         if contains_weakness(&ability.effect) {
@@ -1361,7 +1377,7 @@ impl Catalogue {
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Weakness source must be an ordinary unit card-side registration".into());}
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
-                if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Force registration requires ordinary unit card-side metadata".into());}
+                if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && ["whenPlayed","whenDefeated"].contains(&a.trigger.as_str())) || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event"))) {return Err("Force registration requires ordinary unit card-side metadata".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}

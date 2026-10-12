@@ -106,12 +106,16 @@ card inventory. Markerless legacy snapshots remain valid only for selected pools
 that cannot reach Force abilities; held state and reachable Force abilities
 require the reviewed native token in the selected pool.
 
-The first executable Force registrations are ordinary-unit When Played:
-mandatory gain, or optional use followed by a successful draw-two or self-ready
-continuation. They preserve captured source identity through unique replacement.
-These operations use the validated interpreter fallback in Auto mode. Other
-Force targets, costs, queries, events, groups, hooks, and continuations remain
-explicit rejections. Source conversion and runtime admission remain separate.
+Ordinary-unit When Played supports mandatory Force gain or optional use;
+When Defeated also supports optional use. Event use preserves prepayment
+confirmation and cancellation when no Force is held. Supported continuations
+include draw-two, self-ready, scalar unit damage, unit/base healing, unit phase
+stats, and the opponent choosing one card to discard. Force is spent before the
+continuation and remains spent even when it has no eligible or beneficial target.
+Captured source identity survives departure and unique replacement. These
+operations use the validated interpreter fallback in Auto mode. Other Force
+targets, costs, queries, groups, hooks, and continuations remain explicit
+rejections. Source conversion and runtime admission remain separate.
 
 Bounded simultaneous groups preserve separate event preparation and resolution.
 The runtime supports selected combinations of damage, healing, tokens, readiness,

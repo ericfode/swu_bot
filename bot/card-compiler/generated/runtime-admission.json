@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 535
+    "sourceIr": 543
   },
   "runtimeAdmittedCards": [
     {
@@ -2121,6 +2121,11 @@
       "setCode": "LOF_004"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "karis#we-dont-like-strangers",
+      "setCode": "LOF_031"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "magistrates-scout",
       "setCode": "LOF_032"
@@ -2132,6 +2137,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "talzins-assassin",
+      "setCode": "LOF_035"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "ezra-bridger#attuned-with-life",
       "setCode": "LOF_046"
     },
@@ -2139,6 +2149,11 @@
       "implementation": "sourceIr",
       "internalName": "t6-shuttle-1974#stay-close",
       "setCode": "LOF_047"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "itinerant-warrior",
+      "setCode": "LOF_048"
     },
     {
       "implementation": "sourceIr",
@@ -2184,6 +2199,11 @@
       "implementation": "sourceIr",
       "internalName": "bolstered-endurance",
       "setCode": "LOF_074"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "cure-wounds",
+      "setCode": "LOF_075"
     },
     {
       "implementation": "sourceIr",
@@ -2352,6 +2372,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "mace-windu#leaping-into-action",
+      "setCode": "LOF_149"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "knights-saber",
       "setCode": "LOF_151"
     },
@@ -2379,6 +2404,11 @@
       "implementation": "sourceIr",
       "internalName": "hyena-bomber",
       "setCode": "LOF_158"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "jedi-in-hiding",
+      "setCode": "LOF_159"
     },
     {
       "implementation": "dataOnly",
@@ -2424,6 +2454,16 @@
       "implementation": "sourceIr",
       "internalName": "heavy-blaster-cannon",
       "setCode": "LOF_171"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "sorcerous-blast",
+      "setCode": "LOF_172"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "unleash-rage",
+      "setCode": "LOF_173"
     },
     {
       "implementation": "sourceIr",
@@ -4566,7 +4606,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 911,
+  "runtimeAdmittedCount": 919,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -8134,19 +8174,9 @@
       "setCode": "LOF_030"
     },
     {
-      "internalName": "karis#we-dont-like-strangers",
-      "reason": "karis#we-dont-like-strangers: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
-      "setCode": "LOF_031"
-    },
-    {
       "internalName": "nameless-terror",
       "reason": "nameless-terror: compiler rejected \"nameless-terror\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/05_LOF/units/NamelessTerror.ts\",\"line\":30,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.loseTrait\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.loseTrait\"}]",
       "setCode": "LOF_033"
-    },
-    {
-      "internalName": "talzins-assassin",
-      "reason": "talzins-assassin: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
-      "setCode": "LOF_035"
     },
     {
       "internalName": "old-daka#oldest-and-wisest",
@@ -8165,7 +8195,7 @@
     },
     {
       "internalName": "darth-sidious#the-phantom-menace",
-      "reason": "darth-sidious#the-phantom-menace: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
+      "reason": "darth-sidious#the-phantom-menace: Force requires standalone ordinary play/death/event use and one bounded independent success continuation",
       "setCode": "LOF_039"
     },
     {
@@ -8175,7 +8205,7 @@
     },
     {
       "internalName": "drain-essence",
-      "reason": "drain-essence: Force registration requires ordinary unit card-side metadata",
+      "reason": "drain-essence: Force requires standalone ordinary play/death/event use and one bounded independent success continuation",
       "setCode": "LOF_041"
     },
     {
@@ -8197,11 +8227,6 @@
       "internalName": "yaddle#a-chance-to-make-things-right",
       "reason": "yaddle#a-chance-to-make-things-right: arena-list keywords require a standalone event or WhenPlayed registration",
       "setCode": "LOF_045"
-    },
-    {
-      "internalName": "itinerant-warrior",
-      "reason": "itinerant-warrior: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
-      "setCode": "LOF_048"
     },
     {
       "internalName": "plo-koon#i-dont-believe-in-chance",
@@ -8280,18 +8305,13 @@
     },
     {
       "internalName": "priestesses-of-the-force#eternal",
-      "reason": "priestesses-of-the-force#eternal: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
+      "reason": "priestesses-of-the-force#eternal: Force requires standalone ordinary play/death/event use and one bounded independent success continuation",
       "setCode": "LOF_072"
     },
     {
       "internalName": "mythosaur#folklore-awakened",
       "reason": "mythosaur#folklore-awakened: compiler rejected \"mythosaur#folklore-awakened\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/05_LOF/units/MythosaurFolkloreAwakened.ts\",\"line\":23,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.gainAbility\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.gainAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/05_LOF/units/MythosaurFolkloreAwakened.ts\",\"line\":52,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.gainTrait\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.gainTrait\"}]",
       "setCode": "LOF_073"
-    },
-    {
-      "internalName": "cure-wounds",
-      "reason": "cure-wounds: Force registration requires ordinary unit card-side metadata",
-      "setCode": "LOF_075"
     },
     {
       "internalName": "soresu-stance",
@@ -8440,7 +8460,7 @@
     },
     {
       "internalName": "acolyte-of-the-beyond",
-      "reason": "acolyte-of-the-beyond: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
+      "reason": "acolyte-of-the-beyond: Force registration requires ordinary unit card-side metadata",
       "setCode": "LOF_129"
     },
     {
@@ -8494,11 +8514,6 @@
       "setCode": "LOF_148"
     },
     {
-      "internalName": "mace-windu#leaping-into-action",
-      "reason": "mace-windu#leaping-into-action: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
-      "setCode": "LOF_149"
-    },
-    {
       "internalName": "cin-drallig#esteemed-blademaster",
       "reason": "cin-drallig#esteemed-blademaster: compiler rejected \"cin-drallig#esteemed-blademaster\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/CinDralligEsteemedBlademaster.ts\",\"line\":23,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "LOF_150"
@@ -8514,11 +8529,6 @@
       "setCode": "LOF_156"
     },
     {
-      "internalName": "jedi-in-hiding",
-      "reason": "jedi-in-hiding: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
-      "setCode": "LOF_159"
-    },
-    {
       "internalName": "merrin#alone-with-the-dead",
       "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_160"
@@ -8532,16 +8542,6 @@
       "internalName": "bendu#do-you-fear-the-storm",
       "reason": "bendu#do-you-fear-the-storm: arena lists require standalone verified phase-stat semantics",
       "setCode": "LOF_170"
-    },
-    {
-      "internalName": "sorcerous-blast",
-      "reason": "sorcerous-blast: Force registration requires ordinary unit card-side metadata",
-      "setCode": "LOF_172"
-    },
-    {
-      "internalName": "unleash-rage",
-      "reason": "unleash-rage: Force registration requires ordinary unit card-side metadata",
-      "setCode": "LOF_173"
     },
     {
       "internalName": "do-or-do-not",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1547,
+  "runtimeRejectedCount": 1539,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

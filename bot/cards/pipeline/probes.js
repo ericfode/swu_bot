@@ -2,6 +2,8 @@
 // A deliberately small experiment vocabulary. Unknown IR remains an obligation,
 // never silently becomes a purportedly covered card.
 function planCardProbes(entry, options = {}) {
+    const forceFollowonPlan = require('./force-followon-probes').planForceFollowonProbes(entry, options);
+    if (forceFollowonPlan) return forceFollowonPlan;
     const forcePlan = require('./force-probes').planForceProbes(entry, options);
     if (forcePlan) return forcePlan;
     const arenaStatFilterPlan = require('./arena-stat-filter-probes').planArenaStatFilterProbes(entry, options);

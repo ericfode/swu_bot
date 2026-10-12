@@ -170,8 +170,14 @@ identity and allocation, captured defeated-source continuations, and empty or
 partial draw piles with fatigue. The first actual sources exercise draw-two,
 self-ready and gain on ordinary-unit entry, including unique replacement. Native
 token definitions are reviewed separately from printed-card play witnesses.
-Other Force queries, hooks, costs, groups and continuations remain uncovered or
-runtime-rejected; passing these experiments does not establish them.
+Further source experiments cover ordinary-unit play/death and event use before
+scalar damage, healing, phase stats or opposing hand choice. They distinguish
+absent Force and optional decline, prepayment event confirmation/cancellation,
+post-use target selection, ineffective continuations, recipient deaths, Shield
+prevention, and Shielded trigger ordering. Printed Overwhelm combat and Hidden
+attack protection have their own witnesses. Other Force queries, hooks, costs,
+groups and continuations remain uncovered or runtime-rejected; passing these
+experiments does not establish them.
 
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool

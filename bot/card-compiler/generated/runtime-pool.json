@@ -17155,6 +17155,46 @@
         "vigilance",
         "villainy"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "1991532931",
+      "internalName": "karis#we-dont-like-strangers",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "LOF_031",
+      "setCodes": [
+        {
+          "number": 31,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 31,
+        "set": "LOF"
+      },
+      "subtitle": "We Don't Like Strangers",
+      "text": "When Defeated: You may use the Force (lose your Force token). If you do, give a unit –2/–2 for this phase.",
+      "title": "Karis",
+      "traits": [
+        "force",
+        "night"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
@@ -17226,6 +17266,46 @@
         "first order",
         "vehicle",
         "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "2410965424",
+      "internalName": "talzins-assassin",
+      "keywords": [],
+      "power": 4,
+      "rules": null,
+      "setCode": "LOF_035",
+      "setCodes": [
+        {
+          "number": 35,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 35,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "When Played: You may use the Force (lose your Force token). If you do, give a unit –3/–3 for this phase.",
+      "title": "Talzin's Assassin",
+      "traits": [
+        "force",
+        "night"
       ],
       "types": [
         "unit"
@@ -17314,6 +17394,48 @@
         "unit"
       ],
       "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "7323186775",
+      "internalName": "itinerant-warrior",
+      "keywords": [
+        "shielded"
+      ],
+      "power": 4,
+      "rules": null,
+      "setCode": "LOF_048",
+      "setCodes": [
+        {
+          "number": 48,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 48,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Shielded (When you play this unit, give a Shield token to it.)\nWhen Played: You may use the Force (lose your Force token). If you do, heal 3 damage from a base.",
+      "title": "Itinerant Warrior",
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -17670,6 +17792,43 @@
       "unique": false,
       "upgradeHp": 3,
       "upgradePower": 1
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "3853063436",
+      "internalName": "cure-wounds",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_075",
+      "setCodes": [
+        {
+          "number": 75,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 75,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Use the Force (lose your Force token). If you do, heal 6 damage from a unit.",
+      "title": "Cure Wounds",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
     },
     {
       "aspects": [
@@ -19020,6 +19179,49 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "9757688123",
+      "internalName": "mace-windu#leaping-into-action",
+      "keywords": [
+        "overwhelm"
+      ],
+      "power": 6,
+      "rules": "If the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\nShields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\n",
+      "setCode": "LOF_149",
+      "setCodes": [
+        {
+          "number": 149,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 149,
+        "set": "LOF"
+      },
+      "subtitle": "Leaping into Action",
+      "text": "Overwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)\nWhen Played: You may use the Force (lose your Force token). If you do, deal 4 damage to a unit.",
+      "title": "Mace Windu",
+      "traits": [
+        "force",
+        "jedi",
+        "republic"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "aggression",
         "heroism"
@@ -19252,6 +19454,47 @@
         "droid",
         "vehicle",
         "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "7718974573",
+      "internalName": "jedi-in-hiding",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_159",
+      "setCodes": [
+        {
+          "number": 159,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 159,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nWhen Defeated: You may use the Force (lose your Force token). If you do, each opponent discards a card from their hand.",
+      "title": "Jedi In Hiding",
+      "traits": [
+        "force",
+        "jedi"
       ],
       "types": [
         "unit"
@@ -19625,6 +19868,80 @@
       "unique": false,
       "upgradeHp": 2,
       "upgradePower": 2
+    },
+    {
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "6001143439",
+      "internalName": "sorcerous-blast",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_172",
+      "setCodes": [
+        {
+          "number": 172,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 172,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Use the Force (lose your Force token). If you do, deal 3 damage to a unit.",
+      "title": "Sorcerous Blast",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "8421586325",
+      "internalName": "unleash-rage",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_173",
+      "setCodes": [
+        {
+          "number": 173,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 173,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Use the Force (lose your Force token). If you do, give a friendly unit +3/+0 for this phase.",
+      "title": "Unleash Rage",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
     },
     {
       "aspects": [
