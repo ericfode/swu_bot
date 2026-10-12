@@ -4,7 +4,7 @@
  * Watch recorded Karabast games in the Holotable viewer (the shared viewer kit) while they are played.
  *
  *   node bot/karabast/live-view.js --runs ~/karabast/runs --kit <viewer-kit dir> [--port 8080] [--host 127.0.0.1]
- *        [--key <secret>] [--predict mlp-g5]
+ *        [--key <secret>] [--predict mlp-g5] [--names <file>]
  *
  * It reads the frame files that spectate.js (<run>/<hash>.jsonl) and queue.js (<run>/frames/<hash>.jsonl) write,
  * turns each into a replay with the importer (importer/karabast.js convertFrames) every time the file grows, and
@@ -19,6 +19,11 @@
  *   /lens/<id>    with --predict: the evaluator's P(p1 wins) at every step, as a swu-lens/1 file (no hands seen)
  *   /kit/swu-viewer-kit.js, /kit/card-text.json   from --kit
  * <id> is <run>/<hash> or <run>/frames/<hash>. Only GET, only those files: the server never reads anything else.
+ *
+ * --names <file> is queue.js's private file of opponents' Karabast names (Eric, 2026-10-12: "I also want to know who on
+ * karabast i'm playing"). With it, a bot game names the opponent's seat and the picker says who it is. It works only on a
+ * view that stays on this machine (local host, no --key), such as the one tailscale serves to Eric's own devices: the
+ * share link, the window feed and every file the project shares never carry names.
  */
 const http = require('http');
 const fs = require('fs');
@@ -44,13 +49,44 @@ function arg(name, dflt) {
 
 /** Converts frame files to replays, once per file version. */
 class Games {
-    constructor(runs, { predict = null, now = () => Date.now() } = {}) {
+    constructor(runs, { predict = null, now = () => Date.now(), names = null } = {}) {
         this.runs = path.resolve(runs);
+        this.namesFile = names ? path.resolve(names) : null;
+        this.nameCache = { version: null, map: new Map() };
         this.now = now;
         this.cache = new Map(); // file -> { version, game }, the KEEP most recently used
         this.summaries = new Map(); // file -> { version, info }
         this.ev = predict ? require('../eval/evaluators').loadEvaluator(predict) : null;
         this.predictName = predict;
+    }
+
+    /** Opponents' names by game id from the --names file, or null without one. */
+    opponentNames() {
+        if (!this.namesFile) {
+            return null;
+        }
+        let st;
+        try {
+            st = fs.statSync(this.namesFile);
+        } catch {
+            return new Map(); // no game recorded a name yet
+        }
+        const version = `${st.size}-${st.mtimeMs}`;
+        if (this.nameCache.version !== version) {
+            const map = new Map();
+            for (const line of fs.readFileSync(this.namesFile, 'utf8').split('\n')) {
+                try {
+                    const r = JSON.parse(line);
+                    if (typeof r.game === 'string' && typeof r.name === 'string') {
+                        map.set(r.game, r.name);
+                    }
+                } catch {
+                    // a blank line, or one being written
+                }
+            }
+            this.nameCache = { version, map };
+        }
+        return this.nameCache.map;
     }
 
     /** The frame file of a game id, or null when the id is not one of ours. */
@@ -148,8 +184,9 @@ class Games {
             // no rows yet: the first game of a run
         }
         bot = typeof bot === 'string' && bot ? bot : 'our bot';
-        h.players = h.players.map((p) => ({ ...p, bot: p.id === ours ? `${bot} (ours)` : 'opponent', human: p.id !== ours }));
-        h.ours = { seat: ours, bot };
+        const opponent = this.opponentNames()?.get(`${run}/frames/${base.replace(/\.jsonl$/, '')}`) ?? null;
+        h.players = h.players.map((p) => ({ ...p, bot: p.id === ours ? `${bot} (ours)` : opponent ?? 'opponent', human: p.id !== ours }));
+        h.ours = opponent ? { seat: ours, bot, opponent } : { seat: ours, bot };
     }
 
     /** One line per game for the picker (an entry from list()). `board` says whether the game can be shown yet. */
@@ -165,7 +202,7 @@ class Games {
                 version,
                 info: g && {
                     steps: end.steps, round: end.round, winner: end.winner, how: end.how ?? null, decks: h.players.map((p) => p.deck), pov: h.source.pov,
-                    ours: h.ours?.seat ?? null, bot: h.ours?.bot ?? null
+                    ours: h.ours?.seat ?? null, bot: h.ours?.bot ?? null, ...(h.ours?.opponent ? { opponent: h.ours.opponent } : {})
                 }
             };
             this.summaries.set(file, s);
@@ -312,11 +349,15 @@ function makeServer({ games, kit, key = null }) {
 
 /**
  * Refuses to serve beyond this machine without --key: a live bot game shows our bot's hand, and anyone who can reach
- * the port (the opponent included) could read it during play.
+ * the port (the opponent included) could read it during play. Opponents' names (--names) never go beyond it.
  */
-function checkBinding(host, key) {
-    if (!['127.0.0.1', '::1', 'localhost'].includes(host) && !key) {
+function checkBinding(host, key, names = null) {
+    const local = ['127.0.0.1', '::1', 'localhost'].includes(host);
+    if (!local && !key) {
         throw new Error(`--host ${host} reaches beyond this machine: add --key <secret>, since a live bot game shows our hand`);
+    }
+    if (names && (!local || key)) {
+        throw new Error('--names shows opponents\' Karabast names: only on a view that stays on this machine (local --host, no --key)');
     }
 }
 
@@ -324,16 +365,17 @@ function main() {
     const runs = arg('runs');
     const kit = arg('kit');
     if (!runs || !kit) {
-        throw new Error('usage: live-view.js --runs <runs dir> --kit <viewer-kit dir> [--port 8080] [--host 127.0.0.1] [--key <secret>] [--predict mlp-g5]');
+        throw new Error('usage: live-view.js --runs <runs dir> --kit <viewer-kit dir> [--port 8080] [--host 127.0.0.1] [--key <secret>] [--predict mlp-g5] [--names <file>]');
     }
     const key = arg('key', null);
     if (key && !/^[\w-]{8,}$/.test(key)) {
         throw new Error('--key must be at least 8 letters, digits, - or _');
     }
-    const games = new Games(runs, { predict: arg('predict', null) });
     const port = Number(arg('port', 8080));
     const host = arg('host', '127.0.0.1');
-    checkBinding(host, key);
+    const names = arg('names', null);
+    checkBinding(host, key, names);
+    const games = new Games(runs, { predict: arg('predict', null), names });
     makeServer({ games, kit, key }).listen(port, host, () => {
         console.error(`live view on http://${host}:${port}/${key ? '<key>/' : ''} (runs ${games.runs})`);
     });

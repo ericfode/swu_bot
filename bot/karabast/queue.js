@@ -8,7 +8,7 @@
  *        [--server http://127.0.0.1:9500] [--allow-host <host>] [--username "swu-bot (bot)"]
  *        [--format premier] [--card-pool current] [--wait-minutes 10] [--chat "<line>"] [--out <dir>]
  *        [--ledger <file> --max-people 10|none] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
- *        [--max-waits 6]
+ *        [--max-waits 6] [--names <file>]
  *
  * With --games above 1 it is a loop: after each game it waits --gap seconds (at least 25: a finished lobby keeps its
  * users ~20 s) and queues again, until the games, the people cap, the stop file, --max-errors failures in a row or
@@ -22,6 +22,8 @@
  *   `--max-people none` keeps counting with no cap.
  * - One game at a time on a machine (Eric, 2026-10-11 22:16: the budget is one concurrent game): a non-local run holds
  *   ~/karabast/playing.pid while it runs, and refuses to start while another live run holds it.
+ * - Frames carry no names. With --names, each game's opponent's Karabast name goes to that file alone (mode 600), which
+ *   only the owner's own live view reads (live-view.js --names; Eric, 2026-10-12: "who on karabast i'm playing").
  * - It stops before the next game when --stop-file exists.
  * - The seat never sends undo, answers the opponent's undo requests by a fixed rule and concedes rather than time out
  *   when the bot keeps failing (seat.js).
@@ -75,10 +77,33 @@ function checkDeck(deck) {
 }
 
 /**
+ * Appends one game's opponent name (the seat that is not `me` in the first full frame) to the private names file. The
+ * name is cut to 40 characters without control characters or angle brackets; nothing else about the person is kept.
+ * The file is always mode 600; its folder is made 700 when this creates it.
+ */
+function recordOpponent(file, game, gs, me) {
+    const p = Object.entries(gs.players).find(([id]) => id !== me)?.[1];
+    const raw = p?.name ?? p?.user?.username;
+    const name = typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 40) : '';
+    if (!name) {
+        return;
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    // a file made earlier with wider permissions is narrowed before the name goes in
+    const fd = fs.openSync(file, 'a', 0o600);
+    try {
+        fs.fchmodSync(fd, 0o600);
+        fs.writeSync(fd, JSON.stringify({ game, at: new Date().toISOString(), name }) + '\n');
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+/**
  * Enters the queue and plays one match. onQueued() runs once the server took the queue entry. onMatched(opponentId)
  * runs when the opponent is known, before play starts; it may throw to leave. Resolves to a result row.
  */
-async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, onQueued, onMatched, onGameFile, log }) {
+async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, chat, allowHosts, allowUndos, seed, out, names = null, onQueued, onMatched, onGameFile, log }) {
     const opts = { allowHosts };
     const entered = await post(server, '/api/enter-queue', { user, format, cardPool, gamesToWinMode: 'bestOfOne', deck }, opts);
     if (!entered.body?.success) {
@@ -114,6 +139,14 @@ async function queueOnce({ server, user, deck, bot, format, cardPool, waitMs, ch
             if (!fd && out) {
                 fs.mkdirSync(path.join(out, 'frames'), { recursive: true });
                 file = path.join(out, 'frames', `${hash(`${gs.id ?? ''}|${user.id}`)}.jsonl`);
+                if (names) {
+                    // before the first frame is written, so a live view that sees the game also sees the name
+                    try {
+                        recordOpponent(names, `${path.basename(out)}/frames/${path.basename(file, '.jsonl')}`, gs, user.id);
+                    } catch (e) {
+                        log(`could not record the opponent's name: ${e.message}`);
+                    }
+                }
                 fd = fs.openSync(file, 'a');
                 onGameFile?.(path.basename(file));
             }
@@ -282,7 +315,7 @@ async function main() {
         play: (g, hooks) => queueOnce({
             server, user, deck, bot, format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
             waitMs: waitMinutes * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
-            seed: `${seed}-${g}`, out, log, ...hooks
+            seed: `${seed}-${g}`, out, names: arg('names', null), log, ...hooks
         })
     });
     if (!end.ok) {
@@ -420,4 +453,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, lockToken, KNOWN_ERRORS, MIN_GAP_S };
+module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, lockToken, recordOpponent, KNOWN_ERRORS, MIN_GAP_S };
