@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 554
+    "sourceIr": 556
   },
   "runtimeAdmittedCards": [
     {
@@ -2797,6 +2797,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "death-trooper",
+      "setCode": "SEC_030"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "nute-gunray#escaping-justice",
       "setCode": "SEC_031"
     },
@@ -4017,6 +4022,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "ziton-moj#sowing-chaos",
+      "setCode": "TS26_029"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "obiwan-kenobi#steadfast-knight",
       "setCode": "TS26_040"
     },
@@ -4661,7 +4671,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 930,
+  "runtimeAdmittedCount": 932,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -7810,7 +7820,7 @@
     },
     {
       "internalName": "aerie#cloudrider-dropship",
-      "reason": "aerie#cloudrider-dropship: named selectors require optional scalar any-owner arena units",
+      "reason": "aerie#cloudrider-dropship: named damage requires mandatory own/opponent scalar arena units with default prompts",
       "setCode": "LAW_184"
     },
     {
@@ -8867,11 +8877,6 @@
       "internalName": "the-chancellors-shuttle#grim-harbinger",
       "reason": "the-chancellors-shuttle#grim-harbinger: compiler rejected \"the-chancellors-shuttle#grim-harbinger\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/06_SEC/units/TheChancellorsShuttleGrimHarbinger.ts\",\"line\":19,\"message\":\"unsupported-query:controlsLeaderUnitOrUpgradeWithTitle\",\"pattern\":\"unsupported-query:controlsLeaderUnitOrUpgradeWithTitle\"}]",
       "setCode": "SEC_027"
-    },
-    {
-      "internalName": "death-trooper",
-      "reason": "death-trooper: named selectors require optional scalar any-owner arena units",
-      "setCode": "SEC_030"
     },
     {
       "internalName": "sly-moore#witness-to-power",
@@ -11389,11 +11394,6 @@
       "setCode": "TS26_028"
     },
     {
-      "internalName": "ziton-moj#sowing-chaos",
-      "reason": "ziton-moj#sowing-chaos: named selectors require optional scalar any-owner arena units",
-      "setCode": "TS26_029"
-    },
-    {
       "internalName": "maul#one-last-lesson",
       "reason": "maul#one-last-lesson: compiler rejected \"maul#one-last-lesson\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/07_TS26/units/MaulOneLastLesson.ts\",\"line\":16,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
       "setCode": "TS26_030"
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1528,
+  "runtimeRejectedCount": 1526,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

@@ -217,3 +217,17 @@ test("attack preparation donors must have exact modeled effects and registrar", 
     assert.ok(p.uncovered.some((o) => o.id.endsWith("attacker-departure")));
   }
 });
+
+test("named damage complete source plans carry actual Ambush, chooser and identity boundaries",()=>{
+ const {classifyNamedDamage}=require("../pipeline/named-target-probes");
+ for(const id of ["SEC_030","TS26_029"]){const e=entry(id),p=planNamedTargetProbes(e,{catalogue});assert.ok(classifyNamedDamage(e));assert.ok(p.cases.some(c=>c.probe.sourceSeat===2));for(const suffix of ["paired-shields-self-first","paired-shields-opponent-first","paired-wounded-death-self-first","paired-wounded-death-opponent-first"])assert.ok(p.cases.some(c=>c.name.endsWith(suffix)));assert.ok(p.uncovered.some(c=>c.id.endsWith(":repeated-nonunique-source-copies")));for(const c of p.cases.filter(c=>c.probe.expectForce))assert.ok(c.probe.forceDonorIndices.length);}
+ const p=planNamedTargetProbes(entry("TS26_029"),{catalogue});for(const name of ["actual-ambush-accept","actual-ambush-decline","actual-ambush-empty-enemy","attacker-self-lethal-real-damage","unique-keep-old","unique-keep-new"])assert.ok(p.cases.some(c=>c.name.endsWith(name)));
+});
+test("named damage source metadata and unmodeled domains fail closed",()=>{
+ const {classifyNamedDamage}=require("../pipeline/named-target-probes");
+ for(const change of [e=>e.card.types.push("leader"),e=>e.card.unique="yes",e=>e.card.arena="space",e=>e.abilities.unit.push({trigger:"whenPlayed"}),e=>e.abilities.card[0].targetResolvers[0].name={},e=>e.abilities.card[0].targetResolvers[1].chooser="opponent",e=>e.abilities.card[0].targetResolvers[0].effect.amount.value=3,e=>e.abilities.card[0].targetResolvers[1].targetResolver.arena="space",e=>e.card.unique=true]){const e=entry("SEC_030");change(e);assert.equal(classifyNamedDamage(e),null);}
+ const e=entry("TS26_029");e.card.power=0.5;assert.equal(classifyNamedDamage(e),null);
+});
+test("named damage preparation requires complete event donor without hidden mechanics",()=>{
+ for(const change of [e=>e.abilities.unit.push({trigger:"whenPlayed"}),e=>e.card.pilotText="Piloting 1",e=>e.attachCondition={kind:"const",value:true},e=>e.card.keywords.push("plot")]){const c=structuredClone(catalogue),d=c.cards.find(e=>e.setCode==="IBH_061");change(d);const p=planNamedTargetProbes(entry("TS26_029"),{catalogue:c});assert.ok(!p.cases.some(c=>c.probe.preparationCode));assert.ok(p.uncovered.some(c=>c.id.endsWith(":attacker-self-lethal")));}
+});

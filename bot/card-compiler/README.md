@@ -154,8 +154,16 @@ Each uses a static unit domain in either arena or one named arena, with either
 controller eligible. Both choices are captured before applying the modifiers,
 and the pending attack resumes after resulting defeat triggers. Bounded literal
 negative stats, including negative zero, retain their source meaning. Dependent
-names, other named effect families and additional attack predicates remain
-rejected. Named groups use the validated interpreter fallback in Auto mode.
+names and additional attack predicates remain rejected. Named groups use the validated interpreter fallback in Auto mode.
+
+Two independent named damage selectors support ordinary-unit When Played and
+On Attack registrations. The source controller chooses a mandatory friendly
+unit first and an enemy unit second, with static arena domains and one or two
+points of preventable ability damage. Both choices finish before either damage
+event resolves. Shared Shield replacement and lethal-trigger handling preserve
+recipient identity and the pending attack; a missing enemy does not suppress
+friendly damage. Opponent choosers, dependent names, base targets and mixed
+named damage families remain rejected.
 
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or

@@ -22577,6 +22577,54 @@
     {
       "arena": "ground",
       "aspects": [
+        "villainy",
+        "vigilance"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 3,
+      "id": "6458912354",
+      "internalName": "death-trooper",
+      "keywords": [],
+      "power": 3,
+      "rules": "If Death Trooper is the only friendly unit in play, it must be chosen by its “When Played” ability.\n",
+      "setCode": "SEC_030",
+      "setCodes": [
+        {
+          "number": 33,
+          "set": "SOR"
+        },
+        {
+          "number": 30,
+          "set": "SHD"
+        },
+        {
+          "number": 30,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 30,
+        "set": "SEC"
+      },
+      "subtitle": null,
+      "text": "When Played: Deal 2 damage to a friendly ground unit and 2 damage to an enemy ground unit.",
+      "title": "Death Trooper",
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
         "vigilance",
         "villainy"
       ],
@@ -32343,6 +32391,48 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "cunning",
+        "villainy"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "4124659733",
+      "internalName": "ziton-moj#sowing-chaos",
+      "keywords": [
+        "ambush"
+      ],
+      "power": 4,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\nAll damage dealt by Ziton's \"On Attack\" ability is dealt simultaneously.\n",
+      "setCode": "TS26_029",
+      "setCodes": [
+        {
+          "number": 29,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 29,
+        "set": "TS26"
+      },
+      "subtitle": "Sowing Chaos",
+      "text": "Ambush (When you play this unit, he may attack an enemy unit.)\nOn Attack: For each player, deal 1 damage to a unit that player controls.",
+      "title": "Ziton Moj",
+      "traits": [
+        "underworld"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

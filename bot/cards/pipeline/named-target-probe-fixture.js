@@ -9,6 +9,7 @@ const {
 } = require("../../omni/rs/state");
 async function fixture(env, pool, scenario, seed) {
   const p = scenario.probe;
+  if (p.effectFamily === "damage") return unitDamageFixture(env, pool, scenario, seed);
   if (p.trigger === "onAttack") return attackFixture(env, pool, scenario, seed);
   assert.equal(p.family, "named-target");
   const { eg, rng, bot, deck, own, enemy, source, targets } =
@@ -743,3 +744,93 @@ module.exports = {
     "bot/players/index.js",
   ],
 };
+
+async function unitDamageFixture(env,pool,scenario,seed) {
+    const p=scenario.probe;
+    let construction=scenario;
+    if(p.sourceSeat===2)construction={...scenario,probe:{...p,targets:[...p.targets.map(t=>({...t,owner:t.owner==='self'?'opponent':'self'})),{code:p.cardId,owner:'opponent',zone:'hand',arena:p.sourceArena}]}};
+    if(p.preparationCode)construction={...construction,probe:{...construction.probe,activationCode:p.preparationCode}};
+    const setup=await constructProbeFixture(env,pool,construction,seed),{eg,rng,bot,deck}=setup;
+    const own=p.sourceSeat===2?setup.enemy:setup.own,enemy=p.sourceSeat===2?setup.own:setup.enemy;
+    const targets=setup.targets.slice(),source=p.sourceSeat===2?targets.pop():setup.source;
+    const preparation=p.preparationCode?setup.activation:null;
+    const defender=p.attackBase?enemy.base:targets[p.attackTarget];
+    if(p.trigger==='onAttack'&&!['decline','empty','unique-departed'].includes(p.activationMode))assert.ok(defender&&defender.controller===enemy,'Actual attack defender exists');
+    const live=c=>c.isUnit?.()&&c.isInPlay?.();
+    const eligible=(c,d)=>live(c)&&c.controller===(d.owner==='self'?own:enemy)&&(!d.arena||c.zoneName===d.arena+'Arena');
+    const cardId=c=>eg.cardId(c.uuid),ready=()=>own.getCardsInZone('resource').filter(c=>!c.exhausted).length;
+    const initialRound=eg.round,initialCount=eg.game.state.allCards.length,initialBaseDamage=new Map([[own.base,own.base.damage],[enemy.base,enemy.base.damage]]);
+    const initialForce=eg.game.getPlayers().map(player=>{const token=[player.baseZone.cards,player.outsideTheGameZone.getCards()].flat().find(c=>c.isForceToken());return{player,held:player.hasTheForce,token,id:token&&cardId(token)};});
+    assert.ok(initialForce.every(f=>!f.held&&f.token),'Disclosed Force initially outside with exact stable identity');
+    const costs=[...own.getAspectsForCosts()];let expectedCost=source.cardData.cost;
+    for(const aspect of source.cardData.aspects){const i=costs.indexOf(aspect);if(i<0)expectedCost+=2;else costs.splice(i,1);}
+    const records=[{type:'meta',schema:'omni-rs-trace-v1',pool:pool.provenance,seed,bots:['named-damage-probe','named-damage-probe'],decks:[deck,deck],scenario:scenario.name,
+        fixtureConstruction:'Stage disclosed real recipients/tokens, reserve distinct physical cards, normally play focus and optional real damage preparation; actual Ambush or natural ready attack; record exact source-controller named menus/shared damage/replacement/death inputs through terminal result.',constructionParameters:p}];
+    const witness={coverageObligationIds:[],observations:[]};
+    let step=0,activated=false,played=false,settled=false,initialReady,ambushSeen=false,ambushPassed=false,attackStarted=false,attackPicked=false;
+    let preparationStarted=false,preparationPlayed=false,prepared=!preparation,uniqueSeen=false,descriptorIndex=0;
+    const selections=[],prompted=[],baseline=new Map(),focusedDamage=[],shieldDefeats=[];
+    const capture=()=>{for(const c of eg.game.getArenaUnits())if(!baseline.has(c))baseline.set(c,{hp:c.getHp(),power:c.getPower(),damage:c.damage,shields:c.upgrades.filter(u=>u.isShield?.()).map(cardId)});};
+    eg.game.on('onCardPlayed',e=>{if(activated&&!settled&&!e.isCancelledOrReplaced){if(e.card===source)played=true;if(e.card===preparation)preparationPlayed=true;}});
+    eg.game.on('onDamageDealt',e=>{if(activated&&!settled&&e.damageSource?.type==='ability'&&e.damageSource.card===source){assert.equal(e.context.player,own);focusedDamage.push({card:e.card,amount:e.amount,dealt:e.damageDealt});}});
+    eg.game.on('onCardDefeated',e=>{if(activated&&!settled&&e.card.isShield?.())shieldDefeats.push(cardId(e.card));});
+    function observe(stage,pid,actions){witness.observations.push({stage,actor:pid?eg.seatOf(pid):undefined,actions:actions?.map(a=>canonicalAction(eg,a)),source:cardId(source),sourceZone:source.zoneName,
+        selections:selections.map(s=>({id:cardId(s.card),name:s.descriptor.name})),focusedDamage:focusedDamage.map(e=>({id:cardId(e.card),amount:e.amount,dealt:e.dealt})),shieldDefeats:[...shieldDefeats],state:fullState(eg)});}
+    function assertResolved(){
+        assert.equal(played,true,'Focus was normally played, never staged as source');
+        if(eg.round===initialRound&&!preparationPlayed)assert.equal(ready(),initialReady-expectedCost,'Exact printed and absent-aspect focus cost');
+        for(const s of selections){const b=baseline.get(s.card);assert.ok(b);const dealt=focusedDamage.filter(e=>e.card===s.card).reduce((n,e)=>n+e.dealt,0);assert.equal(dealt,b.shields.length?0:Math.min(s.descriptor.amount,b.hp-b.damage),'Source-derived primary damage clips remainingHP and respects real Shield replacement');}
+        assert.equal(focusedDamage.length,selections.filter(s=>!baseline.get(s.card).shields.length).length,'Each unprevented chosen primary produces exactly one damage event');
+        const expected=p.descriptors.map((d,i)=>[...baseline.keys()].some(c=>c.controller===(d.owner==='self'?own:enemy)&&(!d.arena||c.cardData.arena===d.arena))?i:-1).filter(i=>i>=0);
+        if(p.trigger==='whenPlayed'||attackPicked)assert.deepEqual(prompted,expected,'Every available mandatory descriptor was actually selected');
+        const damage=new Map([...baseline].map(([c,b])=>[c,b.damage]));
+        const shields=new Map([...baseline].map(([c,b])=>[c,b.shields.length]));
+        const hit=(c,n)=>{const b=baseline.get(c);assert.ok(b);if(shields.get(c)>0)shields.set(c,shields.get(c)-1);else damage.set(c,Math.min(b.hp,damage.get(c)+n));};
+        for(const selected of selections)hit(selected.card,selected.descriptor.amount);
+        let baseCombat=0;
+        if(attackPicked&&baseline.has(source)&&damage.get(source)<baseline.get(source).hp){
+            if(defender.isUnit?.()&&baseline.has(defender)&&damage.get(defender)<baseline.get(defender).hp){hit(defender,baseline.get(source).power);hit(source,baseline.get(defender).power);}
+            else if(defender===enemy.base)baseCombat=baseline.get(source).power;
+        }
+        for(const [c,b]of baseline){
+            if(damage.get(c)>=b.hp)assert.equal(c.zoneName,'discard','Derived complete primary/combat lethal set must physically depart');
+            else {assert.ok(live(c),'All unselected/nonlethal recipients remain live');assert.equal(c.damage,damage.get(c),'Exact primary plus combat damage, including untouched recipients');assert.equal(c.getPower(),b.power);assert.equal(c.getHp(),b.hp);const ids=c.upgrades.filter(u=>u.isShield?.()).map(cardId);assert.equal(ids.length,shields.get(c),'Exactly the primary/combat replacement count is consumed');assert.deepEqual(ids.slice().sort(),b.shields.filter(id=>!shieldDefeats.includes(id)).sort(),'Surviving Shield identities come from original attached tokens');}
+        }
+        assert.equal(own.base.damage,initialBaseDamage.get(own.base));
+        assert.equal(enemy.base.damage,Math.min(enemy.base.cardData.hp,initialBaseDamage.get(enemy.base)+baseCombat),'Only retained live attacker base combat changes a base');
+        if(p.expectSourceDeparture){assert.equal(source.zoneName,'discard');assert.equal(enemy.base.damage,0,'Dead attacker cannot deal combat damage');}
+        if(p.expectDefenderDeparture){assert.equal(defender.zoneName,'discard');assert.equal(source.damage,baseline.get(source).damage,'Departed defender cannot retaliate');assert.equal(enemy.base.damage,0,'No printed Overwhelm on this source');}
+        if(p.expectForce){for(const f of initialForce){const selectedDeath=selections.some(s=>s.card.controller===f.player&&(p.forceDonorIndices??[]).some(i=>targets[i]===s.card)&&damage.get(s.card)>=baseline.get(s.card).hp);assert.equal(f.player.hasTheForce,selectedDeath);const current=[f.player.baseZone.cards,f.player.outsideTheGameZone.getCards()].flat().filter(c=>c.isForceToken());assert.equal(current.length,1);assert.equal(cardId(current[0]),f.id);}}
+        if(p.expectClone){const clones=eg.game.getArenaUnits().filter(c=>c.isToken()&&c.controller===enemy&&c.cardData.internalName==='clone-trooper');assert.equal(clones.length,1);assert.equal(eg.game.state.allCards.length,initialCount+1);}else assert.equal(eg.game.state.allCards.length,initialCount,'Focus damage and stable Force do not allocate cards');
+        if(p.activationMode==='decline'){assert.ok(ambushSeen&&ambushPassed);assert.ok(source.exhausted);assert.equal(selections.length,0);}
+        if(p.activationMode==='empty'){assert.equal(ambushSeen,false);assert.ok(source.exhausted);assert.equal(selections.length,0);}
+        if(p.keepUnique){assert.ok(uniqueSeen);const old=targets.at(-1);assert.equal(p.keepUnique==='old'?source.zoneName:old.zoneName,'discard');if(p.keepUnique==='old'){assert.ok(live(old)&&old.exhausted);assert.equal(ambushSeen,false);assert.equal(attackPicked,false);}}
+    }
+    try{
+        while(!eg.over&&step<4000){
+            const pid=eg.ids.find(id=>eg.legalActions(id).length);assert.ok(pid);const actions=expandActions(eg,eg.legalActions(pid)),window=eg.isActionWindow(pid),prompt=eg.player(pid).currentPrompt();let chosen;
+            if(window){records.push({type:'state',step,state:fullState(eg,pid)});
+                const terminalActivation=played&&((p.trigger==='whenPlayed'&&prompted.length>0)||['decline','empty','unique-departed'].includes(p.activationMode)||attackPicked);
+                if(activated&&!settled&&terminalActivation){assertResolved();observe('focused-damage-resolved');settled=true;}
+                if(!activated&&!settled&&pid===own.id){initialReady=ready();chosen=actions.find(a=>a.cardUuid===source.uuid);assert.ok(chosen,'Actual focus play');activated=true;}
+                else if(played&&!settled&&preparation&&!prepared&&pid===own.id&&!preparationStarted){chosen=actions.find(a=>a.cardUuid===preparation.uuid);assert.ok(chosen,'Actual normal damage preparation event');preparationStarted=true;}
+                else if(preparationPlayed&&!prepared){assert.equal(source.damage,source.cardData.hp-1);prepared=true;observe('actual-damage-preparation-resolved');chosen=actions.find(a=>a.arg==='pass');}
+                else if(played&&!settled&&p.trigger==='onAttack'&&p.activationMode==='normal'&&prepared&&!attackStarted&&eg.round>initialRound&&pid===own.id){assert.ok(live(source)&&!source.exhausted,'Normally played source naturally readied');capture();chosen=actions.find(a=>a.cardUuid===source.uuid);assert.ok(chosen);attackStarted=true;}
+                else if(!settled)chosen=actions.find(a=>a.arg==='pass');
+            }else if(activated&&!settled){
+                if(p.keepUnique&&/Choose which copy/i.test(prompt.menuTitle??'')){assert.equal(pid,own.id);const old=targets.at(-1),defeat=p.keepUnique==='old'?source:old;chosen=actions.find(a=>a.cardUuid===defeat.uuid);assert.ok(chosen);uniqueSeen=true;observe('unique-source-choice',pid,actions);}
+                else if(played&&p.ambush&&!attackStarted&&actions.some(a=>a.label==='Trigger')&&actions.some(a=>a.label==='Pass')){assert.equal(pid,own.id);ambushSeen=true;assert.ok(source.exhausted);assert.equal(ready(),initialReady-expectedCost);const accept=p.activationMode==='ambush';chosen=actions.find(a=>a.label===(accept?'Trigger':'Pass'));assert.ok(chosen);ambushPassed=!accept;if(accept)attackStarted=true;observe('actual-ambush-'+(accept?'accept':'decline'),pid,actions);}
+                else if(attackStarted&&!attackPicked&&/target for attack/i.test(prompt.menuTitle??'')){assert.equal(pid,own.id);capture();chosen=actions.find(a=>a.cardUuid===defender.uuid);assert.ok(chosen);attackPicked=true;observe('actual-attack-target',pid,actions);}
+                else if(preparationStarted&&!preparationPlayed&&actions.some(a=>a.kind==='card')){assert.equal(pid,own.id);chosen=actions.find(a=>a.cardUuid===source.uuid);assert.ok(chosen,'Actual damage targets focus identity');observe('actual-damage-preparation-target',pid,actions);}
+                else if((attackPicked||p.trigger==='whenPlayed')&&prompt.menuTitle===p.defaultPromptTitle){const i=descriptorIndex++,d=p.descriptors[i];assert.ok(d,'No unmodeled named descriptor');assert.equal(pid,own.id,'Source controls both named choices, including enemy recipient');capture();
+                    const candidates=eg.game.getArenaUnits().filter(c=>eligible(c,d));assert.deepEqual(actions.filter(a=>a.kind==='card').map(a=>a.cardUuid).sort(),candidates.map(c=>c.uuid).sort());assert.deepEqual(actions.filter(a=>a.kind==='button').map(a=>a.label),[],'Mandatory paid unit registration cannot Pass/Cancel');
+                    for(const [c,b]of baseline){assert.ok(live(c),'No primary handler/death before remaining named selectors');assert.equal(c.damage,b.damage);assert.equal(c.getHp(),b.hp);assert.deepEqual(c.upgrades.filter(u=>u.isShield?.()).map(cardId),b.shields);}
+                    const choice=p.choices[i],card=choice==='source'?source:choice==='defender'?defender:choice?.startsWith('index:')?targets[Number(choice.slice(6))]:null;assert.ok(card&&candidates.includes(card),'Source-derived chosen recipient exists');chosen=actions.find(a=>a.cardUuid===card.uuid);assert.ok(chosen);selections.push({card,descriptor:d});prompted.push(i);observe('descriptor-'+(i+1),pid,actions);
+                }else if(/Choose which player/i.test(prompt.menuTitle??'')){assert.equal(pid,own.id,'Effect/declaration original actor chooses owner ordering');chosen=actions.find(a=>a.label===(p.opponentFirst?'Opponent':'You'));assert.ok(chosen);observe('owner-priority',pid,actions);}
+                chosen??=actions.find(a=>a.kind==='button'&&/trigger|resolve|play|yes/i.test(a.label??''));chosen??=actions.find(a=>a.arg==='done');
+            }
+            chosen??=bot.choose({game:eg,pid,actions,rng});assert.ok(chosen);records.push({type:'decision',step,actor:eg.seatOf(pid),prompt:{type:prompt.promptType??null,title:prompt.menuTitle??null,selected:(eg.player(pid).promptState.selectedCards??[]).map(cardId),actionWindow:window},actions:actions.map(a=>canonicalAction(eg,a)),chosen:canonicalAction(eg,chosen).key,events:[]});eg.apply(pid,chosen,rng);step++;
+        }
+        assert.ok(settled&&eg.over,'Focused source witness and complete terminal game');records.push({type:'result',step,winner:eg.winner,state:fullState(eg)});witness.coverageObligationIds=[...scenario.coverageObligationIds];return{records,witness};
+    }finally{bot.close?.();}
+}

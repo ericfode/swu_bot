@@ -162,6 +162,8 @@ function classifyNamedTarget(entry) {
   return { family: "named-target", trigger: a.trigger, descriptors };
 }
 function planNamedTargetProbes(entry, options = {}) {
+    const damage = classifyNamedDamage(entry);
+    if (damage) return planNamedDamageProbes(entry, damage, options);
   const shape = classifyNamedTarget(entry);
   if (!shape) return null;
   if (shape.trigger === "onAttack") return planAttack(entry, shape, options);
@@ -676,4 +678,58 @@ function planAttack(entry, shape, options) {
   }
   return result;
 }
-module.exports = { classifyNamedTarget, planNamedTargetProbes };
+module.exports = { classifyNamedTarget, classifyNamedDamage, planNamedTargetProbes };
+
+function classifyNamedDamage(entry) {
+    const abilities=Object.values(entry.abilities??{}).flat(),a=abilities[0],kw=entry.keywordValues??{};
+    const ambush=same(kw,{ambush:1});
+    if(entry.status!=='supported'||typeof entry.card?.unique!=='boolean'||entry.baseClass!=='NonLeaderUnitCard'||!same(entry.card?.types,['unit'])||abilities.length!==1||entry.abilities.card?.length!==1||!['ground','space'].includes(entry.card.arena)||entry.attachCondition||entry.card.pilotText||entry.card.pilotBox||entry.card.pilotingBox||entry.piloting||
+        !keys(a,['trigger','title','costs','effect','targetResolvers'])||typeof a.title!=='string'||!['whenPlayed','onAttack'].includes(a.trigger)||!same(a.costs,[])||!same(a.effect,{kind:'noAction'})||a.targetResolvers?.length!==2||
+        !(same(kw,{})||a.trigger==='onAttack'&&ambush)||!same(entry.card.keywords??[],ambush?['ambush']:[]))return null;
+    const descriptors=[];
+    for(const [i,d]of a.targetResolvers.entries()) {
+        const r=d?.targetResolver,e=d?.effect;
+        if(!keys(d,['name','chooser','targetResolver','effect'])||typeof d.name!=='string'||!d.name||!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(d.name)||['target','constructor','prototype','__proto__'].includes(d.name)||d.chooser!=='self'||
+            !keys(r,['owner','type','zone','arena','optional'])||r.owner!==(i?'opponent':'self')||r.type!=='unit'||!['arena','anyAttackable'].includes(r.zone)||r.optional===true||r.optional!==undefined&&r.optional!==false||r.arena!==undefined&&!['ground','space'].includes(r.arena)||
+            !keys(e,['kind','target','amount'])||e.kind!=='damage'||e.target!=='chosen'||!keys(e.amount,['kind','value'])||e.amount.kind!=='const'||![1,2].includes(e.amount.value))return null;
+        descriptors.push({name:d.name,owner:r.owner,arena:r.arena,amount:e.amount.value});
+    }
+    if(a.trigger==='whenPlayed'&&entry.card.unique||(!Number.isInteger(entry.card.power)||entry.card.power<0||!Number.isInteger(entry.card.hp)||entry.card.hp<1))return null;
+    if(descriptors[0].name===descriptors[1].name||entry.card.arena!=='ground'||descriptors.some(d=>a.trigger==='whenPlayed'?d.arena!=='ground':d.arena!==undefined))return null;
+    return {family:'named-target',effectFamily:'damage',trigger:a.trigger,descriptors,ambush,defaultPromptTitle:a.title};
+}
+function planNamedDamageProbes(entry,shape,options={}) {
+    const defs=(Array.isArray(options.catalogue)?options.catalogue:options.catalogue?.cards??[]).slice().sort((a,b)=>a.setCode.localeCompare(b.setCode));
+    const result={schema:'swu-card-probes/v1',cardId:entry.setCode,sourceHash:entry.sourceHash,cases:[],obligations:[],uncovered:[]};
+    const obligation=(dimension,reason)=>{const id=`${entry.setCode}:named-target-damage:${dimension}`;result.obligations.push({id,path:'named-target',dimension});if(reason)result.uncovered.push({id,path:'named-target',reason});return id;};
+    const ordinary=e=>e.status==='supported'&&(!e.baseClass||e.baseClass==='NonLeaderUnitCard')&&same(e.card.types,['unit'])&&!e.card.unique&&!e.card.keywords?.length&&!Object.keys(e.keywordValues??{}).length&&!e.card.pilotText&&!e.card.pilotBox&&!e.card.pilotingBox&&!e.piloting&&!e.attachCondition;
+    const quiet=defs.filter(e=>ordinary(e)&&!Object.values(e.abilities??{}).flat().length);
+    const ground=quiet.find(e=>e.card.arena==='ground'&&e.card.hp>=6&&e.card.power<=2),space=quiet.find(e=>e.card.arena==='space'&&e.card.hp>=4&&e.card.power<=2);
+    if(!ground||!space){obligation('quiet-donors','Missing bounded quiet real recipients in both arenas');return result;}
+    const row=(e,owner,damage=0)=>({code:e.setCode,owner,arena:e.card.arena,exhausted:false,damage});
+    const mixed=[row(ground,'self'),row(ground,'opponent'),row(space,'self'),row(space,'opponent')];
+    const add=(name,extra={},targets=mixed)=>{const id=obligation(name);const setup=[...targets.map(t=>t.code),...targets.flatMap(t=>(t.attachments??[]).map(a=>a.code)),...(extra.preparationCode?[extra.preparationCode]:[]),...(extra.expectForce?['TOKEN_THE_FORCE']:[]),...(extra.expectClone?['TOKEN_CLONE_TROOPER']:[])];result.cases.push({id:`auto/${entry.setCode}/named-target-damage-${name}`,name:`named-target-damage-${name}`,kind:'probe',focusCardIds:[entry.setCode],setupCardIds:[...new Set(setup)].sort(),behaviorIds:['named-targets','damage',shape.trigger==='onAttack'?'on-attack':'when-played'],assertionStages:['construction','activation','observation'],coverageObligationIds:[id],probe:{...shape,cardId:entry.setCode,sourceTypes:entry.card.types,sourceArena:entry.card.arena,sourceUnique:!!entry.card.unique,sourceSeat:1,targets,choices:['index:0','index:1'],attackTarget:1,activationMode:'normal',initiative:'self',resourceCount:32,...extra}});};
+    add('owner-arena-domain');add('opposite-source-controller',{sourceSeat:2,initiative:'opponent'});
+    const tokens=(targets,n)=>targets.map((t,i)=>({...t,...(i<2?{attachments:Array.from({length:n},()=>({code:'TOKEN_SHIELD',token:'shield'}))}:{})}));
+    for(const opponentFirst of [false,true])add('paired-shields-'+(opponentFirst?'opponent-first':'self-first'),{opponentFirst,attackBase:true},tokens(mixed,2));
+    add('one-side-shield',{attackBase:true},mixed.map((t,i)=>({...t,...(i===0?{attachments:[{code:'TOKEN_SHIELD',token:'shield'}]}:{})})));
+    const gain=defs.find(e=>ordinary(e)&&e.card.arena===entry.card.arena&&e.abilities.card?.length===2&&Object.values(e.abilities??{}).flat().length===2&&e.abilities.card.every(a=>keys(a,['trigger','title','costs','effect'])&&same(a.costs,[])&&same(a.effect,{kind:'gainForce',target:'ownPlayer'}))&&same(e.abilities.card.map(a=>a.trigger),['onAttack','whenDefeated']));
+    if(gain){for(const opponentFirst of [false,true])add('paired-wounded-death-'+(opponentFirst?'opponent-first':'self-first'),{expectForce:true,forceDonorIndices:[0,1],opponentFirst,attackBase:true},[row(gain,'self',gain.card.hp-1),row(gain,'opponent',gain.card.hp-1)]);}else obligation('paired-captured-death','No complete scalar mandatory gainForce death donor');
+    if(shape.trigger==='whenPlayed') {
+        add('entering-source',{choices:['source','index:1']});
+        add('empty-enemy',{choices:['source','absent']},[]);
+        add('wrong-space-only',{choices:['source','absent']},[row(space,'self'),row(space,'opponent')]);
+    }else {
+        if(shape.ambush){add('actual-ambush-accept',{activationMode:'ambush'});add('actual-ambush-decline',{activationMode:'decline'});add('actual-ambush-empty-enemy',{activationMode:'empty'},[row(ground,'self')]);}
+        add('source-recipient',{choices:['source','index:1']});add('defender-recipient',{choices:['index:0','defender']});
+        if(gain)add('wounded-defender-captured-death',{choices:['index:0','defender'],expectForce:true,forceDonorIndices:[1],expectDefenderDeparture:true},[row(ground,'self'),row(gain,'opponent',gain.card.hp-1)]);
+        const defense=defs.find(e=>ordinary(e)&&e.card.arena===entry.card.arena&&e.abilities.card?.length===1&&Object.values(e.abilities??{}).flat().length===1&&keys(e.abilities.card[0],['trigger','title','costs','effect'])&&e.abilities.card[0].trigger==='onDefense'&&same(e.abilities.card[0].costs,[])&&same(e.abilities.card[0].effect,{kind:'createTokenUnit',tokenType:'cloneTrooper',amount:{kind:'const',value:1},target:'ownPlayer',entersReady:false}));
+        if(defense)for(const opponentFirst of [false,true])add('captured-defense-'+(opponentFirst?'defender-first':'attacker-first'),{choices:['index:0','defender'],expectClone:true,opponentFirst,expectDefenderDeparture:true},[row(ground,'self'),row(defense,'opponent',defense.card.hp-1)]);
+        else obligation('captured-defense','No complete scalar mandatory Clone onDefense donor');
+        const prep=defs.find(e=>!e.attachCondition&&!e.piloting&&!e.card.pilotText&&!e.card.pilotBox&&!e.card.pilotingBox&&Object.values(e.abilities??{}).flat().length===1&&e.status==='supported'&&e.baseClass==='EventCard'&&same(e.card.types,['event'])&&!e.card.keywords?.length&&!Object.keys(e.keywordValues??{}).length&&e.abilities.card?.length===1&&keys(e.abilities.card[0],['trigger','title','costs','effect','targetResolver'])&&e.abilities.card[0].trigger==='event'&&same(e.abilities.card[0].costs,[])&&same(e.abilities.card[0].effect,{kind:'damage',target:'chosen',amount:{kind:'const',value:entry.card.hp-1}})&&same(e.abilities.card[0].targetResolver,{owner:'any',type:'unit',zone:'anyAttackable'}));
+        if(prep)add('attacker-self-lethal-real-damage',{choices:['source','index:1'],preparationCode:prep.setCode,attackBase:true,expectSourceDeparture:true});else obligation('attacker-self-lethal','No actual scalar damage event to prepare source at remainingHP1');
+        if(entry.card.unique)for(const keepUnique of ['old','new'])add('unique-keep-'+keepUnique,{keepUnique,activationMode:keepUnique==='new'?'ambush':'unique-departed'},[...mixed,{...row(entry,'self'),exhausted:true}]);
+    }
+    for(const gap of ['ordinary-and-native-attachment-death-cleanup','repeated-nonunique-source-copies','token-deployed-leader-recipients','source-control-transfer','recipient-reentry','framework-aura-death','gained-overwhelm','multiplayer'])obligation(gap,'No full-card construction for this dimension; source and primitive diagnostics are separate');
+    return result;
+}

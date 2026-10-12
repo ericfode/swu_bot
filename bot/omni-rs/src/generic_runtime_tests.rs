@@ -2139,7 +2139,7 @@ fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigg
 #[test]
 fn named_two_admission_preserves_other_descriptor_rejections() {
     let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["HMW_263","LAW_099","LAW_184","LOF_054","SEC_030","SOR_218","TS26_029","TS26_072","TS26_081","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    for code in ["HMW_263","LAW_099","LAW_184","LOF_054","SOR_218","TS26_072","TS26_081","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
     assert_eq!(std::mem::size_of::<State>(),18560);
 }
 #[test]
@@ -2502,4 +2502,25 @@ fn named_attack_raw_shapes_reject_unwitnessed_primitive_headers_and_literals() {
 #[test]
 fn named_attack_bossk_distinct_wounded_lethal_resolves_captured_death_then_combat() {
  let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LAW_031");s.card_mut(source).exhausted=false;let victim=unit(&e,&mut s,Seat::P2,"LOF_129");s.card_mut(victim).damage=e.hp(&s,victim)-1;let base=s.players[1].base;let power=e.power(&s,source,false);let prompt=declaration(&e,s,source,base);let second=e.apply(&prompt,&e.card_action(&prompt,source)).unwrap();assert!(e.in_arena(&second,victim));assert!(!second.players[1].force_held);let done=e.apply(&second,&e.card_action(&second,victim)).unwrap();assert!(done.players[1].discard.contains(victim));assert!(done.players[1].force_held);assert_eq!(done.card(base).damage,power+1);assert_eq!(done.attack_source,0);assert_eq!(done.death_depth,0);
+}
+#[test]
+fn named_damage_trooper_defers_both_handlers_and_uses_source_chooser() {
+ let e=engine();let mut s=board(&e);let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let source=hand(&e,&mut s,"SEC_030");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(prompt.decision,Decision::AbilityTarget);assert_eq!(prompt.active,Seat::P1);assert!(e.legal_actions(&prompt).iter().all(|a|a.kind=="card"));let second=e.apply(&prompt,&e.card_action(&prompt,source)).unwrap();assert_eq!(second.active,Seat::P1);assert_eq!(second.card(source).damage,0);assert_eq!(second.card(enemy).damage,0);let done=e.apply(&second,&e.card_action(&second,enemy)).unwrap();assert_eq!(done.card(source).damage,2);assert_eq!(done.card(enemy).damage,2);
+ let mut s=board(&e);let source=hand(&e,&mut s,"SEC_030");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();let done=e.apply(&prompt,&e.card_action(&prompt,source)).unwrap();assert_eq!(done.card(source).damage,2);assert_eq!(done.decision,Decision::Window);
+}
+#[test]
+fn named_damage_two_owner_shields_and_combined_lethal_capture() {
+ let e=engine();for priority in ["You","Opponent"] {let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_129");let enemy=unit(&e,&mut s,Seat::P2,"LOF_129");for id in [own,enemy] {e.create_token(&mut s,id,false).unwrap();e.create_token(&mut s,id,false).unwrap();}let source=hand(&e,&mut s,"SEC_030");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();let second=e.apply(&first,&e.card_action(&first,own)).unwrap();let shield=e.apply(&second,&e.card_action(&second,enemy)).unwrap();assert_eq!(shield.decision,Decision::AbilityGroupShield);assert_eq!(shield.active,Seat::P1);let done=named_button(&e,&shield,priority);for id in [own,enemy] {assert_eq!(done.card(id).damage,0);assert_eq!(e.token_count(&done,done.card(id).shield),1);} }
+ for priority in ["You","Opponent"] {let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_129");let enemy=unit(&e,&mut s,Seat::P2,"LOF_129");for id in [own,enemy] {s.card_mut(id).damage=e.hp(&s,id)-1;}let source=hand(&e,&mut s,"SEC_030");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();let second=e.apply(&first,&e.card_action(&first,own)).unwrap();let death=e.apply(&second,&e.card_action(&second,enemy)).unwrap();assert!(death.players[0].discard.contains(own));assert!(death.players[1].discard.contains(enemy));assert_eq!(death.decision,Decision::DeathPlayer);let done=named_button(&e,&death,priority);assert!(done.players[0].force_held);assert!(done.players[1].force_held);assert_eq!(done.death_depth,0);}
+}
+#[test]
+fn named_damage_ziton_real_ambush_and_self_lethal_preserve_captured_second() {
+ let e=engine();let mut s=board(&e);let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let source=hand(&e,&mut s,"TS26_029");let ambush=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(ambush.decision,Decision::Ambush);let attack=named_button(&e,&ambush,"Trigger");let first=e.apply(&attack,&e.card_action(&attack,enemy)).unwrap();assert_eq!(first.attack_source,source);assert_eq!(first.attack_defender,enemy);let second=e.apply(&first,&e.card_action(&first,source)).unwrap();assert_eq!(second.card(source).damage,0);let done=e.apply(&second,&e.card_action(&second,enemy)).unwrap();assert!(done.card(source).damage>=1);assert_eq!(done.attack_source,0);
+ let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"TS26_029");s.card_mut(source).damage=e.hp(&s,source)-1;s.card_mut(source).exhausted=false;let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let base=s.players[1].base;let first=declaration(&e,s,source,base);let second=e.apply(&first,&e.card_action(&first,source)).unwrap();let done=e.apply(&second,&e.card_action(&second,enemy)).unwrap();assert!(done.players[0].discard.contains(source));assert_eq!(done.card(enemy).damage,1);assert_eq!(done.card(base).damage,0);assert_eq!(done.attack_source,0);
+}
+#[test]
+fn named_damage_missing_first_still_resolves_second_and_raw_guards_reject() {
+ let e=engine();let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"TS26_029");s.players[0].discard.push(source).unwrap();let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityTarget);let done=e.apply(&s,&e.card_action(&s,enemy)).unwrap();assert_eq!(done.card(enemy).damage,1);
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();for (field,value) in [("owner",json!("any")),("optional",json!(true)),("type",json!("base")),("promptTitle",json!("Custom"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="SEC_030").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["targetResolver"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("SEC_030"));}
+ for trigger in ["event","onDefense","action"] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="SEC_030").unwrap();card["abilities"]["card"][0]["trigger"]=json!(trigger);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("SEC_030"));}
 }

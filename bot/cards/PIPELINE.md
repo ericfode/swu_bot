@@ -158,6 +158,19 @@ not distinguish an intermediate lethal sweep. Reversed source seats, unique
 replacement, recipient reentry, broad token/leader combinations and framework
 stat-death ordering remain explicit gaps.
 
+Named unit-damage experiments normally play the source and preserve its chooser
+through friendly and enemy selections. Both source seats, ground-only and
+unrestricted unit domains, entering-source eligibility and missing enemies have
+separate cases. Damage, Shield replacement and physical defeat wait for the
+remaining selection. Paired Shields and captured death effects exercise both
+owner priorities, exact surviving token identities and stable Force identity.
+Actual Ambush accept/decline, unique replacement, natural readiness, captured
+defense, defender departure and self-lethal damage preparation check attack
+resumption. Ordinary attachment cleanup, repeated nonunique sources, reentry,
+controller transfer, broad token/leader targets, gained Overwhelm and framework
+aura deaths remain gaps. Ziton witnesses cover only the pinned two-player
+implementation; its source explicitly disclaims accurate Twin Suns behavior.
+
 Weakness experiments cover optional play/death registrations, both controllers,
 damaged-only choices, exact resource thresholds, the entering source, signed
 stat stacking and zero-power clamping, lethal HP loss, and native token/deployed

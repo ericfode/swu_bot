@@ -968,6 +968,8 @@ impl Program {
             if depth!=0 || !["event","whenPlayed","onAttack"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
                 return Err("named selectors require two independent standalone event/WhenPlayed/OnAttack stat systems".into());
             }
+            let damage=ability.target_resolvers.iter().all(|d|matches!(d.effect,Effect::Damage{..}));
+            if damage && !["whenPlayed","onAttack"].contains(&ability.trigger.as_str()) {return Err("named damage requires ordinary play/attack registration".into());}
             let mut names=std::collections::HashSet::new();
             let mut effects=Vec::new();
             for (index,descriptor) in ability.target_resolvers.iter().enumerate() {
@@ -975,6 +977,13 @@ impl Program {
                 let mut r=descriptor.target_resolver.clone();
                 r.prompt_title=None;
                 r.validate()?;
+                if damage {
+                    if r.owner!=if index==0 {"self"}else{"opponent"} || r.card_type!="unit" || r.optional || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) || r.predicate.is_some() || descriptor.target_resolver.prompt_title.is_some() {return Err("named damage requires mandatory own/opponent scalar arena units with default prompts".into());}
+                    let Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}}=&descriptor.effect else {return Err("named damage requires literal chosen amounts".into());};
+                    if n!="chosen" || !value.as_u64().is_some_and(|n|(1..=2).contains(&n)) {return Err("named damage requires one or two ability damage".into());}
+                    effects.push(Effect::Select{target_resolver:r,effect:Box::new(descriptor.effect.clone())});
+                    continue;
+                }
                 if r.owner!="any" || r.card_type!="unit" || (!r.optional && !(ability.trigger=="onAttack" && index==0)) || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) {return Err("named selectors require optional scalar any-owner arena units".into());}
                 if ability.trigger=="onAttack" && r.predicate.is_some() {return Err("named attack selectors require unconditional arena domains".into());}
                 if let Some(predicate)=&r.predicate {
