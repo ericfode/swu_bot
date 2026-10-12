@@ -117,6 +117,58 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
 - **Trend**: Spearman of skill against each of those over the bots that have both, with an exact two-sided permutation
   p for up to 8 bots. With a handful of bots this describes; it does not prove a rule.
 
+- **Deck-type row** (`skill.byStyle`): the challenger's score against the reference split by the style of the deck it
+  holds (hyperaggro .. hardcontrol, from the deck file's `metadata.style`), with a Wilson CI each. A bot keeps its deck
+  in both games of a seed, so within a pass it holds one side of each deck pair: the overall score is fair, but in a
+  split the cards stay in, and a bot that played exactly like the reference would score its decks' strength there, not
+  50%. So each cell also has `expected`, what the reference itself scores with the same decks from the same seats (the
+  deck model compare.js fits to the reference's mirror, which had its own deals: P(p1 wins) = σ(s[p1 deck] − s[p2
+  deck] + seat)), and `edge` = score − expected. A bot weaker overall loses points in every cell, more where that
+  expectation is far from its own level, so each cell also has `par`: the same model shifted on the logit scale by one
+  amount per bot, so that it gives the bot's overall score (Σ σ(l + d) = Σ y). Par is what a bot of that strength
+  would score with those decks if it handled every deck type like the reference; `vsPar` = score − par, and a row's
+  vsPar averages to 0 over its games. Above 0, the bot does better with that deck type than its level says; below,
+  worse. Neither has a CI, and both carry the noise of the mirror's model. Without a mirror of the reference in the
+  compare file there is no `expected` or `par`.
+
+## The standard bot test (`bot-test.js`)
+
+Every new bot gets the same test: one pass of the 27 decks against c-clock (702 games), on the same deals as every bot
+tested before, so its score compares with theirs and pairs with them game for game.
+
+```bash
+npm run realdeck:test -- --bot <bot> [--mirror] [--record] [--workers 4] [--panel /mnt/project-files/dashboard/panels/realdeck-test.json]
+npm run realdeck:test -- --report [--panel ...]     # rebuild skill.json and the panel from the runs already played
+npm run realdeck:test -- --bot <bot> --dry-run      # print the commands only
+```
+
+- Runs go in `--dir` (default `/mnt/project-files/human-meta/realdeck` when it exists, else `results/realdeck`): the
+  gauntlet as `test-<bot>-<n>`, the mirror (with `--mirror`) as `mirror-<bot>-<n>`. `--resume <run id>` finishes a
+  gauntlet of the same bot that stopped (no write for an hour). It is refused for a run still going or already done
+  (ladder.js may start a done run over), for a run of another bot, deck file, seed or key, and for a run whose key is
+  not published yet (ladder.js publishes it when a run finishes; a resume would deal the rest from a new key).
+- **Same deals**: the run key is the one the last report named (`skill.json` `standard.keyId`), else the key of the
+  gauntlet against c-clock on the same deck file and seed 1 that finished first (its `ladder.json` `config.key`). In a
+  folder with none, the first test draws a new key and the later ones reuse it; a test started while that first one
+  is still running warns that one of the two will be left out. The key also lets a program rebuild the hidden cards,
+  so it is read from that run only, printed only as its id, and never committed.
+- **Report**: every gauntlet in the folder on those deals (the others are listed as left out, with the reason) and
+  one run per challenger: its newest finished run, or its newest unfinished one when it has none (a bot tested again
+  replaces its older games once the new run is done). They are joined through `skill.js` with `compare-702.json`
+  (compare.js on one-pass mirrors). `--mirror` reruns compare.js on the mirrors in that file with this bot's replaced
+  by the new one (mirrors whose folder is gone are listed and dropped; c-clock's mirror is played too when the file
+  has none, since par needs it), so the report has its agreement with humans, and rewrites `compare-702.json` and
+  `.txt`. Writes `skill.json` and `skill.txt` in the folder.
+- **Panel** (`--panel <file>`, research dashboard contract section 5): each bot's score against c-clock as a face-off
+  with its 95% CI (and "running, k of 702 games" while its run goes on, or "stopped" once it has not written for an
+  hour), a table of each bot's score by the deck type it holds with each cell coloured by its points above or below
+  par (Atlas edge steps) and c-clock's own score with the same decks as its first row, the latest bot's deck-type
+  row as face-offs, and the agreement table for bots with a mirror. The goal, mental model, plan and thoughts of an
+  existing panel file are kept (a mental model the script wrote by default before is replaced); a finished test
+  adds one thought with its result.
+- A pass takes about as long as 702 games of the bot (c-clock answers in well under a millisecond). Bots that need
+  more time per decision can use `--workers`.
+
 ## Read with care
 
 - The human field rate is for the archetype (leader + base group) over every list of it in 53 events, not for this

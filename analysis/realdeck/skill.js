@@ -22,6 +22,21 @@
  * anything else are counted, by outcome, and left out. Games still running are ignored. The reference itself is 50% by
  * definition.
  *
+ * Deck-type row (`skill.byStyle`): the same score split by the style of the deck the challenger holds (hyperaggro ..
+ * hardcontrol, from the deck file's metadata.style as compare.js reads it), with a Wilson CI each. A challenger keeps
+ * its deck in both games of a seed, so within a pass it holds one side of each deck pair: the split leaves the cards in,
+ * and a bot that played exactly like the reference would not score 50% in every cell. So each cell also has `expected`,
+ * what the reference itself scores holding the same decks from the same seats (compare.js's deck model of the
+ * reference's mirror run: P(p1 wins) = σ(s[p1 deck] − s[p2 deck] + seat); that mirror had its own deals), and `edge` =
+ * score − expected over the games with an expectation. A bot weaker overall loses points in every cell, and more where
+ * the reference's expectation sits near 50%, so each cell also has `par`: the same model shifted on the logit scale to
+ * the challenger's overall level (one shift d for all its games, Σ σ(l + d) = Σ y), what a bot of that strength would
+ * score with those decks if it handled every deck type like the reference; and `vsPar` = score − par. The vsPar of a
+ * row average to 0 over its games: above 0, the bot does better with that deck type than its level says. Neither has a
+ * CI, and both carry the noise of the mirror's model. Styles come from the `styles` option (deck name -> style) or else
+ * from the compare.js result's decks; without either there is no row, and without a mirror run of the reference no
+ * `expected` or `par`.
+ *
  * Paired: for every two challengers, the seeds both played with the same decks from the same seats and the same game
  * key (or none on both) with all four games decided. Per seed d = (A's score − B's score) / 2 over its two games; the
  * mean d with a normal 95% CI (clamped to ±1), and how many seeds each side did better. A is the challenger with the
@@ -54,6 +69,7 @@ const { readRun, wilson } = require('./compare');
 
 const AGGRO = ['hyperaggro', 'softaggro'];
 const CONTROL = ['softcontrol', 'hardcontrol'];
+const STYLES = [...AGGRO, 'midrange', ...CONTROL];
 const EXACT_MAX = 8; // 8! = 40,320 orderings
 const Z95 = 1.959964;
 const MEASURES = [
@@ -204,6 +220,93 @@ function skillOf(t) {
         score: t.score, winRate: rate, ci, elo: elo(rate), eloCI: ci ? [elo(ci[0]), elo(ci[1])] : null,
         bySeat: { p1: seat(t.bySeat.p1), p2: seat(t.bySeat.p2) }
     };
+}
+
+/**
+ * The reference's own chance to win a game holding `held` against `opp` from `seat`, from compare.js's deck model of
+ * its mirror run (strengths and seat term of cmp.decks[].runs[run], cmp.runs[].seat), or null without one.
+ */
+function referenceModel(cmp, run) {
+    const s = new Map();
+    for (const d of cmp?.decks ?? []) {
+        const x = d?.runs?.[run];
+        if (d?.name && typeof x?.strength === 'number') {
+            s.set(d.name, x.strength);
+        }
+    }
+    if (!run || !s.size) {
+        return null;
+    }
+    const seat = (cmp.runs ?? []).find((r) => r.id === run)?.seat?.logit ?? 0;
+    return (held, opp, at) => (s.has(held) && s.has(opp) ? 1 / (1 + Math.exp(-(s.get(held) - s.get(opp) + (at === 'p1' ? seat : -seat)))) : null);
+}
+
+/**
+ * A challenger's score against the reference by the style of the deck it holds (its deck-type row). styleOf: Map deck
+ * name -> style; a deck it does not know counts under 'unknown'. expect: referenceModel's function (or null) for each
+ * cell's `expected` and `edge`. Decided games only, as in skillOf. Styles in STYLES order, then any others.
+ */
+function styleRow(t, styleOf, expect = null) {
+    const acc = new Map();
+    const modelled = []; // [{style, y, l}]: the games with an expectation, l = its logit
+    for (const rec of t.seeds.values()) {
+        for (const seat of ['p1', 'p2']) {
+            const g = rec[seat];
+            const other = seat === 'p1' ? 'p2' : 'p1';
+            if (!g || g.y === null || !g.decks?.[seat]) {
+                continue;
+            }
+            const style = styleOf.get(g.decks[seat]) ?? 'unknown';
+            const x = acc.get(style) ?? { decided: 0, score: 0, n: 0, y: 0, e: 0, par: 0 };
+            x.decided++;
+            x.score += g.y;
+            const e = expect && g.decks[other] ? expect(g.decks[seat], g.decks[other], seat) : null;
+            if (e !== null) {
+                x.n++;
+                x.y += g.y;
+                x.e += e;
+                modelled.push({ style, y: g.y, l: Math.log(e / (1 - e)) });
+            }
+            acc.set(style, x);
+        }
+    }
+    const shift = levelShift(modelled);
+    for (const m of modelled) {
+        acc.get(m.style).par += sigmoid(m.l + shift);
+    }
+    const order = [...STYLES.filter((s) => acc.has(s)), ...[...acc.keys()].filter((s) => !STYLES.includes(s)).sort()];
+    return Object.fromEntries(order.map((s) => {
+        const x = acc.get(s);
+        return [s, {
+            decided: x.decided, score: x.score, winRate: x.score / x.decided, ci: wilson(x.score, x.decided),
+            expected: x.n ? x.e / x.n : null, edge: x.n ? (x.y - x.e) / x.n : null,
+            par: x.n ? x.par / x.n : null, vsPar: x.n ? (x.y - x.par) / x.n : null, expectedGames: x.n
+        }];
+    }));
+}
+
+const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+
+/**
+ * The challenger's overall level against the reference's own deck model, as a logit shift: the d with
+ * Σ σ(l + d) = Σ y over the games with an expectation (bisection; clamped to ±20 when it scored 0 or all). 0 without games.
+ */
+function levelShift(games) {
+    if (!games.length) {
+        return 0;
+    }
+    const y = games.reduce((a, g) => a + g.y, 0);
+    let lo = -20;
+    let hi = 20;
+    for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if (games.reduce((a, g) => a + sigmoid(g.l + mid), 0) < y) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return (lo + hi) / 2;
 }
 
 const sameDecks = (x, y) => !!x && !!y && x.p1 === y.p1 && x.p2 === y.p2;
@@ -391,12 +494,16 @@ function spearmanExact(xs, ys) {
 }
 
 /**
- * The whole join. gauntlets: from readGauntlet; cmp: a parsed compare.js result (or null). Pure apart from `now`.
+ * The whole join. gauntlets: from readGauntlet; cmp: a parsed compare.js result (or null); styles: deck name -> style
+ * (an object or a Map) for the deck-type rows, else taken from cmp.decks. Pure apart from `now`.
  */
-function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
+function skillVsAgreement(gauntlets, cmp, { now = new Date(), styles = null } = {}) {
     const { reference, tallies, warnings } = gauntletTallies(gauntlets);
+    const styleOf = new Map(styles instanceof Map ? styles : styles ? Object.entries(styles)
+        : (cmp?.decks ?? []).filter((d) => d?.name && d.style).map((d) => [d.name, d.style]));
     const mirrors = mirrorRuns(cmp);
     const refRun = mirrors.get(reference)?.run.id ?? null;
+    const expect = referenceModel(cmp, refRun);
     if (cmp && !refRun) {
         warnings.push(`compare.js result has no mirror run of the reference bot ${reference}`);
     }
@@ -407,7 +514,7 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
         const pick = mirrors.get(bot);
         return {
             bot, reference: isRef,
-            skill: isRef ? { winRate: 0.5, elo: 0, reference: true } : t ? skillOf(t) : null,
+            skill: isRef ? { winRate: 0.5, elo: 0, reference: true } : t ? { ...skillOf(t), byStyle: styleOf.size ? styleRow(t, styleOf, expect) : null } : null,
             agreement: pick ? agreementOf(cmp, pick, refRun) : null
         };
     });
@@ -474,7 +581,13 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
     };
 }
 
-const f2 = (x, d = 2) => (x === null || x === undefined ? '-' : (x >= 0 ? '+' : '') + x.toFixed(d));
+const f2 = (x, d = 2) => {
+    if (x === null || x === undefined) {
+        return '-';
+    }
+    const t = (Number(x.toFixed(d)) || 0).toFixed(d); // no '-0'
+    return (Number(t) >= 0 ? '+' : '') + t;
+};
 const pc = (x) => (x === null || x === undefined ? '-' : (100 * x).toFixed(1));
 const pv = (x) => (x === null || x === undefined ? '-' : x < 0.001 ? '<0.001' : x.toFixed(3));
 const el = (x) => (x === null || x === undefined ? '-' : (x >= 0 ? '+' : '') + Math.round(x));
@@ -496,6 +609,25 @@ function summaryText(r) {
         const ag = !a ? 'no mirror run'
             : `${`${f2(a.deckR)} (${f2(a.deckRDisattenuated)})`.padEnd(27)} ${(a.favouriteShare === null ? '-' : `${pc(a.favouriteShare)}%`).padEnd(10)} ${`${f2(a.style.botGap)} / ${f2(a.style.humanGap)}`.padEnd(20)} ${b.reference ? 'ref' : f2(a.withReference)}`;
         L.push(`${b.bot.padEnd(28)} ${sk} | ${ag}`);
+    }
+    const rows = r.bots.filter((b) => b.skill?.byStyle);
+    if (rows.length) {
+        const cols = [...new Set(rows.flatMap((b) => Object.keys(b.skill.byStyle)))];
+        L.push('');
+        L.push(`by deck type: win% vs ${r.reference} when the bot holds a deck of that type (decided games), and points above or below`);
+        L.push(`par: what a bot of the same overall score would get with those decks if it handled every deck type like ${r.reference}`);
+        L.push(`(${r.reference}'s own deck model, from its mirror; first row: ${r.reference} itself with the same decks and seats)`);
+        L.push(`${''.padEnd(28)} ${cols.map((c) => c.padEnd(18)).join(' ')}`.trimEnd());
+        const own = (c) => rows.map((b) => b.skill.byStyle[c]).filter((x) => x && x.expected !== null).sort((x, y) => y.expectedGames - x.expectedGames)[0];
+        if (cols.some(own)) {
+            L.push(`${`${r.reference} itself`.padEnd(28)} ${cols.map((c) => (own(c) ? pc(own(c).expected) : '-').padEnd(18)).join(' ')}`.trimEnd());
+        }
+        for (const b of rows) {
+            L.push(`${b.bot.padEnd(28)} ${cols.map((c) => {
+                const x = b.skill.byStyle[c];
+                return (x ? `${pc(x.winRate)} (${x.decided})${x.vsPar === null ? '' : ` ${f2(100 * x.vsPar, 0)}`}` : '-').padEnd(18);
+            }).join(' ')}`.trimEnd());
+        }
     }
     if (r.paired.length) {
         L.push('');
@@ -544,6 +676,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-    MEASURES, parseArgs, readGauntlet, gauntletTallies, elo, skillOf, deckBalance, pairedDifference, styleGap, mirrorRuns, agreementOf,
+    MEASURES, STYLES, parseArgs, readGauntlet, gauntletTallies, elo, skillOf, referenceModel, levelShift, styleRow, deckBalance, pairedDifference, styleGap, mirrorRuns, agreementOf,
     permutations, spearmanExact, skillVsAgreement, summaryText
 };

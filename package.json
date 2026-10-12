@@ -19,6 +19,7 @@
     "analysis:fitness": "node analysis/fitness.js",
     "analysis:test": "npm --prefix analysis test",
     "ladder": "node bot/ladder.js",
+    "realdeck:test": "node analysis/realdeck/bot-test.js",
     "test": "node --test bot/test/*.test.js importer/test/*.test.js tools/test/*.test.js app/test/*.test.js",
     "test:py": "python3 -m unittest discover -s bot/python",
     "wasm:build": "node bot/omni-wasm/build.js",

@@ -287,6 +287,62 @@ const cmpFixture = () => {
     assert.match(r5.warnings.join('\n'), /deck files differ \(sha256 compare.json aaaaaaaaaaaa, mirror heu cccccccccccc, gl aaaaaaaaaaaa\)/);
 }
 
+// 5b. deck-type rows: the challenger's score by the style of the deck it holds, from the styles option or cmp.decks
+{
+    const styleOf = new Map([['d0', 'hyperaggro'], ['d1', 'hardcontrol'], ['d2', 'midrange'], ['d3', 'hyperaggro']]);
+    const games = [
+        ...seedGames('heuristic', 'c-clock', 1, [1, 0], { p1: 'd0', p2: 'd1' }),
+        ...seedGames('heuristic', 'c-clock', 2, [0.5, null], { p1: 'd3', p2: 'd2' }),
+        ...seedGames('heuristic', 'c-clock', 3, [1, 1], { p1: 'd1', p2: 'd0' }),
+        ...seedGames('heuristic', 'c-clock', 4, [0, 0], { p1: 'd4', p2: 'd2' })
+    ];
+    const t = sk.gauntletTallies([{ id: 'g', vs: ['c-clock'], games }]).tallies.get('heuristic');
+    const row = sk.styleRow(t, styleOf);
+    assert.deepStrictEqual(Object.keys(row), ['hyperaggro', 'hardcontrol', 'unknown'], 'STYLES order, then the rest');
+    // a bot keeps its deck in both games of a seed: d0 twice, d3 once (a draw; the incomplete game is out)
+    assert.deepStrictEqual([row.hyperaggro.decided, row.hyperaggro.score, row.hyperaggro.winRate], [3, 1.5, 0.5]);
+    assert.deepStrictEqual(row.hyperaggro.ci, wilson(1.5, 3));
+    assert.deepStrictEqual([row.hardcontrol.decided, row.hardcontrol.score, row.unknown.decided, row.unknown.score], [2, 2, 2, 0]);
+    const gl = { id: 'g', vs: ['c-clock'], challengers: ['heuristic'], games, decks: 5 };
+    assert.strictEqual(Object.values(row).reduce((a, x) => a + x.decided, 0), sk.skillOf(t).decided, 'every decided game in one row');
+    const fromCmp = sk.skillVsAgreement([gl], { ...cmpFixture(), decks: [...styleOf].map(([name, style]) => ({ name, style })) });
+    assert.deepStrictEqual(fromCmp.bots.find((b) => b.bot === 'heuristic').skill.byStyle, row);
+    const given = sk.skillVsAgreement([gl], null, { styles: { d0: 'midrange' } });
+    assert.deepStrictEqual(Object.keys(given.bots.find((b) => b.bot === 'heuristic').skill.byStyle), ['midrange', 'unknown']);
+    assert.strictEqual(sk.skillVsAgreement([gl], cmpFixture()).bots.find((b) => b.bot === 'heuristic').skill.byStyle, null, 'no styles, no row');
+    assert.match(sk.summaryText(fromCmp), /by deck type: win% vs c-clock[^\n]*\n[^\n]*\n[^\n]*\n\s+hyperaggro\s+hardcontrol\s+unknown\nheuristic\s+50\.0 \(3\)\s+100\.0 \(2\)\s+0\.0 \(2\)$/m);
+    assert.deepStrictEqual([row.hyperaggro.expected, row.hyperaggro.edge, row.hyperaggro.par, row.hyperaggro.vsPar, row.hyperaggro.expectedGames], [null, null, null, null, 0], 'no reference model, no expectation');
+
+    // what the reference scores with the same decks: its mirror's deck model, σ(s[held] − s[opp] ± seat)
+    const sig = (x) => 1 / (1 + Math.exp(-x));
+    const strengths = { d0: 1, d1: -1, d2: 0, d3: 0.5 };
+    const model = { ...cmpFixture(), decks: [...styleOf].map(([name, style]) => ({ name, style, runs: name in strengths ? { ccl: { strength: strengths[name] } } : {} })) };
+    const m = sk.referenceModel(model, 'ccl');
+    close(m('d0', 'd1', 'p1'), sig(2), 1e-12, 'no seat term in the run: none');
+    assert.strictEqual(m('d4', 'd0', 'p1'), null, 'a deck without a strength');
+    model.runs.find((r) => r.id === 'ccl').seat = { logit: 0.3 };
+    const ms = sk.referenceModel(model, 'ccl');
+    close(ms('d0', 'd1', 'p1'), sig(2.3), 1e-12, 'seat term for p1');
+    close(ms('d0', 'd1', 'p2'), sig(1.7), 1e-12, 'and against p2');
+    assert.strictEqual(sk.referenceModel(model, 'nope'), null);
+    model.runs.find((r) => r.id === 'ccl').seat = { logit: 0 };
+    const byE = sk.skillVsAgreement([gl], model).bots.find((b) => b.bot === 'heuristic').skill.byStyle;
+    // hyperaggro: d0 vs d1 twice (1, 0) and d3 vs d2 once (a draw); hardcontrol: d1 vs d0 twice (1, 1); d4 has no strength
+    close(byE.hyperaggro.expected, (2 * sig(2) + sig(0.5)) / 3, 1e-12, 'expected hyperaggro');
+    close(byE.hyperaggro.edge, (1.5 - 2 * sig(2) - sig(0.5)) / 3, 1e-12, 'edge hyperaggro');
+    close(byE.hardcontrol.edge, 1 - sig(-2), 1e-12, 'edge hardcontrol');
+    assert.deepStrictEqual([byE.unknown.expected, byE.unknown.edge, byE.unknown.expectedGames, byE.unknown.decided], [null, null, 0, 2]);
+    // par: the same model shifted to the bot's level, Σ σ(l + d) = Σ y over the games with an expectation (3.5 of 5 here)
+    close(sk.levelShift([{ l: 0, y: 1 }, { l: 0, y: 1 }, { l: 0, y: 1 }, { l: 0, y: 0 }]), Math.log(3), 1e-9, 'three in four at even odds');
+    assert.deepStrictEqual([sk.levelShift([]), sk.levelShift([{ l: 0, y: 1 }])], [0, 20], 'no games: none; all won: the clamp');
+    const d = sk.levelShift([[1, 2], [0, 2], [0.5, 0.5], [1, -2], [1, -2]].map(([y, l]) => ({ y, l })));
+    close(byE.hyperaggro.par, (2 * sig(2 + d) + sig(0.5 + d)) / 3, 1e-12, 'par hyperaggro');
+    close(byE.hardcontrol.par, sig(-2 + d), 1e-12, 'par hardcontrol');
+    close(3 * byE.hyperaggro.vsPar + 2 * byE.hardcontrol.vsPar, 0, 1e-9, 'vsPar averages to 0 over the row');
+    assert.deepStrictEqual([byE.unknown.par, byE.unknown.vsPar], [null, null]);
+    assert.match(sk.summaryText(sk.skillVsAgreement([gl], model)), /\nc-clock itself\s+79\.5\s+11\.9\s+-\nheuristic\s+50\.0 \(3\) -43\s+100\.0 \(2\) \+65\s+0\.0 \(2\)$/m);
+}
+
 // 6. the command line, on a run directory written like ladder.js writes a gauntlet
 {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'realdeck-skill-'));
@@ -328,4 +384,4 @@ const cmpFixture = () => {
     }
 }
 
-console.log('ok: realdeck skill tallies, paired differences, style gap, exact Spearman, join, cli');
+console.log('ok: realdeck skill tallies, paired differences, style gap, exact Spearman, join, deck-type rows, cli');
