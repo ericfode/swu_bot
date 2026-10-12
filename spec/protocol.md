@@ -211,8 +211,9 @@ Requests, replies, deals and errors are the same, with these differences:
 
 - The hidden cards are dealt again the same way (same zone sizes, same seat-private stream per `deal`), by a shuffle
   of their own, so a deal number gives other cards than it would on forceteki.
-- `prompt` carries only `actionWindow`; `type`, `signature`, `title`, `promptTitle` and `selectCardMode` are `null`
-  and `selected` is empty.
+- `prompt` carries `actionWindow` and a `signature`: `actionWindow|-` at an action window as on forceteki, else
+  `rust|` and the kinds of the legal actions (such as `rust|card|button`). `type`, `title`, `promptTitle` and
+  `selectCardMode` are `null` and `selected` is empty.
 - `state` has no `force` or `credits` (no card in the Rust pool uses them).
 - A `distribute` choice is one action per allowed split, each with its `split` (`[{"id","amount"}]`) and no
   `distribute` field; a `split` you send with `act` is ignored.

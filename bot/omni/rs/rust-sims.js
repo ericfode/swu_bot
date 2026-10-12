@@ -58,9 +58,10 @@ function determinizeState(state, you, rng) {
 
 /**
  * The `sim` requests of one decision on the Rust engine, with the same contract as protocol.js simulator(): `deals`
- * is the seat's random stream per deal, `deadline` the decision's end. Resolves to null when Rust cannot play this game.
+ * is the seat's random stream per deal, `ms` the decision's time (null: none). The clock starts once the engine and
+ * this position are loaded, as the bot's does. Resolves to null when Rust cannot play this game.
  */
-async function rustSimulator(eg, pid, deals, deadline) {
+async function rustSimulator(eg, pid, deals, ms) {
     const rust = await rustEngine();
     if (!rust) return null;
     const you = eg.seatOf(pid);
@@ -71,6 +72,7 @@ async function rustSimulator(eg, pid, deals, deadline) {
     } catch {
         return null; // a card outside the Rust pool
     }
+    const deadline = ms === null ? null : Date.now() + ms;
     let game = null,
         done = false,
         actor = null,
@@ -99,7 +101,7 @@ async function rustSimulator(eg, pid, deals, deadline) {
         }
         const snap = game.snapshot();
         return {
-            t: 'simulated', op, ms: left(), actor, prompt: rust.views.prompt(game, actor), state: rust.views.view(snap, you),
+            t: 'simulated', op, ms: left(), actor, prompt: rust.views.prompt(game, actor, acts), state: rust.views.view(snap, you),
             actions: rust.views.actions(snap, acts)
         };
     };

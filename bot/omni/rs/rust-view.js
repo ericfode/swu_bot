@@ -102,9 +102,14 @@ class RustViews {
         });
     }
 
-    /** What bot/view.js promptView gives, as far as the Rust state knows it. */
-    prompt(game, seat) {
-        return { type: null, signature: null, title: null, promptTitle: null, selectCardMode: null, selected: [], actionWindow: game.isActionWindow(seat) };
+    /**
+     * What bot/view.js promptView gives, as far as the Rust state knows it. The signature is forceteki's at an action
+     * window; elsewhere it is `rust|` and the kinds of the legal actions, since Rust has no prompt types.
+     */
+    prompt(game, seat, actions = []) {
+        const actionWindow = game.isActionWindow(seat);
+        const signature = actionWindow ? 'actionWindow|-' : ['rust', ...new Set(actions.map((a) => a.kind).sort())].join('|');
+        return { type: null, signature, title: null, promptTitle: null, selectCardMode: null, selected: [], actionWindow };
     }
 }
 

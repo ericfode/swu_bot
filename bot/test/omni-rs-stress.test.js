@@ -90,4 +90,9 @@ test('Rust views use the protocol shapes and hide what the seat cannot see', () 
         { i: 0, kind: 'button', label: 'Pass', arg: 'pass' },
         { i: 1, kind: 'card', label: 'x_001', cardUuid: 'c2', card: { id: 'c2', n: 'Card', s: 'X_001', zone: 'hand', ctl: 'p1' } }
     ]);
+    // the protocol schema needs a string signature
+    assert.equal(views.prompt({ isActionWindow: () => true }, 'p1').signature, 'actionWindow|-');
+    const target = views.prompt({ isActionWindow: () => false }, 'p1', [{ kind: 'card' }, { kind: 'button' }, { kind: 'card' }]);
+    assert.equal(target.signature, 'rust|button|card');
+    assert.equal(target.actionWindow, false);
 });

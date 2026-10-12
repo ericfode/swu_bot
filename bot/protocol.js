@@ -201,7 +201,7 @@ class ClientSeat {
         let sim = null;
         if (this.wantsSims && eg.isActionWindow(pid)) {
             const deals = (deal) => this.setup.deals(`${seq}:${deal}`);
-            sim = this.simEngine ? await require('./omni/rs/rust-sims').rustSimulator(eg, pid, deals, ms === null ? null : Date.now() + ms) : null;
+            sim = this.simEngine ? await require('./omni/rs/rust-sims').rustSimulator(eg, pid, deals, ms) : null;
             // the copy catches up with the real game before the clock starts
             const copy = sim ? null : await this.shadow.sync(eg, pid);
             sim ??= copy ? simulator(this.shadow, pid, deals, ms === null ? null : Date.now() + ms) : null;
