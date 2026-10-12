@@ -66,16 +66,21 @@ function feedRun(doc, feed, id) {
     if (doc.bots !== undefined && !(Array.isArray(doc.bots) && doc.bots.every(isName))) return null;
     // runs are ordered by createdAt, so a feed's run needs one
     if (!(typeof doc.createdAt === 'string' && doc.createdAt.length <= 40 && Number.isFinite(Date.parse(doc.createdAt)))) return null;
+    // the run's bots list names our bots; every other seat is a person, kept only as "opponent", so a person's name is
+    // never stored. A run with games must name at least one bot, and every game must seat one of them.
+    const ours = new Set((doc.bots ?? []).filter((b) => b !== 'opponent'));
+    if (doc.games.length && !ours.size) return null;
     const games = [], seen = new Set();
     for (const g of doc.games) {
         const ok = g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`) && !seen.has(g.id)
-            && isName(g.p1) && isName(g.p2) && FEED_OUTCOMES.has(g.outcome)
+            && isName(g.p1) && isName(g.p2) && (ours.has(g.p1) || ours.has(g.p2)) && FEED_OUTCOMES.has(g.outcome)
             && (g.outcome !== 'won' || g.winnerSeat === 'p1' || g.winnerSeat === 'p2') && (g.error == null || typeof g.error === 'string');
         if (!ok) return null;
         seen.add(g.id);
         // the seat follows from the outcome: only a won game names a winner, a draw is always 'draw'
         const seat = g.outcome === 'won' ? g.winnerSeat : g.outcome === 'draw' ? 'draw' : null;
-        games.push({ id: g.id, p1: g.p1, p2: g.p2, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? g[seat] : null,
+        const p = { p1: ours.has(g.p1) ? g.p1 : 'opponent', p2: ours.has(g.p2) ? g.p2 : 'opponent' };
+        games.push({ id: g.id, ...p, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? p[seat] : null,
             rounds: count(g.rounds), steps: count(g.steps), error: g.error ? g.error.slice(0, 200) : null });
     }
     const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small

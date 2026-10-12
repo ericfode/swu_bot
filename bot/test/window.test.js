@@ -351,6 +351,13 @@ test('a feed token writes only what carries its name, and reads like a friend', 
             { id: 'karabast-3', seed: 0, p1: 'c-clock', p2: 'opponent', winner: null, winnerSeat: 'draw', rounds: 0, steps: 1, outcome: 'abandoned', error: 'no result', ms: 0 },
             { id: 'karabast-4', p1: 'c-clock', p2: 'opponent', winnerSeat: null, rounds: 9, steps: 500, outcome: 'draw' },
         ] };
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: undefined }))).status, 400, 'a run with games names its bots');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: ['opponent'] }))).status, 400, '"opponent" is no bot');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: ['rush'] }))).status, 400, 'every game seats one of its bots');
+        // a seat outside the bots list is a person: stored as "opponent", the winner too, so no name is kept
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, games: [{ id: 'karabast-9', p1: 'alice', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1' }] }))).status, 200);
+        const kept = JSON.stringify((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result);
+        assert.ok(!kept.includes('alice') && kept.includes('"p1":"opponent"') && kept.includes('"winner":"opponent"'), kept);
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify(sent))).status, 200);
         assert.deepStrictEqual((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result, { id: 'karabast', feed: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock'], gamesPerPairing: 1, games: [
             { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running', winnerSeat: null, winner: null, rounds: 2, steps: 40, error: null },
