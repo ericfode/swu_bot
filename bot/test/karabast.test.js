@@ -602,6 +602,49 @@ test('the live view names our bot in a bot game and reports the queue run', () =
     assert.strictEqual(games.status().stale, true);
 });
 
+test('opponent names go only to the private names file and the local live view that reads it', () => {
+    const { recordOpponent } = require('../karabast/queue');
+    const { Games, checkBinding } = require('../karabast/live-view');
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    const dir = path.join(runs, 'q-1');
+    fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
+    // our seat's own view, as in a bot game (see the test above)
+    const hand = [{ id: 'id-H1', setId: { set: 'SOR', number: 9 }, uuid: 'H1', name: 'Wampa', zone: 'hand', controllerId: 'a spectator' }];
+    const states = watchedStates().map((s) => {
+        const me = { ...s.players.player2, id: 'a spectator', name: 'a spectator' };
+        me.cardPiles = { ...me.cardPiles, hand };
+        return { ...s, players: { player1: s.players.player1, 'a spectator': me } };
+    });
+    fs.writeFileSync(path.join(dir, 'frames', 'abcdef012345.jsonl'), states.map((s) => JSON.stringify(s)).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'games.jsonl'), JSON.stringify({ bot: 'c-clock', result: 'loss', file: 'abcdef012345.jsonl' }) + '\n');
+    const names = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'private-')), 'private', 'opponents.jsonl');
+    const gs = { players: { 'swu-bot-1': { name: 'swu-bot (bot)' }, 'u-2': { name: '<b>Rey\u0007Fan</b>' } } };
+    recordOpponent(names, 'q-1/frames/abcdef012345', gs, 'swu-bot-1');
+    recordOpponent(names, 'q-1/frames/0000000000aa', { players: { 'swu-bot-1': {}, 'u-3': {} } }, 'swu-bot-1'); // no name: nothing kept
+    const rows = fs.readFileSync(names, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual(rows.map((r) => [r.game, r.name]), [['q-1/frames/abcdef012345', 'bReyFan/b']]);
+    assert.strictEqual(fs.statSync(names).mode & 0o777, 0o600);
+    assert.strictEqual(fs.statSync(path.dirname(names)).mode & 0o777, 0o700);
+    fs.chmodSync(names, 0o644); // made wider by hand: the next name narrows it first
+    recordOpponent(names, 'q-1/frames/0000000000bb', gs, 'swu-bot-1');
+    assert.strictEqual(fs.statSync(names).mode & 0o777, 0o600);
+    fs.writeFileSync(names, fs.readFileSync(names, 'utf8').split('\n').slice(0, 1).join('\n') + '\n'); // back to one row
+
+    const named = new Games(runs, { names });
+    const h = named.get('q-1/frames/abcdef012345').events[0];
+    assert.deepStrictEqual(h.players.filter((p) => p.id !== h.source.pov).map((p) => p.bot), ['bReyFan/b']);
+    assert.strictEqual(named.summary(named.list()[0]).opponent, 'bReyFan/b');
+    const plain = new Games(runs); // the share link and the window feed
+    const h2 = plain.get('q-1/frames/abcdef012345').events[0];
+    assert.deepStrictEqual(h2.players.filter((p) => p.id !== h2.source.pov).map((p) => p.bot), ['opponent']);
+    assert.ok(!('opponent' in plain.summary(plain.list()[0])));
+    assert.ok(!JSON.stringify(plain.get('q-1/frames/abcdef012345').events).includes('Rey'));
+
+    assert.doesNotThrow(() => checkBinding('127.0.0.1', null, names));
+    assert.throws(() => checkBinding('127.0.0.1', 'k3y-for-tests', names), /--names/);
+    assert.throws(() => checkBinding('0.0.0.0', 'k3y-for-tests', names), /--names/);
+});
+
 test('the watchdog restarts a stuck or dead loop, leaves a stopped-on-purpose loop alone, and alerts past its restart budget', () => {
     const { judge, newestStatus } = require('../karabast/watchdog');
     const now = Date.parse('2026-10-11T21:30:00Z');
