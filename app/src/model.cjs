@@ -157,10 +157,11 @@
                 if (forfeit) R(forfeit === 'p1' ? p1 : p2).faults++;
             }
             const table = Object.entries(st).map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
-            // a people run names everyone who sat down (its bots list may leave the people out), so its grid shows before any game ends
+            // a people run names everyone who sat down (its bots list may leave the people out), so its grid shows before any game ends;
+            // `ours` keeps the run's own bots list, which names our bots and never the people
             const bots = [...new Set([...(r.bots || []), ...(people ? r.games.flatMap(g => [g.p1, g.p2]) : [])].map(can).concat(table.map(t => t.id)))];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
-            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
+            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned, ours: [...new Set((r.bots || []).map(can))] } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
 
         // the Atlas's ratings when the meta analyzer wrote them; the app's own fit (same rules) for bots it does not list
@@ -237,7 +238,7 @@
 
         return {
             schema: 'swu-app/0', builtAt: opts.builtAt || new Date().toISOString(),
-            totals: { games: games.length, rated: results.length, runs: runInfo.length, bots: order.length },
+            totals: { games: games.length, rated: results.length, runs: runInfo.filter(r => r.kind !== 'people').length, bots: order.length },
             ratings: extra?.ratings ? { from: 'meta/ratings.json', generatedAt: extra.ratings.generatedAt, rules: extra.ratings.rules } : { from: 'app', generatedAt: null, rules: null },
             bots, order, h2h, botList, games, runs: runInfo, arena, research,
             experiments: src.experiments || [], panels: src.panels || [], evals: (src.evals || []).map(e => ({ gameId: e.gameId, tournament: e.tournament, replay: e.replay, p1: e.p1, p2: e.p2, winner: e.winner, evaluator: e.evaluator, n: (e.points || []).length })),

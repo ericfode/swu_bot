@@ -11,6 +11,7 @@
  *   research lines   PUT  /api/docs/{panels,experiments,evals,bots,league,lens,research,threads}/<id>
  *   browsers         GET  /, /arena, /api/app (the app's model), /api/status, /api/standings, /api/report, /api/games,
  *                         /api/versions, /api/panel (the arena's own read methods, same shapes), /api/replays/<run>/<game>
+ *   Eric's Share page     GET, POST /api/share                 who is invited; {add} or {remove} one GitHub login
  *
  * push.js is the client and CLI for the push side. Who may do what is in auth.js: friends read, the project's token
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
@@ -19,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { createAuth, atLeast } = require('./auth');
+const { createAuth, atLeast, LOGIN } = require('./auth');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -81,7 +82,8 @@ function feedRun(doc, feed, id) {
 }
 
 /**
- * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
+ * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role (the one exception
+ * is an admin's change to the invite list, share() in createWindow). A feed token
  * (an outside machine, auth.js) writes only run documents, lens documents and replays named after it: <feed> or
  * <feed>-<anything>, so the Karabast Sprite can stream its games and nothing else.
  */
@@ -500,6 +502,43 @@ function createWindow(opts = {}) {
         });
     }
 
+    const invited = () => {
+        const d = parseOr(store.getDoc('admin', 'invites'), null);
+        return Array.isArray(d?.logins) ? d.logins.filter((x) => typeof x === 'string').map((x) => x.toLowerCase()) : [];
+    };
+    /**
+     * Who may sign in, for Eric's Share page: GET lists it, POST {add: login} or {remove: login} changes the invite
+     * document. The one write a signed-in browser may make: only an admin, only from this site's own pages (the Origin
+     * header; a page elsewhere cannot set it), and only as JSON (a plain form cannot send that). Removing a login takes
+     * effect on that person's next request.
+     */
+    async function share(req, res, who) {
+        need(who.role === 'admin', 'forbidden', 'only an admin changes who is invited');
+        if (req.method === 'GET') {
+            return sendJson(res, 200, { result: { invites: invited(), ...auth.fixed() } }, req);
+        }
+        need(req.method === 'POST', 'bad_request', 'GET, or POST {add} or {remove}');
+        if (who.via === 'cookie') {
+            need(req.headers.origin === auth.origin, 'forbidden', "the invite list changes only from this site's own pages");
+            need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
+        }
+        let q;
+        try {
+            q = JSON.parse((await readBody(req, 4096)).toString('utf8'));
+        } catch (e) {
+            throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
+        }
+        const adding = typeof q?.add === 'string';
+        const login = String((adding ? q.add : q?.remove) ?? '').trim().replace(/^@/, '').toLowerCase();
+        need(adding !== (typeof q?.remove === 'string') && LOGIN.test(login), 'bad_request', 'send {"add": "<GitHub login>"} or {"remove": "<GitHub login>"}');
+        const cur = invited();
+        const next = adding ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
+        need(next.length <= 500, 'too_large', 'at most 500 invites');
+        const doc = parseOr(store.getDoc('admin', 'invites'), null);
+        store.putDoc('admin', 'invites', JSON.stringify({ ...(doc && typeof doc === 'object' && !Array.isArray(doc) ? doc : {}), logins: next, updatedAt: new Date().toISOString() }));
+        return sendJson(res, 200, { result: { invites: next, ...auth.fixed() } }, req);
+    }
+
     async function api(req, res, url, who) {
         const parts = url.pathname.split('/').slice(2).map((s) => {
             try {
@@ -512,6 +551,9 @@ function createWindow(opts = {}) {
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
             return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role } }, req);
+        }
+        if (parts[0] === 'share' && parts.length === 1) {
+            return share(req, res, who);
         }
         if (parts[0] === 'app' && parts.length === 1) {
             const out = await appData();

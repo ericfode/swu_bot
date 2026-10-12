@@ -16,7 +16,7 @@ asks the same API.
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
-| Browsers, the app | nothing | `GET /api/app`, `/api/status`, `/api/replays/<run>/<game>` |
+| Browsers, the app | the invite list, from Eric's Share page only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` (an admin) |
 
 ## The API
 
@@ -30,7 +30,8 @@ Reads (a signed-in friend, or the project token):
 - `GET /api/docs/<collection>[/<id>]`: raw documents. Friends may read `arena`, `runs`, `evals`, `lens` and `meta`;
   the rest reaches them only through `/api/app`.
 
-Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role:
+Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role,
+except an admin changing the invite list from the app's Share page (below):
 
 - `PUT /api/docs/<collection>/<id>` with a JSON body; `DELETE` removes one. Collections: arena, runs, ladders, league,
   experiments, evals, panels, bots, threads, lens, meta, research, admin. The `admin` collection needs the admin token
@@ -39,6 +40,11 @@ Writes need a bearer token (the project token, or the admin token); a session co
   otherwise 409 with the size to resend from, so a retry never doubles a line. `PUT` replaces a whole replay.
 - `PUT /api/docs/admin/invites` with `{"logins": [...]}` changes who may sign in, without a deploy
   (`SWU_WINDOW_TOKEN=<ARENA_ADMIN_TOKEN> node bot/arena/push.js invites a,b,c`).
+- `GET /api/share` lists who may sign in (`invites`, plus `admins` and `fromEnv`, which only a deploy changes);
+  `POST /api/share` with `{"add": "<login>"}` or `{"remove": "<login>"}` changes the invite document. Admins only: the
+  admin token, or an admin's sign-in from the app's Share page, where the request must carry `Origin` equal to
+  `ARENA_PUBLIC_URL` and a JSON body, so a page elsewhere cannot send it. A change takes effect on the next request.
+- `GET /api/me` answers `{login, role}` for the app (the Share page shows the invite list to admins).
 
 ## Who may do what (auth.js)
 

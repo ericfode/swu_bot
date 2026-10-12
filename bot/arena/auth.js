@@ -9,8 +9,10 @@
  *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST; NAME is letters and digits): it reads like
  *                      a friend and writes only what carries its name (window.js); any other bearer token is refused
  *   nothing            'anon': the sign-in page and /healthz only
- * The role is worked out on every request, so removing an invite takes effect at once. Cookies only ever grant reading;
- * every write needs a bearer token, so a page elsewhere cannot make a signed-in browser push anything.
+ * The role is worked out on every request, so removing an invite takes effect at once. Cookies grant reading, and
+ * nothing else but one write: an admin changing the invite list from this site's own Share page (window.js share(),
+ * which checks Origin and JSON). Every other write needs a bearer token, so a page elsewhere cannot make a signed-in
+ * browser push anything.
  * GitHub sign-in needs GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from an OAuth App whose callback URL is
  * <ARENA_PUBLIC_URL>/auth/github/callback (default https://swu-arena.fly.dev). Sessions are signed with
  * SESSION_SECRET, else with a key made on first start and kept in `dir` (the volume), so deploys keep people signed in.
@@ -50,6 +52,7 @@ function parseCookies(header) {
  */
 function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const publicUrl = String(env.ARENA_PUBLIC_URL ?? 'https://swu-arena.fly.dev').replace(/\/+$/, '');
+    const origin = new URL(publicUrl).origin; // what a browser sends as Origin from this site's own pages
     const secure = publicUrl.startsWith('https:');
     let key = null;
 
@@ -208,7 +211,10 @@ function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchIm
         return false;
     }
 
-    return { who, routes, roleOf, sign, verify, signInPage };
+    /** The logins fixed by the environment: admins, and invites that only a deploy changes. */
+    const fixed = () => ({ admins: logins(env.ARENA_ADMINS ?? 'ericfode'), fromEnv: logins(env.ARENA_INVITES) });
+
+    return { who, routes, roleOf, sign, verify, signInPage, origin, fixed };
 }
 
 /** The page a visitor without a role sees: sign in, or (signed in, not invited) who to ask. */
@@ -217,11 +223,13 @@ function signInPage(next, login, note) {
     const body = login
         ? `<p>You are signed in as <b>@${esc(login)}</b>, who is not on the invite list yet. Ask Eric to add you.</p><p><a href="/auth/logout">Sign out</a></p>`
         : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p>`;
+    // the browser keeps the #/page part of a shared link to itself, so the button adds it to where sign-in returns
+    const keepHash = login ? '' : `<script>(()=>{const a=document.querySelector('a.btn');if(a&&location.hash){const u=new URL(a.href,location.href);u.searchParams.set('next',(u.searchParams.get('next')||'/')+location.hash);a.href=u.pathname+u.search}})()</script>`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SWU Arena</title>
 <style>:root{color-scheme:light dark;--bg:#f6f5f2;--fg:#1c1b19;--mut:#5f5c55;--acc:#2f5bd3}@media (prefers-color-scheme:dark){:root{--bg:#141412;--fg:#ecebe6;--mut:#a3a097;--acc:#7f9cf5}}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box}
 main{max-width:420px}h1{font-size:22px;margin:0 0 8px}p{color:var(--mut)}b{color:var(--fg)}.btn{display:inline-block;background:var(--acc);color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}.note{color:var(--fg)}</style></head>
-<body><main><h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}</main></body></html>`;
+<body><main><h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}</main>${keepHash}</body></html>`;
 }
 
-module.exports = { createAuth, atLeast, parseCookies, ROLES };
+module.exports = { createAuth, atLeast, parseCookies, ROLES, LOGIN };

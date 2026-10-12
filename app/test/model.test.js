@@ -105,7 +105,11 @@ test('buildModel: games against people on Karabast show as their own run and sta
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
     assert.ok(!M.bots.opponent, 'people are not bots');
     assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 5, 'every game stays listed');
-    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');
+    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');    // the run keeps its own bots list, which the app reads to tell our bot's seat from the person's
+    assert.deepEqual(r.ours, ['c-clock', 'opponent']);
+    src.runs.at(-1).bots = ['c-clock'];
+    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'karabast').ours, ['c-clock']);
+    assert.equal(M.totals.runs, M.runs.length - 1, 'a people run is no ladder or round on Home');
 });
 
 test('buildModel: a run any outside feed sent is never rated, whatever its name', () => {

@@ -20,9 +20,9 @@ async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
     await new Promise((r) => srv.once('listening', r));
     const base = () => `http://127.0.0.1:${srv.address().port}`;
-    const go = (p, { method = 'GET', token, cookie, body, type = 'application/json' } = {}) => fetch(base() + p, {
+    const go = (p, { method = 'GET', token, cookie, body, type = 'application/json', origin } = {}) => fetch(base() + p, {
         method, redirect: 'manual', body,
-        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}) }
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}), ...(origin ? { origin } : {}) }
     });
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
@@ -212,6 +212,58 @@ test('sign-in: GitHub confirms the login, invited people get a session, others s
         } finally {
             await close();
         }
+    }
+});
+
+test('share: an admin invites and removes people from the Share page, and no one else can', async () => {
+    const w = makeWindow('w-share');
+    const { go, close } = await serve(w);
+    try {
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const kim = `swu_session=${w.auth.sign({ l: 'kim-b', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const post = (body, opts = {}) => go('/api/share', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
+        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result, { invites: [], admins: ['ericfode'], fromEnv: ['pal'] });
+        assert.strictEqual((await go('/api/share', { cookie: pal })).status, 403, 'a friend cannot see the list');
+        assert.strictEqual((await go('/api/share', { cookie: kim })).status, 401);
+        assert.strictEqual((await go('/', { cookie: kim })).status, 403);
+
+        // a page elsewhere: no Origin, another origin, or a plain form never changes the list
+        assert.strictEqual((await post({ add: 'kim-b' }, { origin: null })).status, 403);
+        assert.strictEqual((await post({ add: 'kim-b' }, { origin: 'https://evil.fly.dev' })).status, 403);
+        assert.strictEqual((await post({ add: 'kim-b' }, { type: 'text/plain' })).status, 400);
+        assert.strictEqual((await go('/api/share', { method: 'POST', cookie: eric, origin: site, type: 'application/x-www-form-urlencoded', body: 'add=kim-b' })).status, 400);
+        assert.strictEqual((await post({ add: 'kim-b' }, { cookie: pal })).status, 403, 'a friend cannot invite');
+        assert.strictEqual((await go('/', { cookie: kim })).status, 403, 'still not invited');
+
+        for (const bad of [{}, { add: '' }, { add: 'no spaces' }, { add: '-dash' }, { add: 'a'.repeat(40) }, { add: 'x', remove: 'y' }, { add: 7 }]) {
+            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
+        }
+        assert.deepStrictEqual((await (await post({ add: '@Kim-B ' })).json()).result.invites, ['kim-b']);
+        assert.deepStrictEqual((await (await post({ add: 'kim-b' })).json()).result.invites, ['kim-b'], 'no duplicates');
+        assert.strictEqual((await go('/', { cookie: kim })).status, 200, 'invited at once');
+        assert.strictEqual((await go('/api/share', { cookie: kim })).status, 403);
+        assert.deepStrictEqual((await (await post({ remove: 'kim-b' })).json()).result.invites, []);
+        assert.strictEqual((await go('/', { cookie: kim })).status, 403, 'removed at once');
+        // the admin token works from a program, with no Origin
+        assert.strictEqual((await go('/api/share', { method: 'POST', token: 'admin-secret', body: '{"add":"kim-b"}' })).status, 200);
+        assert.strictEqual((await go('/api/share', { method: 'POST', token: 'push-secret', body: '{"add":"x"}' })).status, 403, 'the project token cannot');
+        assert.deepStrictEqual(JSON.parse(w.store.getDoc('admin', 'invites')).logins, ['kim-b']);
+    } finally {
+        await close();
+    }
+});
+
+test('sign-in page: a shared link keeps its #/page through sign-in', async () => {
+    const w = makeWindow('w-hash');
+    const { go, close } = await serve(w);
+    try {
+        const html = await (await go('/')).text();
+        assert.match(html, /location\.hash/);
+        assert.match(html, /searchParams\.set\('next'/);
+    } finally {
+        await close();
     }
 });
 
