@@ -96,8 +96,8 @@ this site's own pages: Origin and JSON).
   days or until the link is removed.
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). Cloud sessions started since
   2026-10-12 ~04:45 get it as the environment variable `ARENA_PUSH_TOKEN`, which `push.js` reads (after
-  `SWU_WINDOW_TOKEN`) and `ops/launch.sh` passes to the uplink; where the egress proxy adds it for swu-arena.fly.dev,
-  no variable is needed. Elsewhere set `SWU_WINDOW_TOKEN`.
+  `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. The arena's
+  uplink (`ops/launch.sh`) does not pass it on: competitors run as the same user and could read it from `/proc`. Elsewhere set `SWU_WINDOW_TOKEN`.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
 - An MCP app's access token (`swua_...`, from `/oauth/token`) reads as its person with role friend, never more.
 

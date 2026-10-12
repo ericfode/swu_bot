@@ -181,7 +181,6 @@ uplink_env() {
             "ARENA_RESULTS=$BASE/results" "ARENA_PUBLIC_RESULTS=$BASE/results" "SWU_WINDOW=$1")
     [ -n "${ARENA_DASH:-}" ] && UPLINK+=("ARENA_DASH=$ARENA_DASH")
     [ -n "${SWU_WINDOW_TOKEN:-}" ] && UPLINK+=("SWU_WINDOW_TOKEN=$SWU_WINDOW_TOKEN")
-    [ -n "${ARENA_PUSH_TOKEN:-}" ] && UPLINK+=("ARENA_PUSH_TOKEN=$ARENA_PUSH_TOKEN")
     return 0
 }
 
