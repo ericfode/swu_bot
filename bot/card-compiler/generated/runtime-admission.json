@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 2,
-    "sourceIr": 522
+    "sourceIr": 525
   },
   "runtimeAdmittedCards": [
     {
@@ -2446,6 +2446,11 @@
       "setCode": "LOF_208"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "tusken-tracker",
+      "setCode": "LOF_209"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "charging-phillak",
       "setCode": "LOF_210"
@@ -3642,6 +3647,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "rallying-cry",
+      "setCode": "SOR_154"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "benthic-two-tubes#partisan-lieutenant",
       "setCode": "SOR_156"
     },
@@ -3829,6 +3839,11 @@
       "implementation": "sourceIr",
       "internalName": "xwing",
       "setCode": "TOKEN_XWING"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "king-katuunko#great-king-of-toydaria",
+      "setCode": "TS26_016"
     },
     {
       "implementation": "dataOnly",
@@ -4491,7 +4506,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 896,
+  "runtimeAdmittedCount": 899,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -6395,7 +6410,7 @@
     },
     {
       "internalName": "in-the-heat-of-battle",
-      "reason": "in-the-heat-of-battle: arena lists require standalone verified phase-stat semantics",
+      "reason": "in-the-heat-of-battle: grouped arena lists require separate event-capacity witnesses",
       "setCode": "JTL_077"
     },
     {
@@ -8150,7 +8165,7 @@
     },
     {
       "internalName": "yaddle#a-chance-to-make-things-right",
-      "reason": "yaddle#a-chance-to-make-things-right: arena lists require standalone verified phase-stat semantics",
+      "reason": "yaddle#a-chance-to-make-things-right: arena-list keywords require a standalone event or WhenPlayed registration",
       "setCode": "LOF_045"
     },
     {
@@ -8470,7 +8485,7 @@
     },
     {
       "internalName": "focus-determines-reality",
-      "reason": "focus-determines-reality: arena lists require standalone verified phase-stat semantics",
+      "reason": "focus-determines-reality: nested or constant arena-list keywords are unsupported",
       "setCode": "LOF_152"
     },
     {
@@ -8622,11 +8637,6 @@
       "internalName": "babu-frik#heyyy",
       "reason": "babu-frik#heyyy: compiler rejected \"babu-frik#heyyy\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/05_LOF/units/BabuFrikHeyyy.ts\",\"line\":20,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
       "setCode": "LOF_206"
-    },
-    {
-      "internalName": "tusken-tracker",
-      "reason": "tusken-tracker: arena lists require standalone verified phase-stat semantics",
-      "setCode": "LOF_209"
     },
     {
       "internalName": "dooku#it-is-too-late",
@@ -10979,11 +10989,6 @@
       "setCode": "SOR_153"
     },
     {
-      "internalName": "rallying-cry",
-      "reason": "rallying-cry: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SOR_154"
-    },
-    {
       "internalName": "aggression",
       "reason": "aggression: compiler rejected \"aggression\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/01_SOR/events/Aggression.ts\",\"line\":19,\"message\":\"immediateEffect:chooseModalEffects\",\"pattern\":\"immediateEffect:chooseModalEffects\"}]",
       "setCode": "SOR_155"
@@ -11337,11 +11342,6 @@
       "internalName": "c3po#die-jedi-dogs",
       "reason": "c3po#die-jedi-dogs: compiler rejected \"c3po#die-jedi-dogs\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_TS26/units/C3PODieJediDogs.ts\",\"line\":17,\"message\":\"immediateEffect:takeControlOfUnit\",\"pattern\":\"immediateEffect:takeControlOfUnit\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/07_TS26/units/C3PODieJediDogs.ts\",\"line\":25,\"message\":\"unsupported-field:canBeTriggeredBy\",\"pattern\":\"unsupported-field:canBeTriggeredBy\"}]",
       "setCode": "TS26_015"
-    },
-    {
-      "internalName": "king-katuunko#great-king-of-toydaria",
-      "reason": "king-katuunko#great-king-of-toydaria: arena lists require standalone verified phase-stat semantics",
-      "setCode": "TS26_016"
     },
     {
       "internalName": "jendirian-valley#refugee-freighter",
@@ -12275,7 +12275,7 @@
     },
     {
       "internalName": "sword-and-shield-maneuver",
-      "reason": "sword-and-shield-maneuver: arena lists require standalone verified phase-stat semantics",
+      "reason": "sword-and-shield-maneuver: nested or constant arena-list keywords are unsupported",
       "setCode": "TWI_250"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1562,
+  "runtimeRejectedCount": 1559,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 672
 }

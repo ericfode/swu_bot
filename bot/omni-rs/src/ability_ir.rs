@@ -854,6 +854,11 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if matches!(&ability.effect,Effect::GainKeyword {target:Target::ArenaList(_),..}|Effect::LoseKeyword {target:Target::ArenaList(_),..}) {
+            if depth!=0 || !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.optional || ability.target_resolver.is_some() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.coordinate || !ability.context_title.is_empty() {
+                return Err("arena-list keywords require a standalone event or WhenPlayed registration".into());
+            }
+        }
         if ability.target_resolver.as_ref().is_some_and(|r|r.is_upgrade_domain() && (r.is_multiple() || !scalar_upgrade_operation(&ability.effect,r.zone.as_deref()==Some("discard")))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
         if depth > MAX_ABILITY_NESTING {
             return Err("ability continuation nesting exceeds capacity".into());
@@ -1179,7 +1184,10 @@ impl Program {
             Effect::GainKeyword { target, keyword, amount, duration } => {
                 validate_keyword(keyword)?;
                 if duration != "phase" && !(self.trigger == "constant" && duration == "persistent") { return Err("only phase or constant keywords execute".into()); }
-                target.validate()?; amount.validate_number()?;
+                if let Target::ArenaList(list)=target {
+                    if depth!=0 || duration!="phase" {return Err("nested or constant arena-list keywords are unsupported".into());}
+                    list.validate_scope(true)?;
+                }else{target.validate()?;} amount.validate_number()?;
                 let bounded_shape = matches!(amount, Expr::Const {value} if value.as_u64().is_some_and(|n| n <= 65535))
                     || (duration == "persistent" && matches!(amount, Expr::Ref {path} if matches!(path.last().map(String::as_str), Some("damage" | "readyResourceCount" | "exhaustedResourceCount"))));
                 if !bounded_shape { return Err("keyword amounts require nonnegative literals or verified live damage/resource counts".into()); }
@@ -1193,7 +1201,10 @@ impl Program {
             Effect::LoseKeyword { target, keyword, duration } => {
                 validate_keyword(keyword)?;
                 if duration != "phase" && !(self.trigger == "constant" && duration == "persistent") { return Err("only phase or constant keyword losses execute".into()); }
-                target.validate()?; self.instructions.push(Instruction::Apply(effect.clone()));
+                if let Target::ArenaList(list)=target {
+                    if depth!=0 || duration!="phase" {return Err("nested or constant arena-list keyword loss is unsupported".into());}
+                    list.validate_scope(true)?;
+                }else{target.validate()?;} self.instructions.push(Instruction::Apply(effect.clone()));
             }
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => { target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
         }

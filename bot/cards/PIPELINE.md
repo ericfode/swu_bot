@@ -129,6 +129,14 @@ Synthetic grant/removal, Sentinel, reentry and
 history-import checks remain separate diagnostics; unconstructed leader/token
 history and controller-change interactions stay explicit coverage gaps.
 
+Standalone arena-list phase keyword experiments cover Raid and Restore grants,
+Hidden loss, controller/arena membership, entering sources, actual combat, later
+arrivals, source departure, expiry, stacking two events, empty-event confirmation
+and cancellation, and real token/deployed-leader recipients. Intrinsic numeric
+stacking, recipient reentry, capped or ineffective Restore, Sentinel precedence,
+and live Hidden regain remain explicit gaps. Capacity and overflow checks are
+separate runtime tests.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

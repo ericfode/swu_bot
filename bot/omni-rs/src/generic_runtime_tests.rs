@@ -2070,3 +2070,65 @@ fn hidden_history_hash_preserves_arena_evidence_and_normalizes_inert_departures(
     let v=e.snapshot(&s);let restored=e.load_state(&v).unwrap();assert!(!restored.card(leader).hidden_qualified());assert_eq!(restored.zobrist(),s.zobrist());
     let token=unit(&e,&mut s,Seat::P1,"TOKEN_CLONE_TROOPER");s.card_mut(token).set_hidden_qualified(true);e.defeat(&mut s,token).unwrap();assert!(s.card(token).hidden_qualified());let hash=s.zobrist();s.card_mut(token).set_hidden_qualified(false);assert_eq!(hash,s.zobrist());
 }
+
+fn arena_keyword_ability(trigger:&str,kind:&str,keyword:&str,receiver:&str)->Value {
+    let mut effect=json!({"kind":kind,"target":{"kind":"arenaList","receiver":{"kind":"ref","path":[receiver]},"predicate":{"kind":"const","value":true}},"keyword":keyword,"duration":"phase"});
+    if kind=="gainKeyword" {effect["amount"]=json!({"kind":"const","value":if keyword=="raid" {2}else{1}});}
+    json!({"trigger":trigger,"title":"SYNTHETIC arena keyword","effect":effect})
+}
+#[test]
+fn arena_keyword_admission_adds_three_complete_sources_and_preserves_group_trait_guards() {
+    let e=engine();for code in ["SOR_154","TS26_016","LOF_209"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+    for code in ["LOF_045","JTL_077","LOF_152","TWI_250"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    eprintln!("Arena keyword State bytes={}",std::mem::size_of::<State>());
+}
+#[test]
+fn scalar_arena_keyword_shapes_reject_nested_constant_selected_conditional_and_grouped_effects() {
+    let valid=arena_keyword_ability("event","gainKeyword","raid","player");
+    for trigger in ["event","whenPlayed"] {let mut v=valid.clone();v["trigger"]=json!(trigger);let a:crate::ability_ir::Ability=serde_json::from_value(v).unwrap();crate::ability_ir::Program::compile(&a).unwrap();}
+    let mut bad=Vec::new();for trigger in ["onAttack","onDefense","whenDefeated","action","constant"] {let mut v=valid.clone();v["trigger"]=json!(trigger);bad.push(v);}
+    for (key,value) in [("optional",json!(true)),("coordinate",json!(true)),("condition",json!({"kind":"const","value":true})),("targetResolver",json!({"owner":"self","type":"unit","zone":"arena"}))] {let mut v=valid.clone();v[key]=value;bad.push(v);}
+    for key in ["then","ifYouDo"] {let mut v=valid.clone();v[key]=json!({"title":"Draw","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}});bad.push(v);let mut nested=valid.clone();nested["effect"]=json!({"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}});let mut next=valid.clone();next.as_object_mut().unwrap().remove("trigger");nested[key]=next;bad.push(nested);}
+    for kind in ["simultaneous","phaseModifiers","sequence"] {let mut v=valid.clone();v["effect"]=json!({"kind":kind,"effects":[valid["effect"].clone()]});bad.push(v);}
+    let mut v=valid.clone();v["effect"]["duration"]=json!("persistent");bad.push(v);
+    let mut v=valid.clone();v["effect"]["amount"]=json!({"kind":"ref","path":["source","damage"]});bad.push(v);
+    let mut v=valid.clone();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["source"]});bad.push(v);
+    let mut v=valid.clone();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"hasSomeTrait","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":"jedi"}]});bad.push(v);
+    let mut v=arena_keyword_ability("event","gainKeyword","restore","game");v["effect"]["amount"]=json!({"kind":"const","value":0});bad.push(v);
+    let mut v=arena_keyword_ability("event","gainKeyword","sentinel","game");v["effect"]["amount"]=json!({"kind":"const","value":2});bad.push(v);
+    for v in bad {let a:crate::ability_ir::Ability=serde_json::from_value(v.clone()).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err(),"{v}");}
+}
+#[test]
+fn arena_keywords_snapshot_full_domain_stack_and_exclude_later_entries() {
+    let mut e=engine();let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"SOR_154");s.source=source;
+    let mut own=Vec::new();for _ in 0..40 {own.push(unit(&e,&mut s,Seat::P1,"LOF_256"));}let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");
+    let a:crate::ability_ir::Ability=serde_json::from_value(arena_keyword_ability("event","gainKeyword","raid","player")).unwrap();
+    assert_eq!(e.apply_effect(&mut s,&a.effect).unwrap(),(40,true));for &id in &own {assert_eq!(e.keyword_amount(&s,id,"raid"),2);}assert_eq!(e.keyword_amount(&s,enemy,"raid"),0);
+    e.apply_effect(&mut s,&a.effect).unwrap();for &id in &own {assert_eq!(e.keyword_amount(&s,id,"raid"),4);}
+    let newcomer=unit(&e,&mut s,Seat::P1,"LOF_256");assert_eq!(e.keyword_amount(&s,newcomer,"raid"),0);
+    e.leave_play(&mut s,own[0]).unwrap();assert_eq!(e.keyword_amount(&s,own[0],"raid"),0);
+    let token=unit(&e,&mut s,Seat::P1,"TOKEN_CLONE_TROOPER");let leader=s.players[1].leader;s.card_mut(leader).deployed=true;e.add_arena(&mut s,leader).unwrap();
+    let shield=add(&e,&mut s,Seat::P1,"TOKEN_SHIELD");e.attach(&mut s,shield,newcomer);
+    let a:crate::ability_ir::Ability=serde_json::from_value(arena_keyword_ability("whenPlayed","gainKeyword","restore","game")).unwrap();assert_eq!(e.apply_effect(&mut s,&a.effect).unwrap(),(43,true));assert_eq!(e.keyword_amount(&s,token,"restore"),1);assert_eq!(e.keyword_amount(&s,leader,"restore"),1);assert_eq!(s.card(shield).phase_keyword_mask(),0);assert_eq!(e.keyword_amount(&s,enemy,"restore"),1);assert_eq!(e.keyword_amount(&s,newcomer,"restore"),1);
+    let a:crate::ability_ir::Ability=serde_json::from_value(arena_keyword_ability("whenPlayed","loseKeyword","hidden","opponent")).unwrap();e.definitions[s.card(enemy).def as usize].flags|=1<<8;e.apply_effect(&mut s,&a.effect).unwrap();assert_eq!(e.keyword_amount(&s,enemy,"hidden"),0);assert_eq!(s.card(newcomer).lost_keyword_mask()&(1<<8),0);
+    s.players[0].out=true;s.players[1].out=true;e.advance(&mut s).unwrap();for id in own.into_iter().chain([enemy,newcomer]) {assert_eq!(s.card(id).phase_keyword_mask(),0);assert_eq!(s.card(id).lost_keyword_mask(),0);}
+}
+
+#[test]
+fn actual_rallying_cry_empty_confirmation_and_capacity_failure_are_transactional() {
+    let e=engine();let mut s=board(&e);let event=hand(&e,&mut s,"SOR_154");let play=e.card_action(&s,event);
+    assert!(e.legal_actions(&s).contains(&play));let prompt=e.apply(&s,&play).unwrap();assert_eq!(prompt.decision,Decision::AbilityNoEffect);assert!(prompt.players[0].hand.contains(event));assert!(prompt.players[0].resources.as_slice().iter().all(|id|!prompt.card(*id).exhausted));
+    let actions=e.legal_actions(&prompt);assert_eq!(actions,vec![Action::button("Play anyway",0),Action::button("Cancel",1)]);
+    let declined=named_button(&e,&prompt,"Cancel");assert_eq!(declined.zobrist(),s.zobrist());
+    let cost=e.cost(&s,event);let confirmed=named_button(&e,&prompt,"Play anyway");assert!(confirmed.players[0].discard.contains(event));assert!(!confirmed.players[0].hand.contains(event));assert_eq!(confirmed.players[0].resources.as_slice().iter().filter(|id|confirmed.card(**id).exhausted).count(),cost as usize);
+    let first=unit(&e,&mut s,Seat::P1,"LOF_256");let overflow=unit(&e,&mut s,Seat::P1,"LOF_256");let printed=e.power(&s,overflow,false);s.card_mut(overflow).phase_keyword_values[0]=65535-printed;s.card_mut(overflow).add_phase_keyword(6);
+    assert!(e.legal_actions(&s).contains(&play));let before=s.zobrist();assert!(e.apply(&s,&play).is_err());assert_eq!(s.zobrist(),before);assert_eq!(e.keyword_amount(&s,first,"raid"),0);assert!(s.players[0].hand.contains(event));assert!(s.players[0].resources.as_slice().iter().all(|id|!s.card(*id).exhausted));
+}
+
+#[test]
+fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigger() {
+    let e=engine();
+    for code in ["TS26_016","LOF_209"] {let mut s=board(&e);let source=hand(&e,&mut s,code);let played=e.apply(&s,&e.card_action(&s,source)).unwrap();assert!(played.players[0].ground.contains(source));assert!(played.card(source).hidden_qualified());assert_eq!(played.decision,Decision::Window);assert_eq!(played.active,Seat::P2);
+        if code=="TS26_016" {assert_eq!(e.keyword_amount(&played,source,"restore"),1);}else{assert_eq!(e.keyword_amount(&played,source,"raid"),2);assert_eq!(played.card(source).lost_keyword_mask()&(1<<8),0);}
+    }
+}

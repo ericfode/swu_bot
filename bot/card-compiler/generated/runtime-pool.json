@@ -19817,6 +19817,47 @@
       "aspects": [
         "cunning"
       ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "1548886844",
+      "internalName": "tusken-tracker",
+      "keywords": [
+        "raid",
+        "hidden"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\nOnly units in play when Tusken Tracker's \"When Played\" ability resolves lose Hidden.\n",
+      "setCode": "LOF_209",
+      "setCodes": [
+        {
+          "number": 209,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 209,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Raid 2 (This unit gets +2/+0 while attacking.)\nWhen Played: Each enemy unit loses Hidden for this phase.",
+      "title": "Tusken Tracker",
+      "traits": [
+        "tusken"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
@@ -29424,6 +29465,46 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "aggression",
+        "aggression"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "1208707254",
+      "internalName": "rallying-cry",
+      "keywords": [
+        "raid"
+      ],
+      "power": null,
+      "rules": null,
+      "setCode": "SOR_154",
+      "setCodes": [
+        {
+          "number": 154,
+          "set": "SOR"
+        }
+      ],
+      "setId": {
+        "number": 154,
+        "set": "SOR"
+      },
+      "subtitle": null,
+      "text": "Each friendly unit gains Raid 2 this phase. (They get +2/+0 while attacking.)",
+      "title": "Rallying Cry",
+      "traits": [
+        "tactic"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "aggression"
@@ -30872,6 +30953,47 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "command"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "3325398707",
+      "internalName": "king-katuunko#great-king-of-toydaria",
+      "keywords": [
+        "restore"
+      ],
+      "power": 2,
+      "rules": null,
+      "setCode": "TS26_016",
+      "setCodes": [
+        {
+          "number": 16,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 16,
+        "set": "TS26"
+      },
+      "subtitle": "Great King of Toydaria",
+      "text": "When Played: All units (including enemy units) gain Restore 1 for this phase.",
+      "title": "King Katuunko",
+      "traits": [
+        "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

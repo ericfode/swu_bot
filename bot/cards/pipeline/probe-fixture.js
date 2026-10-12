@@ -139,6 +139,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'arena-keyword') return require('./arena-keyword-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'hidden') return require('./hidden-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'hidden-keyword-only') return require('./hidden-keyword-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'on-defense') return require('./on-defense-probe-fixture').fixture(env, pool, scenario, seed);
@@ -377,6 +378,8 @@ module.exports = {
     buildDeck,
     dependencies: [
         'bot/cards/pipeline/probes.js',
+        'bot/cards/pipeline/arena-keyword-probes.js',
+        'bot/cards/pipeline/arena-keyword-probe-fixture.js',
         'bot/cards/pipeline/probe-fixture.js',
         'bot/cards/pipeline/hidden-probes.js',
         'bot/cards/pipeline/hidden-probe-fixture.js',
