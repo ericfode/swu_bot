@@ -307,7 +307,7 @@ impl Expr {
             } => {
                 if receiver.references_title() || args.iter().any(Self::references_title) { return Err("printed title query coercion is unsupported".into()); }
                 let arity = match name.as_str() {
-                    "hasCost" | "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
+                    "hasCost" | "isUpgrade" | "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
                     | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
                     | "getCost" | "getPrintedCost" | "isToken" | "isTokenUnit" | "resourcePairs" | "isAttacking" | "isDefending" => 0,
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" | "hasSomeArenaUnit"
@@ -317,6 +317,7 @@ impl Expr {
                 if args.len() != arity {
                     return Err(format!("query {name} expects {arity} arguments"));
                 }
+                if name=="isUpgrade" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("isUpgrade requires an explicit card receiver".into());}
                 if name=="hasCost" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("hasCost requires an explicit card receiver".into());}
                 if name=="isTokenUnit" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("isTokenUnit requires an explicit card receiver".into());}
                 if ["isAttacking","isDefending"].contains(&name.as_str()) && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("attack query requires a scalar source/card/target receiver".into());}
@@ -438,6 +439,27 @@ fn any_owner() -> String {
     "any".into()
 }
 impl TargetResolver {
+    /// A positive type predicate supplies the selector inventory domain; ordinary
+    /// `any` continues to enumerate units/bases. Do not admit mixed domains.
+    pub fn is_upgrade_domain(&self) -> bool {
+        fn implies(e:&Expr)->bool { match e {
+            Expr::Query {name,receiver,args} if name=="isUpgrade" && args.is_empty()=>matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && path[0]=="card"),
+            Expr::Binary {op,left,right} if op=="&&"=>implies(left)||implies(right),
+            Expr::Binary {op,left,right} if op=="||"=>implies(left)&&implies(right),
+            _=>false,
+        }}
+        self.card_type=="upgrade" || (self.card_type=="any" && self.predicate.as_ref().is_some_and(implies))
+    }
+    fn mentions_upgrade_query(&self)->bool {
+        fn mentions(e:&Expr)->bool {match e {
+            Expr::Query {name,receiver,args}=>name=="isUpgrade"||mentions(receiver)||args.iter().any(mentions),
+            Expr::Array {items}=>items.iter().any(mentions), Expr::Math {args,..}=>args.iter().any(mentions),
+            Expr::Binary {left,right,..}=>mentions(left)||mentions(right), Expr::Unary {value,..}=>mentions(value),
+            Expr::Conditional {condition,then,r#else}=>mentions(condition)||mentions(then)||mentions(r#else),
+            _=>false,
+        }}
+        self.predicate.as_ref().is_some_and(mentions)
+    }
     pub fn max_targets(&self) -> Result<usize, String> {
         match self.mode.as_deref() {
             None | Some("single") if self.count.is_none() => Ok(1),
@@ -452,7 +474,8 @@ impl TargetResolver {
     pub fn is_multiple(&self) -> bool { matches!(self.mode.as_deref(), Some("upTo" | "unlimited")) }
     pub fn validate(&self) -> Result<(), String> {
         self.max_targets()?;
-        if self.card_type=="upgrade" && (self.arena.is_some() || !matches!(self.zone.as_deref(),None|Some("arena"|"anyAttackable"))) {return Err("upgrade selectors require arena/anyAttackable without an arena filter".into());}
+        if self.card_type=="any" && self.mentions_upgrade_query() && !self.is_upgrade_domain() {return Err("mixed upgrade selector domains are not modeled".into());}
+        if self.is_upgrade_domain() && (self.arena.is_some() || !matches!(self.zone.as_deref(),None|Some("arena"|"anyAttackable"|"discard"))) {return Err("upgrade selectors require arena/anyAttackable without an arena filter".into());}
         if !["self", "opponent", "any"].contains(&self.owner.as_str()) {
             return Err(format!("unsupported target owner {}", self.owner));
         }
@@ -575,6 +598,18 @@ pub enum Effect {
         target_resolver: TargetResolver,
     },
 }
+/// Upgrade departure is scalar and has a single chosen-card event. Conditional
+/// no-action branches retain feasibility; groups and other operations stay blocked.
+fn scalar_upgrade_operation(effect:&Effect,discard:bool)->bool {
+    fn walk(e:&Effect,discard:bool)->(bool,bool) {match e {
+        Effect::ReturnToHand {target}=>(matches!(target,Target::Name(name) if name=="chosen"),true),
+        Effect::Defeat {..}=>(!discard,true),
+        Effect::NoAction=>(true,false),
+        Effect::Conditional {on_true,on_false,..}=>{let a=walk(on_true,discard);let b=on_false.as_ref().map_or((true,false),|e|walk(e,discard));(a.0&&b.0,a.1||b.1)},
+        _=>(false,false),
+    }}
+    let (valid,operation)=walk(effect,discard);valid&&operation
+}
 fn one() -> Expr {
     Expr::number(1)
 }
@@ -683,7 +718,6 @@ impl Program {
             fn literal(e:&Expr)->bool {match e {Expr::Const {value}=>value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n)),Expr::Unary {op,value} if ["+","-"].contains(&op.as_str())=>matches!(value.as_ref(),Expr::Const {value} if value.as_i64().is_some_and(|n|(0..=65535).contains(&n))),_=>false}}
             if !literal(power)||!literal(hp) {return Err("arena-list phase stats require bounded signed literals".into());}
         }
-        if ability.target_resolver.as_ref().is_some_and(|r|r.card_type=="upgrade" && (r.is_multiple() || !matches!(ability.effect,Effect::Defeat {..}))) {return Err("upgrade selection supports only scalar defeat".into());}
         if ability.coordinate && !["constant","onAttack"].contains(&ability.trigger.as_str()) {return Err("Coordinate supports only constant or onAttack registrations".into());}
         if ability.then.as_ref().is_some_and(|a|a.coordinate) || ability.if_you_do.as_ref().is_some_and(|a|a.coordinate) {return Err("Coordinate cannot register on a continuation".into());}
         if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
@@ -820,6 +854,7 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if ability.target_resolver.as_ref().is_some_and(|r|r.is_upgrade_domain() && (r.is_multiple() || !scalar_upgrade_operation(&ability.effect,r.zone.as_deref()==Some("discard")))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
         if depth > MAX_ABILITY_NESTING {
             return Err("ability continuation nesting exceeds capacity".into());
         }
@@ -946,7 +981,7 @@ impl Program {
                     (a.0.max(b.0),a.1||b.1,a.2||b.2)
                 },
                 Effect::Select {target_resolver, effect} => {
-                    if target_resolver.card_type=="upgrade" {return Err("grouped upgrade selection is not modeled".into());}
+                    if target_resolver.is_upgrade_domain() {return Err("grouped upgrade selection is not modeled".into());}
                     target_resolver.validate()?;
                     if array && target_resolver.predicate.as_ref().is_some_and(|e|dependent_in_scope(e,true)) { return Err("array-dependent nested selection is unsupported".into()); }
                     // Nested selection replaces the outer selected value, not its multiplicity.
@@ -1123,7 +1158,7 @@ impl Program {
             }
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::Select { target_resolver, effect } => {
-                if target_resolver.card_type=="upgrade" && (target_resolver.is_multiple() || !matches!(effect.as_ref(),Effect::Defeat {..})) {return Err("upgrade selection supports only scalar defeat".into());}
+                if target_resolver.is_upgrade_domain() && (target_resolver.is_multiple() || !scalar_upgrade_operation(effect,target_resolver.zone.as_deref()==Some("discard"))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
                 target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone()));
                 if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
                 else { self.compile_effect(effect,depth+1)?; }

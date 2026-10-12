@@ -22,6 +22,23 @@ function mutants(entry) {
             add([...path, 'receiver', 'path'], 'swap-owner', (p) => [p[0] === 'player' ? 'opponent' : 'player']);
         if (value.kind === 'arenaList' && value.predicate?.kind !== 'const')
             add([...path, 'predicate'], 'all-arenas', () => ({kind:'const',value:true}));
+        if (value.kind === 'returnToHand' && value.target === 'chosen')
+            add([...path, 'kind'], 'defeat-instead-of-return', () => 'defeat');
+        if (value.kind === 'query' && value.name === 'isUpgrade')
+            add([...path, 'name'], 'unit-type-instead-of-upgrade', () => 'isUnit');
+        if (value.kind === 'query' && value.name === 'hasSomeTrait' &&
+            value.receiver?.kind === 'ref' && JSON.stringify(value.receiver.path) === '["player","base"]')
+            add([...path, 'receiver', 'path'], 'opponent-base-trait', () => ['opponent', 'base']);
+        if (value.kind === 'conditional') {
+            add([...path, 'condition'], 'always-true-branch', () => ({kind:'const', value:true}));
+            add([...path, 'condition'], 'always-false-branch', () => ({kind:'const', value:false}));
+        }
+        if (value.optional === true)
+            add([...path, 'optional'], 'mandatory-instead-of-optional', () => false);
+        if (path.at(-1) === 'targetResolver' && value.owner === 'self')
+            add([...path, 'owner'], 'opponent-instead-of-self', () => 'opponent');
+        if (path.at(-1) === 'targetResolver' && value.zone === 'discard')
+            add([...path, 'zone'], 'arena-instead-of-discard', () => 'anyAttackable');
         if (value.kind === 'query' && value.name === 'hasCost') {
             add(path, 'no-cost-cards', () => ({kind:'const', value:false}));
             add(path, 'positive-cost-only', v => ({kind:'binary', op:'>', left:{kind:'query', name:'getPrintedCost', receiver:v.receiver, args:[]}, right:{kind:'const', value:0}}));

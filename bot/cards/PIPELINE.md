@@ -92,7 +92,10 @@ The planner operates on rule structure. The initial construction vocabulary
 handles simple targeted constant damage and phase stat events, standalone phase
 stat and defeat events over filtered arena lists, self stat modifiers whose power
 depends on damage, and bounded cost-query conditions for discard, upgrade defeat,
-death-triggered ready and upgrade attachment. It selects setup cards from metadata,
+death-triggered ready and upgrade attachment. Scalar upgrade-return experiments
+cover ordinary and token attachments, ownership across host controllers, discard
+recovery, cost and uniqueness filters, base-trait conditions, optional decline,
+and host death after losing an attachment HP bonus. It selects setup cards from metadata,
 uses ordinary engine actions after a disclosed starting position, and records
 oracle observations. Arena-list defeat experiments exercise global entry order,
 death draws, reverse cleanup across multiple parents, token removal and eligible
@@ -108,7 +111,8 @@ state-space exploration.
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately
-wrong amounts, target restrictions, list scopes, signs and cost predicates test
+wrong amounts, target restrictions, list scopes, signs, cost predicates, departure
+destinations, optionality and condition branches test
 the sensitivity of these experiments. Rejected mutants do not count as detected gameplay errors; surviving
 mutants become uncovered obligations. Passing mutants tests only those mutations.
 

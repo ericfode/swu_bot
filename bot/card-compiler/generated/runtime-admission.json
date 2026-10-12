@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 339,
     "nativeAdapters": 2,
-    "sourceIr": 499
+    "sourceIr": 504
   },
   "runtimeAdmittedCards": [
     {
@@ -866,6 +866,11 @@
       "setCode": "HMW_220"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "sandcrawler-sales-team",
+      "setCode": "HMW_222"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "tusken-raider",
       "setCode": "HMW_224"
@@ -894,6 +899,11 @@
       "implementation": "sourceIr",
       "internalName": "gaderffii-stick",
       "setCode": "HMW_235"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "booma-ball",
+      "setCode": "HMW_236"
     },
     {
       "implementation": "sourceIr",
@@ -2722,6 +2732,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "junior-senator",
+      "setCode": "SEC_200"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "rebel-propagandist",
       "setCode": "SEC_202"
     },
@@ -2884,6 +2899,11 @@
       "implementation": "dataOnly",
       "internalName": "village-protectors",
       "setCode": "SHD_043"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "razor-crest#reliable-gunship",
+      "setCode": "SHD_044"
     },
     {
       "implementation": "sourceIr",
@@ -3074,6 +3094,11 @@
       "implementation": "dataOnly",
       "internalName": "liberated-slaves",
       "setCode": "SHD_200"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "criminal-muscle",
+      "setCode": "SHD_209"
     },
     {
       "implementation": "dataOnly",
@@ -4211,7 +4236,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 840,
+  "runtimeAdmittedCount": 845,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5005,7 +5030,7 @@
     },
     {
       "internalName": "full-of-surprises",
-      "reason": "full-of-surprises: unsupported runtime query isUpgrade",
+      "reason": "full-of-surprises: grouped upgrade selection is not modeled",
       "setCode": "ASH_232"
     },
     {
@@ -5769,11 +5794,6 @@
       "setCode": "HMW_221"
     },
     {
-      "internalName": "sandcrawler-sales-team",
-      "reason": "sandcrawler-sales-team: upgrade selection supports only scalar defeat",
-      "setCode": "HMW_222"
-    },
-    {
       "internalName": "therm-scissorpunch#boastful-gambler",
       "reason": "therm-scissorpunch#boastful-gambler: compiler rejected \"therm-scissorpunch#boastful-gambler\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/09_HMW/units/ThermScissorpunchBoastfulGambler.ts\",\"line\":18,\"message\":\"trigger-alias-hook:onPhaseStarted\",\"pattern\":\"trigger-alias-hook:onPhaseStarted\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/ThermScissorpunchBoastfulGambler.ts\",\"line\":49,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:qualifyingRevealedCardCount\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/ThermScissorpunchBoastfulGambler.ts\",\"line\":56,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:checkAddTopCard\"}]",
       "setCode": "HMW_223"
@@ -5807,11 +5827,6 @@
       "internalName": "ritual-dragon",
       "reason": "ritual-dragon: compiler rejected \"ritual-dragon\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/09_HMW/units/RitualDragon.ts\",\"line\":19,\"message\":\"unsupported-field:sourceZoneFilter\",\"pattern\":\"unsupported-field:sourceZoneFilter\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/09_HMW/units/RitualDragon.ts\",\"line\":28,\"message\":\"unsupported-modifier:abilityHelper.ongoingEffects.unitsEnterPlayReady\",\"pattern\":\"unsupported-modifier:abilityHelper.ongoingEffects.unitsEnterPlayReady\"}]",
       "setCode": "HMW_234"
-    },
-    {
-      "internalName": "booma-ball",
-      "reason": "booma-ball: unsupported runtime query isUpgrade",
-      "setCode": "HMW_236"
     },
     {
       "internalName": "easy-prey",
@@ -9344,11 +9359,6 @@
       "setCode": "SEC_196"
     },
     {
-      "internalName": "junior-senator",
-      "reason": "junior-senator: unsupported runtime query isUpgrade",
-      "setCode": "SEC_200"
-    },
-    {
       "internalName": "anakin-skywalker#secret-husband",
       "reason": "anakin-skywalker#secret-husband: compiler rejected \"anakin-skywalker#secret-husband\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":37,\"file\":\"game/cards/06_SEC/units/AnakinSkywalkerSecretHusband.ts\",\"line\":18,\"message\":\"unsupported-query:controlsLeaderUnitOrUpgradeWithTitle\",\"pattern\":\"unsupported-query:controlsLeaderUnitOrUpgradeWithTitle\"}]",
       "setCode": "SEC_201"
@@ -9712,11 +9722,6 @@
       "internalName": "kuiil#i-have-spoken",
       "reason": "kuiil#i-have-spoken: compiler rejected \"kuiil#i-have-spoken\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/02_SHD/units/KuiilIHaveSpoken.ts\",\"line\":22,\"message\":\"unsupported-query:hasMatchingAspects\",\"pattern\":\"unsupported-query:hasMatchingAspects\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/02_SHD/units/KuiilIHaveSpoken.ts\",\"line\":30,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:hasMatchingAspects\"}]",
       "setCode": "SHD_041"
-    },
-    {
-      "internalName": "razor-crest#reliable-gunship",
-      "reason": "razor-crest#reliable-gunship: upgrade selection supports only scalar defeat",
-      "setCode": "SHD_044"
     },
     {
       "internalName": "rose-tico#dedicated-to-the-cause",
@@ -10322,11 +10327,6 @@
       "internalName": "final-showdown",
       "reason": "final-showdown: compiler rejected \"final-showdown\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/02_SHD/events/FinalShowdown.ts\",\"line\":21,\"message\":\"immediateEffect:delayedPlayerEffect\",\"pattern\":\"immediateEffect:delayedPlayerEffect\"}]",
       "setCode": "SHD_208"
-    },
-    {
-      "internalName": "criminal-muscle",
-      "reason": "criminal-muscle: upgrade selection supports only scalar defeat",
-      "setCode": "SHD_209"
     },
     {
       "internalName": "fugitive-wookiee",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1618,
+  "runtimeRejectedCount": 1613,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 666
 }

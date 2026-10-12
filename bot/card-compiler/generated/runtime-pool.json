@@ -6828,6 +6828,46 @@
       "cost": 2,
       "deployBox": null,
       "epicAction": "",
+      "hp": 2,
+      "id": "8471541200",
+      "internalName": "sandcrawler-sales-team",
+      "keywords": [
+        "saboteur"
+      ],
+      "power": 3,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers. A pilot's cost is the card's printed cost, not the cost in the Piloting ability.\nAbilities that return a card to hand must choose a card in play unless otherwise specified.\n",
+      "setCode": "HMW_222",
+      "setCodes": [
+        {
+          "number": 222,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 222,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "Saboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)\nWhen Played: If you control a Tatooine base, you may return an upgrade that costs 3 or less to its owner's hand.",
+      "title": "Sandcrawler Sales Team",
+      "traits": [
+        "jawa"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
       "hp": 4,
       "id": "7185113179",
       "internalName": "tusken-raider",
@@ -7057,6 +7097,44 @@
       ],
       "unique": false,
       "upgradeHp": 1,
+      "upgradePower": 2
+    },
+    {
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "9354439184",
+      "internalName": "booma-ball",
+      "keywords": [],
+      "power": 2,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers. A pilot's cost is the card's printed cost, not the cost in the Piloting ability.\nAbilities that return a card to hand must choose a card in play unless otherwise specified.\n",
+      "setCode": "HMW_236",
+      "setCodes": [
+        {
+          "number": 236,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 236,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: You may return an upgrade that costs 3 or less to its owner's hand.",
+      "title": "Booma Ball",
+      "traits": [
+        "item",
+        "weapon"
+      ],
+      "types": [
+        "upgrade"
+      ],
+      "unique": false,
+      "upgradeHp": 2,
       "upgradePower": 2
     },
     {
@@ -21968,6 +22046,46 @@
         "cunning",
         "heroism"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "1213577854",
+      "internalName": "junior-senator",
+      "keywords": [],
+      "power": 3,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\nAbilities that return a card to hand must choose a card in play unless otherwise specified.\n",
+      "setCode": "SEC_200",
+      "setCodes": [
+        {
+          "number": 200,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 200,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "When Played: You may return an upgrade that costs 3 or less to its owner's hand.",
+      "title": "Junior Senator",
+      "traits": [
+        "republic",
+        "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
@@ -23274,6 +23392,49 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 4,
+      "id": "8142386948",
+      "internalName": "razor-crest#reliable-gunship",
+      "keywords": [
+        "restore"
+      ],
+      "power": 3,
+      "rules": null,
+      "setCode": "SHD_044",
+      "setCodes": [
+        {
+          "number": 44,
+          "set": "SHD"
+        }
+      ],
+      "setId": {
+        "number": 44,
+        "set": "SHD"
+      },
+      "subtitle": "Reliable Gunship",
+      "text": "Restore 2 (When this unit attacks, heal 2 damage from your base.)\n\nWhen Played: You may return an upgrade from your discard pile to your hand.",
+      "title": "Razor Crest",
+      "traits": [
+        "mandalorian",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -24819,6 +24980,44 @@
         "droid",
         "twi'lek",
         "wookiee"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 1,
+      "id": "6475868209",
+      "internalName": "criminal-muscle",
+      "keywords": [],
+      "power": 2,
+      "rules": "Abilities that return a card to hand must choose a card in play unless otherwise specified.\n(ERRATA) Templating update: “Unique” becomes “<uq>”.\n",
+      "setCode": "SHD_209",
+      "setCodes": [
+        {
+          "number": 209,
+          "set": "SHD"
+        }
+      ],
+      "setId": {
+        "number": 209,
+        "set": "SHD"
+      },
+      "subtitle": "",
+      "text": "When Played: You may return a non-unique upgrade to its owner's hand.",
+      "title": "Criminal Muscle",
+      "traits": [
+        "underworld"
       ],
       "types": [
         "unit"

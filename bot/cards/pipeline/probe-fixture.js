@@ -46,7 +46,7 @@ function buildDeck(pool, probe) {
     return {
         metadata: { name: 'Automatic IR probe', author: 'card pipeline' },
         leader: { id: probe.leaderCode ?? leaders[0].setCode, count: 1 },
-        base: { id: bases[0].setCode, count: 1 },
+        base: { id: probe.baseCode ?? bases[0].setCode, count: 1 },
         deck: deckCodes.map((id, i) => ({ id, count: i === 16 ? 2 : 3 })),
         isPresentInDb: false,
     };
@@ -55,7 +55,7 @@ async function constructProbeFixture(env, pool, scenario, seed) {
     const p = scenario.probe;
     assert.ok(p, 'Missing pure probe construction');
     const deck = buildDeck(pool, p),
-        eg = env.newGame({ seed, deck1: deck, deck2: deck });
+        eg = env.newGame({ seed, deck1: deck, deck2: {...deck,base:{id:p.enemyBaseCode ?? deck.base.id,count:1}} });
     const rng = seededRng('automatic-probe-' + seed),
         bot = makeBot('random');
     await eg.start();
@@ -137,6 +137,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'upgrade-return') return require('./upgrade-return-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'cost-query') return require('./cost-probe-fixture').fixture(env, pool, scenario, seed);
     const setup = await constructProbeFixture(env, pool, scenario, seed);
     const { eg, rng, bot, deck, own, enemy, source, activation, targets } = setup,
@@ -374,6 +375,8 @@ module.exports = {
         'bot/cards/pipeline/probe-fixture.js',
         'bot/cards/pipeline/cost-probes.js',
         'bot/cards/pipeline/cost-probe-fixture.js',
+        'bot/cards/pipeline/upgrade-return-probes.js',
+        'bot/cards/pipeline/upgrade-return-probe-fixture.js',
         'bot/env.js',
         'bot/omni/rs/state.js',
         'bot/players/index.js',

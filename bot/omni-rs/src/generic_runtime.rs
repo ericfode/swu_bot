@@ -777,6 +777,7 @@ impl Engine {
                     "isAttacking"=>Eval::Bool(self.is_attacking(s,id)),
                     "isDefending"=>Eval::Bool(self.is_defending(s,id)),
                     "hasCost"=>Eval::Bool(["unit","leader","upgrade","event","token"].iter().any(|kind|d.info.is(kind))),
+                    "isUpgrade"=>Eval::Bool(d.info.is("upgrade")),
                     "isTokenUnit"=>Eval::Bool(d.info.is("token")&&d.info.is("unit")),
                     "isNonLeaderUnit" => Eval::Bool(d.info.is("unit") && !d.info.is("leader")),
                     "isInPlay" => Eval::Bool(self.in_arena(s, id) || self.attached_in_play(s,id) || d.info.is("base")),
@@ -831,10 +832,10 @@ impl Engine {
                 continue;
             }
             let p = s.player(seat);
-            let candidates: Vec<CardId> = if r.card_type=="upgrade" {
-                (1..s.next_id).filter(|id|s.card(*id).owner==seat && self.attached_in_play(s,*id)).collect()
-            } else if r.zone.as_deref() == Some("discard") {
+            let candidates: Vec<CardId> = if r.zone.as_deref() == Some("discard") {
                 p.discard.as_slice().to_vec()
+            } else if r.is_upgrade_domain() {
+                (1..s.next_id).filter(|id|s.card(*id).owner==seat && self.attached_in_play(s,*id)).collect()
             } else {
                 p.ground
                     .as_slice()
@@ -850,6 +851,7 @@ impl Engine {
                 let leader = d.info.is("leader");
                 if match r.card_type.as_str() {
                     "upgrade" => !d.info.is("upgrade"),
+                    "any" if r.is_upgrade_domain()=>!d.info.is("upgrade"),
                     "tokenUnit"=> !(d.info.is("token")&&d.info.is("unit")),
                     "unit" => !(d.info.is("unit") || (leader && s.card(id).deployed)),
                     "base" => !base,
@@ -949,7 +951,7 @@ impl Engine {
                         Effect::Defeat { .. } => unit || self.attached_in_play(s,id),
                         Effect::ReturnToHand { .. } => {
                             !self.def(s, id).info.is("leader")
-                                && (unit || s.player(s.card(id).owner).discard.contains(id))
+                                && (unit || self.attached_in_play(s,id) || s.player(s.card(id).owner).discard.contains(id))
                         }
                         Effect::ModifyStats { .. } | Effect::GainKeyword { .. } | Effect::LoseKeyword { .. } => unit,
                         Effect::GiveShield { .. } | Effect::GiveExperience { .. } => {
@@ -1837,7 +1839,7 @@ impl Engine {
                     if id != 0
                         && (self.in_arena(s, id)
                             || self.def(s, id).info.is("base")
-                            || (matches!(e,Effect::Defeat {..}) && self.attached_in_play(s,id))
+                            || (matches!(e,Effect::Defeat {..}|Effect::ReturnToHand {..}) && self.attached_in_play(s,id))
                             || (matches!(e, Effect::ReturnToHand { .. })
                                 && s.player(s.card(id).owner).discard.contains(id))) =>
                 {
@@ -1865,7 +1867,11 @@ impl Engine {
                         }
                         Effect::ReturnToHand { .. } if !self.def(s, id).info.is("leader") => {
                             let owner = s.card(id).owner;
-                            if in_arena {
+                            // Attachments are not arena unit-list members. Their
+                            // links/stat grants must depart before host death checks.
+                            if self.attached_in_play(s,id) {
+                                self.leave_play_primary_to_discard(s,id,false)?;
+                            } else if in_arena {
                                 self.leave_play(s, id)?;
                             }
                             s.player_mut(owner).discard.remove(id);

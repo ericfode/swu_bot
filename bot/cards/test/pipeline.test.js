@@ -128,3 +128,19 @@ test('cost query sensitivity covers zero-cost capability and attachment threshol
     assert.equal(positive.left.name,'getPrintedCost');
     assert.equal(positive.right.value,0);
 });
+
+
+test('upgrade return mutations challenge movement, inventory, optionality and source-player conditions', () => {
+    const byId = id => mutants(catalogue.cards.find(c => c.setCode === id));
+    for (const id of ['HMW_222','HMW_236','SEC_200','SHD_044','SHD_209']) {
+        const changes = byId(id);
+        assert.ok(changes.some(c => c.label === 'defeat-instead-of-return'));
+        assert.ok(changes.some(c => c.label === 'mandatory-instead-of-optional'));
+    }
+    for (const label of ['opponent-instead-of-self','arena-instead-of-discard'])
+        assert.ok(byId('SHD_044').some(c => c.label === label));
+    for (const label of ['opponent-base-trait','always-true-branch','always-false-branch'])
+        assert.ok(byId('HMW_222').some(c => c.label === label));
+    for (const id of ['HMW_236','SEC_200'])
+        assert.ok(byId(id).some(c => c.label === 'unit-type-instead-of-upgrade'));
+});

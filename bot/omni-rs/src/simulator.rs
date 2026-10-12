@@ -1152,6 +1152,11 @@ impl Engine {
         Ok(())
     }
     fn leave_play_primary(&self, s: &mut State, id: CardId) -> Result<(), String> {
+        self.leave_play_primary_to_discard(s,id,true)
+    }
+    // A returned upgrade moves directly to hand, never through discard. Keep
+    // the common detach/state-reset path without consuming a discard slot.
+    fn leave_play_primary_to_discard(&self, s: &mut State, id: CardId, discard: bool) -> Result<(), String> {
         self.detach(s,id);
         let owner = s.card(id).owner;
         let leader = id == s.player(owner).leader;
@@ -1160,7 +1165,7 @@ impl Engine {
         let p = s.player_mut(owner);
         p.ground.remove(id);
         p.space.remove(id);
-        if !leader && !token {
+        if discard && !leader && !token {
             p.discard.push(id)?;
         }
         let c = s.card_mut(id);

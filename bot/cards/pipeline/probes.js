@@ -2,6 +2,8 @@
 // A deliberately small experiment vocabulary. Unknown IR remains an obligation,
 // never silently becomes a purportedly covered card.
 function planCardProbes(entry, options = {}) {
+    const upgradeReturnPlan = require('./upgrade-return-probes').planUpgradeReturnProbes(entry, options);
+    if (upgradeReturnPlan) return upgradeReturnPlan;
     const costPlan = require('./cost-probes').planCostProbes(entry, options);
     if (costPlan) return costPlan;
     const cardId = entry.setCode;

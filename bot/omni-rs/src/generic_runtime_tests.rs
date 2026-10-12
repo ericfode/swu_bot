@@ -1563,7 +1563,7 @@ fn grouped_upgrade_source_defeat_is_rejected_for_name_reference_and_conditional_
 
 #[test]
 fn upgrade_selectors_reject_unmodeled_arena_filters_and_nonplay_zones() {
-    for resolver in [json!({"type":"upgrade","owner":"any","zone":"arena","arena":"ground"}),json!({"type":"upgrade","owner":"any","zone":"arena","arena":"space"}),json!({"type":"upgrade","owner":"any","zone":"discard"}),json!({"type":"upgrade","owner":"any","zone":"base"})] {
+    for resolver in [json!({"type":"upgrade","owner":"any","zone":"arena","arena":"ground"}),json!({"type":"upgrade","owner":"any","zone":"arena","arena":"space"}),json!({"type":"upgrade","owner":"any","zone":"hand"}),json!({"type":"upgrade","owner":"any","zone":"base"})] {
         let ability:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Unmodeled attachment zone","targetResolver":resolver,"effect":{"kind":"defeat","target":"chosen"}})).unwrap();
         assert!(crate::ability_ir::Program::compile(&ability).unwrap_err().contains("without an arena filter"));
     }
@@ -1868,4 +1868,81 @@ fn has_cost_tracks_engine_property_ancestry_not_positive_numeric_cost() {
     for receiver in [json!({"kind":"ref","path":["player"]}),json!({"kind":"const","value":true}),json!({"kind":"ref","path":["target","controller"]})] {
         let expr:Expr=serde_json::from_value(json!({"kind":"query","name":"hasCost","receiver":receiver,"args":[]})).unwrap();assert!(expr.validate().is_err());
     }
+}
+
+#[test]
+fn scalar_upgrade_return_admits_five_complete_sources_without_storage_growth() {
+    let e=engine();for code in ["HMW_222","SHD_044","SHD_209","HMW_236","SEC_200"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+    eprintln!("State bytes={} (no storage changes for scalar upgrade return)",std::mem::size_of::<State>());
+    assert!(!e.by_code.contains_key("ASH_232"),"grouped nested upgrade return remains unsupported");
+}
+#[test]
+fn scalar_upgrade_return_detaches_to_owner_and_token_return_removes_exact_identity() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let source=s.players[0].leader;
+    let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,upgrade,parent);e.create_token(&mut s,parent,false).unwrap();let shield=s.card(parent).shield;e.create_token(&mut s,parent,true).unwrap();let experience=s.card(parent).experience;
+    s.source=source;s.ability_target=upgrade;let hp=e.hp(&s,parent);
+    e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::name("chosen")}).unwrap();
+    assert!(s.players[0].hand.contains(upgrade));assert!(!s.players[1].hand.contains(upgrade));assert!(!s.players[0].discard.contains(upgrade));assert_eq!(s.card(upgrade).parent,0);assert!(e.hp(&s,parent)<hp);assert_eq!(s.card(parent).shield,shield);assert_eq!(s.card(parent).experience,experience);assert_eq!(s.death_pending.len,0);e.validate_attachment_links(&s).unwrap();
+    s.ability_target=shield;e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::name("chosen")}).unwrap();assert_eq!(s.card(parent).shield,0);assert_eq!(s.card(shield).parent,0);assert_eq!(s.card(parent).experience,experience);assert!(!s.players[1].hand.contains(shield));assert!(!s.players[1].discard.contains(shield));e.validate_attachment_links(&s).unwrap();
+    s.ability_target=experience;e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::name("chosen")}).unwrap();assert_eq!(s.card(parent).experience,0);assert!(!s.players[1].hand.contains(experience));assert!(!s.players[1].discard.contains(experience));e.validate_attachment_links(&s).unwrap();
+}
+#[test]
+fn scalar_upgrade_return_discard_zone_and_implicit_type_predicates_preserve_inventory() {
+    let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"SHD_044");let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let attached=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,attached,parent);let own=add(&e,&mut s,Seat::P1,"SOR_057");s.players[0].discard.push(own).unwrap();let enemy=add(&e,&mut s,Seat::P2,"SOR_057");s.players[1].discard.push(enemy).unwrap();
+    let r=&e.program(e.card_programs(&s,source)[0]).instructions.iter().find_map(|i|if let Instruction::Select(r)=i {Some(r)}else{None}).unwrap();assert_eq!(e.matching_targets(&s,source,r),vec![own]);
+    s.source=source;s.ability_target=own;e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::name("chosen")}).unwrap();assert!(s.players[0].hand.contains(own));assert!(!s.players[0].discard.contains(own));assert!(s.players[1].discard.contains(enemy));assert_eq!(s.card(attached).parent,parent);assert_eq!(s.death_pending.len,0);
+    let senator=unit(&e,&mut s,Seat::P1,"SEC_200");let r=e.program(e.card_programs(&s,senator)[0]).instructions.iter().find_map(|i|if let Instruction::Select(r)=i {Some(r)}else{None}).unwrap();assert!(r.is_upgrade_domain());assert_eq!(e.matching_targets(&s,senator,r),vec![attached]);
+    let ordinary:TargetResolver=serde_json::from_value(json!({"type":"any","owner":"any","zone":"arena"})).unwrap();assert!(!e.matching_targets(&s,senator,&ordinary).contains(&attached));
+}
+#[test]
+fn scalar_upgrade_return_hp_loss_captures_host_death_but_not_upgrade_death() {
+    // Synthetic death registration diagnostics isolate the removal event from
+    // the actual-card reference fixtures, which independently witness timing.
+    let mut e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let source=s.players[0].leader;let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,upgrade,parent);
+    death_program(&mut e,&s,parent,draw_death(false));death_program(&mut e,&s,upgrade,draw_death(false));let own_draw=deck_card(&e,&mut s,Seat::P1);let enemy_draw=deck_card(&e,&mut s,Seat::P2);
+    s.card_mut(parent).damage=e.hp(&s,parent)-1;s.source=source;s.ability_target=upgrade;e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::name("chosen")}).unwrap();
+    assert!(s.players[0].hand.contains(upgrade));assert!(s.players[1].discard.contains(parent));assert_eq!(s.death_pending.len,1);assert_eq!(s.death_pending.entries[0].source,parent);e.finish(&mut s).unwrap();assert!(s.players[1].hand.contains(enemy_draw));assert!(s.players[0].deck.contains(own_draw));e.validate_attachment_links(&s).unwrap();
+}
+#[test]
+fn scalar_upgrade_return_rejects_unverified_domains_groups_and_arity() {
+    for predicate in [json!({"kind":"binary","op":"||","left":{"kind":"query","name":"isUpgrade","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]}}),json!({"kind":"unary","op":"!","value":{"kind":"query","name":"isUpgrade","receiver":{"kind":"ref","path":["card"]},"args":[]}})]{
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"mixed","targetResolver":{"type":"any","predicate":predicate},"effect":{"kind":"returnToHand","target":"chosen"}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+    for receiver in [json!({"kind":"ref","path":["player"]}),json!({"kind":"ref","path":["source","parentUnit"]})]{let q:Expr=serde_json::from_value(json!({"kind":"query","name":"isUpgrade","receiver":receiver,"args":[]})).unwrap();assert!(q.validate().is_err());}
+    let q:Expr=serde_json::from_value(json!({"kind":"query","name":"isUpgrade","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":1}]})).unwrap();assert!(q.validate().is_err());
+}
+#[test]
+fn scalar_upgrade_return_source_threshold_unique_and_tatooine_boundaries() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let senator=unit(&e,&mut s,Seat::P1,"SEC_200");
+    e.create_token(&mut s,parent,false).unwrap();let shield=s.card(parent).shield;e.create_token(&mut s,parent,true).unwrap();let experience=s.card(parent).experience;
+    let cost3=add(&e,&mut s,Seat::P1,"ASH_087");e.attach(&mut s,cost3,parent);let cost4=add(&e,&mut s,Seat::P1,"LOF_171");e.attach(&mut s,cost4,parent);let unique=add(&e,&mut s,Seat::P1,"LOF_238");e.attach(&mut s,unique,parent);
+    let resolver=|source|e.program(e.card_programs(&s,source)[0]).instructions.iter().find_map(|i|if let Instruction::Select(r)=i {Some(r.clone())}else{None}).unwrap();
+    let candidates=e.matching_targets(&s,senator,&resolver(senator));assert!(candidates.contains(&cost3));assert!(candidates.contains(&unique));assert!(!candidates.contains(&cost4));assert!(!candidates.contains(&parent));assert!(candidates.contains(&shield));assert!(candidates.contains(&experience));
+    let muscle=unit(&e,&mut s,Seat::P1,"SHD_209");let r=e.program(e.card_programs(&s,muscle)[0]).instructions.iter().find_map(|i|if let Instruction::Select(r)=i {Some(r)}else{None}).unwrap();let candidates=e.matching_targets(&s,muscle,r);assert!(candidates.contains(&cost3));assert!(candidates.contains(&cost4));assert!(!candidates.contains(&unique));
+    let sandcrawler=unit(&e,&mut s,Seat::P1,"HMW_222");let conditional=Effect::Conditional {condition:Expr::Query {name:"hasSomeTrait".into(),receiver:Box::new(Expr::Ref {path:vec!["player".into(),"base".into()]}),args:vec![Expr::Const {value:json!("tatooine")}]},on_true:Box::new(Effect::ReturnToHand {target:Target::name("chosen")}),on_false:Some(Box::new(Effect::NoAction))};
+    assert!(!e.effect_can_affect(&s,sandcrawler,cost3,&conditional,true));let enemy_base=s.players[1].base;s.card_mut(enemy_base).def=*e.by_code.get("HMW_019").unwrap();assert!(!e.effect_can_affect(&s,sandcrawler,cost3,&conditional,true));let own_base=s.players[0].base;s.card_mut(own_base).def=*e.by_code.get("HMW_019").unwrap();assert!(e.effect_can_affect(&s,sandcrawler,cost3,&conditional,true));
+}
+#[test]
+fn scalar_upgrade_return_domain_does_not_admit_groups_or_effectless_selection() {
+    let resolver=json!({"type":"any","owner":"any","predicate":{"kind":"query","name":"isUpgrade","receiver":{"kind":"ref","path":["card"]},"args":[]}});
+    let select=json!({"kind":"select","targetResolver":resolver,"effect":{"kind":"returnToHand","target":"chosen"}});
+    let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Grouped upgrade","effect":{"kind":"simultaneous","effects":[select]}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).unwrap_err().contains("grouped upgrade selection"));
+    for effect in [json!({"kind":"noAction"}),json!({"kind":"conditional","condition":{"kind":"const","value":true},"onTrue":{"kind":"noAction"},"onFalse":{"kind":"noAction"}})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"No-op selector","targetResolver":resolver,"effect":effect})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+    let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Discard defeat","targetResolver":{"type":"upgrade","owner":"self","zone":"discard"},"effect":{"kind":"defeat","target":"chosen"}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+}
+#[test]
+fn scalar_upgrade_return_does_not_consume_a_discard_slot_before_moving_to_hand() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let source=s.players[0].leader;let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,upgrade,parent);
+    for _ in 0..MAX_ZONE {let id=add(&e,&mut s,Seat::P1,"LOF_256");s.players[0].discard.push(id).unwrap();}let original=s.players[0].discard;
+    s.source=source;s.ability_target=upgrade;e.apply_effect(&mut s,&Effect::ReturnToHand {target:Target::name("chosen")}).unwrap();
+    assert_eq!(s.players[0].discard.as_slice(),original.as_slice());assert!(s.players[0].hand.contains(upgrade));assert_eq!(s.card(upgrade).parent,0);assert_eq!(s.card(parent).upgrades,0);e.validate_attachment_links(&s).unwrap();
+}
+#[test]
+fn scalar_upgrade_return_rejects_unsupported_operations_in_every_continuation_selector() {
+    for continuation in ["then","ifYouDo"] {for effect in [json!({"kind":"defeat","target":"chosen"}),json!({"kind":"noAction"}),json!({"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}})] {
+        let mut value=json!({"trigger":"event","title":"draw then unsupported upgrade action","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}});
+        value[continuation]=json!({"title":"unsupported discard upgrade action","targetResolver":{"type":"upgrade","owner":"self","zone":"discard"},"effect":effect});let ability:crate::ability_ir::Ability=serde_json::from_value(value).unwrap();assert!(crate::ability_ir::Program::compile(&ability).unwrap_err().contains("upgrade selection supports only scalar defeat or return to hand"));
+    }}
 }
