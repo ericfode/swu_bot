@@ -13,6 +13,8 @@ on:
       - tools/card-runtime-report.js
       - bot/cards/**
       - bot/test/phase-stats-export.test.js
+      - bot/env.js
+      - bot/test/env-selection-actions.test.js
       - .agents/skills/swu-card-conversion/**
       - Cargo.lock
       - package.json
@@ -29,6 +31,8 @@ on:
       - tools/card-runtime-report.js
       - bot/cards/**
       - bot/test/phase-stats-export.test.js
+      - bot/env.js
+      - bot/test/env-selection-actions.test.js
       - .agents/skills/swu-card-conversion/**
       - Cargo.lock
       - package.json
@@ -61,6 +65,11 @@ jobs:
         run: |
           npm --prefix forceteki ci --ignore-scripts
           npm --prefix forceteki run get-cards
+      # cards:compile rewrites the generated files, so check the committed ones first;
+      # the daily run skips this and uploads the regenerated diff instead.
+      - name: Fail if committed generated files are stale
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: npm run cards:check
       - name: Generate every known card and validate supported behavior
         run: |
           npm run cards:compile

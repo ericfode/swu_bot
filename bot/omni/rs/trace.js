@@ -14,7 +14,7 @@ async function traceGame(env, pool, seed, names, maxSteps = 6000) {
     const rng = seededRng('bot' + seed);
     const decks = [env.randomDeck(rng, { pool }), env.randomDeck(rng, { pool })];
     const bots = names.map(makeBot);
-    const eg = env.newGame({ seed, deck1: decks[0], deck2: decks[1], undo: bots.some((b) => b.needsUndo) });
+    const eg = env.newGame({ selectionToggles: true, seed, deck1: decks[0], deck2: decks[1], undo: bots.some((b) => b.needsUndo) });
     let events = null;
     for (const name of ['onCardPlayed', 'onAttackDeclared', 'onCardDefeated', 'onLeaderDeployed', 'onUpgradeAttached', 'onDamageDealt', 'onDamageHealed', 'onCardReadied', 'onCardExhausted', 'onCardsDrawn']) {
         eg.game.on(name, (event) => {

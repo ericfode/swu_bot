@@ -32,7 +32,7 @@ function fixtureDeck(pool, scenario = {}) {
         base: { id: scenario.baseCode ?? 'SOR_023', count: 1 }, deck: [...codes, ...filler].map((id, i) => ({ id, count: i === 16 ? 2 : 3 })), isPresentInDb: false };
 }
 async function fixture(env, pool, scenario, seed) {
-    const deck = fixtureDeck(pool, scenario), eg = env.newGame({ seed, deck1: deck, deck2: deck });
+    const deck = fixtureDeck(pool, scenario), eg = env.newGame({ selectionToggles: true, seed, deck1: deck, deck2: deck });
     const rng = seededRng('phase-fixture-' + seed), bot = makeBot('random');
     await eg.start();
     while (!eg.ids.some((pid) => eg.isActionWindow(pid))) {
