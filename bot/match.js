@@ -15,11 +15,14 @@ const { seatFor, Shadow, BotError } = require('./protocol');
  * `pool` ({cards}, an arena card pool: cardpool.js) deals the two random decks from those cards only.
  * `key` (a secret string) makes every random stream unpredictable from the seed (rng.js gameStreams); without it a
  * bot that knows the seed could rebuild the hidden cards. `limits` overrides the reply budgets of protocol.js LIMITS.
+ * `watch` ({ pre(eg, pid, actions, step), post(eg, pid, action, split), end(eg, res), sim?(eg, pid) }) observes every
+ * real move, and with `sim` every simulation (sim returns the same three hooks for one, or null): bot/omni/rs/stress.js.
+ * It only reads the engine and must not throw.
  * playGame closes no bot: whoever started a bot program closes it.
  *
  * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, events, botStats, timing}}
  */
-async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {} }) {
+async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null }) {
     if (bots[0] === bots[1] && typeof bots[0]?.decide === 'function') {
         throw new Error(`${bots[0].name}: one protocol client cannot play both seats`);
     }
@@ -61,6 +64,10 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         // every lookahead runs on a copy of the game (protocol.js Shadow) that follows every real move
         const shadow = seats.some((s) => s.wantsSims || s.needsUndo) ? new Shadow(env, setup) : null;
         seats.forEach((s) => (s.shadow = shadow));
+        // a checker (bot/omni/rs/mirror.js) may follow the real moves and every simulation; it never changes them
+        if (shadow && watch?.sim) {
+            shadow.watch = watch.sim;
+        }
         // cards revealed by a real move are shown to both seats at their next decision
         let live = false;
         eg.game.on('onCardRevealed', (e) => live && seats.forEach((s) => s.reveal((e.cards ?? []).map((c) => placedRef(eg, c)))));
@@ -76,6 +83,7 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
             }
             const prompt = eg.promptSignature(pid);
             const title = eg.player(pid).currentPrompt().menuTitle ?? null;
+            watch?.pre(eg, pid, actions, res.steps);
             const action = await seats[eg.ids.indexOf(pid)].decide(eg, pid, actions, rng);
             // a seat answers with one of `actions`, or a copy of it that carries a split
             const i = actions.findIndex((a) => a === action || actionKey(eg, a) === actionKey(eg, action));
@@ -84,8 +92,10 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
             }
             const move = { pid, i, legal: actions.length, key: actionKey(eg, actions[i]) };
             live = true;
-            const split = eg.apply(pid, action, rng)?.map((e) => ({ id: eg.cardId(e.id), amount: e.amount }));
+            const applied = eg.apply(pid, action, rng);
+            const split = applied?.map((e) => ({ id: eg.cardId(e.id), amount: e.amount }));
             live = false;
+            watch?.post(eg, pid, action, applied);
             res.steps++;
             shadow?.record({ ...move, split });
             if (record) {
@@ -109,6 +119,9 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         res.by = e instanceof BotError ? e.seat : null;
         res.winner = res.by ? (res.by === 'p1' ? 'p2' : 'p1') : null;
         res.round = eg?.round ?? 0;
+    }
+    if (eg) {
+        watch?.end(eg, res);
     }
     // every bot that joined hears the result, except one that broke the game; a failure here changes no result
     for (const s of seats) {

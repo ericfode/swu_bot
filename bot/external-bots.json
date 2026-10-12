@@ -24,6 +24,7 @@
     "py-clock": { "cmd": "python3", "args": ["bot/python/swu_clock.py"], "lang": "python" },
     "node-random": { "cmd": "node", "args": ["bot/examples/random-bot.js", "node-random"], "lang": "js" },
     "node-search": { "cmd": "node", "args": ["bot/examples/search-bot.js", "node-search"], "lang": "js" },
+    "node-search-rust": { "cmd": "node", "args": ["bot/examples/search-bot.js", "node-search-rust", "--sim-engine", "rust"], "lang": "js" },
     "jepa": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--name", "jepa"], "stderr": "ignore", "lang": "python" },
     "jepa-h1": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v1.safetensors", "--mix", "0", "--name", "jepa-h1"], "stderr": "ignore", "lang": "python" },
     "jepa-pure": { "cmd": "python3", "args": ["bot/jepa/jepa_bot.py", "--model", "bot/jepa/models/jepa-v2p.safetensors", "--name", "jepa-pure"], "stderr": "ignore", "lang": "python" },
