@@ -8,13 +8,17 @@
 #                                              referee.js)
 #   bot/arena/ops/launch.sh resume             set up whatever is missing and resume the tournament in tournament.json
 #                                              (the commit comes from <ARENA_HOME>/launch.json)
-#   bot/arena/ops/launch.sh referee|runner|uplink   restart only that process, on the existing setup (keeper.sh uses these)
+#   bot/arena/ops/launch.sh referee|runner|uplink|intake   restart only that process, on the existing setup (keeper.sh)
 #   bot/arena/ops/launch.sh uplink-stop        one last push to the window, then stop the uplink (keeper.sh, at the end)
 #
 # With SWU_WINDOW set at start (e.g. https://swu-arena.fly.dev; kept in launch.json as "window"), a third process, the
 # uplink (push.js arena), sends the arena's state and its round ladders to the arena window's API every 20 s (WINDOW.md).
 # It is the only process that gets the egress proxy, which adds the window's push token, and it runs only our own code
 # (push.js and api.js's read methods). The referee and the bots never get the proxy: a bot could push as the project.
+# A fourth, the intake (intake.js), gets the same environment: it fetches the bots people submit on the window and
+# enters them. It runs our own code too; their code runs only in the WebAssembly sandbox, under a checker process that
+# gets no token and sees nothing of the others (isolate.sh). INTAKE_BENCH_NEW=0 at start rates a new builder's
+# competitor at once; by default it starts on the bench (launch.json "intakeBenchNew"), so a tournament keeps its lineup.
 #
 # Layout under $BASE (default /srv/arena-run, local disk):
 #   referee/        frozen git worktree of the commit; forceteki/ and node_modules/ link to $SRC's built engine, which
@@ -25,6 +29,7 @@
 #   logs/           runner logs, competitor HOMEs, transcripts; usage, prompts and OptMem memory are backed up to $BACKUP
 #   tools/memo      OptMem (it must be executable, so not on the shared mount)
 #   home/, etc/     the HOME of the ladders' user, a copy of the CA bundle
+#   wasm-cache/, intake/   compiled WebAssembly bundles (SWU_WASM_CACHE), the intake's checks of submitted bots
 # ARENA_HOME stays the shared /mnt/project-files/arena (roster, agents/, versions/, tournament.json, standings).
 # Both processes start with a minimal environment (env -i): no session tokens and no NODE_OPTIONS reach the bots.
 # Each also starts in its own PID and mount namespace (isolate.sh): what runs under it, competitors and bot programs
@@ -59,11 +64,12 @@ LAUNCH_TOURNAMENT=$ARENA_HOME/tournament.json
 # (git: the ladders' user reads the root-owned worktree and engine, which git refuses unless told they are safe)
 CLEAN=(env -i "PATH=$PATH" "HOME=$BASE/home" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
        "NODE_EXTRA_CA_CERTS=$CA" "SSL_CERT_FILE=$CA" "ARENA_HOME=$ARENA_HOME" "ARENA_RESULTS=$BASE/results"
-       "ARENA_PUBLIC_RESULTS=$SHARED_RESULTS" "ARENA_SECRET_FILE=$SECRET" "ARENA_BOT_USER=$ARENA_USER"
+       "ARENA_PUBLIC_RESULTS=$SHARED_RESULTS" "ARENA_SECRET_FILE=$SECRET" "ARENA_BOT_USER=$ARENA_USER" "SWU_WASM_CACHE=$BASE/wasm-cache"
        "GIT_CONFIG_COUNT=1" "GIT_CONFIG_KEY_0=safe.directory" "GIT_CONFIG_VALUE_0=*")
 # a rehearsal points this elsewhere too (default: the project's dashboard folder)
 [ -n "${ARENA_DASH:-}" ] && CLEAN+=("ARENA_DASH=$ARENA_DASH")
 UPLINK_LOOP='bot/arena/push.js arena --every'
+INTAKE_LOOP='bot/arena/intake.js --every'
 # the session's credentials and settings (and the usual places of others, hidden only where they exist), hidden from
 # the referee and the runner and all they start. Each gets a /tmp of its own under $BASE/tmp, so the session's
 # scratchpad and anything else in the real /tmp is out of reach too, and the other's /tmp is hidden.
@@ -132,10 +138,20 @@ arena_user() {
     useradd --system --user-group --no-create-home --home-dir "$BASE/home" --shell /usr/sbin/nologin "$ARENA_USER"
 }
 
+# what submitted bots need (bot/compiled/README.md): wasmtime for Python, Javy and CPython for WASI in $SRC/build
+# (a failure here says so and lets the tournament start: the intake then answers "try again later")
+toolchain() {
+    local want
+    want=$(node -e "process.stdout.write(require('$SRC/bot/compiled/toolchain.json').python.wasmtime)") || return 1
+    python3 -c "import importlib.metadata as m, sys; sys.exit(m.version('wasmtime') != '$want')" 2>/dev/null \
+        || python3 -m pip install -q "wasmtime==$want" || return 1
+    (cd "$SRC" && python3 -c "import sys; sys.path.insert(0, 'bot/compiled'); import build; build.javy(); build.runtime('python-3.14-wasi')")
+}
+
 setup() {
     local commit=$1
     arena_user
-    mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools" "$BASE/home" "$BASE/etc"
+    mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools" "$BASE/home" "$BASE/etc" "$BASE/wasm-cache" "$BASE/intake"
     # $BASE (and the folders above it) must let $ARENA_USER through to the worktree and its own folders
     chmod 755 "$BASE"
     if ! runuser -u "$ARENA_USER" -- test -x "$BASE/home"; then
@@ -155,7 +171,11 @@ setup() {
         rmdir "$BASE/referee/forceteki"
         ln -s "$SRC/forceteki" "$BASE/referee/forceteki"
         ln -s "$SRC/node_modules" "$BASE/referee/node_modules"
+        # the WebAssembly toolchain (bot/compiled): submitted bundles run from here
+        mkdir -p "$SRC/build"
+        ln -s "$SRC/build" "$BASE/referee/build"
     fi
+    toolchain || say "could not set up the WebAssembly toolchain (bot/compiled/README.md); submitted bots stay pending until a setup gets it"
     local names
     # benched competitors too: rejoin gives them work windows again without another setup
     names=$(node -e "const r=require('$ARENA_HOME/roster.json'); console.log([...r.agents, ...(r.bench ?? [])].filter(a=>a.harness&&!a.harness.selfRun&&['claude-code','script','command'].includes(a.harness.kind)).map(a=>a.name).join(' '))")
@@ -202,9 +222,9 @@ console.log([...ids].join('\n'));" "$ARENA_HOME/standings.json" "$LAUNCH_TOURNAM
         (umask 077 && node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > "$SECRET")
     fi
     [ -n "$CA" ] && install -m 644 "$CA_SRC" "$CA"
-    # what the ladders write is their user's; the secret, the worktree, the engine, the tools and the runner's folders
-    # stay root's
-    chown -R "$ARENA_USER:" "$BASE/results" "$BASE/home"
+    # what the ladders and the intake's checker write is their user's; the secret, the worktree, the engine, the tools
+    # and the runner's folders stay root's
+    chown -R "$ARENA_USER:" "$BASE/results" "$BASE/home" "$BASE/wasm-cache" "$BASE/intake"
     chown root: "$SECRET"
     chmod 600 "$SECRET"
     # the arena and dashboard folders: the shared mount lets any user write, a rehearsal's local copy is made its user's
@@ -266,6 +286,20 @@ start_uplink() {
     say "uplink to $window started (pid $!)"
 }
 
+# bots that people submit on the window (intake.js): with the uplink's environment (it reads the window with the push
+# token), and what its checker needs: the user it runs as, its folders, and the list of what it must not see
+start_intake() {
+    local window
+    window=$(window_url)
+    [ -z "$window" ] && return 0
+    uplink_env "$window"
+    cd "$BASE/referee"
+    "${UPLINK[@]}" "ARENA_USER=$ARENA_USER" "ARENA_INTAKE_WORK=$BASE/intake" "SWU_WASM_CACHE=$BASE/wasm-cache" \
+        "ARENA_HIDE=$(IFS=:; echo "${SECRETS[*]}"):$SECRET:/home/claude/.claude:$BASE/tmp/referee:$BASE/tmp/runner" \
+        setsid nohup node bot/arena/intake.js --every 60 $([ "$(setting intakeBenchNew true)" = true ] && echo --bench-new) >> "$BASE/intake.log" 2>&1 < /dev/null &
+    say "intake from $window started (pid $!)"
+}
+
 # whether any of these processes is still running
 alive() {
     local p
@@ -273,6 +307,29 @@ alive() {
         kill -0 "$p" 2>/dev/null && return 0
     done
     return 1
+}
+
+# the intake of an earlier launch: a new one may run another commit, window or bench setting
+stop_intake() {
+    local pids checker
+    pids=$(pgrep -f "$INTAKE_LOOP" || true)
+    if [ -n "$pids" ]; then
+        # TERM: the intake kills its running check's process group itself, then exits
+        kill $pids 2>/dev/null || true
+        for _ in $(seq 50); do
+            alive $pids || break
+            sleep 0.2
+        done
+        kill -9 $pids 2>/dev/null || true
+        say "intake stopped"
+    fi
+    # a check whose intake was killed before it could stop it: its process group, named in intake.checker.pid
+    checker=$(cat "$BASE/intake.checker.pid" 2>/dev/null || true)
+    if [[ "$checker" =~ ^[0-9]+$ ]] && tr '\0' ' ' <"/proc/$checker/cmdline" 2>/dev/null | grep -q 'intake.js --check'; then
+        kill -9 -- "-$checker" 2>/dev/null || true
+        say "stopped the check the intake left running"
+    fi
+    rm -f "$BASE/intake.checker.pid"
 }
 
 stop_uplink() {
@@ -300,10 +357,12 @@ case "$MODE" in
     start)
         COMMIT=${2:?usage: launch.sh start <commit>}
         COMMIT=$(git -C "$SRC" rev-parse "$COMMIT")
+        # an intake left from an earlier tournament runs from the worktree setup replaces, with its settings
+        stop_intake
         mkdir -p "$ARENA_HOME/tools"
         [ -e "$ARENA_HOME/tools/memo" ] || cp "${MEMO_FROM:?MEMO_FROM: path to OptMem memo}" "$ARENA_HOME/tools/memo"
-        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), window: process.argv[5] || null, startedAt: new Date().toISOString()}, null, 1))" \
-            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}" "${SWU_WINDOW:-}"
+        node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), window: process.argv[5] || null, intakeBenchNew: process.argv[6] !== '0', startedAt: new Date().toISOString()}, null, 1))" \
+            "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}" "${SWU_WINDOW:-}" "${INTAKE_BENCH_NEW:-1}"
         setup "$COMMIT"
         # a new tournament starts with an empty /tmp for the referee and the runner (a restart keeps it)
         rm -rf "$BASE/tmp"
@@ -312,6 +371,7 @@ case "$MODE" in
         sleep 5
         start_runner
         start_uplink
+        start_intake
         ;;
     resume)
         setup "$(setting commit)"
@@ -319,10 +379,12 @@ case "$MODE" in
         sleep 5
         pgrep -f 'bot/arena/runner.js --repo' > /dev/null || start_runner
         pgrep -f "$UPLINK_LOOP" > /dev/null || start_uplink
+        pgrep -f "$INTAKE_LOOP" > /dev/null || start_intake
         ;;
     referee) start_referee 1 ;;
     runner) start_runner ;;
     uplink) start_uplink ;;
+    intake) start_intake ;;
     uplink-stop) stop_uplink ;;
     *) echo "unknown mode $MODE" >&2; exit 1 ;;
 esac

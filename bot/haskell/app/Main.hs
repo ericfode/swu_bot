@@ -2,8 +2,8 @@
 -- | swu-bot-hs: a Star Wars Unlimited bot speaking the swu-bot stdio protocol (spec/stdio-protocol.md).
 -- One JSON line in, one JSON line out; stdout is protocol only, logs go to stderr.
 --
--- Card data: $SWU_CARD_JSON, else forceteki/test/json/Card under the working directory (the repo root when run
--- by the adapter).
+-- Card data: $SWU_CARD_JSON (the folder that holds Card/, or Card/ itself), else forceteki/test/json under the
+-- working directory (the repo root when run by the adapter).
 module Main (main) where
 
 import Cards (loadCardDb)
@@ -22,7 +22,7 @@ main = do
   hSetBuffering stdout LineBuffering
   hSetBinaryMode stdin True
   hSetEncoding stderr utf8
-  dir <- fromMaybe "forceteki/test/json/Card" <$> lookupEnv "SWU_CARD_JSON"
+  dir <- fromMaybe "forceteki/test/json" <$> lookupEnv "SWU_CARD_JSON"
   debug <- maybe False (`elem` ["1", "true"]) <$> lookupEnv "SWU_HS_DEBUG"
   db <- loadCardDb dir
   let loop mem = do

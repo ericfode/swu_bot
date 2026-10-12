@@ -15,7 +15,7 @@ const VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const MAX_BODY = 1 << 20;
 const MAX_TEXT = 400000; // characters of one tool result; past it the result asks for a narrower call
 
-function createMcpHttp({ name, version = '1.0.0', instructions = '', tools, headers = {} }) {
+function createMcpHttp({ name, version = '1.0.0', instructions = '', tools, headers = {}, maxBody = MAX_BODY }) {
     const list = (ctx) => (typeof tools === 'function' ? tools(ctx) : tools);
 
     function send(res, code, body, extra = {}) {
@@ -30,11 +30,11 @@ function createMcpHttp({ name, version = '1.0.0', instructions = '', tools, head
             let size = 0;
             req.on('data', (d) => {
                 size += d.length;
-                if (size <= MAX_BODY) {
+                if (size <= maxBody) {
                     chunks.push(d);
                 }
             });
-            req.on('end', () => resolve(size > MAX_BODY ? null : Buffer.concat(chunks).toString('utf8')));
+            req.on('end', () => resolve(size > maxBody ? null : Buffer.concat(chunks).toString('utf8')));
             req.on('error', () => resolve(null));
         });
     }
@@ -90,7 +90,7 @@ function createMcpHttp({ name, version = '1.0.0', instructions = '', tools, head
         }
         const text = await readBody(req);
         if (text === null) {
-            return send(res, 413, fail(null, -32600, `request body over ${MAX_BODY} bytes`));
+            return send(res, 413, fail(null, -32600, `request body over ${maxBody} bytes`));
         }
         let msg;
         try {

@@ -6,7 +6,8 @@ bot's version. The format is `swu-arena-bot/1` from the bot packaging design
 (`/mnt/project-files/research/bot-packaging/design.md`, section 3).
 
 This folder builds 9 of our bots that way and plays them like any other bot program, as `<name>-wasm` in
-`bot/external-bots.json`. The arena (`bot/arena`) does not use it yet.
+`bot/external-bots.json`. The arena (`bot/arena`) plays the bots people submit on its window this way: its intake
+(`bot/arena/intake.js`) packs each one into a bundle, and the arena runs it with `run.py`.
 
 | Bundle | Source | How it is built | Runtime | gzip size |
 |---|---|---|---|---|

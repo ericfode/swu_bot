@@ -5,6 +5,7 @@
 #   - the referee died while the tournament runs: restart it with --resume (at most 3 times per keeper run)
 #   - the runner died: restart it (it first stops whatever the dead one left running)
 #   - the window uplink died (only when launch.json names a window): restart it; at the end it pushes once more and stops
+#   - the intake of submitted bots died (also only with a window): restart it; it keeps running after the tournament
 # and every 10 minutes it prints one status line.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -20,6 +21,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
     ref=$(pgrep -f 'bot/arena/referee.js --tournament' | head -1)
     run=$(pgrep -f 'bot/arena/runner.js --repo' | head -1)
     up=$(pgrep -f 'bot/arena/push.js arena --every' | head -1)
+    ink=$(pgrep -f 'bot/arena/intake.js --every' | head -1)
     if [[ $s == done* ]] && [ -z "$ref" ] && [ -z "$run" ]; then
         [ -n "$up" ] && "$HERE/launch.sh" uplink-stop
         echo "[keeper $(date -u +%H:%M)] tournament done, nothing running"
@@ -46,8 +48,13 @@ while [ "$(date +%s)" -lt "$END" ]; do
         tail -5 "$BASE/uplink.log" 2>/dev/null
         "$HERE/launch.sh" uplink
     fi
+    if [[ $s != done* ]] && [ -n "$window" ] && [ -z "$ink" ]; then
+        echo "[keeper $(date -u +%H:%M)] intake is down ($s), restarting it"
+        tail -5 "$BASE/intake.log" 2>/dev/null
+        "$HERE/launch.sh" intake
+    fi
     if [ $((i % 10)) -eq 0 ]; then
-        echo "[keeper $(date -u +%H:%M)] $s; referee ${ref:-down}; runner ${run:-down}${window:+; uplink ${up:-down}}; $(tail -1 "$BASE/runner.log" 2>/dev/null | cut -c1-140)"
+        echo "[keeper $(date -u +%H:%M)] $s; referee ${ref:-down}; runner ${run:-down}${window:+; uplink ${up:-down}; intake ${ink:-down}}; $(tail -1 "$BASE/runner.log" 2>/dev/null | cut -c1-140)"
     fi
     i=$((i + 1))
     sleep 60

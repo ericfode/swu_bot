@@ -17,7 +17,8 @@
  *                                               agents/<name>/) or {kind:'stdio', cmd, args?}: the folder is frozen either way and a stdio cmd
  *                                               runs in it. bot.files (text) is laid over the folder first. A JS bot must load
  *                                               (require bot.js, createBot) and a bot program must start and answer hello
- *                                               with ready, or the submit fails with code bad_bot.
+ *                                               with ready, or the submit fails with code bad_bot. {kind:'wasm', files} is
+ *                                               a WebAssembly bundle (bot/compiled/README.md), played in the sandbox.
  *   withdraw {name, version?} / rejoin {...}    bench a competitor or stop rating one version, from the next ladder to start; undo
  *   versions {name}                             submitted versions with notes
  *   standings {}                                every rated round so far, all-round Elo
@@ -57,6 +58,8 @@ const CODES = new Set(['bad_request', 'unauthorized', 'not_found', 'conflict', '
 const LOAD_CHECK_MS = 30000;
 // a bot program's hello: the referee's own budget for it (30 s, it includes starting the program)
 const START_CHECK_MS = 30000;
+// a WebAssembly bundle's files, in all (a JS bot compiled by Javy is about 1.3 MB)
+const WASM_MAX_BYTES = 16e6;
 const ARCHIVE_ID = /^[\w-]{1,64}$/;
 
 class ArenaError extends Error {
@@ -191,7 +194,7 @@ function startCheck(dir, version, bot, shownAs) {
     const lines = String(r.stderr ?? '').split(dir).join(shownAs).split('\n').filter((l) => l.trim()).slice(-8);
     // a file in the arena folder may have lost its exec bit (a synced folder keeps none): run it through its interpreter
     const hint = lines.some((l) => /EACCES/.test(l)) ? `\n${bot.cmd} is not executable in the arena folder (it keeps no exec bits): start it through its interpreter, e.g. {"cmd": "sh", "args": ["${bot.cmd}"]} for a shell script` : '';
-    throw new ArenaError('bad_bot', `${version} failed the start check (start ${bot.cmd}, send hello, expect ready): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}${hint}`);
+    throw new ArenaError('bad_bot', `${version} failed the start check (start ${bot.label ?? bot.cmd}, send hello, expect ready): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}${hint}`);
 }
 
 /** Whether `o` may be an eval opponent: a built-in bot, a baseline, or an existing <agent>-v<N> of any competitor. */
@@ -267,12 +270,14 @@ const api = {
         return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, say, eval and inbox on a hosted arena.' };
     },
 
-    submit({ name, note, bot = { kind: 'js' }, token } = {}) {
+    submit({ name, note, bot = { kind: 'js' }, token, ref } = {}) {
         // Atomic: the version is assembled and load-checked in versions/.staging-*, then renamed into place in one step,
-        // so the referee never sees a half-copied or unloadable version.
-        owned(name, token);
+        // so the referee never sees a half-copied or unloadable version. A benched competitor may submit too: its newest
+        // version is rated once it rejoins.
+        owned(name, token, { benched: true });
         need(typeof note === 'string' && note.trim(), 'bad_request', 'note: one line saying what changed and why');
-        need(bot && typeof bot === 'object' && ['js', 'stdio'].includes(bot.kind), 'bad_request', "bot.kind: 'js' or 'stdio'");
+        need(bot && typeof bot === 'object' && ['js', 'stdio', 'wasm'].includes(bot.kind), 'bad_request', "bot.kind: 'js', 'stdio' or 'wasm'");
+        need(bot.kind !== 'wasm' || (bot.cmd === undefined && bot.args === undefined), 'bad_request', 'a wasm bundle says how it runs in its arena.json');
         const live = path.join(home.AGENTS, name);
         let upload = null;
         if (bot.kind === 'stdio') {
@@ -286,25 +291,35 @@ const api = {
                 'bot.args: a list of strings; file arguments are paths inside your folder (no absolute paths, no ..)');
             need(bot.cwd === undefined, 'bad_request', 'bot.cwd: not allowed; the program runs in your submitted folder');
         }
+        need(bot.kind !== 'wasm' || (bot.files && typeof bot.files === 'object' && typeof bot.files['arena.json'] === 'string'), 'bad_request',
+            'a wasm bundle is bot.files with its arena.json and the files it names (binary ones as {"base64": "..."})');
         if (bot.files !== undefined) {
-            // remote clients upload their bot as text files: {"bot.js": "...", "lib/x.js": "..."} on top of the live folder's files
-            need(bot.files && typeof bot.files === 'object' && !Array.isArray(bot.files) && (bot.kind === 'stdio' || typeof bot.files['bot.js'] === 'string'), 'bad_request', 'bot.files must include "bot.js"');
-            upload = Object.entries(bot.files).map(([rel, text]) => {
-                const f = path.resolve(live, rel);
-                const ok = f.startsWith(live + path.sep) && typeof text === 'string' && !path.relative(live, f).split(path.sep).some((p) => p === '.git' || p === 'node_modules');
+            // remote clients upload their bot as text files: {"bot.js": "...", "lib/x.js": "..."} on top of the live folder's
+            // files. A wasm bundle is its own folder (bundle/), and its binary files come as {base64}
+            need(bot.files && typeof bot.files === 'object' && !Array.isArray(bot.files) && (bot.kind !== 'js' || typeof bot.files['bot.js'] === 'string'), 'bad_request', 'bot.files must include "bot.js"');
+            const root = bot.kind === 'wasm' ? path.join(live, 'bundle') : live;
+            let bytes = 0;
+            upload = Object.entries(bot.files).map(([rel, body]) => {
+                const f = path.resolve(root, rel);
+                const binary = bot.kind === 'wasm' && body && typeof body === 'object' && typeof body.base64 === 'string';
+                const ok = f.startsWith(root + path.sep) && (typeof body === 'string' || binary) && !path.relative(root, f).split(path.sep).some((p) => p === '.git' || p === 'node_modules');
                 need(ok, 'bad_request', `bad file path ${rel}`);
-                return [path.relative(live, f), text];
+                const data = binary ? Buffer.from(body.base64, 'base64') : body;
+                bytes += Buffer.byteLength(data);
+                need(bytes <= WASM_MAX_BYTES, 'bad_request', `bot.files: at most ${WASM_MAX_BYTES / 1e6} MB in all`);
+                return [path.relative(live, f), data];
             });
         }
         const { files, ...botMeta } = bot;
         const round = clock().round;
         // stamped just before the version is renamed into place, after its load check: a submit that finishes after the
         // round's deadline is late (lineup() rates it next round), however early it started
+        // ref: what this version came from, e.g. a window submission (intake.js; not part of the API's own arguments)
         const meta = (n) => ({ name: `${name}-v${n}`, agent: name, version: n, note: note.trim(), bot: botMeta, files: files ? Object.keys(files) : undefined,
-                               submittedAt: new Date().toISOString(), round, checked: true });
+                               ...(typeof ref === 'string' ? { ref } : {}), submittedAt: new Date().toISOString(), round, checked: true });
         const staging = home.stagingDir(name);
         try {
-            if (home.exists(live)) {
+            if (home.exists(live) && bot.kind !== 'wasm') {
                 try {
                     home.copyBot(live, staging);
                 } catch (e) {
@@ -316,15 +331,18 @@ const api = {
             }
             if (bot.kind === 'js') {
                 need(home.exists(path.join(staging, 'bot.js')), 'bad_request', `no bot.js in ${live}`);
-            } else if (/[\\/]/.test(bot.cmd)) {
+            } else if (bot.kind === 'stdio' && /[\\/]/.test(bot.cmd)) {
                 need(home.exists(path.join(staging, bot.cmd)), 'bad_request', `bot.cmd ${bot.cmd} is not in your folder`);
             }
             let n = (home.versionsOf(name).pop() ?? -1) + 1;
-            if (bot.kind === 'js') {
-                loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
-            } else {
-                startCheck(staging, `${name}-v${n}`, bot, upload ? `(uploaded) ${name}` : live);
-            }
+            const check = () => {
+                if (bot.kind === 'js') {
+                    loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
+                } else {
+                    startCheck(staging, `${name}-v${n}`, bot.kind === 'wasm' ? require('./registry').WASM_BOT : bot, upload ? `(uploaded) ${name}` : live); // hello names the version
+                }
+            };
+            check();
             // a concurrent submit may take the number first: then take the next free one (and load-check under that
             // name, since createBot gets the version name)
             for (let retry = 0; ; retry++) {
@@ -334,13 +352,9 @@ const api = {
                 }
                 need(retry < 5, 'conflict', 'too many concurrent submits; submit again');
                 n = Math.max(n + 1, (home.versionsOf(name).pop() ?? -1) + 1);
-                if (bot.kind === 'js') {
-                    loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
-                } else {
-                    startCheck(staging, `${name}-v${n}`, bot, upload ? `(uploaded) ${name}` : live); // hello names the version
-                }
+                check();
             }
-            if (upload) {
+            if (upload && bot.kind !== 'wasm') {
                 // the live folder follows what was uploaded, so eval of the live bot plays it; only the newest version
                 // may write it, so a slower concurrent submit cannot overwrite a newer one. It becomes a copy of that
                 // version, not the live folder plus this upload: a concurrent submit may have written the live folder
@@ -638,7 +652,7 @@ async function call(method, args = {}) {
 const METHODS = {
     status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
-    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout). The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
+    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
     withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started, and get no work window from the next round. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     rejoin: { token: true, desc: "Undo withdraw: rated again from the next ladder to start (this round's, if it has not started), with a work window from the next round; or with version, rate that version again.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
@@ -657,4 +671,15 @@ const METHODS = {
     inbox: { token: true, readOnly: true, desc: 'Messages for you (from Eric, the referee or others), oldest first. Read it at the start of every round.', props: { name: 'string', since: 'string' }, required: ['name'] }
 };
 
-module.exports = { api, call, asCompetitor, BENCH, clock, notify, METHODS, ArenaError, TOURNAMENT };
+/** A person's builder name: their GitHub login as an arena name (lowercase, _ for -, a letter first). */
+function builderName(login) {
+    const n = String(login ?? '').toLowerCase().replace(/-/g, '_');
+    return (/^[a-z]/.test(n) ? n : `gh_${n}`).slice(0, 32);
+}
+/** The competitor names a person may make: their builder name, and that name with _ and a suffix (ana, ana_fast). */
+function ownsName(login, name) {
+    const b = builderName(login);
+    return name === b || String(name).startsWith(`${b}_`);
+}
+
+module.exports = { api, call, startCheck, asCompetitor, builderName, ownsName, BENCH, clock, notify, METHODS, ArenaError, TOURNAMENT };

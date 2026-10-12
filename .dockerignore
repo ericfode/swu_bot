@@ -1,4 +1,5 @@
-# The arena image needs bot/arena, app, meta/atlas-kit.js, dashboard/site and studio (Dockerfile); keep the rest out
+# The arena image needs bot/arena, app, meta/atlas-kit.js, dashboard/site, studio and spec/protocol.md (Dockerfile, for
+# arena_guide); keep the rest out
 *
 !package.json
 !bot/arena
@@ -6,6 +7,7 @@
 !meta/atlas-kit.js
 !dashboard/site
 !studio
+!spec/protocol.md
 studio/node_modules
 studio/dist*
 studio/static-*

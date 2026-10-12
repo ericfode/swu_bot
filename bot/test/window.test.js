@@ -672,6 +672,86 @@ test('mcp: a competitor token never goes into a URL, and a remote that never ans
     }
 });
 
+/** An MCP access token for an invited login, through the window's real OAuth flow (consent page, PKCE, token). */
+async function mcpToken(w, go, login) {
+    const crypto = require('crypto');
+    const site = 'https://swu-arena.fly.dev';
+    const cb = 'https://claude.ai/api/mcp/auth_callback';
+    const form = (o) => new URLSearchParams(o).toString();
+    const post = (p, body, opts = {}) => go(p, { method: 'POST', body: form(body), type: 'application/x-www-form-urlencoded', ...opts });
+    const cookie = `swu_session=${w.auth.sign({ l: login, exp: Date.now() + 60000 })}`;
+    const client = await (await go('/oauth/register', { method: 'POST', body: JSON.stringify({ client_name: 'Claude', redirect_uris: [cb] }) })).json();
+    const verifier = crypto.randomBytes(40).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const ask = `/oauth/authorize?${form({ response_type: 'code', client_id: client.client_id, redirect_uri: cb, code_challenge: challenge, code_challenge_method: 'S256', state: 's', resource: `${site}/mcp` })}`;
+    const tx = /name="tx" value="([^"]+)"/.exec(await (await go(ask, { cookie })).text())[1].replace(/&#(\d+);/g, (m, c) => String.fromCharCode(c));
+    const code = new URL((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie, origin: site })).headers.get('location')).searchParams.get('code');
+    return (await (await post('/oauth/token', { grant_type: 'authorization_code', code, client_id: client.client_id, redirect_uri: cb, code_verifier: verifier })).json()).access_token;
+}
+
+test('mcp submit: a signed-in person submits a bot, reads only their own submissions, and the arena\'s result comes back', async () => {
+    const w = makeWindow('w-submit');
+    const { go, close } = await serve(w);
+    try {
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['Kim-B', 'lee', 'kim-b-x'] }));
+        w.store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'duel_opus', owner: null }, { name: 'kim_b_two', owner: 'github:kim-b' }, { name: 'kim_b_old', owner: 'github:someone' }] }));
+        const kim = await mcpToken(w, go, 'Kim-B');
+        const lee = await mcpToken(w, go, 'lee');
+        const call = async (t, name, args = {}) => {
+            const r = (await (await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result;
+            return { error: !!r.isError, value: r.isError ? r.content[0].text : JSON.parse(r.content[0].text) };
+        };
+        assert.match((await call(kim, 'arena_guide')).value.text, /^# Build a bot for the SWU Arena/);
+        assert.match((await call(kim, 'arena_guide', { topic: 'protocol' })).value.text, /^# Bot protocol/);
+
+        const bot = { kind: 'js', note: 'first try', files: { 'bot.js': "require('./stdio').serve({ decide: (m) => ({ t: 'act', i: 0 }) });" } };
+        for (const [args, why] of [
+            [{ ...bot, kind: 'exe' }, /kind: one of js, python, wasm/],
+            [{ ...bot, note: ' ' }, /note/],
+            [{ ...bot, files: { '../bot.js': 'x' } }, /not a plain relative path/],
+            [{ ...bot, files: { '/etc/x': 'x' } }, /not a plain relative path/],
+            [{ ...bot, files: { 'bot.js': 7 } }, /must be a string/],
+            [{ ...bot, files: { 'bot.js': 'x'.repeat(3e6 + 1) } }, /at most 3 MB/],
+            [{ ...bot, base64: ['other.wasm'] }, /base64/],
+            [{ ...bot, name: 'Bad-Name' }, /name: 1-32/],
+            [{ ...bot, name: 'duel_opus' }, /is not yours/],
+            [{ ...bot, name: 'lee' }, /is not yours: use your builder name kim_b/],
+            [{ ...bot, name: 'kim_b_x' }, /is not yours/], // @kim-b-x's builder name
+            [{ ...bot, name: 'kim_b_old' }, /another competitor's name/]
+        ]) {
+            const r = await call(kim, 'arena_submit', args);
+            assert.ok(r.error && why.test(r.value), `${JSON.stringify(args).slice(0, 80)}: ${r.value}`);
+        }
+        const first = (await call(kim, 'arena_submit', bot)).value;
+        assert.deepStrictEqual([first.name, first.kind, first.state], ['kim_b', 'js', 'pending']);
+        assert.match(first.id, /^kim-b\./);
+        assert.strictEqual((await call(kim, 'arena_submit', { ...bot, name: 'kim_b_two' })).value.name, 'kim_b_two', 'a second competitor of their own');
+        const stored = JSON.parse(w.store.getDoc('submissions', first.id));
+        assert.deepStrictEqual([stored.owner, stored.files['bot.js'], stored.state], ['kim-b', bot.files['bot.js'], 'pending']);
+
+        // only the arena reads the collection: never a friend, raw or through the tools
+        assert.strictEqual((await go('/api/docs/submissions', { token: kim })).status, 403);
+        assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { token: kim })).status, 403);
+        assert.strictEqual((await (await go('/api/docs/submissions', { token: 'push-secret' })).json()).result.length, 2);
+        assert.deepStrictEqual((await call(lee, 'arena_my_submissions')).value, []);
+        const mine = (await call(kim, 'arena_my_submissions')).value;
+        assert.deepStrictEqual(mine.map((x) => [x.name, x.state, x.files, x.fileNames]), [['kim_b_two', 'pending', undefined, ['bot.js']], ['kim_b', 'pending', undefined, ['bot.js']]]);
+
+        // at most 3 waiting at once
+        assert.strictEqual((await call(kim, 'arena_submit', bot)).error, false);
+        assert.match((await call(kim, 'arena_submit', bot)).value, /3 submissions waiting/);
+
+        // the arena's intake writes its result back with the project token; the person reads it
+        const { files, ...rest } = stored;
+        assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify({ ...rest, fileNames: ['bot.js'], state: 'accepted', version: 'kim_b-v1' }) })).status, 200);
+        assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'feed-secret', body: '{}' })).status, 403, 'a feed cannot');
+        const after = (await call(kim, 'arena_my_submissions')).value.find((x) => x.id === first.id);
+        assert.deepStrictEqual([after.state, after.version, after.fileNames], ['accepted', 'kim_b-v1', ['bot.js']]);
+    } finally {
+        await close();
+    }
+});
+
 test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads as themselves, and can disconnect it', async () => {
     const crypto = require('crypto');
     const w = makeWindow('w-oauth');
@@ -748,12 +828,14 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
         assert.strictEqual(init.result.protocolVersion, '2025-06-18');
         assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","method":"notifications/initialized"}' })).status, 202);
         const names = (await rpc(tok.access_token, 'tools/list')).result.tools.map((t) => t.name);
-        assert.deepStrictEqual(names, ['whoami', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay']);
+        assert.deepStrictEqual(names, ['whoami', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay',
+            'arena_guide', 'arena_submit', 'arena_my_submissions']);
         const call = async (t, name, args = {}) => {
             const r = (await rpc(t, 'tools/call', { name, arguments: args })).result;
             return { error: r.isError, value: JSON.parse(r.content[0].text) };
         };
-        assert.deepStrictEqual((await call(tok.access_token, 'whoami')).value, { login: 'kim-b', role: 'friend', app: 'Claude', may: 'read games, replays, standings and research; change nothing' });
+        assert.deepStrictEqual((await call(tok.access_token, 'whoami')).value, { login: 'kim-b', role: 'friend', app: 'Claude', builder: 'kim_b',
+            may: 'read games, replays, standings and research; submit your own bots (arena_guide says how) and follow them (arena_my_submissions)' });
         assert.deepStrictEqual((await call(tok.access_token, 'window_docs', { collection: 'runs', id: 'demo' })).value.owner, undefined, 'scrubbed');
         assert.strictEqual((await call(tok.access_token, 'window_docs', { collection: 'admin', id: 'invites' })).error, true);
         assert.strictEqual((await call(tok.access_token, 'arena_versions', {})).error, true);

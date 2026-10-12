@@ -79,11 +79,27 @@ signs in with GitHub and presses Allow, and trades the code and its PKCE verifie
 access token (1 hour) and a refresh token (30 days from its last use; each use gives a new one, and an old one used
 again ends the grant). `/oauth/revoke` ends a grant.
 
-What an app may do: read, as its person, with role friend (an admin's app is no admin) and via `oauth`, so it never
-writes; removing the person's invite cuts their apps off on the next call. Its tools: `whoami`, the arena reads
-(`arena_status`, `arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`), `window_docs`
-(the friends' collections: arena, runs, evals, lens, meta; scrubbed), `window_replays` and `window_replay` (a game in
-slices of up to 100 KB). The project token does not open `/mcp`: pushing stays with `mcp.js` above. Tokens are kept
+What an app may do: read, as its person, with role friend (an admin's app is no admin) and via `oauth`, and submit
+that person's bots; nothing else it does writes. Removing the person's invite cuts their apps off on the next call.
+Its tools: `whoami`, the arena reads (`arena_status`, `arena_standings`, `arena_report`, `arena_games`,
+`arena_versions`, `arena_panel`), `window_docs` (the friends' collections: arena, runs, evals, lens, meta; scrubbed),
+`window_replays` and `window_replay` (a game in slices of up to 100 KB), and three for building a bot:
+
+- `arena_guide`: how to write and submit a bot (`BUILD.md`), or the whole bot protocol (`spec/protocol.md`).
+- `arena_submit {kind: js|python|wasm, note, files, base64?, entry?, name?}`: stores the bot in the `submissions`
+  collection as `<login>.<time>`, state `pending`. The default `name` is the person's builder name (their login,
+  lowercase, `_` for `-`); another name must start with it and `_`, and may not be the builder name of anyone else who
+  can sign in (the intake checks the prefix again). Limits: about 3 MB of files, 3 waiting at once, 20 a day, and no
+  competitor someone else owns. The window never runs it.
+- `arena_my_submissions`: the person's own submissions, without their files. Each is pending, then checking, then
+  accepted (the version) or rejected (the error lines). A check that fails on the arena's side (no result) puts it back
+  to pending, files and all, and it is tried again after a few minutes, three times at most.
+
+The arena's intake (`intake.js`, started by `launch.sh` next to the uplink) reads `submissions` with the project
+token. It packs each bot into a WebAssembly bundle, enters it, and writes the outcome back. Each version records the
+submission it came from, so a submission checked again (an intake that stopped, or a window that missed the result)
+gets the version it already has. Only one intake runs per arena (`intake.pid` in its work folder). Friends never read the
+collection raw. The project token does not open `/mcp`: pushing stays with `mcp.js` above. Tokens are kept
 only as SHA-256 hashes, in `auth/oauth.json` on the volume. A person's connected apps are listed on the app's Build a
 bot page (Arena, Build a bot), through `GET /api/apps`, and `POST /api/apps {"disconnect": "<id>"}` ends one (from
 this site's own pages: Origin and JSON).

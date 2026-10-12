@@ -27,19 +27,28 @@ const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
+const { builderName, ownsName } = require('./api');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
 
 const ROOT = path.join(__dirname, '..', '..');
 // the collections a part may push; a friend reads the FRIEND ones raw, and the rest only through the app's public model
-const NS = new Set(['arena', 'runs', 'ladders', 'league', 'experiments', 'evals', 'panels', 'bots', 'threads', 'lens', 'meta', 'research', 'admin']);
+// submissions: bots people send through /mcp (arena_submit), each kept until the arena's intake (intake.js) has checked
+// it; friends never read the collection raw, only their own through arena_my_submissions
+const NS = new Set(['arena', 'runs', 'ladders', 'league', 'experiments', 'evals', 'panels', 'bots', 'threads', 'lens', 'meta', 'research', 'admin', 'submissions']);
 const FRIEND_NS = new Set(['arena', 'runs', 'evals', 'lens', 'meta']);
 const FEED_NS = new Set(['runs', 'lens', 'replays']);
 const ID = /^[A-Za-z0-9][\w.#@+-]{0,159}$/;
 const MAX_DOC = 16e6;
 const MAX_APPEND = 8e6;
 const MAX_REPLAY = 32e6; // the longest recorded game so far is ~14 MB of text
+// bots people submit through /mcp (arena_submit): the kinds the arena's intake packs, and how much of them it takes
+const SUBMIT_KINDS = ['js', 'python', 'wasm'];
+const SUBMIT_FILES = 200;
+const SUBMIT_BYTES = 3e6;
+const SUBMIT_PENDING = 3;
+const SUBMIT_PER_DAY = 20;
 // keys a friend never sees (builder and thread names, Eric's pick 6), at any depth of a document
 const PRIVATE_KEYS = new Set(['owner', 'thread', 'threadId', 'session', 'sessionId', 'tokenHash', 'token']);
 
@@ -593,9 +602,55 @@ function createWindow(opts = {}) {
     const schema = (props, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
     const pick = (a, keys) => Object.fromEntries(keys.filter((k) => a[k] !== undefined && a[k] !== null).map((k) => [k, a[k]]));
     const REPLAY_SLICE = 100000;
+    // GitHub logins ignore case; the arena names an owner github:<login> in lowercase
+    const mySubmissions = (login) => store.listDocs('submissions').filter((d) => d.id.startsWith(`${String(login).toLowerCase()}.`))
+        .map((d) => parseOr(store.getDoc('submissions', d.id), null)).filter(Boolean)
+        .sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+    /** arena_submit: checks the request and stores it for the arena's intake; nothing of it runs here. */
+    function submit(who, { kind, note, files, base64 = [], entry, name } = {}) {
+        need(who.login && LOGIN.test(who.login), 'forbidden', 'submitting takes a GitHub sign-in');
+        const login = who.login.toLowerCase();
+        need(SUBMIT_KINDS.includes(kind), 'bad_request', `kind: one of ${SUBMIT_KINDS.join(', ')}`);
+        need(typeof note === 'string' && note.trim() && note.length <= 300, 'bad_request', 'note: one line (up to 300 characters) saying what this version changes');
+        need(files && typeof files === 'object' && !Array.isArray(files), 'bad_request', 'files: an object of path -> content');
+        const paths = Object.keys(files);
+        need(paths.length >= 1 && paths.length <= SUBMIT_FILES, 'bad_request', `files: 1 to ${SUBMIT_FILES} files`);
+        need(Array.isArray(base64) && base64.every((p) => typeof p === 'string' && p in files), 'bad_request', 'base64: a list of paths that are in files');
+        let bytes = 0;
+        for (const p of paths) {
+            need(/^[\w.-]+(\/[\w.-]+)*$/.test(p) && p.length <= 200 && !p.split('/').some((x) => x === '..' || x === '.' || x === '.git'), 'bad_request', `files: ${p} is not a plain relative path`);
+            need(typeof files[p] === 'string', 'bad_request', `files: ${p} must be a string`);
+            bytes += base64.includes(p) ? Math.floor(files[p].length * 3 / 4) : Buffer.byteLength(files[p]);
+        }
+        need(bytes <= SUBMIT_BYTES, 'too_large', `files: at most ${SUBMIT_BYTES / 1e6} MB in all`);
+        need(entry === undefined || (typeof entry === 'string' && entry in files), 'bad_request', 'entry: one of the files');
+        const n = name ?? builderName(login);
+        need(typeof n === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(n), 'bad_request', 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
+        // a name is its builder's: their builder name, or it with _ and a suffix, and never another person's builder name
+        // (bob may not take bob_x while @bob-x can sign in)
+        const { admins, fromEnv } = auth.fixed();
+        const others = [...admins, ...fromEnv, ...invited()].map((x) => String(x).toLowerCase()).filter((x) => x !== login);
+        need(ownsName(login, n) && !others.some((x) => builderName(x) === n), 'conflict',
+            `"${n}" is not yours: use your builder name ${builderName(login)} (whoami), or it with _ and a suffix, e.g. ${builderName(login)}_fast`);
+        // a competitor of someone else's: the arena refuses it too, but say so now
+        const theirs = (arenaMethods.status().competitors ?? []).find((c) => c?.name === n);
+        need(!theirs || theirs.owner === `github:${login}`, 'conflict', `"${n}" is another competitor's name; submit under your own (whoami says your builder name)`);
+        const mine = mySubmissions(login);
+        need(mine.filter((x) => x.state === 'pending' || x.state === 'checking').length < SUBMIT_PENDING, 'conflict',
+            `you have ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
+        const now = Date.now();
+        need(mine.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day`);
+        const id = `${login}.${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+        const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
+            state: 'pending', submittedAt: new Date(now).toISOString() };
+        store.putDoc('submissions', id, JSON.stringify(doc));
+        return { id, name: n, kind, state: 'pending',
+            next: 'The arena packs it, starts it once in its sandbox and enters it; arena_my_submissions shows the version it rates, or what to fix. While the arena is not running, it waits.' };
+    }
     const mcpTools = [
         { name: 'whoami', description: 'Who this app reads the arena as, and what it may do.', inputSchema: schema({}), annotations: RO,
-            call: ({ who }) => ({ login: who.login, role: who.role, app: who.app, may: 'read games, replays, standings and research; change nothing' }) },
+            call: ({ who }) => ({ login: who.login, role: who.role, app: who.app, builder: builderName(who.login),
+                may: 'read games, replays, standings and research; submit your own bots (arena_guide says how) and follow them (arena_my_submissions)' }) },
         ...[...ARENA_READ].map((m) => ({
             name: `arena_${m}`, description: METHODS[m].desc, annotations: RO,
             inputSchema: schema(Object.fromEntries(Object.entries(METHODS[m].props).map(([k, t]) => [k, TYPE[t]])), METHODS[m].required ?? []),
@@ -633,12 +688,35 @@ function createWindow(opts = {}) {
                 }
                 const slice = buf.subarray(a, b);
                 return { run, game, size: buf.length, from: a, length: slice.length, text: slice.toString('utf8') };
-            } }
+            } },
+        { name: 'arena_guide', annotations: RO,
+            description: 'How to write a bot for the arena and submit it: the short guide (topic "build", default), or the full bot protocol (topic "protocol").',
+            inputSchema: schema({ topic: { type: 'string', enum: ['build', 'protocol'] } }),
+            call: (ctx, { topic = 'build' }) => {
+                const file = topic === 'protocol' ? path.join(ROOT, 'spec', 'protocol.md') : path.join(__dirname, 'BUILD.md');
+                need(fs.existsSync(file), 'not_found', `${topic}: not in this build of the window`);
+                return { topic, text: fs.readFileSync(file, 'utf8') };
+            } },
+        { name: 'arena_submit',
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+            description: `Submit a bot as your next version. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time.`,
+            inputSchema: schema({
+                kind: { type: 'string', enum: SUBMIT_KINDS }, note: { type: 'string', description: 'one line: what this version changes and why' },
+                files: { type: 'object', description: 'path -> file content, e.g. {"bot.js": "..."}', additionalProperties: { type: 'string' } },
+                base64: { type: 'array', items: { type: 'string' }, description: 'the paths in files whose content is base64 (binary files of a wasm bundle)' },
+                entry: { type: 'string', description: 'the file that starts the bot, if not bot.js / bot.py' },
+                name: { type: 'string', description: 'the competitor to submit to: your builder name (the default) or it with _ and a suffix, e.g. ana_fast. A new name makes a new competitor of yours' }
+            }, ['kind', 'note', 'files']),
+            call: ({ who }, a) => submit(who, a) },
+        { name: 'arena_my_submissions', annotations: RO,
+            description: 'Your submissions, newest first: pending, checking, accepted (with the version the arena rates) or rejected (with what to fix).',
+            inputSchema: schema({}),
+            call: ({ who }) => mySubmissions(who.login).map(({ files, base64, ...rest }) => ({ ...rest, ...(files ? { fileNames: Object.keys(files) } : {}) })) }
     ];
     const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
     const mcp = createMcpHttp({
-        name: 'swu-arena', version: '1.0.0', tools: mcpTools, headers: MCP_CORS,
-        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Read-only for now. Start with whoami and arena_status; window_docs lists the runs, evaluations and research; window_replay reads a game move by move. Building and submitting a bot happens in the swu_bot repo (bot/arena/README.md) until the hosted arena opens.'
+        name: 'swu-arena', version: '1.0.0', tools: mcpTools, headers: MCP_CORS, maxBody: 5 << 20,
+        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Start with whoami and arena_status; window_docs lists the runs, evaluations and research; window_replay reads a game move by move. To build a bot, read arena_guide, then submit it with arena_submit and follow it with arena_my_submissions: the arena runs every game itself, in a sandbox.'
     });
     function mcpRoute(req, res) {
         if (req.method === 'OPTIONS') {

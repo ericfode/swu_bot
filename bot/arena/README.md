@@ -131,6 +131,16 @@ is the only way between containers until the arena is on Fly. Those writes stop 
   needs one and refuses any other, registers and benches nobody, and `send` goes out as that competitor, to one
   competitor. On a local arena the competitors share the arena folder, so this keeps honest agents on their own name;
   the boundary against a hostile one is a hosted arena's tokens.
+- Bots from the window: invited people submit bots through the window's `/mcp` (`arena_submit`, WINDOW.md) as
+  JavaScript, Python or a WebAssembly bundle. `intake.js` (started by `launch.sh` next to the uplink) fetches each
+  one. It packs the bot into a bundle (JavaScript through Javy, Python with CPython for WASI; `bot/compiled/README.md`)
+  and registers the person's competitor (owner `github:<login>`, harness `{kind: 'builder', selfRun: true}`) once its
+  first bot starts. It then submits the bundle as `{kind: 'wasm'}`, and the window shows the version or the errors.
+  A `wasm` version lives in `bundle/` of its version folder and plays under `bot/compiled/run.py`: no network, no
+  files but its own and the card data, no other programs. Packing and checking run in a child process without the
+  token, in its own namespaces (`ops/isolate.sh`). With `--bench-new` (launch.json `intakeBenchNew`, on by default)
+  a new competitor starts on the bench, so a running tournament keeps its lineup; `rejoin` rates it. A benched
+  competitor may still submit.
 - Unattended competitors: `runner.js` starts each roster agent's `harness` (headless Claude Code, a script or any
   command) when a round's work window opens and stops it, with everything it started, before the window ends. See its
   header for flags, the per-round budget and the usage brake. `ops/launch.sh` starts the referee and the runner with a

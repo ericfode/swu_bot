@@ -46,8 +46,9 @@ bot/haskell/build.sh          # -> bot/haskell/build/swu-bot-hs (plain ghc, no n
 node bot/ladder.js --bots haskell,rush,tempo,random --games 10
 ```
 
-Card data (costs, keywords, upgrade stats) is read from `$SWU_CARD_JSON`, default `forceteki/test/json/Card` under
-the working directory (the repo root when the adapter starts it). Without it the bot still plays, with flat values.
+Card data (costs, keywords, upgrade stats) is read from `$SWU_CARD_JSON`, the folder that holds `Card/` as for the
+other bots (`Card/` itself works too), default `forceteki/test/json` under the working directory (the repo root when
+the adapter starts it). Without it the bot still plays, with flat values.
 `SWU_HS_DEBUG=1` prints every action-window candidate with its search value, and every prompt answer, to stderr.
 
 Speed: about 5 ms per decision as the harness measures it (adapter included), at most about 0.4 s.

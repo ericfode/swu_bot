@@ -279,7 +279,6 @@ test('withdraw benches a competitor or stops rating one version; rejoin undoes e
     assert.strictEqual(api.status().competitors.find((c) => c.name === 'wd')?.benched, true, 'status still lists it, marked benched');
     assert.ok(api.panel({ name: 'wd' }) && api.panels().panels.length >= 1, 'its panel stays readable');
     assert.deepStrictEqual(api.versions({ name: 'wd' }).map((v) => v.name), ['wd-v0', 'wd-v1', 'wd-v2'], 'its versions stay readable');
-    assert.throws(() => api.submit({ name: 'wd', note: 'benched' }), (e) => e.code === 'not_found');
     // its frozen versions stay eval opponents for the others
     api.register({ name: 'wo', start: 'rush' });
     const ev = api.eval({ name: 'wo', vs: ['wd-v1'] });
@@ -296,6 +295,12 @@ test('withdraw benches a competitor or stops rating one version; rejoin undoes e
     const back = readJson(path.join(HOME, 'roster.json'), {});
     assert.deepStrictEqual([back.agents.map((a) => a.name), back.bench.length, 'benchedAt' in back.agents[1]], [['wo', 'wd'], 0, false]);
     assert.ok(lineup().includes('wd-v2'));
+    // a benched competitor may still submit (a builder's later versions from the window): the version sits out with it
+    api.withdraw({ name: 'wd' });
+    const sub = api.submit({ name: 'wd', note: 'while benched' });
+    assert.ok(!lineup().some((b) => b.startsWith('wd-')), `${sub.version} is not rated while wd is benched`);
+    api.rejoin({ name: 'wd' });
+    assert.ok(lineup().includes(sub.version));
 });
 
 test('a call made for one competitor (ARENA_COMPETITOR) acts for it only, whatever the front end', async () => {
@@ -870,5 +875,189 @@ test('readers get every panel, a round\'s ladder and archived tournaments from t
         } else {
             fs.rmSync(path.join(HOME, 'standings.json'), { force: true });
         }
+    }
+});
+
+// the intake of bots people submit on the window (intake.js): its checker as a plain child process here, since the
+// scratch arena lives under /tmp, which isolate.sh would replace
+process.env.ARENA_INTAKE_NO_ISOLATE = '1';
+process.env.ARENA_INTAKE_WORK = path.join(tmp, 'intake-work');
+const wasmReady = (() => {
+    const { spawnSync } = require('child_process');
+    const rt = path.join(__dirname, '..', '..', 'build', 'compiled', '.tools', 'python-3.14.7', 'python.wasm');
+    return fs.existsSync(rt) && spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
+})();
+
+test('a submitted wasm bundle is held to the host memory cap: its own memory_mb counts up to 1024, and it gets one memory', { skip: require('child_process').spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status !== 0 && 'needs wasmtime' }, () => {
+    const { spawnSync } = require('child_process');
+    // a WASI program that grows its last memory by 20000 pages (1.25 GiB) and prints whether that worked
+    const program = (memories) => `(module
+  (import "wasi_snapshot_preview1" "fd_write" (func $w (param i32 i32 i32 i32) (result i32)))
+  (memory $m0 1) ${memories > 1 ? '(memory $m1 1)' : ''}
+  (export "memory" (memory $m0))
+  (data (memory $m0) (i32.const 16) "grew\\n")
+  (data (memory $m0) (i32.const 32) "fail\\n")
+  (func (export "_start") (local $p i32)
+    (local.set $p (i32.const 16))
+    (if (i32.eq (memory.grow ${memories > 1 ? '$m1' : '$m0'} (i32.const 20000)) (i32.const -1)) (then (local.set $p (i32.const 32))))
+    (i32.store $m0 (i32.const 0) (local.get $p))
+    (i32.store $m0 (i32.const 4) (i32.const 5))
+    (drop (call $w (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 8)))))`;
+    const run = (memories) => {
+        const dir = fs.mkdtempSync(path.join(tmp, 'memhog-'));
+        const make = 'import sys, json, hashlib, wasmtime\nb = wasmtime.wat2wasm(sys.stdin.read())\nopen(sys.argv[1] + "/bot.wasm", "wb").write(b)\n' +
+            'json.dump({"schema": "swu-arena-bot/1", "name": "memhog", "lang": "wat", "protocol": 2, "kind": "wasm", "platform": "wasm32-wasip1", "runtime": "wasi-p1",' +
+            ' "run": {"cmd": "./bot.wasm", "args": [], "env": {}}, "entry_sha256": hashlib.sha256(b).hexdigest(), "resources": {"memory_mb": 4096},' +
+            ' "cards": {"use": "none"}, "network": "none"}, open(sys.argv[1] + "/arena.json", "w"))';
+        assert.strictEqual(spawnSync('python3', ['-c', make, dir], { input: program(memories) }).status, 0);
+        const runPy = path.join(__dirname, '..', 'compiled', 'run.py');
+        return spawnSync('python3', [runPy, dir], { encoding: 'utf8', env: { ...process.env, SWU_WASM_CACHE: path.join(dir, 'cache') }, timeout: 60000 });
+    };
+    assert.strictEqual(run(1).stdout, 'fail\n', 'asking for 4096 MB in arena.json gives 1024 at most');
+    assert.match(run(2).stderr, /memory count too high/);
+});
+
+/** A window that holds submissions in memory, with the two calls the intake makes (push.js request and putDoc). */
+function fakeWindow(docs) {
+    const reads = [];
+    return {
+        docs, reads,
+        request: async (method, p) => {
+            reads.push(p);
+            const id = decodeURIComponent(p.split('/')[4] ?? '');
+            return id ? structuredClone(docs[id] ?? null) : Object.keys(docs).map((k) => ({ id: k }));
+        },
+        putDoc: async (ns, id, doc) => {
+            docs[id] = structuredClone(doc);
+        }
+    };
+}
+
+test('intake: a submission that cannot be packed or names someone else\'s competitor is rejected, with the reason, and its files dropped', async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const roster = readJson(path.join(HOME, 'roster.json'), { baselines: ['rush'], agents: [] });
+    writeJson(path.join(HOME, 'roster.json'), { ...roster, agents: [...roster.agents, { name: 'kim_b_taken', title: 'taken', owner: 'github:someone' }] });
+    const base = { owner: 'kim-b', note: 'try', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
+    const w = fakeWindow({
+        'kim-b.1': { ...base, name: 'kim_b', kind: 'python', files: { 'main.py': 'print(1)' } },
+        'kim-b.2': { ...base, name: 'kim_b', kind: 'js', files: { 'bot.js': "require('../../../etc/hostname')" } },
+        'kim-b.3': { ...base, name: 'kim_b_taken', kind: 'js', files: { 'bot.js': '' } },
+        'kim-b.4': { ...base, name: 'kim_b', kind: 'js', files: {}, state: 'accepted', version: 'kim_b-v1' },
+        'kim-b.5': { ...base, name: 'pal', kind: 'js', files: { 'bot.js': '' } }
+    });
+    const finished = new Set();
+    // with no toolchain yet, nothing is checked and nothing is rejected
+    assert.strictEqual(await intakeOnce({ window: w, finished, missing: () => 'no Javy' }), 0);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => d.state), ['pending', 'pending', 'pending', 'accepted', 'pending']);
+    const ready = () => null; // these fail before any tool runs
+    assert.strictEqual(await intakeOnce({ window: w, finished, missing: ready }), 4);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => d.state), ['rejected', 'rejected', 'rejected', 'accepted', 'rejected']);
+    assert.match(w.docs['kim-b.1'].error, /no bot\.py/);
+    assert.match(w.docs['kim-b.2'].error, /cannot find '\.\.\/\.\.\/\.\.\/etc\/hostname' in the bot's folder/);
+    assert.match(w.docs['kim-b.3'].error, /belongs to another competitor/);
+    assert.match(w.docs['kim-b.5'].error, /"pal" is not yours: use your builder name kim_b/);
+    assert.deepStrictEqual([w.docs['kim-b.1'].files, w.docs['kim-b.1'].fileNames], [undefined, ['main.py']]);
+    assert.ok(!readJson(path.join(HOME, 'roster.json')).agents.some((a) => a.name === 'kim_b'), 'no competitor made for a bot that never started');
+    w.reads.length = 0;
+    assert.strictEqual(await intakeOnce({ window: w, finished, missing: ready }), 0);
+    assert.deepStrictEqual(w.reads, ['/api/docs/submissions'], 'a later pass reads only the list');
+});
+
+test('intake: a Python bot becomes a sandboxed WebAssembly version of the builder\'s competitor, on the bench when asked', { skip: !wasmReady && 'needs wasmtime and the CPython for WASI (bot/compiled/README.md)' }, async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const { describeArenaBot, makeArenaBot } = require('../arena/registry');
+    const base = { owner: 'pal', name: 'pal', kind: 'python', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
+    const w = fakeWindow({
+        'pal.1': { ...base, note: 'first', files: { 'bot.py': PY_BOT } },
+        'pal.2': { ...base, note: 'reads a file it may not', files: { 'bot.py': `open('${HOME}/roster.json').read()\n${PY_BOT}` } },
+        'pal.3': { ...base, note: 'second', files: { 'bot.py': `# v2\n${PY_BOT}` } }
+    });
+    assert.strictEqual(await intakeOnce({ window: w, benchNew: true }), 3);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => [d.state, d.version ?? null, d.benched ?? null]), [['accepted', 'pal-v1', true], ['rejected', null, null], ['accepted', 'pal-v2', true]]);
+    assert.match(w.docs['pal.2'].error, /failed the start check[\s\S]*No such file or directory/);
+    const r = readJson(path.join(HOME, 'roster.json'));
+    assert.deepStrictEqual(r.bench.filter((a) => a.name === 'pal').map((a) => [a.owner, a.harness]), [['github:pal', { kind: 'builder', selfRun: true }]]);
+    assert.deepStrictEqual(fs.readdirSync(path.join(HOME, 'versions', 'pal-v2', 'bundle')).sort(), ['arena.json', 'bot.py']);
+    assert.strictEqual(describeArenaBot('pal-v2').lang, 'wasm');
+    const bot = makeArenaBot('pal-v2');
+    const awake = setTimeout(() => {}, 60000); // a bot program never keeps node running by itself (stdio.js)
+    try {
+        const ready = await bot.hello({ t: 'hello', v: 2, bot: 'pal-v2', you: 'p1', seed: 1, ms: 30000 });
+        assert.strictEqual(ready.t, 'ready');
+    } finally {
+        clearTimeout(awake);
+        await bot.close();
+    }
+});
+
+test('intake: one version per submission, even when the window misses the result or the check runs again; a JS bot may bring Node\'s stdio.js or live in a folder', { skip: !(wasmReady && fs.existsSync(path.join(__dirname, '..', '..', 'build', 'compiled', '.tools', 'javy-8.0.0', 'javy'))) && 'needs wasmtime, the CPython for WASI and Javy (bot/compiled/README.md)' }, async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const { versionsOf } = require('../arena/home');
+    const base = { owner: 'ros', name: 'ros', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
+    const w = fakeWindow({ 'ros.1': { ...base, kind: 'python', note: 'first', files: { 'bot.py': PY_BOT } } });
+    let down = true;
+    const put = w.putDoc;
+    w.putDoc = async (ns, id, doc) => {
+        if (down && doc.state !== 'checking') {
+            throw new Error('502 from the window');
+        }
+        return put(ns, id, doc);
+    };
+    const unsent = new Map();
+    await assert.rejects(intakeOnce({ window: w, unsent }), /502/);
+    assert.deepStrictEqual([w.docs['ros.1'].state, versionsOf('ros')], ['checking', [0, 1]]);
+    down = false;
+    await intakeOnce({ window: w, unsent });
+    assert.deepStrictEqual([w.docs['ros.1'].state, w.docs['ros.1'].version, versionsOf('ros')], ['accepted', 'ros-v1', [0, 1]], 'sent again, not entered again');
+
+    // an intake that died after the entry leaves the doc 'checking'; checked again, it gets the same version
+    w.docs['ros.1'] = { ...w.docs['ros.1'], state: 'checking', checkingAt: '2026-10-12T06:00:00Z', version: undefined };
+    assert.strictEqual(await intakeOnce({ window: w }), 1);
+    assert.deepStrictEqual([w.docs['ros.1'].state, w.docs['ros.1'].version, versionsOf('ros')], ['accepted', 'ros-v1', [0, 1]]);
+
+    const js = "const { serve } = require('./stdio');\nserve({ decide: (m) => ({ t: 'act', i: 0 }) });\n";
+    w.docs['ros.2'] = { ...base, kind: 'js', note: 'tested at home with stdio.js', files: { 'bot.js': js, 'stdio.js': fs.readFileSync(path.join(__dirname, '..', 'stdio.js'), 'utf8') } };
+    w.docs['ros.3'] = { ...base, kind: 'js', note: 'in a folder', entry: 'src/main.js', files: { 'src/main.js': js } };
+    assert.strictEqual(await intakeOnce({ window: w }), 2);
+    assert.deepStrictEqual(['ros.2', 'ros.3'].map((id) => [w.docs[id].state, w.docs[id].version ?? w.docs[id].error]), [['accepted', 'ros-v2'], ['accepted', 'ros-v3']]);
+});
+
+test('intake: a check that ends with no result is the arena\'s fault: the submission waits and is tried again, three times at most', async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const base = { owner: 'kim-b', name: 'kim_b', kind: 'js', note: 'try', state: 'pending', submittedAt: '2026-10-12T06:00:00Z', files: { 'bot.js': '' } };
+    const w = fakeWindow({ 'kim-b.1': { ...base }, 'kim-b.2': { ...base } });
+    let calls = 0;
+    const flaky = async (job) => (calls++, job.id === 'kim-b.2' && job.tries ? { ok: true, version: 'kim_b-v1', benched: false } : { ok: false, retry: true, error: 'the arena could not check it' });
+    const opts = { window: w, missing: () => null, checker: flaky };
+    assert.strictEqual(await intakeOnce(opts), 0);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => [d.state, d.tries, !!d.files]), [['pending', 1, true], ['pending', 1, true]], 'files kept for the next try');
+    assert.ok(Date.parse(w.docs['kim-b.1'].retryAt) > Date.now());
+    assert.strictEqual(await intakeOnce(opts), 0);
+    assert.strictEqual(calls, 2, 'not before retryAt');
+    const due = () => Object.values(w.docs).forEach((d) => d.retryAt && (d.retryAt = '2026-10-12T00:00:00Z'));
+    due();
+    assert.strictEqual(await intakeOnce(opts), 1);
+    assert.deepStrictEqual([w.docs['kim-b.1'].state, w.docs['kim-b.1'].tries, w.docs['kim-b.2'].state], ['pending', 2, 'accepted']);
+    due();
+    assert.strictEqual(await intakeOnce(opts), 1);
+    assert.strictEqual(w.docs['kim-b.1'].state, 'rejected');
+    assert.match(w.docs['kim-b.1'].error, /could not check it \(tried 3 times; submit it again later\)/);
+});
+
+test('intake: one intake at a time; one that is gone does not hold the place', () => {
+    const { onlyIntake } = require('../arena/intake');
+    const pidFile = path.join(process.env.ARENA_INTAKE_WORK, 'intake.pid');
+    fs.mkdirSync(process.env.ARENA_INTAKE_WORK, { recursive: true });
+    fs.writeFileSync(pidFile, '999999999');
+    assert.strictEqual(onlyIntake(), true, 'a pid that is not an intake');
+    assert.strictEqual(fs.readFileSync(pidFile, 'utf8'), String(process.pid));
+    const { spawn } = require('child_process');
+    const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', 'intake.js'], { stdio: 'ignore' });
+    try {
+        fs.writeFileSync(pidFile, String(other.pid));
+        assert.strictEqual(onlyIntake(), false);
+    } finally {
+        other.kill();
+        fs.rmSync(pidFile, { force: true });
     }
 });

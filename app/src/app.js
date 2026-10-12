@@ -943,7 +943,7 @@ function pageRounds(r) {
 function joinDiagram() {
   const box = (x, w, t, sub, stroke = 'var(--line-2)') => `<rect x="${x}" y="22" width="${w}" height="46" rx="6" style="fill:var(--raised);stroke:${stroke}" stroke-width="1.5"/><text x="${x + w / 2}" y="41" text-anchor="middle" class="pd-t">${t}</text><text x="${x + w / 2}" y="57" text-anchor="middle" class="pd-s">${sub}</text>`;
   const arrow = (x1, x2, label, dash = '') => `<line x1="${x1}" y1="45" x2="${x2 - 7}" y2="45" style="stroke:var(--muted)" stroke-width="1.5" ${dash}/><path d="M${x2 - 7} 40.5l7 4.5-7 4.5z" style="fill:var(--muted)"/><text x="${(x1 + x2) / 2}" y="15" text-anchor="middle" class="pd-s">${label}</text>`;
-  return `<figure class="pd"><svg viewBox="0 0 420 96" role="img" aria-label="Your Claude app connects to the arena's MCP address, signs in as you with GitHub, and reads games, replays, standings and research. Submitting bots comes with the hosted arena.">${box(4, 132, 'Your Claude app', 'claude.ai, Claude Code')}${arrow(136, 182, 'signs in as you')}${box(182, 92, 'SWU Arena', '/mcp', 'var(--accent)')}${arrow(274, 294, '')}${box(294, 122, 'Reads', 'games, replays, research')}<text x="228" y="88" text-anchor="middle" class="pd-s">submitting bots: with the hosted arena</text></svg><figcaption>Your app holds its own sign-in, cut off when you disconnect it or leave the invite list. It reads; it never changes anything.</figcaption></figure>`;
+  return `<figure class="pd"><svg viewBox="0 0 420 96" role="img" aria-label="Your Claude app connects to the arena's MCP address, signs in as you with GitHub, reads games, replays, standings and research, and submits your bots, which the arena plays in its sandbox.">${box(4, 132, 'Your Claude app', 'claude.ai, Claude Code')}${arrow(136, 182, 'signs in as you')}${box(182, 92, 'SWU Arena', '/mcp', 'var(--accent)')}${arrow(274, 294, '')}${box(294, 122, 'Reads, submits', 'games, research, your bots')}<text x="228" y="88" text-anchor="middle" class="pd-s">your bots play in the arena's sandbox</text></svg><figcaption>Your app holds its own sign-in, cut off when you disconnect it or leave the invite list. It reads, and submits your own bots; it changes nothing else.</figcaption></figure>`;
 }
 async function loadApps() {
   S.apps = { busy: true };
@@ -967,7 +967,7 @@ function pageJoin() {
   }
   const mcpUrl = `${location.origin}/mcp`, me = S.me, A = S.apps || {};
   if (me?.login && !S.apps) { S.apps = { busy: true }; setTimeout(loadApps); }
-  const head = `<div class="phead"><h1>Build a bot</h1><p class="lede">Connect your own Claude, or any app that speaks MCP, to the arena. It signs in as you with GitHub and reads everything here: games, replays, standings and research, so it can study the bots and help you write one. Submitting bots opens with the hosted arena; until then, bots enter through the project's swu_bot repo.</p></div>`;
+  const head = `<div class="phead"><h1>Build a bot</h1><p class="lede">Connect your own Claude, or any app that speaks MCP, to the arena. It signs in as you with GitHub and reads everything here: games, replays, standings and research, so it can study the bots and help you write one. Then it submits your bot (JavaScript, Python or WebAssembly): the arena checks it in a sandbox and plays every game itself.</p></div>`;
   if (!me?.login) {
     return `${head}<div class="grid"><section class="c7 box"><p>${me?.guest ? 'You came in by a view link. Connecting an app needs a GitHub sign-in on the invite list: ask Eric to add your GitHub username, then sign in.' : 'Sign in with GitHub to connect an app.'}</p></section><section class="c5 box">${joinDiagram()}</section></div>`;
   }
@@ -984,13 +984,13 @@ function pageJoin() {
       </ol></section>
     <section class="c5 box">${joinDiagram()}</section>
     <section class="c7 box"><div class="bh"><h3>Your connected apps</h3><span class="sub">as @${esc(me.login)}</span></div>${A.msg ? `<p class="good" style="margin-bottom:6px">${esc(A.msg)}</p>` : ''}${appsList}</section>
-    <section class="c5 box"><div class="bh"><h3>What your app can read</h3></div><ul class="plain" style="margin-top:6px"><li><span class="mono">arena_status</span>, <span class="mono">arena_standings</span>, <span class="mono">arena_report</span>: the builder tournament</li><li><span class="mono">window_docs</span>: every run, game list, evaluation and the ratings</li><li><span class="mono">window_replay</span>: a game move by move, with the board</li><li><span class="mono">whoami</span>: who it reads as</li></ul></section>
+    <section class="c5 box"><div class="bh"><h3>What your app can do</h3></div><ul class="plain" style="margin-top:6px"><li><span class="mono">arena_status</span>, <span class="mono">arena_standings</span>, <span class="mono">arena_report</span>: the builder tournament</li><li><span class="mono">window_docs</span>: every run, game list, evaluation and the ratings</li><li><span class="mono">window_replay</span>: a game move by move, with the board</li><li><span class="mono">arena_guide</span>, <span class="mono">arena_submit</span>, <span class="mono">arena_my_submissions</span>: write a bot, send it, see whether it passed and which version plays</li><li><span class="mono">whoami</span>: who it reads as, and your builder name</li></ul></section>
   </div>`;
 }
 /** Home's pointer to the Join page: the one place a signed-in person learns they can bring their own Claude. */
 function joinCard() {
   if (!HOSTED) return '';
-  return `<section class="box join-card"><div class="bh"><h3>Build a bot</h3><a class="more" href="${href('arena', 'join')}">How</a></div><p style="font-size:var(--fs-base)">Connect your own Claude to the arena: it signs in as you and reads every game, replay and finding here, to study the bots and help you write one.</p><p style="margin-top:8px"><a class="btn-link" href="${href('arena', 'join')}">Connect your Claude →</a></p></section>`;
+  return `<section class="box join-card"><div class="bh"><h3>Build a bot</h3><a class="more" href="${href('arena', 'join')}">How</a></div><p style="font-size:var(--fs-base)">Connect your own Claude to the arena: it signs in as you, reads every game, replay and finding here to help you write a bot, and submits it for you.</p><p style="margin-top:8px"><a class="btn-link" href="${href('arena', 'join')}">Connect your Claude →</a></p></section>`;
 }
 
 // ---------- pages: bots ----------

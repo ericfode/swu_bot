@@ -10,6 +10,7 @@ on:
       - 'studio/**'
       - 'dashboard/site/**'
       - 'meta/atlas-kit.js'
+      - 'spec/protocol.md'
       - 'Dockerfile'
       - '.dockerignore'
       - 'fly.toml'
