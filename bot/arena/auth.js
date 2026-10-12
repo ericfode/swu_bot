@@ -183,9 +183,11 @@ function createAuth({ dir, invites = () => [], links = () => [], env = process.e
                 page(res, 404, signInPage('/', null, 'That view link was removed, or it never existed. Ask Eric for a new one.'));
                 return true;
             }
-            // someone already let in (Eric trying his own link) keeps their own session; the browser keeps the #/page
+            // someone signed in and let in (Eric trying his own link) keeps their own session; a guest gets this link's,
+            // so their access follows the link they opened last; the browser keeps the #/page
             const cur = who(req);
-            redirect(res, '/', atLeast(cur.role, 'friend') && cur.via === 'cookie' ? [] : [cookie(SESSION, sign({ v: link.id, exp: now() + VIEW_DAYS * 864e5 }), VIEW_DAYS * 86400)]);
+            const keep = atLeast(cur.role, 'friend') && cur.via === 'cookie' && cur.login;
+            redirect(res, '/', keep ? [] : [cookie(SESSION, sign({ v: link.id, exp: now() + VIEW_DAYS * 864e5 }), VIEW_DAYS * 86400)]);
             return true;
         }
         if (!url.pathname.startsWith('/auth/')) {

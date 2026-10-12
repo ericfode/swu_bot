@@ -299,12 +299,18 @@ test('view links: a guest reads with no sign-in while the link exists, and never
         const mine = await go(`/v/${key}`, { cookie: eric });
         assert.strictEqual(mine.status, 302);
         assert.strictEqual(mine.headers.getSetCookie().length, 0);
+        // a guest who opens a second link moves onto it
+        const second = (await (await post({ addLink: 'Sam, second' })).json()).result.links.at(-1);
+        const moved = (await go(`/v/${second.key}`, { cookie: guest })).headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
 
-        // removing the link locks the guest out at once
-        assert.deepStrictEqual((await (await post({ removeLink: id })).json()).result.links, []);
+        // removing a link locks its guests out at once; the one who moved on stays in until their link goes too
+        assert.deepStrictEqual((await (await post({ removeLink: id })).json()).result.links.map((l) => l.id), [second.id]);
         assert.strictEqual((await go('/api/app', { cookie: guest })).status, 401);
         assert.match(await (await go('/', { cookie: guest })).text(), /Sign in with GitHub/);
         assert.strictEqual((await go(`/v/${key}`)).status, 404);
+        assert.strictEqual((await go('/api/app', { cookie: moved })).status, 200);
+        await post({ removeLink: second.id });
+        assert.strictEqual((await go('/api/app', { cookie: moved })).status, 401);
     } finally {
         await close();
     }
