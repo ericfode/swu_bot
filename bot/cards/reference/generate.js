@@ -55,6 +55,9 @@ async function generate(options) {
     }
     const engineBuild = prepareEngine();
     const poolSha256 = sha256(poolBytes), provenance = sourceIdentity();
+    // Immutable oracle traces must come from the pinned engine; a source archive without Git metadata relies on the hashes.
+    assert.ok(!provenance.engineRevision || !provenance.expectedEngineRevision || provenance.engineRevision === provenance.expectedEngineRevision,
+        `forceteki is at ${provenance.engineRevision} but this repo pins ${provenance.expectedEngineRevision}; run git submodule update --init`);
     provenance.buildVerification = engineBuild;
     provenance.sourceCatalogueSha256 = sha256(fs.readFileSync(cataloguePath));
     provenance.nodeVersion = process.version;
