@@ -64,6 +64,40 @@ enum Trigger {
     Program(usize, u16),
 }
 
+fn reviewed_weakness_entry(entry:&Value)->bool {
+    if entry["setCode"]!="TOKEN_WEAKNESS" {return false;}
+    let expected:Value=serde_json::from_str(r#"{
+  "title": "Weakness",
+  "subtitle": "",
+  "cost": 0,
+  "hp": -1,
+  "power": -1,
+  "text": "",
+  "deployBox": null,
+  "epicAction": "",
+  "unique": false,
+  "rules": null,
+  "upgradePower": -1,
+  "upgradeHp": -1,
+  "id": "7816991190",
+  "aspects": [],
+  "traits": [
+    "condition"
+  ],
+  "keywords": [],
+  "types": [
+    "token",
+    "upgrade"
+  ],
+  "setId": {
+    "set": "HMW"
+  },
+  "internalName": "weakness"
+}"#).expect("reviewed Weakness metadata");
+    entry["setCode"]=="TOKEN_WEAKNESS" && entry["sourceHash"]=="dd546e4886757d77fffeb8be6e7381144fa7378b6493ce444aa87e4ba1202778" && entry["baseClass"]=="TokenUpgradeCard" && entry["card"]==expected && entry["keywordValues"]==serde_json::json!({}) && entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]}) && entry["attachCondition"].is_null()
+}
+fn program_needs_weakness(program:&Program)->bool {program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::GiveWeakness{..})))}
+
 impl Engine {
     pub(super) fn needs_hidden_history(&self) -> bool {
         fn grants(v:&Value)->bool {match v {Value::Object(o)=>o.get("keyword").is_some_and(|k| k=="hidden") || o.values().any(grants),Value::Array(a)=>a.iter().any(grants),_=>false}}
@@ -76,16 +110,18 @@ impl Engine {
     /// Load every fully executable card, retaining explicit reasons for all others.
     pub fn from_catalogue_value(value: &Value) -> Result<Self, String> {
         let mut catalogue = Catalogue::load(value)?;
+        let weakness_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_weakness_entry);
         let mut definitions = Vec::new();
         let mut by_code = HashMap::new();
         let mut shield_def = None;
         let mut experience_def = None;
+        let mut weakness_def = None;
         for entry in value["cards"].as_array().ok_or("catalogue missing cards")? {
             let code = entry["setCode"]
                 .as_str()
                 .ok_or("catalogue card missing code")?
                 .to_owned();
-            let native_token = matches!(code.as_str(), "TOKEN_SHIELD" | "TOKEN_EXPERIENCE");
+            let native_token = matches!(code.as_str(), "TOKEN_SHIELD" | "TOKEN_EXPERIENCE" | "TOKEN_WEAKNESS");
             if !native_token && !catalogue.cards.contains_key(&code) {
                 continue;
             }
@@ -99,17 +135,18 @@ impl Engine {
                     }
                 }
                 let programs = catalogue.cards.get(&code).cloned().unwrap_or_default();
+                if !weakness_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])) {return Err("Weakness token unavailable; dependent source cannot execute".into());}
                 if programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|catalogue.programs[*p as usize].trigger=="onDefense") && (!info.is("unit") || info.is("leader") || info.is("token") || entry["baseClass"]!="NonLeaderUnitCard" || !programs.unit.is_empty() || !programs.leader.is_empty()) {return Err("OnDefense currently requires an ordinary nonleader unit source".into());}
                 if native_token {
                     let expected_hash = if code == "TOKEN_SHIELD" {
                         "39f1c6699c36ba309a8fe8e053f9b94ddbb8877991767b6664fcd88d447be91f"
-                    } else {
+                    } else if code=="TOKEN_EXPERIENCE" {
                         "fccf00d13061bfc15447101a0dc82fc360f9b5d2e28a9da678684e8c93bc9d67"
-                    };
+                    } else {"dd546e4886757d77fffeb8be6e7381144fa7378b6493ce444aa87e4ba1202778"};
                     if entry["sourceHash"] != expected_hash {
                         return Err("native token source changed; adapter requires review".into());
                     }
-                    let bonus = if code == "TOKEN_SHIELD" { 0 } else { 1 };
+                    let bonus = if code == "TOKEN_SHIELD" { 0 } else if code=="TOKEN_EXPERIENCE" {1} else {-1};
                     for field in ["power", "hp", "upgradePower", "upgradeHp"] {
                         if entry["card"][field] != bonus {
                             return Err(format!(
@@ -119,9 +156,10 @@ impl Engine {
                     }
                     let expected = if code == "TOKEN_SHIELD" {
                         "shield"
-                    } else {
+                    } else if code=="TOKEN_EXPERIENCE" {
                         "experience"
-                    };
+                    } else {"weakness"};
+                    if code=="TOKEN_WEAKNESS" && !reviewed_weakness_entry(entry) {return Err("native Weakness metadata differs from reviewed adapter".into());}
                     if info.internal_name != expected || !info.is("token") || !info.is("upgrade") {
                         return Err("invalid native token metadata".into());
                     }
@@ -243,6 +281,7 @@ impl Engine {
                     if code == "TOKEN_EXPERIENCE" {
                         experience_def = Some(id);
                     }
+                    if code=="TOKEN_WEAKNESS" {weakness_def=Some(id);}
                     catalogue.rejected.remove(&code);
                     catalogue
                         .metadata
@@ -267,6 +306,7 @@ impl Engine {
             by_code,
             shield_def: shield_def.ok_or("catalogue must include native Shield token")?,
             experience_def,
+            weakness_def,
             rules_backend: RulesBackend::Auto,
             rules_instrumentation: false,
             rules_hits: Default::default(),
@@ -355,6 +395,7 @@ impl Engine {
         if !included.contains("TOKEN_SHIELD") {
             return Err("pool must include TOKEN_SHIELD".into());
         }
+        if !included.contains("TOKEN_WEAKNESS") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])))) {return Err("pool containing GiveWeakness cards must include reviewed TOKEN_WEAKNESS".into());}
         catalogue.metadata.retain(|code, _| included.contains(code));
         engine.pool_hash = format!("{:x}", Sha256::digest(pool_bytes));
         Ok(engine)
@@ -917,6 +958,7 @@ impl Engine {
             | Effect::Draw { target, amount }
             | Effect::GiveShield { target, amount }
             | Effect::GiveExperience { target, amount }
+            | Effect::GiveWeakness {target,amount}
             | Effect::GainKeyword { target, amount, .. } => (
                 target,
                 self.eval(&context, source, context.ability_target, amount)
@@ -964,7 +1006,7 @@ impl Engine {
                                 && (unit || self.attached_in_play(s,id) || s.player(s.card(id).owner).discard.contains(id))
                         }
                         Effect::ModifyStats { .. } | Effect::GainKeyword { .. } | Effect::LoseKeyword { .. } => unit,
-                        Effect::GiveShield { .. } | Effect::GiveExperience { .. } => {
+                        Effect::GiveShield { .. } | Effect::GiveExperience { .. } | Effect::GiveWeakness{..} => {
                             unit && amount > 0
                         }
                         _ => false,
@@ -1800,6 +1842,7 @@ impl Engine {
             | Effect::Draw { target, amount }
             | Effect::GiveShield { target, amount }
             | Effect::GiveExperience { target, amount }
+            | Effect::GiveWeakness {target,amount}
             | Effect::GainKeyword { target, amount, .. } => (target, self.effect_amount(s, amount)?),
             Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
@@ -1941,6 +1984,14 @@ impl Engine {
                             if !s.event_group.resolving {self.capture_explicit_death(s,id)?;}
                             self.leave_play(s,id)?;
                             result += 1;
+                        }
+                        Effect::GiveWeakness{..} if in_arena => {
+                            if amount!=1 {return Err("Weakness amount must be one".into());}
+                            let def=self.weakness_def.ok_or("catalogue needs Weakness token")?;
+                            if s.next_id as usize>=MAX_CARDS {return Err("card capacity exceeded creating Weakness".into());}
+                            let token=s.next_id;s.next_id+=1;
+                            *s.card_mut(token)=Card{present:true,def,owner:s.card(id).owner,..Card::default()};
+                            self.attach(s,token,id);result+=1;
                         }
                         Effect::GiveShield { .. } | Effect::GiveExperience { .. } if in_arena => {
                             for _ in 0..amount {

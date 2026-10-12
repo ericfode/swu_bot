@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "bbc6f2b78e3f641cfa74e1b1ac8b6ad8052975e3d37522f54c00c2ab027e40f8",
+  "compilerHash": "79ec549bbbe9101ccd6b66a9c7be71ba3e1c18daf4957847bed817ed44d82f09",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -44058,7 +44058,27 @@
       "sourceHash": "b6bf140700204eddf346761dc1e23342a1d3913d269290c762a1c4d5a8899b1d",
       "abilities": {
         "leader": [],
-        "unit": [],
+        "unit": [
+          {
+            "trigger": "onAttack",
+            "title": "Give a Weakness token to a unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            }
+          }
+        ],
         "card": []
       },
       "diagnostics": [
@@ -44069,14 +44089,6 @@
           "file": "game/cards/09_HMW/leaders/DoctorHemlockEmotionHasNoPlaceHere.ts",
           "line": 22,
           "column": 60
-        },
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/leaders/DoctorHemlockEmotionHasNoPlaceHere.ts",
-          "line": 34,
-          "column": 34
         }
       ],
       "className": "DoctorHemlockEmotionHasNoPlaceHere",
@@ -44126,7 +44138,12 @@
       "dataHash": "ee8fb5d093b3ece7b9913e19a19689c300669126a243406706d0831030aea3c6",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:leader"
+        "cardType:leader",
+        "ir:const",
+        "ir:giveWeakness",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:onAttack"
       ]
     },
     {
@@ -45497,19 +45514,77 @@
       "sourcePath": "game/cards/09_HMW/leaders/BosskCruelHunter.ts",
       "sourceHash": "aa306d31f98ef67e307d3aff960140990a57dd5d9b71ee4e768f14ec63e4e1ed",
       "abilities": {
-        "leader": [],
+        "leader": [
+          {
+            "trigger": "action",
+            "title": "Heal 1 damage from a damaged enemy unit and give a Weakness token to it",
+            "costs": [
+              {
+                "kind": "exhaustSelf"
+              }
+            ],
+            "targetResolver": {
+              "owner": "opponent",
+              "type": "any",
+              "zone": "anyAttackable",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "isUnit",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "!==",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "damage"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 0
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "simultaneous",
+              "effects": [
+                {
+                  "kind": "heal",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                },
+                {
+                  "kind": "giveWeakness",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                }
+              ]
+            }
+          }
+        ],
         "unit": [],
         "card": []
       },
       "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/leaders/BosskCruelHunter.ts",
-          "line": 23,
-          "column": 21
-        },
         {
           "code": "UNSUPPORTED_SOURCE",
           "pattern": "unsupported-query:isTokenUpgrade",
@@ -45566,7 +45641,23 @@
       "dataHash": "e13912f4f2eb2720bfef9550cf4af1cf1afa03b539211b27157338be533bed87",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:leader"
+        "binary:!==",
+        "binary:&&",
+        "cardType:leader",
+        "ir:binary",
+        "ir:const",
+        "ir:exhaustSelf",
+        "ir:giveWeakness",
+        "ir:heal",
+        "ir:query",
+        "ir:ref",
+        "ir:simultaneous",
+        "query:isUnit",
+        "ref:card",
+        "ref:card.damage",
+        "targetType:any",
+        "targetZone:anyAttackable",
+        "trigger:action"
       ]
     },
     {
@@ -48769,23 +48860,34 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenDefeated",
+            "title": "Give a Weakness token to a unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/CloneXAssassin.ts",
-          "line": 20,
-          "column": 34
-        }
-      ],
+      "diagnostics": [],
       "className": "CloneXAssassin",
       "baseClass": "NonLeaderUnitCard",
       "id": "9805871839",
       "internalName": "clone-x-assassin",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Clone X Assassin",
         "subtitle": "",
@@ -48829,7 +48931,12 @@
       "dataHash": "542ad60f6989ff1e9c426571bba3ce6e3fcc3ce27a91d9618fa0443b90286884",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "cardType:unit",
+        "ir:const",
+        "ir:giveWeakness",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenDefeated"
       ]
     },
     {
@@ -49009,17 +49116,29 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Give a Weakness token to a unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            }
+          }
+        ]
       },
       "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/NuvoVindiBlueShadowPerfected.ts",
-          "line": 21,
-          "column": 34
-        },
         {
           "code": "UNSUPPORTED_SOURCE",
           "pattern": "trigger-alias-hook:onCardDefeated",
@@ -49075,7 +49194,12 @@
       "dataHash": "71c2aa6d67e2f4117e75f957ea2c1c33b32ea802ef2ef89d52a2a04c3800cd19",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "cardType:unit",
+        "ir:const",
+        "ir:giveWeakness",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -49401,24 +49525,34 @@
                 }
               }
             }
+          },
+          {
+            "trigger": "onAttack",
+            "title": "Give a Weakness token to a unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            }
           }
         ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/CloneOfTheZilloBeastEmperorsExperiment.ts",
-          "line": 27,
-          "column": 34
-        }
-      ],
+      "diagnostics": [],
       "className": "CloneOfTheZilloBeastEmperorsExperiment",
       "baseClass": "NonLeaderUnitCard",
       "id": "2558977875",
       "internalName": "clone-of-the-zillo-beast#emperors-experiment",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Clone of the Zillo Beast",
         "subtitle": "Emperor's Experiment",
@@ -49466,6 +49600,7 @@
         "cardType:unit",
         "ir:binary",
         "ir:const",
+        "ir:giveWeakness",
         "ir:modifyStats",
         "ir:query",
         "ir:ref",
@@ -49473,8 +49608,10 @@
         "ref:card",
         "ref:source",
         "targetType:unit",
+        "targetZone:anyAttackable",
         "targetZone:arena",
-        "trigger:constant"
+        "trigger:constant",
+        "trigger:onAttack"
       ]
     },
     {
@@ -51395,23 +51532,64 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenDefeated",
+            "title": "Give a Weakness token to a damaged unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "isUnit",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "!==",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "damage"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 0
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/VenomousWyyyshokk.ts",
-          "line": 21,
-          "column": 34
-        }
-      ],
+      "diagnostics": [],
       "className": "VenomousWyyyshokk",
       "baseClass": "NonLeaderUnitCard",
       "id": "5121155857",
       "internalName": "venomous-wyyyshokk",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Venomous Wyyyshokk",
         "subtitle": "",
@@ -51452,7 +51630,20 @@
       "dataHash": "cc7d14288609c96237d7f7730947b879dfe171df5c4f2ce011d1c1f5c4f4a07c",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "binary:!==",
+        "binary:&&",
+        "cardType:unit",
+        "ir:binary",
+        "ir:const",
+        "ir:giveWeakness",
+        "ir:query",
+        "ir:ref",
+        "query:isUnit",
+        "ref:card",
+        "ref:card.damage",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenDefeated"
       ]
     },
     {
@@ -52187,23 +52378,34 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Give a Weakness token to a unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/upgrades/DireProwess.ts",
-          "line": 20,
-          "column": 34
-        }
-      ],
+      "diagnostics": [],
       "className": "DireProwess",
       "baseClass": "UpgradeCard",
       "id": "3828978526",
       "internalName": "dire-prowess",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Dire Prowess",
         "subtitle": "",
@@ -52243,7 +52445,12 @@
       "dataHash": "84068f3ac1e4df3a3e6f67cda0b8d7b4109a95c14fe1c12cfc2c5813f1c60725",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:giveWeakness",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -52393,23 +52600,119 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "event",
+            "title": "Give a Weakness token to a unit. If you control a Naboo base, give 2 Weakness tokens to that unit instead.",
+            "costs": [],
+            "contextTitle": [
+              {
+                "kind": "const",
+                "value": "Give "
+              },
+              {
+                "kind": "conditional",
+                "condition": {
+                  "kind": "query",
+                  "name": "hasSomeTrait",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "player",
+                      "base"
+                    ]
+                  },
+                  "args": [
+                    {
+                      "kind": "const",
+                      "value": "naboo"
+                    }
+                  ]
+                },
+                "then": {
+                  "kind": "const",
+                  "value": "2 Weakness tokens"
+                },
+                "else": {
+                  "kind": "const",
+                  "value": "a Weakness token"
+                }
+              },
+              {
+                "kind": "const",
+                "value": " to "
+              },
+              {
+                "kind": "conditional",
+                "condition": {
+                  "kind": "ref",
+                  "path": [
+                    "target"
+                  ]
+                },
+                "then": {
+                  "kind": "ref",
+                  "path": [
+                    "target",
+                    "title"
+                  ]
+                },
+                "else": {
+                  "kind": "const",
+                  "value": "a unit"
+                }
+              },
+              {
+                "kind": "const",
+                "value": ""
+              }
+            ],
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "giveWeakness",
+              "target": "chosen",
+              "amount": {
+                "kind": "conditional",
+                "condition": {
+                  "kind": "query",
+                  "name": "hasSomeTrait",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "player",
+                      "base"
+                    ]
+                  },
+                  "args": [
+                    {
+                      "kind": "const",
+                      "value": "naboo"
+                    }
+                  ]
+                },
+                "then": {
+                  "kind": "const",
+                  "value": 2
+                },
+                "else": {
+                  "kind": "const",
+                  "value": 1
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/events/Torrent.ts",
-          "line": 21,
-          "column": 34
-        }
-      ],
+      "diagnostics": [],
       "className": "Torrent",
       "baseClass": "EventCard",
       "id": "0404309004",
       "internalName": "torrent",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Torrent",
         "subtitle": "",
@@ -52449,7 +52752,20 @@
       "dataHash": "830fe51a341174ad8243e27a1c717e147685305b2ad210d321e465630a942c4c",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:event"
+        "ability:then",
+        "cardType:event",
+        "ir:conditional",
+        "ir:const",
+        "ir:giveWeakness",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:player.base",
+        "ref:target",
+        "ref:target.title",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:event"
       ]
     },
     {
@@ -60588,11 +60904,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
+          "pattern": "deck-discard-event-result-capture",
+          "message": "deck-discard-event-result-capture",
           "file": "game/cards/09_HMW/units/QimirEveryoneHasAWeakness.ts",
-          "line": 29,
-          "column": 38
+          "line": 16,
+          "column": 42
         }
       ],
       "className": "QimirEveryoneHasAWeakness",
@@ -60784,23 +61100,47 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Creat a Beast token",
+            "costs": [],
+            "effect": {
+              "kind": "createTokenUnit",
+              "tokenType": "beast",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              },
+              "target": "ownPlayer",
+              "entersReady": false
+            },
+            "then": {
+              "title": "Give a Weakness token to a friendly unit",
+              "costs": [],
+              "targetResolver": {
+                "owner": "self",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "giveWeakness",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 1
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/GeonosianPicador.ts",
-          "line": 23,
-          "column": 38
-        }
-      ],
+      "diagnostics": [],
       "className": "GeonosianPicador",
       "baseClass": "NonLeaderUnitCard",
       "id": "0790563774",
       "internalName": "geonosian-picador",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Geonosian Picador",
         "subtitle": "",
@@ -60842,7 +61182,14 @@
       "dataHash": "8c4a652459339a00abcc9ea31371073732c80af898df480d1f24265d60420490",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:then",
+        "cardType:unit",
+        "ir:const",
+        "ir:createTokenUnit",
+        "ir:giveWeakness",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -60993,23 +61340,79 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Deal 1 damage to a unit and give a Weakness token to it",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "simultaneous",
+              "effects": [
+                {
+                  "kind": "damage",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                },
+                {
+                  "kind": "giveWeakness",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "trigger": "whenDefeated",
+            "title": "Deal 1 damage to a unit and give a Weakness token to it",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "simultaneous",
+              "effects": [
+                {
+                  "kind": "damage",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                },
+                {
+                  "kind": "giveWeakness",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                }
+              ]
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/InfernoSquadWeCanGrieveLater.ts",
-          "line": 26,
-          "column": 21
-        }
-      ],
+      "diagnostics": [],
       "className": "InfernoSquadWeCanGrieveLater",
       "baseClass": "NonLeaderUnitCard",
       "id": "9241047444",
       "internalName": "inferno-squad#we-can-grieve-later",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Inferno Squad",
         "subtitle": "We Can Grieve Later",
@@ -61052,7 +61455,15 @@
       "dataHash": "b462532e7c8d514d1775853c6ca4d19f1ddfbf432510a6f3ba21f1ce57b402a1",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "cardType:unit",
+        "ir:const",
+        "ir:damage",
+        "ir:giveWeakness",
+        "ir:simultaneous",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenDefeated",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -63263,23 +63674,56 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Give a Weakness token to a unit. If it's a unique unit, exhaust it",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "sequence",
+              "effects": [
+                {
+                  "kind": "giveWeakness",
+                  "target": "chosen",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                },
+                {
+                  "kind": "conditional",
+                  "condition": {
+                    "kind": "ref",
+                    "path": [
+                      "target",
+                      "unique"
+                    ]
+                  },
+                  "onTrue": {
+                    "kind": "exhaust",
+                    "target": "chosen"
+                  },
+                  "onFalse": {
+                    "kind": "noAction"
+                  }
+                }
+              ]
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/DragonboatFreighter.ts",
-          "line": 21,
-          "column": 21
-        }
-      ],
+      "diagnostics": [],
       "className": "DragonboatFreighter",
       "baseClass": "NonLeaderUnitCard",
       "id": "0148750669",
       "internalName": "dragonboat-freighter",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Dragonboat Freighter",
         "subtitle": "",
@@ -63322,7 +63766,18 @@
       "dataHash": "dc3e9e2f53c9083d9d2c42daec363392f232e7c40ae96ead9f6ce5add32750ac",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "cardType:unit",
+        "ir:conditional",
+        "ir:const",
+        "ir:exhaust",
+        "ir:giveWeakness",
+        "ir:noAction",
+        "ir:ref",
+        "ir:sequence",
+        "ref:target.unique",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -64249,23 +64704,56 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Give a Weakness token to a unit",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable"
+            },
+            "effect": {
+              "kind": "conditional",
+              "condition": {
+                "kind": "binary",
+                "op": ">=",
+                "left": {
+                  "kind": "ref",
+                  "path": [
+                    "player",
+                    "resources",
+                    "length"
+                  ]
+                },
+                "right": {
+                  "kind": "const",
+                  "value": 6
+                }
+              },
+              "onTrue": {
+                "kind": "giveWeakness",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 1
+                }
+              },
+              "onFalse": {
+                "kind": "noAction"
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:giveWeakness",
-          "message": "immediateEffect:giveWeakness",
-          "file": "game/cards/09_HMW/units/OccupationOfficer.ts",
-          "line": 22,
-          "column": 29
-        }
-      ],
+      "diagnostics": [],
       "className": "OccupationOfficer",
       "baseClass": "NonLeaderUnitCard",
       "id": "8778272573",
       "internalName": "occupation-officer",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Occupation Officer",
         "subtitle": "",
@@ -64306,7 +64794,18 @@
       "dataHash": "aa86cef168b1095d7fc2491090595431a8fb7c3402015e41923ba63767f93668",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "binary:>=",
+        "cardType:unit",
+        "ir:binary",
+        "ir:conditional",
+        "ir:const",
+        "ir:giveWeakness",
+        "ir:noAction",
+        "ir:ref",
+        "ref:player.resources.length",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {

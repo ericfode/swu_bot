@@ -709,6 +709,10 @@ function effect(input, context, defaultTarget = 'self') {
         knownProperties(obj, ['cardTypeFilter', 'controller', 'zoneFilter', 'cardCondition', 'optional', 'mode', 'numCards', 'canChooseNoCards', 'immediateEffect', 'choosingPlayer']);
         return { kind: 'select', targetResolver: targetResolverProperties(obj), effect: effect(obj.props.get('immediateEffect'), obj.ctx, 'chosen') };
     }
+    if (kind === 'giveWeakness') {
+        knownProperties(obj, ['amount', 'target']);
+        return { kind, target: target(obj.props.get('target'), obj.ctx, defaultTarget), amount: obj.props.has('amount') ? expr(obj.props.get('amount'), obj.ctx) : constant(1) };
+    }
     if (!BASIC_EFFECTS.has(kind)) fail(ctx, node, 'immediateEffect:' + kind);
     knownProperties(obj, ['amount', 'target', 'isCost', 'type', 'damageType', 'isIndirect', 'cannotBePrevented']);
     if (obj.props.has('isCost') && literal(obj.props.get('isCost'), obj.ctx)) fail(ctx, node, 'effect-is-cost');

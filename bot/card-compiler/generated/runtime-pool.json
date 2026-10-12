@@ -4361,6 +4361,47 @@
         "vigilance",
         "villainy"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "9805871839",
+      "internalName": "clone-x-assassin",
+      "keywords": [],
+      "power": 1,
+      "rules": null,
+      "setCode": "HMW_059",
+      "setCodes": [
+        {
+          "number": 59,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 59,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Defeated: You may give a Weakness token to a unit.",
+      "title": "Clone X Assassin",
+      "traits": [
+        "imperial",
+        "clone",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
@@ -4961,6 +5002,44 @@
         "naboo",
         "vehicle",
         "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "5121155857",
+      "internalName": "venomous-wyyyshokk",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "HMW_087",
+      "setCodes": [
+        {
+          "number": 87,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 87,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Defeated: You may give a Weakness token to a damaged unit.",
+      "title": "Venomous Wyyyshokk",
+      "traits": [
+        "creature"
       ],
       "types": [
         "unit"
@@ -7775,6 +7854,44 @@
       ],
       "types": [
         "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "8778272573",
+      "internalName": "occupation-officer",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "HMW_242",
+      "setCodes": [
+        {
+          "number": 242,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 242,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: If you control 6 or more resources, you may give a Weakness token to a unit.",
+      "title": "Occupation Officer",
+      "traits": [
+        "imperial"
+      ],
+      "types": [
+        "unit"
       ],
       "unique": false,
       "upgradeHp": null,
@@ -30998,6 +31115,35 @@
       "unique": false,
       "upgradeHp": null,
       "upgradePower": null
+    },
+    {
+      "aspects": [],
+      "cost": 0,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": -1,
+      "id": "7816991190",
+      "internalName": "weakness",
+      "keywords": [],
+      "power": -1,
+      "rules": null,
+      "setCode": "TOKEN_WEAKNESS",
+      "setId": {
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "",
+      "title": "Weakness",
+      "traits": [
+        "condition"
+      ],
+      "types": [
+        "token",
+        "upgrade"
+      ],
+      "unique": false,
+      "upgradeHp": -1,
+      "upgradePower": -1
     },
     {
       "arena": "space",

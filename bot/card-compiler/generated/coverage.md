@@ -1,6 +1,6 @@
 # Card source conversion coverage
 
-Known card definitions: **2458**. IR-converted definitions: **1044** (672 from source AST; 372 metadata-only plain cards). Explicitly blocked definitions: **1414**. Excluded test mocks: 21.
+Known card definitions: **2458**. IR-converted definitions: **1053** (681 from source AST; 372 metadata-only plain cards). Explicitly blocked definitions: **1405**. Excluded test mocks: 21.
 
 These counts measure bounded IR conversion, not runtime acceptance. Metadata-only conversion handles plain bases and fully parsed keyword-only units without a source class. The Rust runtime separately validates its supported operation set. Unsupported definitions retain their source locations and must not be loaded as no-op cards.
 
@@ -43,7 +43,6 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | immediateEffect:createCreditToken | 14 | 15 |
 | immediateEffect:takeControlOfUnit | 14 | 14 |
 | registrar:addPilotingGainAbilityTargetingAttached | 14 | 14 |
-| immediateEffect:giveWeakness | 13 | 13 |
 | registrar:addDamageModificationAbility | 13 | 14 |
 | registrar:addGainConstantAbilityTargetingAttached | 13 | 13 |
 | trigger-alias-hook:onPhaseStarted | 13 | 13 |
@@ -113,6 +112,7 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | class-state:cardsEnteredPlayThisPhaseWatcher | 4 | 4 |
 | constant-stat-dependency | 4 | 6 |
 | coordinate-trigger | 4 | 4 |
+| deck-discard-event-result-capture | 4 | 4 |
 | immediateEffect:indirectDamageToPlayer | 4 | 4 |
 | immediateEffect:lookAt | 4 | 4 |
 | immediateEffect:randomSelection | 4 | 4 |
@@ -138,7 +138,6 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | class-state:cardsLeftPlayThisPhase | 3 | 3 |
 | class-state:damageDealtWatcher | 3 | 3 |
 | class-state:unitsEnteredPlayThisPhaseWatcher | 3 | 3 |
-| deck-discard-event-result-capture | 3 | 3 |
 | immediateEffect:exhaustResources | 3 | 3 |
 | immediateEffect:forThisRoundCardEffect | 3 | 4 |
 | immediateEffect:optional | 3 | 3 |

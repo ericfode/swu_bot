@@ -25,6 +25,8 @@ full source, helper defaults, costs, timing, optionality, zones, controller iden
 continuations and dynamic values. Reject unsupported fields and partial cards.
 Check source class and card-type metadata together: a trusted class name must not
 admit a raw definition with incompatible leader, token, upgrade or mixed types.
+A primitive that requires a native token must reject dependent cards when the
+reviewed token definition is absent or malformed, including selected-pool loads.
 New compiler lowering does not imply executable runtime support.
 
 ## Automatic pipeline first

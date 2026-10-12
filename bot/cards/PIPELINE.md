@@ -146,6 +146,16 @@ delay the remaining prompts until after payment. Effects wait for both choices.
 Unique-source departure, recipient reentry, overlapping trait recipients, lethal
 expiry, and token/deployed-leader interactions remain explicit coverage gaps.
 
+Weakness experiments cover optional play/death registrations, both controllers,
+damaged-only choices, exact resource thresholds, the entering source, signed
+stat stacking and zero-power clamping, lethal HP loss, and native token/deployed
+leader recipients. Creation and attachment observations preserve actual token
+identity, recipient ownership and attachment order. Removing a negative HP
+attachment cannot undo a defeat already captured. The native token adapter is
+reviewed separately from the three printed source cards; its setup appearance
+is not an ordinary token-play witness. Mixed attachment cleanup, removal/return,
+replacement, and multiple-recipient or mixed-effect groups remain explicit gaps.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

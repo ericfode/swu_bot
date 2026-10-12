@@ -38,6 +38,7 @@ pub struct Engine {
     by_code: HashMap<String, u16>,
     shield_def: u16,
     experience_def: Option<u16>,
+    weakness_def: Option<u16>,
     catalogue: Option<Catalogue>,
     rules_backend: RulesBackend,
     rules_instrumentation: bool,
@@ -217,6 +218,7 @@ impl Engine {
             by_code,
             shield_def: shield_def.ok_or("pool must include TOKEN_SHIELD")?,
             experience_def: None,
+            weakness_def: None,
             catalogue: None,
             rules_backend: RulesBackend::Auto,
             rules_instrumentation: false,
@@ -315,7 +317,7 @@ impl Engine {
         Ok(())
     }
     fn upgrade_stats(&self,s:&State,parent:CardId)->(i64,i64) {
-        self.upgrades(s,parent).iter().filter(|id|!self.def(s,**id).info.is("token")).fold((0,0),|a,id| {
+        self.upgrades(s,parent).iter().filter(|id|!self.def(s,**id).info.is("token") || Some(s.card(**id).def)==self.weakness_def).fold((0,0),|a,id| {
             let info=&self.def(s,*id).info;(a.0+info.upgrade_power.unwrap_or(0) as i64,a.1+info.upgrade_hp.unwrap_or(0) as i64)
         })
     }
@@ -1408,7 +1410,7 @@ impl Engine {
                     s.card_mut(id).experience = uid;
                     prior
                 } else {
-                    if !self.def(s,uid).info.is("upgrade") || self.def(s,uid).info.is("token") {return Err("unsupported attachment type".into());}
+                    if !self.def(s,uid).info.is("upgrade") || (self.def(s,uid).info.is("token") && Some(s.card(uid).def)!=self.weakness_def) {return Err("unsupported attachment type".into());}
                     0
                 };
                 s.card_mut(uid).next_token = prior;

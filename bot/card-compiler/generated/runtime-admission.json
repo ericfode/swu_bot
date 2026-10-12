@@ -1,13 +1,13 @@
 {
-  "catalogueHash": "89d76fe64296ef73b072163937cee2343465b4cbe6c30eeb26ab6365636d17fb",
+  "catalogueHash": "174c5ffb99290ad6f86902487b1e5eb8da11cefe4bfaaf15ba3da98aaf4010ec",
   "dataOnlyConvertedCount": 372,
   "gameConformance": "not assessed by this report",
-  "irConvertedCount": 1044,
+  "irConvertedCount": 1053,
   "knownCards": 2458,
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
-    "nativeAdapters": 2,
-    "sourceIr": 527
+    "nativeAdapters": 3,
+    "sourceIr": 530
   },
   "runtimeAdmittedCards": [
     {
@@ -562,6 +562,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "clone-x-assassin",
+      "setCode": "HMW_059"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "director-krennic#the-work-has-stalled",
       "setCode": "HMW_061"
     },
@@ -634,6 +639,11 @@
       "implementation": "sourceIr",
       "internalName": "n1-patroller",
       "setCode": "HMW_086"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "venomous-wyyyshokk",
+      "setCode": "HMW_087"
     },
     {
       "implementation": "dataOnly",
@@ -984,6 +994,11 @@
       "implementation": "sourceIr",
       "internalName": "howl",
       "setCode": "HMW_241"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "occupation-officer",
+      "setCode": "HMW_242"
     },
     {
       "implementation": "sourceIr",
@@ -3846,6 +3861,11 @@
       "setCode": "TOKEN_TIE_FIGHTER"
     },
     {
+      "implementation": "nativeAdapter",
+      "internalName": "weakness",
+      "setCode": "TOKEN_WEAKNESS"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "xwing",
       "setCode": "TOKEN_XWING"
@@ -4516,7 +4536,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 901,
+  "runtimeAdmittedCount": 905,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5260,7 +5280,7 @@
     },
     {
       "internalName": "qira#master-of-teras-kasi",
-      "reason": "qira#master-of-teras-kasi: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "qira#master-of-teras-kasi: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "ASH_226"
     },
     {
@@ -5385,7 +5405,7 @@
     },
     {
       "internalName": "doctor-hemlock#emotion-has-no-place-here",
-      "reason": "doctor-hemlock#emotion-has-no-place-here: compiler rejected \"doctor-hemlock#emotion-has-no-place-here\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/09_HMW/leaders/DoctorHemlockEmotionHasNoPlaceHere.ts\",\"line\":22,\"message\":\"unsupported-query:hasWeakness\",\"pattern\":\"unsupported-query:hasWeakness\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/leaders/DoctorHemlockEmotionHasNoPlaceHere.ts\",\"line\":34,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "doctor-hemlock#emotion-has-no-place-here: compiler rejected \"doctor-hemlock#emotion-has-no-place-here\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/09_HMW/leaders/DoctorHemlockEmotionHasNoPlaceHere.ts\",\"line\":22,\"message\":\"unsupported-query:hasWeakness\",\"pattern\":\"unsupported-query:hasWeakness\"}]",
       "setCode": "HMW_003"
     },
     {
@@ -5445,7 +5465,7 @@
     },
     {
       "internalName": "bossk#cruel-hunter",
-      "reason": "bossk#cruel-hunter: compiler rejected \"bossk#cruel-hunter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":21,\"file\":\"game/cards/09_HMW/leaders/BosskCruelHunter.ts\",\"line\":23,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":112,\"file\":\"game/cards/09_HMW/leaders/BosskCruelHunter.ts\",\"line\":35,\"message\":\"unsupported-query:isTokenUpgrade\",\"pattern\":\"unsupported-query:isTokenUpgrade\"}]",
+      "reason": "bossk#cruel-hunter: compiler rejected \"bossk#cruel-hunter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":112,\"file\":\"game/cards/09_HMW/leaders/BosskCruelHunter.ts\",\"line\":35,\"message\":\"unsupported-query:isTokenUpgrade\",\"pattern\":\"unsupported-query:isTokenUpgrade\"}]",
       "setCode": "HMW_015"
     },
     {
@@ -5564,23 +5584,18 @@
       "setCode": "HMW_058"
     },
     {
-      "internalName": "clone-x-assassin",
-      "reason": "clone-x-assassin: compiler rejected \"clone-x-assassin\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/CloneXAssassin.ts\",\"line\":20,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
-      "setCode": "HMW_059"
-    },
-    {
       "internalName": "vice-admiral-rampart#a-new-era-of-safety",
       "reason": "vice-admiral-rampart#a-new-era-of-safety: compiler rejected \"vice-admiral-rampart#a-new-era-of-safety\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/units/ViceAdmiralRampartANewEraOfSafety.ts\",\"line\":14,\"message\":\"registrar:addReplacementEffectAbility\",\"pattern\":\"registrar:addReplacementEffectAbility\"}]",
       "setCode": "HMW_060"
     },
     {
       "internalName": "nuvo-vindi#blue-shadow-perfected",
-      "reason": "nuvo-vindi#blue-shadow-perfected: compiler rejected \"nuvo-vindi#blue-shadow-perfected\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/NuvoVindiBlueShadowPerfected.ts\",\"line\":21,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/09_HMW/units/NuvoVindiBlueShadowPerfected.ts\",\"line\":30,\"message\":\"trigger-alias-hook:onCardDefeated\",\"pattern\":\"trigger-alias-hook:onCardDefeated\"}]",
+      "reason": "nuvo-vindi#blue-shadow-perfected: compiler rejected \"nuvo-vindi#blue-shadow-perfected\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/09_HMW/units/NuvoVindiBlueShadowPerfected.ts\",\"line\":30,\"message\":\"trigger-alias-hook:onCardDefeated\",\"pattern\":\"trigger-alias-hook:onCardDefeated\"}]",
       "setCode": "HMW_062"
     },
     {
       "internalName": "clone-of-the-zillo-beast#emperors-experiment",
-      "reason": "clone-of-the-zillo-beast#emperors-experiment: compiler rejected \"clone-of-the-zillo-beast#emperors-experiment\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/CloneOfTheZilloBeastEmperorsExperiment.ts\",\"line\":27,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "clone-of-the-zillo-beast#emperors-experiment: Weakness requires an optional standalone scalar unit play/death registration with amount one",
       "setCode": "HMW_065"
     },
     {
@@ -5629,11 +5644,6 @@
       "setCode": "HMW_085"
     },
     {
-      "internalName": "venomous-wyyyshokk",
-      "reason": "venomous-wyyyshokk: compiler rejected \"venomous-wyyyshokk\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/VenomousWyyyshokk.ts\",\"line\":21,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
-      "setCode": "HMW_087"
-    },
-    {
       "internalName": "numa#still-fighting",
       "reason": "numa#still-fighting: compiler rejected \"numa#still-fighting\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/units/NumaStillFighting.ts\",\"line\":15,\"message\":\"registrar:addDamageModificationAbility\",\"pattern\":\"registrar:addDamageModificationAbility\"}]",
       "setCode": "HMW_088"
@@ -5650,7 +5660,7 @@
     },
     {
       "internalName": "dire-prowess",
-      "reason": "dire-prowess: compiler rejected \"dire-prowess\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/upgrades/DireProwess.ts\",\"line\":20,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "dire-prowess: Weakness source must be an ordinary unit card-side registration",
       "setCode": "HMW_097"
     },
     {
@@ -5665,7 +5675,7 @@
     },
     {
       "internalName": "torrent",
-      "reason": "torrent: compiler rejected \"torrent\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/events/Torrent.ts\",\"line\":21,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "torrent: Weakness source must be an ordinary unit card-side registration",
       "setCode": "HMW_100"
     },
     {
@@ -5920,7 +5930,7 @@
     },
     {
       "internalName": "qimir#everyone-has-a-weakness",
-      "reason": "qimir#everyone-has-a-weakness: compiler rejected \"qimir#everyone-has-a-weakness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/09_HMW/units/QimirEveryoneHasAWeakness.ts\",\"line\":29,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "qimir#everyone-has-a-weakness: compiler rejected \"qimir#everyone-has-a-weakness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/09_HMW/units/QimirEveryoneHasAWeakness.ts\",\"line\":16,\"message\":\"deck-discard-event-result-capture\",\"pattern\":\"deck-discard-event-result-capture\"}]",
       "setCode": "HMW_196"
     },
     {
@@ -5930,7 +5940,7 @@
     },
     {
       "internalName": "geonosian-picador",
-      "reason": "geonosian-picador: compiler rejected \"geonosian-picador\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/09_HMW/units/GeonosianPicador.ts\",\"line\":23,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "geonosian-picador: Weakness requires an optional standalone scalar unit play/death registration with amount one",
       "setCode": "HMW_199"
     },
     {
@@ -5940,7 +5950,7 @@
     },
     {
       "internalName": "inferno-squad#we-can-grieve-later",
-      "reason": "inferno-squad#we-can-grieve-later: compiler rejected \"inferno-squad#we-can-grieve-later\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":21,\"file\":\"game/cards/09_HMW/units/InfernoSquadWeCanGrieveLater.ts\",\"line\":26,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "inferno-squad#we-can-grieve-later: Weakness requires an optional standalone scalar unit play/death registration with amount one",
       "setCode": "HMW_202"
     },
     {
@@ -6025,7 +6035,7 @@
     },
     {
       "internalName": "dragonboat-freighter",
-      "reason": "dragonboat-freighter: compiler rejected \"dragonboat-freighter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":21,\"file\":\"game/cards/09_HMW/units/DragonboatFreighter.ts\",\"line\":21,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
+      "reason": "dragonboat-freighter: Weakness requires an optional standalone scalar unit play/death registration with amount one",
       "setCode": "HMW_231"
     },
     {
@@ -6047,11 +6057,6 @@
       "internalName": "sandstorm",
       "reason": "sandstorm: compiler rejected \"sandstorm\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/events/Sandstorm.ts\",\"line\":16,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":26,\"file\":\"game/cards/09_HMW/events/Sandstorm.ts\",\"line\":27,\"message\":\"unsupported-field:choices\",\"pattern\":\"unsupported-field:choices\"}]",
       "setCode": "HMW_240"
-    },
-    {
-      "internalName": "occupation-officer",
-      "reason": "occupation-officer: compiler rejected \"occupation-officer\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/09_HMW/units/OccupationOfficer.ts\",\"line\":22,\"message\":\"immediateEffect:giveWeakness\",\"pattern\":\"immediateEffect:giveWeakness\"}]",
-      "setCode": "HMW_242"
     },
     {
       "internalName": "separatist-harbinger",
@@ -7630,7 +7635,7 @@
     },
     {
       "internalName": "expendable-mercenary",
-      "reason": "expendable-mercenary: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "expendable-mercenary: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LAW_159"
     },
     {
@@ -8500,7 +8505,7 @@
     },
     {
       "internalName": "merrin#alone-with-the-dead",
-      "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_160"
     },
     {
@@ -8530,7 +8535,7 @@
     },
     {
       "internalName": "lightsaber-throw",
-      "reason": "lightsaber-throw: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "lightsaber-throw: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_176"
     },
     {
@@ -8645,7 +8650,7 @@
     },
     {
       "internalName": "the-legacy-run#doomed-debris",
-      "reason": "the-legacy-run#doomed-debris: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "the-legacy-run#doomed-debris: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_213"
     },
     {
@@ -9975,7 +9980,7 @@
     },
     {
       "internalName": "enterprising-lackeys",
-      "reason": "enterprising-lackeys: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "enterprising-lackeys: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "SHD_107"
     },
     {
@@ -10915,7 +10920,7 @@
     },
     {
       "internalName": "emperor-palpatine#master-of-the-dark-side",
-      "reason": "emperor-palpatine#master-of-the-dark-side: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "emperor-palpatine#master-of-the-dark-side: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "SOR_135"
     },
     {
@@ -11262,11 +11267,6 @@
       "internalName": "the-force",
       "reason": "the-force: compiler rejected \"the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/tokens/ForceToken.ts\",\"line\":1,\"message\":\"Inherited custom behavior requires conversion\",\"pattern\":\"custom-inheritance:TokenCard\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/tokens/ForceToken.ts\",\"line\":11,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isForceToken\"}]",
       "setCode": "TOKEN_THE_FORCE"
-    },
-    {
-      "internalName": "weakness",
-      "reason": "weakness: compiler rejected \"weakness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/tokens/Weakness.ts\",\"line\":12,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isWeakness\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/tokens/Weakness.ts\",\"line\":16,\"message\":\"Additional class behavior requires conversion\",\"pattern\":\"class-member:GetAccessor\"}]",
-      "setCode": "TOKEN_WEAKNESS"
     },
     {
       "internalName": "count-dooku#offering-aid",
@@ -11935,7 +11935,7 @@
     },
     {
       "internalName": "resupply",
-      "reason": "resupply: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "resupply: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "TWI_127"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1557,
+  "runtimeRejectedCount": 1553,
   "schema": "omni-rs-catalogue-report-v1",
-  "sourceAstConvertedCount": 672
+  "sourceAstConvertedCount": 681
 }

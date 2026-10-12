@@ -370,9 +370,10 @@ pub fn validate_state_with_catalogue(
                         if !has_type(info,"upgrade") {return Err(format!("{at}: attachment must be an upgrade"));}
                         let token=boolean(u,"token","upgrade")?;
                         if token {
-                            if !matches!(u["setCode"].as_str(),Some("TOKEN_SHIELD"|"TOKEN_EXPERIENCE")) || !has_type(info,"token") {return Err(format!("{at}: only Shield and Experience tokens are supported"));}
+                            if !matches!(u["setCode"].as_str(),Some("TOKEN_SHIELD"|"TOKEN_EXPERIENCE"|"TOKEN_WEAKNESS")) || !has_type(info,"token") {return Err(format!("{at}: only Shield, Experience and Weakness tokens are supported"));}
+                            if u["setCode"]=="TOKEN_WEAKNESS" {upgrade_stats.0+=info["upgradePower"].as_i64().ok_or("Weakness missing signed power")?;upgrade_stats.1+=info["upgradeHp"].as_i64().ok_or("Weakness missing signed HP")?;}
                         }else{
-                            if has_type(info,"token") {return Err(format!("{at}: only Shield and Experience tokens are supported"));}
+                            if has_type(info,"token") {return Err(format!("{at}: only Shield, Experience and Weakness tokens are supported"));}
                             let controller=u["controller"].as_str().ok_or("ordinary upgrade needs controller")?;
                             let owner=u["owner"].as_str().ok_or("ordinary upgrade needs owner")?;
                             if owner!=controller {return Err("foreign-controlled upgrade imports are unsupported".into());}
@@ -609,7 +610,7 @@ mod tests {
         upgrades[2]["token"] = json!(false);
         assert!(validate_state_with_catalogue(&state, &cards)
             .unwrap_err()
-            .contains("only Shield and Experience tokens"));
+            .contains("only Shield, Experience and Weakness tokens"));
     }
 
     #[test]
