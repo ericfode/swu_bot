@@ -265,8 +265,8 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
 function signInPage(next, login, note) {
     const href = `/auth/github?next=${encodeURIComponent(next || '/')}`;
     const body = login
-        ? `<p>You are signed in as <b>@${esc(login)}</b>, who is not on the invite list yet. Ask Eric to add you.</p><p><a href="/auth/logout">Sign out</a></p>`
-        : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p>`;
+        ? `<p>You are signed in to GitHub as <b>@${esc(login)}</b>. The arena is open to invited friends, and <b>@${esc(login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(login)}</b>. Once he has added it, reload this page. Or ask him for a view link: it opens the arena with no sign-in.</p><p><a href="/auth/logout">Sign out</a></p>`
+        : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p><p class="small">Got a view link from Eric? Open it instead; it needs no sign-in.</p>`;
     // the browser keeps the #/page part of a shared link to itself, so the button adds it to where sign-in returns
     const keepHash = login ? '' : `<script>(()=>{const a=document.querySelector('a.btn');if(a&&location.hash){const u=new URL(a.href,location.href);u.searchParams.set('next',(u.searchParams.get('next')||'/')+location.hash);a.href=u.pathname+u.search}})()</script>`;
     return shell(`<h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}`, keepHash);

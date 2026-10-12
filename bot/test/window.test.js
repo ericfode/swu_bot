@@ -208,7 +208,7 @@ test('sign-in: GitHub confirms the login, invited people get a session, others s
             const session = back.headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
             const home = await go('/', { cookie: session });
             assert.strictEqual(home.status, invited ? 200 : 403);
-            assert.match(await home.text(), invited ? /<title>app/ : /not on the invite list/);
+            assert.match(await home.text(), invited ? /<title>app/ : /is not on the list yet.*Send Eric your GitHub username/s);
         } finally {
             await close();
         }

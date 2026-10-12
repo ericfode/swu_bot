@@ -315,7 +315,7 @@ function createOAuth({ dir, auth, now = Date.now }) {
                 return html(res, 200, `<h1>Connect ${esc(r.client.name)}</h1><p><b>${esc(r.client.name)}</b> (${esc(r.client.site)}) wants to use SWU Arena as you. Sign in with GitHub first.</p><p><a class="btn" href="${esc(next)}">Sign in with GitHub</a></p>`), true;
             }
             if (me.role === 'anon') {
-                return html(res, 403, `<h1>Connect ${esc(r.client.name)}</h1><p>You are signed in as <b>@${esc(me.login)}</b>, who is not on the invite list yet. Ask Eric to add you, then connect again.</p><p><a href="/auth/logout">Sign out</a></p>`), true;
+                return html(res, 403, `<h1>Connect ${esc(r.client.name)}</h1><p>You are signed in as <b>@${esc(me.login)}</b>, who is not on the invite list yet. Send Eric your GitHub username, <b>${esc(me.login)}</b>, and connect again once he has added it.</p><p><a href="/auth/logout">Sign out</a></p>`), true;
             }
             const tx = auth.sign({ p: 'consent', u: me.login, ...r.q, exp: now() + 10 * 60000 });
             return html(res, 200, `<h1>Connect ${esc(r.client.name)}</h1>
