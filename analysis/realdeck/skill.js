@@ -26,11 +26,16 @@
  * hardcontrol, from the deck file's metadata.style as compare.js reads it), with a Wilson CI each. A challenger keeps
  * its deck in both games of a seed, so within a pass it holds one side of each deck pair: the split leaves the cards in,
  * and a bot that played exactly like the reference would not score 50% in every cell. So each cell also has `expected`,
- * what the reference scores holding the same decks against itself on the same games (compare.js's deck model of the
- * reference's mirror run: P(p1 wins) = σ(s[p1 deck] − s[p2 deck] + seat)), and `edge` = score − expected over the games
- * with an expectation: above 0, the challenger pilots that deck type better than the reference does. Styles come from
- * the `styles` option (deck name -> style) or else from the compare.js result's decks; without either there is no row,
- * and without a mirror run of the reference no `expected`.
+ * what the reference itself scores holding the same decks from the same seats (compare.js's deck model of the
+ * reference's mirror run: P(p1 wins) = σ(s[p1 deck] − s[p2 deck] + seat); that mirror had its own deals), and `edge` =
+ * score − expected over the games with an expectation. A bot weaker overall loses points in every cell, and more where
+ * the reference's expectation sits near 50%, so each cell also has `par`: the same model shifted on the logit scale to
+ * the challenger's overall level (one shift d for all its games, Σ σ(l + d) = Σ y), what a bot of that strength would
+ * score with those decks if it handled every deck type like the reference; and `vsPar` = score − par. The vsPar of a
+ * row average to 0 over its games: above 0, the bot does better with that deck type than its level says. Neither has a
+ * CI, and both carry the noise of the mirror's model. Styles come from the `styles` option (deck name -> style) or else
+ * from the compare.js result's decks; without either there is no row, and without a mirror run of the reference no
+ * `expected` or `par`.
  *
  * Paired: for every two challengers, the seeds both played with the same decks from the same seats and the same game
  * key (or none on both) with all four games decided. Per seed d = (A's score − B's score) / 2 over its two games; the
@@ -243,6 +248,7 @@ function referenceModel(cmp, run) {
  */
 function styleRow(t, styleOf, expect = null) {
     const acc = new Map();
+    const modelled = []; // [{style, y, l}]: the games with an expectation, l = its logit
     for (const rec of t.seeds.values()) {
         for (const seat of ['p1', 'p2']) {
             const g = rec[seat];
@@ -251,7 +257,7 @@ function styleRow(t, styleOf, expect = null) {
                 continue;
             }
             const style = styleOf.get(g.decks[seat]) ?? 'unknown';
-            const x = acc.get(style) ?? { decided: 0, score: 0, n: 0, y: 0, e: 0 };
+            const x = acc.get(style) ?? { decided: 0, score: 0, n: 0, y: 0, e: 0, par: 0 };
             x.decided++;
             x.score += g.y;
             const e = expect && g.decks[other] ? expect(g.decks[seat], g.decks[other], seat) : null;
@@ -259,18 +265,48 @@ function styleRow(t, styleOf, expect = null) {
                 x.n++;
                 x.y += g.y;
                 x.e += e;
+                modelled.push({ style, y: g.y, l: Math.log(e / (1 - e)) });
             }
             acc.set(style, x);
         }
+    }
+    const shift = levelShift(modelled);
+    for (const m of modelled) {
+        acc.get(m.style).par += sigmoid(m.l + shift);
     }
     const order = [...STYLES.filter((s) => acc.has(s)), ...[...acc.keys()].filter((s) => !STYLES.includes(s)).sort()];
     return Object.fromEntries(order.map((s) => {
         const x = acc.get(s);
         return [s, {
             decided: x.decided, score: x.score, winRate: x.score / x.decided, ci: wilson(x.score, x.decided),
-            expected: x.n ? x.e / x.n : null, edge: x.n ? (x.y - x.e) / x.n : null, expectedGames: x.n
+            expected: x.n ? x.e / x.n : null, edge: x.n ? (x.y - x.e) / x.n : null,
+            par: x.n ? x.par / x.n : null, vsPar: x.n ? (x.y - x.par) / x.n : null, expectedGames: x.n
         }];
     }));
+}
+
+const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+
+/**
+ * The challenger's overall level against the reference's own deck model, as a logit shift: the d with
+ * Σ σ(l + d) = Σ y over the games with an expectation (bisection; clamped to ±20 when it scored 0 or all). 0 without games.
+ */
+function levelShift(games) {
+    if (!games.length) {
+        return 0;
+    }
+    const y = games.reduce((a, g) => a + g.y, 0);
+    let lo = -20;
+    let hi = 20;
+    for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if (games.reduce((a, g) => a + sigmoid(g.l + mid), 0) < y) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return (lo + hi) / 2;
 }
 
 const sameDecks = (x, y) => !!x && !!y && x.p1 === y.p1 && x.p2 === y.p2;
@@ -579,12 +615,17 @@ function summaryText(r) {
         const cols = [...new Set(rows.flatMap((b) => Object.keys(b.skill.byStyle)))];
         L.push('');
         L.push(`by deck type: win% vs ${r.reference} when the bot holds a deck of that type (decided games), and points above or below`);
-        L.push(`what ${r.reference} scores with the same decks on the same games (its mirror's deck model)`);
+        L.push(`par: what a bot of the same overall score would get with those decks if it handled every deck type like ${r.reference}`);
+        L.push(`(${r.reference}'s own deck model, from its mirror; first row: ${r.reference} itself with the same decks and seats)`);
         L.push(`${''.padEnd(28)} ${cols.map((c) => c.padEnd(18)).join(' ')}`.trimEnd());
+        const own = (c) => rows.map((b) => b.skill.byStyle[c]).filter((x) => x && x.expected !== null).sort((x, y) => y.expectedGames - x.expectedGames)[0];
+        if (cols.some(own)) {
+            L.push(`${`${r.reference} itself`.padEnd(28)} ${cols.map((c) => (own(c) ? pc(own(c).expected) : '-').padEnd(18)).join(' ')}`.trimEnd());
+        }
         for (const b of rows) {
             L.push(`${b.bot.padEnd(28)} ${cols.map((c) => {
                 const x = b.skill.byStyle[c];
-                return (x ? `${pc(x.winRate)} (${x.decided})${x.edge === null ? '' : ` ${f2(100 * x.edge, 0)}`}` : '-').padEnd(18);
+                return (x ? `${pc(x.winRate)} (${x.decided})${x.vsPar === null ? '' : ` ${f2(100 * x.vsPar, 0)}`}` : '-').padEnd(18);
             }).join(' ')}`.trimEnd());
         }
     }
@@ -635,6 +676,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-    MEASURES, STYLES, parseArgs, readGauntlet, gauntletTallies, elo, skillOf, referenceModel, styleRow, deckBalance, pairedDifference, styleGap, mirrorRuns, agreementOf,
+    MEASURES, STYLES, parseArgs, readGauntlet, gauntletTallies, elo, skillOf, referenceModel, levelShift, styleRow, deckBalance, pairedDifference, styleGap, mirrorRuns, agreementOf,
     permutations, spearmanExact, skillVsAgreement, summaryText
 };

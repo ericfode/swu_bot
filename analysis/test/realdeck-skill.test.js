@@ -310,8 +310,8 @@ const cmpFixture = () => {
     const given = sk.skillVsAgreement([gl], null, { styles: { d0: 'midrange' } });
     assert.deepStrictEqual(Object.keys(given.bots.find((b) => b.bot === 'heuristic').skill.byStyle), ['midrange', 'unknown']);
     assert.strictEqual(sk.skillVsAgreement([gl], cmpFixture()).bots.find((b) => b.bot === 'heuristic').skill.byStyle, null, 'no styles, no row');
-    assert.match(sk.summaryText(fromCmp), /by deck type: win% vs c-clock[^\n]*\n[^\n]*\n\s+hyperaggro\s+hardcontrol\s+unknown\nheuristic\s+50\.0 \(3\)\s+100\.0 \(2\)\s+0\.0 \(2\)$/m);
-    assert.deepStrictEqual([row.hyperaggro.expected, row.hyperaggro.edge, row.hyperaggro.expectedGames], [null, null, 0], 'no reference model, no expectation');
+    assert.match(sk.summaryText(fromCmp), /by deck type: win% vs c-clock[^\n]*\n[^\n]*\n[^\n]*\n\s+hyperaggro\s+hardcontrol\s+unknown\nheuristic\s+50\.0 \(3\)\s+100\.0 \(2\)\s+0\.0 \(2\)$/m);
+    assert.deepStrictEqual([row.hyperaggro.expected, row.hyperaggro.edge, row.hyperaggro.par, row.hyperaggro.vsPar, row.hyperaggro.expectedGames], [null, null, null, null, 0], 'no reference model, no expectation');
 
     // what the reference scores with the same decks: its mirror's deck model, σ(s[held] − s[opp] ± seat)
     const sig = (x) => 1 / (1 + Math.exp(-x));
@@ -332,7 +332,15 @@ const cmpFixture = () => {
     close(byE.hyperaggro.edge, (1.5 - 2 * sig(2) - sig(0.5)) / 3, 1e-12, 'edge hyperaggro');
     close(byE.hardcontrol.edge, 1 - sig(-2), 1e-12, 'edge hardcontrol');
     assert.deepStrictEqual([byE.unknown.expected, byE.unknown.edge, byE.unknown.expectedGames, byE.unknown.decided], [null, null, 0, 2]);
-    assert.match(sk.summaryText(sk.skillVsAgreement([gl], model)), /heuristic\s+50\.0 \(3\) -29\s+100\.0 \(2\) \+88\s+0\.0 \(2\)$/m);
+    // par: the same model shifted to the bot's level, Σ σ(l + d) = Σ y over the games with an expectation (3.5 of 5 here)
+    close(sk.levelShift([{ l: 0, y: 1 }, { l: 0, y: 1 }, { l: 0, y: 1 }, { l: 0, y: 0 }]), Math.log(3), 1e-9, 'three in four at even odds');
+    assert.deepStrictEqual([sk.levelShift([]), sk.levelShift([{ l: 0, y: 1 }])], [0, 20], 'no games: none; all won: the clamp');
+    const d = sk.levelShift([[1, 2], [0, 2], [0.5, 0.5], [1, -2], [1, -2]].map(([y, l]) => ({ y, l })));
+    close(byE.hyperaggro.par, (2 * sig(2 + d) + sig(0.5 + d)) / 3, 1e-12, 'par hyperaggro');
+    close(byE.hardcontrol.par, sig(-2 + d), 1e-12, 'par hardcontrol');
+    close(3 * byE.hyperaggro.vsPar + 2 * byE.hardcontrol.vsPar, 0, 1e-9, 'vsPar averages to 0 over the row');
+    assert.deepStrictEqual([byE.unknown.par, byE.unknown.vsPar], [null, null]);
+    assert.match(sk.summaryText(sk.skillVsAgreement([gl], model)), /\nc-clock itself\s+79\.5\s+11\.9\s+-\nheuristic\s+50\.0 \(3\) -43\s+100\.0 \(2\) \+65\s+0\.0 \(2\)$/m);
 }
 
 // 6. the command line, on a run directory written like ladder.js writes a gauntlet

@@ -15,20 +15,24 @@
  * the same deals and two bots pair game for game. With no finished gauntlet yet, ladder.js draws a new key and that run
  * sets the deals for the ones after it. The echoed command names the key by its id only: the key rebuilds every hidden
  * card of the games. --mirror also plays the bot against itself (<dir>/mirror-<bot>-<n>, one pass) and reruns
- * compare.js into <dir>/compare-702.json and .txt, so the report has the bot's agreement with humans. --record keeps
+ * compare.js into <dir>/compare-702.json and .txt, so the report has the bot's agreement with humans (when that file
+ * has no mirror of c-clock yet, c-clock's mirror is played too: the deck-type row needs it). --record keeps
  * every game (games/<id>.jsonl, the replay format). --resume <run id> finishes a gauntlet of the same bot that stopped
- * (ladder.js --resume: the games already played are kept); it is refused for a run of another bot, deck file, seed or
- * key, and for a run whose key is not published yet (its remaining games would be dealt from a new key).
+ * (ladder.js --resume: the games already played are kept); it is refused for a run still going or already done, for a
+ * run of another bot, deck file, seed or key, and for a run whose key is not published yet (its remaining games would
+ * be dealt from a new key).
  *
  * The report reads every gauntlet in <dir> against c-clock on that deck file, seed and key (the others are listed with
  * the reason they were left out) and keeps one run per challenger: its newest finished run, or its newest unfinished
  * one when it has none (a bot tested again replaces its older games once the new run is done). It joins them with
  * <dir>/compare-702.json (compare.js on one-pass mirrors) through skill.js and writes <dir>/skill.json and skill.txt.
  * --panel <file> also writes the research dashboard panel (dashboard README section 5): each bot's score against
- * c-clock as a face-off, a table of each bot's score by the deck type it holds next to what c-clock itself scores with
- * the same decks (skill.js `expected` and `edge`), the latest bot's deck-type row as face-offs, and agreement with
- * humans for the bots with a mirror. The prose fields of an existing panel file (goal, mental model, plan, thoughts)
- * are kept; a run still going is marked running, or stopped once it has not written for an hour.
+ * c-clock as a face-off, a table of each bot's score by the deck type it holds against par (skill.js `par`: what a bot
+ * of the same overall score would get with those decks if it handled every deck type like c-clock) with c-clock's own
+ * score with the same decks as its first row, the latest bot's deck-type row as face-offs, and agreement with humans
+ * for the bots with a mirror. The prose fields of an existing panel file (goal, mental model, plan, thoughts) are kept,
+ * except a mental model this script wrote by default before; a run still going is marked running, or stopped once it
+ * has not written for an hour.
  *
  * <dir> defaults to /mnt/project-files/human-meta/realdeck when that folder exists, else results/realdeck in the repo.
  */
@@ -210,8 +214,12 @@ function standardGauntlets(runs, { reference = REFERENCE, sha256, firstSeed = SE
 
 const sameSet = (x, y) => Array.isArray(x) && Array.isArray(y) && x.length === y.length && x.every((v) => y.includes(v));
 
-/** Why `<dir>/<id>` can not be resumed as bot's standard gauntlet (std: from standardGauntlets), or null when it can. */
-function resumeProblem(dir, id, { bot, sha256, std, reference = REFERENCE, firstSeed = SEED }) {
+/**
+ * Why `<dir>/<id>` can not be resumed as bot's standard gauntlet (std: from standardGauntlets), or null when it can. Only
+ * a stopped run resumes: a second ladder.js would write into a running one, and a done one may start over (ladder.js
+ * does when the bot's code or the options changed) and lose its games.
+ */
+function resumeProblem(dir, id, { bot, sha256, std, reference = REFERENCE, firstSeed = SEED, now = new Date() }) {
     const file = path.join(dir, id, 'ladder.json');
     if (!fs.existsSync(file)) {
         return `${path.join(dir, id)} has no ladder.json, so there is no run ${id} to resume`;
@@ -221,6 +229,10 @@ function resumeProblem(dir, id, { bot, sha256, std, reference = REFERENCE, first
         doc = readJson(file);
     } catch {
         return `${file} is not readable JSON`;
+    }
+    const state = runState({ status: doc.status ?? null, updatedAt: doc.updatedAt ?? null, createdAt: doc.createdAt ?? null }, now);
+    if (state !== 'stopped') {
+        return state === 'done' ? `${id} is done already` : `${id} is still running (last written ${doc.updatedAt}); a resume would write into it`;
     }
     const c = doc.config ?? {};
     if (c.format !== 'gauntlet' || !sameSet(c.vs, [reference]) || !sameSet(c.bots, [bot, reference])) {
@@ -300,19 +312,18 @@ function edgeStep(d) {
     return d < 0 ? -n : n;
 }
 
-/** A deck-type cell's edge: score minus what the reference scores with the same decks, else score minus 50%. */
-const cellEdge = (x) => (typeof x?.edge === 'number' ? x.edge : x ? x.winRate - 0.5 : null);
+/** A deck-type cell's colour value: score minus par (skill.js), else score minus 50% when there is no model. */
+const cellEdge = (x) => (typeof x?.vsPar === 'number' ? x.vsPar : x ? x.winRate - 0.5 : null);
 
 /**
- * Aggro minus control from a deck-type row, on the edges (score minus the reference's expected score with the same
- * decks): the pooled edge with hyper and soft aggro decks minus the pooled edge with soft and hard control decks. Null
- * when either side has no expectation.
+ * Aggro minus control from a deck-type row, against par: the points above par with hyper and soft aggro decks minus
+ * those with soft and hard control decks (pooled over the games with an expectation). Null when either side has none.
  */
 function aggroMinusControl(row) {
     const pool = (names) => {
-        const xs = names.map((s) => row?.[s]).filter((x) => x && typeof x.edge === 'number' && x.expectedGames);
+        const xs = names.map((s) => row?.[s]).filter((x) => x && typeof x.vsPar === 'number' && x.expectedGames);
         const n = xs.reduce((a, x) => a + x.expectedGames, 0);
-        return n ? xs.reduce((a, x) => a + x.edge * x.expectedGames, 0) / n : null;
+        return n ? xs.reduce((a, x) => a + x.vsPar * x.expectedGames, 0) / n : null;
     };
     const a = pool(['hyperaggro', 'softaggro']);
     const c = pool(['softcontrol', 'hardcontrol']);
@@ -345,8 +356,8 @@ function styleTableHtml(bots, reference) {
         const d = cellEdge(x);
         const s = edgeStep(d);
         const cls = s > 0 ? ` class="p${s}"` : s < 0 ? ` class="n${-s}"` : '';
-        const tip = `${x.score} of ${x.decided} decided games${typeof x.expected === 'number' ? `; ${reference} with the same decks: ${pct(x.expected)}%` : ''}`;
-        return `<td${cls} title="${esc(tip)}">${pct(x.winRate)}%<small>${typeof x.edge === 'number' ? pts(x.edge) : '&nbsp;'}</small></td>`;
+        const tip = `${x.score} of ${x.decided} decided games${typeof x.par === 'number' ? `; par ${pct(x.par)}%; ${reference} itself ${pct(x.expected)}%` : ''}`;
+        return `<td${cls} title="${esc(tip)}">${pct(x.winRate)}%<small>${typeof x.vsPar === 'number' ? pts(x.vsPar) : '&nbsp;'}</small></td>`;
     };
     const head = model
         ? `<tr class="r"><td class="b">${esc(reference)} itself</td>${cols.map((s) => `<td>${refRow[s] ? `${pct(refRow[s].expected)}%` : '-'}<small>same decks</small></td>`).join('')}<td class="o">50%</td><td class="o"></td></tr>`
@@ -357,8 +368,9 @@ function styleTableHtml(bots, reference) {
             `<td class="o">${gap === null ? '-' : pts(gap)}</td></tr>`;
     }).join('');
     const note = model
-        ? `Score against ${esc(reference)} with the bot holding each deck type, and below it the points above or below what ${esc(reference)} itself scores with the same decks on the same games (first row, from ${esc(reference)}'s mirror). ` +
-            `Blue: the bot pilots that deck type better than ${esc(reference)}; red: worse (Atlas edge steps). Aggro − control: the bot's edge with aggro decks minus its edge with control decks.`
+        ? `Score against ${esc(reference)} with the bot holding each deck type, and below it the points above or below par: what a bot of the same overall score would get with those decks if it handled every deck type like ${esc(reference)} ` +
+            `(from ${esc(reference)}'s mirror; the first row is ${esc(reference)} itself with the same decks). Blue: the bot does better with that deck type than its level says; red: worse (Atlas edge steps). ` +
+            'Aggro − control: its points above par with aggro decks minus with control decks.'
         : `Score against ${esc(reference)} with the bot holding each deck type, coloured against 50%: there is no mirror of ${esc(reference)} in the compare file, so the cards each type holds are still in these numbers.`;
     return '<style>' +
         `:root{color-scheme:light dark;${vars(EDGE.light)}}@media (prefers-color-scheme:dark){:root{${vars(EDGE.dark)}}}` +
@@ -376,39 +388,43 @@ function styleTableHtml(bots, reference) {
 }
 
 const DEFAULT_MODEL = (ref) => ({
-    summary: `A game's result comes from the cards each side holds, how well each side pilots its deck, and skill. Every bot gets the same deals with each deck on both sides, so the cards cancel out of the overall score: it measures skill against ${ref}. ` +
-        `Split by the deck type the bot holds, the cards no longer cancel, so each cell is compared with what ${ref} itself scores with the same decks (from ${ref}'s mirror): above that, the bot pilots that deck type better than ${ref}; below, worse.`,
+    summary: `A game's result comes from the cards each side holds, how well each side handles its deck type, and overall skill. Every bot gets the same deals with each deck on both sides, so the cards cancel out of the overall score: it measures skill against ${ref}. ` +
+        `Split by the deck type the bot holds, the cards no longer cancel, so each cell is compared with par: what a bot of the same overall score would get with those decks if it handled every deck type like ${ref} (from ${ref}'s mirror). ` +
+        'Above par, the bot handles that deck type better than its level says; below, worse.',
     features: []
 });
+
+/** Mental models this script wrote by default before; a panel that still has one gets the current default. */
+const RETIRED_MODELS = ['A game\'s result comes from the cards each side holds, how well each bot pilots its deck type, and skill. Every bot gets the same deals, with each deck on both sides, so the cards cancel out of the score: the score measures skill against c-clock, and the row by deck type shows where the bot pilots worse.'];
 
 /**
  * The dashboard panel (README section 5) for a skillVsAgreement result. existing: the panel file as it is (its prose
  * fields are kept); latest: the bot whose deck-type row gets its own face-offs; thought: a line to add to the thoughts;
- * states: Map bot -> {state: 'done'|'running'|'stopped', finished, run} for the run each bot's games come from.
+ * states: Map bot -> {state: 'done'|'running'|'stopped', run} for the run each bot's games come from.
  */
 function panelOf(result, { existing = null, now = new Date(), latest = null, thought = null, states = new Map(), decks = null, gamesPerBot = null } = {}) {
     const ref = result.reference;
     const tested = result.bots.filter((b) => !b.reference && b.skill && typeof b.skill.winRate === 'number');
     const stamp = now.toISOString().replace(/\.\d+Z$/, 'Z');
     const what = `${decks ?? 'the'} real decks`;
-    const progress = (bot) => {
-        const s = states.get(bot);
+    const progress = (b) => {
+        const s = states.get(b.bot);
         if (!s || s.state === 'done') {
             return '';
         }
-        const k = `${s.finished ?? '?'}${gamesPerBot ? ` of ${gamesPerBot}` : ''} games`;
+        const k = `${b.skill.games ?? '?'}${gamesPerBot ? ` of ${gamesPerBot}` : ''} games`;
         return s.state === 'running' ? `; running, ${k}` : `; stopped at ${k} (--resume ${s.run})`;
     };
     const widgets = [{
         type: 'faceoff', title: `Against ${ref} on ${what}: one pass each, the same deals for every bot`,
         items: tested.map((b) => ({
             a: b.bot, b: ref, share: r3(b.skill.winRate), n: b.skill.decided,
-            note: `95% CI ${pct(b.skill.ci?.[0])}-${pct(b.skill.ci?.[1])}%${b.skill.incomplete ? `; ${b.skill.incomplete} games without a result left out` : ''}${progress(b.bot)}`
+            note: `95% CI ${pct(b.skill.ci?.[0])}-${pct(b.skill.ci?.[1])}%${b.skill.incomplete ? `; ${b.skill.incomplete} games without a result left out` : ''}${progress(b)}`
         }))
     }];
     const withRow = tested.filter((b) => b.skill.byStyle);
     if (withRow.length) {
-        widgets.push({ type: 'html', title: `Score by the deck type the bot holds, next to ${ref} itself with the same decks`, height: Math.min(600, 150 + 44 * (withRow.length + 1)), html: styleTableHtml(withRow, ref) });
+        widgets.push({ type: 'html', title: 'Score by the deck type the bot holds, against par for its level', height: Math.min(600, 150 + 44 * (withRow.length + 1)), html: styleTableHtml(withRow, ref) });
     }
     const last = tested.find((b) => b.bot === latest && b.skill.byStyle);
     if (last) {
@@ -416,7 +432,7 @@ function panelOf(result, { existing = null, now = new Date(), latest = null, tho
             type: 'faceoff', title: `${last.bot} against ${ref}, by the deck type ${last.bot} holds`,
             items: Object.entries(last.skill.byStyle).map(([s, x]) => ({
                 a: last.bot, b: ref, share: r3(x.winRate), n: x.decided,
-                note: `${STYLE_LABEL[s] ?? s} decks${typeof x.expected === 'number' ? `; ${ref} itself ${pct(x.expected)}% with the same decks (${pts(x.edge)})` : ''}`
+                note: `${STYLE_LABEL[s] ?? s} decks${typeof x.par === 'number' ? `; par ${pct(x.par)}% (${pts(x.vsPar)}); ${ref} itself ${pct(x.expected)}%` : ''}`
             }))
         });
     }
@@ -440,7 +456,7 @@ function panelOf(result, { existing = null, now = new Date(), latest = null, tho
         now: lead ? `${lead.bot} scored ${pct(lead.skill.winRate)}% against ${ref} (95% CI ${pct(lead.skill.ci?.[0])}-${pct(lead.skill.ci?.[1])}%) over ${lead.skill.decided} games${leadState === 'done' ? '' : ` so far (${leadState})`}`
             : `${tested.length} bots tested against ${ref} on ${what}`,
         goal: old.goal ?? `One score per bot that every other bot's score can be compared with: one pass of ${what} against ${ref}, the same deals for every bot, and the same score split by the deck type the bot holds.`,
-        mentalModel: old.mentalModel ?? DEFAULT_MODEL(ref),
+        mentalModel: old.mentalModel && !RETIRED_MODELS.includes(old.mentalModel.summary) ? old.mentalModel : DEFAULT_MODEL(ref),
         plan: old.plan ?? [
             { text: 'Test the seven bots of the real-deck study', state: 'done' },
             { text: 'Test every new bot: npm run realdeck:test -- --bot <bot>', state: 'doing' }
@@ -545,6 +561,7 @@ function main() {
             // the mirrors compare.js last used, with this bot's replaced by the new one
             const prev = fs.existsSync(compareFile) ? readJson(compareFile) : null;
             const keep = [];
+            let refMirror = false;
             for (const r of prev?.runs ?? []) {
                 if (!r.mirror || r.bot === a.bot) {
                     continue;
@@ -552,9 +569,18 @@ function main() {
                 const d = r.dir ? path.resolve(ROOT, r.dir) : null;
                 if (d && fs.existsSync(path.join(d, 'ladder.json'))) {
                     keep.push(d);
+                    refMirror ||= r.bot === REFERENCE;
                 } else {
                     console.log(`left out of compare: the mirror ${r.id} of ${r.bot} (its folder ${r.dir ?? '?'} is gone)`);
                 }
+            }
+            if (!refMirror) {
+                // the deck-type row's par comes from the reference's own deck model, so its mirror goes in too
+                const rid = nextId(dir, `mirror-${REFERENCE}`);
+                console.log(`${path.basename(compareFile)} has no mirror of ${REFERENCE}: playing it too (${rid})`);
+                run([rel(path.join(ROOT, 'bot', 'ladder.js')), '--decks', rel(a.decks), '--bots', `${REFERENCE}#a,${REFERENCE}#b`, '--games', String(games),
+                    '--seed', String(SEED), '--id', rid, '--out', dir, ...(a.record ? ['--record'] : []), ...(a.workers ? ['--workers', a.workers] : [])], { dryRun: a.dryRun });
+                keep.unshift(path.join(dir, rid));
             }
             const human = a.decks.replace(/\.json$/, '.human.json');
             const online = a.online ?? (fs.existsSync(ONLINE) ? ONLINE : null);
@@ -593,7 +619,7 @@ function main() {
     for (const r of runs) {
         const m = meta.get(r.id);
         for (const c of r.challengers) {
-            states.set(base(c), { state: runState(m, now), finished: m.progress?.finished ?? null, run: r.id });
+            states.set(base(c), { state: runState(m, now), run: r.id });
         }
     }
     const cmp = fs.existsSync(compareFile) ? readJson(compareFile) : null;
@@ -608,7 +634,7 @@ function main() {
     console.log(text);
     for (const [bot, s] of states) {
         if (s.state !== 'done') {
-            console.log(`${bot}: its run ${s.run} is ${s.state} at ${s.finished ?? '?'} of ${games} games`);
+            console.log(`${bot}: its run ${s.run} is ${s.state} at ${result.bots.find((b) => b.bot === bot)?.skill?.games ?? '?'} of ${games} games`);
         }
     }
     writeAtomic(path.join(dir, 'skill.json'), JSON.stringify(result, null, 1));

@@ -99,28 +99,31 @@ const SCRIPT = path.join(__dirname, '..', 'realdeck', 'bot-test.js');
 // 4. colour steps, the aggro lean and the panel
 {
     assert.deepStrictEqual([0, 0.02, 0.03, 0.1, 0.35, -0.03, -0.4].map(bt.edgeStep), [0, 0, 1, 2, 5, -1, -5]);
-    assert.deepStrictEqual([bt.cellEdge({ winRate: 0.6, edge: -0.1 }), bt.cellEdge({ winRate: 0.6, edge: null }), bt.cellEdge(null)].map((x) => x && Math.round(x * 100)), [-10, 10, null]);
-    // on the edges, weighted by the games with an expectation
-    const row = { hyperaggro: { edge: 0.1, expectedGames: 10 }, softaggro: { edge: -0.1, expectedGames: 30 }, midrange: { edge: 0.5, expectedGames: 4 }, hardcontrol: { edge: -0.2, expectedGames: 20 } };
+    assert.deepStrictEqual([bt.cellEdge({ winRate: 0.6, edge: -0.3, vsPar: -0.1 }), bt.cellEdge({ winRate: 0.6, vsPar: null }), bt.cellEdge(null)].map((x) => x && Math.round(x * 100)), [-10, 10, null]);
+    // against par, weighted by the games with an expectation
+    const row = { hyperaggro: { vsPar: 0.1, expectedGames: 10 }, softaggro: { vsPar: -0.1, expectedGames: 30 }, midrange: { vsPar: 0.5, expectedGames: 4 }, hardcontrol: { vsPar: -0.2, expectedGames: 20 } };
     assert.strictEqual(Math.round(1000 * bt.aggroMinusControl(row)), 150);
-    assert.strictEqual(bt.aggroMinusControl({ hyperaggro: { decided: 4, score: 2, edge: null, expectedGames: 0 }, hardcontrol: { edge: 0, expectedGames: 3 } }), null, 'no edge on one side: no lean');
+    assert.strictEqual(bt.aggroMinusControl({ hyperaggro: { decided: 4, score: 2, vsPar: null, expectedGames: 0 }, hardcontrol: { vsPar: 0, expectedGames: 3 } }), null, 'no par on one side: no lean');
 
     // the table and the latest bot's face-offs against the reference's own score with the same decks
     const modelled = {
-        reference: 'c-clock', bots: [{ bot: 'x', skill: { winRate: 0.55, decided: 20, ci: [0.33, 0.75], incomplete: 2, byStyle: {
-            hyperaggro: { decided: 10, score: 6, winRate: 0.6, expected: 0.7, edge: -0.1, expectedGames: 10 },
-            hardcontrol: { decided: 10, score: 5, winRate: 0.5, expected: 0.3, edge: 0.2, expectedGames: 10 } } } }]
+        reference: 'c-clock', bots: [{ bot: 'x', skill: { winRate: 0.55, games: 22, decided: 20, ci: [0.33, 0.75], incomplete: 2, byStyle: {
+            hyperaggro: { decided: 10, score: 6, winRate: 0.6, expected: 0.7, edge: -0.1, par: 0.7, vsPar: -0.1, expectedGames: 10 },
+            hardcontrol: { decided: 10, score: 5, winRate: 0.5, expected: 0.3, edge: 0.2, par: 0.3, vsPar: 0.2, expectedGames: 10 } } } }]
     };
     const mh = bt.styleTableHtml(modelled.bots, 'c-clock');
     assert.match(mh, /<td class="b">c-clock itself<\/td><td>70%<small>same decks<\/small><\/td><td>30%<small>same decks<\/small><\/td><td class="o">50%<\/td>/);
-    assert.match(mh, /<td class="n2" title="[^"]*c-clock with the same decks: 70%">60%<small>−10<\/small><\/td><td class="p3"[^>]*>50%<small>\+20<\/small><\/td><td class="o">55%<\/td><td class="o">−30<\/td>/);
-    assert.match(mh, /better than c-clock/);
+    assert.match(mh, /<td class="n2" title="[^"]*; par 70%; c-clock itself 70%">60%<small>−10<\/small><\/td><td class="p3"[^>]*>50%<small>\+20<\/small><\/td><td class="o">55%<\/td><td class="o">−30<\/td>/);
+    assert.match(mh, /better with that deck type than its level says/);
     const mp = bt.panelOf(modelled, { now: new Date('2026-10-12T03:00:00Z'), latest: 'x', states: new Map([['x', { state: 'running', finished: 22, run: 'test-x-1' }]]), gamesPerBot: 702 });
     assert.strictEqual(mp.status, 'running');
     assert.strictEqual(mp.widgets[0].items[0].note, '95% CI 33-75%; 2 games without a result left out; running, 22 of 702 games');
-    assert.deepStrictEqual(mp.widgets[2].items.map((x) => x.note), ['Hyper-aggro decks; c-clock itself 70% with the same decks (−10)', 'Hard control decks; c-clock itself 30% with the same decks (+20)']);
+    assert.deepStrictEqual(mp.widgets[2].items.map((x) => x.note), ['Hyper-aggro decks; par 70% (−10); c-clock itself 70%', 'Hard control decks; par 30% (+20); c-clock itself 30%']);
     assert.match(mp.now, /^x scored 55% against c-clock .* over 20 games so far \(running\)$/);
-    assert.match(mp.mentalModel.summary, /compared with what c-clock itself scores with the same decks/);
+    assert.match(mp.mentalModel.summary, /compared with par: what a bot of the same overall score would get/);
+    const retired = { mentalModel: { summary: 'A game\'s result comes from the cards each side holds, how well each bot pilots its deck type, and skill. Every bot gets the same deals, with each deck on both sides, so the cards cancel out of the score: the score measures skill against c-clock, and the row by deck type shows where the bot pilots worse.' } };
+    assert.match(bt.panelOf(modelled, { existing: retired }).mentalModel.summary, /compared with par/, 'an old default model is replaced');
+    assert.strictEqual(bt.panelOf(modelled, { existing: { mentalModel: { summary: 'mine' } } }).mentalModel.summary, 'mine', 'a written one is kept');
     const stopped = bt.panelOf(modelled, { now: new Date('2026-10-12T03:00:00Z'), states: new Map([['x', { state: 'stopped', finished: 22, run: 'test-x-1' }]]), gamesPerBot: 702 });
     assert.deepStrictEqual([stopped.status, stopped.widgets[0].items[0].note.split('; ').at(-1)], ['done', 'stopped at 22 of 702 games (--resume test-x-1)']);
 
@@ -169,7 +172,7 @@ const SCRIPT = path.join(__dirname, '..', 'realdeck', 'bot-test.js');
     assert.match(bt.styleTableHtml([{ bot: '<b>', skill: { winRate: 0.5, byStyle: { midrange: { decided: 2, score: 1, winRate: 0.5 } } } }], 'c-clock'), /&lt;b&gt;/);
     assert.match(table.html, /coloured against 50%/, 'no mirror model: cells against 50%, and the note says so');
     assert(!table.html.includes('itself'), 'no reference row without a model');
-    assert.match(bt.styleTableHtml([{ bot: 'z', skill: { winRate: 0.5, byStyle: { midrange: { decided: 2, score: 1, winRate: 0.5, expected: 0.504, edge: -0.004, expectedGames: 2 } } } }], 'c-clock'), /50%<small>\+0<\/small>/, 'no −0');
+    assert.match(bt.styleTableHtml([{ bot: 'z', skill: { winRate: 0.5, byStyle: { midrange: { decided: 2, score: 1, winRate: 0.5, expected: 0.504, edge: -0.004, par: 0.504, vsPar: -0.004, expectedGames: 2 } } } }], 'c-clock'), /50%<small>\+0<\/small>/, 'no −0');
     assert.strictEqual(bt.shownCommand(['bot/ladder.js', '--key', 'K', '--id', 'x y']), `node bot/ladder.js --key K --id "x y"`);
     assert.strictEqual(bt.shownCommand(['bot/ladder.js', '--key', 'K'], 'K'), `node bot/ladder.js --key <key id ${bt.keyId('K')}>`);
 }
@@ -206,7 +209,8 @@ const SCRIPT = path.join(__dirname, '..', 'realdeck', 'bot-test.js');
         assert.match(dry, new RegExp(`\\$ node bot/ladder\\.js --decks bot/decks/ash-meta-2026-09\\.json --bots rust-search --vs c-clock --games 702 --seed 1 --key <key id ${bt.keyId('secret')}> --id test-rust-search-2 --out `));
         assert(!dry.includes('secret'), 'the key itself is never printed');
         assert.match(dry, /--bots rust-search#a,rust-search#b --games 702 --seed 1 --id mirror-rust-search-1/);
-        assert.match(dry, /analysis\/realdeck\/compare\.js --runs .*mirror-rust-search-1 --decks bot\/decks\/ash-meta-2026-09\.json --human bot\/decks\/ash-meta-2026-09\.human\.json/);
+        assert.match(dry, /has no mirror of c-clock: playing it too \(mirror-c-clock-1\)\n\$ node bot\/ladder\.js .*--bots c-clock#a,c-clock#b --games 702 --seed 1 --id mirror-c-clock-1/);
+        assert.match(dry, /analysis\/realdeck\/compare\.js --runs \S*mirror-c-clock-1,\S*mirror-rust-search-1 --decks bot\/decks\/ash-meta-2026-09\.json --human bot\/decks\/ash-meta-2026-09\.human\.json/);
         assert(!fs.existsSync(path.join(dir, 'skill.json')), 'a dry run writes nothing');
         const out = execFileSync(process.execPath, [SCRIPT, '--report', '--dir', dir, '--panel', panel], { encoding: 'utf8' });
         assert.match(out, /left out: g-other \(another key, so other deals\)/);
@@ -228,6 +232,9 @@ const SCRIPT = path.join(__dirname, '..', 'realdeck', 'bot-test.js');
         assert.match(cli('--bot', 'rust-search', '--resume', 'test-heuristic-9', '--dry-run').out, /is not a gauntlet of rust-search against c-clock/);
         assert.match(cli('--bot', 'heuristic', '--resume', 'test-heuristic-8', '--dry-run').out, /was dealt from key id [0-9a-f]{12}, the standard deals are key id/);
         assert.match(cli('--bot', 'heuristic', '--resume', 'nothing', '--dry-run').out, /no ladder\.json, so there is no run nothing to resume/);
+        const std = { key: 'secret', keyId: bt.keyId('secret') };
+        assert.match(bt.resumeProblem(dir, 'test-heuristic-9', { bot: 'heuristic', sha256, std, now: new Date('2026-10-11T12:20:00Z') }), /is still running .* would write into it/);
+        assert.match(bt.resumeProblem(dir, 'g1', { bot: 'heuristic', sha256, std }), /g1 is done already/);
         assert.strictEqual(cli('--bot', 'heuristic', '--resume', 'nothing', '--dry-run').code, 1);
         assert.match(bt.resumeProblem(dir, 'test-heuristic-9', { bot: 'heuristic', sha256, std: { key: null, keyId: null } }), /would deal its remaining games from a new key/);
 
