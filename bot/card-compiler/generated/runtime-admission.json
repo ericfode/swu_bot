@@ -1,13 +1,13 @@
 {
-  "catalogueHash": "106c2cdfddd838421a513f0292c123e767d461341a29eafa5a43ae054c55a08c",
+  "catalogueHash": "8b80c79f5dbd85c1124b80b73326a7fc7a2b80381568ee0cf2df35cb191bfa81",
   "dataOnlyConvertedCount": 339,
   "gameConformance": "not assessed by this report",
-  "irConvertedCount": 999,
+  "irConvertedCount": 1005,
   "knownCards": 2458,
   "runtimeAdmittedBreakdown": {
     "dataOnly": 339,
     "nativeAdapters": 2,
-    "sourceIr": 492
+    "sourceIr": 499
   },
   "runtimeAdmittedCards": [
     {
@@ -731,6 +731,11 @@
       "setCode": "HMW_152"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "dookus-solar-sailer#droid-army-portent",
+      "setCode": "HMW_154"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "filthy-dianoga",
       "setCode": "HMW_155"
@@ -919,6 +924,11 @@
       "implementation": "sourceIr",
       "internalName": "surveillance-cruiser",
       "setCode": "HMW_247"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "frenzied-trifighters",
+      "setCode": "HMW_249"
     },
     {
       "implementation": "sourceIr",
@@ -1309,6 +1319,11 @@
       "implementation": "sourceIr",
       "internalName": "out-the-airlock",
       "setCode": "JTL_079"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "nebula-ignition",
+      "setCode": "JTL_080"
     },
     {
       "implementation": "sourceIr",
@@ -2517,6 +2532,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "hyperspace-disaster",
+      "setCode": "SEC_078"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "corrupt-politician",
       "setCode": "SEC_079"
     },
@@ -2629,6 +2649,11 @@
       "implementation": "sourceIr",
       "internalName": "kazuda-xiono#im-not-a-spy",
       "setCode": "SEC_151"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "inner-rim-coalition",
+      "setCode": "SEC_154"
     },
     {
       "implementation": "sourceIr",
@@ -3191,6 +3216,11 @@
       "setCode": "SOR_038"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "superlaser-blast",
+      "setCode": "SOR_043"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "restored-arc170",
       "setCode": "SOR_044"
@@ -3614,6 +3644,11 @@
       "implementation": "sourceIr",
       "internalName": "remove-the-chip",
       "setCode": "TS26_069"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "underestimated",
+      "setCode": "TS26_079"
     },
     {
       "implementation": "sourceIr",
@@ -4176,7 +4211,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 833,
+  "runtimeAdmittedCount": 840,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -4445,7 +4480,7 @@
     },
     {
       "internalName": "summaverminoth",
-      "reason": "summaverminoth: arena lists require standalone verified phase-stat semantics",
+      "reason": "summaverminoth: arena-list defeat requires a standalone event without selectors or continuations",
       "setCode": "ASH_083"
     },
     {
@@ -4600,7 +4635,7 @@
     },
     {
       "internalName": "trask-walker",
-      "reason": "trask-walker: compiler rejected \"trask-walker\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/08_ASH/units/TraskWalker.ts\",\"line\":23,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
+      "reason": "trask-walker: compiler rejected \"trask-walker\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/08_ASH/units/TraskWalker.ts\",\"line\":26,\"message\":\"immediateEffect:chooseModalEffects\",\"pattern\":\"immediateEffect:chooseModalEffects\"}]",
       "setCode": "ASH_133"
     },
     {
@@ -5529,11 +5564,6 @@
       "setCode": "HMW_153"
     },
     {
-      "internalName": "dookus-solar-sailer#droid-army-portent",
-      "reason": "dookus-solar-sailer#droid-army-portent: compiler rejected \"dookus-solar-sailer#droid-army-portent\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":93,\"file\":\"game/cards/09_HMW/units/DookusSolarSailerDroidArmyPortent.ts\",\"line\":17,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
-      "setCode": "HMW_154"
-    },
-    {
       "internalName": "arena-acklay#screaming-predator",
       "reason": "arena-acklay#screaming-predator: compiler rejected \"arena-acklay#screaming-predator\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":32,\"file\":\"game/cards/09_HMW/units/ArenaAcklayScreamingPredator.ts\",\"line\":17,\"message\":\"trigger-alias-hook:onDamageDealt\",\"pattern\":\"trigger-alias-hook:onDamageDealt\"}]",
       "setCode": "HMW_156"
@@ -5740,7 +5770,7 @@
     },
     {
       "internalName": "sandcrawler-sales-team",
-      "reason": "sandcrawler-sales-team: compiler rejected \"sandcrawler-sales-team\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/09_HMW/units/SandcrawlerSalesTeam.ts\",\"line\":20,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
+      "reason": "sandcrawler-sales-team: upgrade selection supports only scalar defeat",
       "setCode": "HMW_222"
     },
     {
@@ -5807,11 +5837,6 @@
       "internalName": "defoliator-tank",
       "reason": "defoliator-tank: compiler rejected \"defoliator-tank\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/09_HMW/units/DefoliatorTank.ts\",\"line\":30,\"message\":\"eligibleDefenders(context)\",\"pattern\":\"non-path-reference\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/units/DefoliatorTank.ts\",\"line\":19,\"message\":\"Unused binding eligibleDefenders may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
       "setCode": "HMW_248"
-    },
-    {
-      "internalName": "frenzied-trifighters",
-      "reason": "frenzied-trifighters: compiler rejected \"frenzied-trifighters\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/09_HMW/units/FrenziedTriFighters.ts\",\"line\":20,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
-      "setCode": "HMW_249"
     },
     {
       "internalName": "imperial-cavalry",
@@ -5905,7 +5930,7 @@
     },
     {
       "internalName": "watch-this",
-      "reason": "watch-this: compiler rejected \"watch-this\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/06_IBH/events/WatchThis.ts\",\"line\":19,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
+      "reason": "watch-this: event group contains an unverified operation",
       "setCode": "IBH_052"
     },
     {
@@ -5985,7 +6010,7 @@
     },
     {
       "internalName": "admiral-trench#chkchkchkchk",
-      "reason": "admiral-trench#chkchkchkchk: compiler rejected \"admiral-trench#chkchkchkchk\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts\",\"line\":15,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:deployActionAbilityProps\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts\",\"line\":33,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts\",\"line\":47,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"}]",
+      "reason": "admiral-trench#chkchkchkchk: compiler rejected \"admiral-trench#chkchkchkchk\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts\",\"line\":15,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:deployActionAbilityProps\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts\",\"line\":47,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"}]",
       "setCode": "JTL_014"
     },
     {
@@ -6172,11 +6197,6 @@
       "internalName": "in-the-heat-of-battle",
       "reason": "in-the-heat-of-battle: arena lists require standalone verified phase-stat semantics",
       "setCode": "JTL_077"
-    },
-    {
-      "internalName": "nebula-ignition",
-      "reason": "nebula-ignition: arena lists require standalone verified phase-stat semantics",
-      "setCode": "JTL_080"
     },
     {
       "internalName": "first-order-tie-fighter",
@@ -8904,11 +8924,6 @@
       "setCode": "SEC_077"
     },
     {
-      "internalName": "hyperspace-disaster",
-      "reason": "hyperspace-disaster: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SEC_078"
-    },
-    {
       "internalName": "major-partagaz#healthcare-provider",
       "reason": "major-partagaz#healthcare-provider: compiler rejected \"major-partagaz#healthcare-provider\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/06_SEC/units/MajorPartagazHealthcareProvider.ts\",\"line\":19,\"message\":\"computed-object-key\",\"pattern\":\"computed-object-key\"}]",
       "setCode": "SEC_081"
@@ -9167,11 +9182,6 @@
       "internalName": "luthens-haulcraft#countermeasures-armed",
       "reason": "luthens-haulcraft#countermeasures-armed: compiler rejected \"luthens-haulcraft#countermeasures-armed\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/LuthensHaulcraftCountermeasuresArmed.ts\",\"line\":19,\"message\":\"immediateEffect:disclose\",\"pattern\":\"immediateEffect:disclose\"}]",
       "setCode": "SEC_153"
-    },
-    {
-      "internalName": "inner-rim-coalition",
-      "reason": "inner-rim-coalition: compiler rejected \"inner-rim-coalition\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/06_SEC/units/InnerRimCoalition.ts\",\"line\":20,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
-      "setCode": "SEC_154"
     },
     {
       "internalName": "nemiks-manifesto",
@@ -9805,7 +9815,7 @@
     },
     {
       "internalName": "evidence-of-the-crime",
-      "reason": "evidence-of-the-crime: compiler rejected \"evidence-of-the-crime\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/02_SHD/events/EvidenceOfTheCrime.ts\",\"line\":28,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
+      "reason": "evidence-of-the-crime: compiler rejected \"evidence-of-the-crime\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":26,\"file\":\"game/cards/02_SHD/events/EvidenceOfTheCrime.ts\",\"line\":18,\"message\":\"named-target-card-domain\",\"pattern\":\"named-target-card-domain\"}]",
       "setCode": "SHD_077"
     },
     {
@@ -10637,11 +10647,6 @@
       "internalName": "search-your-feelings",
       "reason": "search-your-feelings: compiler rejected \"search-your-feelings\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/01_SOR/events/SearchYourFeelings.ts\",\"line\":16,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "SOR_042"
-    },
-    {
-      "internalName": "superlaser-blast",
-      "reason": "superlaser-blast: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SOR_043"
     },
     {
       "internalName": "yoda#old-master",
@@ -11554,11 +11559,6 @@
       "setCode": "TS26_078"
     },
     {
-      "internalName": "underestimated",
-      "reason": "underestimated: compiler rejected \"underestimated\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":51,\"file\":\"game/cards/07_TS26/upgrades/Underestimated.ts\",\"line\":14,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
-      "setCode": "TS26_079"
-    },
-    {
       "internalName": "reveal-intentions",
       "reason": "reveal-intentions: compiler rejected \"reveal-intentions\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/07_TS26/events/RevealIntentions.ts\",\"line\":17,\"message\":\"immediateEffect:lookAtAndSelectCard\",\"pattern\":\"immediateEffect:lookAtAndSelectCard\"}]",
       "setCode": "TS26_080"
@@ -11795,7 +11795,7 @@
     },
     {
       "internalName": "the-invasion-of-christophsis",
-      "reason": "the-invasion-of-christophsis: arena lists require standalone verified phase-stat semantics",
+      "reason": "unimplemented runtime keyword exploit",
       "setCode": "TWI_078"
     },
     {
@@ -11890,7 +11890,7 @@
     },
     {
       "internalName": "osi-sobeck#warden-of-the-citadel",
-      "reason": "osi-sobeck#warden-of-the-citadel: compiler rejected \"osi-sobeck#warden-of-the-citadel\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":51,\"file\":\"game/cards/03_TWI/units/OsiSobeckWardenOfTheCitadel.ts\",\"line\":20,\"message\":\"unsupported-query:hasCost\",\"pattern\":\"unsupported-query:hasCost\"}]",
+      "reason": "osi-sobeck#warden-of-the-citadel: compiler rejected \"osi-sobeck#warden-of-the-citadel\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/03_TWI/units/OsiSobeckWardenOfTheCitadel.ts\",\"line\":21,\"message\":\"immediateEffect:capture\",\"pattern\":\"immediateEffect:capture\"}]",
       "setCode": "TWI_115"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1625,
+  "runtimeRejectedCount": 1618,
   "schema": "omni-rs-catalogue-report-v1",
-  "sourceAstConvertedCount": 660
+  "sourceAstConvertedCount": 666
 }

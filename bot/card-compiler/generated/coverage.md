@@ -1,6 +1,6 @@
 # Card source conversion coverage
 
-Known card definitions: **2458**. IR-converted definitions: **999** (660 from source AST; 339 metadata-only plain cards). Explicitly blocked definitions: **1459**. Excluded test mocks: 21.
+Known card definitions: **2458**. IR-converted definitions: **1005** (666 from source AST; 339 metadata-only plain cards). Explicitly blocked definitions: **1453**. Excluded test mocks: 21.
 
 These counts measure bounded IR conversion, not runtime acceptance. Metadata-only conversion handles plain bases and fully parsed keyword-only units without a source class. The Rust runtime separately validates its supported operation set. Unsupported definitions retain their source locations and must not be loaded as no-op cards.
 
@@ -34,12 +34,12 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | registrar:addConstantAbilityTargetingAttached | 18 | 18 |
 | unsupported-player-target-resolver | 18 | 18 |
 | class-state:damageDealtThisPhaseWatcher | 15 | 15 |
+| immediateEffect:capture | 15 | 15 |
 | immediateEffect:forThisPhasePlayerEffect | 15 | 15 |
 | immediateEffect:payResources | 15 | 16 |
 | registrar:addGainTriggeredAbilityTargetingAttached | 15 | 15 |
 | unsupported-field:cannotTargetFirst | 15 | 17 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.cardCannot | 15 | 15 |
-| immediateEffect:capture | 14 | 14 |
 | immediateEffect:createCreditToken | 14 | 15 |
 | immediateEffect:takeControlOfUnit | 14 | 14 |
 | registrar:addPilotingGainAbilityTargetingAttached | 14 | 14 |
@@ -47,11 +47,11 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | registrar:addDamageModificationAbility | 13 | 14 |
 | registrar:addGainConstantAbilityTargetingAttached | 13 | 13 |
 | trigger-alias-hook:onPhaseStarted | 13 | 13 |
+| immediateEffect:chooseModalEffects | 12 | 12 |
 | immediateEffect:forThisAttackCardEffect | 12 | 12 |
 | immediateEffect:lookAtAndSelectCard | 12 | 12 |
 | unsupported-field:sourceZoneFilter | 12 | 12 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.gainAbility | 12 | 12 |
-| immediateEffect:chooseModalEffects | 11 | 11 |
 | opponent-choice-resolver | 11 | 11 |
 | registrar:addBountyAbility | 11 | 11 |
 | trigger-alias-hook:onAttackEnd | 11 | 15 |
@@ -62,7 +62,6 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | registrar:addGainWhenDefeatedAbilityTargetingAttached | 10 | 10 |
 | registrar:addPilotDeploy | 10 | 10 |
 | unsupported-query:getTopCardOfDeck | 10 | 10 |
-| unsupported-query:hasCost | 10 | 10 |
 | unsupported-query:someDefeatedUnitControlledByPlayer | 10 | 10 |
 | unsupported-query:someUnitAttackedControlledByPlayer | 10 | 11 |
 | immediateEffect:playCardFromOutOfPlay | 9 | 10 |
@@ -100,6 +99,7 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | immediateEffect:attachUpgrade | 5 | 5 |
 | immediateEffect:lookAtAndChooseOption | 5 | 5 |
 | immediateEffect:theForceIsWithYou | 5 | 5 |
+| named-target-card-domain | 5 | 5 |
 | registrar:addGainActionAbilityTargetingAttached | 5 | 5 |
 | unimplemented-context-field:events | 5 | 5 |
 | unsupported-field:mustChangeGameState | 5 | 5 |
@@ -119,7 +119,6 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | immediateEffect:randomSelection | 4 | 4 |
 | method:getDamageFromContext | 4 | 4 |
 | method:isUnitPlayedEvent | 4 | 4 |
-| named-target-card-domain | 4 | 4 |
 | registrar:addPilotingConstantAbilityTargetingAttached | 4 | 4 |
 | target-resolver-outer-target-capture | 4 | 4 |
 | trigger-alias-hook:onClaimInitiative | 4 | 4 |

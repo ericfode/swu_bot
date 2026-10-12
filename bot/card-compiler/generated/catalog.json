@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "a38289c95b424595488e8605c00cb613be0d716458abb2d1af6157d709bd0274",
+  "compilerHash": "17abcc273e1bfe6513612ab77dd1bfde89b289906c77579d41a6d05d797c481e",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -20179,11 +20179,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/09_IC27/units/MillenniumFalconYahoo.ts",
-          "line": 21,
-          "column": 81
+          "line": 22,
+          "column": 25
         }
       ]
     },
@@ -26202,12 +26202,15 @@
         "ir:query",
         "ir:ref",
         "ir:returnToHand",
+        "ir:unary",
         "query:hasSomeTrait",
+        "ref:card",
         "ref:event.lastKnownInformation.parentCard",
         "ref:event.lastKnownInformation.parentCardController",
         "ref:player",
         "ref:source.zoneName",
-        "trigger:whenDefeated"
+        "trigger:whenDefeated",
+        "unary:!"
       ]
     },
     {
@@ -27214,7 +27217,14 @@
       "keywordValues": {},
       "requiredCapabilities": [
         "cardType:upgrade",
-        "keyword:sentinel"
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "keyword:sentinel",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -31768,7 +31778,14 @@
       "keywordValues": {},
       "requiredCapabilities": [
         "cardType:upgrade",
-        "keyword:restore"
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "keyword:restore",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -33400,11 +33417,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "immediateEffect:chooseModalEffects",
+          "message": "immediateEffect:chooseModalEffects",
           "file": "game/cards/08_ASH/units/TraskWalker.ts",
-          "line": 23,
-          "column": 42
+          "line": 26,
+          "column": 34
         }
       ],
       "className": "TraskWalker",
@@ -33626,7 +33643,17 @@
       "dataHash": "937aaeef23f9a4e160d8247b32865c518f5c173a4c0677f8dc4228461f7edb6c",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "binary:&&",
+        "cardType:upgrade",
+        "ir:binary",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "ref:card.unique",
+        "unary:!"
       ]
     },
     {
@@ -37110,7 +37137,14 @@
       "dataHash": "0205da6d9272955ca94d6637df551df27ee11960b6e06ec11c0422698fabc977",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -37215,10 +37249,18 @@
       "dataHash": "2cbddc77f8273c888aac0e3db1981c4db40f698e82d29f45750dba12225027c5",
       "keywordValues": {},
       "requiredCapabilities": [
+        "binary:&&",
+        "binary:>",
         "cardType:upgrade",
+        "ir:binary",
         "ir:const",
         "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
         "keyword:overwhelm",
+        "query:isUnit",
+        "ref:card",
+        "ref:card.damage",
         "trigger:constant"
       ]
     },
@@ -37404,7 +37446,14 @@
       "dataHash": "a3080cb1782a8bc6be8cfd85a1d4d28bceec93d9c930bfe7515dd978d55be126",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -39621,7 +39670,14 @@
       "dataHash": "6069cbf68515158124ee71ae69856e0cce963e01b9ac1a840ca8cce9f7ab960e",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -41196,7 +41252,12 @@
       "dataHash": "2976b86263e7c83003969ace10ffce2eb8232ef7309125e4f18a087156d15787",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "binary:===",
+        "cardType:upgrade",
+        "ir:binary",
+        "ir:const",
+        "ir:ref",
+        "ref:card.zoneName"
       ]
     },
     {
@@ -54662,7 +54723,14 @@
       "dataHash": "d809bd6f06380a1781061d42ed23c802305ec08b9d432a182fd02056ba8f3a95",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -56751,23 +56819,84 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Each opponent discards a card from their hand",
+            "costs": [],
+            "effect": {
+              "kind": "conditional",
+              "condition": {
+                "kind": "query",
+                "name": "hasSomeArenaUnit",
+                "receiver": {
+                  "kind": "ref",
+                  "path": [
+                    "player"
+                  ]
+                },
+                "args": [
+                  {
+                    "kind": "binary",
+                    "op": "&&",
+                    "left": {
+                      "kind": "const",
+                      "value": true
+                    },
+                    "right": {
+                      "kind": "binary",
+                      "op": "&&",
+                      "left": {
+                        "kind": "query",
+                        "name": "hasCost",
+                        "receiver": {
+                          "kind": "ref",
+                          "path": [
+                            "card"
+                          ]
+                        },
+                        "args": []
+                      },
+                      "right": {
+                        "kind": "binary",
+                        "op": "<=",
+                        "left": {
+                          "kind": "ref",
+                          "path": [
+                            "card",
+                            "cost"
+                          ]
+                        },
+                        "right": {
+                          "kind": "const",
+                          "value": 1
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "onTrue": {
+                "kind": "discardOwnHand",
+                "amount": {
+                  "kind": "const",
+                  "value": 1
+                },
+                "target": "enemyPlayer"
+              },
+              "onFalse": {
+                "kind": "noAction"
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/09_HMW/units/DookusSolarSailerDroidArmyPortent.ts",
-          "line": 17,
-          "column": 93
-        }
-      ],
+      "diagnostics": [],
       "className": "DookusSolarSailerDroidArmyPortent",
       "baseClass": "NonLeaderUnitCard",
       "id": "4824728633",
       "internalName": "dookus-solar-sailer#droid-army-portent",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Dooku's Solar Sailer",
         "subtitle": "Droid Army Portent",
@@ -56811,7 +56940,22 @@
       "dataHash": "b6146d06e495b37d1b3d3d676dfa1cf86cf25562cec23a5777cc60290c1e3461",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "binary:&&",
+        "binary:<=",
+        "cardType:unit",
+        "ir:binary",
+        "ir:conditional",
+        "ir:const",
+        "ir:discardOwnHand",
+        "ir:noAction",
+        "ir:query",
+        "ir:ref",
+        "query:hasCost",
+        "query:hasSomeArenaUnit",
+        "ref:card",
+        "ref:card.cost",
+        "ref:player",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -62058,23 +62202,83 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Return an upgrade that costs 3 or less to its owner's hand",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "upgrade",
+              "zone": "anyAttackable",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "hasCost",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "<=",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "cost"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 3
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "conditional",
+              "condition": {
+                "kind": "query",
+                "name": "hasSomeTrait",
+                "receiver": {
+                  "kind": "ref",
+                  "path": [
+                    "player",
+                    "base"
+                  ]
+                },
+                "args": [
+                  {
+                    "kind": "const",
+                    "value": "tatooine"
+                  }
+                ]
+              },
+              "onTrue": {
+                "kind": "returnToHand",
+                "target": "chosen"
+              },
+              "onFalse": {
+                "kind": "noAction"
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/09_HMW/units/SandcrawlerSalesTeam.ts",
-          "line": 20,
-          "column": 42
-        }
-      ],
+      "diagnostics": [],
       "className": "SandcrawlerSalesTeam",
       "baseClass": "NonLeaderUnitCard",
       "id": "8471541200",
       "internalName": "sandcrawler-sales-team",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Sandcrawler Sales Team",
         "subtitle": "",
@@ -62119,8 +62323,25 @@
         "saboteur": 1
       },
       "requiredCapabilities": [
+        "binary:&&",
+        "binary:<=",
         "cardType:unit",
-        "keyword:saboteur"
+        "ir:binary",
+        "ir:conditional",
+        "ir:const",
+        "ir:noAction",
+        "ir:query",
+        "ir:ref",
+        "ir:returnToHand",
+        "keyword:saboteur",
+        "query:hasCost",
+        "query:hasSomeTrait",
+        "ref:card",
+        "ref:card.cost",
+        "ref:player.base",
+        "targetType:upgrade",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -63304,7 +63525,19 @@
       "dataHash": "1ad2b70e39ced42198a1bdc6e5cd37003982454ea7ff5d85b0dca33398679563",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "binary:&&",
+        "binary:<=",
+        "cardType:upgrade",
+        "ir:binary",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:getPower",
+        "query:hasSomeTrait",
+        "query:isUnit",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -64370,23 +64603,60 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Defeat an upgrade that costs 3 or less",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "upgrade",
+              "zone": "anyAttackable",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "hasCost",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "<=",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "cost"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 3
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "defeat",
+              "target": "chosen"
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/09_HMW/units/FrenziedTriFighters.ts",
-          "line": 20,
-          "column": 42
-        }
-      ],
+      "diagnostics": [],
       "className": "FrenziedTriFighters",
       "baseClass": "NonLeaderUnitCard",
       "id": "1633962913",
       "internalName": "frenzied-trifighters",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Frenzied Tri-Fighters",
         "subtitle": "",
@@ -64430,7 +64700,20 @@
       "dataHash": "0b5f36b541861ac7c56f5a0392bac975403d7499f7c657ccd7752613288f0099",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "binary:&&",
+        "binary:<=",
+        "cardType:unit",
+        "ir:binary",
+        "ir:const",
+        "ir:defeat",
+        "ir:query",
+        "ir:ref",
+        "query:hasCost",
+        "ref:card",
+        "ref:card.cost",
+        "targetType:upgrade",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -68657,23 +68940,170 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "event",
+            "title": "Return a non-leader unit that costs 6 or less to its owner's hand. Exhaust each other enemy unit in the same arena",
+            "costs": [],
+            "targetResolver": {
+              "owner": "any",
+              "type": "nonLeaderUnit",
+              "zone": "anyAttackable",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "hasCost",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "<=",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "cost"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 6
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "simultaneous",
+              "effects": [
+                {
+                  "kind": "returnToHand",
+                  "target": "chosen"
+                },
+                {
+                  "kind": "exhaust",
+                  "target": {
+                    "kind": "arenaList",
+                    "receiver": {
+                      "kind": "ref",
+                      "path": [
+                        "opponent"
+                      ]
+                    },
+                    "predicate": {
+                      "kind": "binary",
+                      "op": "&&",
+                      "left": {
+                        "kind": "binary",
+                        "op": "&&",
+                        "left": {
+                          "kind": "const",
+                          "value": true
+                        },
+                        "right": {
+                          "kind": "binary",
+                          "op": "||",
+                          "left": {
+                            "kind": "unary",
+                            "op": "!",
+                            "value": {
+                              "kind": "ref",
+                              "path": [
+                                "target",
+                                "zoneName"
+                              ]
+                            }
+                          },
+                          "right": {
+                            "kind": "binary",
+                            "op": "||",
+                            "left": {
+                              "kind": "binary",
+                              "op": "===",
+                              "left": {
+                                "kind": "ref",
+                                "path": [
+                                  "target",
+                                  "zoneName"
+                                ]
+                              },
+                              "right": {
+                                "kind": "const",
+                                "value": "anyArena"
+                              }
+                            },
+                            "right": {
+                              "kind": "binary",
+                              "op": "===",
+                              "left": {
+                                "kind": "ref",
+                                "path": [
+                                  "card",
+                                  "zoneName"
+                                ]
+                              },
+                              "right": {
+                                "kind": "ref",
+                                "path": [
+                                  "target",
+                                  "zoneName"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "binary",
+                        "op": "||",
+                        "left": {
+                          "kind": "unary",
+                          "op": "!",
+                          "value": {
+                            "kind": "ref",
+                            "path": [
+                              "target"
+                            ]
+                          }
+                        },
+                        "right": {
+                          "kind": "binary",
+                          "op": "!==",
+                          "left": {
+                            "kind": "ref",
+                            "path": [
+                              "card"
+                            ]
+                          },
+                          "right": {
+                            "kind": "ref",
+                            "path": [
+                              "target"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/06_IBH/events/WatchThis.ts",
-          "line": 19,
-          "column": 42
-        }
-      ],
+      "diagnostics": [],
       "className": "WatchThis",
       "baseClass": "EventCard",
       "id": "8765982385",
       "internalName": "watch-this",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Watch This",
         "subtitle": "",
@@ -68713,7 +69143,32 @@
       "dataHash": "9e1d32e4bb85d1c187192a8bc06676036e877a2dd5ee0b18cdf892d07ab2c005",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:event"
+        "binary:!==",
+        "binary:&&",
+        "binary:<=",
+        "binary:===",
+        "binary:||",
+        "cardType:event",
+        "ir:arenaList",
+        "ir:binary",
+        "ir:const",
+        "ir:exhaust",
+        "ir:query",
+        "ir:ref",
+        "ir:returnToHand",
+        "ir:simultaneous",
+        "ir:unary",
+        "query:hasCost",
+        "ref:card",
+        "ref:card.cost",
+        "ref:card.zoneName",
+        "ref:opponent",
+        "ref:target",
+        "ref:target.zoneName",
+        "targetType:nonLeaderUnit",
+        "targetZone:anyAttackable",
+        "trigger:event",
+        "unary:!"
       ]
     },
     {
@@ -72266,7 +72721,68 @@
       "sourcePath": "game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts",
       "sourceHash": "f613c5decbdd283d2dd0412c3308e94da9c0b642c9e0620c6298e99271897127",
       "abilities": {
-        "leader": [],
+        "leader": [
+          {
+            "trigger": "action",
+            "title": "Discard a card that costs 3 or more from your hand. If you do, draw a card",
+            "costs": [
+              {
+                "kind": "exhaustSelf"
+              }
+            ],
+            "targetResolver": {
+              "owner": "self",
+              "type": "any",
+              "zone": "hand",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "hasCost",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": ">=",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "cost"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 3
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "discardSpecificCard",
+              "target": "chosen"
+            },
+            "ifYouDo": {
+              "title": "Draw a card",
+              "costs": [],
+              "effect": {
+                "kind": "draw",
+                "target": "ownPlayer",
+                "amount": {
+                  "kind": "const",
+                  "value": 1
+                }
+              }
+            }
+          }
+        ],
         "unit": [],
         "card": []
       },
@@ -72278,14 +72794,6 @@
           "line": 15,
           "column": 1,
           "message": "Additional class method requires conversion"
-        },
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts",
-          "line": 33,
-          "column": 42
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -72343,7 +72851,23 @@
       "dataHash": "791ab750be76cfa57eac3d6900bab3b2efd2f2d732a68db0ad2fede1298f08af",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:leader"
+        "ability:ifYouDo",
+        "binary:&&",
+        "binary:>=",
+        "cardType:leader",
+        "ir:binary",
+        "ir:const",
+        "ir:discardSpecificCard",
+        "ir:draw",
+        "ir:exhaustSelf",
+        "ir:query",
+        "ir:ref",
+        "query:hasCost",
+        "ref:card",
+        "ref:card.cost",
+        "targetType:any",
+        "targetZone:hand",
+        "trigger:action"
       ]
     },
     {
@@ -81304,7 +81828,12 @@
       "dataHash": "abfa5d769b51e4d5c5c6f7c0000a342d6f66bd74eff174af2ad26b67a6c367fa",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -85784,7 +86313,12 @@
       "dataHash": "3202cf0339ad5eb225456c06c7ebbf7e8f151edbfc8d26cf4d29dc747846dee6",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -90373,7 +90907,14 @@
       "dataHash": "ac6e44f6591a789a041ea744a8cf5e0326c6a64cc6db74e390cb68266e8d3505",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "binary:||",
+        "cardType:upgrade",
+        "ir:binary",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -100434,7 +100975,11 @@
       "dataHash": "83e70dcf0aca35262aeffc12c61e1dbc0aec0a642e123d3f705f18806917bde8",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:query",
+        "ir:ref",
+        "query:isNonLeaderUnit",
+        "ref:card"
       ]
     },
     {
@@ -103605,7 +104150,14 @@
       "dataHash": "60fa2a2b91dd267047230e9952c10b4be07f7511ced4469b22b71648727c00bb",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -104689,7 +105241,14 @@
       "dataHash": "f3e2d5843a4d5e9b50ae25bc25a394f87117d094e5321749ff2cbbd77d7a0ded",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -104870,7 +105429,11 @@
       "keywordValues": {},
       "requiredCapabilities": [
         "cardType:upgrade",
-        "keyword:grit"
+        "ir:query",
+        "ir:ref",
+        "keyword:grit",
+        "query:isNonLeaderUnit",
+        "ref:card"
       ]
     },
     {
@@ -106606,7 +107169,14 @@
       "dataHash": "ec9706282179ae2662fe0c5887d5862d900f9b832d93ec090a058cb180370fcd",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -109385,7 +109955,14 @@
       "dataHash": "81cdcc1572dcff87447e940b9e8a5ab05dfffb54df8c5b7e916d1e69ff7d5a96",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -109493,10 +110070,16 @@
         "cardType:upgrade",
         "ir:const",
         "ir:damage",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
         "targetMode:upTo",
         "targetType:unit",
         "targetZone:arena",
-        "trigger:whenPlayed"
+        "trigger:whenPlayed",
+        "unary:!"
       ]
     },
     {
@@ -110518,7 +111101,14 @@
       "dataHash": "11d81dcf3fcab66114edfc7eeee802a5b72e088cd6992fae17b442775e37aee7",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -110621,7 +111211,14 @@
       "dataHash": "1ffe08cfb607e21e6c64e6d1c50bd5c613aedb88d52a03d461445c8029e40770",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -118973,7 +119570,14 @@
       "dataHash": "4cc5f8bcb80c094da0bfd57a4a4e192edbcdf47f2a15456ef15725aad89f3077",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -119986,7 +120590,12 @@
       "dataHash": "dc79bb7580f4c2873a2735a6dc1564400fda6469a96f221b7709df70a844fdb6",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -120078,7 +120687,12 @@
       "dataHash": "c3a7197459d04afdf0f9e96a2d806812a1c6393a7e712bd2e23904b2ff4167d4",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -120198,10 +120812,13 @@
         "ir:gainKeyword",
         "ir:query",
         "ir:ref",
+        "ir:unary",
         "keyword:restore",
         "query:hasSomeTrait",
+        "ref:card",
         "ref:source.parentCard",
-        "trigger:constant"
+        "trigger:constant",
+        "unary:!"
       ]
     },
     {
@@ -121893,7 +122510,12 @@
       "dataHash": "0e0c889fbc7e53b90966cec168a04614cc873cf125c7d734cdd7bc4b3b9c41a4",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -123383,7 +124005,14 @@
       "dataHash": "4c615b903f426e0fe9d99b717de9fdfb8ff432cdd8398ca7280fc44354a042b8",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -124459,7 +125088,14 @@
       "dataHash": "23f98fa53627c1f2b3af0f9baa28cfd4a0b75615d9463880ad3ec46102c36826",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -126097,7 +126733,14 @@
       "dataHash": "988b39fd04a67dc98dab0aad182e6104cd5cf888ed0ec49fffee808955642303",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -127421,7 +128064,12 @@
       "dataHash": "37779efc4487aacb1709b71d252a1c1c8cc2c72dffaca6f0db6368d28cf15c6f",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -128523,7 +129171,16 @@
       "dataHash": "53b28a1187f7d7ab955b200466b316c6ecba558ffd67f9602d55d26c554c98f6",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "binary:&&",
+        "cardType:upgrade",
+        "ir:binary",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -130668,10 +131325,16 @@
         "cardType:upgrade",
         "ir:const",
         "ir:damage",
+        "ir:query",
+        "ir:ref",
         "ir:sequence",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
         "targetType:unit",
         "targetZone:arena",
-        "trigger:whenPlayed"
+        "trigger:whenPlayed",
+        "unary:!"
       ]
     },
     {
@@ -131947,7 +132610,14 @@
       "dataHash": "51d7bda39c91875dbf84a45c976d9e26f48b55cfa88cae8a924e12e2e122d238",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -134120,8 +134790,14 @@
         "cardType:upgrade",
         "ir:const",
         "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
         "keyword:saboteur",
-        "trigger:constant"
+        "query:hasSomeTrait",
+        "ref:card",
+        "trigger:constant",
+        "unary:!"
       ]
     },
     {
@@ -135929,10 +136605,13 @@
         "ir:gainKeyword",
         "ir:query",
         "ir:ref",
+        "ir:unary",
         "keyword:grit",
         "query:hasSomeTrait",
+        "ref:card",
         "ref:source.parentCard",
-        "trigger:constant"
+        "trigger:constant",
+        "unary:!"
       ]
     },
     {
@@ -138011,6 +138690,8 @@
         "keyword:restore",
         "keyword:sentinel",
         "query:hasSomeAspect",
+        "query:hasSomeTrait",
+        "ref:card",
         "ref:source.parentCard",
         "trigger:constant",
         "unary:!"
@@ -147619,9 +148300,11 @@
       "keywordValues": {},
       "requiredCapabilities": [
         "cardType:upgrade",
+        "ir:ref",
         "keyword:overwhelm",
         "keyword:raid",
-        "keyword:restore"
+        "keyword:restore",
+        "ref:card.unique"
       ]
     },
     {
@@ -152167,23 +152850,60 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenDefeated",
+            "title": "Ready a unit that costs 5 or less",
+            "costs": [],
+            "optional": true,
+            "targetResolver": {
+              "owner": "any",
+              "type": "unit",
+              "zone": "anyAttackable",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "query",
+                  "name": "hasCost",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "<=",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "cost"
+                    ]
+                  },
+                  "right": {
+                    "kind": "const",
+                    "value": 5
+                  }
+                }
+              }
+            },
+            "effect": {
+              "kind": "ready",
+              "target": "chosen"
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/06_SEC/units/InnerRimCoalition.ts",
-          "line": 20,
-          "column": 42
-        }
-      ],
+      "diagnostics": [],
       "className": "InnerRimCoalition",
       "baseClass": "NonLeaderUnitCard",
       "id": "7585037197",
       "internalName": "inner-rim-coalition",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Inner Rim Coalition",
         "subtitle": "",
@@ -152226,7 +152946,20 @@
       "dataHash": "2d0378b6828cf55365f00e4df24cc15db73b6d36085745c01da3d3256c8c0484",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "binary:&&",
+        "binary:<=",
+        "cardType:unit",
+        "ir:binary",
+        "ir:const",
+        "ir:query",
+        "ir:ready",
+        "ir:ref",
+        "query:hasCost",
+        "ref:card",
+        "ref:card.cost",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenDefeated"
       ]
     },
     {
@@ -152527,7 +153260,14 @@
       "dataHash": "3e6dc4d10e92c23031d6a6bd54f64858f4430a4a81f45efd3a9f64f417989efb",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -158269,6 +159009,7 @@
         "ir:query",
         "ir:ref",
         "query:hasSomeTrait",
+        "ref:card",
         "ref:source.parentCard",
         "trigger:whenPlayed"
       ]
@@ -166413,7 +167154,11 @@
       "dataHash": "b2a49a7f769eba8042c72a5b5fc39e439bed061d2b8c20fd1cb87d6d158d049b",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:query",
+        "ir:ref",
+        "query:isNonLeaderUnit",
+        "ref:card"
       ]
     },
     {
@@ -167820,7 +168565,11 @@
       "dataHash": "21119e592ac20fc9c8bf00e0a79c6c4fac4cf3357c4899a06e79e45b9e23205b",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:query",
+        "ir:ref",
+        "query:isNonLeaderUnit",
+        "ref:card"
       ]
     },
     {
@@ -167948,9 +168697,12 @@
         "ir:noAction",
         "ir:query",
         "ir:ref",
+        "ir:unary",
         "query:hasSomeTrait",
+        "ref:card",
         "ref:source.parentCard",
-        "trigger:whenPlayed"
+        "trigger:whenPlayed",
+        "unary:!"
       ]
     },
     {
@@ -168038,7 +168790,14 @@
       "dataHash": "581427b8892bddbc28ba455fd4653769c3817ad7927c7cacfb5fb5a464906399",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -168218,11 +168977,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "named-target-card-domain",
+          "message": "named-target-card-domain",
           "file": "game/cards/02_SHD/events/EvidenceOfTheCrime.ts",
-          "line": 28,
-          "column": 25
+          "line": 18,
+          "column": 26
         }
       ],
       "className": "EvidenceOfTheCrime",
@@ -170896,7 +171655,14 @@
       "dataHash": "46e6c38f39f0584c45029d005f23f574262f1319498b54932c57777600f81dca",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -172677,7 +173443,14 @@
       "dataHash": "a1987a62ae1f67539a9255a06934a491862c70a054756765222e56039e0c87b0",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -176582,7 +177355,14 @@
       "keywordValues": {},
       "requiredCapabilities": [
         "cardType:upgrade",
-        "keyword:smuggle"
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "keyword:smuggle",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -176810,7 +177590,14 @@
       "dataHash": "bd3595d049cc3e95aa61eccf577e988bc5e8d7c8ff36fe80476c8b5dec8266f1",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -178173,7 +178960,10 @@
       "requiredCapabilities": [
         "cardType:upgrade",
         "ir:exhaust",
+        "ir:query",
         "ir:ref",
+        "query:isNonLeaderUnit",
+        "ref:card",
         "ref:source.parentCard",
         "trigger:whenPlayed"
       ]
@@ -180667,7 +181457,14 @@
       "dataHash": "e43b2aa1ab5b8c6f2bca8315d80a899be6d16180f0f507f5d1f2e130a49084fe",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -180757,7 +181554,14 @@
       "keywordValues": {},
       "requiredCapabilities": [
         "cardType:upgrade",
-        "keyword:smuggle"
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "keyword:smuggle",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -188510,7 +189314,14 @@
       "dataHash": "7e895a97493806c5bd05b190bc913c9800d312a5794b7d52a21fb79c2dc7e9b0",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -188599,7 +189410,14 @@
       "dataHash": "3f5b532a6a6af3d8015143dedf5690d28c5f0a47818192a004e8bb8755ae6267",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -189563,7 +190381,14 @@
       "dataHash": "e1194d98ff15ddbd2ba63fcaff8c016459edd8c662b3d499c3ad232fbf0a6ca2",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -193408,7 +194233,12 @@
       "dataHash": "cb80a2fa01e3db94b3f4b894f68bff380aaca97a1b22ffa2d191e1164933389d",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -194444,7 +195274,14 @@
       "dataHash": "e4e1ac514c6822526816b17bfda769713ffa871170316ef13a08d84a5d48d8ca",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -194533,7 +195370,14 @@
       "dataHash": "e1eae2d956078ebf9895d9c560c9e2bd81be249199f00e4b67eb7b0817d9056c",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -200645,7 +201489,12 @@
       "dataHash": "6915a44327cb7346f08c38ba10e48a2b6a5025ffb2816f61144a22ff258c09ce",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasSomeTrait",
+        "ref:card"
       ]
     },
     {
@@ -205824,8 +206673,14 @@
         "cardType:upgrade",
         "ir:const",
         "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
         "keyword:sentinel",
-        "trigger:constant"
+        "query:hasSomeTrait",
+        "ref:card",
+        "trigger:constant",
+        "unary:!"
       ]
     },
     {
@@ -207046,7 +207901,14 @@
       "dataHash": "938472dc9fcca4eef9208b40e7f7b159e50cbf57aee43b5ec5373e43e4dcb190",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -208786,7 +209648,14 @@
       "dataHash": "7ec420d1f838841152ed1bdf50a1699dd1ef881961f31945a8bdd8dacdea6b9e",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -209660,7 +210529,14 @@
       "dataHash": "4f3f32c258bded8a7bb20f54c603909c1b90f90d7074e60dc155ce0507c070a0",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -211127,21 +212003,42 @@
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/07_TS26/upgrades/Underestimated.ts",
-          "line": 14,
-          "column": 51
-        }
-      ],
+      "diagnostics": [],
       "className": "Underestimated",
       "baseClass": "UpgradeCard",
       "id": "0122156036",
       "internalName": "underestimated",
-      "status": "unsupported",
+      "attachCondition": {
+        "kind": "binary",
+        "op": "&&",
+        "left": {
+          "kind": "query",
+          "name": "hasCost",
+          "receiver": {
+            "kind": "ref",
+            "path": [
+              "card"
+            ]
+          },
+          "args": []
+        },
+        "right": {
+          "kind": "binary",
+          "op": "<=",
+          "left": {
+            "kind": "ref",
+            "path": [
+              "card",
+              "cost"
+            ]
+          },
+          "right": {
+            "kind": "const",
+            "value": 4
+          }
+        }
+      },
+      "status": "supported",
       "card": {
         "title": "Underestimated",
         "subtitle": "",
@@ -211181,7 +212078,16 @@
       "dataHash": "4a883948c5d1e3789c14eb597fd5d5bc247745c957890239e53906b4f14e4bf6",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "binary:&&",
+        "binary:<=",
+        "cardType:upgrade",
+        "ir:binary",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "query:hasCost",
+        "ref:card",
+        "ref:card.cost"
       ]
     },
     {
@@ -222323,11 +223229,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "immediateEffect:capture",
+          "message": "immediateEffect:capture",
           "file": "game/cards/03_TWI/units/OsiSobeckWardenOfTheCitadel.ts",
-          "line": 20,
-          "column": 51
+          "line": 21,
+          "column": 34
         }
       ],
       "className": "OsiSobeckWardenOfTheCitadel",
@@ -222703,7 +223609,11 @@
         "cardType:upgrade",
         "ir:const",
         "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
         "keyword:overwhelm",
+        "query:isToken",
+        "ref:card",
         "trigger:constant"
       ]
     },
@@ -222858,7 +223768,14 @@
       "dataHash": "c0a997818e6d7b0a3718969116685119e052d5bac30cd9df2693d6d844b66abe",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -222939,7 +223856,13 @@
       "dataHash": "291695438d1ef3f871d44bf206f7d0182b941fe2ab8dbaf245b2b877b4f07402",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:isLeader",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -225834,7 +226757,14 @@
       "dataHash": "8fbc46d80bb0f5a9aa86d5d29a5c68dfe5511db49f8ed2c0c85cec1a45c9603d",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -233619,8 +234549,14 @@
         "cardType:upgrade",
         "ir:const",
         "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
         "keyword:overwhelm",
-        "trigger:constant"
+        "query:hasSomeTrait",
+        "ref:card",
+        "trigger:constant",
+        "unary:!"
       ]
     },
     {
@@ -234581,7 +235517,14 @@
       "dataHash": "ea6d6207735cdfedfebef069bf52aea354b724dd8a7426afa2b05441b3c4fee0",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {
@@ -235379,7 +236322,14 @@
       "dataHash": "dcb4ca08be27548b7b8e19465ca6490037c364da128fef17880c7232f4aff733",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:upgrade"
+        "cardType:upgrade",
+        "ir:const",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "query:hasSomeTrait",
+        "ref:card",
+        "unary:!"
       ]
     },
     {

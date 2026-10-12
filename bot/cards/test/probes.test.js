@@ -150,3 +150,17 @@ test('arena-list oracle constructions witness membership, expiry, empty sets and
             assert.ok(witness.observations.find(o => o.stage === 'after-resolution').targets.every(t => t.zone === 'discard'));
     }
 });
+
+test('defeat arena-list construction witnesses owners, global order, death triggers, attachments and tokens', async () => {
+    const {Env}=require('../../env'), {loadPool}=require('../../omni/rs/pool'), {fixture}=require('../pipeline/probe-fixture');
+    const pool=loadPool(require('node:path').resolve(__dirname,'../../card-compiler/generated/runtime-pool.json')), env=new Env();
+    const ids=['SOR_043','SEC_078','JTL_080'];
+    const scenarios=ids.flatMap(id=>plan(id).cases);
+    for(const id of new Set([...ids,...scenarios.flatMap(c=>c.setupCardIds)])) if(!pool.cards.some(c=>c.setCode===id)) pool.cards.push({...catalogue.cards.find(c=>c.setCode===id).card,setCode:id});
+    let seed=86000;
+    for(const scenario of scenarios){
+        const {witness}=await fixture(env,pool,scenario,seed++);
+        assert.deepEqual(witness.coverageObligationIds,scenario.coverageObligationIds);
+    }
+    for(const id of ids){const p=plan(id);assert.ok(p.cases.some(c=>c.probe.expectDraws));assert.ok(p.cases.some(c=>c.name.endsWith('attachments-reversed')));assert.ok(p.cases.some(c=>c.name.endsWith('token-lifecycle')));}
+});

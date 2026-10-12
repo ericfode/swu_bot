@@ -776,6 +776,7 @@ impl Engine {
                     ),
                     "isAttacking"=>Eval::Bool(self.is_attacking(s,id)),
                     "isDefending"=>Eval::Bool(self.is_defending(s,id)),
+                    "hasCost"=>Eval::Bool(["unit","leader","upgrade","event","token"].iter().any(|kind|d.info.is(kind))),
                     "isTokenUnit"=>Eval::Bool(d.info.is("token")&&d.info.is("unit")),
                     "isNonLeaderUnit" => Eval::Bool(d.info.is("unit") && !d.info.is("leader")),
                     "isInPlay" => Eval::Bool(self.in_arena(s, id) || self.attached_in_play(s,id) || d.info.is("base")),
@@ -1663,10 +1664,10 @@ impl Engine {
         let owner = s.card(s.source).owner;
         match target {
             Target::ArenaList(list)=>{
-                let Eval::Player(seat)=self.eval(s,s.source,s.ability_target,&list.receiver) else {return vec![];};
+                let seat=match self.eval(s,s.source,s.ability_target,&list.receiver) {Eval::Player(seat)=>Some(seat),_=>None};
                 // Snapshot candidates before modifiers and the single lethal sweep.
                 // Candidate card and outer selected target retain separate bindings.
-                self.arena_units(s).into_iter().filter(|id|s.card(*id).owner==seat && self.eval_with_card(s,s.source,s.ability_target,*id,&list.predicate).truth()).map(Eval::Card).collect()
+                self.arena_units(s).into_iter().filter(|id|seat.is_none_or(|seat|s.card(*id).owner==seat) && self.eval_with_card(s,s.source,s.ability_target,*id,&list.predicate).truth()).map(Eval::Card).collect()
             }
             Target::Expression(e) => {
                 fn flatten(value: Eval, out: &mut Vec<Eval>) {
@@ -1751,6 +1752,17 @@ impl Engine {
         u16::try_from(n).map_err(|_| format!("effect amount {n} exceeds bounded runtime"))
     }
     fn apply_effect(&self, s: &mut State, e: &Effect) -> Result<(u16, bool), String> {
+        if let Effect::Defeat {target:Target::ArenaList(_)}=e {
+            if !s.arena_order_exact {return Err("arena-list defeat requires recorded global arena order".into());}
+            // One complete event window: snapshot primary event order, capture
+            // all death registrations, reverse cleanup across all parents, then
+            // move every primary before the framework state sweep. No chunking
+            // or persistent prepared-record buffer is needed for this shape.
+            let targets=self.effect_targets(s,match e {Effect::Defeat {target}=>target,_=>unreachable!()}).into_iter().filter_map(|v|if let Eval::Card(id)=v {Some(id)}else{None}).collect::<Vec<_>>();
+            self.defeat_many(s,&targets)?;
+            self.sweep_stat_defeats(s)?;self.check_win(s);
+            return Ok((targets.len() as u16,!targets.is_empty()));
+        }
         if matches!(e, Effect::PhaseModifiers { .. }) {
             s.event_group.active=true;
             s.event_group.context=Selection::one(s.ability_target);

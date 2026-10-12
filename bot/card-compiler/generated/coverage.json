@@ -1,16 +1,16 @@
 {
   "schema": "swu-card-compiler-coverage/v1",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "a38289c95b424595488e8605c00cb613be0d716458abb2d1af6157d709bd0274",
+  "compilerHash": "17abcc273e1bfe6513612ab77dd1bfde89b289906c77579d41a6d05d797c481e",
   "knownCards": 2458,
   "mockCardsExcluded": 21,
   "sourceFiles": 2074,
   "sourceDefinitions": 2071,
   "definitionsWithSource": 2050,
-  "converted": 999,
-  "sourceAstConverted": 660,
+  "converted": 1005,
+  "sourceAstConverted": 666,
   "dataOnlyConverted": 339,
-  "unconverted": 1459,
+  "unconverted": 1453,
   "runtimeReady": null,
   "runtimeReadyNote": "Source compilation is independent of runtime capability validation. The Rust importer validates each operation before accepting a card; this report does not claim executable coverage.",
   "convertedCards": [
@@ -182,6 +182,7 @@
     "HMW_144",
     "HMW_146",
     "HMW_152",
+    "HMW_154",
     "HMW_155",
     "HMW_157",
     "HMW_158",
@@ -208,6 +209,7 @@
     "HMW_213",
     "HMW_219",
     "HMW_220",
+    "HMW_222",
     "HMW_224",
     "HMW_226",
     "HMW_227",
@@ -222,6 +224,7 @@
     "HMW_245",
     "HMW_246",
     "HMW_247",
+    "HMW_249",
     "HMW_250",
     "HMW_251",
     "HMW_252",
@@ -257,6 +260,7 @@
     "IBH_022",
     "IBH_031",
     "IBH_037",
+    "IBH_052",
     "IBH_053",
     "IBH_054",
     "IBH_055",
@@ -622,6 +626,7 @@
     "SEC_149",
     "SEC_151",
     "SEC_152",
+    "SEC_154",
     "SEC_155",
     "SEC_160",
     "SEC_161",
@@ -875,6 +880,7 @@
     "TS26_069",
     "TS26_070",
     "TS26_072",
+    "TS26_079",
     "TS26_081",
     "TS26_082",
     "TWI_003",
@@ -2061,6 +2067,27 @@
       ]
     },
     {
+      "pattern": "immediateEffect:capture",
+      "occurrences": 15,
+      "cards": [
+        "SEC_056",
+        "SEC_068",
+        "SEC_193",
+        "SEC_212",
+        "SEC_253",
+        "SEC_256",
+        "SHD_106",
+        "SHD_120",
+        "SHD_124",
+        "SHD_251",
+        "TS26_027",
+        "TS26_061",
+        "TWI_115",
+        "TWI_128",
+        "TWI_227"
+      ]
+    },
+    {
       "pattern": "immediateEffect:forThisPhasePlayerEffect",
       "occurrences": 15,
       "cards": [
@@ -2163,26 +2190,6 @@
         "TWI_132",
         "TWI_195",
         "TWI_219"
-      ]
-    },
-    {
-      "pattern": "immediateEffect:capture",
-      "occurrences": 14,
-      "cards": [
-        "SEC_056",
-        "SEC_068",
-        "SEC_193",
-        "SEC_212",
-        "SEC_253",
-        "SEC_256",
-        "SHD_106",
-        "SHD_120",
-        "SHD_124",
-        "SHD_251",
-        "TS26_027",
-        "TS26_061",
-        "TWI_128",
-        "TWI_227"
       ]
     },
     {
@@ -2322,6 +2329,24 @@
       ]
     },
     {
+      "pattern": "immediateEffect:chooseModalEffects",
+      "occurrences": 12,
+      "cards": [
+        "ASH_133",
+        "HMW_035",
+        "HMW_221",
+        "HMW_232",
+        "LOF_079",
+        "LOF_218",
+        "SHD_153",
+        "SOR_058",
+        "SOR_107",
+        "SOR_155",
+        "SOR_203",
+        "TS26_049"
+      ]
+    },
+    {
       "pattern": "immediateEffect:forThisAttackCardEffect",
       "occurrences": 12,
       "cards": [
@@ -2391,23 +2416,6 @@
         "TWI_072",
         "TWI_103",
         "TWI_129"
-      ]
-    },
-    {
-      "pattern": "immediateEffect:chooseModalEffects",
-      "occurrences": 11,
-      "cards": [
-        "HMW_035",
-        "HMW_221",
-        "HMW_232",
-        "LOF_079",
-        "LOF_218",
-        "SHD_153",
-        "SOR_058",
-        "SOR_107",
-        "SOR_155",
-        "SOR_203",
-        "TS26_049"
       ]
     },
     {
@@ -2572,22 +2580,6 @@
         "LAW_171",
         "SHD_214",
         "TWI_195"
-      ]
-    },
-    {
-      "pattern": "unsupported-query:hasCost",
-      "occurrences": 10,
-      "cards": [
-        "ASH_133",
-        "HMW_154",
-        "HMW_222",
-        "HMW_249",
-        "IBH_052",
-        "JTL_014",
-        "SEC_154",
-        "SHD_077",
-        "TS26_079",
-        "TWI_115"
       ]
     },
     {
@@ -3079,6 +3071,17 @@
       ]
     },
     {
+      "pattern": "named-target-card-domain",
+      "occurrences": 5,
+      "cards": [
+        "JTL_056",
+        "JTL_242",
+        "LAW_163",
+        "SEC_232",
+        "SHD_077"
+      ]
+    },
+    {
       "pattern": "registrar:addGainActionAbilityTargetingAttached",
       "occurrences": 5,
       "cards": [
@@ -3275,16 +3278,6 @@
         "LOF_010",
         "LOF_180",
         "SEC_109"
-      ]
-    },
-    {
-      "pattern": "named-target-card-domain",
-      "occurrences": 4,
-      "cards": [
-        "JTL_056",
-        "JTL_242",
-        "LAW_163",
-        "SEC_232"
       ]
     },
     {
@@ -7982,11 +7975,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "immediateEffect:chooseModalEffects",
+          "message": "immediateEffect:chooseModalEffects",
           "file": "game/cards/08_ASH/units/TraskWalker.ts",
-          "line": 23,
-          "column": 42
+          "line": 26,
+          "column": 34
         }
       ]
     },
@@ -11274,21 +11267,6 @@
       ]
     },
     {
-      "setCode": "HMW_154",
-      "internalName": "dookus-solar-sailer#droid-army-portent",
-      "sourcePath": "game/cards/09_HMW/units/DookusSolarSailerDroidArmyPortent.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/09_HMW/units/DookusSolarSailerDroidArmyPortent.ts",
-          "line": 17,
-          "column": 93
-        }
-      ]
-    },
-    {
       "setCode": "HMW_156",
       "internalName": "arena-acklay#screaming-predator",
       "sourcePath": "game/cards/09_HMW/units/ArenaAcklayScreamingPredator.ts",
@@ -11944,21 +11922,6 @@
       ]
     },
     {
-      "setCode": "HMW_222",
-      "internalName": "sandcrawler-sales-team",
-      "sourcePath": "game/cards/09_HMW/units/SandcrawlerSalesTeam.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/09_HMW/units/SandcrawlerSalesTeam.ts",
-          "line": 20,
-          "column": 42
-        }
-      ]
-    },
-    {
       "setCode": "HMW_223",
       "internalName": "therm-scissorpunch#boastful-gambler",
       "sourcePath": "game/cards/09_HMW/units/ThermScissorpunchBoastfulGambler.ts",
@@ -12160,21 +12123,6 @@
           "line": 19,
           "column": 35,
           "message": "Unused binding eligibleDefenders may contain unconverted behavior"
-        }
-      ]
-    },
-    {
-      "setCode": "HMW_249",
-      "internalName": "frenzied-trifighters",
-      "sourcePath": "game/cards/09_HMW/units/FrenziedTriFighters.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/09_HMW/units/FrenziedTriFighters.ts",
-          "line": 20,
-          "column": 42
         }
       ]
     },
@@ -12387,21 +12335,6 @@
           "file": "game/cards/06_IBH/units/GeneralRieekanStalwartTactician.ts",
           "line": 19,
           "column": 29
-        }
-      ]
-    },
-    {
-      "setCode": "IBH_052",
-      "internalName": "watch-this",
-      "sourcePath": "game/cards/06_IBH/events/WatchThis.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/06_IBH/events/WatchThis.ts",
-          "line": 19,
-          "column": 42
         }
       ]
     },
@@ -12883,14 +12816,6 @@
           "line": 15,
           "column": 1,
           "message": "Additional class method requires conversion"
-        },
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/04_JTL/leaders/AdmiralTrenchChkchkchkchk.ts",
-          "line": 33,
-          "column": 42
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -23966,21 +23891,6 @@
       ]
     },
     {
-      "setCode": "SEC_154",
-      "internalName": "inner-rim-coalition",
-      "sourcePath": "game/cards/06_SEC/units/InnerRimCoalition.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/06_SEC/units/InnerRimCoalition.ts",
-          "line": 20,
-          "column": 42
-        }
-      ]
-    },
-    {
       "setCode": "SEC_156",
       "internalName": "nemiks-manifesto",
       "sourcePath": "game/cards/06_SEC/upgrades/NemiksManifesto.ts",
@@ -25953,11 +25863,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "named-target-card-domain",
+          "message": "named-target-card-domain",
           "file": "game/cards/02_SHD/events/EvidenceOfTheCrime.ts",
-          "line": 28,
-          "column": 25
+          "line": 18,
+          "column": 26
         }
       ]
     },
@@ -31841,21 +31751,6 @@
       ]
     },
     {
-      "setCode": "TS26_079",
-      "internalName": "underestimated",
-      "sourcePath": "game/cards/07_TS26/upgrades/Underestimated.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
-          "file": "game/cards/07_TS26/upgrades/Underestimated.ts",
-          "line": 14,
-          "column": 51
-        }
-      ]
-    },
-    {
       "setCode": "TS26_080",
       "internalName": "reveal-intentions",
       "sourcePath": "game/cards/07_TS26/events/RevealIntentions.ts",
@@ -33119,11 +33014,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-query:hasCost",
-          "message": "unsupported-query:hasCost",
+          "pattern": "immediateEffect:capture",
+          "message": "immediateEffect:capture",
           "file": "game/cards/03_TWI/units/OsiSobeckWardenOfTheCitadel.ts",
-          "line": 20,
-          "column": 51
+          "line": 21,
+          "column": 34
         }
       ]
     },

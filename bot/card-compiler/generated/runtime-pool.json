@@ -5740,6 +5740,47 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "4824728633",
+      "internalName": "dookus-solar-sailer#droid-army-portent",
+      "keywords": [],
+      "power": 3,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\n",
+      "setCode": "HMW_154",
+      "setCodes": [
+        {
+          "number": 154,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 154,
+        "set": "HMW"
+      },
+      "subtitle": "Droid Army Portent",
+      "text": "When Played: If you control a unit that costs 1 or less, each opponent discards a card from their hand.",
+      "title": "Dooku's Solar Sailer",
+      "traits": [
+        "separatist",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "aggression",
@@ -7247,6 +7288,47 @@
         "imperial",
         "vehicle",
         "capital ship"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "1633962913",
+      "internalName": "frenzied-trifighters",
+      "keywords": [],
+      "power": 5,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers. A pilot's cost is the card's printed cost, not the cost in the Piloting ability.\n",
+      "setCode": "HMW_249",
+      "setCodes": [
+        {
+          "number": 249,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 249,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: You may defeat an upgrade that costs 3 or less.",
+      "title": "Frenzied Tri-Fighters",
+      "traits": [
+        "separatist",
+        "droid",
+        "vehicle",
+        "fighter"
       ],
       "types": [
         "unit"
@@ -10527,6 +10609,43 @@
       "title": "Out the Airlock",
       "traits": [
         "tactic"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": 9,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "6196035152",
+      "internalName": "nebula-ignition",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "JTL_080",
+      "setCodes": [
+        {
+          "number": 80,
+          "set": "JTL"
+        }
+      ],
+      "setId": {
+        "number": 80,
+        "set": "JTL"
+      },
+      "subtitle": "",
+      "text": "Defeat each unit that isn't upgraded.",
+      "title": "Nebula Ignition",
+      "traits": [
+        "disaster"
       ],
       "types": [
         "event"
@@ -20311,6 +20430,43 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": 7,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "3871116724",
+      "internalName": "hyperspace-disaster",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "SEC_078",
+      "setCodes": [
+        {
+          "number": 78,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 78,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "Defeat all space units.",
+      "title": "Hyperspace Disaster",
+      "traits": [
+        "disaster"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "command",
@@ -21240,6 +21396,46 @@
         "unit"
       ],
       "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "7585037197",
+      "internalName": "inner-rim-coalition",
+      "keywords": [],
+      "power": 6,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\n",
+      "setCode": "SEC_154",
+      "setCodes": [
+        {
+          "number": 154,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 154,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "When Defeated: You may ready a unit that costs 5 or less.",
+      "title": "Inner Rim Coalition",
+      "traits": [
+        "republic",
+        "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -25734,6 +25930,45 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "villainy",
+        "vigilance"
+      ],
+      "cost": 8,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "1353201082",
+      "internalName": "superlaser-blast",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "SOR_043",
+      "setCodes": [
+        {
+          "number": 43,
+          "set": "SOR"
+        }
+      ],
+      "setId": {
+        "number": 43,
+        "set": "SOR"
+      },
+      "subtitle": null,
+      "text": "Defeat all units.",
+      "title": "Superlaser Blast",
+      "traits": [
+        "tactic",
+        "disaster"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "vigilance",
@@ -29106,6 +29341,43 @@
       "unique": false,
       "upgradeHp": null,
       "upgradePower": null
+    },
+    {
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "0122156036",
+      "internalName": "underestimated",
+      "keywords": [],
+      "power": 2,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\n",
+      "setCode": "TS26_079",
+      "setCodes": [
+        {
+          "number": 79,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 79,
+        "set": "TS26"
+      },
+      "subtitle": "",
+      "text": "Attach to a unit that costs 4 or less.",
+      "title": "Underestimated",
+      "traits": [
+        "innate"
+      ],
+      "types": [
+        "upgrade"
+      ],
+      "unique": false,
+      "upgradeHp": 1,
+      "upgradePower": 2
     },
     {
       "arena": "ground",

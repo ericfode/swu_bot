@@ -1823,3 +1823,49 @@ fn arena_list_phase_stats_collect_complete_lethal_set_and_ignore_shields() {
     e.apply_effect(&mut s,&effect).unwrap();assert!(!e.in_arena(&s,a));assert!(!e.in_arena(&s,b));
     assert_eq!(e.apply_effect(&mut s,&effect).unwrap(),(0,false));
 }
+
+fn arena_defeat(receiver:&str)->Effect {serde_json::from_value(json!({"kind":"defeat","target":{"kind":"arenaList","receiver":{"kind":"ref","path":[receiver]},"predicate":{"kind":"const","value":true}}})).unwrap()}
+#[test]
+fn arena_list_defeat_captures_all_sources_and_reverses_complete_cleanup() {
+    let mut e=engine();let mut s=board(&e);
+    let a=unit(&e,&mut s,Seat::P1,"LOF_254");let b=unit(&e,&mut s,Seat::P2,"LOF_256");
+    let upgrade_a=add(&e,&mut s,Seat::P1,"SOR_057");let upgrade_b=add(&e,&mut s,Seat::P1,"SOR_057");
+    e.attach(&mut s,upgrade_a,a);e.attach(&mut s,upgrade_b,b);
+    e.create_token(&mut s,a,false).unwrap();let shield=s.card(a).shield;
+    e.create_token(&mut s,b,true).unwrap();let experience=s.card(b).experience;
+    for source in [a,b] {death_program(&mut e,&s,source,json!({"trigger":"whenDefeated","title":"Draw","condition":{"kind":"binary","op":"===","left":{"kind":"query","name":"arenaUnitCount","receiver":{"kind":"ref","path":["opponent"]},"args":[{"kind":"const","value":true}]},"right":{"kind":"const","value":1}},"effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}}));}
+    s.source=hand(&e,&mut s,"SOR_043");let outer=s.players[0].leader;s.ability_target=outer;
+    assert_eq!(e.apply_effect(&mut s,&arena_defeat("game")).unwrap(),(2,true));
+    assert_eq!(s.death_pending.len,2,"both conditions saw pre-movement board");
+    assert_eq!(s.players[0].discard.as_slice(),&[upgrade_b,upgrade_a,a]);
+    assert_eq!(s.players[1].discard.as_slice(),&[b]);
+    assert_eq!(s.card(shield).parent,0);assert_eq!(s.card(experience).parent,0);
+    assert_eq!(s.ability_target,outer);
+}
+#[test]
+fn arena_list_defeat_large_window_leader_token_and_missing_order() {
+    let e=engine();let mut s=board(&e);
+    for _ in 0..40 {unit(&e,&mut s,Seat::P2,"LOF_254");}
+    let leader=s.players[1].leader;s.card_mut(leader).deployed=true;e.add_arena(&mut s,leader).unwrap();
+    let token=unit(&e,&mut s,Seat::P2,"TOKEN_CLONE_TROOPER");
+    let own=unit(&e,&mut s,Seat::P1,"LOF_254");s.source=hand(&e,&mut s,"TWI_126");
+    let mut legacy=s;legacy.arena_order_exact=false;assert!(e.apply_effect(&mut legacy,&arena_defeat("opponent")).is_err());
+    assert_eq!(e.apply_effect(&mut s,&arena_defeat("opponent")).unwrap(),(42,true));
+    assert!(e.in_arena(&s,own));assert!(!s.card(leader).deployed);assert!(s.card(leader).exhausted);
+    assert!(!s.players[1].discard.contains(leader));assert!(!s.players[1].discard.contains(token));
+    assert_eq!(e.apply_effect(&mut s,&arena_defeat("opponent")).unwrap(),(0,false));
+    eprintln!("State bytes={} (no storage changes for arena-list defeat)",std::mem::size_of::<State>());
+}
+
+#[test]
+fn has_cost_tracks_engine_property_ancestry_not_positive_numeric_cost() {
+    let e=engine();let mut s=board(&e);let source=s.players[0].leader;
+    for (code,expected) in [("ASH_019",false),("SOR_014",true),("LOF_254",true),("SOR_057",true),("TWI_126",true),("TOKEN_SHIELD",true),("TOKEN_CLONE_TROOPER",true)] {
+        let card=add(&e,&mut s,Seat::P1,code);
+        let expr:Expr=serde_json::from_value(json!({"kind":"query","name":"hasCost","receiver":{"kind":"ref","path":["target"]},"args":[]})).unwrap();
+        expr.validate().unwrap();assert_eq!(e.eval(&s,source,card,&expr).truth(),expected,"{code}");
+    }
+    for receiver in [json!({"kind":"ref","path":["player"]}),json!({"kind":"const","value":true}),json!({"kind":"ref","path":["target","controller"]})] {
+        let expr:Expr=serde_json::from_value(json!({"kind":"query","name":"hasCost","receiver":receiver,"args":[]})).unwrap();assert!(expr.validate().is_err());
+    }
+}

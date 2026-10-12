@@ -150,6 +150,8 @@ function createPacket({
             sourcePath: entry.sourcePath,
             sourceHash: entry.sourceHash,
             configuration: entry.abilities,
+            attachCondition: entry.attachCondition ?? null,
+            intrinsicKeywordValues: entry.keywordValues ?? {},
             diagnostics: entry.diagnostics,
             probes: plans.find((p) => p.cardId === entry.setCode),
             coverage: coverage.find((c) => c.cardId === entry.setCode),

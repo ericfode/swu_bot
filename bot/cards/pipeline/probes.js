@@ -2,6 +2,8 @@
 // A deliberately small experiment vocabulary. Unknown IR remains an obligation,
 // never silently becomes a purportedly covered card.
 function planCardProbes(entry, options = {}) {
+    const costPlan = require('./cost-probes').planCostProbes(entry, options);
+    if (costPlan) return costPlan;
     const cardId = entry.setCode;
     const result = {
         schema: 'swu-card-probes/v1',
@@ -60,11 +62,13 @@ function planCardProbes(entry, options = {}) {
                 ...new Set([
                     ...(spec.targets?.map((t) => t.code) ?? []),
                     ...(spec.activationCode ? [spec.activationCode] : []),
+                    ...(spec.targets?.flatMap(t => (t.attachments ?? []).map(a => a.code)) ?? []),
+                    ...(spec.leaderCode ? [spec.leaderCode] : []),
                 ]),
             ].sort(),
             behaviorIds: [
-                ability.effect.kind === 'damage'
-                    ? 'damage'
+                ['damage', 'defeat'].includes(ability.effect.kind)
+                    ? ability.effect.kind
                     : ability.effect.duration === 'phase'
                     ? 'phase-stats'
                     : 'live-stats',
@@ -89,7 +93,7 @@ function planCardProbes(entry, options = {}) {
             const path = `abilities.${side}.${i}`;
             const effect = ability.effect;
             const effectKeys =
-                effect?.kind === 'damage'
+                effect?.kind === 'defeat' ? ['kind', 'target'] : effect?.kind === 'damage'
                     ? ['kind', 'target', 'amount']
                     : ['kind', 'target', 'duration', 'power', 'hp'];
             const extraEffectKeys = Object.keys(effect ?? {}).filter((k) => !effectKeys.includes(k));
@@ -101,7 +105,7 @@ function planCardProbes(entry, options = {}) {
                 extraEffectKeys.length ||
                 ability.costs?.length ||
                 !effect ||
-                !['damage', 'modifyStats'].includes(effect.kind)
+                !['damage', 'defeat', 'modifyStats'].includes(effect.kind)
             ) {
                 obligation(
                     path,
@@ -223,6 +227,90 @@ function planCardProbes(entry, options = {}) {
                     'aura-death-timing',
                     'No automatic simultaneous lethal set or stat-dependency cycle experiment',
                 );
+                continue;
+            }
+            if (effect.kind === 'defeat' && effect.target?.kind === 'arenaList') {
+                const target = effect.target;
+                const receiver = target.receiver?.kind === 'ref' && target.receiver.path?.length === 1 ? target.receiver.path[0] : null;
+                const zonePredicate = (zone) => ({kind:'binary',op:'&&',left:{kind:'const',value:true},right:{kind:'binary',op:'||',left:{kind:'unary',op:'!',value:{kind:'const',value:zone}},right:{kind:'binary',op:'||',left:{kind:'binary',op:'===',left:{kind:'const',value:zone},right:{kind:'const',value:'anyArena'}},right:{kind:'binary',op:'===',left:{kind:'ref',path:['card','zoneName']},right:{kind:'const',value:zone}}}}});
+                const predicate = JSON.stringify(target.predicate);
+                const notUpgraded = predicate === JSON.stringify({kind:'binary',op:'&&',left:{kind:'const',value:true},right:{kind:'binary',op:'&&',left:{kind:'query',name:'isUnit',receiver:{kind:'ref',path:['card']},args:[]},right:{kind:'unary',op:'!',value:{kind:'query',name:'isUpgraded',receiver:{kind:'ref',path:['card']},args:[]}}}});
+                const arena = notUpgraded || predicate === JSON.stringify({kind:'const',value:true}) ? 'any'
+                    : ['ground', 'space'].find(a => predicate === JSON.stringify(zonePredicate(a + 'Arena')));
+                if (side !== 'card' || ability.trigger !== 'event' || ability.targetResolver || !['game','player','opponent'].includes(receiver) || !arena ||
+                    Object.keys(target).some(k => !['kind','receiver','predicate'].includes(k)) || Object.keys(target.receiver).some(k => !['kind','path'].includes(k))) {
+                    obligation(path,'execution','Only event arena-list defeat with owner/arena filters constructible');
+                    continue;
+                }
+                const ground = unit('ground'), space = unit('space');
+                if (!ground || !space) { obligation(path,'construction','Missing quiet arena units'); continue; }
+                const selected = t => (receiver === 'game' || t.owner === (receiver === 'player' ? 'self' : 'opponent')) && (arena === 'any' || t.arena === arena) && (!notUpgraded || !t.attachments?.length);
+                const specification = targets => ({targets,autoTargets:true,selectedTargetIndices:targets.map((t,i) => selected(t)?i:null).filter(i => i!==null),expectDefeated:true});
+                // Interleave controllers within each arena, then reverse full entry order.
+                const mixed = [ground,space].flatMap(e => ['opponent','self'].map(owner => ({code:e.setCode,owner,arena:e.card.arena,damage:1})));
+                for (const [name,targets] of [['interleaved',mixed],['reversed',mixed.toReversed()]])
+                    add(ability,path,name,specification(targets),[obligation(path+'.effect',name+'-global-entry-order')]);
+                add(ability,path,'empty-set',specification([]),[obligation(path+'.effect','empty-set')]);
+                const chosenUnit = arena === 'space' ? space : ground;
+                const selectedOwner = receiver === 'opponent' ? 'opponent' : 'self';
+                add(ability,path,'duplicate-units',specification([0,1].map(() => ({code:chosenUnit.setCode,owner:selectedOwner,arena:chosenUnit.card.arena,damage:1}))),[obligation(path+'.effect','duplicate-definition-defeats')]);
+                const donors = definitions.filter(e => e.status === 'supported' && e.card.types.includes('unit') && !e.card.types.includes('leader') && !e.card.unique &&
+                    Object.values(e.abilities ?? {}).flat().length === 1 && e.abilities.card?.[0]?.trigger === 'whenDefeated' &&
+                    !e.abilities.card[0].costs?.length && Object.keys(e.abilities.card[0]).every(k => ['trigger','title','costs','effect','optional'].includes(k)) &&
+                    JSON.stringify(e.abilities.card[0].effect) === JSON.stringify({kind:'draw',target:'ownPlayer',amount:{kind:'const',value:1}})).sort((a,b)=>a.setCode.localeCompare(b.setCode));
+                const donor = donors.find(e => arena === 'any' || e.card.arena === arena);
+                if (donor) {
+                    const targets = ['self','opponent'].flatMap(owner => [0,1].map(() => ({code:donor.setCode,owner,arena:donor.card.arena,damage:0})));
+                    const spec = specification(targets); spec.resolveDeathDraws = true; spec.expectDraws = ['self','opponent'].map(owner => targets.filter(t => t.owner===owner && selected(t)).length);
+                    add(ability,path,'death-trigger-window',spec,[obligation(path+'.effect','both-side-death-trigger-window')]);
+                } else obligation(path+'.effect','both-side-death-trigger-window','No mandatory simple draw-on-death donor in eligible arena');
+                const upgrades = definitions.filter(e => e.status === 'supported' && e.card.types.includes('upgrade') && !e.card.types.includes('token') && !e.card.unique &&
+                    !e.card.keywords?.length && Object.values(e.abilities ?? {}).flat().length === 0).sort((a,b)=>a.setCode.localeCompare(b.setCode));
+                const tokenUpgrades = ['shield','experience'].map(name => definitions.find(e => e.card.types.includes('token') && e.card.types.includes('upgrade') && e.internalName===name));
+                // Construction eligibility evaluates only a bounded metadata predicate vocabulary.
+                // The oracle attachTo assertion independently checks the chosen real card.
+                const attachEligible = (expr, card) => {
+                    if (!expr) return true;
+                    if (expr.kind==='const') return expr.value;
+                    if (expr.kind==='unary' && expr.op==='!') { const v=attachEligible(expr.value,card); return v===null?null:!v; }
+                    if (expr.kind==='binary') {
+                        const left=attachEligible(expr.left,card),right=attachEligible(expr.right,card);
+                        if (left===null || right===null) return null;
+                        if (expr.op==='&&') return left&&right;
+                        if (expr.op==='<=') return left<=right;
+                    }
+                    if (expr.kind==='query' && JSON.stringify(expr.receiver)==='{"kind":"ref","path":["card"]}') {
+                        if (expr.name==='isUnit' && !expr.args.length) return card.types.includes('unit');
+                        if (expr.name==='getPower' && !expr.args.length) return card.power;
+                        if (expr.name==='hasSomeTrait' && expr.args.length===1 && expr.args[0].kind==='const') return card.traits.includes(expr.args[0].value);
+                    }
+                    return null;
+                };
+                let attachmentHost, ordinaryUpgrade;
+                for (const upgrade of upgrades) {
+                    attachmentHost=definitions.filter(e=>e.status==='supported' && e.card.types.includes('unit') && !e.card.types.includes('leader') && !e.card.unique &&
+                        e.card.arena===chosenUnit.card.arena && Object.values(e.abilities ?? {}).flat().length===0 && attachEligible(upgrade.attachCondition,e.card)===true).sort((a,b)=>a.setCode.localeCompare(b.setCode))[0];
+                    if (attachmentHost) { ordinaryUpgrade=upgrade; break; }
+                }
+                if (ordinaryUpgrade && tokenUpgrades.every(Boolean)) {
+                    const attachments = [ordinaryUpgrade,tokenUpgrades[0],tokenUpgrades[1]].map(e => ({code:e.setCode,token:e.card.types.includes('token')?e.internalName:null}));
+                    const targets = ['self','opponent'].map(owner => ({code:attachmentHost.setCode,owner,arena:attachmentHost.card.arena,damage:0,attachments}));
+                    const attachmentTargets = notUpgraded ? targets.flatMap(t => [t,{code:t.code,owner:t.owner,arena:t.arena,damage:0}]) : targets;
+                    for (const [name,ordered] of [['attachments',attachmentTargets],['attachments-reversed',attachmentTargets.toReversed()]])
+                        add(ability,path,name,specification(ordered),[obligation(path+'.effect',name+(notUpgraded ? '-upgrade-eligibility' : '-combined-cleanup-order'))]);
+                } else obligation(path+'.effect','attachment-cleanup','Missing quiet ordinary upgrade or Shield/Experience metadata');
+                if (notUpgraded) obligation(path+'.effect','attachment-cleanup','Upgraded hosts are excluded by predicate; ordinary upgrade contingent cleanup is not exercised');
+                const tokens = definitions.filter(e => e.status==='supported' && e.card.types.includes('token') && e.card.types.includes('unit') &&
+                    Object.values(e.abilities ?? {}).flat().length === 0 && !e.card.keywords?.length).sort((a,b)=>a.setCode.localeCompare(b.setCode));
+                const token = tokens.find(e => arena === 'any' || e.card.arena===arena);
+                if (token) add(ability,path,'token-lifecycle',specification(['self','opponent'].map(owner => ({code:token.setCode,token:token.internalName,owner,arena:token.card.arena,damage:0}))),[obligation(path+'.effect','token-removal')]);
+                else obligation(path+'.effect','token-removal','No quiet eligible token unit metadata');
+                const leader = definitions.filter(e=>e.status==='supported' && e.card.types.includes('leader') && (arena==='any'||e.card.arena===arena) &&
+                    Object.values(e.abilities ?? {}).flat().every(a=>['action','onAttack'].includes(a.trigger))).sort((a,b)=>a.setCode.localeCompare(b.setCode))[0];
+                if (leader) add(ability,path,'deployed-leader',{...specification(['self','opponent'].map(owner=>({code:leader.setCode,owner,arena:leader.card.arena,deployedLeader:true,damage:0}))),leaderCode:leader.setCode},[obligation(path+'.effect','deployed-leader-undeployment')]);
+                else obligation(path+'.effect','deployed-leader','No eligible leader without automatic enter/leave-play triggers');
+                for (const dimension of ['aura-death-timing','sequential-sweep-sensitivity','cancel-before-payment','capacity-boundary'])
+                    obligation(path+'.effect',dimension,'No automatic '+dimension+' defeat construction yet');
                 continue;
             }
             if (effect.kind === 'modifyStats' && effect.target?.kind === 'arenaList') {

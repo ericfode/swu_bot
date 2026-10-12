@@ -109,3 +109,22 @@ test('pipeline CLI keeps builds mandatory and parses multiple selected cards', (
         assert.ok(changes.some(c => c.label === label), label);
     assert.ok(!changes.some(c => c.label.includes('sequential')));
 });
+
+
+test('defeat list sensitivity includes empty targets and owner restriction', () => {
+    const entry = {setCode:'TST_002',abilities:{card:[{effect:{kind:'defeat',target:{kind:'arenaList',receiver:{kind:'ref',path:['game']},predicate:{kind:'const',value:true}}}}]}};
+    const changes = mutants(entry);
+    assert.deepEqual(changes.map(c => c.label).sort(), ['empty-list','friendly-only-list']);
+    assert.equal(entry.abilities.card[0].effect.target.predicate.value,true);
+});
+test('cost query sensitivity covers zero-cost capability and attachment thresholds', () => {
+    const condition = {kind:'binary',op:'&&',left:{kind:'query',name:'hasCost',receiver:{kind:'ref',path:['card']},args:[]},right:{kind:'binary',op:'<=',left:{kind:'ref',path:['card','cost']},right:{kind:'const',value:4}}};
+    const entry = {setCode:'TST_003',abilities:{card:[]},attachCondition:condition};
+    const before=digest(entry), changes=mutants(entry);
+    assert.deepEqual(changes.map(c=>c.label).sort(),['amount-plus-one','no-cost-cards','positive-cost-only']);
+    assert.equal(digest(entry),before);
+    assert.ok(changes.every(c=>c.path.startsWith('attachCondition.')));
+    const positive=changes.find(c=>c.label==='positive-cost-only').entry.attachCondition.left;
+    assert.equal(positive.left.name,'getPrintedCost');
+    assert.equal(positive.right.value,0);
+});

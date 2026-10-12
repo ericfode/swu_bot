@@ -90,12 +90,15 @@ compare equal-work search results and binary size when extending code generation
 
 The planner operates on rule structure. The initial construction vocabulary
 handles simple targeted constant damage and phase stat events, standalone phase
-stat events over owner/arena-filtered arena lists, and self stat modifiers whose
-power depends on damage. Arena-list experiments include mixed controllers and
-arenas, empty sets, expiry and simultaneous lethal targets; aura-dependent
-ordering and attachment cleanup remain explicit gaps. It selects setup cards from metadata,
+stat and defeat events over filtered arena lists, self stat modifiers whose power
+depends on damage, and bounded cost-query conditions for discard, upgrade defeat,
+death-triggered ready and upgrade attachment. It selects setup cards from metadata,
 uses ordinary engine actions after a disclosed starting position, and records
-oracle observations. It does not compute expected game outcomes from the IR.
+oracle observations. Arena-list defeat experiments exercise global entry order,
+death draws, reverse cleanup across multiple parents, token removal and eligible
+leader undeployment. Arena-list stat experiments exercise mixed controllers and
+arenas, empty sets, expiry and simultaneous lethal targets. Aura-dependent timing
+and unconstructed interactions remain explicit gaps for each family. It does not compute expected game outcomes from the IR.
 Positive targeting, ownership/arena differences, damaged and lethal targets,
 bases, invalid hand targets, no eligible units, phase expiry, initial stat values
 and live damage changes have construction adapters. Other shapes remain visible
@@ -105,8 +108,8 @@ state-space exploration.
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately
-wrong amounts, target restrictions and signs test the sensitivity of these
-experiments. Rejected mutants do not count as detected gameplay errors; surviving
+wrong amounts, target restrictions, list scopes, signs and cost predicates test
+the sensitivity of these experiments. Rejected mutants do not count as detected gameplay errors; surviving
 mutants become uncovered obligations. Passing mutants tests only those mutations.
 
 IR-derived tests cannot detect every source behavior omitted by the compiler.

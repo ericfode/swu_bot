@@ -307,7 +307,7 @@ impl Expr {
             } => {
                 if receiver.references_title() || args.iter().any(Self::references_title) { return Err("printed title query coercion is unsupported".into()); }
                 let arity = match name.as_str() {
-                    "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
+                    "hasCost" | "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
                     | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
                     | "getCost" | "getPrintedCost" | "isToken" | "isTokenUnit" | "resourcePairs" | "isAttacking" | "isDefending" => 0,
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" | "hasSomeArenaUnit"
@@ -317,6 +317,7 @@ impl Expr {
                 if args.len() != arity {
                     return Err(format!("query {name} expects {arity} arguments"));
                 }
+                if name=="hasCost" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("hasCost requires an explicit card receiver".into());}
                 if name=="isTokenUnit" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("isTokenUnit requires an explicit card receiver".into());}
                 if ["isAttacking","isDefending"].contains(&name.as_str()) && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("attack query requires a scalar source/card/target receiver".into());}
                 sub(receiver)?;
@@ -342,20 +343,23 @@ pub struct ArenaListTarget { pub kind: ArenaListKind, pub receiver: Expr, pub pr
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ArenaListKind { #[serde(rename = "arenaList")] ArenaList }
 impl ArenaListTarget {
-    fn validate_phase_stats(&self)->Result<(),String> {
-        self.receiver.validate()?;
+    fn validate_phase_stats(&self)->Result<(),String> { self.validate_scope(false) }
+    fn validate_scope(&self, global:bool)->Result<(),String> {
+        if !(global && matches!(&self.receiver,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["game"])) {self.receiver.validate()?;}
         self.predicate.validate()?;
-        if !matches!(&self.receiver,Expr::Ref {path} if path.len()==1 && ["player","opponent"].contains(&path[0].as_str())) {return Err("arena-list phase stats require player or opponent receiver".into());}
-        fn predicate(e:&Expr)->bool {match e {
+        if !matches!(&self.receiver,Expr::Ref {path} if path.len()==1 && (["player","opponent"].contains(&path[0].as_str()) || (global && path[0]=="game"))) {return Err("arena-list receiver is outside the verified scope".into());}
+        fn predicate(e:&Expr,global:bool)->bool {match e {
             Expr::Const {value}=>value.is_boolean(),
-            Expr::Unary {op,value} if op=="!"=>predicate(value)||matches!(value.as_ref(),Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"))),
-            Expr::Binary {op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left)&&predicate(right),
+            Expr::Unary {op,value} if op=="!"=>predicate(value,global)||matches!(value.as_ref(),Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"))),
+            Expr::Binary {op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left,global)&&predicate(right,global),
             Expr::Binary {op,left,right} if op=="==="=>{
                 let zone=|e:&Expr|matches!(e,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
                 let name=|e:&Expr|matches!(e,Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
                 (zone(left)&&name(right))||(name(left)&&name(right))
-            },_=>false}}
-        if !predicate(&self.predicate) {return Err("arena-list phase-stat predicate requires verified arena-only scope".into());}Ok(())
+            },
+            Expr::Query {name,receiver,args} if global && ["isUnit","isUpgraded"].contains(&name.as_str())=>args.is_empty() && matches!(receiver.as_ref(),Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card"]),
+            _=>false}}
+        if !predicate(&self.predicate,global) {return Err("arena-list phase-stat predicate requires verified arena-only scope".into());}Ok(())
     }
 }
 impl Target {
@@ -668,6 +672,10 @@ impl Program {
                 Expr::Binary {op, ..} if op == "+" => e.validate_number(),
                 _ => e.validate(),
             }
+        }
+        if let Effect::Defeat {target:Target::ArenaList(list)}=&ability.effect {
+            if ability.trigger!="event" || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate {return Err("arena-list defeat requires a standalone event without selectors or continuations".into());}
+            list.validate_scope(true)?;
         }
         if let Effect::ModifyStats {target:Target::ArenaList(list),power,hp,duration}=&ability.effect {
             if ability.trigger!="event" || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate || duration!="phase" {return Err("arena-list phase stats require a standalone event without selectors or continuations".into());}
@@ -1121,6 +1129,10 @@ impl Program {
                 else { self.compile_effect(effect,depth+1)?; }
             }
             Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
+            Effect::Defeat {target:Target::ArenaList(list)} => {
+                if depth!=0 {return Err("nested arena-list defeat requires explicit timing witnesses".into());}
+                list.validate_scope(true)?;self.instructions.push(Instruction::Apply(effect.clone()));
+            }
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::ModifyStats { target, power, hp, duration } => {
                 if matches!(target,Target::ArenaList(_)) && depth!=0 {return Err("nested arena-list modifiers require explicit continuation witnesses".into());}
@@ -1455,5 +1467,21 @@ mod arena_list_phase_tests {
         let mut v=ability();v["effect"]["power"]=json!({"kind":"ref","path":["target","damage"]});assert!(compile(v).is_err());
         let mut v=ability();v["effect"]["kind"]=json!("damage");v["effect"].as_object_mut().unwrap().remove("duration");v["effect"].as_object_mut().unwrap().remove("power");v["effect"].as_object_mut().unwrap().remove("hp");v["effect"]["amount"]=json!({"kind":"const","value":1});assert!(compile(v).is_err());
         let mut v=ability();v["effect"]=json!({"kind":"sequence","effects":[v["effect"].clone()]});assert!(compile(v).is_err());
+    }
+}
+
+#[cfg(test)]
+mod arena_list_defeat_tests {
+    use super::*;use serde_json::json;
+    fn ability()->serde_json::Value {json!({"trigger":"event","title":"Defeat","effect":{"kind":"defeat","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["game"]},"predicate":{"kind":"const","value":true}}}})}
+    fn compile(v:serde_json::Value)->Result<Program,String>{Program::compile(&serde_json::from_value(v).unwrap())}
+    #[test]fn defeat_list_rejects_unwitnessed_contexts_and_predicates(){
+        assert!(compile(ability()).is_ok());
+        let mut v=ability();v["trigger"]=json!("onAttack");assert!(compile(v).is_err());
+        let mut v=ability();v["then"]=json!({"title":"Next","effect":{"kind":"noAction"}});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"isUpgraded","receiver":{"kind":"ref","path":["card"]},"args":[]});assert!(compile(v.clone()).is_ok());v["effect"]["target"]["predicate"]["receiver"]=json!({"kind":"ref","path":["target"]});assert!(compile(v).is_err());
+        let mut v=ability();let mut p=json!({"kind":"const","value":true});for _ in 0..20 {p=json!({"kind":"unary","op":"!","value":p});}v["effect"]["target"]["predicate"]=p;assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]=json!({"kind":"simultaneous","effects":[v["effect"].clone()]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["source"]});assert!(compile(v).is_err());
     }
 }

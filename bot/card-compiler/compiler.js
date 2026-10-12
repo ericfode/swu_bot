@@ -260,7 +260,7 @@ function arenaPredicate(value, ctx, node, depth = 0) {
         return;
     }
     if (!['const','binary','unary','conditional','query','math','array'].includes(value.kind)) fail(ctx, node, 'arena-predicate-expression');
-    if (value.kind === 'query' && !['isUnit','isBase','isLeader','isNonLeaderUnit','isUpgrade','isToken','isEvent','hasSomeTrait','hasEveryTrait','hasSomeAspect','hasEveryAspect','hasSomeKeyword','hasEveryKeyword','getPower','getHp','getCost','getPrintedCost','hasInitiative','getNumericKeywordTotal','isInPlay','isDeployed','isUpgraded','canBeDamaged','canBeExhausted'].includes(value.name)) fail(ctx, node, 'arena-predicate-query');
+    if (value.kind === 'query' && !['isUnit','isBase','isLeader','isNonLeaderUnit','isUpgrade','isToken','isEvent','hasSomeTrait','hasEveryTrait','hasSomeAspect','hasEveryAspect','hasSomeKeyword','hasEveryKeyword','getPower','getHp','getCost','getPrintedCost','hasInitiative','getNumericKeywordTotal','isInPlay','isDeployed','isUpgraded','canBeDamaged','canBeExhausted','hasCost'].includes(value.name)) fail(ctx, node, 'arena-predicate-query');
     for (const child of Object.values(value)) {
         if (Array.isArray(child)) { for (const item of child) if (item && typeof item === 'object') arenaPredicate(item, ctx, node, depth + 1); }
         else if (child && typeof child === 'object') arenaPredicate(child, ctx, node, depth + 1);
@@ -436,6 +436,15 @@ function expr(input, context, params = ['context']) {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const call = node.expression;
         const name = call.name.text;
+        if (name === 'hasCost') {
+            if(node.questionDotToken || call.questionDotToken)fail(ctx,node,'optional-cost-query');
+            if(node.arguments.length)fail(ctx,node,'cost-query-arity');
+            const receiver=expr(call.expression,ctx);
+            const roots=['source','card','target'];
+            if(ctx.attachPredicate)roots.push('attachTarget');
+            if(receiver.kind!=='ref'||receiver.path.length!==1||!roots.includes(receiver.path[0]))fail(ctx,node,'cost-query-receiver');
+            return {kind:'query',name,receiver,args:[]};
+        }
         if (['isAttacking','isDefending'].includes(name)) {
             if(node.questionDotToken || call.questionDotToken) fail(ctx,node,'optional-attack-query');
             if(node.arguments.length) fail(ctx,node,'attack-query-arity');
