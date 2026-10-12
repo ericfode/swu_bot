@@ -106,8 +106,11 @@ card inventory. Markerless legacy snapshots remain valid only for selected pools
 that cannot reach Force abilities; held state and reachable Force abilities
 require the reviewed native token in the selected pool.
 
-Ordinary-unit When Played supports mandatory Force gain or optional use;
-When Defeated also supports optional use. Event use preserves prepayment
+Ordinary units support mandatory Force gain on play, attack and defeat, or
+optional use on play and defeat. Multiple gain registrations retain separate
+captured triggers and reuse the same token identity. Ordinary upgrades may use
+their controller's Force on play before a bounded base-healing continuation;
+attachment restrictions, printed stats and uniqueness still apply. Event use preserves prepayment
 confirmation and cancellation when no Force is held. Supported continuations
 include draw-two, self-ready, scalar unit damage, unit/base healing, unit phase
 stats, and the opponent choosing one card to discard. Force is spent before the

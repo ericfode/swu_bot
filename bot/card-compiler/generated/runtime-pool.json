@@ -18323,6 +18323,46 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "5800386133",
+      "internalName": "yodas-lightsaber",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "LOF_102",
+      "setCodes": [
+        {
+          "number": 102,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 102,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Attach to a non-Vehicle unit.\nWhen Played: You may use the Force (lose your Force token). If you do, heal 3 damage from a base.",
+      "title": "Yoda's Lightsaber",
+      "traits": [
+        "item",
+        "weapon",
+        "lightsaber"
+      ],
+      "types": [
+        "upgrade"
+      ],
+      "unique": true,
+      "upgradeHp": 1,
+      "upgradePower": 3
+    },
+    {
       "arena": "space",
       "aspects": [
         "command",
@@ -18838,6 +18878,45 @@
       ],
       "types": [
         "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "0958021533",
+      "internalName": "acolyte-of-the-beyond",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "LOF_129",
+      "setCodes": [
+        {
+          "number": 129,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 129,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "On Attack/When Defeated: The Force is with you (create your Force token).",
+      "title": "Acolyte of the Beyond",
+      "traits": [
+        "sith"
+      ],
+      "types": [
+        "unit"
       ],
       "unique": false,
       "upgradeHp": null,

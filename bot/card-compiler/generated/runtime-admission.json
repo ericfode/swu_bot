@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 547
+    "sourceIr": 549
   },
   "runtimeAdmittedCards": [
     {
@@ -2267,6 +2267,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "yodas-lightsaber",
+      "setCode": "LOF_102"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "acclamator-assault-ship",
       "setCode": "LOF_106"
     },
@@ -2329,6 +2334,11 @@
       "implementation": "sourceIr",
       "internalName": "rampage",
       "setCode": "LOF_127"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "acolyte-of-the-beyond",
+      "setCode": "LOF_129"
     },
     {
       "implementation": "dataOnly",
@@ -4626,7 +4636,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 923,
+  "runtimeAdmittedCount": 925,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -8404,11 +8414,6 @@
       "setCode": "LOF_101"
     },
     {
-      "internalName": "yodas-lightsaber",
-      "reason": "yodas-lightsaber: Force registration requires ordinary unit card-side metadata",
-      "setCode": "LOF_102"
-    },
-    {
       "internalName": "following-the-path",
       "reason": "following-the-path: compiler rejected \"following-the-path\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/FollowingThePath.ts\",\"line\":18,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "LOF_103"
@@ -8472,11 +8477,6 @@
       "internalName": "protect-the-pod",
       "reason": "protect-the-pod: compiler rejected \"protect-the-pod\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":19,\"file\":\"game/cards/05_LOF/events/ProtectThePod.ts\",\"line\":19,\"message\":\"`${context.targets.friendlyUnit.title} deals ${context.targets.friendlyUnit.remainingHp} damage to an enemy unit`\",\"pattern\":\"expression:TemplateExpression\"}]",
       "setCode": "LOF_128"
-    },
-    {
-      "internalName": "acolyte-of-the-beyond",
-      "reason": "acolyte-of-the-beyond: Force registration requires ordinary unit card-side metadata",
-      "setCode": "LOF_129"
     },
     {
       "internalName": "hk47#exclamation-die-meatbag",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1535,
+  "runtimeRejectedCount": 1533,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

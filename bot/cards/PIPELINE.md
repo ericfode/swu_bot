@@ -177,6 +177,16 @@ post-use target selection, ineffective continuations, recipient deaths, Shield
 prevention, and Shielded trigger ordering. Printed Overwhelm combat and Hidden
 attack protection have their own witnesses.
 
+Force-trigger experiments cover separate attack and defeat gain registrations,
+including a lethal attack that captures both and an already-held token. Upgrade
+experiments cover non-Vehicle attachment in both arenas, controller identity on
+an enemy host, printed stat bonuses and aspect costs, both bases, partial and
+capped healing, optional decline, and absent Force. Same-host unique upgrades
+automatically lose the older copy; different hosts offer a choice, and a captured
+When Played ability still heals after its source is defeated. Controller transfer,
+attack cancellation, other simultaneous source triggers, replacement effects and
+unit-host death after attachment remain explicit gaps.
+
 Force-presence experiments cover actual gain/use/regain changing self Grit,
 Sentinel attack menus and friendly power in both arenas. Enemy-only Force does
 not activate these effects, and phase changes preserve them. Conditional Ambush
