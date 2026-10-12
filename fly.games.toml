@@ -1,10 +1,14 @@
-# The Fly app swu-arena-games: the games machine (bot/arena/games.js, Dockerfile.games). It plays the bots people
-# submit on the window (swu-arena, fly.toml) and sends the results there. Deployed by .github/workflows/deploy-games.yml.
+# The Fly app swu-arena-games: the games machine (Dockerfile.games). It plays the bots people submit on the window
+# (swu-arena, fly.toml) and sends the results there. Deployed by .github/workflows/deploy-games.yml. GAMES_COORDINATOR
+# picks what runs it (bot/arena/ops/games-entry.sh): "node" bot/arena/games.js, "elixir" the Elixir coordinator
+# (coord/README.md), which calls Node for the game work. Switch without a rebuild:
+# `fly machine update <id> --env GAMES_COORDINATOR=node -a swu-arena-games`.
 #
 # It has a private address only (`fly ips allocate-v6 --private -a swu-arena-games`, no public IP), so only machines in
 # the same Fly organization reach it: the window calls http://swu-arena-games.flycast/wake (ARENA_GAMES_WAKE in
-# fly.toml) on each submission and every 6 hours, and Fly's proxy starts the stopped machine for that request. games.js
-# exits when it has nothing to do, and the machine stays stopped until the next wake-up (restart only on failure).
+# fly.toml) on each submission and every 6 hours, and Fly's proxy starts the stopped machine for that request. The
+# program running it exits when it has nothing to do, and the machine stays stopped until the next wake-up (restart
+# only on failure).
 # Secret (`fly secrets set ... -a swu-arena-games`): SWU_WINDOW_TOKEN, a token the window accepts as the project's
 # (ARENA_GAMES_TOKEN in fly.toml's secrets).
 app = "swu-arena-games"
@@ -20,6 +24,9 @@ kill_timeout = "30s"
   SWU_WINDOW = "https://swu-arena.fly.dev"
   GAMES_DATA = "/data"
   PORT = "8080"
+  GAMES_COORDINATOR = "node"
+  # the coordinator refuses to start when /data is not the volume (its jobs and state would not survive a restart)
+  GAMES_REQUIRE_MOUNT = "1"
 
 [[mounts]]
   source = "games_data"
@@ -31,7 +38,7 @@ kill_timeout = "30s"
   internal_port = 8080
   protocol = "tcp"
   auto_start_machines = true
-  # games.js decides when to stop (a round has no requests while it plays)
+  # the program running it decides when to stop (a round has no requests while it plays)
   auto_stop_machines = "off"
   min_machines_running = 0
 

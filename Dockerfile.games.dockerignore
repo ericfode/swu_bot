@@ -1,4 +1,4 @@
-# The games image (Dockerfile.games) needs the bot folder, the Rust workspace manifests and the forceteki source; keep
+# The games image (Dockerfile.games) needs the bot and coord folders, the Rust workspace manifests and the forceteki source; keep
 # the rest out, and what a local checkout builds (forceteki's packages, build and card data, Rust targets, caches).
 # BuildKit reads this file for Dockerfile.games; fly.games.toml names it as the ignore file for flyctl.
 *
@@ -6,11 +6,14 @@
 !Cargo.toml
 !Cargo.lock
 !bot
+!coord
 !forceteki
 forceteki/.git
 forceteki/node_modules
 forceteki/build
 forceteki/test/json
+coord/_build
+coord/deps
 **/target
 **/node_modules
 **/__pycache__

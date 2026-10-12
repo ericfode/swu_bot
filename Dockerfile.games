@@ -1,8 +1,10 @@
-# The games machine: what the Fly app swu-arena-games runs (fly.games.toml). bot/arena/games.js takes the bots people
-# submit on the window (swu-arena.fly.dev), plays them against each other and the resident bots, and sends the results
-# back to the window. Built from the repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's
-# builders (never from a thread's container). The build context is filtered by Dockerfile.games.dockerignore.
-# No stage installs system packages: each takes what it needs from an official image (node, python, rust).
+# The games machine: what the Fly app swu-arena-games runs (fly.games.toml). It takes the bots people submit on the
+# window (swu-arena.fly.dev), plays them against each other and the resident bots, and sends the results back to the
+# window. Two programs can run it, picked by GAMES_COORDINATOR (bot/arena/ops/games-entry.sh): the Elixir coordinator
+# (coord/, which calls Node's bot/arena/gamesctl.js for the game work) or bot/arena/games.js alone. Built from the
+# repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
+# container). The build context is filtered by Dockerfile.games.dockerignore.
+# No stage installs system packages: each takes what it needs from an official image (node, python, rust, Hex's elixir).
 
 # the engine: forceteki built at the commit this repo pins, its card data fetched, only its runtime packages kept
 FROM node:22-bookworm AS engine
@@ -32,6 +34,26 @@ COPY bot bot
 RUN python3 bot/compiled/build.py c-clock rust-greedy2 rust-search node-search py-clock \
  && rm -rf build/compiled/.cargo build/compiled/.work build/compiled/.cache build/compiled/.tools/downloads
 
+# the Elixir coordinator as a release (coord/): Erlang and Elixir from Hex's official image, built on the rust image
+# because it has gcc (exqlite's SQLite is compiled from source, config :exqlite, force_build: true). All three images
+# are Debian bookworm, so the release runs on the final image's glibc.
+FROM hexpm/elixir:1.19.6-erlang-28.5.0.7-debian-bookworm-20260918-slim AS beam
+FROM rust:1.97-bookworm AS coord
+COPY --from=beam /usr/local/lib/erlang /usr/local/lib/erlang
+COPY --from=beam /usr/local/lib/elixir /usr/local/lib/elixir
+RUN for b in erl erlc escript; do ln -s ../lib/erlang/bin/$b /usr/local/bin/$b; done \
+ && for b in elixir elixirc mix; do ln -s ../lib/elixir/bin/$b /usr/local/bin/$b; done
+ENV LANG=C.UTF-8 MIX_ENV=prod
+WORKDIR /src/coord
+RUN mix local.hex --force && mix local.rebar --force
+COPY coord/mix.exs coord/mix.lock ./
+COPY coord/config config
+RUN mix deps.get --only prod && mix deps.compile
+COPY coord/lib lib
+COPY coord/priv priv
+COPY coord/rel rel
+RUN mix release --path /opt/coord && chmod 600 /opt/coord/releases/COOKIE
+
 # python3 runs bundles under wasmtime (bot/compiled/run.py); bash, unshare and setpriv run isolate.sh; the bots and the
 # intake's checker run as the user arena
 FROM python:3.12-slim-bookworm
@@ -47,5 +69,8 @@ COPY --from=engine /src/forceteki/build forceteki/build
 COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
 COPY --from=engine /src/forceteki/test/json forceteki/test/json
 COPY --from=wasm /src/build/compiled build/compiled
+COPY --from=coord /opt/coord /app/coord
+# the release starts here: crypto, SQLite and the CA store load (runtime.exs needs a window address to load)
+RUN SWU_WINDOW=http://window.invalid /app/coord/bin/coord eval 'true = byte_size(:crypto.strong_rand_bytes(8)) == 8; {:ok, _} = Exqlite.Sqlite3.open(":memory:"); true = :public_key.cacerts_get() != []'
 EXPOSE 8080
-CMD ["node", "bot/arena/games.js"]
+CMD ["sh", "bot/arena/ops/games-entry.sh"]

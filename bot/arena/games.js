@@ -48,8 +48,9 @@ const DIRS = {
     secret: path.join(DATA, 'secret')
 };
 const SECRET = path.join(DIRS.secret, 'arena-secret');
-// what nothing started here may see (isolate.sh --hide): Fly's API socket and config, and GAMES_HIDE's paths
-const HIDE = (process.env.GAMES_HIDE || '/.fly').split(':').filter(Boolean);
+// what nothing started here may see (isolate.sh --hide): Fly's API socket and config, the Elixir coordinator's folder
+// (its job database and state), or GAMES_HIDE's paths
+const HIDE = (process.env.GAMES_HIDE || ['/.fly', path.join(DATA, 'coord')].join(':')).split(':').filter(Boolean);
 // the project's own bots, rated with everyone (their mean is pinned to 1500): two in-process anchors and five
 // WebAssembly bundles built into the image (bot/compiled)
 const RESIDENTS = (process.env.ARENA_RESIDENTS || 'heuristic,rush,c-clock-wasm,rust-greedy2-wasm,rust-search-wasm,node-search-wasm,py-clock-wasm')

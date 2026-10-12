@@ -1,5 +1,5 @@
 # Builds the games image (Dockerfile.games) on Fly's builders and rolls it out to swu-arena-games (fly.games.toml) after
-# the arena tests pass. Needs the repository secret FLY_GAMES_TOKEN (`fly tokens create deploy -a swu-arena-games`).
+# the arena tests pass. Pull requests that touch the same files run the tests only. Needs the repository secret FLY_GAMES_TOKEN (`fly tokens create deploy -a swu-arena-games`).
 # The image builds forceteki from the submodule: when that repository is private, FORCETEKI_TOKEN (a token that can
 # read it) checks it out; otherwise the workflow's own token does.
 name: Deploy the games machine
@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - 'bot/**'
+      - 'coord/**'
       - 'forceteki'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -15,11 +16,21 @@ on:
       - 'Dockerfile.games.dockerignore'
       - 'fly.games.toml'
       - '.github/workflows/deploy-games.yml'
+  pull_request:
+    paths:
+      - 'bot/arena/**'
+      - 'bot/test/games.test.js'
+      - 'bot/test/gamesctl.test.js'
+      - 'bot/test/arena-hardening.test.js'
+      - 'coord/**'
+      - 'Dockerfile.games'
+      - 'fly.games.toml'
+      - '.github/workflows/deploy-games.yml'
   workflow_dispatch:
 
 concurrency:
-  group: deploy-games
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('games-test-{0}', github.ref) || 'deploy-games' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -31,8 +42,38 @@ jobs:
           node-version: 22
       - run: node --test bot/test/games.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js
 
+  # the Elixir coordinator (coord/): the versions Dockerfile.games builds with; the :node tests call the real gamesctl.js
+  test-coord:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: coord
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '28.5.0.7'
+          elixir-version: '1.19.6'
+          version-type: strict
+      - uses: actions/cache@v4
+        with:
+          path: |
+            coord/deps
+            coord/_build
+          key: coord-${{ runner.os }}-28.5.0.7-1.19.6-${{ hashFiles('coord/mix.lock') }}
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix test --include node
+
   deploy:
-    needs: test
+    needs: [test, test-coord]
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_GAMES_TOKEN }}
