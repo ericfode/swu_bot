@@ -29,6 +29,11 @@ Reads (a signed-in friend, or the project token):
   returns the replay from that byte, with its full size in `x-size`, so a viewer can follow a game being played.
 - `GET /api/docs/<collection>[/<id>]`: raw documents. Friends may read `arena`, `runs`, `evals`, `lens` and `meta`;
   the rest reaches them only through `/api/app`.
+- People are never named to readers. A run against people (a feed's run, or an id starting `karabast`) is stored as
+  sent, and only the programs that write (bearer tokens from feed up) read it back that way. Everyone else (a
+  sign-in, a view link's guest, an MCP app) reads a copy: the person's seat is `opponent` in the run document and
+  `a person` in the replay's header and on each board. The copy holds whole lines only, so offsets into it stay valid
+  while the game is played, and `?sizes=1` gives `size: null` for its games (`x-size` on each read gives the size).
 
 Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role,
 except an admin changing the invite list from the app's Share page (below):
