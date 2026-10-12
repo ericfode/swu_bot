@@ -60,7 +60,7 @@
 
   function label(g) {
     // a bot game names our bot and says whether it won; a watched game is two people, no bot of ours
-    const who = g.bot ? `${g.bot} (${g.ours}) vs a person` : 'two people, no bot';
+    const who = g.bot ? `${g.bot} (${g.ours}) vs ${g.opponent ?? 'a person'}` : 'two people, no bot';
     const result = g.live ? '● live' : g.winner === 'draw' ? 'draw'
       : !g.winner ? 'ended early'
       : g.bot ? `${g.bot} ${g.winner === g.ours ? 'won' : 'lost'}` : `${g.winner} won`;

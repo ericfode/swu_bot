@@ -76,6 +76,12 @@ The server reads only the frame files, the runs' `games.jsonl` and `status.json`
 
 In a bot game (`<run>/frames/`) the frames are our seat's view, so that seat is named after the bot ("c-clock (ours)")
 and the other one "opponent", and the picker says whether our bot won. A watched game is two people and says so.
+
+Opponents' names (Eric, 2026-10-12: "who on karabast i'm playing") are kept apart from everything else. `queue.js
+--names <file>` appends each game's opponent's Karabast name to that file only (mode 600, folder 700; frames stay
+scrubbed). `live-view.js --names <file>` then shows the name on the opponent's seat and in the picker, and refuses to
+start unless it stays on this machine (local `--host`, no `--key`). On the Sprite only the `live-view` service behind
+Eric's tailnet reads it; the share link (`live-share`), the window feed, the repo and shared files never carry names.
 The page polls every 2 s, so a game shows up a few seconds after its first board, and shows the newest queue run's
 state from its `status.json`: in the queue since when, playing, between games, or stopped and why. When the bot starts
 a game the page isn't showing, a button opens it.
