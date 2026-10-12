@@ -125,7 +125,8 @@
             const kind = typeof r.feed === 'string' && r.feed ? 'people' : runKind(r.id), people = kind === 'people';
             // a person is never named: in a people run, a seat outside the run's own bots list (which names our bots) is "opponent"
             const ours = people ? [...new Set((r.bots || []).map(can))] : null;
-            const seat = n => people && ours.length && !ours.includes(canonical(n, fixed)) ? 'opponent' : can(n);
+            // (with no bots list the person cannot be told from our bot, so every seat is "opponent")
+            const seat = n => people && !ours.includes(canonical(n, fixed)) ? 'opponent' : can(n);
             for (const g of r.games) {
                 const p1 = seat(g.p1), p2 = seat(g.p2);
                 let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned (people only)
