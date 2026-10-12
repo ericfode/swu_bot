@@ -148,9 +148,9 @@ const gameRow = g => { const run = M.runs[g[0]], p1 = M.botList[g[2]], p2 = M.bo
 // The person is the seat the feed calls "opponent" (the Karabast feed names every person so), or a seat its run's own
 // bots list leaves out (that list names our bots). People are never named in the app.
 const isPeople = i => M.runs[M.games[i][0]]?.kind === 'people';
+const isPerson = (run, n) => run?.kind === 'people' && (n === 'opponent' || (run.ours?.length > 0 && !run.ours.includes(n)));
 function humanSeat(run, p1, p2) {
-  if (run?.kind !== 'people') return null;
-  const person = n => n === 'opponent' || (run.ours?.length > 0 && !run.ours.includes(n));
+  const person = n => isPerson(run, n);
   return person(p1) && !person(p2) ? 'p1' : person(p2) && !person(p1) ? 'p2' : null;
 }
 const PERSON_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="2.6"/><path d="M2.8 14.2c.6-2.8 2.6-4.3 5.2-4.3s4.6 1.5 5.2 4.3"/></svg>';
@@ -179,14 +179,14 @@ function gameGrid(run, { maxBots = 14 } = {}) {
   const bots = run.bots.slice(0, maxBots), ix = M.games.map((g, i) => i).filter(i => M.games[i][0] === M.runs.indexOf(run));
   const by = {};
   for (const i of ix) { const x = gameRow(M.games[i]); (by[`${x.p1}|${x.p2}`] ||= []).push(i); (by[`${x.p2}|${x.p1}`] ||= []).push(i); }
-  const per = run.gamesPerPairing || 2;
-  let h = `<div class="scroll"><table class="rgrid"><thead><tr><th></th>${bots.map(b => `<th class="rot"><div title="${esc(b)}">${esc(b)}</div></th>`).join('')}</tr></thead><tbody>`;
+  const per = run.gamesPerPairing || 2, name = b => isPerson(run, b) ? 'a person' : b;
+  let h = `<div class="scroll"><table class="rgrid"><thead><tr><th></th>${bots.map(b => `<th class="rot"><div title="${esc(name(b))}">${esc(name(b))}</div></th>`).join('')}</tr></thead><tbody>`;
   for (const a of bots) {
-    h += `<tr><th>${botLink(a)}</th>`;
+    h += `<tr><th>${isPerson(run, a) ? personChip() : botLink(a)}</th>`;
     for (const b of bots) {
       if (a === b) { h += '<td><div class="cell self"></div></td>'; continue; }
       const gs = by[`${a}|${b}`] || [];
-      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${x.p1} vs ${x.p2}: ${k === 'w' ? a + ' won' : k === 'l' ? b + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'abandoned' : 'not rated'}`)}"></a>`; });
+      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${name(x.p1)} vs ${name(x.p2)}: ${k === 'w' ? name(a) + ' won' : k === 'l' ? name(b) + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'abandoned' : 'not rated'}`)}"></a>`; });
       for (let k = gs.length; k < per; k++) sq.push('<span title="not played yet"></span>');
       h += `<td><div class="cell">${sq.join('')}</div></td>`;
     }
@@ -1051,17 +1051,17 @@ function pageGames(r) {
 }
 const KIND = { arena: ['Arena round', 'llm'], ladder: ['Ladder', 'heuristic'], study: ['Study', 'learned'], people: ['Vs people', 'search'], test: ['Test', 'random'] };
 function pageRuns() {
-  return `<div class="phead"><h1>Runs</h1><p class="lede">Every ladder, study and arena round, newest first.</p></div><section class="box"><div class="scroll"><table><thead><tr><th>Run</th><th>Kind</th><th>Started</th><th class="n">Bots</th><th class="n">Games</th><th>Top of the run</th></tr></thead><tbody>${[...M.runs].reverse().map(r => `<tr class="click" data-href="${href('runs', r.id)}"><td><a href="${href('runs', r.id)}" class="mono">${esc(r.id)}</a>${r.running ? ' <span class="pill live">playing</span>' : ''}</td><td><span class="fam" style="--c:${famColor(KIND[r.kind][1])}">${KIND[r.kind][0]}</span></td><td class="mono" style="font-size:var(--fs-sm)">${ago(r.createdAt)} ago</td><td class="n">${r.bots.length}</td><td class="n">${r.decided}${r.planned ? ` / ${r.planned}` : ''}</td><td>${r.table[0] ? `${botLink(r.table[0].id)} <span class="muted" style="font-size:var(--fs-sm)">${pct(r.table[0].pct)}</span>` : '-'}</td></tr>`).join('')}</tbody></table></div></section>`;
+  return `<div class="phead"><h1>Runs</h1><p class="lede">Every ladder, study and arena round, newest first.</p></div><section class="box"><div class="scroll"><table><thead><tr><th>Run</th><th>Kind</th><th>Started</th><th class="n">Bots</th><th class="n">Games</th><th>Top of the run</th></tr></thead><tbody>${[...M.runs].reverse().map(r => `<tr class="click" data-href="${href('runs', r.id)}"><td><a href="${href('runs', r.id)}" class="mono">${esc(r.id)}</a>${r.running ? ' <span class="pill live">playing</span>' : ''}</td><td><span class="fam" style="--c:${famColor(KIND[r.kind][1])}">${KIND[r.kind][0]}</span></td><td class="mono" style="font-size:var(--fs-sm)">${ago(r.createdAt)} ago</td><td class="n">${r.bots.filter(b => !isPerson(r, b)).length}</td><td class="n">${r.decided}${r.planned ? ` / ${r.planned}` : ''}</td><td>${r.table[0] ? `${botLink(r.table[0].id)} <span class="muted" style="font-size:var(--fs-sm)">${pct(r.table[0].pct)}</span>` : '-'}</td></tr>`).join('')}</tbody></table></div></section>`;
 }
 function pageRun(r) {
   const run = runById(r.parts[1]); if (!run) return `<div class="notice">No run named ${esc(r.parts[1])}.</div>`;
   const ri = M.runs.indexOf(run), rows = []; for (let i = M.games.length - 1; i >= 0; i--) if (M.games[i][0] === ri) rows.push(i);
-  const exps = M.experiments.filter(e => runsIn(e).includes(run)), wide = (run.gamesPerPairing || 2) * run.bots.length > 24, half = wide ? 'c12' : 'c6';
+  const exps = M.experiments.filter(e => runsIn(e).includes(run)), people = run.kind === 'people', wide = people || (run.gamesPerPairing || 2) * run.bots.length > 24, half = wide ? 'c12' : 'c6';
   return `<div class="phead"><div><div class="eyebrow">${KIND[run.kind][0]} · ${new Date(run.createdAt).toLocaleString()}</div><h1 class="mono">${esc(run.id)}</h1></div><p class="lede">${run.kind === 'people' ? `Our bots against people: ${run.decided} finished games${run.abandoned ? `, ${run.abandoned} abandoned` : ''}${run.errors ? `, ${run.errors} with no result` : ''}` : `${run.bots.length} bots, ${run.decided} rated games${run.planned ? ` of ${run.planned}` : ''}${run.errors ? `, ${run.errors} not rated (engine errors or caps)` : ''}`}${run.running ? `, ${run.running} playing now` : ''}.</p></div>
   ${exps.map(e => `<div class="notice" style="border-style:solid;margin-bottom:12px"><b>Why this run:</b> <a href="${href('research', 'experiments', e.id)}">${esc(e.title)}</a>. ${esc(e.hypothesis || '')}${e.conclusion ? ` <b>Found:</b> ${esc(e.conclusion)}` : ''}</div>`).join('')}
   <div class="grid"><div class="${half} box"><div class="bh"><h3>Standings in this run</h3><span class="sub">score bar: line = 50%</span></div><div class="scroll"><table><thead><tr><th>#</th><th>Bot</th><th class="hide-sm">Style</th><th class="hide-sm">Nine spots</th><th class="n">W-L</th><th>Score</th></tr></thead><tbody>${run.table.map((t, i) => `<tr><td class="rank">${i + 1}</td><td>${botLink(t.id)}</td><td class="hide-sm">${styleTag(atl(t.id)?.summary?.style)}</td><td class="hide-sm">${fingerprint(t.id)}</td><td class="n">${t.w}-${t.l}${t.d ? `-${t.d}` : ''}</td><td><span class="sc-cell"><span class="sc"><i style="width:${(t.pct || 0) * 100}%;--c:${t.pct >= .5 ? 'var(--pos-4)' : 'var(--neg-4)'}"></i><b></b></span><em>${pct(t.pct)}</em></span></td></tr>`).join('')}</tbody></table></div></div>
-  <div class="${half} box"><div class="bh"><h3>Who beat whom</h3><span class="sub">every game; click a square to watch</span></div>${run.bots.length <= 14 ? gameGrid(run) : `<p class="muted">${run.bots.length} bots: too many for the grid; see the games below.</p>`}</div>
-  <div class="c12 box"><div class="bh"><h3>Newest games</h3><a class="more" href="${href('games', 'all')}">All games</a></div>${gamesTable(rows.slice(0, 12), { showRun: false })}${rows.length > 12 ? `<p class="muted" style="margin-top:6px">${rows.length - 12} more: the grid above has every game.</p>` : ''}</div></div>`;
+  ${people ? `<div class="c12 notice people-note">Every game here is one of our bots against a real person on karabast.net. <a href="${href('people')}">Vs people</a> has the record over time and the games playing now.</div>` : `<div class="${half} box"><div class="bh"><h3>Who beat whom</h3><span class="sub">every game; click a square to watch</span></div>${run.bots.length <= 14 ? gameGrid(run) : `<p class="muted">${run.bots.length} bots: too many for the grid; see the games below.</p>`}</div>`}
+  <div class="c12 box"><div class="bh"><h3>Newest games</h3><a class="more" href="${href('games', 'all')}">All games</a></div>${gamesTable(rows.slice(0, 12), { showRun: false })}${rows.length > 12 ? `<p class="muted" style="margin-top:6px">${rows.length - 12} more: ${people ? `<a href="${href('people')}">Vs people</a> lists every game.` : 'the grid above has every game.'}</p>` : ''}</div></div>`;
 }
 function pageGame(r) {
   const run = runById(r.parts[1]), key = `${r.parts[1]}/${r.parts[2]}`, i = gameIdx.get(key);

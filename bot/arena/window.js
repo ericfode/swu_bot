@@ -511,7 +511,11 @@ function createWindow(opts = {}) {
         const d = parseOr(store.getDoc('admin', 'invites'), null);
         return Array.isArray(d?.logins) ? d.logins.filter((x) => typeof x === 'string').map((x) => x.toLowerCase()) : [];
     };
-    const shared = () => ({ invites: invited(), ...auth.fixed(), links: viewLinks().map(({ id, key, label, createdAt }) => ({ id, key, label, createdAt })) });
+    /** The Share page's lists; a login the server already lets in (admins, ARENA_INVITES) shows there, never as an invite. */
+    const shared = () => {
+        const fixed = auth.fixed(), set = new Set([...fixed.admins, ...fixed.fromEnv]);
+        return { invites: invited().filter((x) => !set.has(x)), ...fixed, links: viewLinks().map(({ id, key, label, createdAt }) => ({ id, key, label, createdAt })) };
+    };
     /**
      * Who may look, for Eric's Share page: GET lists the invited GitHub logins and the view links; POST changes one of
      * them: {add: login} or {remove: login} on the invite document, {addLink: note} or {removeLink: id} on the view
@@ -544,6 +548,9 @@ function createWindow(opts = {}) {
         if (ops[0] === 'add' || ops[0] === 'remove') {
             const login = q[ops[0]].trim().replace(/^@/, '').toLowerCase();
             need(LOGIN.test(login), 'bad_request', 'a GitHub login: letters, digits and dashes, up to 39');
+            // a login the server lets in would never leave the list it shows, so the page could not remove it
+            const { admins, fromEnv } = auth.fixed();
+            need(ops[0] !== 'add' || ![...admins, ...fromEnv].includes(login), 'conflict', `${login} can already sign in (set by the server)`);
             const cur = invited();
             const next = ops[0] === 'add' ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
             need(next.length <= 500, 'too_large', 'at most 500 invites');

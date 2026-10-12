@@ -242,6 +242,12 @@ test('share: an admin invites and removes people from the Share page, and no one
         }
         assert.deepStrictEqual((await (await post({ add: '@Kim-B ' })).json()).result.invites, ['kim-b']);
         assert.deepStrictEqual((await (await post({ add: 'kim-b' })).json()).result.invites, ['kim-b'], 'no duplicates');
+        // a login the server already lets in is refused, and one already in the document never shows as an invite
+        assert.strictEqual((await post({ add: 'Pal' })).status, 409, 'set by ARENA_INVITES');
+        assert.strictEqual((await post({ add: 'ericfode' })).status, 409, 'an admin');
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b', 'pal'] }));
+        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result.invites, ['kim-b']);
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b'] }));
         assert.strictEqual((await go('/', { cookie: kim })).status, 200, 'invited at once');
         assert.strictEqual((await go('/api/share', { cookie: kim })).status, 403);
         assert.deepStrictEqual((await (await post({ remove: 'kim-b' })).json()).result.invites, []);

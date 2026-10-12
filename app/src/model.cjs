@@ -123,12 +123,15 @@
             // games against people show in the grid, the run and the game pages, and stay out of bot records and ratings
             // a run an outside feed sent (the window stamps `feed` on it) is never rated, whatever its name
             const kind = typeof r.feed === 'string' && r.feed ? 'people' : runKind(r.id), people = kind === 'people';
+            // a person is never named: in a people run, a seat outside the run's own bots list (which names our bots) is "opponent"
+            const ours = people ? [...new Set((r.bots || []).map(can))] : null;
+            const seat = n => people && ours.length && !ours.includes(canonical(n, fixed)) ? 'opponent' : can(n);
             for (const g of r.games) {
-                const p1 = can(g.p1), p2 = can(g.p2);
+                const p1 = seat(g.p1), p2 = seat(g.p2);
                 let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned (people only)
                 if (g.outcome === 'running') { res = 3; running++; }
                 else if (g.outcome === 'won' && (g.winnerSeat === 'p1' || g.winnerSeat === 'p2')) res = g.winnerSeat === 'p1' ? 0 : 1;
-                else if (g.outcome === 'ERROR' && /^TIME_FORFEIT (\S+)/.test(g.error || '')) { forfeit = canonical(RegExp.$1, fixed) === p1 ? 'p1' : 'p2'; res = forfeit === 'p1' ? 1 : 0; }
+                else if (g.outcome === 'ERROR' && /^TIME_FORFEIT (\S+)/.test(g.error || '')) { forfeit = seat(RegExp.$1) === p1 ? 'p1' : 'p2'; res = forfeit === 'p1' ? 1 : 0; }
                 else if (g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2')) { forfeit = g.by; res = g.by === 'p1' ? 1 : 0; }
                 else if (g.winnerSeat === 'draw') { res = 2; errors++; }
                 else { res = 4; errors++; }
@@ -156,12 +159,12 @@
                 }
                 if (forfeit) R(forfeit === 'p1' ? p1 : p2).faults++;
             }
-            const table = Object.entries(st).map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
-            // a people run names everyone who sat down (its bots list may leave the people out), so its grid shows before any game ends;
-            // `ours` keeps the run's own bots list, which names our bots and never the people
-            const bots = [...new Set([...(r.bots || []), ...(people ? r.games.flatMap(g => [g.p1, g.p2]) : [])].map(can).concat(table.map(t => t.id)))];
+            const table = Object.entries(st).filter(([id]) => !people || id !== 'opponent').map(([id, t]) => ({ id, ...t, n: t.w + t.l + t.d, pct: (t.w + t.d / 2) / Math.max(1, t.w + t.l + t.d) })).sort((a, b) => b.pct - a.pct || b.n - a.n);
+            // a people run lists every seat (each person as "opponent"; its bots list may leave the people out), so its grid shows
+            // before any game ends; `ours` keeps the run's own bots list, which names our bots and never the people
+            const bots = [...new Set([...(r.bots || []).map(can), ...(people ? r.games.flatMap(g => [seat(g.p1), seat(g.p2)]) : []), ...table.map(t => t.id)])];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
-            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned, ours: [...new Set((r.bots || []).map(can))] } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
+            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned, ours } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
 
         // the Atlas's ratings when the meta analyzer wrote them; the app's own fit (same rules) for bots it does not list
