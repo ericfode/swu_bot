@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 556
+    "sourceIr": 559
   },
   "runtimeAdmittedCards": [
     {
@@ -3896,6 +3896,11 @@
       "setCode": "SOR_216"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "asteroid-sanctuary",
+      "setCode": "SOR_218"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "tieln-fighter",
       "setCode": "SOR_225"
@@ -4086,6 +4091,11 @@
       "setCode": "TS26_069"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "fervor",
+      "setCode": "TS26_072"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "pre-vizsla#for-mandalore",
       "setCode": "TS26_074"
@@ -4094,6 +4104,11 @@
       "implementation": "sourceIr",
       "internalName": "underestimated",
       "setCode": "TS26_079"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "mislead",
+      "setCode": "TS26_081"
     },
     {
       "implementation": "sourceIr",
@@ -4671,7 +4686,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 932,
+  "runtimeAdmittedCount": 935,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -11194,11 +11209,6 @@
       "setCode": "SOR_217"
     },
     {
-      "internalName": "asteroid-sanctuary",
-      "reason": "asteroid-sanctuary: named selectors require optional scalar any-owner arena units",
-      "setCode": "SOR_218"
-    },
-    {
       "internalName": "sneak-attack",
       "reason": "sneak-attack: compiler rejected \"sneak-attack\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":32,\"file\":\"game/cards/01_SOR/events/SneakAttack.ts\",\"line\":19,\"message\":\"unsupported-field:cannotTargetFirst\",\"pattern\":\"unsupported-field:cannotTargetFirst\"}]",
       "setCode": "SOR_219"
@@ -11544,11 +11554,6 @@
       "setCode": "TS26_071"
     },
     {
-      "internalName": "fervor",
-      "reason": "fervor: named selectors require optional scalar any-owner arena units",
-      "setCode": "TS26_072"
-    },
-    {
       "internalName": "moralo-eval#infamous-murderer",
       "reason": "moralo-eval#infamous-murderer: compiler rejected \"moralo-eval#infamous-murderer\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":32,\"file\":\"game/cards/07_TS26/units/MoraloEvalInfamousMurderer.ts\",\"line\":18,\"message\":\"trigger-alias-hook:onDamageDealt\",\"pattern\":\"trigger-alias-hook:onDamageDealt\"}]",
       "setCode": "TS26_073"
@@ -11577,11 +11582,6 @@
       "internalName": "reveal-intentions",
       "reason": "reveal-intentions: compiler rejected \"reveal-intentions\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/07_TS26/events/RevealIntentions.ts\",\"line\":17,\"message\":\"immediateEffect:lookAtAndSelectCard\",\"pattern\":\"immediateEffect:lookAtAndSelectCard\"}]",
       "setCode": "TS26_080"
-    },
-    {
-      "internalName": "mislead",
-      "reason": "mislead: named selectors require optional scalar any-owner arena units",
-      "setCode": "TS26_081"
     },
     {
       "internalName": "evade-arrest",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1526,
+  "runtimeRejectedCount": 1523,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

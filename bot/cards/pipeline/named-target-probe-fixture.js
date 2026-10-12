@@ -9,6 +9,7 @@ const {
 } = require("../../omni/rs/state");
 async function fixture(env, pool, scenario, seed) {
   const p = scenario.probe;
+  if (p.mixedKind) return mixedEventFixture(env, pool, scenario, seed);
   if (p.effectFamily === "damage") return unitDamageFixture(env, pool, scenario, seed);
   if (p.trigger === "onAttack") return attackFixture(env, pool, scenario, seed);
   assert.equal(p.family, "named-target");
@@ -833,4 +834,478 @@ async function unitDamageFixture(env,pool,scenario,seed) {
         }
         assert.ok(settled&&eg.over,'Focused source witness and complete terminal game');records.push({type:'result',step,winner:eg.winner,state:fullState(eg)});witness.coverageObligationIds=[...scenario.coverageObligationIds];return{records,witness};
     }finally{bot.close?.();}
+}
+
+async function mixedEventFixture(env, pool, scenario, seed) {
+  const p = scenario.probe;
+  const { eg, rng, bot, deck, own, enemy, source, targets } =
+    await constructProbeFixture(env, pool, scenario, seed);
+  const round = eg.round;
+  const live = (c) => c.isUnit?.() && c.isInPlay?.();
+  const baseline = new Map(
+    targets.filter(live).map((c) => [
+      c,
+      {
+        power: c.getPower(),
+        hp: c.getHp(),
+        damage: c.damage,
+        exhausted: c.exhausted,
+        upgrades: [...c.upgrades],
+      },
+    ]),
+  );
+  const initialState = fullState(eg);
+  const initialCardCount = eg.game.state.allCards.length;
+  const ready = () =>
+    own.getCardsInZone("resource").filter((c) => !c.exhausted).length;
+  const initialReady = ready();
+  const aspects = [...own.getAspectsForCosts()];
+  let cost = source.cardData.cost;
+  for (const a of source.cardData.aspects) {
+    const i = aspects.indexOf(a);
+    if (i < 0) cost += 2;
+    else aspects.splice(i, 1);
+  }
+  const legal = (c, d) =>
+    live(c) &&
+    (d.owner === "any" ||
+      c.controller === (d.owner === "self" ? own : enemy)) &&
+    (p.mixedKind !== "exhaust-cheap-shield" ||
+      d.effect.kind !== "giveShield" ||
+      c.cost <= 3);
+  const domain = (d) => eg.game.getArenaUnits().filter((c) => legal(c, d));
+  const effective = (c, d) =>
+    d.effect.kind === "ready"
+      ? c.exhausted
+      : d.effect.kind === "exhaust"
+      ? !c.exhausted
+      : true;
+  const legalDomains = p.descriptors.map(domain);
+  const expectedPrompts = p.descriptors
+    .map((d, i) => (legalDomains[i].some((c) => effective(c, d)) ? i : -1))
+    .filter((i) => i >= 0);
+  const delayed = !legalDomains[0].length;
+  const witness = {
+    coverageObligationIds: [],
+    observations: [],
+    created: [],
+    attached: [],
+    readied: [],
+    exhausted: [],
+  };
+  const records = [
+    {
+      type: "meta",
+      schema: "omni-rs-trace-v1",
+      pool: pool.provenance,
+      seed,
+      bots: ["named-target-probe", "named-target-probe"],
+      decks: [deck, deck],
+      scenario: scenario.name,
+      constructionParameters: p,
+      fixtureConstruction:
+        "Stage disclosed real units/attachments/native identities, normally play the mandatory named event, record all prepayment or delayed selectors, exact cancellation and shared effect/token timing, then continue to terminal result.",
+    },
+  ];
+  let step = 0,
+    started = false,
+    played = false,
+    cancelled = false,
+    settled = false,
+    confirmSeen = false;
+  const selections = new Map(),
+    prompted = [];
+  let eventObserved = false,
+    followStarted = false,
+    followPicked = false;
+  const followAttacker = p.followAttack && targets[p.followAttack.attacker];
+  const followDefender = p.followAttack && targets[p.followAttack.defender];
+  eg.game.on("onCardPlayed", (e) => {
+    if (started && !settled && !e.isCancelledOrReplaced && e.card === source)
+      played = true;
+  });
+  for (const [eventName, field] of [
+    ["onCardReadied", "readied"],
+    ["onCardExhausted", "exhausted"],
+  ]) {
+    eg.game.on(eventName, (e) => {
+      if (
+        !started ||
+        settled ||
+        e.context?.source !== source ||
+        e.isCancelledOrReplaced ||
+        !baseline.has(e.card)
+      )
+        return;
+      witness[field].push(eg.cardId(e.card.uuid));
+    });
+  }
+  eg.game.on("onTokensCreated", (e) => {
+    if (!started || settled || e.context?.source !== source) return;
+    for (const token of e.generatedTokens ?? []) {
+      assert.ok(token.isShield());
+      witness.created.push({
+        id: eg.cardId(token.uuid),
+        owner: eg.seatOf(token.owner.id),
+        token,
+      });
+    }
+  });
+  eg.game.on("onUpgradeAttached", (e) => {
+    if (settled || e.context?.source !== source || !e.upgradeCard?.isShield?.())
+      return;
+    witness.attached.push({
+      id: eg.cardId(e.upgradeCard.uuid),
+      parent: eg.cardId(e.parentCard.uuid),
+      order: e.parentCard.upgrades.map((c) => eg.cardId(c.uuid)),
+    });
+  });
+  function observe(stage, pid, actions) {
+    witness.observations.push({
+      stage,
+      actor: pid ? eg.seatOf(pid) : undefined,
+      actions: actions?.map((a) => canonicalAction(eg, a)),
+      sourceZone: source.zoneName,
+      readyResources: ready(),
+      selections: [...selections].map(([i, c]) => ({
+        descriptor: i,
+        id: eg.cardId(c.uuid),
+      })),
+      state: fullState(eg),
+    });
+  }
+  function unchanged() {
+    assert.equal(
+      fullState(eg).nextCardId,
+      initialState.nextCardId,
+      "No token identity allocated while named choices remain",
+    );
+    assert.equal(eg.game.state.allCards.length, initialCardCount);
+    for (const [c, b] of baseline) {
+      assert.ok(
+        live(c),
+        "No staged recipient departs before named event generation",
+      );
+      assert.equal(c.getPower(), b.power);
+      assert.equal(c.getHp(), b.hp);
+      assert.equal(c.damage, b.damage);
+      assert.equal(c.exhausted, b.exhausted);
+      assert.deepEqual(c.upgrades, b.upgrades);
+    }
+  }
+  function outcome(expired = false) {
+    if (cancelled) {
+      assert.equal(source.zoneName, "hand");
+      assert.equal(ready(), initialReady);
+      assert.equal(played, false);
+      assert.equal(witness.created.length, 0);
+      unchanged();
+      assert.deepEqual(
+        fullState(eg),
+        initialState,
+        "Cancellation preserves the complete exported board",
+      );
+      return;
+    }
+    assert.equal(source.zoneName, "discard");
+    assert.ok(played);
+    if (eg.round === round)
+      assert.equal(
+        ready(),
+        initialReady - cost,
+        "Exact printed and absent-aspect event payment",
+      );
+    assert.deepEqual(
+      prompted,
+      expectedPrompts,
+      "No-legal and legal-but-ineffective selectors skip individually",
+    );
+    for (const [kind, field] of [
+      ["ready", "readied"],
+      ["exhaust", "exhausted"],
+    ]) {
+      const i = p.descriptors.findIndex((d) => d.effect.kind === kind),
+        c = selections.get(i);
+      const effective =
+        c &&
+        (kind === "ready"
+          ? baseline.get(c).exhausted
+          : !baseline.get(c).exhausted);
+      assert.deepEqual(
+        witness[field],
+        effective ? [eg.cardId(c.uuid)] : [],
+        "Only effective chosen readiness events actually resolve",
+      );
+    }
+    const shieldIndex = p.descriptors.findIndex(
+      (d) => d.effect.kind === "giveShield",
+    );
+    const shieldTarget = selections.get(shieldIndex);
+    assert.equal(witness.created.length, shieldTarget ? 1 : 0);
+    assert.equal(witness.attached.length, shieldTarget ? 1 : 0);
+    if (shieldTarget) {
+      const token = witness.created[0].token;
+      assert.equal(eg.cardId(token.uuid), "c" + initialState.nextCardId);
+      assert.equal(token.owner, shieldTarget.controller);
+      assert.equal(token.controller, shieldTarget.controller);
+      assert.equal(token.parentCard, shieldTarget);
+      assert.deepEqual(witness.attached[0].order, [
+        ...baseline.get(shieldTarget).upgrades.map((c) => eg.cardId(c.uuid)),
+        eg.cardId(token.uuid),
+      ]);
+    }
+    assert.equal(
+      fullState(eg).nextCardId,
+      initialState.nextCardId + (shieldTarget ? 1 : 0),
+    );
+    assert.equal(
+      eg.game.state.allCards.length,
+      initialCardCount + (shieldTarget ? 1 : 0),
+    );
+    for (const [c, b] of baseline) {
+      const chosen = [...selections]
+        .filter(([, target]) => target === c)
+        .map(([i]) => p.descriptors[i].effect);
+      const damaged = chosen.some((e) => e.kind === "damage");
+      const shields = b.upgrades.filter((c) => c.isShield?.());
+      const expectedDamage = b.damage + (damaged && !shields.length ? 3 : 0);
+      const dead = expectedDamage >= b.hp;
+      if (dead) {
+        assert.equal(
+          c.zoneName,
+          c.isToken() ? "outsideTheGame" : c.isLeader() ? "base" : "discard",
+        );
+        if (!c.isToken() && !c.isLeader())
+          assert.ok(c.owner.getCardsInZone("discard").includes(c));
+        for (const up of b.upgrades) {
+          assert.equal(up.isAttached(), false);
+          assert.equal(
+            up.zoneName,
+            up.isToken() ? "outsideTheGame" : "discard",
+          );
+          if (!up.isToken())
+            assert.ok(up.owner.getCardsInZone("discard").includes(up));
+          else assert.ok(up.owner.outsideTheGameZone.getCards().includes(up));
+        }
+      } else {
+        assert.ok(
+          live(c),
+          "Every nonlethal unselected/selected recipient stays in play",
+        );
+        assert.equal(c.damage, expectedDamage);
+        const debuff = chosen.some((e) => e.kind === "modifyStats") && !expired;
+        assert.equal(c.getPower(), Math.max(0, b.power - (debuff ? 3 : 0)));
+        assert.equal(c.getHp(), b.hp);
+        const first = chosen.find((e) => ["ready", "exhaust"].includes(e.kind));
+        if (!expired)
+          assert.equal(
+            c.exhausted,
+            first ? first.kind === "exhaust" : b.exhausted,
+          );
+        const expectedUpgrades = b.upgrades.filter(
+          (up) => !(damaged && up === shields[0]),
+        );
+        if (c === shieldTarget) expectedUpgrades.push(witness.created[0].token);
+        assert.deepEqual(c.upgrades, expectedUpgrades);
+      }
+      if (damaged && shields.length)
+        assert.equal(shields[0].zoneName, "outsideTheGame");
+    }
+    if (p.expectDeathForce) {
+      const target = selections.get(1);
+      assert.equal(target.zoneName, "discard");
+      assert.equal(target.controller.hasTheForce, true);
+    }
+  }
+  try {
+    while (!eg.over && step < 4000) {
+      const pid = eg.ids.find((id) => eg.legalActions(id).length);
+      assert.ok(pid);
+      const actions = expandActions(eg, eg.legalActions(pid)),
+        window = eg.isActionWindow(pid),
+        prompt = eg.player(pid).currentPrompt();
+      let chosen;
+      if (window) {
+        records.push({ type: "state", step, state: fullState(eg, pid) });
+        if (started && !settled && (cancelled || played)) {
+          if (followPicked) {
+            assert.ok(live(followAttacker) && live(followDefender));
+            assert.equal(
+              followDefender.damage,
+              baseline.get(followDefender).damage,
+              "Actually created Shield prevents all next attack damage",
+            );
+            assert.equal(
+              followAttacker.damage,
+              baseline.get(followAttacker).damage +
+                baseline.get(followDefender).power,
+              "Live defender retaliates normally",
+            );
+            const token = witness.created[0].token;
+            assert.equal(token.zoneName, "outsideTheGame");
+            assert.equal(token.isAttached(), false);
+            assert.ok(!followDefender.upgrades.includes(token));
+            assert.equal(
+              fullState(eg).nextCardId,
+              initialState.nextCardId + 1,
+              "Consumption preserves allocated token identity",
+            );
+            observe("created-shield-actual-combat-consumed");
+            settled = true;
+          } else if (!p.followAttack || !eventObserved) {
+            outcome(p.waitForExpiry && eg.round > round);
+            if (p.followAttack) {
+              observe("event-resolved-before-later-combat");
+              eventObserved = true;
+            } else if (cancelled || !p.waitForExpiry || eg.round > round) {
+              observe(
+                cancelled
+                  ? "cancelled"
+                  : p.waitForExpiry
+                  ? "phase-expired"
+                  : "resolved",
+              );
+              settled = true;
+            }
+          }
+        }
+        if (!started && !settled && pid === own.id) {
+          chosen = actions.find((a) => a.cardUuid === source.uuid);
+          assert.ok(chosen);
+          started = true;
+        } else if (
+          !settled &&
+          p.followAttack &&
+          eventObserved &&
+          !followStarted &&
+          eg.round > round &&
+          pid === followAttacker.controller.id
+        ) {
+          assert.ok(!followAttacker.exhausted);
+          chosen = actions.find((a) => a.cardUuid === followAttacker.uuid);
+          assert.ok(chosen);
+          followStarted = true;
+          observe("later-normal-attack", pid, actions);
+        } else if (!settled) chosen = actions.find((a) => a.arg === "pass");
+      } else if (started && !settled) {
+        if (
+          followStarted &&
+          /target for attack/i.test(prompt.menuTitle ?? "")
+        ) {
+          assert.equal(pid, followAttacker.controller.id);
+          chosen = actions.find((a) => a.cardUuid === followDefender.uuid);
+          assert.ok(chosen);
+          followPicked = true;
+          observe("later-attack-target", pid, actions);
+        } else if (/no effect/i.test(prompt.menuTitle ?? "")) {
+          assert.equal(pid, own.id);
+          assert.deepEqual(
+            actions.map((a) => a.label),
+            ["Play anyway", "Cancel"],
+          );
+          assert.ok(
+            legalDomains.every((d) => !d.length),
+            "Confirmation is for genuinely no legal recipients",
+          );
+          assert.equal(source.zoneName, "hand");
+          assert.equal(ready(), initialReady);
+          unchanged();
+          confirmSeen = true;
+          chosen = actions.find(
+            (a) => a.label === (p.cancelEmpty ? "Cancel" : "Play anyway"),
+          );
+          cancelled = !!p.cancelEmpty;
+          observe("empty-confirmation", pid, actions);
+        } else if (
+          actions.some((a) => a.kind === "card") &&
+          prompted.length < expectedPrompts.length
+        ) {
+          const index = expectedPrompts[prompted.length],
+            d = p.descriptors[index];
+          assert.equal(
+            pid,
+            own.id,
+            "Both named recipients chosen by event source controller",
+          );
+          if (d.promptTitle) assert.equal(prompt.menuTitle, d.promptTitle);
+          const candidates = domain(d);
+          assert.deepEqual(
+            actions
+              .filter((a) => a.kind === "card")
+              .map((a) => a.cardUuid)
+              .sort(),
+            candidates.map((c) => c.uuid).sort(),
+          );
+          const prepaid = !played;
+          assert.equal(
+            prepaid,
+            !delayed,
+            "Missing first delays second until payment; ineffective first preserves prepayment",
+          );
+          assert.deepEqual(
+            actions.filter((a) => a.kind === "button").map((a) => a.label),
+            prepaid ? ["Cancel"] : [],
+          );
+          assert.equal(source.zoneName, prepaid ? "hand" : "discard");
+          assert.equal(ready(), initialReady - (prepaid ? 0 : cost));
+          unchanged();
+          observe("descriptor-" + (index + 1), pid, actions);
+          prompted.push(index);
+          const choice = p.choices[index];
+          if (choice === "cancel") {
+            chosen = actions.find((a) => a.arg === "cancel");
+            assert.ok(chosen);
+            cancelled = true;
+          } else {
+            assert.ok(choice?.startsWith("index:"));
+            const c = targets[Number(choice.slice(6))];
+            assert.ok(candidates.includes(c));
+            chosen = actions.find((a) => a.cardUuid === c.uuid);
+            assert.ok(chosen);
+            selections.set(index, c);
+          }
+        }
+        chosen ??= actions.find(
+          (a) =>
+            a.kind === "button" &&
+            /trigger|resolve|play|yes/i.test(a.label ?? ""),
+        );
+        chosen ??= actions.find((a) => a.arg === "done");
+      }
+      chosen ??= bot.choose({ game: eg, pid, actions, rng });
+      assert.ok(chosen);
+      records.push({
+        type: "decision",
+        step,
+        actor: eg.seatOf(pid),
+        prompt: {
+          type: prompt.promptType ?? null,
+          title: prompt.menuTitle ?? null,
+          selected: (eg.player(pid).promptState.selectedCards ?? []).map((c) =>
+            eg.cardId(c.uuid),
+          ),
+          actionWindow: window,
+        },
+        actions: actions.map((a) => canonicalAction(eg, a)),
+        chosen: canonicalAction(eg, chosen).key,
+        events: [],
+      });
+      eg.apply(pid, chosen, rng);
+      step++;
+    }
+    assert.ok(settled && eg.over);
+    if (p.empty) assert.ok(confirmSeen);
+    records.push({
+      type: "result",
+      step,
+      winner: eg.winner,
+      state: fullState(eg),
+    });
+    witness.coverageObligationIds = [...scenario.coverageObligationIds];
+    // Keep token objects out of the serializable receipt.
+    witness.created = witness.created.map(({ token, ...row }) => row);
+    return { records, witness };
+  } finally {
+    bot.close?.();
+  }
 }

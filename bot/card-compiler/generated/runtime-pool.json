@@ -31473,6 +31473,43 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "6901817734",
+      "internalName": "asteroid-sanctuary",
+      "keywords": [],
+      "power": null,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\n",
+      "setCode": "SOR_218",
+      "setCodes": [
+        {
+          "number": 218,
+          "set": "SOR"
+        }
+      ],
+      "setId": {
+        "number": 218,
+        "set": "SOR"
+      },
+      "subtitle": null,
+      "text": "Exhaust an enemy unit.\n\nGive a Shield token to a friendly unit that costs 3 or less.",
+      "title": "Asteroid Sanctuary",
+      "traits": [
+        "trick"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "villainy"
@@ -32917,6 +32954,43 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "3800728779",
+      "internalName": "fervor",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TS26_072",
+      "setCodes": [
+        {
+          "number": 72,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 72,
+        "set": "TS26"
+      },
+      "subtitle": "",
+      "text": "Ready a unit.\nDeal 3 damage to a unit.",
+      "title": "Fervor",
+      "traits": [
+        "innate"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "cunning",
@@ -32995,6 +33069,43 @@
       "unique": false,
       "upgradeHp": 1,
       "upgradePower": 2
+    },
+    {
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "7387838286",
+      "internalName": "mislead",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TS26_081",
+      "setCodes": [
+        {
+          "number": 81,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 81,
+        "set": "TS26"
+      },
+      "subtitle": "",
+      "text": "Give a Shield token to a unit.\nGive a unit –3/–0 for this phase.",
+      "title": "Mislead",
+      "traits": [
+        "trick"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
     },
     {
       "arena": "ground",

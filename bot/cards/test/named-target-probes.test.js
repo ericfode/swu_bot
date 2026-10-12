@@ -231,3 +231,181 @@ test("named damage source metadata and unmodeled domains fail closed",()=>{
 test("named damage preparation requires complete event donor without hidden mechanics",()=>{
  for(const change of [e=>e.abilities.unit.push({trigger:"whenPlayed"}),e=>e.card.pilotText="Piloting 1",e=>e.attachCondition={kind:"const",value:true},e=>e.card.keywords.push("plot")]){const c=structuredClone(catalogue),d=c.cards.find(e=>e.setCode==="IBH_061");change(d);const p=planNamedTargetProbes(entry("TS26_029"),{catalogue:c});assert.ok(!p.cases.some(c=>c.probe.preparationCode));assert.ok(p.uncovered.some(c=>c.id.endsWith(":attacker-self-lethal")));}
 });
+
+test("three mixed independent mandatory source shapes receive actual menu and identity cases", () => {
+  const expected = {
+    SOR_218: "exhaust-cheap-shield",
+    TS26_072: "ready-damage",
+    TS26_081: "shield-debuff",
+  };
+  for (const [id, kind] of Object.entries(expected)) {
+    assert.equal(classifyNamedTarget(entry(id)).mixedKind, kind);
+    const p = planNamedTargetProbes(entry(id), { catalogue });
+    for (const suffix of [
+      "cancel-first",
+      "cancel-second",
+      "empty-play-anyway",
+      "empty-cancel",
+    ]) {
+      assert.ok(p.cases.some((c) => c.name.endsWith(suffix)));
+    }
+    assert.ok(p.uncovered.some((o) => o.id.endsWith("reversed-source-seats")));
+    for (const c of p.cases) {
+      const counts = new Map([[id, 1]]);
+      for (const t of c.probe.targets) {
+        if (!t.token && !t.leader)
+          counts.set(t.code, (counts.get(t.code) ?? 0) + 1);
+        for (const a of t.attachments ?? [])
+          if (!a.token) counts.set(a.code, (counts.get(a.code) ?? 0) + 1);
+      }
+      assert.ok([...counts.values()].every((n) => n <= 3));
+    }
+  }
+  const asteroid = planNamedTargetProbes(entry("SOR_218"), { catalogue });
+  for (const suffix of [
+    "missing-enemy-second-after-payment",
+    "all-enemy-exhausted-cancel-second",
+    "all-enemy-exhausted-no-friendly-shield",
+    "cost-three-four-domain",
+    "native-beast-zero-cost",
+    "deployed-leader-cost-exclusion",
+    "created-shield-later-combat",
+  ])
+    assert.ok(asteroid.cases.some((c) => c.name.endsWith(suffix)));
+  const fervor = planNamedTargetProbes(entry("TS26_072"), { catalogue });
+  for (const suffix of [
+    "all-ready-cancel-second",
+    "selected-ineffective-ready",
+    "existing-shield-prevents-damage",
+    "same-recipient-captured-death",
+    "lethal-cross-owner-ordinary-native-cleanup",
+  ])
+    assert.ok(fervor.cases.some((c) => c.name.endsWith(suffix)));
+});
+test("mixed metadata and root registrar scopes fail closed without throwing", () => {
+  for (const id of ["SOR_218", "TS26_072", "TS26_081"])
+    for (const change of [
+      (e) => (e.baseClass = "NonLeaderUnitCard"),
+      (e) => (e.card.types = ["unit"]),
+      (e) => e.card.types.push("token"),
+      (e) => (e.card.pilotText = "Piloting"),
+      (e) => (e.card.pilotBox = "Piloting"),
+      (e) => (e.card.pilotingBox = "Piloting"),
+      (e) => (e.piloting = {}),
+      (e) => (e.attachCondition = { kind: "const", value: true }),
+      (e) => (e.keywordValues.saboteur = 1),
+      (e) => e.card.keywords.push("saboteur"),
+      (e) => e.abilities.unit.push({ trigger: "whenPlayed" }),
+      (e) => (e.abilities.card[0].optional = true),
+      (e) => e.abilities.card[0].costs.push({ kind: "exhaustSelf" }),
+      (e) => (e.abilities.card[0].condition = { kind: "const", value: true }),
+      (e) => (e.abilities.card[0].ifYouDo = { effect: { kind: "noAction" } }),
+      (e) =>
+        (e.abilities.card[0].effect = { kind: "simultaneous", effects: [] }),
+    ]) {
+      const e = entry(id);
+      change(e);
+      assert.equal(classifyNamedTarget(e), null);
+    }
+  const e = entry("TS26_072");
+  e.abilities = { leader: [e.abilities.card[0]] };
+  assert.equal(classifyNamedTarget(e), null);
+});
+test("mixed selectors reject optional, opponent chooser, reordered and dependent domains", () => {
+  for (const id of ["SOR_218", "TS26_072", "TS26_081"])
+    for (const change of [
+      (e) => e.abilities.card[0].targetResolvers.reverse(),
+      (e) => (e.abilities.card[0].targetResolvers[0].name = "target"),
+      (e) =>
+        (e.abilities.card[0].targetResolvers[0].name =
+          e.abilities.card[0].targetResolvers[1].name),
+      (e) => (e.abilities.card[0].targetResolvers[0].chooser = "opponent"),
+      (e) =>
+        (e.abilities.card[0].targetResolvers[0].targetResolver.optional = true),
+      (e) => (e.abilities.card[0].targetResolvers[0].targetResolver.count = 2),
+      (e) =>
+        (e.abilities.card[0].targetResolvers[0].targetResolver.owner =
+          "enemyPlayer"),
+      (e) =>
+        (e.abilities.card[0].targetResolvers[1].targetResolver.dependsOn =
+          e.abilities.card[0].targetResolvers[0].name),
+      (e) =>
+        (e.abilities.card[0].targetResolvers[1].targetResolver.zone =
+          "discard"),
+      (e) => (e.abilities.card[0].targetResolvers[1].effect.extra = true),
+    ]) {
+      const e = entry(id);
+      change(e);
+      assert.equal(classifyNamedTarget(e), null);
+    }
+});
+test("mixed numeric, predicate and operation grammar is bounded to constructed shapes", () => {
+  for (const change of [
+    (e) => (e.abilities.card[0].targetResolvers[1].effect.amount.value = 4),
+    (e) => (e.abilities.card[0].targetResolvers[0].effect.kind = "exhaust"),
+    (e) =>
+      (e.abilities.card[0].targetResolvers[1].effect.amount = {
+        kind: "ref",
+        path: ["source", "power"],
+      }),
+  ]) {
+    const e = entry("TS26_072");
+    change(e);
+    assert.equal(classifyNamedTarget(e), null);
+  }
+  for (const change of [
+    (e) =>
+      (e.abilities.card[0].targetResolvers[1].targetResolver.predicate.right.right.value = 4),
+    (e) =>
+      (e.abilities.card[0].targetResolvers[1].targetResolver.predicate.left.name =
+        "hasCost"),
+    (e) =>
+      (e.abilities.card[0].targetResolvers[0].targetResolver.type = "unit"),
+    (e) => (e.abilities.card[0].targetResolvers[1].effect.amount.value = 2),
+  ]) {
+    const e = entry("SOR_218");
+    change(e);
+    assert.equal(classifyNamedTarget(e), null);
+  }
+  for (const change of [
+    (e) => (e.abilities.card[0].targetResolvers[1].effect.hp.value.value = 1),
+    (e) => (e.abilities.card[0].targetResolvers[1].effect.power.op = "+"),
+    (e) =>
+      (e.abilities.card[0].targetResolvers[1].effect.duration = "persistent"),
+    (e) => (e.abilities.card[0].targetResolvers[0].effect.amount.value = 2),
+  ]) {
+    const e = entry("TS26_081");
+    change(e);
+    assert.equal(classifyNamedTarget(e), null);
+  }
+});
+
+test("staged deployed-leader donor fails closed to the inactive direct-action/OA shape", () => {
+  for (const change of [
+    (e) => (e.card.pilotText = "Piloting"),
+    (e) => e.card.keywords.push("sentinel"),
+    (e) => (e.keywordValues.sentinel = 1),
+    (e) => (e.abilities.unit[0].condition = { kind: "const", value: true }),
+    (e) => (e.abilities.unit[0].effect.extra = true),
+    (e) => (e.abilities.leader[0].effect.extra = true),
+    (e) =>
+      e.abilities.unit.push({
+        trigger: "constant",
+        effect: { kind: "noAction" },
+      }),
+  ]) {
+    const altered = structuredClone(catalogue);
+    for (const e of altered.cards)
+      if (
+        e.card.types?.includes("leader") &&
+        e.abilities.unit?.length &&
+        e.abilities.leader?.length
+      )
+        change(e);
+    const p = planNamedTargetProbes(entry("SOR_218"), { catalogue: altered });
+    assert.ok(!p.cases.some((c) => c.probe.leaderCode));
+    assert.ok(
+      p.uncovered.some((o) => o.id.endsWith("deployed-leader-cost-exclusion")),
+    );
+  }
+});

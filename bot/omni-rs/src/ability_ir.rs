@@ -968,6 +968,11 @@ impl Program {
             if depth!=0 || !["event","whenPlayed","onAttack"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
                 return Err("named selectors require two independent standalone event/WhenPlayed/OnAttack stat systems".into());
             }
+            let fervor=matches!(&ability.target_resolvers[0].effect,Effect::Ready{target:Target::Name(n)} if n=="chosen") && matches!(&ability.target_resolvers[1].effect,Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(3));
+            let sanctuary=matches!(&ability.target_resolvers[0].effect,Effect::Exhaust{target:Target::Name(n)} if n=="chosen") && matches!(&ability.target_resolvers[1].effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1));
+            fn minus(e:&Expr,n:u64)->bool {matches!(e,Expr::Unary{op,value} if op=="-" && matches!(value.as_ref(),Expr::Const{value} if value.as_u64()==Some(n)))}
+            let mislead=matches!(&ability.target_resolvers[0].effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1)) && matches!(&ability.target_resolvers[1].effect,Effect::ModifyStats{target:Target::Name(n),duration,power,hp} if n=="chosen"&&duration=="phase"&&minus(power,3)&&minus(hp,0));
+            if (fervor||sanctuary||mislead) && ability.trigger!="event" {return Err("named mixed systems require standalone event".into());}
             let damage=ability.target_resolvers.iter().all(|d|matches!(d.effect,Effect::Damage{..}));
             if damage && !["whenPlayed","onAttack"].contains(&ability.trigger.as_str()) {return Err("named damage requires ordinary play/attack registration".into());}
             let mut names=std::collections::HashSet::new();
@@ -977,6 +982,15 @@ impl Program {
                 let mut r=descriptor.target_resolver.clone();
                 r.prompt_title=None;
                 r.validate()?;
+                if fervor||sanctuary||mislead {
+                    let common=!r.optional && r.mode.is_none() && r.count.is_none() && matches!(r.zone.as_deref(),Some("arena"|"anyAttackable"));
+                    let domain=if fervor||mislead {r.owner=="any" && r.card_type=="unit" && r.arena.is_none() && r.predicate.is_none()} else if index==0 {r.owner=="opponent" && r.card_type=="any" && r.zone.as_deref()==Some("arena") && r.arena.is_none() && r.predicate.is_none()} else {
+                        r.owner=="self" && r.card_type=="any" && r.zone.as_deref()==Some("anyAttackable") && r.arena.is_none() && matches!(&r.predicate,Some(Expr::Binary{op,left,right}) if op=="&&" && matches!(left.as_ref(),Expr::Query{name,receiver,args} if name=="isUnit"&&args.is_empty()&&matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="<="&&matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","cost"])&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(3))))
+                    };
+                    if !common||!domain || (sanctuary && descriptor.target_resolver.prompt_title.is_some()) {return Err("named mixed selector domain is unverified".into());}
+                    let effect=if mislead && index==1 {Effect::ModifyStats{target:Target::Name("chosen".into()),duration:"phase".into(),power:Expr::number(-3),hp:Expr::number(0)}} else {descriptor.effect.clone()};
+                    effects.push(Effect::Select{target_resolver:r,effect:Box::new(effect)});continue;
+                }
                 if damage {
                     if r.owner!=if index==0 {"self"}else{"opponent"} || r.card_type!="unit" || r.optional || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) || r.predicate.is_some() || descriptor.target_resolver.prompt_title.is_some() {return Err("named damage requires mandatory own/opponent scalar arena units with default prompts".into());}
                     let Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}}=&descriptor.effect else {return Err("named damage requires literal chosen amounts".into());};

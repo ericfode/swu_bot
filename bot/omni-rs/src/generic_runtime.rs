@@ -1432,7 +1432,7 @@ impl Engine {
                         s.event_group.context=if s.ability_selection.len>0 { s.ability_selection } else { Selection::one(s.ability_target) };
                     }
                     if !self.generate_group(s,effect)? { return Ok(()); }
-                    if named { self.commit_program(s)?; }
+                    if named { self.commit_program(s)?; self.allocate_named_tokens(s,effect)?; }
                     if !self.resolve_group(s,effect)? { return Ok(()); }
                     s.event_group=EventGroupState::default();
                     s.ability_selection=Selection::default();
@@ -1511,7 +1511,7 @@ impl Engine {
             let tokens=matches!(e,Effect::GiveShield{..}|Effect::GiveExperience{..});
             for _ in 0..if tokens { amount } else { 1 } {
                 let mut record=PreparedEvent{op:op as u16,target,amount,power,hp,token:0};
-                if tokens {
+                if tokens && !matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedGroup(_)) {
                     if s.next_id as usize>=MAX_CARDS { return Err("card capacity exceeded generating token".into()); }
                     record.token=s.next_id; s.next_id+=1;
                     let def=if matches!(e,Effect::GiveExperience{..}) { self.experience_def.ok_or("catalogue needs Experience token")? } else { self.shield_def };
@@ -1520,6 +1520,18 @@ impl Engine {
                 if s.event_group.count>=32 { return Err("prepared event capacity exceeded".into()); }
                 s.event_group.records[s.event_group.count as usize]=record; s.event_group.count+=1;
             }
+        }
+        Ok(())
+    }
+    fn allocate_named_tokens(&self,s:&mut State,e:&Effect)->Result<(),String> {
+        let ops=group_ops(e);
+        let records=(0..s.event_group.count as usize).filter(|i|s.event_group.records[*i].token==0 && matches!(ops[s.event_group.records[*i].op as usize],GroupOp::Leaf(Effect::GiveShield{..}|Effect::GiveExperience{..}))).collect::<Vec<_>>();
+        if s.next_id as usize+records.len()>MAX_CARDS {return Err("card capacity exceeded generating named tokens".into());}
+        if records.iter().any(|i|matches!(ops[s.event_group.records[*i].op as usize],GroupOp::Leaf(Effect::GiveExperience{..}))) && self.experience_def.is_none() {return Err("catalogue needs Experience token".into());}
+        for i in records {
+            let r=s.event_group.records[i];let token=s.next_id;s.next_id+=1;
+            let def=if matches!(ops[r.op as usize],GroupOp::Leaf(Effect::GiveExperience{..})) {self.experience_def.unwrap()} else {self.shield_def};
+            *s.card_mut(token)=Card{present:true,def,owner:s.card(r.target).owner,..Card::default()};s.event_group.records[i].token=token;
         }
         Ok(())
     }
@@ -1533,7 +1545,7 @@ impl Engine {
                 GroupOp::Select(r,child,end)=> {
                     if self.group_candidates(s,r,child,true).is_empty() {
                         // A missing pretarget delays the remaining named resolver chain until costs.
-                        if !s.ability_committed && matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedGroup(_)) {self.commit_program(s)?;}
+                        if !s.ability_committed && matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedGroup(_)) && self.group_candidates(s,r,child,false).is_empty() {self.commit_program(s)?;}
                         s.event_group.pc=*end as u16; continue;
                     }
                     s.decision=Decision::AbilityTarget; return Ok(false);

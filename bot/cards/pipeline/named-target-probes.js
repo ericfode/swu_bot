@@ -3,6 +3,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const keys = (a, allowed) =>
   a && Object.keys(a).every((k) => allowed.includes(k));
 function classifyNamedTarget(entry) {
+  const mixed = classifyNamedMixed(entry);
+  if (mixed) return mixed;
   const abilities = Object.values(entry.abilities ?? {}).flat();
   const a = abilities[0];
   const event = same(entry.card?.types, ["event"]);
@@ -166,6 +168,7 @@ function planNamedTargetProbes(entry, options = {}) {
     if (damage) return planNamedDamageProbes(entry, damage, options);
   const shape = classifyNamedTarget(entry);
   if (!shape) return null;
+  if (shape.mixedKind) return planMixedEvent(entry, shape, options);
   if (shape.trigger === "onAttack") return planAttack(entry, shape, options);
   const defs = Array.isArray(options.catalogue)
     ? options.catalogue
@@ -732,4 +735,488 @@ function planNamedDamageProbes(entry,shape,options={}) {
     }
     for(const gap of ['ordinary-and-native-attachment-death-cleanup','repeated-nonunique-source-copies','token-deployed-leader-recipients','source-control-transfer','recipient-reentry','framework-aura-death','gained-overwhelm','multiplayer'])obligation(gap,'No full-card construction for this dimension; source and primitive diagnostics are separate');
     return result;
+}
+
+function classifyNamedMixed(entry) {
+  const a = entry.abilities?.card?.[0];
+  const all = Object.values(entry.abilities ?? {}).flat();
+  if (
+    entry.status !== "supported" ||
+    entry.baseClass !== "EventCard" ||
+    !same(entry.card?.types, ["event"]) ||
+    all.length !== 1 ||
+    entry.abilities.card?.length !== 1 ||
+    entry.card.keywords?.length ||
+    Object.keys(entry.keywordValues ?? {}).length ||
+    entry.card.pilotText ||
+    entry.card.pilotBox ||
+    entry.card.pilotingBox ||
+    entry.piloting ||
+    entry.attachCondition ||
+    !keys(a, ["trigger", "title", "costs", "effect", "targetResolvers"]) ||
+    a.trigger !== "event" ||
+    !same(a.costs, []) ||
+    !same(a.effect, { kind: "noAction" }) ||
+    !Array.isArray(a.targetResolvers) ||
+    a.targetResolvers.length !== 2
+  )
+    return null;
+  for (const d of a.targetResolvers) {
+    if (
+      !keys(d, ["name", "chooser", "targetResolver", "effect"]) ||
+      typeof d.name !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(d.name) ||
+      ["target", "constructor", "prototype", "__proto__"].includes(d.name) ||
+      d.chooser !== "self"
+    )
+      return null;
+  }
+  if (a.targetResolvers[0].name === a.targetResolvers[1].name) return null;
+  const [first, second] = a.targetResolvers;
+  const any = (r) =>
+    keys(r, ["owner", "type", "zone", "promptTitle"]) &&
+    r.owner === "any" &&
+    r.type === "unit" &&
+    r.zone === "anyAttackable" &&
+    typeof r.promptTitle === "string";
+  const shield = {
+    kind: "giveShield",
+    target: "chosen",
+    amount: { kind: "const", value: 1 },
+  };
+  let mixedKind;
+  if (
+    any(first.targetResolver) &&
+    any(second.targetResolver) &&
+    same(first.effect, { kind: "ready", target: "chosen" }) &&
+    same(second.effect, {
+      kind: "damage",
+      target: "chosen",
+      amount: { kind: "const", value: 3 },
+    })
+  )
+    mixedKind = "ready-damage";
+  if (
+    any(first.targetResolver) &&
+    any(second.targetResolver) &&
+    same(first.effect, shield) &&
+    same(second.effect, {
+      kind: "modifyStats",
+      target: "chosen",
+      duration: "phase",
+      power: { kind: "unary", op: "-", value: { kind: "const", value: 3 } },
+      hp: { kind: "unary", op: "-", value: { kind: "const", value: 0 } },
+    })
+  )
+    mixedKind = "shield-debuff";
+  const cheap = {
+    kind: "binary",
+    op: "&&",
+    left: {
+      kind: "query",
+      name: "isUnit",
+      receiver: { kind: "ref", path: ["card"] },
+      args: [],
+    },
+    right: {
+      kind: "binary",
+      op: "<=",
+      left: { kind: "ref", path: ["card", "cost"] },
+      right: { kind: "const", value: 3 },
+    },
+  };
+  if (
+    same(first.targetResolver, {
+      owner: "opponent",
+      type: "any",
+      zone: "arena",
+    }) &&
+    same(second.targetResolver, {
+      owner: "self",
+      type: "any",
+      zone: "anyAttackable",
+      predicate: cheap,
+    }) &&
+    same(first.effect, { kind: "exhaust", target: "chosen" }) &&
+    same(second.effect, shield)
+  )
+    mixedKind = "exhaust-cheap-shield";
+  if (!mixedKind) return null;
+  return {
+    family: "named-target",
+    trigger: "event",
+    mixedKind,
+    descriptors: a.targetResolvers.map((d) => ({
+      name: d.name,
+      promptTitle: d.targetResolver.promptTitle,
+      owner: d.targetResolver.owner,
+      effect: d.effect,
+    })),
+  };
+}
+function planMixedEvent(entry, shape, options) {
+  const defs = Array.isArray(options.catalogue)
+    ? options.catalogue
+    : options.catalogue?.cards ?? [];
+  const quiet = defs
+    .filter(
+      (e) =>
+        e.status === "supported" &&
+        (!e.baseClass || e.baseClass === "NonLeaderUnitCard") &&
+        same(e.card.types, ["unit"]) &&
+        !e.card.unique &&
+        !e.card.keywords?.length &&
+        !e.card.pilotText &&
+        !e.card.pilotBox &&
+        !e.card.pilotingBox &&
+        !e.piloting &&
+        !e.attachCondition &&
+        !Object.keys(e.keywordValues ?? {}).length &&
+        !Object.values(e.abilities ?? {}).flat().length,
+    )
+    .sort((a, b) => a.setCode.localeCompare(b.setCode));
+  const result = {
+    schema: "swu-card-probes/v1",
+    cardId: entry.setCode,
+    sourceHash: entry.sourceHash,
+    cases: [],
+    obligations: [],
+    uncovered: [],
+  };
+  function obligation(name, reason) {
+    const id = `${entry.setCode}:named-target:${name}`;
+    result.obligations.push({ id, path: "named-target", dimension: name });
+    if (reason) result.uncovered.push({ id, path: "named-target", reason });
+    return id;
+  }
+  const ground = quiet.find(
+    (e) => e.card.arena === "ground" && e.card.hp > 3 && e.card.cost <= 3,
+  );
+  const space = quiet.find((e) => e.card.arena === "space" && e.card.hp > 3);
+  const expensive = quiet.find((e) => e.card.cost === 4 && e.card.hp > 3);
+  const cheapThree = quiet.find((e) => e.card.cost === 3 && e.card.hp > 3);
+  if (!ground || !space || !expensive || !cheapThree) {
+    obligation(
+      "metadata-donors",
+      "No bounded quiet donor for required arena/cost boundaries",
+    );
+    return result;
+  }
+  const row = (e, owner, exhausted = true, damage = 0) => ({
+    code: e.setCode,
+    owner,
+    arena: e.card.arena,
+    exhausted,
+    damage,
+  });
+  const mixed = [
+    row(ground, "self"),
+    row(ground, "opponent", false),
+    row(space, "self", false),
+    row(space, "opponent"),
+  ];
+  function add(name, targets, choices, extra = {}) {
+    const id = obligation(name);
+    result.cases.push({
+      id: `auto/${entry.setCode}/named-target-mixed-${name}`,
+      name: "named-target-mixed-" + name,
+      kind: "probe",
+      focusCardIds: [entry.setCode],
+      setupCardIds: [
+        ...new Set([
+          ...targets.map((t) => t.code),
+          ...targets.flatMap((t) => (t.attachments ?? []).map((a) => a.code)),
+          ...(shape.mixedKind.includes("shield") ? ["TOKEN_SHIELD"] : []),
+          ...(extra.expectDeathForce || extra.leaderCode
+            ? ["TOKEN_THE_FORCE"]
+            : []),
+        ]),
+      ].sort(),
+      behaviorIds: [
+        "named-targets",
+        "independent-systems",
+        "prepayment-selection",
+      ],
+      assertionStages: ["construction", "activation", "observation"],
+      coverageObligationIds: [id],
+      probe: {
+        ...shape,
+        cardId: entry.setCode,
+        sourceTypes: entry.card.types,
+        sourceArena: entry.card.arena,
+        targets,
+        choices,
+        resourceCount: 32,
+        initiative: "self",
+        ...extra,
+      },
+    });
+  }
+  add("different-recipients", mixed, ["index:3", "index:0"]);
+  add("cancel-first", mixed, ["cancel", "index:0"]);
+  add("cancel-second", mixed, ["index:3", "cancel"]);
+  add("empty-play-anyway", [], [], { empty: true });
+  add("empty-cancel", [], [], { empty: true, cancelEmpty: true });
+  if (shape.mixedKind === "exhaust-cheap-shield") {
+    add(
+      "missing-enemy-second-after-payment",
+      [row(ground, "self")],
+      ["skip", "index:0"],
+    );
+    add(
+      "missing-own-shield",
+      [row(ground, "opponent", false)],
+      ["index:0", "skip"],
+    );
+    const allExhausted = [row(ground, "opponent"), row(ground, "self")];
+    add("all-enemy-exhausted-cancel-second", allExhausted, ["skip", "cancel"]);
+    add("all-enemy-exhausted-continue", allExhausted, ["skip", "index:1"]);
+    add(
+      "all-enemy-exhausted-no-friendly-shield",
+      [row(ground, "opponent")],
+      ["skip", "skip"],
+    );
+    add("selected-ineffective-exhaust", mixed, ["index:3", "index:0"]);
+    add("effective-exhaust", mixed, ["index:1", "index:0"]);
+    add("created-shield-later-combat", mixed, ["index:1", "index:0"], {
+      followAttack: { attacker: 1, defender: 0 },
+    });
+    add(
+      "cost-three-four-domain",
+      [
+        row(ground, "opponent", false),
+        row(cheapThree, "self"),
+        row(expensive, "self"),
+      ],
+      ["index:0", "index:1"],
+    );
+    const beast = defs.find((e) => e.setCode === "TOKEN_BEAST");
+    if (beast)
+      add(
+        "native-beast-zero-cost",
+        [
+          row(ground, "opponent", false),
+          { ...row(beast, "self"), token: "beast" },
+        ],
+        ["index:0", "index:1"],
+      );
+    const leader = defs
+      .filter(
+        (e) =>
+          e.status === "supported" &&
+          e.baseClass === "LeaderUnitCard" &&
+          same(e.card.types, ["leader"]) &&
+          Number.isInteger(e.card.cost) &&
+          e.card.cost > 3 &&
+          ["ground", "space"].includes(e.card.arena) &&
+          !e.card.keywords?.length &&
+          !e.card.pilotText &&
+          !e.card.pilotBox &&
+          !e.card.pilotingBox &&
+          !e.piloting &&
+          !e.attachCondition &&
+          !Object.keys(e.keywordValues ?? {}).length &&
+          same(e.abilities.card, []) &&
+          e.abilities.leader?.length === 1 &&
+          e.abilities.unit?.length === 1 &&
+          keys(e.abilities.leader[0], [
+            "trigger",
+            "title",
+            "costs",
+            "effect",
+          ]) &&
+          e.abilities.leader[0].trigger === "action" &&
+          same(e.abilities.leader[0].costs, [{ kind: "exhaustSelf" }]) &&
+          same(e.abilities.leader[0].effect, {
+            kind: "damage",
+            target: "bothBases",
+            amount: { kind: "const", value: 1 },
+          }) &&
+          keys(e.abilities.unit[0], ["trigger", "title", "costs", "effect"]) &&
+          e.abilities.unit[0].trigger === "onAttack" &&
+          same(e.abilities.unit[0].costs, []) &&
+          same(e.abilities.unit[0].effect, {
+            kind: "damage",
+            target: "enemyBase",
+            amount: { kind: "const", value: 1 },
+          }),
+      )
+      .sort((a, b) => a.setCode.localeCompare(b.setCode))[0];
+    if (leader)
+      add(
+        "deployed-leader-cost-exclusion",
+        [
+          row(ground, "opponent", false),
+          row(ground, "self"),
+          { ...row(leader, "self"), leader: true },
+        ],
+        ["index:0", "index:1"],
+        { leaderCode: leader.setCode },
+      );
+    else
+      obligation(
+        "deployed-leader-cost-exclusion",
+        "No quiet unit-side leader metadata donor",
+      );
+  } else {
+    add("same-own-recipient", mixed, ["index:0", "index:0"]);
+    add("same-enemy-recipient", mixed, ["index:3", "index:3"]);
+    add("enemy-first-own-second", mixed, ["index:3", "index:0"]);
+    add("own-first-enemy-second", mixed, ["index:0", "index:1"]);
+    if (shape.mixedKind === "ready-damage") {
+      const allReady = mixed.map((t) => ({ ...t, exhausted: false }));
+      add("all-ready-cancel-second", allReady, ["skip", "cancel"]);
+      add("all-ready-continue", allReady, ["skip", "index:0"]);
+      add("selected-ineffective-ready", mixed, ["index:1", "index:0"]);
+      const hpThree = quiet.find((e) => e.card.hp === 3);
+      if (hpThree)
+        add(
+          "same-recipient-lethal",
+          [row(hpThree, "self")],
+          ["index:0", "index:0"],
+        );
+      const shielded = [row(ground, "opponent")];
+      shielded[0].attachments = [{ code: "TOKEN_SHIELD", token: "shield" }];
+      add("existing-shield-prevents-damage", shielded, ["index:0", "index:0"]);
+      const gain = defs.find(
+        (e) =>
+          e.status === "supported" &&
+          e.baseClass === "NonLeaderUnitCard" &&
+          same(e.card.types, ["unit"]) &&
+          !e.card.unique &&
+          !e.card.keywords?.length &&
+          !Object.keys(e.keywordValues ?? {}).length &&
+          !e.card.pilotText &&
+          !e.card.pilotBox &&
+          !e.card.pilotingBox &&
+          !e.piloting &&
+          !e.attachCondition &&
+          same(e.abilities.leader, []) &&
+          same(e.abilities.unit, []) &&
+          e.abilities.card?.length === 2 &&
+          same(
+            e.abilities.card.map((a) => a.trigger),
+            ["onAttack", "whenDefeated"],
+          ) &&
+          e.abilities.card.every(
+            (a) =>
+              keys(a, ["trigger", "title", "costs", "effect"]) &&
+              same(a.costs, []) &&
+              same(a.effect, { kind: "gainForce", target: "ownPlayer" }),
+          ) &&
+          e.card.hp === 3,
+      );
+      if (gain) {
+        add(
+          "same-recipient-captured-death",
+          [row(gain, "opponent")],
+          ["index:0", "index:0"],
+          { expectDeathForce: true },
+        );
+        const attached = row(gain, "opponent", true, 1);
+        attached.attachments = [
+          { code: "TOKEN_EXPERIENCE", token: "experience" },
+        ];
+        add(
+          "lethal-native-attachment-cleanup",
+          [attached],
+          ["index:0", "index:0"],
+          { expectDeathForce: true },
+        );
+        const ordinary = defs.find(
+          (e) =>
+            e.status === "supported" &&
+            e.baseClass === "UpgradeCard" &&
+            same(e.card.types, ["upgrade"]) &&
+            !e.card.unique &&
+            !e.card.keywords?.length &&
+            !Object.keys(e.keywordValues ?? {}).length &&
+            !e.card.pilotText &&
+            !e.card.pilotBox &&
+            !e.card.pilotingBox &&
+            !e.piloting &&
+            !Object.values(e.abilities ?? {}).flat().length &&
+            Number.isInteger(e.card.upgradePower) &&
+            e.card.upgradePower >= 0 &&
+            e.card.upgradeHp === 1 &&
+            same(e.attachCondition, {
+              kind: "binary",
+              op: "&&",
+              left: {
+                kind: "query",
+                name: "hasCost",
+                receiver: { kind: "ref", path: ["card"] },
+                args: [],
+              },
+              right: {
+                kind: "binary",
+                op: "<=",
+                left: { kind: "ref", path: ["card", "cost"] },
+                right: { kind: "const", value: 4 },
+              },
+            }) &&
+            gain.card.cost <= 4,
+        );
+        if (ordinary) {
+          const both = row(gain, "opponent", true, 2);
+          both.attachments = [
+            { code: ordinary.setCode, owner: "self" },
+            { code: "TOKEN_EXPERIENCE", token: "experience" },
+          ];
+          add(
+            "lethal-cross-owner-ordinary-native-cleanup",
+            [both],
+            ["index:0", "index:0"],
+            { expectDeathForce: true, ordinaryCleanup: true },
+          );
+        }
+      }
+    } else {
+      add("phase-expiry", mixed, ["index:0", "index:1"], {
+        waitForExpiry: true,
+      });
+      add("created-shield-later-combat", mixed, ["index:0", "index:2"], {
+        followAttack: { attacker: 1, defender: 0 },
+      });
+      const clamp = quiet.find(
+        (e) => e.card.power > 0 && e.card.power < 3 && e.card.hp > 3,
+      );
+      if (clamp)
+        add(
+          "negative-power-clamp",
+          [row(clamp, "opponent")],
+          ["index:0", "index:0"],
+        );
+      const beast = defs.find((e) => e.setCode === "TOKEN_BEAST");
+      if (beast)
+        add(
+          "native-unit-recipient",
+          [{ ...row(beast, "opponent"), token: "beast" }],
+          ["index:0", "index:0"],
+        );
+    }
+  }
+  for (const gap of [
+    "source-semantic-review",
+    "reversed-source-seats",
+    "shield-later-combat-consumption",
+    "ordinary-attachment-death-cleanup",
+    "replacement-token-cancellation",
+    "recipient-departure-during-selection",
+    "multiplayer",
+    "source-controller-transfer",
+  ]) {
+    if (
+      (gap === "shield-later-combat-consumption" &&
+        result.cases.some((c) => c.probe.followAttack)) ||
+      (gap === "ordinary-attachment-death-cleanup" &&
+        result.cases.some((c) => c.probe.ordinaryCleanup))
+    )
+      continue;
+    obligation(
+      gap,
+      "No actual source-card construction for this dimension; primitive diagnostics are separate",
+    );
+  }
+  return result;
 }

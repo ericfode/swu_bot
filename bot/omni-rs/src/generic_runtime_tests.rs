@@ -2139,7 +2139,7 @@ fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigg
 #[test]
 fn named_two_admission_preserves_other_descriptor_rejections() {
     let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["HMW_263","LAW_099","LAW_184","LOF_054","SOR_218","TS26_072","TS26_081","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    for code in ["HMW_263","LAW_099","LAW_184","LOF_054","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
     assert_eq!(std::mem::size_of::<State>(),18560);
 }
 #[test]
@@ -2523,4 +2523,44 @@ fn named_damage_missing_first_still_resolves_second_and_raw_guards_reject() {
  let e=engine();let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"TS26_029");s.players[0].discard.push(source).unwrap();let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityTarget);let done=e.apply(&s,&e.card_action(&s,enemy)).unwrap();assert_eq!(done.card(enemy).damage,1);
  let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();for (field,value) in [("owner",json!("any")),("optional",json!(true)),("type",json!("base")),("promptTitle",json!("Custom"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="SEC_030").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["targetResolver"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("SEC_030"));}
  for trigger in ["event","onDefense","action"] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="SEC_030").unwrap();card["abilities"]["card"][0]["trigger"]=json!(trigger);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("SEC_030"));}
+}
+#[test]
+fn named_mixed_ineffective_first_keeps_second_cancel_before_payment() {
+ let e=engine();for (event,exhausted) in [("TS26_072",false),("SOR_218",true)] {let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_256");let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");s.card_mut(own).exhausted=exhausted;s.card_mut(enemy).exhausted=exhausted;let source=hand(&e,&mut s,event);let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(prompt.decision,Decision::AbilityTarget);assert!(!prompt.ability_committed);assert!(prompt.players[0].hand.contains(source));assert!(e.legal_actions(&prompt).iter().any(|a|a.label=="Cancel"));let cancelled=named_button(&e,&prompt,"Cancel");assert_eq!(cancelled.zobrist(),s.zobrist());assert_eq!(cancelled.next_id,s.next_id);}
+}
+#[test]
+fn named_mixed_fervor_ready_ineffective_recipient_remains_selectable_and_shared() {
+ let e=engine();let mut s=board(&e);let ready=unit(&e,&mut s,Seat::P1,"LOF_256");s.card_mut(ready).exhausted=false;let tired=unit(&e,&mut s,Seat::P2,"LOF_256");s.card_mut(tired).exhausted=true;let source=hand(&e,&mut s,"TS26_072");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert!(e.legal_actions(&prompt).contains(&e.card_action(&prompt,ready)));let second=e.apply(&prompt,&e.card_action(&prompt,tired)).unwrap();assert!(second.card(tired).exhausted);assert_eq!(second.card(tired).damage,0);let done=e.apply(&second,&e.card_action(&second,tired)).unwrap();assert!(!done.card(tired).exhausted);assert_eq!(done.card(tired).damage,3);
+ let second=e.apply(&prompt,&e.card_action(&prompt,ready)).unwrap();let done=e.apply(&second,&e.card_action(&second,tired)).unwrap();assert!(done.card(tired).exhausted);assert!(!done.card(ready).exhausted);assert_eq!(done.card(tired).damage,3);
+}
+#[test]
+fn named_mixed_fervor_shield_and_lethal_callbacks_follow_ready() {
+ let e=engine();for shield in [false,true] {let mut s=board(&e);let victim=unit(&e,&mut s,Seat::P2,"LOF_129");s.card_mut(victim).exhausted=true;s.card_mut(victim).damage=e.hp(&s,victim)-1;if shield {e.create_token(&mut s,victim,false).unwrap();}let source=hand(&e,&mut s,"TS26_072");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();let second=e.apply(&first,&e.card_action(&first,victim)).unwrap();let done=e.apply(&second,&e.card_action(&second,victim)).unwrap();if shield {assert!(e.in_arena(&done,victim));assert!(!done.card(victim).exhausted);assert_eq!(done.card(victim).shield,0);assert!(!done.players[1].force_held);}else{assert!(done.players[1].discard.contains(victim));assert!(done.players[1].force_held);}}
+}
+#[test]
+fn named_mixed_sanctuary_missing_enemy_pays_then_shields_cheap_own() {
+ let e=engine();let mut s=board(&e);let target=unit(&e,&mut s,Seat::P1,"LOF_256");let expensive=unit(&e,&mut s,Seat::P1,"LOF_119");let source=hand(&e,&mut s,"SOR_218");let next=s.next_id;let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert!(prompt.ability_committed);assert!(prompt.players[0].discard.contains(source));assert!(!e.legal_actions(&prompt).iter().any(|a|a.label=="Cancel"));assert!(e.legal_actions(&prompt).contains(&e.card_action(&prompt,target)));assert!(!e.legal_actions(&prompt).contains(&e.card_action(&prompt,expensive)));let done=e.apply(&prompt,&e.card_action(&prompt,target)).unwrap();assert_eq!(done.next_id,next+1);assert_eq!(done.card(target).shield,next);assert_eq!(done.card(next).owner,Seat::P1);assert_eq!(done.card(next).parent,target);
+}
+#[test]
+fn named_mixed_raw_shapes_reject_broad_headers_operations_and_predicates() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();for code in ["SOR_218","TS26_072"] {for (field,value) in [("owner",json!("opponent")),("optional",json!(true)),("type",json!("base")),("zone",json!("resource"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]==code).unwrap();card["abilities"]["card"][0]["targetResolvers"][1]["targetResolver"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key(code),"{code}/{field}");}}
+ let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="SOR_218").unwrap();card["abilities"]["card"][0]["targetResolvers"][1]["targetResolver"]["predicate"]["right"]["right"]["value"]=json!(4);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("SOR_218"));
+}
+#[test]
+fn named_mixed_mislead_defers_token_id_until_both_choices_and_payment() {
+ let e=engine();for same in [true,false] {let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_256");let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let source=hand(&e,&mut s,"TS26_081");let next=s.next_id;let power=e.power(&s,enemy,false);let hp=e.hp(&s,enemy);let first=e.apply(&s,&e.card_action(&s,source)).unwrap();let second=e.apply(&first,&e.card_action(&first,enemy)).unwrap();assert_eq!(second.next_id,next);assert_eq!(second.cards,s.cards);assert_eq!(second.players[0].resources,s.players[0].resources);assert!(second.players[0].hand.contains(source));assert_eq!(second.card(enemy).shield,0);assert_eq!(e.power(&second,enemy,false),power);assert_eq!(second.event_group.records[0].token,0);let cancelled=named_button(&e,&second,"Cancel");assert_eq!(cancelled.zobrist(),s.zobrist());assert_eq!(cancelled.cards,s.cards);assert_eq!(cancelled.next_id,next);assert_eq!(cancelled.players[0].hand,s.players[0].hand);
+ let target=if same {enemy}else{own};let original_power=e.power(&s,target,false);let done=e.apply(&second,&e.card_action(&second,target)).unwrap();assert_eq!(done.next_id,next+1);assert_eq!(done.card(enemy).shield,next);assert_eq!(done.card(next).parent,enemy);assert_eq!(done.card(next).owner,Seat::P2);assert_eq!(e.power(&done,target,false),original_power.saturating_sub(3));assert_eq!(e.hp(&done,enemy),hp);assert!(done.players[0].discard.contains(source));assert!(done.players[0].resources.as_slice().iter().any(|id|done.card(*id).exhausted));}
+}
+#[test]
+fn named_mixed_token_capacity_preflight_has_no_partial_card_allocation() {
+ let e=engine();let mut s=board(&e);let recipient=unit(&e,&mut s,Seat::P1,"LOF_256");let source=hand(&e,&mut s,"TS26_081");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();let mut second=e.apply(&first,&e.card_action(&first,recipient)).unwrap();second.next_id=MAX_CARDS as CardId;let before=second;assert!(e.apply(&second,&e.card_action(&second,recipient)).is_err());assert_eq!(second.cards,before.cards);assert_eq!(second.players[0].hand,before.players[0].hand);let p=e.program(second.ability_program-1);let Instruction::NamedGroup(effect)=&p.instructions[second.ability_pc as usize] else {panic!()};assert!(e.allocate_named_tokens(&mut second,effect).is_err());assert_eq!(second.cards,before.cards);assert_eq!(second.next_id,before.next_id);
+}
+#[test]
+fn named_mixed_mislead_rejects_hp_damage_and_dynamic_token_shapes() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();for (field,value) in [("hp",json!({"kind":"unary","op":"-","value":{"kind":"const","value":1}})),("power",json!({"kind":"ref","path":["source","power"]})),("duration",json!("persistent"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="TS26_081").unwrap();card["abilities"]["card"][0]["targetResolvers"][1]["effect"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("TS26_081"));}
+}
+#[test]
+fn named_mixed_all_empty_confirms_before_costs_and_cost_filter_is_printed() {
+ let e=engine();for code in ["SOR_218","TS26_072","TS26_081"] {let mut s=board(&e);let source=hand(&e,&mut s,code);let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(prompt.decision,Decision::AbilityNoEffect);assert_eq!(named_button(&e,&prompt,"Cancel").zobrist(),s.zobrist());let done=named_button(&e,&prompt,"Play anyway");assert!(done.players[0].discard.contains(source));assert_eq!(done.next_id,s.next_id);}
+ let mut s=board(&e);let source=hand(&e,&mut s,"SOR_218");let mut ids=vec![];for cost in [3,4] {let d=e.definitions.iter().find(|d|d.info.is("unit")&&!d.info.is("leader")&&d.info.cost==Some(cost)&&d.programs.card.is_empty()).unwrap();let id=unit(&e,&mut s,Seat::P1,&d.code);ids.push(id);}let zero=unit(&e,&mut s,Seat::P1,"LOF_254");let beast=unit(&e,&mut s,Seat::P1,"TOKEN_BEAST");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();let legal=e.legal_actions(&prompt);for id in [ids[0],zero,beast] {assert!(legal.contains(&e.card_action(&prompt,id)));}assert!(!legal.contains(&e.card_action(&prompt,ids[1])));
 }

@@ -162,8 +162,16 @@ unit first and an enemy unit second, with static arena domains and one or two
 points of preventable ability damage. Both choices finish before either damage
 event resolves. Shared Shield replacement and lethal-trigger handling preserve
 recipient identity and the pending attack; a missing enemy does not suppress
-friendly damage. Opponent choosers, dependent names, base targets and mixed
-named damage families remain rejected.
+friendly damage. Opponent choosers, dependent names and base targets remain
+rejected.
+
+Bounded mixed named events combine ready with three damage, exhaust with one
+Shield on a friendly unit of printed cost three or less, or one Shield with a
+-3/-0 phase modifier. Both recipients are selected before effects and token
+allocation. A missing first target delays later selection until after payment;
+a legal but already ready/exhausted first domain keeps later selection before
+payment. Cancellation preserves card identities and resource state. Unsupported
+mixed pairs remain rejected rather than running a partial effect.
 
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or

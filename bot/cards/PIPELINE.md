@@ -171,6 +171,18 @@ controller transfer, broad token/leader targets, gained Overwhelm and framework
 aura deaths remain gaps. Ziton witnesses cover only the pinned two-player
 implementation; its source explicitly disclaims accurate Twin Suns behavior.
 
+Mixed named-event experiments cover ready/damage, exhaust/cheap Shield and
+Shield/negative power pairs. They distinguish truly empty domains from legal
+but ineffective readiness choices, cancellation at either selection, delayed
+payment, same/different recipients and controllers, and exact token allocation
+after the final choice. Real Shields are consumed in later ordinary combat;
+phase modifiers expire naturally. Fervor cases include prevention, captured
+death effects, native attachment removal and ordinary attachments controlled
+by the other player. Printed-cost boundaries include a native Beast and an
+ineligible deployed leader. Reversed source seats, recipient departure during
+selection, replacement/cancellation of token creation, controller transfer and
+multiplayer remain gaps; attachment cleanup coverage is specific to Fervor.
+
 Weakness experiments cover optional play/death registrations, both controllers,
 damaged-only choices, exact resource thresholds, the entering source, signed
 stat stacking and zero-power clamping, lethal HP loss, and native token/deployed
