@@ -11,6 +11,10 @@
  *   research lines   PUT  /api/docs/{panels,experiments,evals,bots,league,lens,research,threads}/<id>
  *   browsers         GET  /, /arena, /api/app (the app's model), /api/status, /api/standings, /api/report, /api/games,
  *                         /api/versions, /api/panel (the arena's own read methods, same shapes), /api/replays/<run>/<game>
+ *   Eric's Share page     GET, POST /api/share                 who is invited; {add} or {remove} one GitHub login
+ *   MCP clients      POST /mcp                             each person's own app (Claude, Claude Code...), signed in
+ *                                                          with GitHub through OAuth (oauth.js, /oauth/*); it reads
+ *   Build a bot page GET, POST /api/apps                   a person's connected apps; {disconnect: id}
  *
  * push.js is the client and CLI for the push side. Who may do what is in auth.js: friends read, the project's token
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
@@ -19,7 +23,10 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { createAuth, atLeast } = require('./auth');
+const crypto = require('crypto');
+const { createAuth, atLeast, LOGIN } = require('./auth');
+const { createOAuth } = require('./oauth');
+const { createMcpHttp } = require('./mcp-http');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -64,16 +71,21 @@ function feedRun(doc, feed, id) {
     if (doc.bots !== undefined && !(Array.isArray(doc.bots) && doc.bots.every(isName))) return null;
     // runs are ordered by createdAt, so a feed's run needs one
     if (!(typeof doc.createdAt === 'string' && doc.createdAt.length <= 40 && Number.isFinite(Date.parse(doc.createdAt)))) return null;
+    // the run's bots list names our bots; every other seat is a person, kept only as "opponent", so a person's name is
+    // never stored. A run with games must name at least one bot, and every game must seat one of them.
+    const ours = new Set((doc.bots ?? []).filter((b) => b !== 'opponent'));
+    if (doc.games.length && !ours.size) return null;
     const games = [], seen = new Set();
     for (const g of doc.games) {
         const ok = g && typeof g === 'object' && typeof g.id === 'string' && /^[\w.@#+-]{1,160}$/.test(g.id) && g.id.startsWith(`${feed}-`) && !seen.has(g.id)
-            && isName(g.p1) && isName(g.p2) && FEED_OUTCOMES.has(g.outcome)
+            && isName(g.p1) && isName(g.p2) && (ours.has(g.p1) || ours.has(g.p2)) && FEED_OUTCOMES.has(g.outcome)
             && (g.outcome !== 'won' || g.winnerSeat === 'p1' || g.winnerSeat === 'p2') && (g.error == null || typeof g.error === 'string');
         if (!ok) return null;
         seen.add(g.id);
         // the seat follows from the outcome: only a won game names a winner, a draw is always 'draw'
         const seat = g.outcome === 'won' ? g.winnerSeat : g.outcome === 'draw' ? 'draw' : null;
-        games.push({ id: g.id, p1: g.p1, p2: g.p2, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? g[seat] : null,
+        const p = { p1: ours.has(g.p1) ? g.p1 : 'opponent', p2: ours.has(g.p2) ? g.p2 : 'opponent' };
+        games.push({ id: g.id, ...p, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? p[seat] : null,
             rounds: count(g.rounds), steps: count(g.steps), error: g.error ? g.error.slice(0, 200) : null });
     }
     const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small
@@ -81,7 +93,8 @@ function feedRun(doc, feed, id) {
 }
 
 /**
- * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role. A feed token
+ * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role (the one exception
+ * is an admin's change to the invite list, share() in createWindow). A feed token
  * (an outside machine, auth.js) writes only run documents, lens documents and replays named after it: <feed> or
  * <feed>-<anything>, so the Karabast Sprite can stream its games and nothing else.
  */
@@ -340,6 +353,81 @@ function scrub(x) {
     return x;
 }
 
+/**
+ * People are never named to readers. A run of games against people (one a feed sent, or an id starting "karabast", as
+ * app/src/model.cjs tells them apart) is stored as its writer sent it, and the programs that write (bearer tokens from
+ * feed up) read it back that way, so their sizes and offsets match what they wrote. Everyone else (a sign-in, a view
+ * link's guest, an MCP app) reads a copy where a seat outside the run's own bots list is "opponent" in the run document,
+ * and "a person" in a replay's header and on each board, as the app shows it.
+ */
+const PERSON = 'a person';
+const readsMasked = (who) => !(who.via === 'bearer' && atLeast(who.role, 'feed'));
+const peopleRun = (id, doc) => (typeof doc?.feed === 'string' && doc.feed !== '') || /^karabast(-|$)/.test(id);
+const oursOf = (doc) => new Set((Array.isArray(doc?.bots) ? doc.bots : []).filter((b) => b !== 'opponent'));
+
+function maskRun(doc) {
+    const ours = oursOf(doc);
+    if (!ours.size || !Array.isArray(doc.games)) {
+        return doc; // with no bots list the person cannot be told from the bot (the app shows such a run unmasked too)
+    }
+    const seat = (n) => (typeof n !== 'string' || ours.has(n) || n === 'draw' ? n : 'opponent');
+    return { ...doc, games: doc.games.map((g) => (g && typeof g === 'object' ? { ...g, p1: seat(g.p1), p2: seat(g.p2), ...('winner' in g ? { winner: seat(g.winner) } : {}) } : g)) };
+}
+
+/** A readers' copy of a document: a people run masked (above), and for friends without builder and thread names. */
+function readerDoc(ns, id, doc, who) {
+    const d = ns === 'runs' && doc && typeof doc === 'object' && readsMasked(who) && peopleRun(id, doc) ? maskRun(doc) : doc;
+    return atLeast(who.role, 'project') ? d : scrub(d);
+}
+
+/**
+ * A people game's replay as readers get it. The person's seat comes from the run's row for the game (a seat that is
+ * "opponent" or outside the bots list), or, before the run names the game, from the header (a player named "opponent"
+ * or outside the bots list). Whole lines only: a line still being written waits for its newline, so the copy only ever
+ * grows by whole lines and a reader's offsets stay valid while the game is played.
+ */
+function maskReplay(buf, doc, game) {
+    const ours = oursOf(doc);
+    const row = Array.isArray(doc?.games) ? doc.games.find((g) => g?.id === game) : null;
+    const outside = (n) => n === 'opponent' || (ours.size > 0 && !ours.has(n));
+    const isPerson = (p) => (row && typeof row[p.id] === 'string' ? outside(row[p.id]) : outside(p.bot));
+    const names = new Map(); // seat -> the names the header gave the person
+    const end = buf.lastIndexOf(10) + 1;
+    const lines = buf.subarray(0, end).toString('utf8').split('\n');
+    lines.pop();
+    const out = lines.map((line) => {
+        if (!line.includes('"header"') && ![...names.values()].some((ns) => ns.some((n) => line.includes(JSON.stringify(n))))) {
+            return line;
+        }
+        let e;
+        try {
+            e = JSON.parse(line);
+        } catch {
+            return line;
+        }
+        let changed = false;
+        if (e?.t === 'header' && Array.isArray(e.players)) {
+            e.players = e.players.map((p) => {
+                if (!p || typeof p !== 'object' || !isPerson(p)) {
+                    return p;
+                }
+                names.set(p.id, [p.bot, p.name].filter((n) => typeof n === 'string' && n !== '' && n !== p.id));
+                changed = true;
+                return { ...p, bot: PERSON, ...(typeof p.name === 'string' && p.name !== p.id ? { name: PERSON } : {}) };
+            });
+        }
+        for (const [seat, ns] of names) {
+            const pl = e?.state?.players?.[seat];
+            if (pl && ns.includes(pl.name)) {
+                pl.name = PERSON;
+                changed = true;
+            }
+        }
+        return changed ? JSON.stringify(e) : line;
+    });
+    return Buffer.from(out.length ? `${out.join('\n')}\n` : '', 'utf8');
+}
+
 /** The app's code, loaded once: the research loader, the Atlas kit and the app model. null when a part is missing. */
 function loadAppParts() {
     const first = (...ps) => ps.find((p) => p && fs.existsSync(p)) || null;
@@ -414,7 +502,11 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
 function createWindow(opts = {}) {
     const home = path.resolve(opts.home ?? process.env.WINDOW_HOME ?? '/data/window');
     const store = new Store(home);
-    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [] });
+    const viewLinks = () => {
+        const d = parseOr(store.getDoc('admin', 'links'), null);
+        return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
+    };
+    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
     const webFile = opts.web ?? path.join(__dirname, 'web', 'index.html');
@@ -455,6 +547,132 @@ function createWindow(opts = {}) {
             return { round: k, ladderId: id, replayBase: `replays/${id}/games/`, games: idx.games };
         }
     };
+
+    // a replay as this reader may see it (maskReplay above), or null; the last few masked copies are kept
+    const masked = new Map();
+    function replayFor(who, run, game) {
+        const buf = store.readReplay(run, game);
+        if (!buf || !readsMasked(who)) {
+            return buf;
+        }
+        const doc = parseOr(store.getDoc('runs', run), null);
+        if (!peopleRun(run, doc)) {
+            return buf;
+        }
+        const k = `${run}/${game}`;
+        const sig = crypto.createHash('sha256').update(buf).update(JSON.stringify([doc?.bots ?? null, Array.isArray(doc?.games) ? doc.games.find((g) => g?.id === game) ?? null : null])).digest('hex');
+        const hit = masked.get(k);
+        if (hit?.sig === sig) {
+            return hit.buf;
+        }
+        const out = maskReplay(buf, doc, game);
+        masked.delete(k);
+        masked.set(k, { sig, buf: out });
+        if (masked.size > 24) {
+            masked.delete(masked.keys().next().value);
+        }
+        return out;
+    }
+    // a run's replays with sizes; a people run's copies for readers are sized when each one is read (window_replay)
+    const replaySizes = (who, run) => {
+        const people = readsMasked(who) && peopleRun(run, parseOr(store.getDoc('runs', run), null));
+        return store.listReplays(run).map((id) => ({ id, size: people ? null : store.replaySize(run, id) }));
+    };
+
+    // ---- /mcp: each person's own MCP client (Claude, Claude Code, Cursor...) signs in with GitHub through OAuth
+    // (oauth.js) and reads as that person; the project token stays with bot/arena/mcp.js for pushing ----
+    const oauth = createOAuth({ dir: path.join(home, 'auth'), auth });
+    auth.useBearer(oauth.lookup);
+    const { METHODS } = require('./api');
+    const RO = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
+    const TYPE = { string: { type: 'string' }, integer: { type: 'integer' } };
+    const schema = (props, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
+    const pick = (a, keys) => Object.fromEntries(keys.filter((k) => a[k] !== undefined && a[k] !== null).map((k) => [k, a[k]]));
+    const REPLAY_SLICE = 100000;
+    const mcpTools = [
+        { name: 'whoami', description: 'Who this app reads the arena as, and what it may do.', inputSchema: schema({}), annotations: RO,
+            call: ({ who }) => ({ login: who.login, role: who.role, app: who.app, may: 'read games, replays, standings and research; change nothing' }) },
+        ...[...ARENA_READ].map((m) => ({
+            name: `arena_${m}`, description: METHODS[m].desc, annotations: RO,
+            inputSchema: schema(Object.fromEntries(Object.entries(METHODS[m].props).map(([k, t]) => [k, TYPE[t]])), METHODS[m].required ?? []),
+            call: (ctx, a) => scrub(arenaMethods[m](pick(a, Object.keys(METHODS[m].props))))
+        })),
+        { name: 'window_docs', annotations: RO,
+            description: `Without id: the documents in a collection (${[...FRIEND_NS].join(', ')}), with their sizes. With id: one document. "runs" holds every ladder, tournament round and game list; "evals" and "lens" a game's win-chance curves; "meta" the ratings and the Strategy Atlas.`,
+            inputSchema: schema({ collection: { type: 'string', enum: [...FRIEND_NS] }, id: TYPE.string }, ['collection']),
+            call: (ctx, { collection, id }) => {
+                need(FRIEND_NS.has(collection), 'not_found', `collection: one of ${[...FRIEND_NS].join(', ')}`);
+                if (id == null || id === '') {
+                    return store.listDocs(collection);
+                }
+                const text = store.getDoc(collection, String(id));
+                need(text != null, 'not_found', `no ${collection}/${id}`);
+                return readerDoc(collection, String(id), JSON.parse(text), ctx.who);
+            } },
+        { name: 'window_replays', annotations: RO, description: "A run's recorded games (replays) and their sizes in bytes (in a run against people, window_replay gives each size).", inputSchema: schema({ run: TYPE.string }, ['run']),
+            call: (ctx, { run }) => replaySizes(ctx.who, String(run ?? '')) },
+        { name: 'window_replay', annotations: RO,
+            description: `Part of one game's replay: JSON lines, a header, then one step per decision with the board (spec/replay-format.md in the swu_bot repo). Up to ${REPLAY_SLICE} bytes per call from byte \`from\`; size says how much there is.`,
+            inputSchema: schema({ run: TYPE.string, game: TYPE.string, from: TYPE.integer, length: TYPE.integer }, ['run', 'game']),
+            call: (ctx, { run, game, from = 0, length = REPLAY_SLICE }) => {
+                const buf = replayFor(ctx.who, String(run ?? ''), String(game ?? ''));
+                need(buf, 'not_found', `no replay ${run}/${game}`);
+                // a slice starts and ends on whole characters, so slices read one after another (from + length) join
+                // back into the replay; length says how many bytes this one holds
+                const inside = (i) => i < buf.length && (buf[i] & 0xc0) === 0x80; // a UTF-8 continuation byte
+                let a = Math.min(buf.length, Math.max(0, Number(from) || 0));
+                while (inside(a)) a++;
+                let b = Math.min(buf.length, a + Math.min(REPLAY_SLICE, Math.max(1, Number(length) || REPLAY_SLICE)));
+                while (b > a && inside(b)) b--;
+                if (b === a && a < buf.length) {
+                    for (b = a + 1; inside(b); b++); // asked for less than one character: give that character
+                }
+                const slice = buf.subarray(a, b);
+                return { run, game, size: buf.length, from: a, length: slice.length, text: slice.toString('utf8') };
+            } }
+    ];
+    const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
+    const mcp = createMcpHttp({
+        name: 'swu-arena', version: '1.0.0', tools: mcpTools, headers: MCP_CORS,
+        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Read-only for now. Start with whoami and arena_status; window_docs lists the runs, evaluations and research; window_replay reads a game move by move. Building and submitting a bot happens in the swu_bot repo (bot/arena/README.md) until the hosted arena opens.'
+    });
+    function mcpRoute(req, res) {
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204, { ...MCP_CORS, 'access-control-max-age': '600' });
+            return res.end();
+        }
+        const who = auth.who(req);
+        if (who.via !== 'oauth' || !atLeast(who.role, 'friend')) {
+            const message = who.via === 'oauth' ? `@${who.login} is not on the invite list (any more)`
+                : who.via === 'bearer' && who.role !== 'bad' ? 'this endpoint takes a person\'s own sign-in; the project token works with bot/arena/mcp.js'
+                    : 'connect this server in your MCP client: it opens a GitHub sign-in';
+            res.writeHead(401, { 'content-type': 'application/json', 'www-authenticate': oauth.challenge(who.via !== 'cookie'), ...MCP_CORS });
+            return res.end(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32001, message } }));
+        }
+        return mcp.handle(req, res, { who });
+    }
+
+    /**
+     * A person's own connected apps, for the app's Build a bot page: GET lists them with the MCP address; POST {disconnect: id}
+     * ends one, from this site's own pages only (Origin and JSON, as share() checks).
+     */
+    async function apps(req, res, who) {
+        need(who.login, 'forbidden', 'sign in with GitHub to connect apps');
+        if (req.method === 'POST') {
+            need(who.via === 'cookie' && req.headers.origin === auth.origin, 'forbidden', "apps are disconnected only from this site's own pages");
+            need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
+            let q;
+            try {
+                q = JSON.parse((await readBody(req, 1024)).toString('utf8'));
+            } catch (e) {
+                throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
+            }
+            need(typeof q?.disconnect === 'string' && oauth.end(who.login, q.disconnect), 'not_found', 'no such app of yours');
+        } else {
+            need(req.method === 'GET', 'bad_request', 'GET, or POST {disconnect: id}');
+        }
+        return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login) } }, req);
+    }
 
     function sendJson(res, code, body, req) {
         if (res.headersSent) {
@@ -500,6 +718,69 @@ function createWindow(opts = {}) {
         });
     }
 
+    const invited = () => {
+        const d = parseOr(store.getDoc('admin', 'invites'), null);
+        return Array.isArray(d?.logins) ? d.logins.filter((x) => typeof x === 'string').map((x) => x.toLowerCase()) : [];
+    };
+    /** The Share page's lists; a login the server already lets in (admins, ARENA_INVITES) shows there, never as an invite. */
+    const shared = () => {
+        const fixed = auth.fixed(), set = new Set([...fixed.admins, ...fixed.fromEnv]);
+        return { invites: invited().filter((x) => !set.has(x)), ...fixed, links: viewLinks().map(({ id, key, label, createdAt }) => ({ id, key, label, createdAt })) };
+    };
+    /**
+     * Who may look, for Eric's Share page: GET lists the invited GitHub logins and the view links; POST changes one of
+     * them: {add: login} or {remove: login} on the invite document, {addLink: note} or {removeLink: id} on the view
+     * links (admin/links; a view link lets anyone holding it read, with no sign-in). The one write a signed-in browser
+     * may make: only an admin, only from this site's own pages (the Origin header; a page elsewhere cannot set it), and
+     * only as JSON (a plain form cannot send that). A removal takes effect on that person's next request.
+     */
+    async function share(req, res, who) {
+        need(who.role === 'admin', 'forbidden', 'only an admin changes who can look');
+        if (req.method === 'GET') {
+            return sendJson(res, 200, { result: shared() }, req);
+        }
+        need(req.method === 'POST', 'bad_request', 'GET, or POST {add}, {remove}, {addLink} or {removeLink}');
+        if (who.via === 'cookie') {
+            need(req.headers.origin === auth.origin, 'forbidden', "the invite list changes only from this site's own pages");
+            need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
+        }
+        let q;
+        try {
+            q = JSON.parse((await readBody(req, 4096)).toString('utf8'));
+        } catch (e) {
+            throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
+        }
+        const ops = ['add', 'remove', 'addLink', 'removeLink'].filter((k) => typeof q?.[k] === 'string');
+        need(ops.length === 1, 'bad_request', 'send one of {"add": "<GitHub login>"}, {"remove": "<GitHub login>"}, {"addLink": "<who it is for>"}, {"removeLink": "<id>"}');
+        const keep = (ns) => {
+            const d = parseOr(store.getDoc('admin', ns), null);
+            return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+        };
+        if (ops[0] === 'add' || ops[0] === 'remove') {
+            const login = q[ops[0]].trim().replace(/^@/, '').toLowerCase();
+            need(LOGIN.test(login), 'bad_request', 'a GitHub login: letters, digits and dashes, up to 39');
+            // a login the server lets in would never leave the list it shows, so the page could not remove it
+            const { admins, fromEnv } = auth.fixed();
+            need(ops[0] !== 'add' || ![...admins, ...fromEnv].includes(login), 'conflict', `${login} can already sign in (set by the server)`);
+            const cur = invited();
+            const next = ops[0] === 'add' ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
+            need(next.length <= 500, 'too_large', 'at most 500 invites');
+            store.putDoc('admin', 'invites', JSON.stringify({ ...keep('invites'), logins: next, updatedAt: new Date().toISOString() }));
+        } else if (ops[0] === 'addLink') {
+            // the note says who the link is for; only admins ever see it
+            const label = q.addLink.replace(/\s+/g, ' ').trim();
+            need(label.length >= 1 && label.length <= 60 && !/[\u0000-\u001f\u007f]/.test(label), 'bad_request', 'a short note, up to 60 characters: who the link is for');
+            const cur = viewLinks();
+            need(cur.length < 100, 'too_large', 'at most 100 view links; remove one first');
+            const link = { id: crypto.randomBytes(6).toString('hex'), key: crypto.randomBytes(24).toString('base64url'), label, createdAt: new Date().toISOString() };
+            store.putDoc('admin', 'links', JSON.stringify({ ...keep('links'), links: [...cur, link] }));
+        } else {
+            need(/^[0-9a-f]{12}$/.test(q.removeLink), 'bad_request', 'removeLink: the id of a view link');
+            store.putDoc('admin', 'links', JSON.stringify({ ...keep('links'), links: viewLinks().filter((l) => l.id !== q.removeLink) }));
+        }
+        return sendJson(res, 200, { result: shared() }, req);
+    }
+
     async function api(req, res, url, who) {
         const parts = url.pathname.split('/').slice(2).map((s) => {
             try {
@@ -511,7 +792,13 @@ function createWindow(opts = {}) {
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
-            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role } }, req);
+            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}) } }, req);
+        }
+        if (parts[0] === 'share' && parts.length === 1) {
+            return share(req, res, who);
+        }
+        if (parts[0] === 'apps' && parts.length === 1) {
+            return apps(req, res, who);
         }
         if (parts[0] === 'app' && parts.length === 1) {
             const out = await appData();
@@ -531,13 +818,14 @@ function createWindow(opts = {}) {
                 if (!id) {
                     const list = store.listDocs(ns);
                     if (q.full === '1') {
-                        return sendJson(res, 200, { result: list.map((d) => ({ ...d, doc: (friend ? scrub : (x) => x)(parseOr(store.getDoc(ns, d.id), null)) })) }, req);
+                        return sendJson(res, 200, { result: list.map((d) => ({ ...d, doc: readerDoc(ns, d.id, parseOr(store.getDoc(ns, d.id), null), who) })) }, req);
                     }
                     return sendJson(res, 200, { result: list }, req);
                 }
                 const text = store.getDoc(ns, id);
                 need(text != null, 'not_found', `no ${ns}/${id}`);
-                return friend ? sendJson(res, 200, { result: scrub(JSON.parse(text)) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
+                const doc = friend || (ns === 'runs' && readsMasked(who)) ? JSON.parse(text) : null;
+                return doc && (friend || (readsMasked(who) && peopleRun(id, doc))) ? sendJson(res, 200, { result: readerDoc(ns, id, doc, who) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
             }
             canWrite(who, ns, id);
             need(id, 'bad_request', 'use /api/docs/<collection>/<id>');
@@ -571,10 +859,9 @@ function createWindow(opts = {}) {
             need(parts.length <= 3 && run, 'not_found', 'use /api/replays/<run>[/<game>]');
             if (req.method === 'GET') {
                 if (!game) {
-                    const ids = store.listReplays(run);
-                    return sendJson(res, 200, { result: q.sizes === '1' ? ids.map((id) => ({ id, size: store.replaySize(run, id) })) : ids }, req);
+                    return sendJson(res, 200, { result: q.sizes === '1' ? replaySizes(who, run) : store.listReplays(run) }, req);
                 }
-                const buf = store.readReplay(run, game);
+                const buf = replayFor(who, run, game);
                 need(buf, 'not_found', `no replay ${run}/${game}`);
                 const from = Math.min(buf.length, Math.max(0, Number(q.from) || 0));
                 const to = q.length ? Math.min(buf.length, from + Math.max(0, Number(q.length) || 0)) : buf.length;
@@ -615,6 +902,12 @@ function createWindow(opts = {}) {
             if (await auth.routes(req, res, url)) {
                 return undefined;
             }
+            if (await oauth.routes(req, res, url)) {
+                return undefined;
+            }
+            if (url.pathname === '/mcp') {
+                return mcpRoute(req, res);
+            }
             const who = auth.who(req);
             if (who.role === 'bad') {
                 return sendJson(res, 401, { error: { code: 'unauthorized', message: 'wrong bearer token' } }, req);
@@ -653,7 +946,8 @@ function createWindow(opts = {}) {
                         return '';
                     }
                 };
-                const text = rep[3] ? store.getDoc('runs', dec(rep[1])) : store.readReplay(dec(rep[1]), dec(rep[2]));
+                const runDoc = rep[3] ? parseOr(store.getDoc('runs', dec(rep[1])), null) : null;
+                const text = rep[3] ? runDoc && JSON.stringify(readerDoc('runs', dec(rep[1]), runDoc, who)) : replayFor(who, dec(rep[1]), dec(rep[2]));
                 return text == null ? sendText(res, req, 404, 'text/plain', 'not found') : sendText(res, req, 200, rep[3] ? 'application/json' : 'application/x-ndjson', text);
             }
             return sendText(res, req, 404, 'text/plain', 'not found');

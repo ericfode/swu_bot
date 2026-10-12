@@ -105,7 +105,19 @@ test('buildModel: games against people on Karabast show as their own run and sta
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
     assert.ok(!M.bots.opponent, 'people are not bots');
     assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 5, 'every game stays listed');
-    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');
+    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');    // the run keeps its own bots list, which the app reads to tell our bot's seat from the person's
+    assert.deepEqual(r.ours, ['c-clock', 'opponent']);
+    src.runs.at(-1).bots = ['c-clock'];
+    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'karabast').ours, ['c-clock']);
+    assert.equal(M.totals.runs, M.runs.length - 1, 'a people run is no ladder or round on Home');
+    // a person is never named: a seat outside the run's bots list becomes "opponent", and the run's table lists only our bots
+    src.runs.at(-1).games.push({ id: 'karabast-6', p1: 'some-person', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1' }, { id: 'karabast-7', p1: 'c-clock', p2: 'x', outcome: 'ERROR', error: 'TIME_FORFEIT x' });
+    const N = model.buildModel(src, null, null), k = N.runs.find(x => x.id === 'karabast');
+    assert.ok(!N.botList.includes('some-person') && !k.bots.includes('some-person'), 'no name reaches the model');
+    assert.deepEqual(k.bots, ['c-clock', 'opponent']);
+    assert.deepEqual(k.table.map(t => t.id), ['c-clock']);
+    assert.deepEqual(N.games.find(g => g[1] === 'karabast-6').slice(2, 5), [N.botList.indexOf('opponent'), N.botList.indexOf('c-clock'), 0]);
+    assert.equal(N.games.find(g => g[1] === 'karabast-7')[4], 0, 'a person who timed out lost');
 });
 
 test('buildModel: a run any outside feed sent is never rated, whatever its name', () => {

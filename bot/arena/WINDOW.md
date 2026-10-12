@@ -16,7 +16,7 @@ asks the same API.
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
-| Browsers, the app | nothing | `GET /api/app`, `/api/status`, `/api/replays/<run>/<game>` |
+| Browsers, the app | the invite list, from Eric's Share page only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` (an admin) |
 
 ## The API
 
@@ -29,8 +29,14 @@ Reads (a signed-in friend, or the project token):
   returns the replay from that byte, with its full size in `x-size`, so a viewer can follow a game being played.
 - `GET /api/docs/<collection>[/<id>]`: raw documents. Friends may read `arena`, `runs`, `evals`, `lens` and `meta`;
   the rest reaches them only through `/api/app`.
+- People are never named to readers. A run against people (a feed's run, or an id starting `karabast`) is stored as
+  sent, and only the programs that write (bearer tokens from feed up) read it back that way. Everyone else (a
+  sign-in, a view link's guest, an MCP app) reads a copy: the person's seat is `opponent` in the run document and
+  `a person` in the replay's header and on each board. The copy holds whole lines only, so offsets into it stay valid
+  while the game is played, and `?sizes=1` gives `size: null` for its games (`x-size` on each read gives the size).
 
-Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role:
+Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role,
+except an admin changing the invite list from the app's Share page (below):
 
 - `PUT /api/docs/<collection>/<id>` with a JSON body; `DELETE` removes one. Collections: arena, runs, ladders, league,
   experiments, evals, panels, bots, threads, lens, meta, research, admin. The `admin` collection needs the admin token
@@ -39,6 +45,17 @@ Writes need a bearer token (the project token, or the admin token); a session co
   otherwise 409 with the size to resend from, so a retry never doubles a line. `PUT` replaces a whole replay.
 - `PUT /api/docs/admin/invites` with `{"logins": [...]}` changes who may sign in, without a deploy
   (`SWU_WINDOW_TOKEN=<ARENA_ADMIN_TOKEN> node bot/arena/push.js invites a,b,c`).
+- `GET /api/share` lists who may sign in (`invites`, plus `admins` and `fromEnv`, which only a deploy changes);
+  `POST /api/share` with `{"add": "<login>"}` or `{"remove": "<login>"}` changes the invite document. Admins only: the
+  admin token, or an admin's sign-in from the app's Share page, where the request must carry `Origin` equal to
+  `ARENA_PUBLIC_URL` and a JSON body, so a page elsewhere cannot send it. A change takes effect on the next request.
+- `POST /api/share` with `{"addLink": "<who it is for>"}` makes a view link, `{"removeLink": "<id>"}` removes one
+  (the `admin/links` document). Opening `/v/<key>` lets anyone holding the link read the window with no sign-in (Eric's
+  typed OK, 2026-10-12 04:30): it sets a 30-day guest session tied to that link and sends the browser to `/`, which
+  keeps the link's `#/page`. A guest reads like a friend and never writes; removing the link locks its guests out on
+  their next request. Someone already signed in keeps their own session when they open a link.
+- `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
+  the invite list and the view links to admins.
 
 ## Through MCP
 
@@ -50,14 +67,38 @@ what the window lacks, and it reports how many replays the window has), `window_
 .json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
 proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR) gets the reads only.
 
+### Each person's own app: `/mcp` with GitHub sign-in (oauth.js)
+
+`https://swu-arena.fly.dev/mcp` is a remote MCP server (Streamable HTTP, JSON answers, no sessions) for each invited
+person's own app. On claude.ai: Settings, Connectors, Add custom connector, paste the address. In Claude Code:
+`claude mcp add --transport http swu-arena https://swu-arena.fly.dev/mcp`, then `/mcp`. The app finds the sign-in
+on its own: `/mcp` answers 401 with `WWW-Authenticate: Bearer resource_metadata=...`, which points to
+`/.well-known/oauth-protected-resource` and from there to `/.well-known/oauth-authorization-server`. The app registers
+itself (`POST /oauth/register`, public clients, no secret), opens `/oauth/authorize` in a browser, where the person
+signs in with GitHub and presses Allow, and trades the code and its PKCE verifier (S256 only) at `/oauth/token` for an
+access token (1 hour) and a refresh token (30 days from its last use; each use gives a new one, and an old one used
+again ends the grant). `/oauth/revoke` ends a grant.
+
+What an app may do: read, as its person, with role friend (an admin's app is no admin) and via `oauth`, so it never
+writes; removing the person's invite cuts their apps off on the next call. Its tools: `whoami`, the arena reads
+(`arena_status`, `arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`), `window_docs`
+(the friends' collections: arena, runs, evals, lens, meta; scrubbed), `window_replays` and `window_replay` (a game in
+slices of up to 100 KB). The project token does not open `/mcp`: pushing stays with `mcp.js` above. Tokens are kept
+only as SHA-256 hashes, in `auth/oauth.json` on the volume. A person's connected apps are listed on the app's Build a
+bot page (Arena, Build a bot), through `GET /api/apps`, and `POST /api/apps {"disconnect": "<id>"}` ends one (from
+this site's own pages: Origin and JSON).
+
 ## Who may do what (auth.js)
 
 - Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
   invite document is a friend; anyone else sees who to ask. Sessions last 14 days and survive deploys.
+- A view link (`/v/<key>`, made on the Share page) lets in anyone holding it as a guest: role friend, no login, for 30
+  days or until the link is removed.
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). In cloud sessions the egress
   proxy adds it for swu-arena.fly.dev (a network secret in the environment's settings), so no thread holds the token.
   Elsewhere set `SWU_WINDOW_TOKEN`.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
+- An MCP app's access token (`swua_...`, from `/oauth/token`) reads as its person with role friend, never more.
 
 ## Outside machines (feeds)
 

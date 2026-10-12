@@ -20,9 +20,9 @@ async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
     await new Promise((r) => srv.once('listening', r));
     const base = () => `http://127.0.0.1:${srv.address().port}`;
-    const go = (p, { method = 'GET', token, cookie, body, type = 'application/json' } = {}) => fetch(base() + p, {
+    const go = (p, { method = 'GET', token, cookie, body, type = 'application/json', origin } = {}) => fetch(base() + p, {
         method, redirect: 'manual', body,
-        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}) }
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}), ...(origin ? { origin } : {}) }
     });
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
@@ -30,7 +30,7 @@ async function serve(w) {
 function makeWindow(name, { fetchImpl } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
-    const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins });
+    const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
     return createWindow({ home, auth, app, minMs: 0 });
@@ -208,10 +208,123 @@ test('sign-in: GitHub confirms the login, invited people get a session, others s
             const session = back.headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
             const home = await go('/', { cookie: session });
             assert.strictEqual(home.status, invited ? 200 : 403);
-            assert.match(await home.text(), invited ? /<title>app/ : /not on the invite list/);
+            assert.match(await home.text(), invited ? /<title>app/ : /is not on the list yet.*Send Eric your GitHub username/s);
         } finally {
             await close();
         }
+    }
+});
+
+test('share: an admin invites and removes people from the Share page, and no one else can', async () => {
+    const w = makeWindow('w-share');
+    const { go, close } = await serve(w);
+    try {
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const kim = `swu_session=${w.auth.sign({ l: 'kim-b', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const post = (body, opts = {}) => go('/api/share', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
+        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result, { invites: [], admins: ['ericfode'], fromEnv: ['pal'], links: [] });
+        assert.strictEqual((await go('/api/share', { cookie: pal })).status, 403, 'a friend cannot see the list');
+        assert.strictEqual((await go('/api/share', { cookie: kim })).status, 401);
+        assert.strictEqual((await go('/', { cookie: kim })).status, 403);
+
+        // a page elsewhere: no Origin, another origin, or a plain form never changes the list
+        assert.strictEqual((await post({ add: 'kim-b' }, { origin: null })).status, 403);
+        assert.strictEqual((await post({ add: 'kim-b' }, { origin: 'https://evil.fly.dev' })).status, 403);
+        assert.strictEqual((await post({ add: 'kim-b' }, { type: 'text/plain' })).status, 400);
+        assert.strictEqual((await go('/api/share', { method: 'POST', cookie: eric, origin: site, type: 'application/x-www-form-urlencoded', body: 'add=kim-b' })).status, 400);
+        assert.strictEqual((await post({ add: 'kim-b' }, { cookie: pal })).status, 403, 'a friend cannot invite');
+        assert.strictEqual((await go('/', { cookie: kim })).status, 403, 'still not invited');
+
+        for (const bad of [{}, { add: '' }, { add: 'no spaces' }, { add: '-dash' }, { add: 'a'.repeat(40) }, { add: 'x', remove: 'y' }, { add: 7 }]) {
+            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
+        }
+        assert.deepStrictEqual((await (await post({ add: '@Kim-B ' })).json()).result.invites, ['kim-b']);
+        assert.deepStrictEqual((await (await post({ add: 'kim-b' })).json()).result.invites, ['kim-b'], 'no duplicates');
+        // a login the server already lets in is refused, and one already in the document never shows as an invite
+        assert.strictEqual((await post({ add: 'Pal' })).status, 409, 'set by ARENA_INVITES');
+        assert.strictEqual((await post({ add: 'ericfode' })).status, 409, 'an admin');
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b', 'pal'] }));
+        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result.invites, ['kim-b']);
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b'] }));
+        assert.strictEqual((await go('/', { cookie: kim })).status, 200, 'invited at once');
+        assert.strictEqual((await go('/api/share', { cookie: kim })).status, 403);
+        assert.deepStrictEqual((await (await post({ remove: 'kim-b' })).json()).result.invites, []);
+        assert.strictEqual((await go('/', { cookie: kim })).status, 403, 'removed at once');
+        // the admin token works from a program, with no Origin
+        assert.strictEqual((await go('/api/share', { method: 'POST', token: 'admin-secret', body: '{"add":"kim-b"}' })).status, 200);
+        assert.strictEqual((await go('/api/share', { method: 'POST', token: 'push-secret', body: '{"add":"x"}' })).status, 403, 'the project token cannot');
+        assert.deepStrictEqual(JSON.parse(w.store.getDoc('admin', 'invites')).logins, ['kim-b']);
+    } finally {
+        await close();
+    }
+});
+
+test('view links: a guest reads with no sign-in while the link exists, and never writes', async () => {
+    const w = makeWindow('w-links');
+    const { go, close } = await serve(w);
+    try {
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const post = (body, opts = {}) => go('/api/share', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
+        assert.strictEqual((await post({ addLink: 'for Sam' }, { cookie: pal })).status, 403, 'a friend cannot make one');
+        assert.strictEqual((await post({ addLink: 'for Sam' }, { origin: 'https://evil.fly.dev' })).status, 403);
+        for (const bad of [{ addLink: '' }, { addLink: 'x'.repeat(61) }, { addLink: 'a\u0007b' }, { addLink: 'x', add: 'y' }, { removeLink: 'nope' }]) {
+            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
+        }
+        const made = (await (await post({ addLink: '  for   Sam ' })).json()).result.links;
+        assert.strictEqual(made.length, 1);
+        const [{ id, key, label }] = made;
+        assert.strictEqual(label, 'for Sam');
+        assert.match(id, /^[0-9a-f]{12}$/);
+        assert.match(key, /^[A-Za-z0-9_-]{32}$/);
+
+        assert.strictEqual((await go('/v/not-a-real-key-at-all')).status, 404);
+        const open = await go(`/v/${key}`);
+        assert.strictEqual(open.status, 302);
+        assert.strictEqual(open.headers.get('location'), '/');
+        const guest = open.headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
+        assert.match(open.headers.getSetCookie().join(), /Max-Age=2592000/);
+        assert.strictEqual((await go('/', { cookie: guest })).status, 200);
+        assert.match(await (await go('/', { cookie: guest })).text(), /<title>app/);
+        assert.deepStrictEqual((await (await go('/api/me', { cookie: guest })).json()).result, { login: null, role: 'friend', guest: true });
+        assert.strictEqual((await go('/api/app', { cookie: guest })).status, 200);
+        assert.strictEqual((await go('/api/share', { cookie: guest })).status, 403, 'a guest never sees the links');
+        assert.strictEqual((await go('/api/docs/runs/x', { method: 'PUT', cookie: guest, body: '{}' })).status, 403, 'a guest never writes');
+        assert.strictEqual((await go('/api/share', { method: 'POST', cookie: guest, origin: site, body: '{"addLink":"me"}' })).status, 403);
+
+        // someone already signed in keeps their own session when they open a link
+        const mine = await go(`/v/${key}`, { cookie: eric });
+        assert.strictEqual(mine.status, 302);
+        assert.strictEqual(mine.headers.getSetCookie().length, 0);
+        // a guest who opens a second link moves onto it
+        const second = (await (await post({ addLink: 'Sam, second' })).json()).result.links.at(-1);
+        const moved = (await go(`/v/${second.key}`, { cookie: guest })).headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
+
+        // removing a link locks its guests out at once; the one who moved on stays in until their link goes too
+        assert.deepStrictEqual((await (await post({ removeLink: id })).json()).result.links.map((l) => l.id), [second.id]);
+        assert.strictEqual((await go('/api/app', { cookie: guest })).status, 401);
+        assert.match(await (await go('/', { cookie: guest })).text(), /Sign in with GitHub/);
+        assert.strictEqual((await go(`/v/${key}`)).status, 404);
+        assert.strictEqual((await go('/api/app', { cookie: moved })).status, 200);
+        await post({ removeLink: second.id });
+        assert.strictEqual((await go('/api/app', { cookie: moved })).status, 401);
+    } finally {
+        await close();
+    }
+});
+
+test('sign-in page: a shared link keeps its #/page through sign-in', async () => {
+    const w = makeWindow('w-hash');
+    const { go, close } = await serve(w);
+    try {
+        const html = await (await go('/')).text();
+        assert.match(html, /location\.hash/);
+        assert.match(html, /searchParams\.set\('next'/);
+    } finally {
+        await close();
     }
 });
 
@@ -244,6 +357,13 @@ test('a feed token writes only what carries its name, and reads like a friend', 
             { id: 'karabast-3', seed: 0, p1: 'c-clock', p2: 'opponent', winner: null, winnerSeat: 'draw', rounds: 0, steps: 1, outcome: 'abandoned', error: 'no result', ms: 0 },
             { id: 'karabast-4', p1: 'c-clock', p2: 'opponent', winnerSeat: null, rounds: 9, steps: 500, outcome: 'draw' },
         ] };
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: undefined }))).status, 400, 'a run with games names its bots');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: ['opponent'] }))).status, 400, '"opponent" is no bot');
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: ['rush'] }))).status, 400, 'every game seats one of its bots');
+        // a seat outside the bots list is a person: stored as "opponent", the winner too, so no name is kept
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, games: [{ id: 'karabast-9', p1: 'alice', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1' }] }))).status, 200);
+        const kept = JSON.stringify((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result);
+        assert.ok(!kept.includes('alice') && kept.includes('"p1":"opponent"') && kept.includes('"winner":"opponent"'), kept);
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify(sent))).status, 200);
         assert.deepStrictEqual((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result, { id: 'karabast', feed: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock'], gamesPerPairing: 1, games: [
             { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running', winnerSeat: null, winner: null, rounds: 2, steps: 40, error: null },
@@ -261,6 +381,49 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await append('arena-t1-r1')).status, 403);
         assert.deepStrictEqual((await (await go('/api/replays/karabast?sizes=1', { token: 'feed-secret' })).json()).result, [{ id: 'g1', size: 15 }]);
         assert.strictEqual((await go('/api/docs/panels', { token: 'feed-secret' })).status, 403, 'reads like a friend');
+    } finally {
+        await close();
+    }
+});
+
+test('people are never named to readers: writers read back their own bytes, everyone else reads "a person"', async () => {
+    const w = makeWindow('w-people');
+    const { go, close } = await serve(w);
+    try {
+        const friend = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        // pushed with the project token, which the window stores as sent
+        const run = { id: 'karabast-p', createdAt: '2026-10-12T00:00:00Z', bots: ['c-clock'], owner: 'x', games: [{ id: 'g1', p1: 'bob', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1', winner: 'bob' }] };
+        assert.strictEqual((await go('/api/docs/runs/karabast-p', { method: 'PUT', token: 'push-secret', body: JSON.stringify(run) })).status, 200);
+        const lines = [{ t: 'header', players: [{ id: 'p1', bot: 'bob' }, { id: 'p2', bot: 'c-clock' }] }, { t: 'step', state: { players: { p1: { name: 'bob' }, p2: { name: 'c-clock' } } } }].map((x) => `${JSON.stringify(x)}\n`);
+        const append = (at, body) => go(`/api/replays/karabast-p/g1?at=${at}`, { method: 'POST', token: 'push-secret', body, type: 'application/x-ndjson' });
+        assert.strictEqual((await append(0, lines[0] + lines[1].slice(0, 20))).status, 200, 'the step line is still being written');
+        const read = async (who, from = 0) => {
+            const r = await go(`/api/replays/karabast-p/g1?from=${from}`, who);
+            return { text: await r.text(), size: Number(r.headers.get('x-size')) };
+        };
+        const first = await read({ cookie: friend });
+        assert.deepStrictEqual(first, { text: `${JSON.stringify({ t: 'header', players: [{ id: 'p1', bot: 'a person' }, { id: 'p2', bot: 'c-clock' }] })}\n`, size: first.text.length }, 'whole lines only');
+        assert.strictEqual((await read({ token: 'push-secret' })).text, lines[0] + lines[1].slice(0, 20), 'the writer reads its own bytes');
+        assert.strictEqual((await append(Buffer.byteLength(lines[0]) + 20, lines[1].slice(20))).status, 200);
+        const next = await read({ cookie: eric }, first.size);
+        assert.strictEqual(next.text, `${JSON.stringify({ t: 'step', state: { players: { p1: { name: 'a person' }, p2: { name: 'c-clock' } } } })}\n`, 'a reader tailing from its own offset gets the next whole line, masked; an admin\'s sign-in too');
+        assert.strictEqual(next.size, first.size + next.text.length);
+        assert.deepStrictEqual((await (await go('/api/replays/karabast-p?sizes=1', { cookie: friend })).json()).result, [{ id: 'g1', size: null }]);
+        assert.deepStrictEqual((await (await go('/api/replays/karabast-p?sizes=1', { token: 'push-secret' })).json()).result, [{ id: 'g1', size: Buffer.byteLength(lines.join('')) }]);
+        // the run document: the person's seat and win read "opponent"
+        for (const who of [{ cookie: friend }, { cookie: eric }]) {
+            const doc = JSON.stringify((await (await go('/api/docs/runs/karabast-p', who)).json()).result);
+            assert.ok(!doc.includes('bob') && doc.includes('"p1":"opponent"') && doc.includes('"winner":"opponent"'), doc);
+        }
+        assert.ok(!JSON.stringify((await (await go('/api/docs/runs?full=1', { cookie: friend })).json()).result).includes('bob'));
+        assert.ok((await (await go('/api/docs/runs/karabast-p', { token: 'push-secret' })).text()).includes('bob'), 'the writer reads what it wrote');
+        for (const p of ['/replays/karabast-p/index.json', '/replays/karabast-p/games/g1.jsonl']) {
+            assert.ok(!(await (await go(p, { cookie: friend })).text()).includes('bob'), p);
+        }
+        // bot-vs-bot runs are served exactly as stored
+        w.store.putReplay('ladder-1', 'g1', Buffer.from(lines[0]));
+        assert.strictEqual(await (await go('/api/replays/ladder-1/g1', { cookie: friend })).text(), lines[0]);
     } finally {
         await close();
     }
@@ -436,6 +599,152 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
         project.close();
         friendless.close();
         competitor.close();
+        await close();
+    }
+});
+
+test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads as themselves, and can disconnect it', async () => {
+    const crypto = require('crypto');
+    const w = makeWindow('w-oauth');
+    const { go, close } = await serve(w);
+    try {
+        const site = 'https://swu-arena.fly.dev';
+        const form = (o) => new URLSearchParams(o).toString();
+        const post = (p, body, opts = {}) => go(p, { method: 'POST', body: form(body), type: 'application/x-www-form-urlencoded', ...opts });
+        const session = (l) => `swu_session=${w.auth.sign({ l, exp: Date.now() + 60000 })}`;
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b'] }));
+        w.store.putDoc('runs', 'demo', JSON.stringify({ id: 'demo', createdAt: '2026-10-12T00:00:00Z', bots: ['rush'], games: [], owner: 'someone' }));
+
+        // discovery: /mcp says where to sign in, and the server lists its endpoints
+        const no = await go('/mcp', { method: 'POST', body: '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' });
+        assert.strictEqual(no.status, 401);
+        assert.match(no.headers.get('www-authenticate'), /resource_metadata="https:\/\/swu-arena\.fly\.dev\/\.well-known\/oauth-protected-resource"/);
+        assert.deepStrictEqual((await (await go('/.well-known/oauth-protected-resource')).json()).authorization_servers, [site]);
+        const meta = await (await go('/.well-known/oauth-authorization-server')).json();
+        assert.deepStrictEqual([meta.issuer, meta.token_endpoint, meta.code_challenge_methods_supported], [site, `${site}/oauth/token`, ['S256']]);
+        assert.strictEqual((await go('/.well-known/openid-configuration')).status, 404, 'a JSON 404, never the sign-in page');
+
+        // the client registers itself; only safe return addresses
+        const reg = (uris) => go('/oauth/register', { method: 'POST', body: JSON.stringify({ client_name: 'Claude', redirect_uris: uris }) });
+        for (const bad of [[], ['http://evil.example/cb'], ['javascript:alert(1)'], ['https://x.example/cb#frag'], 'https://x']) {
+            assert.strictEqual((await reg(bad)).status, 400, JSON.stringify(bad));
+        }
+        const r1 = await reg(['https://claude.ai/api/mcp/auth_callback', 'http://localhost:33418/callback']);
+        assert.strictEqual(r1.status, 201);
+        const client = await r1.json();
+        assert.strictEqual(client.token_endpoint_auth_method, 'none');
+
+        const verifier = crypto.randomBytes(40).toString('base64url');
+        const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+        const ask = (extra = {}) => `/oauth/authorize?${form({ response_type: 'code', client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_challenge: challenge, code_challenge_method: 'S256', state: 'st8', resource: `${site}/mcp`, ...extra })}`;
+        assert.strictEqual((await go(ask({ redirect_uri: 'https://claude.ai/other' }))).status, 400, 'an address the client never registered gets a page, never a redirect');
+        assert.match((await go(ask({ code_challenge_method: 'plain' }))).headers.get('location'), /error=invalid_request/, 'PKCE S256 is required');
+
+        // nobody signed in, or a guest with a view link: sign in with GitHub first, coming back to the same request
+        const anon = await (await go(ask())).text();
+        assert.match(anon, /Sign in with GitHub/);
+        assert.ok(anon.includes(`/auth/github?next=${encodeURIComponent(ask())}`.replace(/&/g, '&#38;')));
+        const guest = `swu_session=${w.auth.sign({ v: 'link1', exp: Date.now() + 60000 })}`;
+        assert.match(await (await go(ask(), { cookie: guest })).text(), /Sign in with GitHub/);
+        assert.strictEqual((await go(ask(), { cookie: session('stranger') })).status, 403, 'signed in, not invited');
+
+        // the consent page: its form carries a signed ticket; only this site's page may answer
+        const page = await (await go(ask(), { cookie: session('kim-b') })).text();
+        assert.match(page, /Claude<\/b> \(claude\.ai\) wants to use SWU Arena as <b>@kim-b/);
+        const tx = /name="tx" value="([^"]+)"/.exec(page)[1].replace(/&#(\d+);/g, (m, c) => String.fromCharCode(c));
+        assert.strictEqual((await go('/', { cookie: `swu_session=${tx}` })).status, 200, 'the page itself');
+        assert.match(await (await go('/', { cookie: `swu_session=${tx}` })).text(), /Sign in with GitHub/, 'a consent ticket is never a session');
+        assert.strictEqual((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('kim-b') })).status, 403, 'no Origin');
+        assert.strictEqual((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('ericfode'), origin: site })).status, 400, 'someone else signed in');
+        const denied = await post('/oauth/authorize', { tx, decision: 'deny' }, { cookie: session('kim-b'), origin: site });
+        assert.match(denied.headers.get('location'), /^https:\/\/claude\.ai\/api\/mcp\/auth_callback\?error=access_denied.*state=st8/);
+        const allowed = await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('kim-b'), origin: site });
+        const back = new URL(allowed.headers.get('location'));
+        assert.deepStrictEqual([back.origin + back.pathname, back.searchParams.get('state'), back.searchParams.get('iss')], ['https://claude.ai/api/mcp/auth_callback', 'st8', site]);
+        const code = back.searchParams.get('code');
+
+        // the code, once, with its verifier
+        const exchange = (extra) => post('/oauth/token', { grant_type: 'authorization_code', code, client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', resource: `${site}/mcp`, ...extra });
+        assert.strictEqual((await (await exchange({ code_verifier: 'x'.repeat(43) })).json()).error, 'invalid_grant', 'wrong verifier');
+        assert.strictEqual((await (await exchange({ code_verifier: verifier })).json()).error, 'invalid_grant', 'a code is spent by any try');
+        const again = new URL((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('kim-b'), origin: site })).headers.get('location')).searchParams.get('code');
+        const tok = await (await post('/oauth/token', { grant_type: 'authorization_code', code: again, client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_verifier: verifier })).json();
+        assert.match(tok.access_token, /^swua_/);
+        assert.match(tok.refresh_token, /^swur_/);
+        assert.strictEqual(tok.expires_in, 3600);
+
+        // MCP with the token: the person's own read tools, scrubbed like any friend's view
+        const rpc = async (t, method, params) => (await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 7, method, params }) })).json();
+        const init = await rpc(tok.access_token, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } });
+        assert.strictEqual(init.result.protocolVersion, '2025-06-18');
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","method":"notifications/initialized"}' })).status, 202);
+        const names = (await rpc(tok.access_token, 'tools/list')).result.tools.map((t) => t.name);
+        assert.deepStrictEqual(names, ['whoami', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay']);
+        const call = async (t, name, args = {}) => {
+            const r = (await rpc(t, 'tools/call', { name, arguments: args })).result;
+            return { error: r.isError, value: JSON.parse(r.content[0].text) };
+        };
+        assert.deepStrictEqual((await call(tok.access_token, 'whoami')).value, { login: 'kim-b', role: 'friend', app: 'Claude', may: 'read games, replays, standings and research; change nothing' });
+        assert.deepStrictEqual((await call(tok.access_token, 'window_docs', { collection: 'runs', id: 'demo' })).value.owner, undefined, 'scrubbed');
+        assert.strictEqual((await call(tok.access_token, 'window_docs', { collection: 'admin', id: 'invites' })).error, true);
+        assert.strictEqual((await call(tok.access_token, 'arena_versions', {})).error, true);
+        assert.strictEqual((await go('/mcp', { token: tok.access_token })).status, 405, 'no event stream');
+        // a game against a person, sent with the person's name: the app never shows it, so neither does the MCP
+        w.store.putDoc('runs', 'karabast-x', JSON.stringify({ id: 'karabast-x', createdAt: '2026-10-12T00:00:00Z', bots: ['c-clock'], games: [{ id: 'k1', p1: 'c-clock', p2: 'alice', outcome: 'won', winnerSeat: 'p2', winner: 'alice' }] }));
+        w.store.putReplay('karabast-x', 'k1', Buffer.from(`${JSON.stringify({ t: 'header', players: [{ id: 'p1', name: 'p1', bot: 'c-clock' }, { id: 'p2', name: 'alice', bot: 'alice' }] })}\n${JSON.stringify({ t: 'step', state: { players: { p1: { name: 'c-clock' }, p2: { name: 'alice' } } } })}\n`));
+        assert.deepStrictEqual((await call(tok.access_token, 'window_replays', { run: 'karabast-x' })).value, [{ id: 'k1', size: null }]);
+        const masked = (await call(tok.access_token, 'window_replay', { run: 'karabast-x', game: 'k1' })).value;
+        assert.ok(!masked.text.includes('alice') && masked.text.includes('"bot":"a person"') && masked.text.includes('"p2":{"name":"a person"}'), masked.text);
+        assert.strictEqual(masked.size, Buffer.byteLength(masked.text));
+        assert.ok(!JSON.stringify((await call(tok.access_token, 'window_docs', { collection: 'runs', id: 'karabast-x' })).value).includes('alice'));
+        // slices start and end on whole characters, and read one after another they join back into the replay
+        w.store.putReplay('demo', 'u1', Buffer.from(`${JSON.stringify({ t: 'header', note: 'Ça, Ünlü, 星' })}\n`));
+        let joined = '', at = 0;
+        for (let n = 0; n < 40; n++) {
+            const s = (await call(tok.access_token, 'window_replay', { run: 'demo', game: 'u1', from: at, length: 3 })).value;
+            assert.ok(!s.text.includes('�'), JSON.stringify(s));
+            joined += s.text;
+            at = s.from + s.length;
+            if (at >= s.size) break;
+        }
+        assert.strictEqual(joined, `${JSON.stringify({ t: 'header', note: 'Ça, Ünlü, 星' })}\n`);
+        assert.strictEqual((await call(tok.access_token, 'window_replay', { run: 'demo', game: 'u1', from: 35, length: 1 })).value.text, '星', 'less than one character gives that character');
+        // the token reads like a friend and never writes; an admin's token is no admin either
+        assert.strictEqual((await go('/api/docs/runs/demo', { method: 'PUT', token: tok.access_token, body: '{}' })).status, 403);
+        assert.strictEqual((await go('/api/share', { token: tok.access_token })).status, 403);
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: 'push-secret', body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'the project token stays with mcp.js');
+
+        // refresh: a new pair each time; the old refresh token used again ends the grant
+        const refresh = (t) => post('/oauth/token', { grant_type: 'refresh_token', refresh_token: t, client_id: client.client_id });
+        const tok2 = await (await refresh(tok.refresh_token)).json();
+        assert.match(tok2.access_token, /^swua_/);
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'the old access token is gone');
+        assert.strictEqual((await (await refresh(tok.refresh_token)).json()).error, 'invalid_grant');
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok2.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'replay ends the grant');
+
+        // connect once more, then: the Share page lists it and disconnects it; removing the invite cuts it off too
+        const fresh = async () => {
+            const c = new URL((await post('/oauth/authorize', { tx: /name="tx" value="([^"]+)"/.exec(await (await go(ask(), { cookie: session('kim-b') })).text())[1].replace(/&#(\d+);/g, (m, x) => String.fromCharCode(x)), decision: 'allow' }, { cookie: session('kim-b'), origin: site })).headers.get('location')).searchParams.get('code');
+            return (await post('/oauth/token', { grant_type: 'authorization_code', code: c, client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_verifier: verifier })).json();
+        };
+        const tok3 = await fresh();
+        const listed = (await (await go('/api/apps', { cookie: session('kim-b') })).json()).result;
+        assert.strictEqual(listed.mcp, `${site}/mcp`);
+        assert.deepStrictEqual(listed.apps.map((a) => [a.app, a.site]), [['Claude', 'claude.ai']]);
+        assert.deepStrictEqual((await (await go('/api/apps', { cookie: session('ericfode') })).json()).result.apps, [], 'only your own');
+        const drop = (cookie, id, origin = site) => go('/api/apps', { method: 'POST', cookie, origin, body: JSON.stringify({ disconnect: id }) });
+        assert.strictEqual((await drop(session('kim-b'), listed.apps[0].id, 'https://evil.example')).status, 403);
+        assert.strictEqual((await drop(session('ericfode'), listed.apps[0].id)).status, 404, "not someone else's");
+        assert.strictEqual((await drop(session('kim-b'), listed.apps[0].id)).status, 200);
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok3.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401);
+        const tok4 = await fresh();
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok4.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 200);
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: [] }));
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok4.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'an invite removed cuts the apps off at once');
+        assert.strictEqual((await (await refresh(tok4.refresh_token)).json()).error, 'invalid_grant');
+        // revoke answers the same either way
+        assert.strictEqual((await post('/oauth/revoke', { token: 'nonsense' })).status, 200);
+    } finally {
         await close();
     }
 });

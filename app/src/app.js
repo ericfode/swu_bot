@@ -10,7 +10,7 @@ const pref = {
   set(k, v) { try { localStorage.setItem('swuapp.' + k, JSON.stringify(v)); } catch {} },
 };
 // audience is fixed at build time: 'project' (Eric and the threads, with Lab) or 'public' (friends: no Lab, no thread names)
-const S = { aud: DATA.audience === 'public' ? 'public' : 'project', seen: pref.get('seen', null), live: false, api: false, apiVersion: null, files: null, reader: null, prefix: '', syncedAt: null, botSort: ['rating', -1], botFam: new Set(), botQ: '', botAll: false, botStyle: new Set(), gamesPage: 0, gamesF: { bot: '', run: '', res: 'all', replay: false }, cmp: null };
+const S = { aud: DATA.audience === 'public' ? 'public' : 'project', seen: pref.get('seen', null), live: false, api: false, apiVersion: null, files: null, reader: null, prefix: '', syncedAt: null, botSort: ['rating', -1], botFam: new Set(), botQ: '', botAll: false, botStyle: new Set(), gamesPage: 0, gamesF: { bot: '', run: '', res: 'all', replay: false }, peopleF: 'all', peoplePage: 0, cmp: null, me: null, share: null };
 // live mode reads the project's shared folder through the files capability; the public build never does (pick 6)
 const CAN_LIVE = S.aud === 'project';
 // served by the arena web server (app at /, the arena's own page with its forms at /arena), not as a file or a Claude artifact
@@ -143,7 +143,21 @@ function bottomLine(F) {
   return `Of ${n} proven claims, ${holds} ${holds === 1 ? 'passes' : 'pass'} a direct test on our games, ${partly} agree with our numbers without testing them directly, and ${open} ${open === 1 ? 'is' : 'are'} not tested yet. In practice: judge an evaluator by how often it calls real endings right, and expect early positions to be the hard ones.`;
 }
 const runById = id => M.runs.find(r => r.id === id);
-const gameRow = g => ({ run: M.runs[g[0]], id: g[1], p1: M.botList[g[2]], p2: M.botList[g[3]], res: g[4], rounds: g[5], steps: g[6], forfeit: g[7] });
+const gameRow = g => { const run = M.runs[g[0]], p1 = M.botList[g[2]], p2 = M.botList[g[3]]; return { run, id: g[1], p1, p2, res: g[4], rounds: g[5], steps: g[6], forfeit: g[7], human: humanSeat(run, p1, p2) }; };
+// ---------- games against people (karabast.net) ----------
+// The person is the seat the feed calls "opponent" (the Karabast feed names every person so), or a seat its run's own
+// bots list leaves out (that list names our bots). People are never named in the app.
+const isPeople = i => M.runs[M.games[i][0]]?.kind === 'people';
+const isPerson = (run, n) => run?.kind === 'people' && (n === 'opponent' || (run.ours?.length > 0 && !run.ours.includes(n)));
+function humanSeat(run, p1, p2) {
+  const person = n => isPerson(run, n);
+  return person(p1) && !person(p2) ? 'p1' : person(p2) && !person(p1) ? 'p2' : null;
+}
+const PERSON_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="2.6"/><path d="M2.8 14.2c.6-2.8 2.6-4.3 5.2-4.3s4.6 1.5 5.2 4.3"/></svg>';
+const personChip = () => `<span class="person" title="a real person on karabast.net (people are never named here)">${PERSON_ICON}<span>a person</span></span>`;
+const seatLink = (x, s) => x.human === s ? personChip() : botLink(x[s]);
+const winnerName = x => x.res === 0 || x.res === 1 ? (x.human === (x.res === 0 ? 'p1' : 'p2') ? 'the person' : x.res === 0 ? x.p1 : x.p2) : null;
+const humanPill = () => '<span class="pill human" title="our bot against a real person on karabast.net; these games never change a rating">vs a person</span>';
 const gameIdx = new Map(); function indexGames() { gameIdx.clear(); M.games.forEach((g, i) => gameIdx.set(`${M.runs[g[0]].id}/${g[1]}`, i)); }
 const hasReplay = i => M.replay?.[i] === '1' || (S.live && !S.api && !!M.runs[M.games[i][0]]?.dir); // the window's model marks its replays
 function resText(g) {
@@ -152,27 +166,27 @@ function resText(g) {
   if (x.res === 4) return '<span class="res faint">not rated</span>';
   if (x.res === 5) return '<span class="res faint" title="the game never started or went silent">abandoned</span>';
   if (x.res === 2) return '<span class="res">draw</span>';
-  return `${botLink(x.res === 0 ? x.p1 : x.p2)}${x.forfeit ? ' <span class="res warn" title="the other bot failed (late, illegal or broken reply)">by forfeit</span>' : ''}`;
+  return `${seatLink(x, x.res === 0 ? 'p1' : 'p2')}${x.forfeit ? ' <span class="res warn" title="the other bot failed (late, illegal or broken reply)">by forfeit</span>' : ''}`;
 }
 function gamesTable(rows, { showRun = true, me = null } = {}) {
   if (!rows.length) return '<p class="muted">No games.</p>';
   return `<div class="scroll"><table><thead><tr>${showRun ? '<th>Run</th>' : ''}<th>Player 1</th><th>Player 2</th><th>Winner</th><th class="n">Rounds</th><th class="n hide-sm">Steps</th><th></th></tr></thead><tbody>${rows.map(i => {
     const g = M.games[i], x = gameRow(g), lost = me && x.res < 2 && (x.res === 0 ? x.p2 : x.p1) === me;
-    return `<tr class="click${lost ? '' : ''}" data-href="${href('games', x.run.id, x.id)}">${showRun ? `<td><a href="${href('runs', x.run.id)}" class="mono" style="font-size:var(--fs-sm)">${esc(x.run.id)}</a></td>` : ''}<td>${botLink(x.p1)}</td><td>${botLink(x.p2)}</td><td>${resText(g)}${lost ? ' <span class="res bad">lost</span>' : ''}</td><td class="n">${x.rounds ?? '-'}</td><td class="n hide-sm">${x.steps ?? '-'}</td><td class="n">${hasReplay(i) ? `<a href="${href('games', x.run.id, x.id)}" title="Watch">Watch</a>` : '<span class="faint" title="this run kept no replay">-</span>'}</td></tr>`;
+    return `<tr class="click${lost ? '' : ''}" data-href="${href('games', x.run.id, x.id)}">${showRun ? `<td><a href="${href('runs', x.run.id)}" class="mono" style="font-size:var(--fs-sm)">${esc(x.run.id)}</a></td>` : ''}<td>${seatLink(x, 'p1')}</td><td>${seatLink(x, 'p2')}</td><td>${resText(g)}${lost ? ' <span class="res bad">lost</span>' : ''}</td><td class="n">${x.rounds ?? '-'}</td><td class="n hide-sm">${x.steps ?? '-'}</td><td class="n">${hasReplay(i) ? `<a href="${href('games', x.run.id, x.id)}" title="Watch">Watch</a>` : '<span class="faint" title="this run kept no replay">-</span>'}</td></tr>`;
   }).join('')}</tbody></table></div>`;
 }
 function gameGrid(run, { maxBots = 14 } = {}) {
   const bots = run.bots.slice(0, maxBots), ix = M.games.map((g, i) => i).filter(i => M.games[i][0] === M.runs.indexOf(run));
   const by = {};
   for (const i of ix) { const x = gameRow(M.games[i]); (by[`${x.p1}|${x.p2}`] ||= []).push(i); (by[`${x.p2}|${x.p1}`] ||= []).push(i); }
-  const per = run.gamesPerPairing || 2;
-  let h = `<div class="scroll"><table class="rgrid"><thead><tr><th></th>${bots.map(b => `<th class="rot"><div title="${esc(b)}">${esc(b)}</div></th>`).join('')}</tr></thead><tbody>`;
+  const per = run.gamesPerPairing || 2, name = b => isPerson(run, b) ? 'a person' : b;
+  let h = `<div class="scroll"><table class="rgrid"><thead><tr><th></th>${bots.map(b => `<th class="rot"><div title="${esc(name(b))}">${esc(name(b))}</div></th>`).join('')}</tr></thead><tbody>`;
   for (const a of bots) {
-    h += `<tr><th>${botLink(a)}</th>`;
+    h += `<tr><th>${isPerson(run, a) ? personChip() : botLink(a)}</th>`;
     for (const b of bots) {
       if (a === b) { h += '<td><div class="cell self"></div></td>'; continue; }
       const gs = by[`${a}|${b}`] || [];
-      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${x.p1} vs ${x.p2}: ${k === 'w' ? a + ' won' : k === 'l' ? b + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'abandoned' : 'not rated'}`)}"></a>`; });
+      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${name(x.p1)} vs ${name(x.p2)}: ${k === 'w' ? name(a) + ' won' : k === 'l' ? name(b) + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'abandoned' : 'not rated'}`)}"></a>`; });
       for (let k = gs.length; k < per; k++) sq.push('<span title="not played yet"></span>');
       h += `<td><div class="cell">${sq.join('')}</div></td>`;
     }
@@ -259,16 +273,17 @@ function fillSpotBar(v) {
   if (!st?.players) return;
   const i = gameIdx.get(v.game), x = i != null ? gameRow(M.games[i]) : { p1: g.header?.p1, p2: g.header?.p2 };
   const sig = `${st.round}|${AT.spotsAt(st, 'p1')}|${AT.spotsAt(st, 'p2')}`; if (el.dataset.sig === sig) return; el.dataset.sig = sig;
-  const row = (pid, name) => { const sp = st.round >= 1 ? AT.spotsAt(st, pid) : [], a = atl(name); return `<div class="sb-row">${botLink(name)}${styleTag(a?.summary?.style)}${sp.length ? sp.map(sid => { const c = a?.situations?.[sid], best = ATL()?.best?.[sid]; return `<span class="sb-spot" title="${esc(sit(sid).short)}">${spotIcon(sid, 'pict s')}<b>${esc(sit(sid).label)}</b>${c?.n ? `<em class="${c.edge >= 0 ? 'good' : 'bad'}" title="this bot, ${c.n} games in this spot">${edgeTxt(c.edge)} pts</em>` : '<em class="faint">no data</em>'}${best === name ? '<span class="mk star" title="best of all bots in this spot">★</span>' : ''}</span>`; }).join('') : '<span class="muted">no spot yet: even, early game</span>'}</div>`; };
+  const row = (pid, name) => { const sp = st.round >= 1 ? AT.spotsAt(st, pid) : [], a = atl(name); return `<div class="sb-row">${x.human === pid ? personChip() : botLink(name)}${x.human === pid ? '' : styleTag(a?.summary?.style)}${sp.length ? sp.map(sid => { const c = a?.situations?.[sid], best = ATL()?.best?.[sid]; return `<span class="sb-spot" title="${esc(sit(sid).short)}">${spotIcon(sid, 'pict s')}<b>${esc(sit(sid).label)}</b>${c?.n ? `<em class="${c.edge >= 0 ? 'good' : 'bad'}" title="this bot, ${c.n} games in this spot">${edgeTxt(c.edge)} pts</em>` : '<em class="faint">no data</em>'}${best === name ? '<span class="mk star" title="best of all bots in this spot">★</span>' : ''}</span>`; }).join('') : '<span class="muted">no spot yet: even, early game</span>'}</div>`; };
   el.innerHTML = `<div class="sb-head"><span>Atlas spots on this board · round ${st.round ?? '-'}</span><span>pts = this bot vs an average bot in that spot</span></div>${row('p1', x.p1)}${row('p2', x.p2)}`;
 }
 
 // ---------- sections and routing ----------
 const SECTIONS = [
   { id: '', label: 'Home', icon: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
-  { id: 'arena', label: 'Arena', sub: [['', 'Live'], ['standings', 'Standings'], ['builders', 'Builders'], ['rounds', 'Rounds'], ['join', 'Join']], icon: 'M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z' },
+  { id: 'arena', label: 'Arena', sub: [['', 'Live'], ['standings', 'Standings'], ['builders', 'Builders'], ['rounds', 'Rounds'], ['join', 'Build a bot']], icon: 'M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z' },
   { id: 'bots', label: 'Bots', sub: [['', 'All bots'], ['faceoff', 'Face-off']], icon: 'M5 8h14v11H5zM12 4v4M9 13h.01M15 13h.01M9 16h6' },
   { id: 'games', label: 'Games', sub: [['', 'Now playing'], ['all', 'All games'], ['runs', 'Runs']], icon: 'M4 5h16v14H4zM4 12h16M12 5v14' },
+  { id: 'people', label: 'Vs people', icon: 'M12 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM4.5 20.5c.8-4 3.7-6.2 7.5-6.2s6.7 2.2 7.5 6.2' },
   { id: 'research', label: 'Research', sub: [['', 'Overview'], ['evaluators', 'Evaluators'], ['analysis', 'Position analysis'], ['experiments', 'Experiments'], ['lines', 'Research lines'], ['speed', 'Speed']], icon: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3' },
   { id: 'lab', label: 'Lab', lab: true, sub: [['', 'Work threads'], ['waiting', 'Waiting on Eric'], ['health', 'Data health']] },
 ];
@@ -278,6 +293,8 @@ function route() {
   const qs = new URLSearchParams(q || '');
   let sec = parts[0] || '';
   if (sec === 'runs') sec = 'games';
+  // a game or run against people belongs to the Vs people tab
+  if ((parts[0] === 'games' || parts[0] === 'runs') && parts[1] && runById(parts[1])?.kind === 'people') sec = 'people';
   return { parts, qs, sec };
 }
 function renderNav(r) {
@@ -296,6 +313,8 @@ const PAGES = {
   bots: r => r.parts[1] === 'faceoff' ? pageFaceoff(r) : r.parts[1] ? pageBot(r) : pageBots(r),
   games: r => r.parts[1] === 'runs' ? pageRuns(r) : r.parts[2] ? pageGame(r) : r.parts[1] === 'all' ? pageGames(r) : pageLiveGrid(r),
   runs: r => r.parts[1] ? pageRun(r) : pageRuns(r),
+  people: pagePeople,
+  share: pageShare,
   research: r => ({ '': pageResearch, evaluators: pageEvaluators, atlas: atlasMoved, spots: atlasMoved, analysis: pageAnalysis, experiments: r.parts[2] ? pageExperiment : pageExperiments, lines: r.parts[2] ? pageLine : pageLines, speed: pageSpeed }[r.parts[1] || ''] || pageResearch)(r),
   lab: r => S.aud === 'public' ? `<div class="notice">Lab is only in the project build.</div>` : ({ '': pageLab, waiting: pageWaiting, health: pageHealth }[r.parts[1] || ''] || pageLab)(r),
 };
@@ -315,13 +334,25 @@ function render(keepScroll) {
   document.title = `SWU Arena · ${pageTitle(r)}`;
   if (!same && !keepScroll) window.scrollTo(0, 0);
 }
-function pageTitle(r) { const s = SECTIONS.find(x => x.id === r.sec); return r.parts[1] && r.parts[0] !== 'research' && r.parts[0] !== 'arena' ? r.parts.slice(-1)[0] : s?.label || 'Home'; }
+function pageTitle(r) { const s = SECTIONS.find(x => x.id === r.sec); return r.parts[1] && r.parts[0] !== 'research' && r.parts[0] !== 'arena' ? r.parts.slice(-1)[0] : s?.label || (r.parts[0] === 'share' ? 'Share' : 'Home'); }
 function afterRender() {
   for (const tr of document.querySelectorAll('tr[data-href]')) tr.addEventListener('click', e => { if (e.target.closest('a,button')) return; location.hash = tr.dataset.href; });
   for (const el of document.querySelectorAll('[data-strategy]')) { try { const w = JSON.parse(el.dataset.strategy); window.SWUStrategy?.render(el, w); } catch {} }
   for (const b of document.querySelectorAll('[data-act]')) b.addEventListener('click', () => ACTIONS[b.dataset.act]?.(b));
   for (const i of document.querySelectorAll('[data-input]')) i.addEventListener(i.tagName === 'SELECT' || i.type === 'checkbox' ? 'change' : 'input', () => ACTIONS[i.dataset.input]?.(i));
   if ($('guide-svg')) startGuide();
+  $('linkform')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('linklabel').value.replace(/\s+/g, ' ').trim();
+    if (!v) { S.share = { ...S.share, linkMsg: 'Write who the link is for, so you can tell the links apart.' }; render(true); return; }
+    shareChange({ addLink: v.slice(0, 60) });
+  });
+  $('inviteform')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('invitelogin').value.trim().replace(/^@/, '').toLowerCase();
+    if (!GH_LOGIN.test(v)) { S.share = { ...S.share, msg: 'That is not a GitHub username: letters, digits and dashes, up to 39.' }; render(true); return; }
+    shareChange({ add: v });
+  });
 }
 /** The animated spot guide (the Atlas's): cycles through the spots, or holds the one picked. */
 const ACTIONS = {
@@ -338,6 +369,16 @@ const ACTIONS = {
   seek: b => { const v = VIEWERS.get(b.dataset.key); v?.v?.seek(+b.dataset.i); v?.host.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
   toggle: b => { const t = $(b.dataset.t); if (t) { t.hidden = !t.hidden; b.textContent = t.hidden ? b.dataset.show : b.dataset.hide; } },
   golive: () => startLive(true),
+  peopleF: b => { S.peopleF = b.dataset.f; S.peoplePage = 0; render(true); },
+  peoplePage: b => { S.peoplePage = Math.max(0, S.peoplePage + +b.dataset.d); render(true); },
+  shareCopy: async b => { const el = $('sharelink'); try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } },
+  shareSend: async () => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games, replays and research', url: $('sharelink').value }); } catch {} },
+  inviteRemove: b => { if (confirm(`Remove @${b.dataset.login}? They lose access at once.`)) shareChange({ remove: b.dataset.login }); },
+  linkCopy: async b => { try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = 'Copied'; } catch { prompt('Copy this link', b.dataset.url); } },
+  linkSend: async b => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games, replays and research', url: b.dataset.url }); } catch {} },
+  mcpCopy: async b => { const el = $('mcpurl'); try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } },
+  appDisconnect: b => { if (confirm(`Disconnect ${b.dataset.app}? It has to sign in again to read anything.`)) appDisconnect(b.dataset.id); },
+  linkRemove: b => { if (confirm(`Remove the view link "${b.dataset.label}"? Anyone using it is locked out at once.`)) shareChange({ removeLink: b.dataset.id }); },
 };
 
 // ---------- viewers (the shared viewer kit), kept alive across re-renders ----------
@@ -365,6 +406,23 @@ async function replayText(key) {
   if (t) { REPLAYS.set(key, t); if (REPLAYS.size > 6) REPLAYS.delete(REPLAYS.keys().next().value); }
   return t;
 }
+/** For a game against a person: a function that rewrites one replay line so the person's seat reads "a person" in the
+ *  header's player list and in each board's player name (the viewer kit shows both); null for any other game. People
+ *  are never named in the app, whatever a feed wrote. */
+function personMask(key) {
+  const i = gameIdx.get(key), x = i == null ? null : gameRow(M.games[i]);
+  if (x?.run?.kind !== 'people') return null;
+  const seats = new Map(); // seat -> the name the header gave the person
+  return line => {
+    if (!line.includes('"header"') && ![...seats.values()].some(n => line.includes(JSON.stringify(n)))) return line;
+    try {
+      const e = JSON.parse(line);
+      if (e?.t === 'header' && Array.isArray(e.players)) e.players = e.players.map(p => p && (p.id === x.human || isPerson(x.run, p.bot)) ? (seats.set(p.id, String(p.bot)), { ...p, bot: 'a person' }) : p);
+      for (const [seat, name] of seats) if (e?.state?.players?.[seat]?.name === name) e.state.players[seat].name = 'a person';
+      return JSON.stringify(e);
+    } catch { return line; }
+  };
+}
 async function sideFile(kind, id) {
   if (kind === 'evals' && DATA.evals[id]) return DATA.evals[id];
   if (kind === 'lens' && DATA.lens[id]) return DATA.lens[id];
@@ -382,7 +440,8 @@ async function mountViewer(v, host) {
   host.innerHTML = '';
   const step = +(route().qs.get('step') || 0) || undefined;
   try {
-    v.v = KIT.mount(host, { jsonl: text, evals: evals || undefined, lens: lens || undefined, layout: host.dataset.layout || 'full', ...(step ? { stepN: step } : {}), persist: 'swuapp.viewer', follow: true,
+    v.mask = personMask(v.game);
+    v.v = KIT.mount(host, { jsonl: v.mask ? text.split('\n').map(v.mask).join('\n') : text, evals: evals || undefined, lens: lens || undefined, layout: host.dataset.layout || 'full', ...(step ? { stepN: step } : {}), persist: 'swuapp.viewer', follow: true,
       onStep: (i, n) => { v.step = n; v.idx = i; if (!v.raf) v.raf = requestAnimationFrame(() => { v.raf = 0; fillSpotBar(v); }); } });
     v.offset = new TextEncoder().encode(text).length;
     v.ended = /"t":"end"/.test(text.slice(-4000));
@@ -422,7 +481,7 @@ async function tailViewers() {
       if (!res.bytes.length) continue;
       v.offset += res.bytes.length;
       const txt = (v.partial || '') + new TextDecoder().decode(res.bytes), parts = txt.split('\n'); v.partial = parts.pop();
-      const lines = parts.filter(Boolean); if (lines.length) { v.v.append(lines); if (lines.some(l => l.includes('"t":"end"'))) v.ended = true; }
+      const lines = parts.filter(Boolean).map(l => v.mask ? v.mask(l) : l); if (lines.length) { v.v.append(lines); if (lines.some(l => l.includes('"t":"end"'))) v.ended = true; }
     } catch {}
   }
 }
@@ -461,19 +520,23 @@ function tileSpots(f, x) {
   if (!f || f.r < 1) return '<span class="faint">no spot yet</span>';
   const st = SWUApp.fullState(f);
   const one = (pid, name) => { const sp = AT.spotsAt(st, pid), a = atl(name); return `<span class="gt-side" style="--c:${pid === 'p1' ? 'var(--fa)' : 'var(--fb)'}"><i></i>${sp.length ? sp.slice(0, 3).map(sid => { const c = a?.situations?.[sid]; return `<span class="gt-spot" title="${esc(`${name}: ${sit(sid).label} (${sit(sid).short})${c?.n ? `; this bot ${edgeTxt(c.edge)} pts vs an average bot there` : ''}`)}">${spotIcon(sid, 'pict s')}<span>${esc(sit(sid).label)}</span>${c?.n ? `<em class="${c.edge >= 0 ? 'good' : 'bad'}">${edgeTxt(c.edge)}</em>` : ''}</span>`; }).join('') : '<span class="faint" style="font-size:var(--fs-xs)">even</span>'}</span>`; };
-  return one('p1', x.p1) + one('p2', x.p2);
+  return one('p1', x.human === 'p1' ? 'the person' : x.p1) + one('p2', x.human === 'p2' ? 'the person' : x.p2);
 }
 function tileState(key) {
   const t = TILES.get(key); if (!t?.frames?.length) return { f: null, t };
   return { f: t.frames[Math.min(t.i, t.frames.length - 1)], t };
 }
 function tileStatus(x, t) {
-  const who = x.res === 0 ? x.p1 : x.res === 1 ? x.p2 : null, atEnd = !t?.replaying || t.i >= t.frames.length - 1;
+  const seat = x.res === 0 ? 'p1' : x.res === 1 ? 'p2' : null, who = seat && (x.human === seat ? 'the person' : x[seat]), atEnd = !t?.replaying || t.i >= t.frames.length - 1;
   const res = x.res < 3 && atEnd ? `<span class="gt-res">${who ? `${esc(who)} won` : x.res === 2 ? 'draw' : 'not rated'}</span>` : '';
   if (t?.live && !t.ended) return '<span class="pill live">Live</span>';
   if (t?.replaying) return `${res}<span class="pill done" title="the snapshot's frames of this game, played back">${x.res === 3 ? 'Snapshot' : atEnd ? 'Final' : 'Replay'}</span>`;
   return `${res}<span class="pill done">Final</span>`;
 }
+// a tile's names and its tag: the run's id, or for a game against a person, a "vs a person" pill
+const tileSeat = (x, s) => x.human === s ? personChip() : `<span class="bot" style="--c:${botColor(x[s])}"><i></i><span>${esc(x[s])}</span></span>`;
+const tileNames = x => `<span class="gt-names">${tileSeat(x, 'p1')}<span class="vs">vs</span>${tileSeat(x, 'p2')}</span>`;
+const tileTag = x => x.human ? humanPill() : `<span class="gt-run mono">${esc(x.run.id)}</span>`;
 function tileHtml(i, { sm = false } = {}) {
   const x = gameRow(M.games[i]), key = `${x.run.id}/${x.id}`;
   if (!TILES.has(key)) {
@@ -481,10 +544,10 @@ function tileHtml(i, { sm = false } = {}) {
     TILES.set(key, tr && !S.live ? { frames: tr.f, i: 0, hold: 0, replaying: true, end: tr.end } : { frames: tr ? [tr.f.at(-1)] : [], i: 0, live: S.live && x.res === 3, ended: x.res !== 3 });
   }
   const { f, t } = tileState(key);
-  if (!hasBoard(i)) return `<a class="gtile ${sm ? 'sm' : ''} noboard" href="${href('games', x.run.id, x.id)}"><span class="gt-head"><span>${x.res === 3 ? '<span class="pill live">Live</span>' : '<span class="pill done">Final</span>'}</span><span class="gt-run mono">${esc(x.run.id)}</span></span><span class="gt-names"><span class="bot" style="--c:${botColor(x.p1)}"><i></i><span>${esc(x.p1)}</span></span><span class="vs">vs</span><span class="bot" style="--c:${botColor(x.p2)}"><i></i><span>${esc(x.p2)}</span></span></span><span class="gt-nob">No board: this run does not keep replay files, so only its result will show.</span></a>`;
+  if (!hasBoard(i)) return `<a class="gtile ${sm ? 'sm' : ''} noboard" href="${href('games', x.run.id, x.id)}"><span class="gt-head"><span>${x.res === 3 ? '<span class="pill live">Live</span>' : '<span class="pill done">Final</span>'}</span>${tileTag(x)}</span>${tileNames(x)}<span class="gt-nob">No board: this run does not keep replay files, so only its result will show.</span></a>`;
   return `<a class="gtile ${sm ? 'sm' : ''}" href="${href('games', x.run.id, x.id)}" data-tile="${esc(key)}">
-    <span class="gt-head"><span class="gt-run mono">${esc(x.run.id)}</span><span class="gt-st" data-ts>${tileStatus(x, t)}</span></span>
-    <span class="gt-names"><span class="bot" style="--c:${botColor(x.p1)}"><i></i><span>${esc(x.p1)}</span></span><span class="vs">vs</span><span class="bot" style="--c:${botColor(x.p2)}"><i></i><span>${esc(x.p2)}</span></span></span>
+    <span class="gt-head">${tileTag(x)}<span class="gt-st" data-ts>${tileStatus(x, t)}</span></span>
+    ${tileNames(x)}
     <span class="gt-b" data-tb>${boardSvg(f, x)}</span>
     ${sm ? '' : `<span class="gt-spots" data-tsp>${tileSpots(f, x)}</span>`}</a>`;
 }
@@ -539,7 +602,8 @@ async function gridTick() {
   } finally { gridBusy = false; }
 }
 setInterval(gridTick, 650);
-/** Games for the grid: every running game (boards first), then finished games with a board, at most 3 per run. */
+/** Games for the grid: every running game (boards first), then finished games with a board, at most 3 per run; bot
+ *  games only, or (people: true) only games against people. */
 // live: which games have a replay file, listed once per run per sync (some runs keep none)
 const GFILES = new Map();
 function gameFilesOf(r) {
@@ -554,8 +618,8 @@ const hasBoard = i => {
   if (!r?.dir || !S.reader) return false;
   const set = gameFilesOf(r); return set ? set.has(id) : false;
 };
-function gridGames({ run = null, max = 24, finished = 8 } = {}) {
-  const newest = [...M.games.keys()].reverse().filter(i => !run || M.runs[M.games[i][0]] === run);
+function gridGames({ run = null, max = 24, finished = 8, people = false } = {}) {
+  const newest = [...M.games.keys()].reverse().filter(i => run ? M.runs[M.games[i][0]] === run : isPeople(i) === people);
   const playing = newest.filter(i => M.games[i][4] === 3).sort((a, b) => hasBoard(b) - hasBoard(a)).slice(0, max);
   const per = {}, done = newest.filter(i => M.games[i][4] < 3 && hasBoard(i) && (per[M.games[i][0]] = (per[M.games[i][0]] || 0) + 1) <= (run ? 99 : 3)).slice(0, finished);
   return { playing, done };
@@ -602,27 +666,32 @@ async function syncApi() {
 }
 async function startApi() {
   S.files = apiFiles(); S.reader = apiReader(); S.api = true;
+  fetch('/api/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(j => { if (j?.result) { S.me = j.result; const p = route().parts; if (p[0] === 'share' || (p[0] === 'arena' && p[1] === 'join')) render(true); } }).catch(() => {});
   $('livetext').textContent = 'Connecting to the arena…';
   try { await syncApi(); } catch (e) { S.api = false; S.files = null; S.reader = null; $('livetext').textContent = `Offline (${e?.message || 'error'}) · showing snapshot`; }
 }
-function liveGame() {
-  // the arena's running game first, then any running game, then the newest finished game with a replay
-  const order = [...M.runs].reverse();
+function liveGame({ people = false } = {}) {
+  // the arena's running game first, then any running game, then the newest finished game with a replay; bot games
+  // only, or (people: true) only games against people
+  const order = [...M.runs].reverse().filter(r => (r.kind === 'people') === people);
   for (const want of ['arena', null]) for (const r of order) { if (want && r.kind !== want) continue; const ri = M.runs.indexOf(r); for (let i = M.games.length - 1; i >= 0; i--) { const g = M.games[i]; if (g[0] === ri && g[4] === 3 && hasReplay(i)) return { i, running: true }; } }
   const pick = DATA.picks.hero && gameIdx.get(DATA.picks.hero);
-  if (!S.live && pick != null) return { i: pick, running: M.games[pick][4] === 3 };
-  for (let i = M.games.length - 1; i >= 0; i--) if (M.games[i][4] < 3 && hasReplay(i)) return { i, running: false };
+  if (!S.live && pick != null && isPeople(pick) === people) return { i: pick, running: M.games[pick][4] === 3 };
+  for (let i = M.games.length - 1; i >= 0; i--) if (M.games[i][4] < 3 && hasReplay(i) && isPeople(i) === people) return { i, running: false };
   return null;
 }
 function setChip() {
-  const run = M.runs.at(-1), playing = M.games.filter(g => g[4] === 3).length, chip = $('livechip');
-  chip.classList.toggle('on', S.live && playing > 0);
+  const run = M.runs.filter(r => r.kind !== 'people').at(-1), chip = $('livechip');
+  const playing = M.games.filter(g => g[4] === 3 && M.runs[g[0]].kind !== 'people').length, ppl = M.games.filter(g => g[4] === 3 && M.runs[g[0]].kind === 'people').length;
+  chip.classList.toggle('on', S.live && playing + ppl > 0);
   const ar = M.arena;
   let t;
   if (ar.phase === 'work') t = `Arena round ${ar.current?.n} · work phase · ${Math.max(0, Math.round((Date.parse(ar.deadline) - NOW()) / 60000))} min left`;
   else if (ar.phase === 'ladder') t = `Arena round ${ar.current?.n} · ladder playing`;
   else if (playing) t = `${run?.id} · ${run?.decided}/${run?.planned || run?.n} games · ${playing} playing`;
-  else t = `No live games · last run ${run?.id} ${ago(run?.createdAt)} ago`;
+  else t = run ? `No live bot games · last run ${run.id} ${ago(run.createdAt)} ago` : 'No bot games yet';
+  if (ppl) t += ` · ${ppl} vs ${ppl === 1 ? 'a person' : 'people'} now`;
+  chip.title = t;
   $('livetext').innerHTML = S.live ? `${esc(t)}` : `${CAN_LIVE ? '<button type="button" id="golive">Go live</button> · ' : ''}Snapshot ${clock(M.builtAt)} · ${esc(t)}`;
   $('golive')?.addEventListener('click', () => startLive(true));
 }
@@ -668,10 +737,12 @@ setInterval(() => { if (S.live) setChip(); }, 30000);
 
 // ---------- pages: home ----------
 function heroBox() {
-  const lg = liveGame();
+  // a bot game; a game against a person only when there is no bot game yet, and then labelled as one
+  const lg = liveGame() || liveGame({ people: true });
   if (!lg) return `<div class="box"><p class="muted">No game to show yet.</p></div>`;
   const x = gameRow(M.games[lg.i]), key = `${x.run.id}/${x.id}`;
-  return `<section class="box hero" aria-label="Now playing"><div class="hero-head">${lg.running ? '<span class="pill live">Live</span>' : '<span class="pill done">Latest game</span>'}${botLink(x.p1)}<span class="vs">vs</span>${botLink(x.p2)}<span class="muted" style="font-size:var(--fs-md)">${x.run.kind === 'arena' ? 'arena' : x.run.kind === 'people' ? 'vs people' : 'ladder'} <a href="${href('runs', x.run.id)}">${esc(x.run.id)}</a>${x.res < 3 ? ` · won by ${esc(x.res === 0 ? x.p1 : x.res === 1 ? x.p2 : 'nobody')} in round ${x.rounds}` : ''}</span><a class="more" href="${href('games', x.run.id, x.id)}" style="margin-left:auto">Open game</a></div><div class="kithost compact" data-game="${esc(key)}" data-layout="compact" data-live="${lg.running ? 1 : 0}"></div>${spotBarHtml(key)}</section>`;
+  const where = x.human ? `${humanPill()} on karabast.net · never rated` : `${x.run.kind === 'arena' ? 'arena' : 'ladder'} <a href="${href('runs', x.run.id)}">${esc(x.run.id)}</a>`;
+  return `<section class="box hero" aria-label="Now playing"><div class="hero-head">${lg.running ? '<span class="pill live">Live</span>' : '<span class="pill done">Latest game</span>'}${seatLink(x, 'p1')}<span class="vs">vs</span>${seatLink(x, 'p2')}<span class="muted" style="font-size:var(--fs-md)">${where}${x.res < 3 ? ` · ${x.res === 2 ? 'a draw' : `won by ${esc(winnerName(x))}`} in round ${x.rounds}` : ''}</span><a class="more" href="${href('games', x.run.id, x.id)}" style="margin-left:auto">Open game</a></div><div class="kithost compact" data-game="${esc(key)}" data-layout="compact" data-live="${lg.running ? 1 : 0}"></div>${spotBarHtml(key)}</section>`;
 }
 function arenaCard() {
   const A = M.arena, st = A.standings, last = st?.rounds?.at(-1), leader = last?.leader;
@@ -705,7 +776,7 @@ function waitingBox() {
 function pageHome() {
   const k = M.totals;
   const kpis = `<div class="kpis"><div><div class="v">${int(k.rated)}</div><div class="k">games rated</div></div><div><div class="v">${k.runs}</div><div class="k">ladders and rounds</div></div><div><div class="v">${k.bots}</div><div class="k">rated bots</div></div><div><div class="v">${ATL()?.mapped.length ?? '-'}</div><div class="k">bots with a spot map</div></div><div><div class="v">${M.arena.competitors.length}</div><div class="k">arena competitors</div></div><div><div class="v">${M.research.findings.filter(f => f.v !== 'open').length}/${M.research.findings.length}</div><div class="k">findings with evidence</div></div></div>`;
-  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${waitingBox()}${arenaCard()}${topBots(8)}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c7">${learnedBox(true)}</div><div class="c5">${feedBox(12)}</div><div class="c12">${glanceBox()}</div></div>${kpis}`;
+  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${joinCard()}${waitingBox()}${arenaCard()}${peopleCard()}${topBots(8)}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c7">${learnedBox(true)}</div><div class="c5">${feedBox(12)}</div><div class="c12">${glanceBox()}</div></div>${kpis}`;
 }
 
 // ---------- the builder arena: systems that build bots compete ----------
@@ -868,12 +939,58 @@ function pageRounds(r) {
   const reps = M.arena.reports, keys = Object.keys(reps).sort((a, b) => b - a);
   return `<div class="phead"><h1>Rounds</h1><p class="lede">Each round's report from the referee: standings, results per opponent and the lost games.</p></div>${keys.length ? keys.map(k => `<section class="box">${M.arena.archived ? '<span class="archived">archived</span>' : ''}${md(reps[k]).replace(/\/mnt\/project-files\/results\/(arena-[\w-]+)\/games\/([\w.@#+-]+)\.jsonl/g, (m, run, id) => `<a href="${href('games', run, id)}">${esc(id)}</a>`)}</section>`).join('') : '<div class="notice">No round has been rated yet.</div>'}`;
 }
+/** The mental model of connecting: your own MCP app signs in as you, then reads the arena; submitting comes later. */
+function joinDiagram() {
+  const box = (x, w, t, sub, stroke = 'var(--line-2)') => `<rect x="${x}" y="22" width="${w}" height="46" rx="6" style="fill:var(--raised);stroke:${stroke}" stroke-width="1.5"/><text x="${x + w / 2}" y="41" text-anchor="middle" class="pd-t">${t}</text><text x="${x + w / 2}" y="57" text-anchor="middle" class="pd-s">${sub}</text>`;
+  const arrow = (x1, x2, label, dash = '') => `<line x1="${x1}" y1="45" x2="${x2 - 7}" y2="45" style="stroke:var(--muted)" stroke-width="1.5" ${dash}/><path d="M${x2 - 7} 40.5l7 4.5-7 4.5z" style="fill:var(--muted)"/><text x="${(x1 + x2) / 2}" y="15" text-anchor="middle" class="pd-s">${label}</text>`;
+  return `<figure class="pd"><svg viewBox="0 0 420 96" role="img" aria-label="Your Claude app connects to the arena's MCP address, signs in as you with GitHub, and reads games, replays, standings and research. Submitting bots comes with the hosted arena.">${box(4, 132, 'Your Claude app', 'claude.ai, Claude Code')}${arrow(136, 182, 'signs in as you')}${box(182, 92, 'SWU Arena', '/mcp', 'var(--accent)')}${arrow(274, 294, '')}${box(294, 122, 'Reads', 'games, replays, research')}<text x="228" y="88" text-anchor="middle" class="pd-s">submitting bots: with the hosted arena</text></svg><figcaption>Your app holds its own sign-in, cut off when you disconnect it or leave the invite list. It reads; it never changes anything.</figcaption></figure>`;
+}
+async function loadApps() {
+  S.apps = { busy: true };
+  try { const r = await fetch('/api/apps', { credentials: 'same-origin' }), j = await r.json().catch(() => ({})); S.apps = r.ok ? j.result : { err: j.error?.message || `HTTP ${r.status}` }; }
+  catch (e) { S.apps = { err: e?.message || 'offline' }; }
+  if (route().parts[1] === 'join') render(true);
+}
+async function appDisconnect(id) {
+  const keep = S.apps; S.apps = { ...keep, busy: true }; render(true);
+  try {
+    const r = await fetch('/api/apps', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ disconnect: id }) }), j = await r.json().catch(() => ({}));
+    S.apps = r.ok ? { ...j.result, msg: 'Disconnected. That app has to sign in again to read anything.' } : { ...keep, busy: false, msg: j.error?.message || `HTTP ${r.status}` };
+  } catch (e) { S.apps = { ...keep, busy: false, msg: e?.message || 'offline' }; }
+  render(true);
+}
 function pageJoin() {
-  return `<div class="phead"><h1>Join the arena</h1><p class="lede">You enter a builder: a Claude harness with your model, effort and memory settings, Codex, a script, or yourself. It writes its own bot and gets the same task and time as every other builder. Every front end calls the same methods.</p></div>
-  <div class="grid"><div class="c4 box"><h3>Claude Code or Desktop</h3><p class="muted" style="font-size:var(--fs-md);margin:6px 0">Add the arena as an MCP server; tools are named arena_&lt;method&gt;.</p><pre class="mono" style="white-space:pre-wrap;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px">claude mcp add arena -- node bot/arena/mcp.js --remote https://&lt;arena host&gt;</pre></div>
-  <div class="c4 box"><h3>HTTP</h3><p class="muted" style="font-size:var(--fs-md);margin:6px 0">GET /api/&lt;method&gt;?k=v or POST JSON. Hosted arenas need your competitor token.</p><pre class="mono" style="white-space:pre-wrap;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px">curl -s https://&lt;arena host&gt;/api/status</pre></div>
-  <div class="c4 box"><h3>A round, from your side</h3><ul class="plain" style="margin-top:6px"><li>wait until the work phase opens, read inbox and report</li><li>improve the bot; test with eval</li><li>post thinking and a strategy diagram with say</li><li>submit before the deadline</li></ul></div>
-  <div class="c12 notice">${HOSTED ? `<b>Register and Submit</b> are on the <a href="/arena">arena page</a>.` : `<b>Register and Submit</b> forms live here in the hosted build (arena on Fly). In the project the arena runs with auth off, from the shared folder.`}</div></div>`;
+  const builders = `<div class="c4 box"><h3>A round, from a builder's side</h3><ul class="plain" style="margin-top:6px"><li>wait until the work phase opens, read inbox and report</li><li>improve the bot; test with eval</li><li>post thinking and a strategy diagram with say</li><li>submit before the deadline</li></ul></div>`;
+  if (!HOSTED) {
+    return `<div class="phead"><h1>Join the arena</h1><p class="lede">You enter a builder: a Claude harness with your model, effort and memory settings, Codex, a script, or yourself. It writes its own bot and gets the same task and time as every other builder. Every front end calls the same methods.</p></div>
+  <div class="grid"><div class="c8 box"><h3>Claude Code, Codex or any MCP client</h3><p class="muted" style="font-size:var(--fs-md);margin:6px 0">In the project the arena runs from the shared folder; tools are named arena_&lt;method&gt;.</p><pre class="mono" style="white-space:pre-wrap;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px">claude mcp add arena -- node bot/arena/mcp.js</pre></div>${builders}</div>`;
+  }
+  const mcpUrl = `${location.origin}/mcp`, me = S.me, A = S.apps || {};
+  if (me?.login && !S.apps) { S.apps = { busy: true }; setTimeout(loadApps); }
+  const head = `<div class="phead"><h1>Build a bot</h1><p class="lede">Connect your own Claude, or any app that speaks MCP, to the arena. It signs in as you with GitHub and reads everything here: games, replays, standings and research, so it can study the bots and help you write one. Submitting bots opens with the hosted arena; until then, bots enter through the project's swu_bot repo.</p></div>`;
+  if (!me?.login) {
+    return `${head}<div class="grid"><section class="c7 box"><p>${me?.guest ? 'You came in by a view link. Connecting an app needs a GitHub sign-in on the invite list: ask Eric to add your GitHub username, then sign in.' : 'Sign in with GitHub to connect an app.'}</p></section><section class="c5 box">${joinDiagram()}</section></div>`;
+  }
+  const appsList = A.err ? `<p class="bad">${esc(A.err)}</p>` : !A.apps ? '<p class="muted">Loading…</p>' : A.apps.length
+    ? `<ul class="invites">${A.apps.map(a => `<li><span><b>${esc(a.app)}</b> <span class="muted">${esc(a.site || '')} · connected ${ago(a.createdAt) === 'now' ? 'just now' : `${ago(a.createdAt)} ago`} · last used ${ago(a.usedAt) === 'now' ? 'just now' : `${ago(a.usedAt)} ago`}</span></span><button type="button" data-act="appDisconnect" data-id="${esc(a.id)}" data-app="${esc(a.app)}" ${A.busy ? 'disabled' : ''}>Disconnect</button></li>`).join('')}</ul>`
+    : '<p class="muted">None yet. Once you connect one, it shows here.</p>';
+  const code = t => `<pre class="mono" style="white-space:pre-wrap;word-break:break-all;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px;margin:6px 0">${esc(t)}</pre>`;
+  return `${head}<div class="grid">
+    <section class="c7 box"><div class="bh"><h3>Connect in three steps</h3></div>
+      <ol class="steps-list">
+        <li><b>Copy the address.</b><div class="sharerow" style="margin-top:6px"><input id="mcpurl" readonly value="${esc(mcpUrl)}" aria-label="MCP address"><button type="button" data-act="mcpCopy">Copy</button></div></li>
+        <li><b>Add it to your app.</b> On claude.ai: Settings, Connectors, Add custom connector, and paste it. In Claude Code:${code(`claude mcp add --transport http swu-arena ${mcpUrl}`)}then type <span class="mono">/mcp</span> and pick swu-arena. Other apps: add a remote MCP server with this address.</li>
+        <li><b>Sign in with GitHub and press Allow</b> on the page your app opens. Then ask it something, like "who leads the arena, and how does that bot play?"</li>
+      </ol></section>
+    <section class="c5 box">${joinDiagram()}</section>
+    <section class="c7 box"><div class="bh"><h3>Your connected apps</h3><span class="sub">as @${esc(me.login)}</span></div>${A.msg ? `<p class="good" style="margin-bottom:6px">${esc(A.msg)}</p>` : ''}${appsList}</section>
+    <section class="c5 box"><div class="bh"><h3>What your app can read</h3></div><ul class="plain" style="margin-top:6px"><li><span class="mono">arena_status</span>, <span class="mono">arena_standings</span>, <span class="mono">arena_report</span>: the builder tournament</li><li><span class="mono">window_docs</span>: every run, game list, evaluation and the ratings</li><li><span class="mono">window_replay</span>: a game move by move, with the board</li><li><span class="mono">whoami</span>: who it reads as</li></ul></section>
+  </div>`;
+}
+/** Home's pointer to the Join page: the one place a signed-in person learns they can bring their own Claude. */
+function joinCard() {
+  if (!HOSTED) return '';
+  return `<section class="box join-card"><div class="bh"><h3>Build a bot</h3><a class="more" href="${href('arena', 'join')}">How</a></div><p style="font-size:var(--fs-base)">Connect your own Claude to the arena: it signs in as you and reads every game, replay and finding here, to study the bots and help you write one.</p><p style="margin-top:8px"><a class="btn-link" href="${href('arena', 'join')}">Connect your Claude →</a></p></section>`;
 }
 
 // ---------- pages: bots ----------
@@ -927,7 +1044,8 @@ function pageBot(r) {
   if (!b) return `<div class="notice">No bot named ${esc(id)}.</div>`;
   const c = botColor(id), a = b.card || {}, at = atl(id);
   const opp = Object.entries(M.h2h[id] || {}).map(([o, [w, l, d]]) => ({ o, w, l, d, n: w + l + d, s: (w + d / 2) / (w + l + d) })).sort((x, y) => y.n - x.n);
-  const myGames = []; for (let i = M.games.length - 1; i >= 0 && myGames.length < 400; i--) { const g = M.games[i]; if (M.botList[g[2]] === id || M.botList[g[3]] === id) myGames.push(i); }
+  const myGames = []; for (let i = M.games.length - 1; i >= 0 && myGames.length < 400; i--) { const g = M.games[i]; if ((M.botList[g[2]] === id || M.botList[g[3]] === id) && !isPeople(i)) myGames.push(i); }
+  const vsPeople = peopleStats().bots.find(B => B.id === id);
   const lost = myGames.filter(i => { const x = gameRow(M.games[i]); return x.res < 2 && (x.res === 0 ? x.p2 : x.p1) === id && hasReplay(i); }).slice(0, 8);
   const panel = M.panels.find(p => p.id === b.panel);
   const cmp = S.cmp && M.bots[S.cmp] ? M.bots[S.cmp] : null;
@@ -946,6 +1064,7 @@ function pageBot(r) {
       <section class="box"><div class="bh"><h3>Games</h3><span class="sub">newest first</span><a class="more" href="${href('games', 'all')}" data-bot="${esc(id)}" id="allgames">All its games</a></div>${gamesTable(myGames.slice(0, 10), { me: id })}${lost.length ? `<h4 style="margin:14px 0 6px">Recent losses with replays</h4>${gamesTable(lost, { me: id })}` : ''}</section>
     </div>
     <div class="c4 stack">
+      ${vsPeople ? `<section class="box people-box"><div class="bh"><h3>Against people</h3><a class="more" href="${href('people')}">Vs people</a></div><p style="font-size:var(--fs-base)">${humanPill()} <b>${vsPeople.w}-${vsPeople.l}${vsPeople.d ? `-${vsPeople.d}` : ''}</b> on karabast.net${vsPeople.n ? `, ${pct(vsPeople.pct)} won` : ''}${vsPeople.live ? ` · ${vsPeople.live} playing now` : ''}.</p><p class="muted" style="font-size:var(--fs-sm);margin-top:4px">Never rated: its rating and the games below are bot-vs-bot only.</p></section>` : ''}
       <section class="box"><div class="bh"><h3>Compare</h3></div><select data-input="cmp" aria-label="Compare with"><option value="">Pick a bot to compare</option>${M.order.filter(x => x !== id).map(x => `<option ${x === S.cmp ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>${cmp ? (() => { const h = M.h2h[id]?.[cmp.id]; return `<p style="margin-top:8px;font-size:var(--fs-base)">Head to head: <b>${h ? `${h[0]}-${h[1]}${h[2] ? `-${h[2]}` : ''}` : 'never met'}</b>. Rating ${b.rating} vs ${cmp.rating}.</p><div class="stack" style="gap:4px;margin-top:8px;font-size:var(--fs-md)"><span class="row">${fingerprint(id)} ${esc(id)}</span><span class="row">${fingerprint(cmp.id)} ${esc(cmp.id)}</span></div><p style="margin-top:8px"><a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(id)}&b=${encodeURIComponent(cmp.id)}">Open the face-off, spot by spot</a></p>`; })() : ''}</section>
       <section class="box"><div class="bh"><h3>Form</h3><span class="sub">Elo after each game</span></div>${lineChart(formSeries, { h: 170, w: 420, labels: false, xLabel: 'games' })}</section>
       <section class="box"><div class="bh"><h3>Opponents</h3><span class="sub">${opp.length}</span></div><div class="scroll"><table><tbody>${opp.slice(0, 12).map(o => `<tr><td>${botLink(o.o)}</td><td class="hide-sm">${styleTag(atl(o.o)?.summary?.style)}</td><td class="n">${o.w}-${o.l}${o.d ? `-${o.d}` : ''}</td><td style="width:70px"><div class="track" style="position:relative;height:8px;background:var(--sunken);border-radius:2px"><i style="position:absolute;left:0;top:0;bottom:0;width:${o.s * 100}%;background:${o.s >= .5 ? 'var(--good)' : 'var(--bad)'};border-radius:2px"></i></div></td></tr>`).join('')}</tbody></table></div></section>
@@ -964,10 +1083,10 @@ function pageLiveGrid(r) {
   const want = r.qs.get('run'), run = want ? runById(want) : null;
   const { playing, done } = gridGames({ run, max: 36, finished: 12 });
   const chips = runs.length > 1 ? `<div class="fchips">${[['', 'All runs'], ...runs.map(x => [x, x])].map(([k, l]) => `<a class="fchip" href="${href('games')}${k ? `?run=${encodeURIComponent(k)}` : ''}" aria-pressed="${(want || '') === k}"><i style="background:var(--live)"></i>${esc(l)}</a>`).join('')}</div>` : '';
-  const nob = playing.filter(i => !hasBoard(i)).length;
-  return `<div class="phead"><h1>Now playing</h1><p class="lede">Every running game in the project, one small board each, in the Strategy Atlas's picture language. Click a board to watch the game.</p></div>
-  ${gridNote()}${chips}
-  <section><div class="bh" style="margin:6px 0 8px"><h2>${playing.length ? `Playing${S.live ? ' now' : ' at snapshot time'}` : 'Nothing is playing'}</h2><span class="sub">${playing.length} game${playing.length === 1 ? '' : 's'}${nob ? ` · ${nob} without a board (no replay file kept)` : ''}</span></div>${playing.length ? `${playing.length > nob ? `<div class="gtiles">${playing.filter(hasBoard).map(i => tileHtml(i)).join('')}</div>` : ''}${nob ? `<div class="nob-list">${playing.filter(i => !hasBoard(i)).map(i => { const x = gameRow(M.games[i]); return `<a href="${href('games', x.run.id, x.id)}"><span class="pill live">Live</span><span class="bot" style="--c:${botColor(x.p1)}"><i></i><span>${esc(x.p1)}</span></span><span class="vs">vs</span><span class="bot" style="--c:${botColor(x.p2)}"><i></i><span>${esc(x.p2)}</span></span><span class="mono faint">${esc(x.run.id)}</span></a>`; }).join('')}<p class="muted" style="font-size:var(--fs-sm)">No board for these: their run does not keep replay files, so only the result will show. Runs that keep replays get a board here and a spot map in Bots.</p></div>` : ''}` : `<p class="muted">No run is playing ${S.live ? 'right now' : 'in this snapshot'}. The newest finished games are below.</p>`}</section>
+  const nob = playing.filter(i => !hasBoard(i)).length, ppl = gridGames({ people: true, max: 60, finished: 0 }).playing.length;
+  return `<div class="phead"><h1>Now playing</h1><p class="lede">Every running bot-vs-bot game in the project, one small board each, in the Strategy Atlas's picture language. Click a board to watch the game.</p></div>
+  ${gridNote()}${ppl ? `<div class="notice people-note">${humanPill()} ${ppl} game${ppl === 1 ? '' : 's'} against ${ppl === 1 ? 'a person' : 'people'} on karabast.net ${ppl === 1 ? 'is' : 'are'} playing too. <a href="${href('people')}">Watch on Vs people</a></div>` : ''}${chips}
+  <section><div class="bh" style="margin:6px 0 8px"><h2>${playing.length ? `Playing${S.live ? ' now' : ' at snapshot time'}` : 'Nothing is playing'}</h2><span class="sub">${playing.length} game${playing.length === 1 ? '' : 's'}${nob ? ` · ${nob} without a board (no replay file kept)` : ''}</span></div>${playing.length ? `${playing.length > nob ? `<div class="gtiles">${playing.filter(hasBoard).map(i => tileHtml(i)).join('')}</div>` : ''}${nob ? `<div class="nob-list">${playing.filter(i => !hasBoard(i)).map(i => { const x = gameRow(M.games[i]); return `<a href="${href('games', x.run.id, x.id)}"><span class="pill live">Live</span>${tileSeat(x, 'p1')}<span class="vs">vs</span>${tileSeat(x, 'p2')}<span class="mono faint">${esc(x.run.id)}</span></a>`; }).join('')}<p class="muted" style="font-size:var(--fs-sm)">No board for these: their run does not keep replay files, so only the result will show. Runs that keep replays get a board here and a spot map in Bots.</p></div>` : ''}` : `<p class="muted">No run is playing ${S.live ? 'right now' : 'in this snapshot'}. The newest finished games are below.</p>`}</section>
   ${done.length ? `<section style="margin-top:18px"><div class="bh" style="margin-bottom:8px"><h2>Just finished</h2><span class="sub">newest first</span><a class="more" href="${href('games', 'all')}">All games</a></div><div class="gtiles">${done.map(i => tileHtml(i)).join('')}</div></section>` : ''}
   ${tileKey()}`;
 }
@@ -983,30 +1102,32 @@ function pageGames(r) {
   const rows = [];
   for (let i = M.games.length - 1; i >= 0; i--) {
     const g = M.games[i];
+    if (isPeople(i)) continue; // games against people are on their own tab
     if (runIx >= 0 && g[0] !== runIx) continue;
     if (botI >= 0 && g[2] !== botI && g[3] !== botI) continue;
-    if (F.res === 'decided' && g[4] > 2) continue; if (F.res === 'playing' && g[4] !== 3) continue; if (F.res === 'forfeit' && !g[7]) continue; if (F.res === 'error' && g[4] !== 4) continue; if (F.res === 'abandoned' && g[4] !== 5) continue;
+    if (F.res === 'decided' && g[4] > 2) continue; if (F.res === 'playing' && g[4] !== 3) continue; if (F.res === 'forfeit' && !g[7]) continue; if (F.res === 'error' && g[4] !== 4) continue;
     if (F.replay && !hasReplay(i)) continue;
     rows.push(i);
   }
   const per = 40, pages = Math.max(1, Math.ceil(rows.length / per)), p = Math.min(S.gamesPage, pages - 1);
-  return `<div class="phead"><h1>Games</h1><p class="lede">${int(M.games.length)} games in ${M.runs.length} runs; ${int([...M.games.keys()].filter(hasReplay).length)} have a replay you can watch.</p></div>
-  <div class="filters"><select data-input="gamesF" data-k="bot" aria-label="Bot"><option value="">Any bot</option>${[...M.order, ...Object.keys(M.bots).filter(x => !M.bots[x].rating)].map(x => `<option ${x === F.bot ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select><select data-input="gamesF" data-k="run" aria-label="Run"><option value="">Any run</option>${[...M.runs].reverse().map(x => `<option ${x.id === F.run ? 'selected' : ''}>${esc(x.id)}</option>`).join('')}</select><select data-input="gamesF" data-k="res" aria-label="Result">${[['all', 'Any result'], ['decided', 'Decided'], ['playing', 'Playing now'], ['forfeit', 'Won by forfeit'], ['error', 'Not rated (engine error)'], ['abandoned', 'Abandoned (vs people)']].map(([k, l]) => `<option value="${k}" ${k === F.res ? 'selected' : ''}>${l}</option>`).join('')}</select><label class="row" style="font-size:var(--fs-md);gap:5px"><input type="checkbox" data-input="gamesF" data-k="replay" ${F.replay ? 'checked' : ''}>Has replay</label><span class="muted" style="font-size:var(--fs-md)">${int(rows.length)} games</span></div>
+  const botGames = [...M.games.keys()].filter(i => !isPeople(i)), botRuns = M.runs.filter(x => x.kind !== 'people');
+  return `<div class="phead"><h1>Games</h1><p class="lede">${int(botGames.length)} bot-vs-bot games in ${botRuns.length} runs; ${int(botGames.filter(hasReplay).length)} have a replay you can watch.${botRuns.length < M.runs.length ? ` Games against people are on <a href="${href('people')}">Vs people</a>.` : ''}</p></div>
+  <div class="filters"><select data-input="gamesF" data-k="bot" aria-label="Bot"><option value="">Any bot</option>${[...M.order, ...Object.keys(M.bots).filter(x => !M.bots[x].rating)].map(x => `<option ${x === F.bot ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select><select data-input="gamesF" data-k="run" aria-label="Run"><option value="">Any run</option>${[...M.runs].reverse().filter(x => x.kind !== 'people').map(x => `<option ${x.id === F.run ? 'selected' : ''}>${esc(x.id)}</option>`).join('')}</select><select data-input="gamesF" data-k="res" aria-label="Result">${[['all', 'Any result'], ['decided', 'Decided'], ['playing', 'Playing now'], ['forfeit', 'Won by forfeit'], ['error', 'Not rated (engine error)']].map(([k, l]) => `<option value="${k}" ${k === F.res ? 'selected' : ''}>${l}</option>`).join('')}</select><label class="row" style="font-size:var(--fs-md);gap:5px"><input type="checkbox" data-input="gamesF" data-k="replay" ${F.replay ? 'checked' : ''}>Has replay</label><span class="muted" style="font-size:var(--fs-md)">${int(rows.length)} games</span></div>
   <section class="box">${gamesTable(rows.slice(p * per, p * per + per))}<div class="pager" style="margin-top:8px"><button type="button" data-act="gamesPage" data-d="-1" ${p === 0 ? 'disabled' : ''}>Newer</button><span class="mono">${p + 1} / ${pages}</span><button type="button" data-act="gamesPage" data-d="1" ${p >= pages - 1 ? 'disabled' : ''}>Older</button></div></section>`;
 }
 const KIND = { arena: ['Arena round', 'llm'], ladder: ['Ladder', 'heuristic'], study: ['Study', 'learned'], people: ['Vs people', 'search'], test: ['Test', 'random'] };
 function pageRuns() {
-  return `<div class="phead"><h1>Runs</h1><p class="lede">Every ladder, study and arena round, newest first.</p></div><section class="box"><div class="scroll"><table><thead><tr><th>Run</th><th>Kind</th><th>Started</th><th class="n">Bots</th><th class="n">Games</th><th>Top of the run</th></tr></thead><tbody>${[...M.runs].reverse().map(r => `<tr class="click" data-href="${href('runs', r.id)}"><td><a href="${href('runs', r.id)}" class="mono">${esc(r.id)}</a>${r.running ? ' <span class="pill live">playing</span>' : ''}</td><td><span class="fam" style="--c:${famColor(KIND[r.kind][1])}">${KIND[r.kind][0]}</span></td><td class="mono" style="font-size:var(--fs-sm)">${ago(r.createdAt)} ago</td><td class="n">${r.bots.length}</td><td class="n">${r.decided}${r.planned ? ` / ${r.planned}` : ''}</td><td>${r.table[0] ? `${botLink(r.table[0].id)} <span class="muted" style="font-size:var(--fs-sm)">${pct(r.table[0].pct)}</span>` : '-'}</td></tr>`).join('')}</tbody></table></div></section>`;
+  return `<div class="phead"><h1>Runs</h1><p class="lede">Every ladder, study and arena round, newest first.</p></div><section class="box"><div class="scroll"><table><thead><tr><th>Run</th><th>Kind</th><th>Started</th><th class="n">Bots</th><th class="n">Games</th><th>Top of the run</th></tr></thead><tbody>${[...M.runs].filter(r => r.kind !== 'people').reverse().map(r => `<tr class="click" data-href="${href('runs', r.id)}"><td><a href="${href('runs', r.id)}" class="mono">${esc(r.id)}</a>${r.running ? ' <span class="pill live">playing</span>' : ''}</td><td><span class="fam" style="--c:${famColor(KIND[r.kind][1])}">${KIND[r.kind][0]}</span></td><td class="mono" style="font-size:var(--fs-sm)">${ago(r.createdAt)} ago</td><td class="n">${r.bots.filter(b => !isPerson(r, b)).length}</td><td class="n">${r.decided}${r.planned ? ` / ${r.planned}` : ''}</td><td>${r.table[0] ? `${botLink(r.table[0].id)} <span class="muted" style="font-size:var(--fs-sm)">${pct(r.table[0].pct)}</span>` : '-'}</td></tr>`).join('')}</tbody></table></div></section>`;
 }
 function pageRun(r) {
   const run = runById(r.parts[1]); if (!run) return `<div class="notice">No run named ${esc(r.parts[1])}.</div>`;
   const ri = M.runs.indexOf(run), rows = []; for (let i = M.games.length - 1; i >= 0; i--) if (M.games[i][0] === ri) rows.push(i);
-  const exps = M.experiments.filter(e => runsIn(e).includes(run)), wide = (run.gamesPerPairing || 2) * run.bots.length > 24, half = wide ? 'c12' : 'c6';
+  const exps = M.experiments.filter(e => runsIn(e).includes(run)), people = run.kind === 'people', wide = people || (run.gamesPerPairing || 2) * run.bots.length > 24, half = wide ? 'c12' : 'c6';
   return `<div class="phead"><div><div class="eyebrow">${KIND[run.kind][0]} · ${new Date(run.createdAt).toLocaleString()}</div><h1 class="mono">${esc(run.id)}</h1></div><p class="lede">${run.kind === 'people' ? `Our bots against people: ${run.decided} finished games${run.abandoned ? `, ${run.abandoned} abandoned` : ''}${run.errors ? `, ${run.errors} with no result` : ''}` : `${run.bots.length} bots, ${run.decided} rated games${run.planned ? ` of ${run.planned}` : ''}${run.errors ? `, ${run.errors} not rated (engine errors or caps)` : ''}`}${run.running ? `, ${run.running} playing now` : ''}.</p></div>
   ${exps.map(e => `<div class="notice" style="border-style:solid;margin-bottom:12px"><b>Why this run:</b> <a href="${href('research', 'experiments', e.id)}">${esc(e.title)}</a>. ${esc(e.hypothesis || '')}${e.conclusion ? ` <b>Found:</b> ${esc(e.conclusion)}` : ''}</div>`).join('')}
   <div class="grid"><div class="${half} box"><div class="bh"><h3>Standings in this run</h3><span class="sub">score bar: line = 50%</span></div><div class="scroll"><table><thead><tr><th>#</th><th>Bot</th><th class="hide-sm">Style</th><th class="hide-sm">Nine spots</th><th class="n">W-L</th><th>Score</th></tr></thead><tbody>${run.table.map((t, i) => `<tr><td class="rank">${i + 1}</td><td>${botLink(t.id)}</td><td class="hide-sm">${styleTag(atl(t.id)?.summary?.style)}</td><td class="hide-sm">${fingerprint(t.id)}</td><td class="n">${t.w}-${t.l}${t.d ? `-${t.d}` : ''}</td><td><span class="sc-cell"><span class="sc"><i style="width:${(t.pct || 0) * 100}%;--c:${t.pct >= .5 ? 'var(--pos-4)' : 'var(--neg-4)'}"></i><b></b></span><em>${pct(t.pct)}</em></span></td></tr>`).join('')}</tbody></table></div></div>
-  <div class="${half} box"><div class="bh"><h3>Who beat whom</h3><span class="sub">every game; click a square to watch</span></div>${run.bots.length <= 14 ? gameGrid(run) : `<p class="muted">${run.bots.length} bots: too many for the grid; see the games below.</p>`}</div>
-  <div class="c12 box"><div class="bh"><h3>Newest games</h3><a class="more" href="${href('games', 'all')}">All games</a></div>${gamesTable(rows.slice(0, 12), { showRun: false })}${rows.length > 12 ? `<p class="muted" style="margin-top:6px">${rows.length - 12} more: the grid above has every game.</p>` : ''}</div></div>`;
+  ${people ? `<div class="c12 notice people-note">Every game here is one of our bots against a real person on karabast.net. <a href="${href('people')}">Vs people</a> has the record over time and the games playing now.</div>` : `<div class="${half} box"><div class="bh"><h3>Who beat whom</h3><span class="sub">every game; click a square to watch</span></div>${run.bots.length <= 14 ? gameGrid(run) : `<p class="muted">${run.bots.length} bots: too many for the grid; see the games below.</p>`}</div>`}
+  <div class="c12 box"><div class="bh"><h3>Newest games</h3><a class="more" href="${people ? href('people') : href('games', 'all')}">All games</a></div>${gamesTable(rows.slice(0, 12), { showRun: false })}${rows.length > 12 ? `<p class="muted" style="margin-top:6px">${rows.length - 12} more: ${people ? `<a href="${href('people')}">Vs people</a> lists every game.` : 'the grid above has every game.'}</p>` : ''}</div></div>`;
 }
 function pageGame(r) {
   const run = runById(r.parts[1]), key = `${r.parts[1]}/${r.parts[2]}`, i = gameIdx.get(key);
@@ -1014,11 +1135,117 @@ function pageGame(r) {
   const x = gameRow(M.games[i]), ev = DATA.evals[x.id], ri = M.runs.indexOf(run);
   const sib = []; M.games.forEach((g, j) => { if (g[0] === ri) sib.push(j); }); const at = sib.indexOf(i);
   const nav = (j, l) => j != null && sib[j] != null ? `<a href="${href('games', run.id, M.games[sib[j]][1])}">${l}</a>` : `<span class="faint">${l}</span>`;
-  const both = atl(x.p1) && atl(x.p2);
-  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${botLink(x.p1)}${styleTag(atl(x.p1)?.summary?.style)}<span class="faint" style="font-size:var(--fs-base)">vs</span>${botLink(x.p2)}${styleTag(atl(x.p2)?.summary?.style)}</h1></div><p class="lede">${x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 5 ? 'Abandoned: the game never started or went silent.' : x.res === 2 ? 'Draw.' : `${esc(x.res === 0 ? x.p1 : x.p2)} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}</span></div>
+  const both = atl(x.p1) && atl(x.p2), ours = x.human ? x[x.human === 'p1' ? 'p2' : 'p1'] : null;
+  const side = s => `${seatLink(x, s)}${x.human === s ? '' : styleTag(atl(x[s])?.summary?.style)}`;
+  const lede = x.human
+    ? `${x.res === 3 ? `${esc(ours)} is playing a real person on karabast.net right now.` : x.res === 5 ? `${esc(ours)} against a real person on karabast.net: abandoned, the game never started or went silent.` : x.res === 2 ? `${esc(ours)} drew with a real person on karabast.net.` : x.res === 4 ? `${esc(ours)} against a real person on karabast.net: no result.` : `${esc(ours)} ${winnerName(x) === ours ? 'beat' : 'lost to'} a real person on karabast.net in round ${x.rounds}.`} Never rated: games against people stay out of every bot's rating.`
+    : x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 2 ? 'Draw.' : `${esc(winnerName(x))} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`;
+  return `<div class="phead"><div><div class="eyebrow">${x.human ? `${humanPill()} <a href="${href('people')}">karabast.net</a>` : `<a href="${href('runs', run.id)}">${esc(run.id)}</a>`} · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${side('p1')}<span class="faint" style="font-size:var(--fs-base)">vs</span>${side('p2')}</h1></div><p class="lede">${lede} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}</span></div>
   ${spotBarHtml(key)}
   <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" style="margin-top:8px"></div>
   <section class="box"><div class="bh"><h3>Pivotal plays</h3><span class="sub">the actions that moved the game most; click to jump</span></div><div id="pivotal" class="comps" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"><p class="muted">Loading…</p></div></section>`;
+}
+
+// ---------- pages: bots vs people ----------
+/** Our bots' record against people on karabast.net: per bot W-L-D, abandoned and playing games, and its finished
+ *  results oldest first (1 won, 0 lost, .5 draw); `games` is every game of a people run, newest first. */
+function peopleStats() {
+  const by = {}, games = [];
+  for (let i = M.games.length - 1; i >= 0; i--) {
+    if (!isPeople(i)) continue;
+    const x = gameRow(M.games[i]); games.push(i);
+    if (!x.human) continue; // a feed's game with no seat we can tell is a person's: listed, kept out of the record
+    const seat = x.human === 'p1' ? 'p2' : 'p1', id = x[seat], B = (by[id] ||= { id, w: 0, l: 0, d: 0, n: 0, ab: 0, live: 0, seq: [] });
+    if (x.res === 3) B.live++;
+    else if (x.res === 5) B.ab++;
+    else if (x.res <= 2) { const sc = x.res === 2 ? .5 : (x.res === 0) === (seat === 'p1') ? 1 : 0; sc === 1 ? B.w++ : sc === 0 ? B.l++ : B.d++; B.n++; B.seq.push(sc); }
+  }
+  for (const B of Object.values(by)) { B.seq.reverse(); B.pct = B.n ? (B.w + B.d / 2) / B.n : null; }
+  return { bots: Object.values(by).sort((a, b) => b.n - a.n || b.live - a.live), games };
+}
+/** The mental model: two kinds of games come in, and only bot-vs-bot games reach the ratings. */
+function peopleDiagram() {
+  const box = (x, y, t, s, c) => `<rect x="${x}" y="${y}" width="128" height="42" rx="6" style="fill:var(--raised);stroke:${c}" stroke-width="1.5"/><text x="${x + 64}" y="${y + 18}" text-anchor="middle" class="pd-t">${t}</text><text x="${x + 64}" y="${y + 33}" text-anchor="middle" class="pd-s">${s}</text>`;
+  const arrow = (y, label, c) => `<line x1="136" y1="${y}" x2="198" y2="${y}" style="stroke:${c}" stroke-width="1.6"/><path d="M198 ${y - 4.5}l7 4.5-7 4.5z" style="fill:${c}"/><text x="170" y="${y - 7}" text-anchor="middle" class="pd-s">${label}</text>`;
+  return `<figure class="pd"><svg viewBox="0 0 340 112" role="img" aria-label="Bot-vs-bot games from ladders and arena rounds go into the ratings, the Bots tab and the Games tab. Games between our bots and people on karabast.net go only to the Vs people tab and are never rated.">
+    ${box(4, 6, 'Ladders, arena', 'a bot vs a bot', 'var(--accent)')}${arrow(27, 'rated', 'var(--accent)')}${box(208, 6, 'Ratings', 'Bots and Games tabs', 'var(--accent)')}
+    ${box(4, 64, 'karabast.net', 'our bot vs a person', 'var(--human)')}${arrow(85, 'never rated', 'var(--human)')}${box(208, 64, 'Vs people', 'this tab', 'var(--human)')}
+  </svg><figcaption>Two kinds of games come in. Only bot-vs-bot games change a rating.</figcaption></figure>`;
+}
+/** Home: our bots' record against people, and the live game against a person when the hero shows a bot game. */
+function peopleCard() {
+  const P = peopleStats(); if (!P.games.length) return '';
+  const lg = liveGame() ? liveGame({ people: true }) : null;
+  return `<section class="box people-box"><div class="bh"><h3>Vs people</h3><span class="sub">karabast.net · never rated</span><a class="more" href="${href('people')}">Open</a></div><div class="stack" style="gap:4px">${P.bots.slice(0, 3).map(B => `<div class="row" style="font-size:var(--fs-md)">${botLink(B.id)}<b>${B.w}-${B.l}${B.d ? `-${B.d}` : ''}</b><span class="muted">${B.n ? `${pct(B.pct)} won` : 'no finished game yet'}${B.live ? ` · ${B.live} playing now` : ''}</span></div>`).join('')}</div>${lg ? `<div class="gtiles" style="margin-top:10px">${tileHtml(lg.i, { sm: true })}</div>` : ''}</section>`;
+}
+const PEOPLE_F = [['all', 'All'], ['playing', 'Playing'], ['won', 'Our bot won'], ['lost', 'Our bot lost'], ['abandoned', 'Abandoned']];
+function pagePeople() {
+  const P = peopleStats();
+  const head = `<div class="phead"><h1>Bots vs people</h1><p class="lede">Our bots play real people on karabast.net, the public Star Wars Unlimited site. These games never change a bot's rating; ratings come from bot-vs-bot games only. People are never named here: each one shows as "a person".${HOSTED ? ` <a href="#/share?from=${encodeURIComponent('#/people')}">Share this tab</a>` : ''}</p></div>`;
+  if (!P.games.length) return `${head}<div class="grid"><div class="c6 box">${peopleDiagram()}</div><div class="c6 box"><p class="muted">No games against people yet.</p></div></div>`;
+  const all = P.bots.reduce((a, B) => ({ w: a.w + B.w, l: a.l + B.l, d: a.d + B.d, n: a.n + B.n, ab: a.ab + B.ab, live: a.live + B.live }), { w: 0, l: 0, d: 0, n: 0, ab: 0, live: 0 });
+  const { playing, done } = gridGames({ people: true, max: 12, finished: 6 });
+  const won = i => { const x = gameRow(M.games[i]); return x.res < 2 && winnerName(x) !== 'the person'; };
+  const keep = { all: () => true, playing: i => M.games[i][4] === 3, won, lost: i => M.games[i][4] < 2 && !won(i), abandoned: i => M.games[i][4] === 5 }[S.peopleF] || (() => true);
+  const rows = P.games.filter(keep), per = 30, pages = Math.max(1, Math.ceil(rows.length / per)), p = Math.min(S.peoplePage, pages - 1);
+  const W = 20, series = P.bots.filter(B => B.seq.length >= 10).map(B => ({ name: B.id, color: botColor(B.id), points: B.seq.map((_, k) => k).filter(k => k >= 9).map(k => { const w = B.seq.slice(Math.max(0, k - W + 1), k + 1); return [k + 1, w.reduce((a, v) => a + v, 0) / w.length]; }) }));
+  if (series.length) { const xs = series.flatMap(x => x.points.map(q => q[0])); series.push({ name: 'even', color: 'var(--line-2)', dash: true, nolabel: true, width: 1, points: [[Math.min(...xs), .5], [Math.max(...xs), .5]] }); }
+  const kpis = `<div class="kpis"><div><div class="v">${int(all.n)}</div><div class="k">finished games</div></div><div><div class="v">${all.w}-${all.l}${all.d ? `-${all.d}` : ''}</div><div class="k">our bots' record</div></div><div><div class="v">${pct(all.n ? (all.w + all.d / 2) / all.n : null)}</div><div class="k">won</div></div><div><div class="v">${all.ab}</div><div class="k">abandoned</div></div><div><div class="v">${all.live}</div><div class="k">playing now</div></div></div>`;
+  const record = `<div class="scroll"><table><thead><tr><th>Bot</th><th class="n">W-L</th><th>Won</th><th class="n hide-sm">Abandoned</th><th class="n hide-sm">Its rating</th></tr></thead><tbody>${P.bots.map(B => `<tr><td>${botLink(B.id)}${B.live ? ' <span class="pill live">playing</span>' : ''}</td><td class="n">${B.w}-${B.l}${B.d ? `-${B.d}` : ''}</td><td><span class="sc-cell"><span class="sc"><i style="width:${(B.pct || 0) * 100}%;--c:${B.pct >= .5 ? 'var(--pos-4)' : 'var(--neg-4)'}"></i><b></b></span><em>${pct(B.pct)}</em></span></td><td class="n hide-sm">${B.ab}</td><td class="n hide-sm">${M.bots[B.id]?.rating ?? '<span class="faint">-</span>'}${M.bots[B.id]?.rank ? ` <span class="faint">#${M.bots[B.id].rank}</span>` : ''}</td></tr>`).join('')}</tbody></table></div><p class="muted" style="font-size:var(--fs-sm);margin-top:6px">Its rating: from bot-vs-bot games only, for comparison. Score bar: line = 50%.</p>`;
+  return `${head}
+  <div class="grid"><div class="c5 box">${peopleDiagram()}</div><div class="c7 box"><div class="bh"><h3>Our bots against people</h3><span class="sub">finished games</span></div>${record}</div></div>
+  <div style="margin-top:var(--gap)">${kpis}</div>
+  <section style="margin-top:18px"><div class="bh" style="margin:6px 0 8px"><h2>${playing.length ? `Playing${S.live ? ' now' : ' at snapshot time'}` : 'Nothing is playing'}</h2><span class="sub">${playing.length} game${playing.length === 1 ? '' : 's'} against people</span></div>${playing.length ? `<div class="gtiles">${playing.map(i => tileHtml(i)).join('')}</div>` : `<p class="muted">No game against a person is playing ${S.live ? 'right now' : 'in this snapshot'}.</p>`}</section>
+  ${done.length ? `<section style="margin-top:18px"><div class="bh" style="margin-bottom:8px"><h2>Just finished</h2><span class="sub">newest first</span></div><div class="gtiles">${done.map(i => tileHtml(i)).join('')}</div></section>` : ''}
+  ${series.length ? `<section class="box" style="margin-top:18px"><div class="bh"><h3>Win rate over time</h3><span class="sub">share of its last ${W} finished games won, by game number</span></div>${lineChart(series, { yLo: 0, yHi: 1, yFmt: pct, xLabel: 'finished games', h: 220, label: `Each bot's win rate against people over its last ${W} games` })}</section>` : ''}
+  <section class="box" style="margin-top:18px"><div class="bh"><h3>Every game against people</h3><span class="sub">newest first</span></div><div class="fchips" style="margin-bottom:8px">${PEOPLE_F.map(([k, l]) => `<button type="button" class="fchip" data-act="peopleF" data-f="${k}" aria-pressed="${S.peopleF === k}">${esc(l)}</button>`).join('')}<span class="muted" style="font-size:var(--fs-md);align-self:center">${int(rows.length)} games</span></div>${gamesTable(rows.slice(p * per, p * per + per), { showRun: false })}<div class="pager" style="margin-top:8px"><button type="button" data-act="peoplePage" data-d="-1" ${p === 0 ? 'disabled' : ''}>Newer</button><span class="mono">${p + 1} / ${pages}</span><button type="button" data-act="peoplePage" data-d="1" ${p >= pages - 1 ? 'disabled' : ''}>Older</button></div></section>
+  ${tileKey()}`;
+}
+
+// ---------- share: a link to any page, and (an admin) who may sign in ----------
+const SHARE_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="3.5" r="2"/><circle cx="4" cy="8" r="2"/><circle cx="12" cy="12.5" r="2"/><path d="M5.8 7l4.4-2.5M5.8 9l4.4 2.5"/></svg>';
+const GH_LOGIN = /^[a-z0-9](?:[a-z0-9-]{0,38})$/;
+const shareLink = from => `${location.origin}${location.pathname}${/^#\/(?!share)/.test(from || '') ? from : '#/'}`;
+async function loadShare() {
+  S.share = { busy: true };
+  try { const r = await fetch('/api/share', { credentials: 'same-origin' }), j = await r.json().catch(() => ({})); S.share = r.ok ? j.result : { err: j.error?.message || `HTTP ${r.status}` }; }
+  catch (e) { S.share = { err: e?.message || 'offline' }; }
+  if (route().parts[0] === 'share') render(true);
+}
+async function shareChange(body) {
+  const keep = S.share; S.share = { ...keep, busy: true, msg: '', linkMsg: '' }; render(true);
+  const done = body.add ? { msg: `@${body.add} can sign in now. Send them the link above.` } : body.remove ? { msg: `@${body.remove} can no longer sign in.` }
+    : body.addLink ? { linkMsg: `Made a view link: ${body.addLink}. Copy or send it below.` } : { linkMsg: 'Removed. Anyone using that link is locked out.' };
+  try {
+    const r = await fetch('/api/share', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), j = await r.json().catch(() => ({}));
+    S.share = r.ok ? { ...j.result, ...done } : { ...keep, busy: false, [body.addLink || body.removeLink ? 'linkMsg' : 'msg']: j.error?.message || `HTTP ${r.status}` };
+  } catch (e) { S.share = { ...keep, busy: false, msg: e?.message || 'offline' }; }
+  render(true);
+}
+/** The mental model: two ways in (a GitHub sign-in on the invite list, or a view link), one arena, view only. */
+function shareDiagram(admin) {
+  const box = (y, t, s) => `<rect x="4" y="${y}" width="150" height="42" rx="6" style="fill:var(--raised);stroke:var(--line-2)" stroke-width="1.5"/><text x="79" y="${y + 18}" text-anchor="middle" class="pd-t">${t}</text><text x="79" y="${y + 33}" text-anchor="middle" class="pd-s">${s}</text>`;
+  const arrow = (y1, y2) => `<line x1="156" y1="${y1}" x2="214" y2="${y2}" style="stroke:var(--muted)" stroke-width="1.5"/><path d="M214 ${y2 - 4.5}l7 4.5-7 4.5z" style="fill:var(--muted)"/>`;
+  return `<figure class="pd"><svg viewBox="0 0 340 112" role="img" aria-label="Two ways in: signing in with GitHub when your name is on the invite list, or opening a view link. Both open the same arena, view only.">${box(6, 'GitHub sign-in', admin ? 'name on your invite list' : 'name on the invite list')}${box(64, 'View link', 'anyone holding it')}${arrow(27, 52)}${arrow(85, 60)}<rect x="222" y="35" width="114" height="42" rx="6" style="fill:var(--raised);stroke:var(--accent)" stroke-width="1.5"/><text x="279" y="53" text-anchor="middle" class="pd-t">The arena</text><text x="279" y="68" text-anchor="middle" class="pd-s">view only</text></svg><figcaption>Two ways in, one arena. Removing a name or a link locks it out on the next click.</figcaption></figure>`;
+}
+function pageShare(r) {
+  const head = `<div class="phead"><h1>Share the arena</h1><p class="lede">Two ways in: sign in with GitHub when your name is on the invite list, or open a view link, which needs no account. Either way you see everything here: games and replays, bots and their histories, the research. Nobody who comes in can change anything.</p></div>`;
+  if (!HOSTED) return `${head}<div class="notice">Sharing is part of the hosted arena at swu-arena.fly.dev; this copy is a snapshot.</div>`;
+  const admin = S.me?.role === 'admin', sh = S.share || {}, from = r.qs.get('from'), hash = /^#\/(?!share)./.test(from || '') ? from : '';
+  if (admin && !S.share) { S.share = { busy: true }; setTimeout(loadShare); }
+  const who = (l, how, rm) => `<li><span class="mono">@${esc(l)}</span><span class="muted">${how}</span>${rm ? `<button type="button" data-act="inviteRemove" data-login="${esc(l)}" ${sh.busy ? 'disabled' : ''}>Remove</button>` : ''}</li>`;
+  const list = sh.err ? `<p class="bad" style="margin-top:8px">${esc(sh.err)}</p>` : !sh.invites ? '<p class="muted" style="margin-top:8px">Loading…</p>'
+    : `<ul class="invites">${[...(sh.admins || []).map(l => who(l, 'admin', false)), ...(sh.fromEnv || []).filter(l => !(sh.admins || []).includes(l)).map(l => who(l, 'set on the server', false)), ...sh.invites.map(l => who(l, 'invited here', true))].join('')}</ul>${sh.invites.length ? '' : '<p class="muted" style="margin-top:6px;font-size:var(--fs-md)">Nobody invited here yet.</p>'}`;
+  const linkUrl = l => `${location.origin}/v/${l.key}${hash}`;
+  const links = !sh.links ? '' : sh.links.length ? `<ul class="invites">${[...sh.links].reverse().map(l => `<li class="vlink"><span><b>${esc(l.label)}</b> <span class="muted">made ${ago(l.createdAt) === 'now' ? 'just now' : `${ago(l.createdAt)} ago`}</span><span class="mono faint vurl">${esc(linkUrl(l))}</span></span><span class="vbtns"><button type="button" data-act="linkCopy" data-url="${esc(linkUrl(l))}">Copy</button>${navigator.share ? `<button type="button" data-act="linkSend" data-url="${esc(linkUrl(l))}">Send</button>` : ''}<button type="button" data-act="linkRemove" data-id="${esc(l.id)}" data-label="${esc(l.label)}" ${sh.busy ? 'disabled' : ''}>Remove</button></span></li>`).join('')}</ul>` : '<p class="muted" style="margin-top:6px;font-size:var(--fs-md)">No view links yet.</p>';
+  const notAdmin = S.me?.guest ? 'You came in by a view link. To share the arena, ask Eric for a link of your own.' : 'Only Eric adds people: send him their GitHub username, or ask him for a view link.';
+  return `${head}<div class="grid">
+    <section class="c7 box"><div class="bh"><h3>Link to the page you were on</h3></div><div class="sharerow"><input id="sharelink" readonly value="${esc(shareLink(from))}" aria-label="Link"><button type="button" data-act="shareCopy">Copy</button>${navigator.share ? '<button type="button" data-act="shareSend">Send</button>' : ''}</div><p class="muted" style="font-size:var(--fs-md);margin-top:6px">It opens that same page for anyone invited, right after they sign in.${admin ? ' For someone without GitHub, send a view link (below).' : ''}</p></section>
+    <section class="c5 box">${shareDiagram(admin)}</section>
+    ${admin ? `<section class="c12 box"><div class="bh"><h3>View links</h3><span class="sub">no account needed${hash ? `; each opens ${esc(hash)}` : ''}</span></div><p class="muted" style="font-size:var(--fs-md);margin-bottom:8px">Anyone holding a view link sees the arena with no sign-in, and a forwarded link works too. Make one per person, so you can remove one without the others.</p><form id="linkform" class="sharerow"><input id="linklabel" placeholder="Who is it for? (only you see this)" maxlength="60" autocomplete="off" aria-label="Who the link is for"><button type="submit" ${sh.busy ? 'disabled' : ''}>Make a link</button></form>${sh.linkMsg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.linkMsg)}</p>` : ''}${links}</section>
+    <section class="c12 box"><div class="bh"><h3>Who can sign in</h3><span class="sub">changes take effect at once</span></div><form id="inviteform" class="sharerow"><input id="invitelogin" placeholder="GitHub username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="GitHub username"><button type="submit" ${sh.busy ? 'disabled' : ''}>Invite</button></form>${sh.msg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.msg)}</p>` : ''}${list}</section>`
+      : `<section class="c12 box"><p>${notAdmin}</p></section>`}
+  </div>${S.me?.login ? `<p class="muted" style="margin-top:10px;font-size:var(--fs-md)">Signed in as @${esc(S.me.login)} · <a href="/auth/logout">Sign out</a></p>` : ''}`;
 }
 
 // ---------- pages: research ----------
@@ -1449,3 +1676,7 @@ window.addEventListener('hashchange', () => render(false));
 render(false);
 if (window.claude?.use) setTimeout(() => startLive(false), 400);
 else if (HOSTED) startApi();
+if (HOSTED) {
+  const b = $('sharebtn'); b.hidden = false; b.innerHTML = SHARE_ICON;
+  b.addEventListener('click', () => { const r = route(); if (r.parts[0] !== 'share') location.hash = `#/share?from=${encodeURIComponent(location.hash || '#/')}`; });
+}
