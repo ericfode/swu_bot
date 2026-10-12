@@ -65,6 +65,10 @@ jobs:
         run: |
           npm --prefix forceteki ci --ignore-scripts
           npm --prefix forceteki run get-cards
+      - name: Build the pinned engine (the bot/env.js selection test loads it)
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm --prefix forceteki run build
       # cards:compile rewrites the generated files, so check the committed ones first;
       # the daily run skips this and uploads the regenerated diff instead.
       - name: Fail if committed generated files are stale
