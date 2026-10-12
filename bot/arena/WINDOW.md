@@ -89,11 +89,27 @@ Its tools: `whoami`, the arena reads (`arena_status`, `arena_standings`, `arena_
 - `arena_submit {kind: js|python|wasm, note, files, base64?, entry?, name?}`: stores the bot in the `submissions`
   collection as `<login>.<time>`, state `pending`. The default `name` is the person's builder name (their login,
   lowercase, `_` for `-`); another name must start with it and `_`, and may not be the builder name of anyone else who
-  can sign in (the intake checks the prefix again). Limits: about 3 MB of files, 3 waiting at once, 20 a day, and no
-  competitor someone else owns. The window never runs it.
+  can sign in (the intake checks the prefix again). Limits: about 3 MB of files; per competitor 3 waiting at once
+  and 20 a day; 60 a day per person; and no competitor someone else owns. The window never runs it.
 - `arena_my_submissions`: the person's own submissions, without their files. Each is pending, then checking, then
   accepted (the version) or rejected (the error lines). A check that fails on the arena's side (no result) puts it back
   to pending, files and all, and it is tried again after a few minutes, three times at most.
+
+### An agent with no browser: a connect link (the device grant)
+
+A program that cannot open a browser, such as a Claude builder running headless on someone's own computer, connects
+with the OAuth device grant (RFC 8628), for one competitor name:
+
+    node bot/arena/connect.js --name kim_b_sprite --label "Kim's laptop builder" --out ~/.swu-arena-token
+
+`connect.js` asks `POST /oauth/device_authorization {name, label}` for a code, prints the link
+(`/oauth/device?user_code=XXXX-XXXX`), and polls `/oauth/token` until the person opens it, signs in with GitHub,
+checks the code and presses Allow. The token (`swuk_`, 90 days, no refresh) is saved to `--out` (mode 600), never
+printed. It reads like the person's app and submits only as that competitor: `arena_submit` refuses any other
+`name`, and `arena_my_submissions` lists only that competitor's submissions. The name is checked when the person
+answers and again when the token is made, with the rules `arena_submit` uses. Connecting the same name again ends
+the old token; the agent shows on the person's Build a bot page, where Disconnect ends it. Use it as a header:
+`claude mcp add --transport http swu-arena https://swu-arena.fly.dev/mcp --header "Authorization: Bearer $(cat ~/.swu-arena-token)"`.
 
 The arena's intake (`intake.js`, started by `launch.sh` next to the uplink) reads `submissions` with the project
 token. It packs each bot into a WebAssembly bundle, enters it, and writes the outcome back. Each version records the

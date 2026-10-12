@@ -11,7 +11,8 @@
  *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST; NAME is letters and digits): it reads like
  *                      a friend and writes only what carries its name (window.js); any other bearer token is refused
  *                      An MCP client's access token (oauth.js) reads as its person: 'friend' while invited, never
- *                      more, with via 'oauth' (so it never writes)
+ *                      more, with via 'oauth' (so it never writes); an agent's token (the device grant) also carries `agent`,
+ *                      the one competitor name it may submit as (window.js arena_submit)
  *   nothing            'anon': the sign-in page and /healthz only
  * The role is worked out on every request, so removing an invite takes effect at once. Cookies grant reading, and
  * nothing else but one write: an admin changing the invite list from this site's own Share page (window.js share(),
@@ -157,7 +158,7 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
             }
             const g = lookup(t);
             if (g) {
-                return { role: roleOf(g.login) === 'anon' ? 'anon' : 'friend', login: g.login, grant: g.grant, app: g.app, via: 'oauth' };
+                return { role: roleOf(g.login) === 'anon' ? 'anon' : 'friend', login: g.login, grant: g.grant, app: g.app, ...(g.agent ? { agent: g.agent } : {}), via: 'oauth' };
             }
             return { role: 'bad', via: 'bearer' };
         }

@@ -47,8 +47,9 @@ const MAX_REPLAY = 32e6; // the longest recorded game so far is ~14 MB of text
 const SUBMIT_KINDS = ['js', 'python', 'wasm'];
 const SUBMIT_FILES = 200;
 const SUBMIT_BYTES = 3e6;
-const SUBMIT_PENDING = 3;
-const SUBMIT_PER_DAY = 20;
+const SUBMIT_PENDING = 3; // waiting at once, per competitor name
+const SUBMIT_PER_DAY = 20; // per competitor name
+const SUBMIT_PER_DAY_PERSON = 60; // per person, over all their names
 // keys a friend never sees (builder and thread names, Eric's pick 6), at any depth of a document
 const PRIVATE_KEYS = new Set(['owner', 'thread', 'threadId', 'session', 'sessionId', 'tokenHash', 'token']);
 
@@ -594,7 +595,7 @@ function createWindow(opts = {}) {
 
     // ---- /mcp: each person's own MCP client (Claude, Claude Code, Cursor...) signs in with GitHub through OAuth
     // (oauth.js) and reads as that person; the project token stays with bot/arena/mcp.js for pushing ----
-    const oauth = createOAuth({ dir: path.join(home, 'auth'), auth });
+    const oauth = createOAuth({ dir: path.join(home, 'auth'), auth, checkName: (login, name) => nameProblem(login, name) });
     auth.useBearer(oauth.lookup);
     const { METHODS } = require('./api');
     const RO = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
@@ -606,10 +607,35 @@ function createWindow(opts = {}) {
     const mySubmissions = (login) => store.listDocs('submissions').filter((d) => d.id.startsWith(`${String(login).toLowerCase()}.`))
         .map((d) => parseOr(store.getDoc('submissions', d.id), null)).filter(Boolean)
         .sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+    /**
+     * Why @login may not submit as competitor n, or null: a name is its builder's (their builder name, or it with _ and
+     * a suffix), never another person's builder name (bob may not take bob_x while @bob-x can sign in), and never
+     * another person's competitor. arena_submit and an agent's connect link (oauth.js device grant) both ask.
+     */
+    function nameProblem(login, n) {
+        login = String(login ?? '').toLowerCase();
+        if (typeof n !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(n)) {
+            return 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter';
+        }
+        const { admins, fromEnv } = auth.fixed();
+        const others = [...admins, ...fromEnv, ...invited()].map((x) => String(x).toLowerCase()).filter((x) => x !== login);
+        if (!ownsName(login, n) || others.some((x) => builderName(x) === n)) {
+            return `"${n}" is not yours: use your builder name ${builderName(login)} (whoami), or it with _ and a suffix, e.g. ${builderName(login)}_fast`;
+        }
+        // a competitor of someone else's: the arena refuses it too, but say so now
+        const theirs = (arenaMethods.status().competitors ?? []).find((c) => c?.name === n);
+        if (theirs && theirs.owner !== `github:${login}`) {
+            return `"${n}" is another competitor's name; submit under your own (whoami says your builder name)`;
+        }
+        return null;
+    }
+
     /** arena_submit: checks the request and stores it for the arena's intake; nothing of it runs here. */
     function submit(who, { kind, note, files, base64 = [], entry, name } = {}) {
         need(who.login && LOGIN.test(who.login), 'forbidden', 'submitting takes a GitHub sign-in');
         const login = who.login.toLowerCase();
+        // an agent's token (a person's Claude on their Sprite) submits as its one competitor, and only as that one
+        need(!who.agent || name === undefined || name === null || name === who.agent, 'forbidden', `this agent's token submits only as ${who.agent}`);
         need(SUBMIT_KINDS.includes(kind), 'bad_request', `kind: one of ${SUBMIT_KINDS.join(', ')}`);
         need(typeof note === 'string' && note.trim() && note.length <= 300, 'bad_request', 'note: one line (up to 300 characters) saying what this version changes');
         need(files && typeof files === 'object' && !Array.isArray(files), 'bad_request', 'files: an object of path -> content');
@@ -624,22 +650,18 @@ function createWindow(opts = {}) {
         }
         need(bytes <= SUBMIT_BYTES, 'too_large', `files: at most ${SUBMIT_BYTES / 1e6} MB in all`);
         need(entry === undefined || (typeof entry === 'string' && entry in files), 'bad_request', 'entry: one of the files');
-        const n = name ?? builderName(login);
+        const n = name ?? who.agent ?? builderName(login);
         need(typeof n === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(n), 'bad_request', 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
-        // a name is its builder's: their builder name, or it with _ and a suffix, and never another person's builder name
-        // (bob may not take bob_x while @bob-x can sign in)
-        const { admins, fromEnv } = auth.fixed();
-        const others = [...admins, ...fromEnv, ...invited()].map((x) => String(x).toLowerCase()).filter((x) => x !== login);
-        need(ownsName(login, n) && !others.some((x) => builderName(x) === n), 'conflict',
-            `"${n}" is not yours: use your builder name ${builderName(login)} (whoami), or it with _ and a suffix, e.g. ${builderName(login)}_fast`);
-        // a competitor of someone else's: the arena refuses it too, but say so now
-        const theirs = (arenaMethods.status().competitors ?? []).find((c) => c?.name === n);
-        need(!theirs || theirs.owner === `github:${login}`, 'conflict', `"${n}" is another competitor's name; submit under your own (whoami says your builder name)`);
+        const problem = nameProblem(login, n);
+        need(!problem, 'conflict', problem);
         const mine = mySubmissions(login);
-        need(mine.filter((x) => x.state === 'pending' || x.state === 'checking').length < SUBMIT_PENDING, 'conflict',
-            `you have ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
+        const forName = mine.filter((x) => x.name === n);
+        need(forName.filter((x) => x.state === 'pending' || x.state === 'checking').length < SUBMIT_PENDING, 'conflict',
+            `${n} has ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
         const now = Date.now();
-        need(mine.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day`);
+        const today = (xs) => xs.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length;
+        need(today(forName) < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day for one competitor`);
+        need(today(mine) < SUBMIT_PER_DAY_PERSON, 'conflict', `at most ${SUBMIT_PER_DAY_PERSON} submissions a day over all your competitors`);
         const id = `${login}.${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
         const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
             state: 'pending', submittedAt: new Date(now).toISOString() };
@@ -649,8 +671,9 @@ function createWindow(opts = {}) {
     }
     const mcpTools = [
         { name: 'whoami', description: 'Who this app reads the arena as, and what it may do.', inputSchema: schema({}), annotations: RO,
-            call: ({ who }) => ({ login: who.login, role: who.role, app: who.app, builder: builderName(who.login),
-                may: 'read games, replays, standings and research; submit your own bots (arena_guide says how) and follow them (arena_my_submissions)' }) },
+            call: ({ who }) => ({ login: who.login, role: who.role, app: who.app, builder: builderName(who.login), ...(who.agent ? { competitor: who.agent } : {}),
+                may: who.agent ? `read games, replays, standings and research; submit bots as ${who.agent} only (arena_guide says how) and follow them (arena_my_submissions)`
+                    : 'read games, replays, standings and research; submit your own bots (arena_guide says how) and follow them (arena_my_submissions)' }) },
         ...[...ARENA_READ].map((m) => ({
             name: `arena_${m}`, description: METHODS[m].desc, annotations: RO,
             inputSchema: schema(Object.fromEntries(Object.entries(METHODS[m].props).map(([k, t]) => [k, TYPE[t]])), METHODS[m].required ?? []),
@@ -699,19 +722,20 @@ function createWindow(opts = {}) {
             } },
         { name: 'arena_submit',
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-            description: `Submit a bot as your next version. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time.`,
+            description: `Submit a bot as your next version. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time for each competitor. An agent's token (connected with a link for one competitor) submits only as that competitor.`,
             inputSchema: schema({
                 kind: { type: 'string', enum: SUBMIT_KINDS }, note: { type: 'string', description: 'one line: what this version changes and why' },
                 files: { type: 'object', description: 'path -> file content, e.g. {"bot.js": "..."}', additionalProperties: { type: 'string' } },
                 base64: { type: 'array', items: { type: 'string' }, description: 'the paths in files whose content is base64 (binary files of a wasm bundle)' },
                 entry: { type: 'string', description: 'the file that starts the bot, if not bot.js / bot.py' },
-                name: { type: 'string', description: 'the competitor to submit to: your builder name (the default) or it with _ and a suffix, e.g. ana_fast. A new name makes a new competitor of yours' }
+                name: { type: 'string', description: 'the competitor to submit to: your builder name (the default; an agent\'s token: its competitor) or it with _ and a suffix, e.g. ana_fast. A new name makes a new competitor of yours' }
             }, ['kind', 'note', 'files']),
             call: ({ who }, a) => submit(who, a) },
         { name: 'arena_my_submissions', annotations: RO,
-            description: 'Your submissions, newest first: pending, checking, accepted (with the version the arena rates) or rejected (with what to fix).',
+            description: 'Your submissions (an agent\'s token: its competitor\'s), newest first: pending, checking, accepted (with the version the arena rates) or rejected (with what to fix).',
             inputSchema: schema({}),
-            call: ({ who }) => mySubmissions(who.login).map(({ files, base64, ...rest }) => ({ ...rest, ...(files ? { fileNames: Object.keys(files) } : {}) })) }
+            call: ({ who }) => mySubmissions(who.login).filter((x) => !who.agent || x.name === who.agent)
+                .map(({ files, base64, ...rest }) => ({ ...rest, ...(files ? { fileNames: Object.keys(files) } : {}) })) }
     ];
     const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
     const mcp = createMcpHttp({

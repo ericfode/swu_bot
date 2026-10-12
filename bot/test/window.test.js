@@ -737,9 +737,11 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
         const mine = (await call(kim, 'arena_my_submissions')).value;
         assert.deepStrictEqual(mine.map((x) => [x.name, x.state, x.files, x.fileNames]), [['kim_b_two', 'pending', undefined, ['bot.js']], ['kim_b', 'pending', undefined, ['bot.js']]]);
 
-        // at most 3 waiting at once
+        // at most 3 waiting at once for one competitor; another of theirs is counted apart
         assert.strictEqual((await call(kim, 'arena_submit', bot)).error, false);
-        assert.match((await call(kim, 'arena_submit', bot)).value, /3 submissions waiting/);
+        assert.strictEqual((await call(kim, 'arena_submit', bot)).error, false);
+        assert.match((await call(kim, 'arena_submit', bot)).value, /kim_b has 3 submissions waiting/);
+        assert.strictEqual((await call(kim, 'arena_submit', { ...bot, name: 'kim_b_two' })).error, false);
 
         // the arena's intake writes its result back with the project token; the person reads it
         const { files, ...rest } = stored;
@@ -747,6 +749,97 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
         assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'feed-secret', body: '{}' })).status, 403, 'a feed cannot');
         const after = (await call(kim, 'arena_my_submissions')).value.find((x) => x.id === first.id);
         assert.deepStrictEqual([after.state, after.version, after.fileNames], ['accepted', 'kim_b-v1', ['bot.js']]);
+    } finally {
+        await close();
+    }
+});
+
+test('mcp agent: a connect link gives an agent with no browser a token that submits as one competitor only', async () => {
+    const w = makeWindow('w-agent');
+    const { go, close } = await serve(w);
+    try {
+        const site = 'https://swu-arena.fly.dev';
+        const form = (o) => new URLSearchParams(o).toString();
+        const post = (p, body, opts = {}) => go(p, { method: 'POST', body: form(body), type: 'application/x-www-form-urlencoded', ...opts });
+        const session = (l) => `swu_session=${w.auth.sign({ l, exp: Date.now() + 60000 })}`;
+        const unescape = (x) => x.replace(/&#(\d+);/g, (m, c) => String.fromCharCode(c));
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b', 'lee'] }));
+        w.store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'kim_b_old', owner: 'github:someone' }] }));
+        const meta = await (await go('/.well-known/oauth-authorization-server')).json();
+        assert.strictEqual(meta.device_authorization_endpoint, `${site}/oauth/device_authorization`);
+        assert.ok(meta.grant_types_supported.includes('urn:ietf:params:oauth:grant-type:device_code'));
+
+        const start = async (name, label = 'Sprite one') => (await post('/oauth/device_authorization', { name, label })).json();
+        const poll = async (device) => (await post('/oauth/token', { grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: device })).json();
+        const consent = (code, cookie) => go(`/oauth/device?user_code=${encodeURIComponent(code)}`, { cookie });
+        const answer = async (code, decision, login = 'kim-b', origin = site) => {
+            const page = await (await consent(code, session(login))).text();
+            const tx = unescape(/name="tx" value="([^"]+)"/.exec(page)[1]);
+            return post('/oauth/device', { tx, decision }, { cookie: session(login), origin });
+        };
+        assert.strictEqual((await post('/oauth/device_authorization', { name: 'Bad-Name' })).status, 400);
+
+        const d = await start('kim_b_sprite');
+        assert.match(d.user_code, /^[B-Z]{4}-[B-Z]{4}$/);
+        assert.strictEqual(d.verification_uri_complete, `${site}/oauth/device?user_code=${d.user_code}`);
+        assert.strictEqual((await poll(d.device_code)).error, 'authorization_pending');
+        assert.strictEqual((await poll(d.device_code)).error, 'slow_down', 'polled again at once');
+
+        // the person's side: sign in first; only invited people; the code typed in any case and spacing
+        assert.match(await (await consent(d.user_code)).text(), /Sign in with GitHub/);
+        assert.strictEqual((await consent(d.user_code, session('stranger'))).status, 403);
+        assert.strictEqual((await consent('ZZZZ-ZZZZ', session('kim-b'))).status, 404);
+        const page = await (await consent(d.user_code.toLowerCase().replace('-', ' '), session('kim-b'))).text();
+        assert.ok(page.includes(d.user_code) && page.includes('kim_b_sprite') && page.includes('Sprite one'), 'the page names the code, the competitor and the agent');
+        const tx = unescape(/name="tx" value="([^"]+)"/.exec(page)[1]);
+        assert.strictEqual((await post('/oauth/device', { tx, decision: 'allow' }, { cookie: session('kim-b') })).status, 403, 'no Origin');
+        assert.strictEqual((await post('/oauth/device', { tx, decision: 'allow' }, { cookie: session('lee'), origin: site })).status, 400, 'someone else signed in');
+        assert.match(await (await post('/oauth/device', { tx, decision: 'allow' }, { cookie: session('kim-b'), origin: site })).text(), /Connected/);
+        const tok = await poll(d.device_code);
+        assert.match(tok.access_token, /^swuk_/);
+        assert.strictEqual(tok.refresh_token, undefined);
+        assert.strictEqual((await poll(d.device_code)).error, 'expired_token', 'one token, once');
+
+        const call = async (t, name, args = {}) => {
+            const r = await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+            if (r.status !== 200) {
+                return { status: r.status };
+            }
+            const j = (await r.json()).result;
+            return { error: !!j.isError, value: j.isError ? j.content[0].text : JSON.parse(j.content[0].text) };
+        };
+        const me = (await call(tok.access_token, 'whoami')).value;
+        assert.deepStrictEqual([me.login, me.competitor, me.app], ['kim-b', 'kim_b_sprite', 'Sprite one']);
+        const bot = { kind: 'js', note: 'from the agent', files: { 'bot.js': "require('./stdio').serve({ decide: (m) => ({ t: 'act', i: 0 }) });" } };
+        assert.strictEqual((await call(tok.access_token, 'arena_submit', bot)).value.name, 'kim_b_sprite', 'its competitor by default');
+        assert.match((await call(tok.access_token, 'arena_submit', { ...bot, name: 'kim_b' })).value, /submits only as kim_b_sprite/);
+        // the person's own app sees everything of theirs; the agent only its competitor's submissions
+        const kim = await mcpToken(w, go, 'kim-b');
+        assert.strictEqual((await call(kim, 'arena_submit', bot)).value.name, 'kim_b');
+        assert.deepStrictEqual((await call(tok.access_token, 'arena_my_submissions')).value.map((x) => x.name), ['kim_b_sprite']);
+        assert.deepStrictEqual((await call(kim, 'arena_my_submissions')).value.map((x) => x.name).sort(), ['kim_b', 'kim_b_sprite']);
+
+        // names: never another person's builder name or competitor (checked when the person answers)
+        for (const name of ['lee', 'kim_b_old']) {
+            const x = await start(name);
+            assert.strictEqual((await consent(x.user_code, session('kim-b'))).status, 403, name);
+        }
+        // a denied link gives nothing
+        const no = await start('kim_b_other');
+        assert.match(await (await answer(no.user_code, 'deny')).text(), /Denied/);
+        assert.strictEqual((await poll(no.device_code)).error, 'access_denied');
+
+        // the agent shows on the person's Build a bot page; connecting the same name again ends the old token
+        const apps = (await (await go('/api/apps', { cookie: session('kim-b') })).json()).result.apps;
+        assert.deepStrictEqual(apps.filter((a) => a.agent).map((a) => [a.app, a.site]), [['Sprite one', 'submits as kim_b_sprite']]);
+        const again = await start('kim_b_sprite', 'Sprite one, again');
+        await answer(again.user_code, 'allow');
+        const tok2 = await poll(again.device_code);
+        assert.strictEqual((await call(tok.access_token, 'whoami')).status, 401, 'the old token for that name is gone');
+        assert.strictEqual((await call(tok2.access_token, 'whoami')).value.competitor, 'kim_b_sprite');
+        const id = (await (await go('/api/apps', { cookie: session('kim-b') })).json()).result.apps.find((a) => a.agent).id;
+        assert.strictEqual((await go('/api/apps', { method: 'POST', cookie: session('kim-b'), origin: site, body: JSON.stringify({ disconnect: id }) })).status, 200);
+        assert.strictEqual((await call(tok2.access_token, 'whoami')).status, 401, 'disconnected on the Build a bot page');
     } finally {
         await close();
     }
