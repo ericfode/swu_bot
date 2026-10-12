@@ -82,6 +82,8 @@ function implementationSnapshot() {
         'bot/omni-wasm/Cargo.toml',
         'bot/card-compiler/compiler.js',
         'bot/card-compiler/build.js',
+        'bot/omni/rs/state.js',
+        'bot/omni/rs/make-pool.js',
     ];
     for (const dir of ['bot/omni-rs/src', 'bot/omni-wasm/src', 'bot/cards/pipeline']) {
         for (const file of fs

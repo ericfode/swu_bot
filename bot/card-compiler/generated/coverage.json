@@ -1,16 +1,16 @@
 {
   "schema": "swu-card-compiler-coverage/v1",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "17abcc273e1bfe6513612ab77dd1bfde89b289906c77579d41a6d05d797c481e",
+  "compilerHash": "e75a4babb1bf1f788a3f44446fb67b06724a399a03dc9469e12794f8085d67ce",
   "knownCards": 2458,
   "mockCardsExcluded": 21,
   "sourceFiles": 2074,
   "sourceDefinitions": 2071,
   "definitionsWithSource": 2050,
-  "converted": 1005,
-  "sourceAstConverted": 666,
+  "converted": 1011,
+  "sourceAstConverted": 672,
   "dataOnlyConverted": 339,
-  "unconverted": 1453,
+  "unconverted": 1447,
   "runtimeReady": null,
   "runtimeReadyNote": "Source compilation is independent of runtime capability validation. The Rust importer validates each operation before accepting a card; this report does not claim executable coverage.",
   "convertedCards": [
@@ -89,6 +89,7 @@
     "ASH_173",
     "ASH_174",
     "ASH_175",
+    "ASH_177",
     "ASH_179",
     "ASH_181",
     "ASH_185",
@@ -186,6 +187,7 @@
     "HMW_155",
     "HMW_157",
     "HMW_158",
+    "HMW_162",
     "HMW_163",
     "HMW_164",
     "HMW_165",
@@ -193,6 +195,7 @@
     "HMW_170",
     "HMW_174",
     "HMW_175",
+    "HMW_176",
     "HMW_177",
     "HMW_178",
     "HMW_179",
@@ -502,6 +505,7 @@
     "LOF_126",
     "LOF_127",
     "LOF_131",
+    "LOF_132",
     "LOF_133",
     "LOF_134",
     "LOF_135",
@@ -534,6 +538,7 @@
     "LOF_199",
     "LOF_207",
     "LOF_208",
+    "LOF_209",
     "LOF_212",
     "LOF_213",
     "LOF_214",
@@ -646,6 +651,7 @@
     "SEC_199",
     "SEC_200",
     "SEC_202",
+    "SEC_203",
     "SEC_204",
     "SEC_206",
     "SEC_213",
@@ -2770,20 +2776,6 @@
         "SOR_151",
         "SOR_234",
         "TWI_256"
-      ]
-    },
-    {
-      "pattern": "unsupported-modifier-keyword",
-      "occurrences": 8,
-      "cards": [
-        "ASH_068",
-        "ASH_177",
-        "HMW_104",
-        "HMW_162",
-        "HMW_176",
-        "LOF_132",
-        "LOF_209",
-        "SEC_203"
       ]
     },
     {
@@ -5719,6 +5711,13 @@
       ]
     },
     {
+      "pattern": "unsupported-modifier-keyword",
+      "occurrences": 1,
+      "cards": [
+        "ASH_068"
+      ]
+    },
+    {
       "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.additionalPhase",
       "occurrences": 1,
       "cards": [
@@ -8438,21 +8437,6 @@
       ]
     },
     {
-      "setCode": "ASH_177",
-      "internalName": "onyx-cinder#adventure-awaits",
-      "sourcePath": "game/cards/08_ASH/units/OnyxCinderAdventureAwaits.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/08_ASH/units/OnyxCinderAdventureAwaits.ts",
-          "line": 19,
-          "column": 69
-        }
-      ]
-    },
-    {
       "setCode": "ASH_178",
       "internalName": "knobby-white-ice-spider",
       "sourcePath": "game/cards/08_ASH/units/KnobbyWhiteIceSpider.ts",
@@ -10790,14 +10774,6 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/09_HMW/units/GarnacLetTheHuntBegin.ts",
-          "line": 19,
-          "column": 69
-        },
-        {
-          "code": "UNSUPPORTED_SOURCE",
           "pattern": "unsupported-field:initiateAttack",
           "message": "unsupported-field:initiateAttack",
           "file": "game/cards/09_HMW/units/GarnacLetTheHuntBegin.ts",
@@ -11327,21 +11303,6 @@
       ]
     },
     {
-      "setCode": "HMW_162",
-      "internalName": "teebo#striped-hunter",
-      "sourcePath": "game/cards/09_HMW/units/TeeboStripedHunter.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/09_HMW/units/TeeboStripedHunter.ts",
-          "line": 23,
-          "column": 69
-        }
-      ]
-    },
-    {
       "setCode": "HMW_166",
       "internalName": "gungi#fighting-for-kashyyyk",
       "sourcePath": "game/cards/09_HMW/units/GungiFightingForKashyyyk.ts",
@@ -11436,21 +11397,6 @@
           "file": "game/cards/09_HMW/events/RebelOperation.ts",
           "line": 16,
           "column": 9
-        }
-      ]
-    },
-    {
-      "setCode": "HMW_176",
-      "internalName": "village-troublemaker",
-      "sourcePath": "game/cards/09_HMW/units/VillageTroublemaker.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/09_HMW/units/VillageTroublemaker.ts",
-          "line": 21,
-          "column": 58
         }
       ]
     },
@@ -20869,21 +20815,6 @@
       ]
     },
     {
-      "setCode": "LOF_132",
-      "internalName": "grand-inquisitor#youre-right-to-be-afraid",
-      "sourcePath": "game/cards/05_LOF/units/GrandInquisitorYoureRightToBeAfraid.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/05_LOF/units/GrandInquisitorYoureRightToBeAfraid.ts",
-          "line": 22,
-          "column": 69
-        }
-      ]
-    },
-    {
       "setCode": "LOF_137",
       "internalName": "savage-opress#imbued-with-hate",
       "sourcePath": "game/cards/05_LOF/units/SavageOpressImbuedWithHate.ts",
@@ -21604,21 +21535,6 @@
           "file": "game/cards/05_LOF/units/BabuFrikHeyyy.ts",
           "line": 20,
           "column": 29
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_209",
-      "internalName": "tusken-tracker",
-      "sourcePath": "game/cards/05_LOF/units/TuskenTracker.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/05_LOF/units/TuskenTracker.ts",
-          "line": 20,
-          "column": 66
         }
       ]
     },
@@ -24434,21 +24350,6 @@
           "file": "game/cards/06_SEC/units/AnakinSkywalkerSecretHusband.ts",
           "line": 18,
           "column": 37
-        }
-      ]
-    },
-    {
-      "setCode": "SEC_203",
-      "internalName": "tala-durith#i-can-get-you-inside",
-      "sourcePath": "game/cards/06_SEC/units/TalaDurithICanGetYouInside.ts",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/06_SEC/units/TalaDurithICanGetYouInside.ts",
-          "line": 19,
-          "column": 69
         }
       ]
     },

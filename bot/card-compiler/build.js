@@ -38,7 +38,7 @@ function requiredCapabilities(abilities, card, attachCondition) {
 }
 function keywordValues(card) {
     const values = {};
-    const parsedKeywords = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded', 'Coordinate'].map(name => [name.toLowerCase(), name]));
+    const parsedKeywords = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded', 'Coordinate', 'Hidden'].map(name => [name.toLowerCase(), name]));
     // Card's constructor parses text for units; leaders parse deployBox and
     // text separately. Metadata supplies expected names, including mentions
     // that do not become intrinsic keywords without an own-line text match.

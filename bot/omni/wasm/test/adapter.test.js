@@ -96,10 +96,17 @@ test('catalogue JSON supports both all-admitted cards and an exact raw subset po
     const initial = rows.find((row) => row.type === 'state').state;
     try {
         assert.equal(subset.poolHash, rows[0].pool.sha256);
-        for (const simulator of [subset, all]) {
-            const game = simulator.loadState(initial);
+        assert.throws(() => all.loadState(initial), /requires explicit Hidden phase history/);
+        // This fixture starts before any arena entry, so no per-unit history is inferred.
+        for (const player of Object.values(initial.players)) {
+            assert.equal(player.ground.length, 0);
+            assert.equal(player.space.length, 0);
+        }
+        const versioned = { ...structuredClone(initial), hiddenHistoryVersion: 1 };
+        for (const [simulator, snapshot] of [[subset, initial], [all, versioned]]) {
+            const game = simulator.loadState(snapshot);
             try {
-                assert.deepEqual(game.snapshot(), initial);
+                assert.deepEqual(game.snapshot(), snapshot);
                 assert.equal(game.prove({ nodes: 0 }).complete, false);
             } finally { game.free(); }
         }

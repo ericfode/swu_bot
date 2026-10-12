@@ -1,6 +1,6 @@
 # Card source conversion coverage
 
-Known card definitions: **2458**. IR-converted definitions: **1005** (666 from source AST; 339 metadata-only plain cards). Explicitly blocked definitions: **1453**. Excluded test mocks: 21.
+Known card definitions: **2458**. IR-converted definitions: **1011** (672 from source AST; 339 metadata-only plain cards). Explicitly blocked definitions: **1447**. Excluded test mocks: 21.
 
 These counts measure bounded IR conversion, not runtime acceptance. Metadata-only conversion handles plain bases and fully parsed keyword-only units without a source class. The Rust runtime separately validates its supported operation set. Unsupported definitions retain their source locations and must not be loaded as no-op cards.
 
@@ -75,7 +75,6 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | registrar:addReplacementEffectAbility | 8 | 8 |
 | trigger-alias-hook:onAttackDeclared | 8 | 8 |
 | unsupported-field:source | 8 | 8 |
-| unsupported-modifier-keyword | 8 | 8 |
 | unsupported-query:getAllTargets | 8 | 8 |
 | unsupported-query:hasSomeArenaCard | 8 | 8 |
 | unsupported-query:targetIsUnit | 8 | 8 |
@@ -445,6 +444,7 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | unsupported-field:target | 1 | 1 |
 | unsupported-field:targetPlayer | 1 | 1 |
 | unsupported-hand-discard-field:cardCondition | 1 | 1 |
+| unsupported-modifier-keyword | 1 | 1 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.additionalPhase | 1 | 1 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.assignIndirectDamageDealtToOpponents | 1 | 1 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.blankEventCard | 1 | 1 |

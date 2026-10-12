@@ -22,9 +22,26 @@ Trace schema `omni-rs-trace-v1` begins at the first action window. Setup and mul
 - `decision`: `step`, acting seat (`p1`/`p2`), prompt type/title/selected stable IDs/action-window flag, canonical legal `actions`, chosen key, and engine coverage events emitted while applying that choice.
 - `result`: final step, winner (`p1`, `p2`, or `draw`) and full terminal `state`.
 
-`state` has `round`, `phase`, `initiative`, `initiativeClaimed`, `prevPassed`, `activePlayer`, `actor`, `winner`, `nextCardId`, and `players`. `nextCardId` is the length of the engine's complete card registry, including tokens outside visible zones, so future Shield IDs remain reproducible.
+`state` has `hiddenHistoryVersion`, `arenaUnitOrder`, `round`, `phase`, `initiative`, `initiativeClaimed`, `prevPassed`, `activePlayer`, `actor`, `winner`, `nextCardId`, and `players`. `nextCardId` is the length of the engine's complete card registry, including tokens outside visible zones, so future Shield IDs remain reproducible.
 
 Each player's state has `hand`, top-first `deck`, ordered `resources` with `exhausted`, ordered `discard`, `ground`, `space`, `leader`, `base`, and `out` (finished with this action phase). Cards use `{id, setCode, name}`, where IDs are `EnvGame.cardId` values such as `c17`. Shield uses `TOKEN_SHIELD`. Units include `damage`, `exhausted`, observed `power`/`hp`, and ordered `upgrades` with a token flag. Leaders include `deployed`, `exhausted`, and `epicUsed`; a deployed leader also appears in its arena with its unit statistics. Bases include `damage`, `hp`, and `epicUsed`. `prevPassed` identifies a prior consecutive pass; `out` is distinct from a temporary pass.
+
+New full states include `hiddenHistoryVersion: 1` and a boolean `hiddenQualified`
+for every arena unit, even units without Hidden. The value comes from the engine's
+play, deployment and token-creation watchers. Ordinary unit play is tied to the
+current in-play incarnation; generic arena placement does not qualify. Current
+Hidden presence and qualification are independent: a later grant can protect a
+qualified unit, expiry clears qualification without removing a printed keyword,
+and live Sentinel overrides Hidden's attack restriction. Saboteur does not.
+
+The loader rejects unknown history versions, incomplete per-unit evidence and
+unversioned Hidden phase effects. Existing immutable traces can omit these fields
+only when the selected pool cannot reach intrinsic or granted Hidden. That
+compatibility check uses the selected pool, not all definitions loaded from a
+larger catalog. Legacy snapshots keep their original output and hash shape.
+Current admitted movement does not reuse a departed token or redeploy a spent
+leader within the phase; supporting such movement will require preserving the
+engine's identity-based deployment/creation history outside the arena as well.
 
 ## Canonical action identity
 

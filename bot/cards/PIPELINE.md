@@ -115,6 +115,17 @@ and live damage changes have construction adapters. Other shapes remain visible
 as uncovered obligations. This is extensible experiment generation, not exhaustive
 state-space exploration.
 
+Hidden experiments distinguish ordinary play from arena placement, observe phase
+expiry, and compare ordinary and Saboteur attack menus. Actual source programs
+exercise grants to previously played versus staged units, trait/controller/arena
+filters, grant-source departure, conditional base traits, intrinsic Raid and
+Saboteur combat, defense returns with Overwhelm, death exhaustion, live resource
+counts, Hidden queries after expiry and their three-target limit, and healing
+continuations based on actual damage healed. Full states carry explicit phase
+history for every arena unit. Synthetic grant/removal, Sentinel, reentry and
+history-import checks remain separate diagnostics; unconstructed leader/token
+history and controller-change interactions stay explicit coverage gaps.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

@@ -120,6 +120,8 @@ pub struct Card {
     pub phase_keyword_values: [u16; 2],
     pub phase_keyword_presence: u8,
     pub phase_lost_keywords: u8,
+    /// Current phase play/deploy/create qualification, independent of live Hidden.
+    pub hidden_state: u8,
     pub exhausted: bool,
     pub deployed: bool,
     pub epic_used: bool,
@@ -265,6 +267,7 @@ pub struct State {
     pub arena_unit_order:[ArenaOrder;2],
     /// False only for immutable legacy imports without ordinary upgrades.
     pub arena_order_exact:bool,
+    pub hidden_history_exact:bool,
     pub round: u16,
     pub regroup: bool,
     pub initiative: Seat,
@@ -311,7 +314,7 @@ impl Default for State {
             cards: [Card::default(); MAX_CARDS],
             next_id: 1,
             players: [Player::default(); 2],
-            arena_unit_order:[ArenaOrder::default();2],arena_order_exact:true,
+            arena_unit_order:[ArenaOrder::default();2],arena_order_exact:true,hidden_history_exact:false,
             round: 1,
             regroup: false,
             initiative: Seat::P1,
@@ -406,6 +409,7 @@ impl State {
         put(self.arena_order_exact as u64);
         for arena in self.arena_unit_order {put(arena.len as u64);for id in arena.ids {put(id as u64);}}
         put(self.round as u64);
+        if self.hidden_history_exact {put(1); }
         put(self.regroup as u64);
         put(self.initiative.index() as u64);
         put(self.initiative_claimed as u64);
@@ -448,6 +452,14 @@ impl State {
             put(self.resource_done[n] as u64);
             put(self.resource_selected[n] as u64);
         }
+        // Qualification is observable only for current arena members. Build
+        // membership once rather than scanning every zone for every card.
+        let mut hidden_arena_members=[false;MAX_CARDS];
+        if self.hidden_history_exact {
+            for player in &self.players {for arena in [&player.ground,&player.space] {
+                for &id in arena.as_slice() {hidden_arena_members[id as usize]=true;}
+            }}
+        }
         for (idx, c) in self
             .cards
             .iter()
@@ -462,6 +474,11 @@ impl State {
             for amount in c.phase_keyword_values { put(amount as u64); }
             put(c.phase_lost_keywords as u64);
             put(c.phase_keyword_presence as u64);
+            if self.hidden_history_exact {
+                let in_arena=hidden_arena_members[idx];
+                // Identity history outside the arena is inert in the admitted no-reentry domain.
+                put((c.hidden_state & if in_arena {u8::MAX}else{!1}) as u64);
+            }
             put(c.next_token as u64);
             put(c.parent as u64);put(c.upgrades as u64);put(c.next_upgrade as u64);
             put(c.def as u64
@@ -536,7 +553,14 @@ impl Action {
 }
 
 impl Card {
+    pub fn hidden_qualified(&self)->bool {self.hidden_state & 1 != 0}
+    pub fn set_hidden_qualified(&mut self,value:bool) {self.hidden_state=(self.hidden_state & !1)|u8::from(value);}
+    pub fn phase_keyword_mask(&self)->u16 {self.phase_keyword_presence as u16 | if self.hidden_state&2!=0 {1<<8}else{0}}
+    pub fn lost_keyword_mask(&self)->u16 {self.phase_lost_keywords as u16 | if self.hidden_state&4!=0 {1<<8}else{0}}
+    pub fn add_phase_keyword(&mut self,index:usize) {if index==8 {self.hidden_state|=2;}else{self.phase_keyword_presence|=1<<index;}}
+    pub fn add_lost_keyword(&mut self,index:usize) {if index==8 {self.hidden_state|=4;}else{self.phase_lost_keywords|=1<<index;}}
+    pub fn clear_hidden_phase_effects(&mut self) {self.hidden_state &= 1;}
     pub fn phase_keyword_amount(&self, index: usize) -> u16 {
-        if index >= 6 { self.phase_keyword_values[index - 6] } else { u16::from(self.phase_keyword_presence & (1 << index) != 0) }
+        if let Some(slot) = crate::ability_ir::numeric_keyword_slot(index) { self.phase_keyword_values[slot] } else { u16::from(self.phase_keyword_mask() & (1 << index) != 0) }
     }
 }

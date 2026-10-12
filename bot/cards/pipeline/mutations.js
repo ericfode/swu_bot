@@ -40,6 +40,11 @@ function mutants(entry) {
             add([...path, 'target'], 'swap-effect-owner', target => ({ownBase:'enemyBase',enemyBase:'ownBase',ownPlayer:'enemyPlayer',enemyPlayer:'ownPlayer'})[target]);
         if (value.kind === 'returnToHand' && value.target === 'chosen')
             add([...path, 'kind'], 'defeat-instead-of-return', () => 'defeat');
+        if (value.kind === 'query' && value.name === 'hasSomeKeyword' &&
+            value.args?.length === 1 && value.args[0].kind === 'const' && value.args[0].value === 'hidden')
+            add([...path, 'args', 0, 'value'], 'sentinel-instead-of-hidden-query', () => 'sentinel');
+        if (['gainKeyword','loseKeyword'].includes(value.kind) && value.keyword === 'hidden')
+            add([...path, 'keyword'], 'sentinel-instead-of-hidden-modifier', () => 'sentinel');
         if (value.kind === 'query' && value.name === 'isUpgrade')
             add([...path, 'name'], 'unit-type-instead-of-upgrade', () => 'isUnit');
         if (value.kind === 'query' && value.name === 'hasSomeTrait' &&
@@ -69,6 +74,9 @@ function mutants(entry) {
             add([...path, 'type'], 'units-only', () => 'unit');
         for (const [key, child] of Object.entries(value)) walk(child, [...path, key]);
     }
+    for (const keyword of Object.keys(entry.keywordValues ?? {}).sort())
+        add(['keywordValues'], 'remove-intrinsic-' + keyword, values =>
+            Object.fromEntries(Object.entries(values).filter(([name]) => name !== keyword)));
     walk(entry.abilities, ['abilities']);
     walk(entry.attachCondition, ['attachCondition']);
     return out;

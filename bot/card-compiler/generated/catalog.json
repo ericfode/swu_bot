@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "17abcc273e1bfe6513612ab77dd1bfde89b289906c77579d41a6d05d797c481e",
+  "compilerHash": "e75a4babb1bf1f788a3f44446fb67b06724a399a03dc9469e12794f8085d67ce",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -32184,7 +32184,9 @@
         "internalName": "8d8#daimyos-majordomo"
       },
       "dataHash": "9140e27ab862f1f308893a6d22ed9c4f0a0f87c1a46510341e59e3b6e2c15d60",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -32845,7 +32847,9 @@
         "internalName": "stolen-eta-shuttle"
       },
       "dataHash": "140b2480ca2e5195a38c3b2a9f8b2ffd18b7b9aa272420d43b369676be4f0e3d",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "ir:const",
@@ -35482,7 +35486,9 @@
         "internalName": "kachirho-militia"
       },
       "dataHash": "a53aef6ebc387be4935427a7cc531efa3b86d19d4dfbf6d54f19c3eb108c39f2",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -35917,7 +35923,9 @@
         "internalName": "ewok-warrior"
       },
       "dataHash": "1a02ebaed00816aa71b3318ff30242ecde372db65e264ba5f856db3599e44cdb",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -36731,23 +36739,51 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "constant",
+            "title": "Other friendly units gain Hidden",
+            "costs": [],
+            "effect": {
+              "kind": "gainKeyword",
+              "target": "chosen",
+              "duration": "persistent",
+              "keyword": "hidden",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            },
+            "targetResolver": {
+              "owner": "self",
+              "type": "unit",
+              "zone": "arena",
+              "predicate": {
+                "kind": "binary",
+                "op": "!==",
+                "left": {
+                  "kind": "ref",
+                  "path": [
+                    "card"
+                  ]
+                },
+                "right": {
+                  "kind": "ref",
+                  "path": [
+                    "source"
+                  ]
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/08_ASH/units/OnyxCinderAdventureAwaits.ts",
-          "line": 19,
-          "column": 69
-        }
-      ],
+      "diagnostics": [],
       "className": "OnyxCinderAdventureAwaits",
       "baseClass": "NonLeaderUnitCard",
       "id": "0792086629",
       "internalName": "onyx-cinder#adventure-awaits",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Onyx Cinder",
         "subtitle": "Adventure Awaits",
@@ -36789,10 +36825,22 @@
         "internalName": "onyx-cinder#adventure-awaits"
       },
       "dataHash": "d7d02d298301a70e3bd8ee1bd1540f31d56d84cb87ec66dc3ce83132cfa45e55",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
+        "binary:!==",
         "cardType:unit",
-        "keyword:hidden"
+        "ir:binary",
+        "ir:const",
+        "ir:gainKeyword",
+        "ir:ref",
+        "keyword:hidden",
+        "ref:card",
+        "ref:source",
+        "targetType:unit",
+        "targetZone:arena",
+        "trigger:constant"
       ]
     },
     {
@@ -36859,7 +36907,9 @@
         "internalName": "knobby-white-ice-spider"
       },
       "dataHash": "e39e8aa4bdafcfc75ab827db9611714fbf7fc58c82cd061f8c5b374dfa17a775",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -39921,7 +39971,9 @@
         "internalName": "womp-rat"
       },
       "dataHash": "b98beacc4fde06854bdc40330871d802262ab9798a2068eb2a76393a1194c8e8",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -40809,7 +40861,9 @@
         "internalName": "tatooine-sand-beast"
       },
       "dataHash": "841e24f3aa868d5a8eaa71b9aa5451359624027d0e0d7505c05c2dbf29a9ca14",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -42389,7 +42443,9 @@
         "internalName": "remnant-trooper-corps"
       },
       "dataHash": "757811404e48991b93420c7969840e9a469bbbe739b7a81211ca100f2b8806cd",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -42758,7 +42814,9 @@
         "internalName": "covert-veteran"
       },
       "dataHash": "6690b27aa8f86f31184b2e4db6872859434b0517a60a27fe159562d19cbd9192",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -43234,6 +43292,7 @@
       },
       "dataHash": "7cb011f47ac86eb52a61508810821758f88c9b8b63213bf0176b3a8f0aeebf73",
       "keywordValues": {
+        "hidden": 1,
         "saboteur": 1
       },
       "requiredCapabilities": [
@@ -44030,7 +44089,9 @@
         "internalName": "maz-kanata#eclectic-pirate-queen"
       },
       "dataHash": "ea0f92ee01e99145f0fd70700910a1bf33a69d2838c7f1943e1028fe72b960e7",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:leader",
         "keyword:hidden"
@@ -45056,7 +45117,9 @@
         "internalName": "darth-sidious#there-is-no-mercy"
       },
       "dataHash": "fe0c268df4c306ca5562cf79b7a953b1386e5843424c1485a6f823ce31c0f3a5",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:leader",
         "keyword:hidden"
@@ -48600,7 +48663,9 @@
         "internalName": "yoda#trickster-in-exile"
       },
       "dataHash": "f987d4970e09e902c8c2f38991bc15ee7a60fabf513aa861fb8616fa719e6f2e",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -52710,17 +52775,52 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "constant",
+            "title": "While an opponent controls a unique unit, this unit gains Hidden.",
+            "costs": [],
+            "effect": {
+              "kind": "gainKeyword",
+              "target": "self",
+              "duration": "persistent",
+              "keyword": "hidden",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            },
+            "condition": {
+              "kind": "query",
+              "name": "hasSomeArenaUnit",
+              "receiver": {
+                "kind": "ref",
+                "path": [
+                  "opponent"
+                ]
+              },
+              "args": [
+                {
+                  "kind": "binary",
+                  "op": "&&",
+                  "left": {
+                    "kind": "const",
+                    "value": true
+                  },
+                  "right": {
+                    "kind": "ref",
+                    "path": [
+                      "card",
+                      "unique"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
       },
       "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/09_HMW/units/GarnacLetTheHuntBegin.ts",
-          "line": 19,
-          "column": 69
-        },
         {
           "code": "UNSUPPORTED_SOURCE",
           "pattern": "unsupported-field:initiateAttack",
@@ -52778,8 +52878,18 @@
       "dataHash": "9d1ba2a260e286838eca5fa84f1d0b364d8169b9b9015239d18f35608ecaacb5",
       "keywordValues": {},
       "requiredCapabilities": [
+        "binary:&&",
         "cardType:unit",
-        "keyword:hidden"
+        "ir:binary",
+        "ir:const",
+        "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "keyword:hidden",
+        "query:hasSomeArenaUnit",
+        "ref:card.unique",
+        "ref:opponent",
+        "trigger:constant"
       ]
     },
     {
@@ -55293,7 +55403,9 @@
         "internalName": "zam-wesell#not-what-she-seems"
       },
       "dataHash": "816077ae117d8312db19304aa8b84c5b8b7677cf6d9133a60d4c697e450fe665",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -57471,23 +57583,107 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "constant",
+            "title": "Other friendly Ewok units gain Hidden",
+            "costs": [],
+            "effect": {
+              "kind": "gainKeyword",
+              "target": "chosen",
+              "duration": "persistent",
+              "keyword": "hidden",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            },
+            "targetResolver": {
+              "owner": "self",
+              "type": "unit",
+              "zone": "arena",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "binary",
+                  "op": "&&",
+                  "left": {
+                    "kind": "binary",
+                    "op": "&&",
+                    "left": {
+                      "kind": "query",
+                      "name": "isUnit",
+                      "receiver": {
+                        "kind": "ref",
+                        "path": [
+                          "card"
+                        ]
+                      },
+                      "args": []
+                    },
+                    "right": {
+                      "kind": "query",
+                      "name": "hasSomeTrait",
+                      "receiver": {
+                        "kind": "ref",
+                        "path": [
+                          "card"
+                        ]
+                      },
+                      "args": [
+                        {
+                          "kind": "const",
+                          "value": "ewok"
+                        }
+                      ]
+                    }
+                  },
+                  "right": {
+                    "kind": "binary",
+                    "op": "===",
+                    "left": {
+                      "kind": "ref",
+                      "path": [
+                        "card",
+                        "controller"
+                      ]
+                    },
+                    "right": {
+                      "kind": "ref",
+                      "path": [
+                        "player"
+                      ]
+                    }
+                  }
+                },
+                "right": {
+                  "kind": "binary",
+                  "op": "!==",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "right": {
+                    "kind": "ref",
+                    "path": [
+                      "source"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/09_HMW/units/TeeboStripedHunter.ts",
-          "line": 23,
-          "column": 69
-        }
-      ],
+      "diagnostics": [],
       "className": "TeeboStripedHunter",
       "baseClass": "NonLeaderUnitCard",
       "id": "9629078251",
       "internalName": "teebo#striped-hunter",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Teebo",
         "subtitle": "Striped Hunter",
@@ -57529,10 +57725,29 @@
         "internalName": "teebo#striped-hunter"
       },
       "dataHash": "22953c542f42f2ff22e6c6040d7b5b47ef9cf121199ba08ea81dad4641f76033",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
+        "binary:!==",
+        "binary:&&",
+        "binary:===",
         "cardType:unit",
-        "keyword:hidden"
+        "ir:binary",
+        "ir:const",
+        "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "keyword:hidden",
+        "query:hasSomeTrait",
+        "query:isUnit",
+        "ref:card",
+        "ref:card.controller",
+        "ref:player",
+        "ref:source",
+        "targetType:unit",
+        "targetZone:arena",
+        "trigger:constant"
       ]
     },
     {
@@ -58654,23 +58869,83 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "constant",
+            "title": "While you control an Endor base, this unit gains Hidden and Saboteur",
+            "costs": [],
+            "effect": {
+              "kind": "simultaneous",
+              "effects": [
+                {
+                  "kind": "gainKeyword",
+                  "target": "chosen",
+                  "duration": "persistent",
+                  "keyword": "hidden",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                },
+                {
+                  "kind": "gainKeyword",
+                  "target": "chosen",
+                  "duration": "persistent",
+                  "keyword": "saboteur",
+                  "amount": {
+                    "kind": "const",
+                    "value": 1
+                  }
+                }
+              ]
+            },
+            "condition": {
+              "kind": "query",
+              "name": "hasSomeTrait",
+              "receiver": {
+                "kind": "ref",
+                "path": [
+                  "player",
+                  "base"
+                ]
+              },
+              "args": [
+                {
+                  "kind": "const",
+                  "value": "endor"
+                }
+              ]
+            },
+            "targetResolver": {
+              "owner": "self",
+              "type": "unit",
+              "zone": "arena",
+              "predicate": {
+                "kind": "binary",
+                "op": "===",
+                "left": {
+                  "kind": "ref",
+                  "path": [
+                    "card"
+                  ]
+                },
+                "right": {
+                  "kind": "ref",
+                  "path": [
+                    "source"
+                  ]
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/09_HMW/units/VillageTroublemaker.ts",
-          "line": 21,
-          "column": 58
-        }
-      ],
+      "diagnostics": [],
       "className": "VillageTroublemaker",
       "baseClass": "NonLeaderUnitCard",
       "id": "6012814125",
       "internalName": "village-troublemaker",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Village Troublemaker",
         "subtitle": "",
@@ -58714,9 +58989,23 @@
       "dataHash": "40ca9f1f9b96296dcf6bd199e8f1a0b168009685459b7ac36e1b59afafc0e91d",
       "keywordValues": {},
       "requiredCapabilities": [
+        "binary:===",
         "cardType:unit",
+        "ir:binary",
+        "ir:const",
+        "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "ir:simultaneous",
         "keyword:hidden",
-        "keyword:saboteur"
+        "keyword:saboteur",
+        "query:hasSomeTrait",
+        "ref:card",
+        "ref:player.base",
+        "ref:source",
+        "targetType:unit",
+        "targetZone:arena",
+        "trigger:constant"
       ]
     },
     {
@@ -59327,6 +59616,7 @@
       },
       "dataHash": "fb70b7206f71b1a445ab1ffce01f309c7e64d785ad138dcdf80afdf871bfe84d",
       "keywordValues": {
+        "hidden": 1,
         "overwhelm": 1
       },
       "requiredCapabilities": [
@@ -59688,7 +59978,9 @@
         "internalName": "dathomiri-rancor"
       },
       "dataHash": "fa5e922f0c8cb4d76dbcd658873bf9f1e4542240fdd92f4d78330086d93cb3ae",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -60683,7 +60975,9 @@
         "internalName": "rish-loo#traitorous-minister"
       },
       "dataHash": "ca7d7b047c0627a8c0544487a49550a5b1e76914a5f1f2be2fe2926a511818cf",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -61719,7 +62013,9 @@
         "internalName": "phee-genoa#liberator-of-ancient-wonders"
       },
       "dataHash": "d7210a0408bff429dfd3e4d5611d9296e5e7e5a23e30d2c0a593255198d6a962",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -62826,7 +63122,9 @@
         "internalName": "lurking-wampa"
       },
       "dataHash": "890b1c51dd8014bf8553c7bd5898c3434f24c4af45717b2881f08c3562ca74ab",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -63310,7 +63608,9 @@
         "internalName": "awakened-exogorth"
       },
       "dataHash": "a5b3cb7b0c3b0f5f4ca5a56edd97f38d3d28088b04789e7d6492a80738d35362",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "binary:&&",
         "binary:===",
@@ -99554,7 +99854,9 @@
         "internalName": "l337#radical-instigator"
       },
       "dataHash": "2d287d1e81e9732cf2f745f26c95caf2cb89b333b1307f4dfd521167df7c126f",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -101550,6 +101852,7 @@
       },
       "dataHash": "f483ac2877212f1e70507585541f7377d30c0b0896f94e550efacd5d3cc8f94d",
       "keywordValues": {
+        "hidden": 1,
         "raid": 4
       },
       "requiredCapabilities": [
@@ -107915,7 +108218,9 @@
         "internalName": "hidden-hunters"
       },
       "dataHash": "3624503a0cff5ef9223ca62930607a18cbfcd760ac85d04d413ccb43f56d4ce8",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -109864,7 +110169,9 @@
         "internalName": "ben-solo#facing-the-light"
       },
       "dataHash": "c015cf85eef1ba538f650c5fcd0ed64211ac402c62d5d5aed45adbfd18d19bc2",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -110144,7 +110451,9 @@
         "internalName": "savareen-survivor"
       },
       "dataHash": "bbfcd9c70ec515cc7e58e99f5cb7951f2b183c7ef651d2a5d4be951904d0da58",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -111793,7 +112102,9 @@
         "internalName": "nihil-stormsower"
       },
       "dataHash": "3fff9c2267494f3320a2975de893775878203d91e6504727912c26e92fbb3fb0",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -112349,7 +112660,9 @@
         "internalName": "jabbas-rancor#snack-time"
       },
       "dataHash": "1aef81d2869696be3cd3b9592d0424e2d91ac5ea0168ba50f756da4b763a5a72",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -112640,6 +112953,7 @@
       },
       "dataHash": "a5a28ef81c56209794c2b937200dcd85473fb3c4971ffda27fe63303725a2bb0",
       "keywordValues": {
+        "hidden": 1,
         "raid": 2
       },
       "requiredCapabilities": [
@@ -115714,7 +116028,9 @@
         "internalName": "seasoned-tracker"
       },
       "dataHash": "bfc11f99a3055868d75194fcd343372e3e4f2ce9e495684f93da46647f4b87c0",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -117172,7 +117488,9 @@
         "internalName": "third-sister#seething-with-ambition"
       },
       "dataHash": "b5b47bd8938bd3535029b318689ad05c49dd452689dc7dd3096fa183b6f2e402",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:leader",
         "keyword:hidden"
@@ -123768,6 +124086,7 @@
       },
       "dataHash": "6703137ba8bc64895963a908adb32844da198b0abbe7d1edc4d8223cd1901405",
       "keywordValues": {
+        "hidden": 1,
         "ambush": 1,
         "overwhelm": 1,
         "restore": 1
@@ -125569,6 +125888,7 @@
       },
       "dataHash": "4c266d1c9edbee8d18d41a30d08a4cc89107d5a86e80737f14784f79e256d696",
       "keywordValues": {
+        "hidden": 1,
         "restore": 1
       },
       "requiredCapabilities": [
@@ -127444,23 +127764,86 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "constant",
+            "title": "Other friendly Inquisitor units gain Hidden",
+            "costs": [],
+            "effect": {
+              "kind": "gainKeyword",
+              "target": "chosen",
+              "duration": "persistent",
+              "keyword": "hidden",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            },
+            "targetResolver": {
+              "owner": "self",
+              "type": "unit",
+              "zone": "arena",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "binary",
+                  "op": "&&",
+                  "left": {
+                    "kind": "binary",
+                    "op": "!==",
+                    "left": {
+                      "kind": "ref",
+                      "path": [
+                        "card"
+                      ]
+                    },
+                    "right": {
+                      "kind": "ref",
+                      "path": [
+                        "source"
+                      ]
+                    }
+                  },
+                  "right": {
+                    "kind": "query",
+                    "name": "isUnit",
+                    "receiver": {
+                      "kind": "ref",
+                      "path": [
+                        "card"
+                      ]
+                    },
+                    "args": []
+                  }
+                },
+                "right": {
+                  "kind": "query",
+                  "name": "hasSomeTrait",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": [
+                    {
+                      "kind": "const",
+                      "value": "inquisitor"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/05_LOF/units/GrandInquisitorYoureRightToBeAfraid.ts",
-          "line": 22,
-          "column": 69
-        }
-      ],
+      "diagnostics": [],
       "className": "GrandInquisitorYoureRightToBeAfraid",
       "baseClass": "NonLeaderUnitCard",
       "id": "0686684746",
       "internalName": "grand-inquisitor#youre-right-to-be-afraid",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Grand Inquisitor",
         "subtitle": "You're Right to Be Afraid",
@@ -127506,12 +127889,27 @@
       },
       "dataHash": "09a98bd41a181349dc05d9f420f5e57a4afe0dc3925729802810c30220e80763",
       "keywordValues": {
+        "hidden": 1,
         "raid": 1
       },
       "requiredCapabilities": [
+        "binary:!==",
+        "binary:&&",
         "cardType:unit",
+        "ir:binary",
+        "ir:const",
+        "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
         "keyword:hidden",
-        "keyword:raid"
+        "keyword:raid",
+        "query:hasSomeTrait",
+        "query:isUnit",
+        "ref:card",
+        "ref:source",
+        "targetType:unit",
+        "targetZone:arena",
+        "trigger:constant"
       ]
     },
     {
@@ -128534,7 +128932,9 @@
         "internalName": "attuned-fyrnock"
       },
       "dataHash": "3b563c3f9ed8419bd9f2a19b1253eaa7aab9011bdb02a64874686530189f310e",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -129512,7 +129912,9 @@
         "internalName": "witch-of-the-mist"
       },
       "dataHash": "5f9b815d13ff94bafad76dca2c0462971255b031618d4500fb373b75427df2f7",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -129997,7 +130399,9 @@
         "internalName": "jedi-in-hiding"
       },
       "dataHash": "beb9428beb266a65a04f54efdb618fdae2f8f4528fcce3b458ce58d8a0ee52fb",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -130166,7 +130570,9 @@
         "internalName": "tukata"
       },
       "dataHash": "54120fa9109613097a0fe3bbb79c2da380cb20fdc7dde3714d385a70e42ca6a1",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -132013,6 +132419,7 @@
       },
       "dataHash": "d8fa9bad465aad62a4549d273dcfe73a8b8ae0b17d66cbad3fae20fd3816c801",
       "keywordValues": {
+        "hidden": 1,
         "raid": 2
       },
       "requiredCapabilities": [
@@ -132166,7 +132573,9 @@
         "internalName": "banking-clan-shuttle"
       },
       "dataHash": "e072926e3ded9e5fac9d5bcce42934dfe0ea1f6fb46fe6956e7ac06c6f0699f4",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -132302,6 +132711,7 @@
       },
       "dataHash": "7aa2003a1e7e77965861b3518a3e8729828245cace04b448d6184150387e0239",
       "keywordValues": {
+        "hidden": 1,
         "shielded": 1
       },
       "requiredCapabilities": [
@@ -132446,7 +132856,9 @@
         "internalName": "baylan-skoll#enigmatic-master"
       },
       "dataHash": "096503f6f510460c3173f519132ec44465f11c374c0c7c006bc10bc4ad6345a6",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -132828,6 +133240,7 @@
       },
       "dataHash": "78969b90a9bbb584120a3a4cd18b377b5592668f421a1e24127b0097697e2cd8",
       "keywordValues": {
+        "hidden": 1,
         "shielded": 1
       },
       "requiredCapabilities": [
@@ -132903,7 +133316,9 @@
         "internalName": "bd1#beep-boo-boo-bweep"
       },
       "dataHash": "8c94800191acd48358ace02601ff35e720da79a7fab4443c10c4c2c38488d3cc",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden",
@@ -134207,23 +134622,38 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Each enemy unit loses Hidden for this phase",
+            "costs": [],
+            "effect": {
+              "kind": "loseKeyword",
+              "target": {
+                "kind": "arenaList",
+                "receiver": {
+                  "kind": "ref",
+                  "path": [
+                    "opponent"
+                  ]
+                },
+                "predicate": {
+                  "kind": "const",
+                  "value": true
+                }
+              },
+              "duration": "phase",
+              "keyword": "hidden"
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/05_LOF/units/TuskenTracker.ts",
-          "line": 20,
-          "column": 66
-        }
-      ],
+      "diagnostics": [],
       "className": "TuskenTracker",
       "baseClass": "NonLeaderUnitCard",
       "id": "1548886844",
       "internalName": "tusken-tracker",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Tusken Tracker",
         "subtitle": "",
@@ -134270,8 +134700,14 @@
       },
       "requiredCapabilities": [
         "cardType:unit",
+        "ir:arenaList",
+        "ir:const",
+        "ir:loseKeyword",
+        "ir:ref",
         "keyword:hidden",
-        "keyword:raid"
+        "keyword:raid",
+        "ref:opponent",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -134338,7 +134774,8 @@
       },
       "dataHash": "b846d33186318baa6ead55c282be0b353b01b0278b15e66d07115360e9e5cd0b",
       "keywordValues": {
-        "ambush": 1
+        "ambush": 1,
+        "hidden": 1
       },
       "requiredCapabilities": [
         "cardType:unit",
@@ -134411,7 +134848,9 @@
         "internalName": "dooku#it-is-too-late"
       },
       "dataHash": "8e67f519c9002bdb4d1d1ff35e6cb4b51e05fea7ce6f57272849d1d03432f668",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -135784,6 +136223,7 @@
       },
       "dataHash": "662a1271af3e63948a9ea55488bd95dea9ce8efdd240cf8c2e7209ee945f76ca",
       "keywordValues": {
+        "hidden": 1,
         "raid": 1
       },
       "requiredCapabilities": [
@@ -137383,7 +137823,9 @@
         "internalName": "vulptex"
       },
       "dataHash": "536e3aafda1b2ff0611c316b3af30dc255d94206856a834054c4e3897748b1b6",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -137489,7 +137931,9 @@
         "internalName": "grogu#mysterious-child"
       },
       "dataHash": "160d47b77f449cbe7ca8f28ae167515aa9099fd020df66c2168a644eeab9b9de",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "ability:ifYouDo",
         "cardType:unit",
@@ -151443,7 +151887,9 @@
         "internalName": "enforcer-squadron"
       },
       "dataHash": "9a2b41d7be86d70d9bfc9161a7ae97c009c8cecc7cea4aca21583f0b56f11758",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -152209,7 +152655,9 @@
         "internalName": "rebellious-functionary"
       },
       "dataHash": "175fee246b57595cb5694ebb14f0eef98e49241894999264815cd4d414641d44",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -152350,7 +152798,9 @@
         "internalName": "karis-nemik#freedom-is-a-pure-idea"
       },
       "dataHash": "72043761fbc30b01dd4e672923ee2794dfb98d7612190837887d7bf535e04b05",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -155696,7 +156146,9 @@
         "internalName": "general-grievous#scuttling-to-safety"
       },
       "dataHash": "4ce49f9aa30b653f1c72b5b0697cbd9fb564e04a85dce96ec33b641a521d7f10",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "binary:===",
         "cardType:unit",
@@ -156831,7 +157283,9 @@
         "internalName": "anakin-skywalker#secret-husband"
       },
       "dataHash": "a42e4b5d5ff7feae7b32df151e4dbccd3b5c0ceba300d3f66d8fce7592ced3da",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden",
@@ -157030,23 +157484,66 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "constant",
+            "title": "Each other friendly unit gains Hidden.",
+            "costs": [],
+            "effect": {
+              "kind": "gainKeyword",
+              "target": "chosen",
+              "duration": "persistent",
+              "keyword": "hidden",
+              "amount": {
+                "kind": "const",
+                "value": 1
+              }
+            },
+            "targetResolver": {
+              "owner": "self",
+              "type": "unit",
+              "zone": "arena",
+              "predicate": {
+                "kind": "binary",
+                "op": "&&",
+                "left": {
+                  "kind": "binary",
+                  "op": "!==",
+                  "left": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "right": {
+                    "kind": "ref",
+                    "path": [
+                      "source"
+                    ]
+                  }
+                },
+                "right": {
+                  "kind": "query",
+                  "name": "isUnit",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "card"
+                    ]
+                  },
+                  "args": []
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-modifier-keyword",
-          "message": "unsupported-modifier-keyword",
-          "file": "game/cards/06_SEC/units/TalaDurithICanGetYouInside.ts",
-          "line": 19,
-          "column": 69
-        }
-      ],
+      "diagnostics": [],
       "className": "TalaDurithICanGetYouInside",
       "baseClass": "NonLeaderUnitCard",
       "id": "1369084772",
       "internalName": "tala-durith#i-can-get-you-inside",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Tala Durith",
         "subtitle": "I Can Get You Inside",
@@ -157091,8 +157588,21 @@
       "dataHash": "07bd8556f09a18635a95ffad689a62fa1bb6a4557a2f043aa1387bcc58258966",
       "keywordValues": {},
       "requiredCapabilities": [
+        "binary:!==",
+        "binary:&&",
         "cardType:unit",
-        "keyword:plot"
+        "ir:binary",
+        "ir:const",
+        "ir:gainKeyword",
+        "ir:query",
+        "ir:ref",
+        "keyword:plot",
+        "query:isUnit",
+        "ref:card",
+        "ref:source",
+        "targetType:unit",
+        "targetZone:arena",
+        "trigger:constant"
       ]
     },
     {
@@ -158141,7 +158651,9 @@
         "internalName": "zenuas-shadow-fighter"
       },
       "dataHash": "8078e61391bed9a35d1b19b5f4c4395bd474f4c33e0b7e5be486d4bfd29e8c70",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -158436,7 +158948,9 @@
         "internalName": "unruly-astromech"
       },
       "dataHash": "0cf1ffe86f76d558987c587464acf9be7186785d8c9e2029117c39d4621c78d8",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "ir:exhaust",
@@ -158811,7 +159325,9 @@
         "internalName": "synara-san#harboring-a-secret"
       },
       "dataHash": "893d0ef2f2e98815252a2ddb826b395c21bb332bd239d7d02c0848f6f3fb1f1d",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "ir:const",
@@ -159751,7 +160267,9 @@
         "internalName": "sith-assassin"
       },
       "dataHash": "8ae536e094639f3e6e79a9170a53bf2372ee3d52f35a87d3dab0105d1a77181e",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -205392,7 +205910,9 @@
         "internalName": "asajj-ventress#ambitious-apprentice"
       },
       "dataHash": "a06112bd87f12a7e0152029eb546e27db6e1b78f212f545ee7c5930c8385743d",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:leader",
         "keyword:hidden"
@@ -205879,7 +206399,9 @@
         "internalName": "darth-sidious#under-a-cloak-of-darkness"
       },
       "dataHash": "4dc596f5e1bb64f0a1771c629f0e19d7d59bafc3b7050a5246d3c81b59f4740f",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "binary:!==",
         "binary:&&",
@@ -206369,7 +206891,9 @@
         "internalName": "coleman-trebor#jedi-rescuer"
       },
       "dataHash": "cecaf35640b208c78b2a8f68e36ef998a32bafd721bd42d22c5a4d6a20d2b785",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"
@@ -206553,6 +207077,7 @@
       },
       "dataHash": "9c4f9ca989fc6c98ebc978a42ea32d4d95bdc58e0ff2533d8da464e944a67d41",
       "keywordValues": {
+        "hidden": 1,
         "overwhelm": 1,
         "raid": 2,
         "restore": 2
@@ -210694,6 +211219,7 @@
       },
       "dataHash": "5cf64e8e6241c43b907ab190be559de727c6692669d639f58c486199a2f9e0b8",
       "keywordValues": {
+        "hidden": 1,
         "grit": 1
       },
       "requiredCapabilities": [
@@ -211651,6 +212177,7 @@
       },
       "dataHash": "00d8b1a1153060304a55e5e2145cadf57f3d70c51188115de51d7c5b4bae33d6",
       "keywordValues": {
+        "hidden": 1,
         "saboteur": 1
       },
       "requiredCapabilities": [
@@ -211988,7 +212515,9 @@
         "internalName": "barriss-offee#its-only-a-matter-of-time"
       },
       "dataHash": "eb4d24c1ec3212736f6dfb096674c2ea6a56cb0fa7cee98a2bce601ae5315b7c",
-      "keywordValues": {},
+      "keywordValues": {
+        "hidden": 1
+      },
       "requiredCapabilities": [
         "cardType:unit",
         "keyword:hidden"

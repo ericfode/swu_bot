@@ -30,7 +30,7 @@ test('phase keyword ledger preserves gains under loss and aggregates numeric sta
     assert.deepEqual(phaseStats(card([keywordEffect({ keyword: 'restore', amount: 0 })])), { phaseKeywords: { restore: 0 } });
 });
 test('phase keyword export rejects unsupported mechanics, malformed values and lasting effects', () => {
-    for (const value of ['hidden', { keyword: 'raid', amount: -1 }, { keyword: 'raid', amount: 1.5 }, { keyword: 'sentinel', amount: 1 }, { keyword: 'restore', amount: 1, extra: true }]) {
+    for (const value of ['unsupported-keyword', { keyword: 'raid', amount: -1 }, { keyword: 'raid', amount: 1.5 }, { keyword: 'sentinel', amount: 1 }, { keyword: 'restore', amount: 1, extra: true }]) {
         assert.throws(() => phaseStats(card([keywordEffect(value)])), /keyword/);
     }
     assert.throws(() => phaseStats(card([keywordEffect('sentinel', 'gainKeyword', 'untilEndOfRound')])), /duration/);

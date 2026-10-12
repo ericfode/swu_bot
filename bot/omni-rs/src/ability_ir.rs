@@ -1480,7 +1480,7 @@ mod tests {
 
 }
 
-pub const CORE_KEYWORDS: [&str; 8] = ["sentinel", "overwhelm", "saboteur", "ambush", "grit", "shielded", "raid", "restore"];
+pub const CORE_KEYWORDS: [&str; 9] = ["sentinel", "overwhelm", "saboteur", "ambush", "grit", "shielded", "raid", "restore", "hidden"];
 fn validate_keyword(keyword: &str) -> Result<(), String> { if CORE_KEYWORDS.contains(&keyword) { Ok(()) } else { Err(format!("unsupported keyword {keyword}")) } }
 
 #[cfg(test)]
@@ -1520,3 +1520,6 @@ mod arena_list_defeat_tests {
         let mut v=ability();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["source"]});assert!(compile(v).is_err());
     }
 }
+
+/// Numeric storage slots remain independent of keyword bit positions.
+pub fn numeric_keyword_slot(index: usize) -> Option<usize> { match index { 6 => Some(0), 7 => Some(1), _ => None } }

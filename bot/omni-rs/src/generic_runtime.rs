@@ -65,6 +65,14 @@ enum Trigger {
 }
 
 impl Engine {
+    pub(super) fn needs_hidden_history(&self) -> bool {
+        fn grants(v:&Value)->bool {match v {Value::Object(o)=>o.get("keyword").is_some_and(|k| k=="hidden") || o.values().any(grants),Value::Array(a)=>a.iter().any(grants),_=>false}}
+        let Some(catalogue)=&self.catalogue else {return self.definitions.iter().any(|d|d.flags & (1<<8)!=0);};
+        catalogue.metadata.keys().any(|code| {
+            self.by_code.get(code).is_some_and(|i|self.definitions[*i as usize].flags & (1<<8)!=0) ||
+            catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|id|grants(&serde_json::to_value(&catalogue.programs[*id as usize]).expect("serializable program"))))
+        })
+    }
     /// Load every fully executable card, retaining explicit reasons for all others.
     pub fn from_catalogue_value(value: &Value) -> Result<Self, String> {
         let mut catalogue = Catalogue::load(value)?;
@@ -164,6 +172,7 @@ impl Engine {
                         "ambush" => flags |= AMBUSH,
                         "grit" => flags |= GRIT,
                         "shielded" => flags |= SHIELDED,
+                        "hidden" => flags |= 1 << 8,
                         "raid" | "restore" => {
                             let amount = entry["keywordValues"][name]
                                 .as_u64()
@@ -465,7 +474,7 @@ impl Engine {
     }
     fn raw_keyword_amount(&self, s: &State, target: CardId, keyword: &str) -> i64 {
         let Some(index) = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| *k == keyword) else { return 0; };
-        if s.card(target).phase_lost_keywords & (1 << index) != 0 { return 0; }
+        if s.card(target).lost_keyword_mask() & (1 << index) != 0 { return 0; }
         let definition = self.def(s, target);
         let mut total = match index {
             6 => definition.raid as i64,
@@ -479,20 +488,20 @@ impl Engine {
                 _ => {}
             }
         }
-        if index < 6 { i64::from(total > 0) } else { total }
+        if crate::ability_ir::numeric_keyword_slot(index).is_none() { i64::from(total > 0) } else { total }
     }
     pub(super) fn keyword_amount(&self, s: &State, target: CardId, keyword: &str) -> u16 {
         self.raw_keyword_amount(s, target, keyword).clamp(0, u16::MAX as i64) as u16
     }
     pub(super) fn has_keyword(&self, s: &State, target: CardId, keyword: &str) -> bool {
         let Some(index) = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| *k == keyword) else { return false; };
-        if s.card(target).phase_lost_keywords & (1 << index) != 0 { return false; }
+        if s.card(target).lost_keyword_mask() & (1 << index) != 0 { return false; }
         let effects = self.constant_effects(s, target, true);
         if effects.iter().any(|(_,e)| matches!(e, Effect::LoseKeyword {keyword: name, ..} if name == keyword)) { return false; }
-        s.card(target).phase_keyword_presence & (1 << index) != 0 || (self.def(s, target).flags & (1 << index) != 0 || (index == 6 && self.def(s, target).raid > 0) || (index == 7 && self.def(s, target).restore > 0)) || effects.iter().any(|(_,e)| matches!(e, Effect::GainKeyword {keyword: name, ..} if name == keyword))
+        s.card(target).phase_keyword_mask() & (1 << index) != 0 || (self.def(s, target).flags & (1 << index) != 0 || (index == 6 && self.def(s, target).raid > 0) || (index == 7 && self.def(s, target).restore > 0)) || effects.iter().any(|(_,e)| matches!(e, Effect::GainKeyword {keyword: name, ..} if name == keyword))
     }
     pub(super) fn effective_flags(&self, s: &State, target: CardId) -> u16 {
-        crate::ability_ir::CORE_KEYWORDS[..6].iter().enumerate().fold(0, |flags, (i, k)| flags | if self.keyword_amount(s, target, k) > 0 { 1 << i } else { 0 })
+        crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter(|(i,_)| crate::ability_ir::numeric_keyword_slot(*i).is_none()).fold(0, |flags, (i, k)| flags | if self.keyword_amount(s, target, k) > 0 { 1 << i } else { 0 })
     }
     fn raw_hp(&self,s:&State,id:CardId)->i64 {self.def(s,id).info.hp.unwrap_or(0) as i64+self.token_count(s,s.card(id).experience) as i64+s.card(id).phase_hp as i64+self.constant_stats(s,id).1+self.upgrade_stats(s,id).1}
     pub fn hp(&self,s:&State,id:CardId)->u16 {u16::try_from(self.raw_hp(s,id).max(0)).expect("HP exceeds validated compact capacity")}
@@ -1603,7 +1612,7 @@ impl Engine {
                 s.ability_result=s.ability_result.saturating_add(amount);s.ability_succeeded|=resolved;continue;
             }
             if matches!(effect,Effect::CreateTokenUnit {..}) {
-                self.add_arena(s,r.token)?;s.ability_result=s.ability_result.saturating_add(1);s.ability_succeeded=true;
+                s.card_mut(r.token).set_hidden_qualified(true);self.add_arena(s,r.token)?;s.ability_result=s.ability_result.saturating_add(1);s.ability_succeeded=true;
                 continue;
             }
             if !self.in_arena(s,r.target)&&!self.def(s,r.target).info.is("base") { continue; }
@@ -1883,13 +1892,13 @@ impl Engine {
                         }
                         Effect::GainKeyword { keyword, .. } if in_arena => {
                             let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).unwrap();
-                            if index >= 6 { s.card_mut(id).phase_keyword_values[index - 6] = s.card(id).phase_keyword_values[index - 6].checked_add(amount).ok_or("phase keyword capacity exceeded")?; }
-                            s.card_mut(id).phase_keyword_presence |= 1 << index;
+                            if let Some(slot) = crate::ability_ir::numeric_keyword_slot(index) { s.card_mut(id).phase_keyword_values[slot] = s.card(id).phase_keyword_values[slot].checked_add(amount).ok_or("phase keyword capacity exceeded")?; }
+                            s.card_mut(id).add_phase_keyword(index);
                             result += 1;
                         }
                         Effect::LoseKeyword { keyword, .. } if in_arena => {
                             let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).unwrap();
-                            s.card_mut(id).phase_lost_keywords |= 1 << index;
+                            s.card_mut(id).add_lost_keyword(index);
                             result += 1;
                         }
                         Effect::ModifyStats { .. } if in_arena => {

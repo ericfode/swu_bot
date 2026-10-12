@@ -581,7 +581,7 @@ function liveStatBounds(value, ctx, node, depth = 0) {
     }
     rejected();
 }
-const MODIFIER_KEYWORDS = new Set(['sentinel','saboteur','overwhelm','grit','raid','restore','ambush','shielded']);
+const MODIFIER_KEYWORDS = new Set(['sentinel','saboteur','overwhelm','grit','raid','restore','ambush','shielded','hidden']);
 function modifierEffects(input, ctx, duration, targetValue) {
     let raw = unwrap(input);
     while (ts.isIdentifier(raw) && ctx.constants.has(raw.text)) raw = unwrap(readConstant(raw.text, ctx));

@@ -1754,6 +1754,47 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "command"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "7063302069",
+      "internalName": "stolen-eta-shuttle",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_125",
+      "setCodes": [
+        {
+          "number": 125,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 125,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nWhile you have the initiative, this unit gets +2/+0.",
+      "title": "Stolen Eta Shuttle",
+      "traits": [
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "command"
@@ -2472,6 +2513,47 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "0792086629",
+      "internalName": "onyx-cinder#adventure-awaits",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 6,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_177",
+      "setCodes": [
+        {
+          "number": 177,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 177,
+        "set": "ASH"
+      },
+      "subtitle": "Adventure Awaits",
+      "text": "Hidden\nOther friendly units gain Hidden.",
+      "title": "Onyx Cinder",
+      "traits": [
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "aggression"
       ],
@@ -3103,6 +3185,48 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "6510578496",
+      "internalName": "anakin-skywalker#you-were-right-about-me",
+      "keywords": [
+        "hidden",
+        "saboteur"
+      ],
+      "power": 6,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_255",
+      "setCodes": [
+        {
+          "number": 255,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 255,
+        "set": "ASH"
+      },
+      "subtitle": "You Were Right About Me",
+      "text": "Hidden\nSaboteur\nWhen Played: Give a Shield token to another friendly unit.",
+      "title": "Anakin Skywalker",
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -5908,6 +6032,47 @@
         "aggression",
         "heroism"
       ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "9629078251",
+      "internalName": "teebo#striped-hunter",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "HMW_162",
+      "setCodes": [
+        {
+          "number": 162,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 162,
+        "set": "HMW"
+      },
+      "subtitle": "Striped Hunter",
+      "text": "Hidden (This unit can't be attacked if he was played this phase.)\nOther friendly Ewok units gain Hidden.",
+      "title": "Teebo",
+      "traits": [
+        "ewok"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
       "cost": 2,
       "deployBox": null,
       "epicAction": "",
@@ -6179,6 +6344,47 @@
         "unit"
       ],
       "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "6012814125",
+      "internalName": "village-troublemaker",
+      "keywords": [
+        "hidden",
+        "saboteur"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "HMW_176",
+      "setCodes": [
+        {
+          "number": 176,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 176,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "While you control an Endor base, this unit gains Hidden and Saboteur.",
+      "title": "Village Troublemaker",
+      "traits": [
+        "ewok"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -7053,6 +7259,46 @@
       "title": "Raiding Party",
       "traits": [
         "tusken"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 7,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 7,
+      "id": "2900138286",
+      "internalName": "awakened-exogorth",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 7,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "HMW_233",
+      "setCodes": [
+        {
+          "number": 233,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 233,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nWhile this unit is attacking, the defending unit gets –3/–0.",
+      "title": "Awakened Exogorth",
+      "traits": [
+        "creature"
       ],
       "types": [
         "unit"
@@ -17521,6 +17767,50 @@
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
+      "hp": 4,
+      "id": "0686684746",
+      "internalName": "grand-inquisitor#youre-right-to-be-afraid",
+      "keywords": [
+        "hidden",
+        "raid"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_132",
+      "setCodes": [
+        {
+          "number": 132,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 132,
+        "set": "LOF"
+      },
+      "subtitle": "You're Right to Be Afraid",
+      "text": "Hidden\nRaid 1\nOther friendly Inquisitor units gain Hidden.",
+      "title": "Grand Inquisitor",
+      "traits": [
+        "force",
+        "imperial",
+        "inquisitor"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
       "hp": 2,
       "id": "3595375406",
       "internalName": "purge-trooper",
@@ -19007,6 +19297,45 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "6553590382",
+      "internalName": "in-the-shadows",
+      "keywords": [
+        "hidden"
+      ],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_241",
+      "setCodes": [
+        {
+          "number": 241,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 241,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Give an Experience token to each of up to 3 friendly units with Hidden.",
+      "title": "In the Shadows",
+      "traits": [
+        "plan"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "heroism"
@@ -19044,6 +19373,46 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "4389144613",
+      "internalName": "grogu#mysterious-child",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 1,
+      "rules": "Grogu's ability can still be used as an action even if you don't or can't heal damage from a unit (but you don't deal any damage to a unit).\nIf a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_246",
+      "setCodes": [
+        {
+          "number": 246,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 246,
+        "set": "LOF"
+      },
+      "subtitle": "Mysterious Child",
+      "text": "Hidden\nAction [Exhaust]: Heal up to 2 damage from a unit. If you do, deal that much damage to a unit.",
+      "title": "Grogu",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -21925,6 +22294,48 @@
         "cunning",
         "villainy"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "1759702973",
+      "internalName": "general-grievous#scuttling-to-safety",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "“When this unit is attacked” triggers at the same time as “On Attack” abilities.\nGrievous can only be returned to hand by his ability if he is in play when it is resolves.\nIf a unit with Overwhelm attacks General Grievous and he returns to his owner's hand, all combat damage is considered excess damage and dealt to the defending player's base.\nOn Defense abilities trigger when this unit is chosen as the defender for an attack, in the same window as the attacker's On Attack abilities.\n",
+      "setCode": "SEC_187",
+      "setCodes": [
+        {
+          "number": 187,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 187,
+        "set": "SEC"
+      },
+      "subtitle": "Scuttling to Safety",
+      "text": "Hidden (This unit can't be attacked if he was played this phase.)\nWhen this unit is attacked: Return him to his owner's hand (before damage is dealt).",
+      "title": "General Grievous",
+      "traits": [
+        "separatist",
+        "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
       "cost": 5,
       "deployBox": null,
       "epicAction": "",
@@ -22333,6 +22744,46 @@
       "aspects": [
         "cunning"
       ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "1521329961",
+      "internalName": "unruly-astromech",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": null,
+      "setCode": "SEC_221",
+      "setCodes": [
+        {
+          "number": 221,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 221,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nWhen Defeated: Exhaust an enemy unit.",
+      "title": "Unruly Astromech",
+      "traits": [
+        "droid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
@@ -22401,6 +22852,46 @@
       "title": "Vel Sartha",
       "traits": [
         "rebel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 7,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 7,
+      "id": "7111202788",
+      "internalName": "synara-san#harboring-a-secret",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 7,
+      "rules": null,
+      "setCode": "SEC_225",
+      "setCodes": [
+        {
+          "number": 225,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 225,
+        "set": "SEC"
+      },
+      "subtitle": "Harboring a Secret",
+      "text": "Hidden\nOn Attack: For each friendly unit, ready a friendly resource.",
+      "title": "Synara San",
+      "traits": [
+        "underworld"
       ],
       "types": [
         "unit"

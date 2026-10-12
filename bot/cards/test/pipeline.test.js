@@ -156,3 +156,27 @@ test('defense trigger mutations challenge registration, mandatory effects and co
     for(const label of ['optional-instead-of-mandatory','reverse-token-readiness','wrong-token-type','swap-effect-owner'])
         assert.ok(changes('TWI_049').some(c=>c.label===label));
 });
+
+
+test('keyword sensitivity removes intrinsic presence without altering metadata or source', () => {
+    const entry = {setCode:'TST_004', sourceHash:hash, card:{keywords:['hidden','raid']}, keywordValues:{hidden:1,raid:0}, abilities:{card:[]}};
+    const before=digest(entry), changes=mutants(entry);
+    assert.deepEqual(changes.map(c=>c.label),['remove-intrinsic-hidden','remove-intrinsic-raid']);
+    for(const c of changes){
+        assert.deepEqual(c.entry.card,entry.card);
+        assert.deepEqual(c.entry.abilities,entry.abilities);
+        assert.equal(c.entry.sourceHash,entry.sourceHash);
+        assert.equal(Object.keys(c.entry.keywordValues).length,1);
+    }
+    assert.deepEqual(changes[0].entry.keywordValues,{raid:0});
+    assert.deepEqual(changes[1].entry.keywordValues,{hidden:1});
+    assert.equal(digest(entry),before);
+});
+test('Hidden query sensitivity distinguishes presence from another live keyword', () => {
+    const query={kind:'query',name:'hasSomeKeyword',receiver:{kind:'ref',path:['card']},args:[{kind:'const',value:'hidden'}]};
+    const entry={setCode:'TST_005',abilities:{card:[{targetResolver:{predicate:query},effect:{kind:'gainKeyword',keyword:'hidden'}}]}};
+    const changes=mutants(entry);
+    assert.ok(changes.some(c=>c.label==='sentinel-instead-of-hidden-query'&&c.entry.abilities.card[0].targetResolver.predicate.args[0].value==='sentinel'));
+    assert.ok(changes.some(c=>c.label==='sentinel-instead-of-hidden-modifier'&&c.entry.abilities.card[0].effect.keyword==='sentinel'));
+    assert.equal(query.args[0].value,'hidden');
+});

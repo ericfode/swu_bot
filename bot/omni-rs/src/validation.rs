@@ -163,9 +163,11 @@ pub fn validate_state_with_catalogue(
             "winner",
             "players",
             "arenaUnitOrder",
+            "hiddenHistoryVersion",
         ],
         "state",
     )?;
+    let history = match v.get("hiddenHistoryVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported hiddenHistoryVersion".into())};
     let next = number(v, "nextCardId", (MAX_CARDS - 1) as u64, "state")?;
     if number(v, "round", u16::MAX as u64, "state")? == 0 {
         return Err("state.round must be positive".into());
@@ -288,6 +290,7 @@ pub fn validate_state_with_catalogue(
                         "phaseStats",
                         "phaseKeywords",
                         "phaseLostKeywords",
+                        "hiddenQualified",
                     ]
                 } else if zone == "resources" {
                     &["id", "setCode", "name", "exhausted"]
@@ -327,6 +330,7 @@ pub fn validate_state_with_catalogue(
                     boolean(c, "exhausted", &at)?;
                 }
                 if arena {
+                    if history {boolean(c,"hiddenQualified",&at)?;} else if c.get("hiddenQualified").is_some() {return Err(format!("{at}: hiddenQualified requires hiddenHistoryVersion"));}
                     if info["arena"] != zone {
                         return Err(format!("{at}: card is in the wrong arena"));
                     }
@@ -379,9 +383,10 @@ pub fn validate_state_with_catalogue(
                     if let Some(keywords) = c.get("phaseKeywords") {
                         let object = keywords.as_object().ok_or_else(|| format!("{at}: phaseKeywords must be object"))?;
                         for (keyword, amount) in object {
+                            if keyword=="hidden" && !history {return Err(format!("{at}: Hidden phase effect requires explicit history"));}
                             let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or_else(|| format!("{at}: unknown phase keyword {keyword}"))?;
                             let amount = amount.as_u64().filter(|n| *n <= 65535).ok_or_else(|| format!("{at}: invalid phase keyword amount"))?;
-                            if index < 6 && amount != 1 { return Err(format!("{at}: boolean phase keyword amount must be one")); }
+                            if crate::ability_ir::numeric_keyword_slot(index).is_none() && amount != 1 { return Err(format!("{at}: boolean phase keyword amount must be one")); }
                             if keyword == "restore" && amount == 0 { return Err(format!("{at}: zero phase Restore requires verified nullable trigger titles")); }
                         }
                     }
@@ -390,6 +395,7 @@ pub fn validate_state_with_catalogue(
                         let mut seen = HashSet::new();
                         for keyword in array {
                             let name = keyword.as_str().filter(|k| crate::ability_ir::CORE_KEYWORDS.contains(k)).ok_or_else(|| format!("{at}: unknown lost phase keyword"))?;
+                            if name=="hidden" && !history {return Err(format!("{at}: Hidden phase loss requires explicit history"));}
                             if !seen.insert(name) { return Err(format!("{at}: duplicate lost phase keyword")); }
                         }
                     }

@@ -1,13 +1,13 @@
 {
-  "catalogueHash": "8b80c79f5dbd85c1124b80b73326a7fc7a2b80381568ee0cf2df35cb191bfa81",
+  "catalogueHash": "c4586d754a5bed4cad87a7c4f306d9cd4b6b4bc9990d673ed3386bdef753f3a4",
   "dataOnlyConvertedCount": 339,
   "gameConformance": "not assessed by this report",
-  "irConvertedCount": 1005,
+  "irConvertedCount": 1011,
   "knownCards": 2458,
   "runtimeAdmittedBreakdown": {
     "dataOnly": 339,
     "nativeAdapters": 2,
-    "sourceIr": 510
+    "sourceIr": 522
   },
   "runtimeAdmittedCards": [
     {
@@ -231,6 +231,11 @@
       "setCode": "ASH_124"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "stolen-eta-shuttle",
+      "setCode": "ASH_125"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "survivors-langskib",
       "setCode": "ASH_126"
@@ -322,6 +327,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "onyx-cinder#adventure-awaits",
+      "setCode": "ASH_177"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "mark-my-words",
       "setCode": "ASH_181"
     },
@@ -399,6 +409,11 @@
       "implementation": "dataOnly",
       "internalName": "n5-sentry-droid",
       "setCode": "ASH_252"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "anakin-skywalker#you-were-right-about-me",
+      "setCode": "ASH_255"
     },
     {
       "implementation": "dataOnly",
@@ -751,6 +766,11 @@
       "setCode": "HMW_158"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "teebo#striped-hunter",
+      "setCode": "HMW_162"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "champions-of-endor",
       "setCode": "HMW_163"
@@ -784,6 +804,11 @@
       "implementation": "dataOnly",
       "internalName": "fennec-shand#a-ship-for-a-life",
       "setCode": "HMW_175"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "village-troublemaker",
+      "setCode": "HMW_176"
     },
     {
       "implementation": "sourceIr",
@@ -894,6 +919,11 @@
       "implementation": "sourceIr",
       "internalName": "raiding-party",
       "setCode": "HMW_230"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "awakened-exogorth",
+      "setCode": "HMW_233"
     },
     {
       "implementation": "sourceIr",
@@ -2167,6 +2197,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "grand-inquisitor#youre-right-to-be-afraid",
+      "setCode": "LOF_132"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "purge-trooper",
       "setCode": "LOF_133"
     },
@@ -2352,8 +2387,18 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "in-the-shadows",
+      "setCode": "LOF_241"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "refugee-of-the-path",
       "setCode": "LOF_242"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "grogu#mysterious-child",
+      "setCode": "LOF_246"
     },
     {
       "implementation": "dataOnly",
@@ -2717,6 +2762,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "general-grievous#scuttling-to-safety",
+      "setCode": "SEC_187"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "trade-federation-delegates",
       "setCode": "SEC_191"
     },
@@ -2766,6 +2816,11 @@
       "setCode": "SEC_214"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "unruly-astromech",
+      "setCode": "SEC_221"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "loan-shark",
       "setCode": "SEC_222"
@@ -2774,6 +2829,11 @@
       "implementation": "sourceIr",
       "internalName": "vel-sartha#one-path-one-choice",
       "setCode": "SEC_224"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "synara-san#harboring-a-secret",
+      "setCode": "SEC_225"
     },
     {
       "implementation": "sourceIr",
@@ -4266,7 +4326,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 851,
+  "runtimeAdmittedCount": 863,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -4664,11 +4724,6 @@
       "setCode": "ASH_121"
     },
     {
-      "internalName": "stolen-eta-shuttle",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "ASH_125"
-    },
-    {
       "internalName": "the-twins#we-dont-want-war",
       "reason": "the-twins#we-dont-want-war: compiler rejected \"the-twins#we-dont-want-war\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/08_ASH/units/TheTwinsWeDontWantWar.ts\",\"line\":20,\"message\":\"trigger-alias-hook:onCardDefeated\",\"pattern\":\"trigger-alias-hook:onCardDefeated\"}]",
       "setCode": "ASH_127"
@@ -4827,11 +4882,6 @@
       "internalName": "imposing-scout-walker",
       "reason": "imposing-scout-walker: compiler rejected \"imposing-scout-walker\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/08_ASH/units/ImposingScoutWalker.ts\",\"line\":26,\"message\":\"immediateEffect:giveAdvantage\",\"pattern\":\"immediateEffect:giveAdvantage\"}]",
       "setCode": "ASH_176"
-    },
-    {
-      "internalName": "onyx-cinder#adventure-awaits",
-      "reason": "onyx-cinder#adventure-awaits: compiler rejected \"onyx-cinder#adventure-awaits\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":69,\"file\":\"game/cards/08_ASH/units/OnyxCinderAdventureAwaits.ts\",\"line\":19,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"}]",
-      "setCode": "ASH_177"
     },
     {
       "internalName": "knobby-white-ice-spider",
@@ -5137,11 +5187,6 @@
       "internalName": "gallofree-transport",
       "reason": "gallofree-transport: compiler rejected \"gallofree-transport\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/08_ASH/units/GallofreeTransport.ts\",\"line\":20,\"message\":\"immediateEffect:giveAdvantage\",\"pattern\":\"immediateEffect:giveAdvantage\"}]",
       "setCode": "ASH_254"
-    },
-    {
-      "internalName": "anakin-skywalker#you-were-right-about-me",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "ASH_255"
     },
     {
       "internalName": "choose-your-path",
@@ -5470,7 +5515,7 @@
     },
     {
       "internalName": "garnac#let-the-hunt-begin",
-      "reason": "garnac#let-the-hunt-begin: compiler rejected \"garnac#let-the-hunt-begin\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":69,\"file\":\"game/cards/09_HMW/units/GarnacLetTheHuntBegin.ts\",\"line\":19,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/09_HMW/units/GarnacLetTheHuntBegin.ts\",\"line\":25,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
+      "reason": "garnac#let-the-hunt-begin: compiler rejected \"garnac#let-the-hunt-begin\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/09_HMW/units/GarnacLetTheHuntBegin.ts\",\"line\":25,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
       "setCode": "HMW_104"
     },
     {
@@ -5639,11 +5684,6 @@
       "setCode": "HMW_161"
     },
     {
-      "internalName": "teebo#striped-hunter",
-      "reason": "teebo#striped-hunter: compiler rejected \"teebo#striped-hunter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":69,\"file\":\"game/cards/09_HMW/units/TeeboStripedHunter.ts\",\"line\":23,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"}]",
-      "setCode": "HMW_162"
-    },
-    {
       "internalName": "gungi#fighting-for-kashyyyk",
       "reason": "gungi#fighting-for-kashyyyk: compiler rejected \"gungi#fighting-for-kashyyyk\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":32,\"file\":\"game/cards/09_HMW/units/GungiFightingForKashyyyk.ts\",\"line\":19,\"message\":\"trigger-alias-hook:onDamageDealt\",\"pattern\":\"trigger-alias-hook:onDamageDealt\"}]",
       "setCode": "HMW_166"
@@ -5672,11 +5712,6 @@
       "internalName": "rebel-operation",
       "reason": "rebel-operation: compiler rejected \"rebel-operation\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/events/RebelOperation.ts\",\"line\":16,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"}]",
       "setCode": "HMW_173"
-    },
-    {
-      "internalName": "village-troublemaker",
-      "reason": "village-troublemaker: compiler rejected \"village-troublemaker\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":58,\"file\":\"game/cards/09_HMW/units/VillageTroublemaker.ts\",\"line\":21,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"}]",
-      "setCode": "HMW_176"
     },
     {
       "internalName": "stormchaser",
@@ -5847,11 +5882,6 @@
       "internalName": "mon-cal-cruiser",
       "reason": "mon-cal-cruiser: compiler rejected \"mon-cal-cruiser\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/09_HMW/units/MonCalCruiser.ts\",\"line\":17,\"message\":\"immediateEffect:chooseModalEffects\",\"pattern\":\"immediateEffect:chooseModalEffects\"}]",
       "setCode": "HMW_232"
-    },
-    {
-      "internalName": "awakened-exogorth",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "HMW_233"
     },
     {
       "internalName": "ritual-dragon",
@@ -8294,11 +8324,6 @@
       "setCode": "LOF_130"
     },
     {
-      "internalName": "grand-inquisitor#youre-right-to-be-afraid",
-      "reason": "grand-inquisitor#youre-right-to-be-afraid: compiler rejected \"grand-inquisitor#youre-right-to-be-afraid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":69,\"file\":\"game/cards/05_LOF/units/GrandInquisitorYoureRightToBeAfraid.ts\",\"line\":22,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"}]",
-      "setCode": "LOF_132"
-    },
-    {
       "internalName": "savage-opress#imbued-with-hate",
       "reason": "savage-opress#imbued-with-hate: compiler rejected \"savage-opress#imbued-with-hate\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/05_LOF/units/SavageOpressImbuedWithHate.ts\",\"line\":23,\"message\":\"unsupported-field:ifYouDoNot\",\"pattern\":\"unsupported-field:ifYouDoNot\"}]",
       "setCode": "LOF_137"
@@ -8550,7 +8575,7 @@
     },
     {
       "internalName": "tusken-tracker",
-      "reason": "tusken-tracker: compiler rejected \"tusken-tracker\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":66,\"file\":\"game/cards/05_LOF/units/TuskenTracker.ts\",\"line\":20,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"}]",
+      "reason": "tusken-tracker: arena lists require standalone verified phase-stat semantics",
       "setCode": "LOF_209"
     },
     {
@@ -8654,11 +8679,6 @@
       "setCode": "LOF_240"
     },
     {
-      "internalName": "in-the-shadows",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "LOF_241"
-    },
-    {
       "internalName": "caretaker-matron",
       "reason": "caretaker-matron: compiler rejected \"caretaker-matron\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/CaretakerMatron.ts\",\"line\":9,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/CaretakerMatron.ts\",\"line\":18,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/05_LOF/units/CaretakerMatron.ts\",\"line\":27,\"message\":\"unsupported-query:someCardPlayed\",\"pattern\":\"unsupported-query:someCardPlayed\"}]",
       "setCode": "LOF_243"
@@ -8672,11 +8692,6 @@
       "internalName": "vulptex",
       "reason": "vulptex: compiler rejected \"vulptex\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/vulptex.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
       "setCode": "LOF_245"
-    },
-    {
-      "internalName": "grogu#mysterious-child",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "LOF_246"
     },
     {
       "internalName": "jocasta-nu#the-gift-of-knowledge",
@@ -9339,11 +9354,6 @@
       "setCode": "SEC_186"
     },
     {
-      "internalName": "general-grievous#scuttling-to-safety",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "SEC_187"
-    },
-    {
       "internalName": "darth-traya#lord-of-betrayal",
       "reason": "darth-traya#lord-of-betrayal: compiler rejected \"darth-traya#lord-of-betrayal\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/06_SEC/units/DarthTrayaLordOfBetrayal.ts\",\"line\":19,\"message\":\"cardTypeFilter:leader\",\"pattern\":\"cardTypeFilter:leader\"}]",
       "setCode": "SEC_188"
@@ -9390,7 +9400,7 @@
     },
     {
       "internalName": "tala-durith#i-can-get-you-inside",
-      "reason": "tala-durith#i-can-get-you-inside: compiler rejected \"tala-durith#i-can-get-you-inside\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":69,\"file\":\"game/cards/06_SEC/units/TalaDurithICanGetYouInside.ts\",\"line\":19,\"message\":\"unsupported-modifier-keyword\",\"pattern\":\"unsupported-modifier-keyword\"}]",
+      "reason": "unimplemented runtime keyword plot",
       "setCode": "SEC_203"
     },
     {
@@ -9459,19 +9469,9 @@
       "setCode": "SEC_220"
     },
     {
-      "internalName": "unruly-astromech",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "SEC_221"
-    },
-    {
       "internalName": "duchesss-investigators",
       "reason": "duchesss-investigators: compiler rejected \"duchesss-investigators\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/DuchesssInvestigators.ts\",\"line\":20,\"message\":\"immediateEffect:disclose\",\"pattern\":\"immediateEffect:disclose\"}]",
       "setCode": "SEC_223"
-    },
-    {
-      "internalName": "synara-san#harboring-a-secret",
-      "reason": "unimplemented runtime keyword hidden",
-      "setCode": "SEC_225"
     },
     {
       "internalName": "sneaking-suspicion",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1607,
+  "runtimeRejectedCount": 1595,
   "schema": "omni-rs-catalogue-report-v1",
-  "sourceAstConvertedCount": 666
+  "sourceAstConvertedCount": 672
 }

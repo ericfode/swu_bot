@@ -3,7 +3,7 @@
 function phaseStats(card) {
     let power = 0, hp = 0;
     const phaseKeywords = {}, phaseLostKeywords = new Set();
-    const keywordOrder = ['sentinel', 'overwhelm', 'saboteur', 'ambush', 'grit', 'shielded', 'raid', 'restore'];
+    const keywordOrder = ['sentinel', 'overwhelm', 'saboteur', 'ambush', 'grit', 'shielded', 'raid', 'restore', 'hidden'];
     const supported = new Set(keywordOrder);
     for (const effect of card.getOngoingEffects()) {
         // Constant stat programs are derived from arena sources by Rust; they are
@@ -75,7 +75,7 @@ function fullState(eg, actor = null) {
         const bs = p.base.getSummary(p, true);
         const unit = (c) => {
             const s = c.getSummary(p, true);
-            return { ...ref(eg, c), ...phaseStats(c), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => {
+            return { ...ref(eg, c), ...phaseStats(c), hiddenQualified: c.wasPlayedDeployedOrCreatedThisPhase(), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => {
                 const token = !!u.isToken?.();
                 // An enemy unit's attached upgrade keeps its own controller and
                 // physical owner. Tokens retain the original compact trace shape.
@@ -94,7 +94,7 @@ function fullState(eg, actor = null) {
             out: !!p.passedActionPhase
         };
     }
-    return { arenaUnitOrder: arenaUnitOrder(eg), nextCardId: eg.game.state.allCards.length, round: eg.round, phase: eg.phase, initiative: eg.game.initiativePlayer ? eg.seatOf(eg.game.initiativePlayer.id) : null, initiativeClaimed: !!eg.game.isInitiativeClaimed, prevPassed: !!eg.game.prevActionPhasePlayerPassed, activePlayer: eg.game.actionPhaseActivePlayer ? eg.seatOf(eg.game.actionPhaseActivePlayer.id) : null, actor: actor ? eg.seatOf(actor) : null, winner: eg.winner, players };
+    return { hiddenHistoryVersion: 1, arenaUnitOrder: arenaUnitOrder(eg), nextCardId: eg.game.state.allCards.length, round: eg.round, phase: eg.phase, initiative: eg.game.initiativePlayer ? eg.seatOf(eg.game.initiativePlayer.id) : null, initiativeClaimed: !!eg.game.isInitiativeClaimed, prevPassed: !!eg.game.prevActionPhasePlayerPassed, activePlayer: eg.game.actionPhaseActivePlayer ? eg.seatOf(eg.game.actionPhaseActivePlayer.id) : null, actor: actor ? eg.seatOf(actor) : null, winner: eg.winner, players };
 }
 function normalizeArg(eg, value) {
     if (typeof value === 'string' && eg.game.state.allCards.includes(value)) return eg.cardId(value);

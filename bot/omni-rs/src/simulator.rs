@@ -389,6 +389,7 @@ impl Engine {
             .iter()
             .copied()
             .filter(|&c| !sentinel || self.keyword_amount(s, c, "sentinel") > 0)
+            .filter(|&c| self.keyword_amount(s,c,"sentinel") > 0 || self.keyword_amount(s,c,"hidden") == 0 || !s.card(c).hidden_qualified())
             .collect();
         if !ambush && !sentinel {
             out.push(opp.base);
@@ -661,6 +662,7 @@ impl Engine {
                     self.spend(&mut t, self.cost(s, id));
                     t.player_mut(seat).hand.remove(id);
                     t.card_mut(id).exhausted = true;
+                    t.card_mut(id).set_hidden_qualified(true);
                     self.add_arena(&mut t, id)?;
                     t.source = id;
                     t.trigger_context = 1;
@@ -706,6 +708,7 @@ impl Engine {
                         c.epic_used = true;
                         c.exhausted = false;
                     }
+                    t.card_mut(leader).set_hidden_qualified(true);
                     self.add_arena(&mut t, leader)?;
                     t.source = leader;
                     self.enter_triggers(&mut t)?;
@@ -1174,12 +1177,14 @@ impl Engine {
             p.discard.push(id)?;
         }
         let c = s.card_mut(id);
+        if !leader && !token {c.set_hidden_qualified(false);}
         c.damage = 0;
         c.phase_power = 0;
         c.phase_hp = 0;
         c.phase_keyword_values = [0; 2];
         c.phase_keyword_presence = 0;
         c.phase_lost_keywords = 0;
+        c.clear_hidden_phase_effects();
         c.shield = 0;
         c.experience = 0;
         c.upgrades = 0;
@@ -1250,11 +1255,13 @@ impl Engine {
         if s.players.iter().all(|p| p.out) {
             s.action_player=None;
             for id in 1..s.next_id {
+                s.card_mut(id).set_hidden_qualified(false);
                 s.card_mut(id).phase_power = 0;
                 s.card_mut(id).phase_hp = 0;
                 s.card_mut(id).phase_keyword_values = [0; 2];
                 s.card_mut(id).phase_keyword_presence = 0;
                 s.card_mut(id).phase_lost_keywords = 0;
+                s.card_mut(id).clear_hidden_phase_effects();
             }
             self.sweep_stat_defeats(s)?;
             if self.open_deaths(s,4)? {return Ok(());}
@@ -1335,6 +1342,7 @@ impl Engine {
             return Err(format!("conflicting card identity {text}"));
         }
         let c = s.card_mut(id);
+        if let Some(q)=v.get("hiddenQualified") {c.set_hidden_qualified(q.as_bool().ok_or("hiddenQualified must be boolean")?);}
         c.present = true;
         c.def = def;
         c.owner = owner;
@@ -1363,14 +1371,14 @@ impl Engine {
                 let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or("unsupported phase keyword")?;
                 let amount = amount.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or("phase keyword amount must be bounded integer")?;
                 if index == 7 && amount == 0 { return Err("zero phase Restore requires verified nullable trigger titles".into()); }
-                if index >= 6 { c.phase_keyword_values[index - 6] = amount; } else if amount != 1 { return Err("boolean phase keyword amount must be one".into()); }
-                c.phase_keyword_presence |= 1 << index;
+                if let Some(slot) = crate::ability_ir::numeric_keyword_slot(index) { c.phase_keyword_values[slot] = amount; } else if amount != 1 { return Err("boolean phase keyword amount must be one".into()); }
+                c.add_phase_keyword(index);
             }
         }
         if let Some(keywords) = v.get("phaseLostKeywords") {
             for keyword in keywords.as_array().ok_or("phaseLostKeywords must be array")? {
                 let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| Some(*k) == keyword.as_str()).ok_or("unsupported lost keyword")?;
-                c.phase_lost_keywords |= 1 << index;
+                c.add_lost_keyword(index);
             }
         }
         s.next_id = s.next_id.max(id + 1);
@@ -1407,6 +1415,8 @@ impl Engine {
             return Err("positions must start at an action window in the action phase".into());
         }
         let mut s = State::default();
+        s.hidden_history_exact=v.get("hiddenHistoryVersion").is_some();
+        if !s.hidden_history_exact && self.needs_hidden_history() {return Err("selected pool requires explicit Hidden phase history".into());}
         s.round = n(v, "round");
         if s.round == 0 {
             return Err("invalid round".into());
@@ -1538,15 +1548,16 @@ impl Engine {
                             let mut v = self.card_ref(s, id);
                             let c = s.card(id);
                             v["damage"] = json!(c.damage);
+                            if s.hidden_history_exact {v["hiddenQualified"]=json!(c.hidden_qualified());}
                             if c.phase_power != 0 || c.phase_hp != 0 {
                                 v["phaseStats"] = json!({"power":c.phase_power,"hp":c.phase_hp});
                             }
-                            if c.phase_keyword_presence != 0 {
+                            if c.phase_keyword_mask() != 0 {
                                 let mut keywords = serde_json::Map::new();
-                                for (i, name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() { if c.phase_keyword_presence & (1 << i) != 0 { keywords.insert((*name).into(), json!(c.phase_keyword_amount(i))); } }
+                                for (i, name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() { if c.phase_keyword_mask() & (1 << i) != 0 { keywords.insert((*name).into(), json!(c.phase_keyword_amount(i))); } }
                                 v["phaseKeywords"] = Value::Object(keywords);
                             }
-                            if c.phase_lost_keywords != 0 { v["phaseLostKeywords"] = json!(crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter_map(|(i,k)| (c.phase_lost_keywords & (1 << i) != 0).then_some(*k)).collect::<Vec<_>>()); }
+                            if c.lost_keyword_mask() != 0 { v["phaseLostKeywords"] = json!(crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter_map(|(i,k)| (c.lost_keyword_mask() & (1 << i) != 0).then_some(*k)).collect::<Vec<_>>()); }
                             v["exhausted"] = json!(c.exhausted);
                             v["power"] = json!(self.power(s, id, self.is_attacking(s, id)));
                             v["hp"] = json!(self.hp(s, id));
@@ -1568,6 +1579,7 @@ impl Engine {
             s.winner().map(Seat::as_str)
         };
         let mut value=json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":s.action_player.map(Seat::as_str),"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players});
+        if s.hidden_history_exact {value["hiddenHistoryVersion"]=json!(1);}
         if s.arena_order_exact {value["arenaUnitOrder"]=json!({"ground":s.arena_unit_order[0].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>(),"space":s.arena_unit_order[1].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>()});}
         value
     }

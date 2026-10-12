@@ -63,7 +63,9 @@ async function constructProbeFixture(env, pool, scenario, seed) {
         assert.ok(i < 100, 'Startup did not reach action window');
         const pid = eg.ids.find((id) => eg.legalActions(id).length),
             actions = expandActions(eg, eg.legalActions(pid));
-        eg.apply(pid, bot.choose({ game: eg, pid, actions, rng }), rng);
+        const desiredInitiative=p.initiative==='self'?eg.ids[0]:eg.ids[1];
+        const initiativeChoice=p.initiative&&actions.find(a=>a.label===(pid===desiredInitiative?'Yourself':'Opponent'));
+        eg.apply(pid, initiativeChoice??bot.choose({ game: eg, pid, actions, rng }), rng);
     }
     const own = eg.player(eg.ids[0]),
         enemy = eg.player(eg.ids[1]);
@@ -107,7 +109,7 @@ async function constructProbeFixture(env, pool, scenario, seed) {
         return card;
     });
     for (const player of [own, enemy]) {
-        for (const card of player.drawDeck.slice(0, 12)) {
+        for (const card of player.drawDeck.slice(0, p.resourceCount ?? 12)) {
             card.moveTo('resource');
             card.exhausted = false;
         }
@@ -137,6 +139,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'hidden') return require('./hidden-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'on-defense') return require('./on-defense-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'upgrade-return') return require('./upgrade-return-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'cost-query') return require('./cost-probe-fixture').fixture(env, pool, scenario, seed);
@@ -374,6 +377,9 @@ module.exports = {
     dependencies: [
         'bot/cards/pipeline/probes.js',
         'bot/cards/pipeline/probe-fixture.js',
+        'bot/cards/pipeline/hidden-probes.js',
+        'bot/cards/pipeline/hidden-probe-fixture.js',
+        'bot/cards/pipeline/hidden-source-fixture.js',
         'bot/cards/pipeline/on-defense-probes.js',
         'bot/cards/pipeline/on-defense-probe-fixture.js',
         'bot/cards/pipeline/cost-probes.js',

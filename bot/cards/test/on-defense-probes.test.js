@@ -10,9 +10,13 @@ test('complete defense family accepts supported scalar source shapes and rejects
     const missing=structuredClone(catalogue.cards.find(e=>e.setCode==='LOF_047'));delete missing.abilities.card[0].effect;assert.equal(classifyOnDefense(missing),null);missing.abilities.card[0].effect=catalogue.cards.find(e=>e.setCode==='LOF_047').abilities.card[0].effect;missing.abilities.card[0].optional='true';assert.equal(classifyOnDefense(missing),null);
     const e=structuredClone(catalogue.cards.find(e=>e.setCode==='SHD_035'));e.abilities.card[0].targetResolver.predicate={kind:'const',value:true};assert.equal(classifyOnDefense(e),null);
 });
-test('metadata Hidden remains an explicit whole-card lifecycle gap even when keywordValues is empty',()=>{
-    const p=plan('SEC_187');assert.ok(p.uncovered.some(o=>o.id.endsWith(':hidden-lifecycle')));
-    assert.deepEqual(catalogue.cards.find(e=>e.setCode==='SEC_187').keywordValues,{});
+test('the defense-only adapter leaves Hidden lifecycle explicit with or without intrinsic extraction',()=>{
+    const entry=catalogue.cards.find(e=>e.setCode==='SEC_187');
+    assert.deepEqual(entry.keywordValues,{hidden:1});
+    for(const keywordValues of [entry.keywordValues,{}]){
+        const p=planOnDefenseProbes({...entry,keywordValues},{catalogue});
+        assert.ok(p.uncovered.some(o=>o.id.endsWith(':hidden-lifecycle')));
+    }
 });
 test('defense probes construct owner priorities, real attack keyword donors, lethal capture and cross-arena selectors',()=>{
     for(const id of ids){const p=plan(id);assert.deepEqual(p,plan(id));for(const variant of ['restore-attacker-first','restore-defender-first','saboteur-attacker-first','saboteur-defender-first','onattack-lethal-attacker-first','onattack-lethal-defender-first','actual-ambush'])assert.ok(p.cases.some(c=>c.name.endsWith(variant)),id+':'+variant);}

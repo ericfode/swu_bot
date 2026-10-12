@@ -31,11 +31,8 @@ fn catalogue_admission_is_explicit_and_original_leaders_use_programs() {
 }
 #[test]
 fn generated_programs_match_all_committed_engine_traces() {
-    let mut e = engine();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    e.pool_hash = Engine::from_pool(&root.join("../omni/rs/pool.json"))
-        .unwrap()
-        .pool_hash;
+    let e=Engine::from_compiled_pool_bytes(include_bytes!("../../omni/rs/pool.json"),include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
     for file in std::fs::read_dir(root.join("tests/fixtures")).unwrap() {
         let path = file.unwrap().path();
         if path.extension().is_some_and(|e| e == "gz") {
@@ -58,6 +55,7 @@ fn add(e: &Engine, s: &mut State, seat: Seat, code: &str) -> CardId {
 }
 fn board(e: &Engine) -> State {
     let mut s = State::default();
+    s.hidden_history_exact=true;
     for (seat, leader) in [(Seat::P1, "SOR_014"), (Seat::P2, "IBH_053")] {
         let base = add(e, &mut s, seat, "ASH_019");
         let leader = add(e, &mut s, seat, leader);
@@ -871,7 +869,7 @@ fn phase_keywords_stack_numeric_dedupe_boolean_roundtrip_and_expire() {
     let snapshot=e.snapshot(&s);let restored=e.load_state(&snapshot).unwrap();assert_eq!(e.keyword_amount(&restored,target,"raid"),5);assert!(e.has_keyword(&restored,target,"raid"));
     s.players[0].out=true;s.players[1].out=true;
     e.advance(&mut s).unwrap();assert_eq!(s.card(target).phase_keyword_presence,0);assert_eq!(e.keyword_amount(&s,target,"raid"),0);
-    for bad in [json!({"sentinel":2}),json!({"raid":65536}),json!({"hidden":1}),json!({"restore":-1}),json!({"restore":0})] {
+    for bad in [json!({"sentinel":2}),json!({"raid":65536}),json!({"hidden":2}),json!({"restore":-1}),json!({"restore":0})] {
         let mut v=snapshot.clone();v["players"]["p1"]["ground"][0]["phaseKeywords"]=bad;assert!(e.load_state(&v).is_err());
     }
 }
@@ -885,7 +883,7 @@ fn restore_amount_is_captured_before_its_aura_source_leaves() {
 }
 #[test]
 fn keyword_admission_rejects_cycles_unknowns_and_unbounded_values() {
-    for effect in [json!({"kind":"gainKeyword","target":"self","keyword":"hidden","duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"raid","amount":{"kind":"query","name":"getPower","receiver":{"kind":"ref","path":["source"]}},"duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"grit","amount":{"kind":"const","value":2},"duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"restore","amount":{"kind":"const","value":-1},"duration":"persistent"})] {
+    for effect in [json!({"kind":"gainKeyword","target":"self","keyword":"unsupported-keyword","duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"raid","amount":{"kind":"query","name":"getPower","receiver":{"kind":"ref","path":["source"]}},"duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"grit","amount":{"kind":"const","value":2},"duration":"persistent"}),json!({"kind":"gainKeyword","target":"self","keyword":"restore","amount":{"kind":"const","value":-1},"duration":"persistent"})] {
         let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"constant","title":"Rejected","effect":effect})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
     }
     let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"constant","title":"Cycle","condition":{"kind":"query","name":"hasSomeKeyword","receiver":{"kind":"ref","path":["source"]},"args":[{"kind":"const","value":"sentinel"}]},"effect":{"kind":"gainKeyword","target":"self","keyword":"sentinel","duration":"persistent"}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
@@ -1715,8 +1713,8 @@ fn guarded_attacker_raw_ir_requires_positive_same_candidate_guard_and_zero_argum
 }
 #[test]
 fn complete_source_admission_preserves_secondary_and_printed_keyword_blockers() {
-    let e=engine();for code in ["ASH_226","JTL_170","ASH_046","HMW_233"] {assert!(!e.by_code.contains_key(code),"partial card {code} admitted");}
-    assert!(e.rejected_cards().unwrap()["ASH_046"].contains("keyword support"));assert!(e.rejected_cards().unwrap()["HMW_233"].contains("keyword hidden"));
+    let e=engine();for code in ["ASH_226","JTL_170","ASH_046"] {assert!(!e.by_code.contains_key(code),"partial card {code} admitted");}
+    assert!(e.rejected_cards().unwrap()["ASH_046"].contains("keyword support"));assert!(e.by_code.contains_key("HMW_233"));
     assert!(e.by_code.contains_key("SEC_011"));assert!(e.by_code.contains_key("TWI_094"));
 }
 #[test]
@@ -1953,9 +1951,9 @@ fn declaration(e:&Engine,mut s:State,attacker:CardId,defender:CardId)->State {
 }
 fn named_button(e:&Engine,s:&State,label:&str)->State {let a=e.legal_actions(s).into_iter().find(|a|a.label==label).unwrap_or_else(||panic!("missing {label}: {:?}",e.legal_actions(s)));e.apply(s,&a).unwrap()}
 #[test]
-fn defense_admission_is_generic_six_complete_cards_and_hidden_stays_rejected() {
+fn defense_admission_is_generic_six_complete_cards_and_hidden_integrates() {
     let e=engine();for code in ["LOF_047","SHD_035","SOR_196","TS26_024","TWI_049","TWI_083"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    assert!(e.rejected_cards().unwrap()["SEC_187"].contains("hidden"));eprintln!("State bytes={} (no storage growth for declaration windows)",std::mem::size_of::<State>());
+    assert!(e.by_code.contains_key("SEC_187"));eprintln!("State bytes={} (no storage growth for declaration windows)",std::mem::size_of::<State>());
 }
 #[test]
 fn defense_optional_uses_defender_owner_and_preserves_attack_while_prompting() {
@@ -2024,4 +2022,51 @@ fn defense_synthetic_return_redirects_live_overwhelm_without_admitting_hidden_ca
         death_program(&mut e,&s,defender,json!({"trigger":"onDefense","title":"SYNTHETIC return self","effect":{"kind":"returnToHand","target":"self"}}));death_program(&mut e,&s,attacker,json!({"trigger":"onAttack","title":"SYNTHETIC live power boost","effect":{"kind":"modifyStats","target":"self","duration":"phase","power":{"kind":"const","value":2},"hp":{"kind":"const","value":0}}}));
         let started=declaration(&e,s,attacker,defender);assert_eq!(started.decision,Decision::DeathPlayer);let done=named_button(&e,&started,priority);assert!(done.players[0].hand.contains(defender));assert_eq!(done.card(defender).damage,0);assert_eq!(done.card(base).damage,if overwhelm {power+2}else{0});assert_eq!(done.attack_source,0);assert_eq!(done.death_depth,0);
     }}
+}
+
+#[test]
+fn hidden_live_qualification_and_numeric_storage_are_separate() {
+    let mut e=engine();let mut s=board(&e);s.hidden_history_exact=true;
+    let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let target=unit(&e,&mut s,Seat::P1,"LOF_254");
+    s.card_mut(target).set_hidden_qualified(true);
+    e.definitions[s.card(target).def as usize].flags|=1<<8;
+    assert!(!e.attack_targets(&s,attacker,false).contains(&target));
+    e.definitions[s.card(attacker).def as usize].flags|=SABOTEUR;assert!(!e.attack_targets(&s,attacker,false).contains(&target));
+    s.card_mut(target).set_hidden_qualified(false);assert!(e.attack_targets(&s,attacker,false).contains(&target));
+    s.card_mut(target).set_hidden_qualified(true);e.definitions[s.card(target).def as usize].flags|=SENTINEL;assert!(e.attack_targets(&s,attacker,false).contains(&target));
+    s.source=target;
+    for (keyword,amount) in [("raid",3),("restore",2),("hidden",1),("hidden",1)] {
+        let effect:crate::ability_ir::Effect=serde_json::from_value(json!({"kind":"gainKeyword","target":"self","keyword":keyword,"amount":{"kind":"const","value":amount},"duration":"phase"})).unwrap();e.apply_effect(&mut s,&effect).unwrap();
+    }
+    assert_eq!(s.card(target).phase_keyword_values,[3,2]);assert_eq!(e.keyword_amount(&s,target,"hidden"),1);
+    let snapshot=e.snapshot(&s);let restored=e.load_state(&snapshot).unwrap();assert_eq!(e.snapshot(&restored),snapshot);
+    for bad in [json!(null),json!(false),json!(2),json!("1")] {let mut v=snapshot.clone();v["hiddenHistoryVersion"]=bad;assert!(e.load_state(&v).is_err());}
+    let mut v=snapshot.clone();v["players"]["p1"]["ground"][0].as_object_mut().unwrap().remove("hiddenQualified");assert!(e.load_state(&v).is_err());
+    let mut v=snapshot.clone();v.as_object_mut().unwrap().remove("hiddenHistoryVersion");assert!(e.load_state(&v).is_err());
+    e.leave_play(&mut s,target).unwrap();assert!(!s.card(target).hidden_qualified());
+    s.players[0].out=true;s.players[1].out=true;e.advance(&mut s).unwrap();assert!(!s.card(attacker).hidden_qualified());
+    eprintln!("Hidden State bytes={}; Card bytes={}",std::mem::size_of::<State>(),std::mem::size_of::<Card>());
+}
+
+#[test]
+fn legacy_hidden_guard_uses_selected_pool_and_rejects_both_modifier_masks() {
+    let mut e=engine();let mut s=board(&e);unit(&e,&mut s,Seat::P1,"LOF_256");
+    let mut v=e.snapshot(&s);v.as_object_mut().unwrap().remove("hiddenHistoryVersion");
+    for seat in ["p1","p2"] {for arena in ["ground","space"] {for card in v["players"][seat][arena].as_array_mut().unwrap() {card.as_object_mut().unwrap().remove("hiddenQualified");}}}
+    assert!(e.load_state(&v).unwrap_err().contains("requires explicit Hidden"));
+    e.catalogue.as_mut().unwrap().metadata.retain(|code,_|["ASH_019","SOR_014","IBH_053","LOF_256"].contains(&code.as_str()));
+    assert!(!e.needs_hidden_history());let legacy=e.load_state(&v).unwrap();assert!(!legacy.hidden_history_exact);assert_eq!(e.snapshot(&legacy),v);
+    for (field,value) in [("phaseKeywords",json!({"hidden":1})),("phaseLostKeywords",json!(["hidden"]))] {let mut bad=v.clone();bad["players"]["p1"]["ground"][0][field]=value;assert!(e.load_state(&bad).is_err());}
+    let mut bad=v.clone();bad["players"]["p1"]["ground"][0]["hiddenQualified"]=json!(false);assert!(e.load_state(&bad).is_err());
+}
+
+#[test]
+fn hidden_history_hash_preserves_arena_evidence_and_normalizes_inert_departures() {
+    let e=engine();let mut s=board(&e);let leader=s.players[0].leader;
+    s.card_mut(leader).deployed=true;s.card_mut(leader).epic_used=true;s.card_mut(leader).set_hidden_qualified(true);e.add_arena(&mut s,leader).unwrap();
+    let v=e.snapshot(&s);assert_eq!(e.load_state(&v).unwrap().zobrist(),s.zobrist());
+    let mut changed=s;changed.card_mut(leader).set_hidden_qualified(false);assert_ne!(changed.zobrist(),s.zobrist());
+    e.defeat(&mut s,leader).unwrap();assert!(s.card(leader).hidden_qualified());
+    let v=e.snapshot(&s);let restored=e.load_state(&v).unwrap();assert!(!restored.card(leader).hidden_qualified());assert_eq!(restored.zobrist(),s.zobrist());
+    let token=unit(&e,&mut s,Seat::P1,"TOKEN_CLONE_TROOPER");s.card_mut(token).set_hidden_qualified(true);e.defeat(&mut s,token).unwrap();assert!(s.card(token).hidden_qualified());let hash=s.zobrist();s.card_mut(token).set_hidden_qualified(false);assert_eq!(hash,s.zobrist());
 }

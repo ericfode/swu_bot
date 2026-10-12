@@ -24,8 +24,8 @@ function planOnDefenseProbes(entry,options={}){
     const result={schema:'swu-card-probes/v1',cardId:entry.setCode,sourceHash:entry.sourceHash,cases:[],obligations:[],uncovered:[]};
     const obligation=(d,reason)=>{const id=entry.setCode+':on-defense:'+d;result.obligations.push({id,path:'on-defense',dimension:d});if(reason)result.uncovered.push({id,path:'on-defense',reason});return id;};
     obligation('source-semantics','Structural construction needs independent full-source/helper review');
-    // Metadata includes intrinsic keywords not yet represented by keywordValues.
-    if(entry.card.keywords?.includes('hidden'))obligation('hidden-lifecycle','Whole-card runtime Hidden rejection remains; staged engine observations do not establish actual play or Hidden expiry conformance');
+    // Defense-only staging does not witness Hidden play history or phase expiry.
+    if(entry.card.keywords?.includes('hidden'))obligation('hidden-lifecycle','Staged defense observations do not establish actual play or Hidden expiry conformance; the Hidden adapter handles these separately');
     for(const keyword of Object.keys(entry.keywordValues??{}))obligation('intrinsic-'+keyword,'Defense attacks exercise declared keyword interactions only; full intrinsic lifecycle remains uncovered');
     const donors=defs.filter(e=>e.status==='supported'&&e.card.types.includes('unit')&&!e.card.types.includes('leader')&&!e.card.types.includes('token')&&e.card.arena===entry.card.arena&&Object.values(e.abilities??{}).flat().length===0&&!e.card.keywords?.includes('hidden')).sort((a,b)=>a.card.power-b.card.power||a.setCode.localeCompare(b.setCode));
     const quiet=donors.find(e=>!Object.keys(e.keywordValues??{}).length),restore=donors.find(e=>e.keywordValues?.restore>0),saboteur=donors.find(e=>e.keywordValues?.saboteur>0),ambush=donors.find(e=>e.keywordValues?.ambush>0),overwhelm=donors.find(e=>e.keywordValues?.overwhelm>0);
