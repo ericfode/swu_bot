@@ -78,6 +78,15 @@ async function rustSimulator(eg, pid, deals, ms) {
         actor = null,
         acts = null,
         fresh = 0;
+    // Rust refuses to list the actions of the seat that is not to move, where forceteki lists none
+    const choices = (seat) => {
+        try {
+            return game.legalActions(seat);
+        } catch (e) {
+            if (/^actor mismatch/.test(firstLine(e))) return [];
+            throw e;
+        }
+    };
     const left = () => (deadline === null ? null : Math.max(0, deadline - Date.now()));
     const close = () => {
         game?.free();
@@ -91,10 +100,10 @@ async function rustSimulator(eg, pid, deals, ms) {
         }
         // when both seats have a prompt (regroup resources), yours comes first
         actor = you;
-        acts = game.legalActions(you);
+        acts = choices(you);
         if (!acts.length) {
             actor = opp;
-            acts = game.legalActions(opp);
+            acts = choices(opp);
         }
         if (!acts.length) {
             throw new Error('neither player can act');
