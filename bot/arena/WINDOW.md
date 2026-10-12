@@ -62,6 +62,27 @@ what the window lacks, and it reports how many replays the window has), `window_
 .json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
 proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR) gets the reads only.
 
+### Each person's own app: `/mcp` with GitHub sign-in (oauth.js)
+
+`https://swu-arena.fly.dev/mcp` is a remote MCP server (Streamable HTTP, JSON answers, no sessions) for each invited
+person's own app. On claude.ai: Settings, Connectors, Add custom connector, paste the address. In Claude Code:
+`claude mcp add --transport http swu-arena https://swu-arena.fly.dev/mcp`, then `/mcp`. The app finds the sign-in
+on its own: `/mcp` answers 401 with `WWW-Authenticate: Bearer resource_metadata=...`, which points to
+`/.well-known/oauth-protected-resource` and from there to `/.well-known/oauth-authorization-server`. The app registers
+itself (`POST /oauth/register`, public clients, no secret), opens `/oauth/authorize` in a browser, where the person
+signs in with GitHub and presses Allow, and trades the code and its PKCE verifier (S256 only) at `/oauth/token` for an
+access token (1 hour) and a refresh token (30 days from its last use; each use gives a new one, and an old one used
+again ends the grant). `/oauth/revoke` ends a grant.
+
+What an app may do: read, as its person, with role friend (an admin's app is no admin) and via `oauth`, so it never
+writes; removing the person's invite cuts their apps off on the next call. Its tools: `whoami`, the arena reads
+(`arena_status`, `arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`), `window_docs`
+(the friends' collections: arena, runs, evals, lens, meta; scrubbed), `window_replays` and `window_replay` (a game in
+slices of up to 100 KB). The project token does not open `/mcp`: pushing stays with `mcp.js` above. Tokens are kept
+only as SHA-256 hashes, in `auth/oauth.json` on the volume. A person's connected apps are listed on the app's Build a
+bot page (Arena, Build a bot), through `GET /api/apps`, and `POST /api/apps {"disconnect": "<id>"}` ends one (from
+this site's own pages: Origin and JSON).
+
 ## Who may do what (auth.js)
 
 - Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
@@ -72,6 +93,7 @@ proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR
   proxy adds it for swu-arena.fly.dev (a network secret in the environment's settings), so no thread holds the token.
   Elsewhere set `SWU_WINDOW_TOKEN`.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
+- An MCP app's access token (`swua_...`, from `/oauth/token`) reads as its person with role friend, never more.
 
 ## Outside machines (feeds)
 

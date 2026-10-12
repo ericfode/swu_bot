@@ -12,6 +12,9 @@
  *   browsers         GET  /, /arena, /api/app (the app's model), /api/status, /api/standings, /api/report, /api/games,
  *                         /api/versions, /api/panel (the arena's own read methods, same shapes), /api/replays/<run>/<game>
  *   Eric's Share page     GET, POST /api/share                 who is invited; {add} or {remove} one GitHub login
+ *   MCP clients      POST /mcp                             each person's own app (Claude, Claude Code...), signed in
+ *                                                          with GitHub through OAuth (oauth.js, /oauth/*); it reads
+ *   Build a bot page GET, POST /api/apps                   a person's connected apps; {disconnect: id}
  *
  * push.js is the client and CLI for the push side. Who may do what is in auth.js: friends read, the project's token
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
@@ -22,6 +25,8 @@ const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
+const { createOAuth } = require('./oauth');
+const { createMcpHttp } = require('./mcp-http');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -468,6 +473,92 @@ function createWindow(opts = {}) {
         }
     };
 
+    // ---- /mcp: each person's own MCP client (Claude, Claude Code, Cursor...) signs in with GitHub through OAuth
+    // (oauth.js) and reads as that person; the project token stays with bot/arena/mcp.js for pushing ----
+    const oauth = createOAuth({ dir: path.join(home, 'auth'), auth });
+    auth.useBearer(oauth.lookup);
+    const { METHODS } = require('./api');
+    const RO = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
+    const TYPE = { string: { type: 'string' }, integer: { type: 'integer' } };
+    const schema = (props, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
+    const pick = (a, keys) => Object.fromEntries(keys.filter((k) => a[k] !== undefined && a[k] !== null).map((k) => [k, a[k]]));
+    const REPLAY_SLICE = 100000;
+    const mcpTools = [
+        { name: 'whoami', description: 'Who this app reads the arena as, and what it may do.', inputSchema: schema({}), annotations: RO,
+            call: ({ who }) => ({ login: who.login, role: who.role, app: who.app, may: 'read games, replays, standings and research; change nothing' }) },
+        ...[...ARENA_READ].map((m) => ({
+            name: `arena_${m}`, description: METHODS[m].desc, annotations: RO,
+            inputSchema: schema(Object.fromEntries(Object.entries(METHODS[m].props).map(([k, t]) => [k, TYPE[t]])), METHODS[m].required ?? []),
+            call: (ctx, a) => scrub(arenaMethods[m](pick(a, Object.keys(METHODS[m].props))))
+        })),
+        { name: 'window_docs', annotations: RO,
+            description: `Without id: the documents in a collection (${[...FRIEND_NS].join(', ')}), with their sizes. With id: one document. "runs" holds every ladder, tournament round and game list; "evals" and "lens" a game's win-chance curves; "meta" the ratings and the Strategy Atlas.`,
+            inputSchema: schema({ collection: { type: 'string', enum: [...FRIEND_NS] }, id: TYPE.string }, ['collection']),
+            call: (ctx, { collection, id }) => {
+                need(FRIEND_NS.has(collection), 'not_found', `collection: one of ${[...FRIEND_NS].join(', ')}`);
+                if (id == null || id === '') {
+                    return store.listDocs(collection);
+                }
+                const text = store.getDoc(collection, String(id));
+                need(text != null, 'not_found', `no ${collection}/${id}`);
+                return scrub(JSON.parse(text));
+            } },
+        { name: 'window_replays', annotations: RO, description: "A run's recorded games (replays) and their sizes in bytes.", inputSchema: schema({ run: TYPE.string }, ['run']),
+            call: (ctx, { run }) => store.listReplays(String(run ?? '')).map((id) => ({ id, size: store.replaySize(run, id) })) },
+        { name: 'window_replay', annotations: RO,
+            description: `Part of one game's replay: JSON lines, a header, then one step per decision with the board (spec/replay-format.md in the swu_bot repo). Up to ${REPLAY_SLICE} bytes per call from byte \`from\`; size says how much there is.`,
+            inputSchema: schema({ run: TYPE.string, game: TYPE.string, from: TYPE.integer, length: TYPE.integer }, ['run', 'game']),
+            call: (ctx, { run, game, from = 0, length = REPLAY_SLICE }) => {
+                const buf = store.readReplay(String(run ?? ''), String(game ?? ''));
+                need(buf, 'not_found', `no replay ${run}/${game}`);
+                const a = Math.min(buf.length, Math.max(0, Number(from) || 0));
+                const slice = buf.subarray(a, Math.min(buf.length, a + Math.min(REPLAY_SLICE, Math.max(0, Number(length) || REPLAY_SLICE))));
+                return { run, game, size: buf.length, from: a, length: slice.length, text: slice.toString('utf8') };
+            } }
+    ];
+    const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
+    const mcp = createMcpHttp({
+        name: 'swu-arena', version: '1.0.0', tools: mcpTools, headers: MCP_CORS,
+        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Read-only for now. Start with whoami and arena_status; window_docs lists the runs, evaluations and research; window_replay reads a game move by move. Building and submitting a bot happens in the swu_bot repo (bot/arena/README.md) until the hosted arena opens.'
+    });
+    function mcpRoute(req, res) {
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204, { ...MCP_CORS, 'access-control-max-age': '600' });
+            return res.end();
+        }
+        const who = auth.who(req);
+        if (who.via !== 'oauth' || !atLeast(who.role, 'friend')) {
+            const message = who.via === 'oauth' ? `@${who.login} is not on the invite list (any more)`
+                : who.via === 'bearer' && who.role !== 'bad' ? 'this endpoint takes a person\'s own sign-in; the project token works with bot/arena/mcp.js'
+                    : 'connect this server in your MCP client: it opens a GitHub sign-in';
+            res.writeHead(401, { 'content-type': 'application/json', 'www-authenticate': oauth.challenge(who.via !== 'cookie'), ...MCP_CORS });
+            return res.end(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32001, message } }));
+        }
+        return mcp.handle(req, res, { who });
+    }
+
+    /**
+     * A person's own connected apps, for the app's Build a bot page: GET lists them with the MCP address; POST {disconnect: id}
+     * ends one, from this site's own pages only (Origin and JSON, as share() checks).
+     */
+    async function apps(req, res, who) {
+        need(who.login, 'forbidden', 'sign in with GitHub to connect apps');
+        if (req.method === 'POST') {
+            need(who.via === 'cookie' && req.headers.origin === auth.origin, 'forbidden', "apps are disconnected only from this site's own pages");
+            need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
+            let q;
+            try {
+                q = JSON.parse((await readBody(req, 1024)).toString('utf8'));
+            } catch (e) {
+                throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
+            }
+            need(typeof q?.disconnect === 'string' && oauth.end(who.login, q.disconnect), 'not_found', 'no such app of yours');
+        } else {
+            need(req.method === 'GET', 'bad_request', 'GET, or POST {disconnect: id}');
+        }
+        return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login) } }, req);
+    }
+
     function sendJson(res, code, body, req) {
         if (res.headersSent) {
             return;
@@ -591,6 +682,9 @@ function createWindow(opts = {}) {
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);
         }
+        if (parts[0] === 'apps' && parts.length === 1) {
+            return apps(req, res, who);
+        }
         if (parts[0] === 'app' && parts.length === 1) {
             const out = await appData();
             const gzip = acceptsGzip(req);
@@ -692,6 +786,12 @@ function createWindow(opts = {}) {
             }
             if (await auth.routes(req, res, url)) {
                 return undefined;
+            }
+            if (await oauth.routes(req, res, url)) {
+                return undefined;
+            }
+            if (url.pathname === '/mcp') {
+                return mcpRoute(req, res);
             }
             const who = auth.who(req);
             if (who.role === 'bad') {

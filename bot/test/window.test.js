@@ -559,3 +559,129 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
         await close();
     }
 });
+
+test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads as themselves, and can disconnect it', async () => {
+    const crypto = require('crypto');
+    const w = makeWindow('w-oauth');
+    const { go, close } = await serve(w);
+    try {
+        const site = 'https://swu-arena.fly.dev';
+        const form = (o) => new URLSearchParams(o).toString();
+        const post = (p, body, opts = {}) => go(p, { method: 'POST', body: form(body), type: 'application/x-www-form-urlencoded', ...opts });
+        const session = (l) => `swu_session=${w.auth.sign({ l, exp: Date.now() + 60000 })}`;
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['kim-b'] }));
+        w.store.putDoc('runs', 'demo', JSON.stringify({ id: 'demo', createdAt: '2026-10-12T00:00:00Z', bots: ['rush'], games: [], owner: 'someone' }));
+
+        // discovery: /mcp says where to sign in, and the server lists its endpoints
+        const no = await go('/mcp', { method: 'POST', body: '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' });
+        assert.strictEqual(no.status, 401);
+        assert.match(no.headers.get('www-authenticate'), /resource_metadata="https:\/\/swu-arena\.fly\.dev\/\.well-known\/oauth-protected-resource"/);
+        assert.deepStrictEqual((await (await go('/.well-known/oauth-protected-resource')).json()).authorization_servers, [site]);
+        const meta = await (await go('/.well-known/oauth-authorization-server')).json();
+        assert.deepStrictEqual([meta.issuer, meta.token_endpoint, meta.code_challenge_methods_supported], [site, `${site}/oauth/token`, ['S256']]);
+        assert.strictEqual((await go('/.well-known/openid-configuration')).status, 404, 'a JSON 404, never the sign-in page');
+
+        // the client registers itself; only safe return addresses
+        const reg = (uris) => go('/oauth/register', { method: 'POST', body: JSON.stringify({ client_name: 'Claude', redirect_uris: uris }) });
+        for (const bad of [[], ['http://evil.example/cb'], ['javascript:alert(1)'], ['https://x.example/cb#frag'], 'https://x']) {
+            assert.strictEqual((await reg(bad)).status, 400, JSON.stringify(bad));
+        }
+        const r1 = await reg(['https://claude.ai/api/mcp/auth_callback', 'http://localhost:33418/callback']);
+        assert.strictEqual(r1.status, 201);
+        const client = await r1.json();
+        assert.strictEqual(client.token_endpoint_auth_method, 'none');
+
+        const verifier = crypto.randomBytes(40).toString('base64url');
+        const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+        const ask = (extra = {}) => `/oauth/authorize?${form({ response_type: 'code', client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_challenge: challenge, code_challenge_method: 'S256', state: 'st8', resource: `${site}/mcp`, ...extra })}`;
+        assert.strictEqual((await go(ask({ redirect_uri: 'https://claude.ai/other' }))).status, 400, 'an address the client never registered gets a page, never a redirect');
+        assert.match((await go(ask({ code_challenge_method: 'plain' }))).headers.get('location'), /error=invalid_request/, 'PKCE S256 is required');
+
+        // nobody signed in, or a guest with a view link: sign in with GitHub first, coming back to the same request
+        const anon = await (await go(ask())).text();
+        assert.match(anon, /Sign in with GitHub/);
+        assert.ok(anon.includes(`/auth/github?next=${encodeURIComponent(ask())}`.replace(/&/g, '&#38;')));
+        const guest = `swu_session=${w.auth.sign({ v: 'link1', exp: Date.now() + 60000 })}`;
+        assert.match(await (await go(ask(), { cookie: guest })).text(), /Sign in with GitHub/);
+        assert.strictEqual((await go(ask(), { cookie: session('stranger') })).status, 403, 'signed in, not invited');
+
+        // the consent page: its form carries a signed ticket; only this site's page may answer
+        const page = await (await go(ask(), { cookie: session('kim-b') })).text();
+        assert.match(page, /Claude<\/b> \(claude\.ai\) wants to use SWU Arena as <b>@kim-b/);
+        const tx = /name="tx" value="([^"]+)"/.exec(page)[1].replace(/&#(\d+);/g, (m, c) => String.fromCharCode(c));
+        assert.strictEqual((await go('/', { cookie: `swu_session=${tx}` })).status, 200, 'the page itself');
+        assert.match(await (await go('/', { cookie: `swu_session=${tx}` })).text(), /Sign in with GitHub/, 'a consent ticket is never a session');
+        assert.strictEqual((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('kim-b') })).status, 403, 'no Origin');
+        assert.strictEqual((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('ericfode'), origin: site })).status, 400, 'someone else signed in');
+        const denied = await post('/oauth/authorize', { tx, decision: 'deny' }, { cookie: session('kim-b'), origin: site });
+        assert.match(denied.headers.get('location'), /^https:\/\/claude\.ai\/api\/mcp\/auth_callback\?error=access_denied.*state=st8/);
+        const allowed = await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('kim-b'), origin: site });
+        const back = new URL(allowed.headers.get('location'));
+        assert.deepStrictEqual([back.origin + back.pathname, back.searchParams.get('state'), back.searchParams.get('iss')], ['https://claude.ai/api/mcp/auth_callback', 'st8', site]);
+        const code = back.searchParams.get('code');
+
+        // the code, once, with its verifier
+        const exchange = (extra) => post('/oauth/token', { grant_type: 'authorization_code', code, client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', resource: `${site}/mcp`, ...extra });
+        assert.strictEqual((await (await exchange({ code_verifier: 'x'.repeat(43) })).json()).error, 'invalid_grant', 'wrong verifier');
+        assert.strictEqual((await (await exchange({ code_verifier: verifier })).json()).error, 'invalid_grant', 'a code is spent by any try');
+        const again = new URL((await post('/oauth/authorize', { tx, decision: 'allow' }, { cookie: session('kim-b'), origin: site })).headers.get('location')).searchParams.get('code');
+        const tok = await (await post('/oauth/token', { grant_type: 'authorization_code', code: again, client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_verifier: verifier })).json();
+        assert.match(tok.access_token, /^swua_/);
+        assert.match(tok.refresh_token, /^swur_/);
+        assert.strictEqual(tok.expires_in, 3600);
+
+        // MCP with the token: the person's own read tools, scrubbed like any friend's view
+        const rpc = async (t, method, params) => (await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 7, method, params }) })).json();
+        const init = await rpc(tok.access_token, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } });
+        assert.strictEqual(init.result.protocolVersion, '2025-06-18');
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","method":"notifications/initialized"}' })).status, 202);
+        const names = (await rpc(tok.access_token, 'tools/list')).result.tools.map((t) => t.name);
+        assert.deepStrictEqual(names, ['whoami', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay']);
+        const call = async (t, name, args = {}) => {
+            const r = (await rpc(t, 'tools/call', { name, arguments: args })).result;
+            return { error: r.isError, value: JSON.parse(r.content[0].text) };
+        };
+        assert.deepStrictEqual((await call(tok.access_token, 'whoami')).value, { login: 'kim-b', role: 'friend', app: 'Claude', may: 'read games, replays, standings and research; change nothing' });
+        assert.deepStrictEqual((await call(tok.access_token, 'window_docs', { collection: 'runs', id: 'demo' })).value.owner, undefined, 'scrubbed');
+        assert.strictEqual((await call(tok.access_token, 'window_docs', { collection: 'admin', id: 'invites' })).error, true);
+        assert.strictEqual((await call(tok.access_token, 'arena_versions', {})).error, true);
+        assert.strictEqual((await go('/mcp', { token: tok.access_token })).status, 405, 'no event stream');
+        // the token reads like a friend and never writes; an admin's token is no admin either
+        assert.strictEqual((await go('/api/docs/runs/demo', { method: 'PUT', token: tok.access_token, body: '{}' })).status, 403);
+        assert.strictEqual((await go('/api/share', { token: tok.access_token })).status, 403);
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: 'push-secret', body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'the project token stays with mcp.js');
+
+        // refresh: a new pair each time; the old refresh token used again ends the grant
+        const refresh = (t) => post('/oauth/token', { grant_type: 'refresh_token', refresh_token: t, client_id: client.client_id });
+        const tok2 = await (await refresh(tok.refresh_token)).json();
+        assert.match(tok2.access_token, /^swua_/);
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'the old access token is gone');
+        assert.strictEqual((await (await refresh(tok.refresh_token)).json()).error, 'invalid_grant');
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok2.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'replay ends the grant');
+
+        // connect once more, then: the Share page lists it and disconnects it; removing the invite cuts it off too
+        const fresh = async () => {
+            const c = new URL((await post('/oauth/authorize', { tx: /name="tx" value="([^"]+)"/.exec(await (await go(ask(), { cookie: session('kim-b') })).text())[1].replace(/&#(\d+);/g, (m, x) => String.fromCharCode(x)), decision: 'allow' }, { cookie: session('kim-b'), origin: site })).headers.get('location')).searchParams.get('code');
+            return (await post('/oauth/token', { grant_type: 'authorization_code', code: c, client_id: client.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', code_verifier: verifier })).json();
+        };
+        const tok3 = await fresh();
+        const listed = (await (await go('/api/apps', { cookie: session('kim-b') })).json()).result;
+        assert.strictEqual(listed.mcp, `${site}/mcp`);
+        assert.deepStrictEqual(listed.apps.map((a) => [a.app, a.site]), [['Claude', 'claude.ai']]);
+        assert.deepStrictEqual((await (await go('/api/apps', { cookie: session('ericfode') })).json()).result.apps, [], 'only your own');
+        const drop = (cookie, id, origin = site) => go('/api/apps', { method: 'POST', cookie, origin, body: JSON.stringify({ disconnect: id }) });
+        assert.strictEqual((await drop(session('kim-b'), listed.apps[0].id, 'https://evil.example')).status, 403);
+        assert.strictEqual((await drop(session('ericfode'), listed.apps[0].id)).status, 404, "not someone else's");
+        assert.strictEqual((await drop(session('kim-b'), listed.apps[0].id)).status, 200);
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok3.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401);
+        const tok4 = await fresh();
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok4.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 200);
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: [] }));
+        assert.strictEqual((await go('/mcp', { method: 'POST', token: tok4.access_token, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401, 'an invite removed cuts the apps off at once');
+        assert.strictEqual((await (await refresh(tok4.refresh_token)).json()).error, 'invalid_grant');
+        // revoke answers the same either way
+        assert.strictEqual((await post('/oauth/revoke', { token: 'nonsense' })).status, 200);
+    } finally {
+        await close();
+    }
+});

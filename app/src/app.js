@@ -280,7 +280,7 @@ function fillSpotBar(v) {
 // ---------- sections and routing ----------
 const SECTIONS = [
   { id: '', label: 'Home', icon: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
-  { id: 'arena', label: 'Arena', sub: [['', 'Live'], ['standings', 'Standings'], ['builders', 'Builders'], ['rounds', 'Rounds'], ['join', 'Join']], icon: 'M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z' },
+  { id: 'arena', label: 'Arena', sub: [['', 'Live'], ['standings', 'Standings'], ['builders', 'Builders'], ['rounds', 'Rounds'], ['join', 'Build a bot']], icon: 'M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z' },
   { id: 'bots', label: 'Bots', sub: [['', 'All bots'], ['faceoff', 'Face-off']], icon: 'M5 8h14v11H5zM12 4v4M9 13h.01M15 13h.01M9 16h6' },
   { id: 'games', label: 'Games', sub: [['', 'Now playing'], ['all', 'All games'], ['runs', 'Runs']], icon: 'M4 5h16v14H4zM4 12h16M12 5v14' },
   { id: 'people', label: 'Vs people', icon: 'M12 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM4.5 20.5c.8-4 3.7-6.2 7.5-6.2s6.7 2.2 7.5 6.2' },
@@ -376,6 +376,8 @@ const ACTIONS = {
   inviteRemove: b => { if (confirm(`Remove @${b.dataset.login}? They lose access at once.`)) shareChange({ remove: b.dataset.login }); },
   linkCopy: async b => { try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = 'Copied'; } catch { prompt('Copy this link', b.dataset.url); } },
   linkSend: async b => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games, replays and research', url: b.dataset.url }); } catch {} },
+  mcpCopy: async b => { const el = $('mcpurl'); try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } },
+  appDisconnect: b => { if (confirm(`Disconnect ${b.dataset.app}? It has to sign in again to read anything.`)) appDisconnect(b.dataset.id); },
   linkRemove: b => { if (confirm(`Remove the view link "${b.dataset.label}"? Anyone using it is locked out at once.`)) shareChange({ removeLink: b.dataset.id }); },
 };
 
@@ -774,7 +776,7 @@ function waitingBox() {
 function pageHome() {
   const k = M.totals;
   const kpis = `<div class="kpis"><div><div class="v">${int(k.rated)}</div><div class="k">games rated</div></div><div><div class="v">${k.runs}</div><div class="k">ladders and rounds</div></div><div><div class="v">${k.bots}</div><div class="k">rated bots</div></div><div><div class="v">${ATL()?.mapped.length ?? '-'}</div><div class="k">bots with a spot map</div></div><div><div class="v">${M.arena.competitors.length}</div><div class="k">arena competitors</div></div><div><div class="v">${M.research.findings.filter(f => f.v !== 'open').length}/${M.research.findings.length}</div><div class="k">findings with evidence</div></div></div>`;
-  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${waitingBox()}${arenaCard()}${peopleCard()}${topBots(8)}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c7">${learnedBox(true)}</div><div class="c5">${feedBox(12)}</div><div class="c12">${glanceBox()}</div></div>${kpis}`;
+  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${joinCard()}${waitingBox()}${arenaCard()}${peopleCard()}${topBots(8)}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c7">${learnedBox(true)}</div><div class="c5">${feedBox(12)}</div><div class="c12">${glanceBox()}</div></div>${kpis}`;
 }
 
 // ---------- the builder arena: systems that build bots compete ----------
@@ -937,12 +939,58 @@ function pageRounds(r) {
   const reps = M.arena.reports, keys = Object.keys(reps).sort((a, b) => b - a);
   return `<div class="phead"><h1>Rounds</h1><p class="lede">Each round's report from the referee: standings, results per opponent and the lost games.</p></div>${keys.length ? keys.map(k => `<section class="box">${M.arena.archived ? '<span class="archived">archived</span>' : ''}${md(reps[k]).replace(/\/mnt\/project-files\/results\/(arena-[\w-]+)\/games\/([\w.@#+-]+)\.jsonl/g, (m, run, id) => `<a href="${href('games', run, id)}">${esc(id)}</a>`)}</section>`).join('') : '<div class="notice">No round has been rated yet.</div>'}`;
 }
+/** The mental model of connecting: your own MCP app signs in as you, then reads the arena; submitting comes later. */
+function joinDiagram() {
+  const box = (x, w, t, sub, stroke = 'var(--line-2)') => `<rect x="${x}" y="22" width="${w}" height="46" rx="6" style="fill:var(--raised);stroke:${stroke}" stroke-width="1.5"/><text x="${x + w / 2}" y="41" text-anchor="middle" class="pd-t">${t}</text><text x="${x + w / 2}" y="57" text-anchor="middle" class="pd-s">${sub}</text>`;
+  const arrow = (x1, x2, label, dash = '') => `<line x1="${x1}" y1="45" x2="${x2 - 7}" y2="45" style="stroke:var(--muted)" stroke-width="1.5" ${dash}/><path d="M${x2 - 7} 40.5l7 4.5-7 4.5z" style="fill:var(--muted)"/><text x="${(x1 + x2) / 2}" y="15" text-anchor="middle" class="pd-s">${label}</text>`;
+  return `<figure class="pd"><svg viewBox="0 0 420 96" role="img" aria-label="Your Claude app connects to the arena's MCP address, signs in as you with GitHub, and reads games, replays, standings and research. Submitting bots comes with the hosted arena.">${box(4, 132, 'Your Claude app', 'claude.ai, Claude Code')}${arrow(136, 182, 'signs in as you')}${box(182, 92, 'SWU Arena', '/mcp', 'var(--accent)')}${arrow(274, 294, '')}${box(294, 122, 'Reads', 'games, replays, research')}<text x="228" y="88" text-anchor="middle" class="pd-s">submitting bots: with the hosted arena</text></svg><figcaption>Your app holds its own sign-in, cut off when you disconnect it or leave the invite list. It reads; it never changes anything.</figcaption></figure>`;
+}
+async function loadApps() {
+  S.apps = { busy: true };
+  try { const r = await fetch('/api/apps', { credentials: 'same-origin' }), j = await r.json().catch(() => ({})); S.apps = r.ok ? j.result : { err: j.error?.message || `HTTP ${r.status}` }; }
+  catch (e) { S.apps = { err: e?.message || 'offline' }; }
+  if (route().parts[1] === 'join') render(true);
+}
+async function appDisconnect(id) {
+  const keep = S.apps; S.apps = { ...keep, busy: true }; render(true);
+  try {
+    const r = await fetch('/api/apps', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ disconnect: id }) }), j = await r.json().catch(() => ({}));
+    S.apps = r.ok ? { ...j.result, msg: 'Disconnected. That app has to sign in again to read anything.' } : { ...keep, busy: false, msg: j.error?.message || `HTTP ${r.status}` };
+  } catch (e) { S.apps = { ...keep, busy: false, msg: e?.message || 'offline' }; }
+  render(true);
+}
 function pageJoin() {
-  return `<div class="phead"><h1>Join the arena</h1><p class="lede">You enter a builder: a Claude harness with your model, effort and memory settings, Codex, a script, or yourself. It writes its own bot and gets the same task and time as every other builder. Every front end calls the same methods.</p></div>
-  <div class="grid"><div class="c4 box"><h3>Claude Code or Desktop</h3><p class="muted" style="font-size:var(--fs-md);margin:6px 0">Add the arena as an MCP server; tools are named arena_&lt;method&gt;.</p><pre class="mono" style="white-space:pre-wrap;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px">claude mcp add arena -- node bot/arena/mcp.js --remote https://&lt;arena host&gt;</pre></div>
-  <div class="c4 box"><h3>HTTP</h3><p class="muted" style="font-size:var(--fs-md);margin:6px 0">GET /api/&lt;method&gt;?k=v or POST JSON. Hosted arenas need your competitor token.</p><pre class="mono" style="white-space:pre-wrap;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px">curl -s https://&lt;arena host&gt;/api/status</pre></div>
-  <div class="c4 box"><h3>A round, from your side</h3><ul class="plain" style="margin-top:6px"><li>wait until the work phase opens, read inbox and report</li><li>improve the bot; test with eval</li><li>post thinking and a strategy diagram with say</li><li>submit before the deadline</li></ul></div>
-  <div class="c12 notice">${HOSTED ? `<b>Register and Submit</b> are on the <a href="/arena">arena page</a>.` : `<b>Register and Submit</b> forms live here in the hosted build (arena on Fly). In the project the arena runs with auth off, from the shared folder.`}</div></div>`;
+  const builders = `<div class="c4 box"><h3>A round, from a builder's side</h3><ul class="plain" style="margin-top:6px"><li>wait until the work phase opens, read inbox and report</li><li>improve the bot; test with eval</li><li>post thinking and a strategy diagram with say</li><li>submit before the deadline</li></ul></div>`;
+  if (!HOSTED) {
+    return `<div class="phead"><h1>Join the arena</h1><p class="lede">You enter a builder: a Claude harness with your model, effort and memory settings, Codex, a script, or yourself. It writes its own bot and gets the same task and time as every other builder. Every front end calls the same methods.</p></div>
+  <div class="grid"><div class="c8 box"><h3>Claude Code, Codex or any MCP client</h3><p class="muted" style="font-size:var(--fs-md);margin:6px 0">In the project the arena runs from the shared folder; tools are named arena_&lt;method&gt;.</p><pre class="mono" style="white-space:pre-wrap;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px">claude mcp add arena -- node bot/arena/mcp.js</pre></div>${builders}</div>`;
+  }
+  const mcpUrl = `${location.origin}/mcp`, me = S.me, A = S.apps || {};
+  if (me?.login && !S.apps) { S.apps = { busy: true }; setTimeout(loadApps); }
+  const head = `<div class="phead"><h1>Build a bot</h1><p class="lede">Connect your own Claude, or any app that speaks MCP, to the arena. It signs in as you with GitHub and reads everything here: games, replays, standings and research, so it can study the bots and help you write one. Submitting bots opens with the hosted arena; until then, bots enter through the project's swu_bot repo.</p></div>`;
+  if (!me?.login) {
+    return `${head}<div class="grid"><section class="c7 box"><p>${me?.guest ? 'You came in by a view link. Connecting an app needs a GitHub sign-in on the invite list: ask Eric to add your GitHub username, then sign in.' : 'Sign in with GitHub to connect an app.'}</p></section><section class="c5 box">${joinDiagram()}</section></div>`;
+  }
+  const appsList = A.err ? `<p class="bad">${esc(A.err)}</p>` : !A.apps ? '<p class="muted">Loading…</p>' : A.apps.length
+    ? `<ul class="invites">${A.apps.map(a => `<li><span><b>${esc(a.app)}</b> <span class="muted">${esc(a.site || '')} · connected ${ago(a.createdAt) === 'now' ? 'just now' : `${ago(a.createdAt)} ago`} · last used ${ago(a.usedAt) === 'now' ? 'just now' : `${ago(a.usedAt)} ago`}</span></span><button type="button" data-act="appDisconnect" data-id="${esc(a.id)}" data-app="${esc(a.app)}" ${A.busy ? 'disabled' : ''}>Disconnect</button></li>`).join('')}</ul>`
+    : '<p class="muted">None yet. Once you connect one, it shows here.</p>';
+  const code = t => `<pre class="mono" style="white-space:pre-wrap;word-break:break-all;font-size:var(--fs-sm);background:var(--sunken);padding:8px;border-radius:4px;margin:6px 0">${esc(t)}</pre>`;
+  return `${head}<div class="grid">
+    <section class="c7 box"><div class="bh"><h3>Connect in three steps</h3></div>
+      <ol class="steps-list">
+        <li><b>Copy the address.</b><div class="sharerow" style="margin-top:6px"><input id="mcpurl" readonly value="${esc(mcpUrl)}" aria-label="MCP address"><button type="button" data-act="mcpCopy">Copy</button></div></li>
+        <li><b>Add it to your app.</b> On claude.ai: Settings, Connectors, Add custom connector, and paste it. In Claude Code:${code(`claude mcp add --transport http swu-arena ${mcpUrl}`)}then type <span class="mono">/mcp</span> and pick swu-arena. Other apps: add a remote MCP server with this address.</li>
+        <li><b>Sign in with GitHub and press Allow</b> on the page your app opens. Then ask it something, like "who leads the arena, and how does that bot play?"</li>
+      </ol></section>
+    <section class="c5 box">${joinDiagram()}</section>
+    <section class="c7 box"><div class="bh"><h3>Your connected apps</h3><span class="sub">as @${esc(me.login)}</span></div>${A.msg ? `<p class="good" style="margin-bottom:6px">${esc(A.msg)}</p>` : ''}${appsList}</section>
+    <section class="c5 box"><div class="bh"><h3>What your app can read</h3></div><ul class="plain" style="margin-top:6px"><li><span class="mono">arena_status</span>, <span class="mono">arena_standings</span>, <span class="mono">arena_report</span>: the builder tournament</li><li><span class="mono">window_docs</span>: every run, game list, evaluation and the ratings</li><li><span class="mono">window_replay</span>: a game move by move, with the board</li><li><span class="mono">whoami</span>: who it reads as</li></ul></section>
+  </div>`;
+}
+/** Home's pointer to the Join page: the one place a signed-in person learns they can bring their own Claude. */
+function joinCard() {
+  if (!HOSTED) return '';
+  return `<section class="box join-card"><div class="bh"><h3>Build a bot</h3><a class="more" href="${href('arena', 'join')}">How</a></div><p style="font-size:var(--fs-base)">Connect your own Claude to the arena: it signs in as you and reads every game, replay and finding here, to study the bots and help you write one.</p><p style="margin-top:8px"><a class="btn-link" href="${href('arena', 'join')}">Connect your Claude →</a></p></section>`;
 }
 
 // ---------- pages: bots ----------

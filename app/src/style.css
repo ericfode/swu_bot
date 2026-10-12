@@ -644,3 +644,9 @@ figure.pd { margin: 0; }
 .vlink .vurl { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vlink .vbtns { display: flex; gap: var(--sp-6); margin-left: auto; }
 .vlink .vbtns button { margin-left: 0; }
+/* Build a bot (Arena > Join): connect your own MCP app */
+ol.steps-list { margin: var(--sp-8) 0 0; padding-left: var(--sp-24); display: grid; gap: var(--sp-12); font-size: var(--fs-base); color: var(--ink-2); }
+ol.steps-list b { color: var(--ink); }
+.join-card { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 6%, var(--surface)); }
+.btn-link { display: inline-block; background: var(--accent); color: var(--on-accent); padding: var(--sp-6) var(--sp-12); border-radius: var(--r-sm); font-weight: 600; text-decoration: none; font-size: var(--fs-md); }
+.btn-link:hover { filter: brightness(1.08); text-decoration: none; }

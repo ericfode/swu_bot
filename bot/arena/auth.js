@@ -10,6 +10,8 @@
  *                      token api.js accepts); ARENA_FEED_TOKEN_<NAME> is 'feed' for one outside machine (a Sprite
  *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST; NAME is letters and digits): it reads like
  *                      a friend and writes only what carries its name (window.js); any other bearer token is refused
+ *                      An MCP client's access token (oauth.js) reads as its person: 'friend' while invited, never
+ *                      more, with via 'oauth' (so it never writes)
  *   nothing            'anon': the sign-in page and /healthz only
  * The role is worked out on every request, so removing an invite takes effect at once. Cookies grant reading, and
  * nothing else but one write: an admin changing the invite list from this site's own Share page (window.js share(),
@@ -51,12 +53,14 @@ function parseCookies(header) {
 
 /**
  * opts: dir (where the session key lives), invites() (extra invited logins, e.g. from the admin/invites document),
- * links() (view links [{id, key}], from the admin/links document), env (default process.env), fetch (for GitHub; tests
- * pass a fake), now() (for tests).
+ * links() (view links [{id, key}], from the admin/links document), bearer(token) (an MCP client's access token ->
+ * {login, grant, app} or null; oauth.js lookup), env (default process.env), fetch (for GitHub; tests pass a fake),
+ * now() (for tests).
  */
-function createAuth({ dir, invites = () => [], links = () => [], env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+function createAuth({ dir, invites = () => [], links = () => [], bearer = () => null, env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const publicUrl = String(env.ARENA_PUBLIC_URL ?? 'https://swu-arena.fly.dev').replace(/\/+$/, '');
     const origin = new URL(publicUrl).origin; // what a browser sends as Origin from this site's own pages
+    let lookup = bearer; // the window sets it once its oauth.js exists (useBearer)
     const secure = publicUrl.startsWith('https:');
     let key = null;
 
@@ -151,9 +155,15 @@ function createAuth({ dir, invites = () => [], links = () => [], env = process.e
                     return { role: 'feed', feed: m[1].toLowerCase(), via: 'bearer' };
                 }
             }
+            const g = lookup(t);
+            if (g) {
+                return { role: roleOf(g.login) === 'anon' ? 'anon' : 'friend', login: g.login, grant: g.grant, app: g.app, via: 'oauth' };
+            }
             return { role: 'bad', via: 'bearer' };
         }
-        const s = verify(parseCookies(req.headers.cookie)[SESSION]);
+        // anything else this key signs (a consent ticket, oauth.js) names its purpose in `p`, and is never a session
+        const v = verify(parseCookies(req.headers.cookie)[SESSION]);
+        const s = v && v.p === undefined ? v : null;
         if (s && typeof s.v === 'string') {
             // a guest is let in only while the link they came by exists, so removing it locks them out at once
             return viewLinks().some((l) => l.id === s.v) ? { role: 'friend', guest: s.v, via: 'cookie' } : { role: 'anon', via: 'cookie' };
@@ -244,7 +254,11 @@ function createAuth({ dir, invites = () => [], links = () => [], env = process.e
     /** The logins fixed by the environment: admins, and invites that only a deploy changes. */
     const fixed = () => ({ admins: logins(env.ARENA_ADMINS ?? 'ericfode'), fromEnv: logins(env.ARENA_INVITES) });
 
-    return { who, routes, roleOf, sign, verify, signInPage, origin, fixed };
+    const useBearer = (fn) => {
+        lookup = fn;
+    };
+
+    return { who, routes, roleOf, sign, verify, signInPage, origin, publicUrl, fixed, shell, useBearer };
 }
 
 /** The page a visitor without a role sees: sign in, or (signed in, not invited) who to ask. */
@@ -255,11 +269,16 @@ function signInPage(next, login, note) {
         : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p>`;
     // the browser keeps the #/page part of a shared link to itself, so the button adds it to where sign-in returns
     const keepHash = login ? '' : `<script>(()=>{const a=document.querySelector('a.btn');if(a&&location.hash){const u=new URL(a.href,location.href);u.searchParams.set('next',(u.searchParams.get('next')||'/')+location.hash);a.href=u.pathname+u.search}})()</script>`;
+    return shell(`<h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}`, keepHash);
+}
+
+/** The plain page the sign-in and app-connect screens share. */
+function shell(inner, after = '') {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SWU Arena</title>
 <style>:root{color-scheme:light dark;--bg:#f6f5f2;--fg:#1c1b19;--mut:#5f5c55;--acc:#2f5bd3}@media (prefers-color-scheme:dark){:root{--bg:#141412;--fg:#ecebe6;--mut:#a3a097;--acc:#7f9cf5}}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box}
-main{max-width:420px}h1{font-size:22px;margin:0 0 8px}p{color:var(--mut)}b{color:var(--fg)}.btn{display:inline-block;background:var(--acc);color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}.note{color:var(--fg)}</style></head>
-<body><main><h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}</main>${keepHash}</body></html>`;
+main{max-width:420px}h1{font-size:22px;margin:0 0 8px}p{color:var(--mut)}b{color:var(--fg)}.btn{display:inline-block;background:var(--acc);color:#fff;padding:10px 16px;border-radius:8px;border:0;font:inherit;text-decoration:none;font-weight:600;cursor:pointer}.btn.ghost{background:transparent;color:var(--fg);box-shadow:inset 0 0 0 1.5px var(--mut)}.note{color:var(--fg)}.small{font-size:14px}</style></head>
+<body><main>${inner}</main>${after}</body></html>`;
 }
 
 module.exports = { createAuth, atLeast, parseCookies, ROLES, LOGIN };
