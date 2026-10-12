@@ -11,6 +11,8 @@ on:
       - bot/omni/rs/**
       - bot/rust/src/cards.rs
       - tools/card-runtime-report.js
+      - tools/omni-search-bench.js
+      - tools/test/omni-search-bench.test.js
       - bot/cards/**
       - bot/test/phase-stats-export.test.js
       - .agents/skills/swu-card-conversion/**
@@ -27,6 +29,8 @@ on:
       - bot/omni/rs/**
       - bot/rust/src/cards.rs
       - tools/card-runtime-report.js
+      - tools/omni-search-bench.js
+      - tools/test/omni-search-bench.test.js
       - bot/cards/**
       - bot/test/phase-stats-export.test.js
       - .agents/skills/swu-card-conversion/**
@@ -65,6 +69,7 @@ jobs:
         run: |
           npm run cards:compile
           npm run cards:test
+          node --test tools/test/omni-search-bench.test.js
           cargo test --locked --workspace
           npm run cards:check
       - name: Build and test the same programs in WebAssembly

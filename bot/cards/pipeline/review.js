@@ -79,6 +79,7 @@ function implementationSnapshot() {
         'Cargo.lock',
         'bot/omni-rs/Cargo.toml',
         'bot/omni-rs/build.rs',
+        'bot/omni-rs/expression_codegen.rs',
         'bot/omni-wasm/Cargo.toml',
         'bot/card-compiler/compiler.js',
         'bot/card-compiler/build.js',

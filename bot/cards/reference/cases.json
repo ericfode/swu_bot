@@ -18,7 +18,7 @@
     "./scenarios/hand-effects.js": "2b921d9080118ca99cbbd8054f839046c28039b6908f7f78c5d58b47a37e40f0",
     "./scenarios/keywords.js": "76c165a0398b9a41d268058717dc4bda1be0fb05530f26ec202ecd2c59a828d6",
     "./scenarios/leaders.js": "1144bae343e116630de22781a8e6e8cf3f5cf47d907875abc7917d92942164c6",
-    "./scenarios/live-stats.js": "0ea0dfa1785a9cbb1e9d4a98b8a1ee729219ed7150f730e7be4b3c355d8856e8",
+    "./scenarios/live-stats.js": "900ea7f8c30a99523bcec550e4a67958fb45f27d10f65ac2b1fc800379083608",
     "./scenarios/named-targets.js": "f31d3ea58f0c0e545f6c53ba8640f158f0b41127d48955415270c5a29c163e64",
     "./scenarios/phase-stats.js": "ecded1b9ea5ba17cac7da2129f0d7d8e1cae29ca8060b91f76f0c051272b9728",
     "./scenarios/shield-stat-deaths.js": "9a35d464c2d63cc0538a2d3891a336a958d7eeb73f6705498067d5d368fdc8a6",
@@ -11554,6 +11554,115 @@
       ]
     },
     {
+      "id": "live-stats/chirpa-mirrors-affected-exclusion-and-controller-counts",
+      "behaviorIds": [
+        "live-stats",
+        "live-count-mirror-binding-boundaries"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/live-stats.js",
+        "scenario": "chirpa-mirrors-affected-exclusion-and-controller-counts"
+      },
+      "focusCardIds": [
+        "HMW_164"
+      ],
+      "setupCardIds": [
+        "ASH_261",
+        "HMW_116",
+        "HMW_164",
+        "JTL_212",
+        "TWI_226"
+      ],
+      "setup": {
+        "name": "chirpa-mirrors-affected-exclusion-and-controller-counts",
+        "family": "live-count-mirror-binding-boundaries",
+        "actualScriptedCardIds": [
+          "HMW_164"
+        ],
+        "units": [
+          {
+            "key": "ownChirpa",
+            "code": "HMW_164",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "ownEwok",
+            "code": "HMW_116",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "ownGround",
+            "code": "ASH_261",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "ownSpace",
+            "code": "JTL_212",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "enemyChirpa",
+            "code": "HMW_164",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "enemyEwok",
+            "code": "HMW_116",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "enemyOtherEwok",
+            "code": "HMW_116",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "enemySpace",
+            "code": "JTL_212",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": false
+          }
+        ],
+        "baseDamage": 0,
+        "plan": [
+          {
+            "code": "HMW_116"
+          },
+          {
+            "code": "TWI_226",
+            "target": "enemyEwok"
+          },
+          {
+            "code": "TWI_226",
+            "target": "ownEwok"
+          },
+          {
+            "code": "TWI_226",
+            "target": "enemyOtherEwok"
+          }
+        ]
+      },
+      "assertionStages": [
+        "beforeApply",
+        "assertAfter"
+      ]
+    },
+    {
       "id": "live-stats/chirpa-other-ewok-entry-removal",
       "behaviorIds": [
         "live-stats",
@@ -11936,6 +12045,105 @@
           {
             "code": "SOR_169",
             "target": "source"
+          }
+        ]
+      },
+      "assertionStages": [
+        "beforeApply",
+        "assertAfter"
+      ]
+    },
+    {
+      "id": "live-stats/kino-mirrors-source-controller-and-query-card",
+      "behaviorIds": [
+        "live-stats",
+        "live-count-mirror-binding-boundaries"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/live-stats.js",
+        "scenario": "kino-mirrors-source-controller-and-query-card"
+      },
+      "focusCardIds": [
+        "SEC_114"
+      ],
+      "setupCardIds": [
+        "ASH_261",
+        "HMW_116",
+        "JTL_212",
+        "SEC_114",
+        "SOR_169"
+      ],
+      "setup": {
+        "name": "kino-mirrors-source-controller-and-query-card",
+        "family": "live-count-mirror-binding-boundaries",
+        "actualScriptedCardIds": [
+          "SEC_114"
+        ],
+        "units": [
+          {
+            "key": "ownKino",
+            "code": "SEC_114",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": true
+          },
+          {
+            "key": "ownGround",
+            "code": "ASH_261",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": true
+          },
+          {
+            "key": "ownSpace",
+            "code": "JTL_212",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": true
+          },
+          {
+            "key": "ownReady",
+            "code": "HMW_116",
+            "owner": "own",
+            "damage": 0,
+            "exhausted": false
+          },
+          {
+            "key": "enemyKino",
+            "code": "SEC_114",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": true
+          },
+          {
+            "key": "enemyGround",
+            "code": "ASH_261",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": true
+          },
+          {
+            "key": "enemySpace",
+            "code": "JTL_212",
+            "owner": "enemy",
+            "damage": 0,
+            "exhausted": false
+          }
+        ],
+        "baseDamage": 0,
+        "plan": [
+          {
+            "code": "SOR_169",
+            "target": "ownKino"
+          },
+          {
+            "code": "SOR_169",
+            "target": "ownGround"
+          },
+          {
+            "code": "SOR_169",
+            "target": "enemyGround"
           }
         ]
       },

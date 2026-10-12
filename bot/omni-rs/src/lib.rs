@@ -12,3 +12,8 @@ fn program_backend(bytes:&[u8])->Result<usize,&'static str> {
     use sha2::{Digest,Sha256};
     simulator::program_backend(&format!("{:x}",Sha256::digest(bytes)),bytes)
 }
+
+fn expression_backend(bytes: &[u8]) -> Option<usize> {
+    use sha2::{Digest, Sha256};
+    simulator::expression_backend(&format!("{:x}", Sha256::digest(bytes)), bytes)
+}

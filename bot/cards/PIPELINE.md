@@ -64,10 +64,18 @@ can be represented by a future language version.
 
 The first AOT backend emits executable Rust for scalar draw, damage, healing,
 ready/exhaust, no-action and phase-stat operations with supported constant
-expressions and step control. Shared engine primitives still manage targeting,
-legal choices, commits, defeats and prompts. Dynamic expressions, grouped
-operations and constant/live modifiers currently use their validated runtime
-paths. Reports name these boundaries. A static table of instructions alone would
+expressions and step control. A separate content-bound expression backend emits
+Rust for supported scalar references, arithmetic, conditionals and predicates,
+including live arena counts. Expressions bind only after validation, preserve all
+source/target/query/modifier bindings, and serialize as the original portable IR.
+Forced Interpreter bypasses expression execution as well as generated steps.
+Shared engine primitives still manage targeting, legal choices, commits, defeats,
+prompts, grouped operations and live-modifier scheduling. Parent and zone-name
+expression roots and content absent at build time retain interpreter evaluation;
+literal roots keep their existing cheap evaluator arm. Reports expose generated
+expression content, rejection reasons and opt-in bound-expression execution counts.
+Strict AOT still requires complete instruction support and rejects live modifiers.
+A static table of instructions alone would
 not count as generated execution; dispatch receipts show actual generated steps.
 
 ```sh

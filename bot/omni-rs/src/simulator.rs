@@ -42,6 +42,7 @@ pub struct Engine {
     rules_backend: RulesBackend,
     rules_instrumentation: bool,
     rules_hits: std::sync::Mutex<std::collections::BTreeMap<usize, [u64;2]>>,
+    expression_hits: std::sync::Mutex<[u64;2]>,
 }
 fn aspect(s: &str) -> Result<usize, String> {
     match s {
@@ -209,6 +210,7 @@ impl Engine {
             rules_backend: RulesBackend::Auto,
             rules_instrumentation: false,
     rules_hits: Default::default(),
+    expression_hits: Default::default(),
         })
     }
     pub fn pool_hash(&self) -> &str {
@@ -1568,3 +1570,7 @@ impl Engine {
 mod tests;
 
 pub(crate) fn program_backend(hash:&str,bytes:&[u8])->Result<usize,&'static str> {generic_runtime::generated_backend(hash,bytes)}
+
+pub(crate) fn expression_backend(hash: &str, bytes: &[u8]) -> Option<usize> {
+    generic_runtime::generated_expression_backend(hash, bytes)
+}

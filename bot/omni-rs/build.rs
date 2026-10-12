@@ -2,6 +2,8 @@
 #[allow(dead_code)]
 #[path = "src/ability_ir.rs"]
 mod ability_ir;
+mod expression_codegen;
+fn expression_backend(_bytes: &[u8]) -> Option<usize> { None }
 use ability_ir::{Catalogue, Effect, Expr, Instruction, Program, Target};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, env, fs, path::PathBuf};
@@ -119,6 +121,12 @@ fn main() {
         serde_json::from_slice(&fs::read(catalog).expect("committed ability catalog missing"))
             .expect("invalid committed catalog JSON");
     let c = Catalogue::load(&value).expect("invalid catalog schema");
+    let mut roots = Vec::new();
+    for mut program in c.programs.iter().cloned() {
+        program.visit_expression_roots_mut(&mut |e| roots.push(serde_json::to_value(e).unwrap()));
+    }
+    roots.extend(c.cards.values().filter_map(|p|p.attach_condition.as_ref()).map(|e|serde_json::to_value(e).unwrap()));
+    let expressions = expression_codegen::generate(roots);
     let mut programs = BTreeMap::new();
     for p in c.programs {
         let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(&p).unwrap()));
@@ -146,6 +154,7 @@ fn main() {
     source.push_str("_=>Err(\"program content absent from build catalog\")}}\n");
     functions.push_str("_=>Err(\"invalid AOT executable index\".into())}}}\n");
     source.push_str(&functions);
+    source.push_str(&expressions);
     fs::write(
         PathBuf::from(env::var("OUT_DIR").unwrap()).join("rules_aot.rs"),
         source,
