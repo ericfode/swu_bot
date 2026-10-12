@@ -742,6 +742,23 @@ pub struct Program {
     #[serde(skip)]
     pub executable: Result<usize, &'static str>,
 }
+fn named_unit_base_damage(ability: &Ability) -> bool {
+    ability.trigger == "onAttack" && ability.target_resolvers.len() == 2 &&
+    ability.target_resolvers.iter().enumerate().all(|(index, descriptor)| {
+        let r = &descriptor.target_resolver;
+        let domain = if index == 0 {
+            r.owner == "opponent" && r.card_type == "any" && r.zone.as_deref() == Some("arena") &&
+                r.arena.as_deref() == Some("ground")
+        } else {
+            r.owner == "any" && r.card_type == "base" && r.zone.as_deref() == Some("anyAttackable") && r.arena.is_none()
+        };
+        domain && !r.optional && r.mode.is_none() && r.count.is_none() && r.predicate.is_none() &&
+            r.prompt_title.as_ref().is_some_and(|title| !title.is_empty()) &&
+            matches!(&descriptor.effect, Effect::Damage { target: Target::Name(name), amount: Expr::Const { value } }
+                if name == "chosen" && value.as_u64() == Some(2))
+    })
+}
+
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
         // Deck discard has per-card events plus an aggregate event. The scalar
@@ -975,6 +992,7 @@ impl Program {
             if (fervor||sanctuary||mislead) && ability.trigger!="event" {return Err("named mixed systems require standalone event".into());}
             let damage=ability.target_resolvers.iter().all(|d|matches!(d.effect,Effect::Damage{..}));
             if damage && !["whenPlayed","onAttack"].contains(&ability.trigger.as_str()) {return Err("named damage requires ordinary play/attack registration".into());}
+            let unit_base_damage = named_unit_base_damage(ability);
             let mut names=std::collections::HashSet::new();
             let mut effects=Vec::new();
             for (index,descriptor) in ability.target_resolvers.iter().enumerate() {
@@ -990,6 +1008,10 @@ impl Program {
                     if !common||!domain || (sanctuary && descriptor.target_resolver.prompt_title.is_some()) {return Err("named mixed selector domain is unverified".into());}
                     let effect=if mislead && index==1 {Effect::ModifyStats{target:Target::Name("chosen".into()),duration:"phase".into(),power:Expr::number(-3),hp:Expr::number(0)}} else {descriptor.effect.clone()};
                     effects.push(Effect::Select{target_resolver:r,effect:Box::new(effect)});continue;
+                }
+                if unit_base_damage {
+                    effects.push(Effect::Select { target_resolver: r, effect: Box::new(descriptor.effect.clone()) });
+                    continue;
                 }
                 if damage {
                     if r.owner!=if index==0 {"self"}else{"opponent"} || r.card_type!="unit" || r.optional || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) || r.predicate.is_some() || descriptor.target_resolver.prompt_title.is_some() {return Err("named damage requires mandatory own/opponent scalar arena units with default prompts".into());}
@@ -1435,6 +1457,17 @@ impl Catalogue {
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
+                if sides.card.iter().any(named_unit_base_damage) {
+                    let no_keywords = entry["keywordValues"].as_object().is_some_and(|values| values.is_empty()) &&
+                        entry["card"]["keywords"].as_array().is_some_and(|values| values.is_empty());
+                    let no_pilot = ["pilotText", "pilotBox", "pilotingBox"].iter().all(|key| entry["card"][key].is_null()) &&
+                        entry["piloting"].is_null();
+                    if sides.card.len() != 1 || !sides.leader.is_empty() || !sides.unit.is_empty() ||
+                        entry["baseClass"] != "NonLeaderUnitCard" || !exact_type("unit") || !no_keywords || !no_pilot ||
+                        !entry["attachCondition"].is_null() {
+                        return Err("named unit/base damage requires a sole ordinary nonleader card-side source without intrinsic keywords or piloting".into());
+                    }
+                }
                 if sides.leader.iter().chain(&sides.unit).any(|a|!a.target_resolvers.is_empty()) || sides.card.iter().any(|a|!a.target_resolvers.is_empty() && !((a.trigger=="event" && entry["baseClass"]=="EventCard" && exact_type("event")) || (["whenPlayed","onAttack"].contains(&a.trigger.as_str()) && entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit")))) {return Err("named selectors support ordinary unit WhenPlayed or event card-side sources".into());}
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Weakness source must be an ordinary unit card-side registration".into());}
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});

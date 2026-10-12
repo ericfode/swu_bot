@@ -9,6 +9,7 @@ const {
 } = require("../../omni/rs/state");
 async function fixture(env, pool, scenario, seed) {
   const p = scenario.probe;
+  if (p.effectFamily === "unit-base-damage") return unitBaseDamageFixture(env, pool, scenario, seed);
   if (p.mixedKind) return mixedEventFixture(env, pool, scenario, seed);
   if (p.effectFamily === "damage") return unitDamageFixture(env, pool, scenario, seed);
   if (p.trigger === "onAttack") return attackFixture(env, pool, scenario, seed);
@@ -1308,4 +1309,123 @@ async function mixedEventFixture(env, pool, scenario, seed) {
   } finally {
     bot.close?.();
   }
+}
+
+async function unitBaseDamageFixture(env, pool, scenario, seed) {
+  const p = scenario.probe;
+  const reverse = p.sourceSeat === 2;
+  const construction = reverse ? {...scenario,probe:{...p,targets:[...p.targets.map(t=>({...t,owner:t.owner==='self'?'opponent':'self'})),{code:p.cardId,owner:'opponent',zone:'hand',arena:p.sourceArena}]}} : scenario;
+  const setup = await constructProbeFixture(env,pool,construction,seed);
+  const {eg,rng,bot,deck} = setup;
+  const own = reverse ? setup.enemy : setup.own;
+  const enemy = reverse ? setup.own : setup.enemy;
+  const targets = setup.targets.slice();
+  const source = reverse ? targets.pop() : setup.source;
+  own.base.damage = p.ownBaseDamage ?? 0;
+  enemy.base.damage = p.enemyBaseDamage ?? 0;
+  eg.game.resolveGameState(true); eg.game.continue();
+  const defender = p.attackBase ? enemy.base : targets[p.attackTarget];
+  const round = eg.round, count = eg.game.state.allCards.length;
+  const cardId = c=>eg.cardId(c.uuid);
+  const ready = ()=>own.getCardsInZone('resource').filter(c=>!c.exhausted).length;
+  const aspects = [...own.getAspectsForCosts()];
+  let cost = source.cardData.cost;
+  for(const aspect of source.cardData.aspects) { const i=aspects.indexOf(aspect); if(i<0)cost+=2;else aspects.splice(i,1); }
+  const force = eg.game.getPlayers().map(player=>({player,held:player.hasTheForce,id:cardId([...player.baseZone.cards,...player.outsideTheGameZone.getCards()].find(c=>c.isForceToken()))}));
+  const records=[{type:'meta',schema:'omni-rs-trace-v1',pool:pool.provenance,seed,bots:['named-unit-base-damage-probe','named-unit-base-damage-probe'],decks:[deck,deck],scenario:scenario.name,constructionParameters:p,
+    fixtureConstruction:'Disclosed actual recipients, normally play source at printed/aspect cost, naturally ready, select both named recipients before damage, resolve captured death/Force and combat through complete terminal game.'}];
+  const witness={coverageObligationIds:[],observations:[]};
+  const observe=(stage,pid,actions)=>witness.observations.push({stage,actor:pid?eg.seatOf(pid):null,actions:actions?.map(a=>canonicalAction(eg,a)),state:fullState(eg,pid)});
+  let step=0,started=false,played=false,playChecked=false,attacking=false,attackPicked=false,settled=false,initialReady;
+  const originalShields = new Map(targets.flatMap(c=>(c.upgrades??[]).filter(u=>u.isShield?.()).map(u=>[cardId(u),u])));
+  const baseline = new Map(), selections=[], damageEvents=[],shieldDeaths=[],orderedEvents=[];
+  const capture=()=>{for(const c of [...eg.game.getArenaUnits(),own.base,enemy.base])baseline.set(c,{damage:c.damage,hp:c.getHp?.()??c.cardData.hp,power:c.isUnit?.()?c.getPower():0,shields:c.upgrades?.filter(u=>u.isShield?.()).map(cardId)??[]});};
+  eg.game.on('onCardPlayed',e=>{if(started&&!settled&&e.card===source&&!e.isCancelledOrReplaced)played=true;});
+  eg.game.on('onDamageDealt',e=>{if(attacking&&!settled)damageEvents.push({card:e.card,amount:e.damageDealt,type:e.damageSource?.type,source:e.damageSource?.card});});
+  eg.game.on('onCardDefeated',e=>{if(attacking&&!settled&&e.card.isShield?.())shieldDeaths.push(cardId(e.card));});
+  for(const name of ['onCardDefeated','onTokensCreated','onDamageDealt','onAttackEnd']) eg.game.on(name,e=>{if(attacking&&!settled)orderedEvents.push({name,card:e.card,tokenType:e.tokenType,type:e.damageSource?.type,amount:e.damageDealt,winners:[...eg.game.winnerNames]});});
+  function assertResolved() {
+    assert.ok(played&&playChecked&&attackPicked,'Actual normal play and natural readiness witnessed');
+    const eligible=[...baseline.keys()].filter(c=>c.isUnit?.()&&c.controller===enemy&&c.cardData.arena==='ground');
+    assert.equal(selections.length,eligible.length?2:1,'Mandatory available selectors actually completed');
+    const unit=selections.find(s=>s.index===0)?.card;
+    const base=selections.find(s=>s.index===1)?.card;
+    assert.ok(base===own.base||base===enemy.base);
+    const expected=new Map([...baseline].map(([c,b])=>[c,b.damage]));
+    const shields=new Map([...baseline].map(([c,b])=>[c,b.shields.slice()]));
+    const hit=(c,n)=>{if(shields.get(c).length)shields.get(c).shift();else expected.set(c,Math.min(baseline.get(c).hp,expected.get(c)+n));};
+    if(unit)hit(unit,p.descriptors[0].amount);
+    hit(base,p.descriptors[1].amount);
+    if(defender===enemy.base)hit(defender,baseline.get(source).power);
+    else {hit(defender,baseline.get(source).power);hit(source,baseline.get(defender).power);}
+    for(const [c,b]of baseline) {
+      if(c.isUnit?.()&&expected.get(c)>=b.hp)assert.equal(c.zoneName,'discard');
+      else {if(c.isUnit?.())assert.ok(c.isInPlay(),'Every unselected/nonlethal unit stays live');assert.equal(c.damage,expected.get(c),'Exact primary/combat damage for every recipient');}
+      if(c.isUnit?.()&&c.isInPlay()) {
+        const expectedConsumed=(c===unit?1:0)+(c===defender&&defender.isUnit?.()?1:0);
+        const removed=b.shields.filter(id=>shieldDeaths.includes(id));
+        assert.equal(removed.length,Math.min(b.shields.length,expectedConsumed),'Exact primary/combat Shield consumption');
+        for(const id of removed){const token=originalShields.get(id);assert.ok(token);assert.equal(token.zoneName,'outsideTheGame');assert.equal(token.isAttached(),false);}
+        assert.equal(c.getPower(),b.power);assert.equal(c.getHp(),b.hp);assert.deepEqual(c.upgrades.filter(u=>u.isShield?.()).map(cardId).sort(),b.shields.filter(id=>!shieldDeaths.includes(id)).sort()); }
+    }
+    for(const selected of selections) {
+      const events=damageEvents.filter(e=>e.type==='ability'&&e.source===source&&e.card===selected.card);
+      assert.equal(events.length,baseline.get(selected.card).shields.length?0:1);
+      if(events.length)assert.equal(events[0].amount,Math.min(p.descriptors[selected.index].amount,baseline.get(selected.card).hp-baseline.get(selected.card).damage));
+    }
+    assert.equal(eg.game.state.allCards.length,count,'No new physical identities from damage or stable Force');
+    for(const f of force) {
+      assert.equal(f.player.hasTheForce,p.forceDeath&&f.player===enemy?true:f.held);
+      assert.equal(cardId([...f.player.baseZone.cards,...f.player.outsideTheGameZone.getCards()].find(c=>c.isForceToken())),f.id);
+    }
+    if(p.ownBaseDamage===28) {
+      assert.ok(eg.over);assert.equal(eg.winner,eg.seatOf(enemy.id),'Own-base fatal winner remains latched even after enemy-base combat');
+      const death=orderedEvents.findIndex(e=>e.name==='onCardDefeated'&&e.card===unit);
+      const gain=orderedEvents.findIndex(e=>e.name==='onTokensCreated'&&e.tokenType==='the-force');
+      const combat=orderedEvents.findIndex(e=>e.name==='onDamageDealt'&&e.card===enemy.base&&e.type==='attack');
+      assert.ok(death>=0&&gain>death&&combat>gain,'Physical selected death then mandatory Force then resumed combat');
+      for(const i of [death,gain,combat])assert.deepEqual(orderedEvents[i].winners,[eg.seatOf(enemy.id)]);
+      assert.equal(orderedEvents[combat].amount,baseline.get(source).power);
+      assert.equal(orderedEvents.at(-1).name,'onAttackEnd');
+    }
+    settled=true;observe('primary-death-combat-resolved');
+  }
+  try {
+    while(!eg.over&&step<4000) {
+      const pid=eg.ids.find(id=>eg.legalActions(id).length);assert.ok(pid);
+      const actions=expandActions(eg,eg.legalActions(pid)),prompt=eg.player(pid).currentPrompt(),window=eg.isActionWindow(pid);
+      let chosen;
+      if(window) {
+        records.push({type:'state',step,state:fullState(eg,pid)});
+        if(played&&!playChecked) {assert.equal(source.zoneName,'spaceArena');assert.ok(source.exhausted);assert.equal(ready(),initialReady-cost);playChecked=true;observe('actual-play-paid');}
+        if(attackPicked&&!settled)assertResolved();
+        if(!started&&pid===own.id) {initialReady=ready();chosen=actions.find(a=>a.cardUuid===source.uuid);assert.ok(chosen);started=true;}
+        else if(played&&!attacking&&!settled&&eg.round>round&&pid===own.id) {assert.ok(!source.exhausted&&source.isInPlay());capture();chosen=actions.find(a=>a.cardUuid===source.uuid);assert.ok(chosen);attacking=true;}
+        else if(!settled)chosen=actions.find(a=>a.arg==='pass');
+      } else if(attacking&&!settled) {
+        if(!attackPicked&&/target for attack/i.test(prompt.menuTitle??'')) {chosen=actions.find(a=>a.cardUuid===defender.uuid);assert.ok(chosen);attackPicked=true;}
+        else {
+          const index=p.descriptors.findIndex(d=>d.promptTitle===prompt.menuTitle);
+          if(index>=0) {
+            assert.equal(pid,own.id);
+            const candidates=index===0?eg.game.getArenaUnits().filter(c=>c.controller===enemy&&c.zoneName==='groundArena'):[own.base,enemy.base];
+            assert.deepEqual(actions.filter(a=>a.kind==='card').map(a=>a.cardUuid).sort(),candidates.map(c=>c.uuid).sort());
+            assert.deepEqual(actions.filter(a=>a.kind==='button').map(a=>a.label),[],'Mandatory selectors have no cancellation/decline');
+            for(const [c,b]of baseline) {assert.equal(c.damage,b.damage,'No damage before both choices');if(c.isUnit?.())assert.ok(c.isInPlay());}
+            const card=index===0?targets[p.unitChoice]:(p.baseChoice==='own'?own.base:enemy.base);
+            assert.ok(candidates.includes(card));chosen=actions.find(a=>a.cardUuid===card.uuid);assert.ok(chosen);selections.push({index,card});observe('descriptor-'+index,pid,actions);
+          }
+        }
+        chosen??=actions.find(a=>a.kind==='button'&&/trigger|resolve|yes/i.test(a.label??''));
+        chosen??=actions.find(a=>a.arg==='done');
+      }
+      chosen??=bot.choose({game:eg,pid,actions,rng});assert.ok(chosen);
+      records.push({type:'decision',step,actor:eg.seatOf(pid),prompt:{type:prompt.promptType??null,title:prompt.menuTitle??null,selected:(eg.player(pid).promptState.selectedCards??[]).map(cardId),actionWindow:window},actions:actions.map(a=>canonicalAction(eg,a)),chosen:canonicalAction(eg,chosen).key,events:[]});
+      eg.apply(pid,chosen,rng);step++;
+    }
+    if(attackPicked&&!settled)assertResolved();
+    assert.ok(settled&&eg.over,'Focused witness and full terminal game');
+    records.push({type:'result',step,winner:eg.winner,state:fullState(eg)});
+    witness.coverageObligationIds=[...scenario.coverageObligationIds];return {records,witness};
+  } finally {bot.close?.();}
 }

@@ -409,3 +409,22 @@ test("staged deployed-leader donor fails closed to the inactive direct-action/OA
     );
   }
 });
+
+test('named enemy-ground and any-base damage retains bounded full-source plans',()=>{
+ const {classifyNamedUnitBaseDamage}=require('../pipeline/named-target-probes');
+ const e=entry('LAW_184');assert.ok(classifyNamedUnitBaseDamage(e));
+ const p=planNamedTargetProbes(e,{catalogue});assert.equal(p.cases.length,11);
+ for(const label of ['opposite-source-controller','space-unit-combat','missing-ground','shield-2','both-bases-lethal-latch'])assert.ok(p.cases.some(c=>c.name.endsWith(label)));
+ assert.ok(p.uncovered.some(o=>o.id.endsWith('unique-source-replacement')));
+});
+test('named unit/base classifier rejects unmodeled headers domains metadata and effects',()=>{
+ const {classifyNamedUnitBaseDamage}=require('../pipeline/named-target-probes');
+ const mutate=[e=>e.abilities.card[0].targetResolvers[1].targetResolver.promptTitle=e.abilities.card[0].targetResolvers[0].targetResolver.promptTitle,e=>e.abilities.card[0].optional=true,e=>e.abilities.card[0].ifYouDo={effect:{kind:'noAction'}},e=>e.card.arena='ground',e=>e.card.pilotText='unmodeled',e=>e.keywordValues={raid:1},e=>e.card.keywords=['raid'],e=>e.baseClass='EventCard',e=>e.attachCondition={kind:'const',value:true},e=>e.abilities.unit.push(e.abilities.card[0]),e=>e.abilities.card[0].targetResolvers[0].chooser='opponent',e=>e.abilities.card[0].targetResolvers[0].targetResolver.owner='any',e=>e.abilities.card[0].targetResolvers[0].targetResolver.type='unit',e=>e.abilities.card[0].targetResolvers[0].targetResolver.arena='space',e=>e.abilities.card[0].targetResolvers[1].targetResolver.optional=true,e=>e.abilities.card[0].targetResolvers[1].effect.amount.value=3,e=>e.abilities.card[0].targetResolvers[1].name='target'];
+ for(const f of mutate){const e=entry('LAW_184');f(e);assert.equal(classifyNamedUnitBaseDamage(e),null);}
+});
+
+test('named unit/base quiet donor guard rejects unmodeled source bodies',()=>{
+ const altered=structuredClone(catalogue);
+ for(const e of altered.cards)if(!e.baseClass){e.sourcePath='unmodeled.ts';e.card.text='Unmodeled body';}
+ const p=planNamedTargetProbes(entry('LAW_184'),{catalogue:altered});assert.equal(p.cases.length,0);assert.ok(p.uncovered.some(o=>o.id.endsWith('quiet-donors')));
+});

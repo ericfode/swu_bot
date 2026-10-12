@@ -2139,7 +2139,7 @@ fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigg
 #[test]
 fn named_two_admission_preserves_other_descriptor_rejections() {
     let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["HMW_263","LAW_099","LAW_184","LOF_054","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    for code in ["HMW_263","LAW_099","LOF_054","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
     assert_eq!(std::mem::size_of::<State>(),18560);
 }
 #[test]
@@ -2563,4 +2563,70 @@ fn named_mixed_mislead_rejects_hp_damage_and_dynamic_token_shapes() {
 fn named_mixed_all_empty_confirms_before_costs_and_cost_filter_is_printed() {
  let e=engine();for code in ["SOR_218","TS26_072","TS26_081"] {let mut s=board(&e);let source=hand(&e,&mut s,code);let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(prompt.decision,Decision::AbilityNoEffect);assert_eq!(named_button(&e,&prompt,"Cancel").zobrist(),s.zobrist());let done=named_button(&e,&prompt,"Play anyway");assert!(done.players[0].discard.contains(source));assert_eq!(done.next_id,s.next_id);}
  let mut s=board(&e);let source=hand(&e,&mut s,"SOR_218");let mut ids=vec![];for cost in [3,4] {let d=e.definitions.iter().find(|d|d.info.is("unit")&&!d.info.is("leader")&&d.info.cost==Some(cost)&&d.programs.card.is_empty()).unwrap();let id=unit(&e,&mut s,Seat::P1,&d.code);ids.push(id);}let zero=unit(&e,&mut s,Seat::P1,"LOF_254");let beast=unit(&e,&mut s,Seat::P1,"TOKEN_BEAST");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();let legal=e.legal_actions(&prompt);for id in [ids[0],zero,beast] {assert!(legal.contains(&e.card_action(&prompt,id)));}assert!(!legal.contains(&e.card_action(&prompt,ids[1])));
+}
+
+#[test]
+fn named_unit_base_damage_domains_and_deferred_handlers() {
+    let e = engine();
+    let mut s = board(&e);
+    let source = unit(&e, &mut s, Seat::P1, "LAW_184");
+    let own = unit(&e, &mut s, Seat::P1, "HMW_116");
+    let ground = unit(&e, &mut s, Seat::P2, "HMW_116");
+    let space = unit(&e, &mut s, Seat::P2, "IBH_022");
+    let enemy_base = s.players[1].base;
+    let first = declaration(&e, s, source, enemy_base);
+    let cards: Vec<_> = e.legal_actions(&first).into_iter().filter(|a| a.kind == "card").collect();
+    assert_eq!(cards, vec![e.card_action(&first, ground)]);
+    let second = e.apply(&first, &e.card_action(&first, ground)).unwrap();
+    assert_eq!(second.card(ground).damage, 0);
+    for player in &second.players {
+        assert!(e.legal_actions(&second).contains(&e.card_action(&second, player.base)));
+    }
+    let done = e.apply(&second, &e.card_action(&second, enemy_base)).unwrap();
+    assert_eq!(done.card(ground).damage, 2);
+    assert_eq!(done.card(enemy_base).damage, 5);
+    assert_eq!(done.card(own).damage, 0);
+    assert_eq!(done.card(space).damage, 0);
+    assert_eq!(done.attack_source, 0);
+}
+
+#[test]
+fn named_unit_base_damage_missing_ground_preserves_base_and_combat() {
+    let e = engine();
+    let mut s = board(&e);
+    let source = unit(&e, &mut s, Seat::P1, "LAW_184");
+    let enemy_base = s.players[1].base;
+    let own_base = s.players[0].base;
+    let prompt = declaration(&e, s, source, enemy_base);
+    let done = e.apply(&prompt, &e.card_action(&prompt, own_base)).unwrap();
+    assert_eq!(done.card(own_base).damage, 2);
+    assert_eq!(done.card(enemy_base).damage, 3);
+    assert_eq!(done.attack_source, 0);
+}
+
+#[test]
+fn named_unit_base_damage_raw_scope_is_fail_closed() {
+    let original: Value = serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    let alterations = [
+        ("/abilities/card/0/optional", json!(true)),
+        ("/abilities/card/0/targetResolvers/0/chooser", json!("opponent")),
+        ("/abilities/card/0/targetResolvers/0/targetResolver/owner", json!("any")),
+        ("/abilities/card/0/targetResolvers/0/targetResolver/arena", json!("space")),
+        ("/abilities/card/0/targetResolvers/1/targetResolver/type", json!("unit")),
+        ("/card/keywords", json!(["raid"])),
+        ("/card/pilotText", json!("unmodeled")),
+        ("/baseClass", json!("EventCard")),
+    ];
+    for (path, value) in alterations {
+        let mut catalogue = original.clone();
+        let card = catalogue["cards"].as_array_mut().unwrap().iter_mut().find(|c| c["setCode"] == "LAW_184").unwrap();
+        let parts: Vec<_> = path.trim_start_matches('/').split('/').collect();
+        let mut slot = &mut *card;
+        for key in &parts[..parts.len()-1] {
+            slot = if slot.is_array() { &mut slot[key.parse::<usize>().unwrap()] } else { &mut slot[*key] };
+        }
+        let key = parts[parts.len()-1];
+        if slot.is_array() { slot[key.parse::<usize>().unwrap()] = value; } else { slot[key] = value; }
+        assert!(!Engine::from_catalogue_value(&catalogue).unwrap().by_code.contains_key("LAW_184"), "{path}");
+    }
 }

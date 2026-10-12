@@ -171,6 +171,15 @@ controller transfer, broad token/leader targets, gained Overwhelm and framework
 aura deaths remain gaps. Ziton witnesses cover only the pinned two-player
 implementation; its source explicitly disclaims accurate Twin Suns behavior.
 
+Named ground-unit/base damage experiments normally play the space source and
+wait for natural readiness. They cover both source seats, both base choices,
+missing enemy ground recipients, owner/arena exclusions, one or two Shields,
+lethal ground damage and original space-unit combat. Fatal own-base cases assert
+the latched winner while the selected unit is defeated, its mandatory Force gain
+resolves and combat completes. Unique replacement, source departure, token/leader
+recipients, ordinary attachment cleanup, captured defense, gained Overwhelm and
+controller transfer remain explicit gaps.
+
 Mixed named-event experiments cover ready/damage, exhaust/cheap Shield and
 Shield/negative power pairs. They distinguish truly empty domains from legal
 but ineffective readiness choices, cancellation at either selection, delayed

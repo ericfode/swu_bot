@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 559
+    "sourceIr": 560
   },
   "runtimeAdmittedCards": [
     {
@@ -1984,6 +1984,11 @@
       "implementation": "sourceIr",
       "internalName": "bwing-skirmisher",
       "setCode": "LAW_183"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "aerie#cloudrider-dropship",
+      "setCode": "LAW_184"
     },
     {
       "implementation": "sourceIr",
@@ -4686,7 +4691,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 935,
+  "runtimeAdmittedCount": 936,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -7832,11 +7837,6 @@
       "internalName": "fear-and-dead-men",
       "reason": "fear-and-dead-men: compiler rejected \"fear-and-dead-men\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/events/FearAndDeadMen.ts\",\"line\":9,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDiscardedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/events/FearAndDeadMen.ts\",\"line\":18,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/07_LAW/events/FearAndDeadMen.ts\",\"line\":23,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"}]",
       "setCode": "LAW_179"
-    },
-    {
-      "internalName": "aerie#cloudrider-dropship",
-      "reason": "aerie#cloudrider-dropship: named damage requires mandatory own/opponent scalar arena units with default prompts",
-      "setCode": "LAW_184"
     },
     {
       "internalName": "ben-solo#facing-the-light",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1523,
+  "runtimeRejectedCount": 1522,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

@@ -164,6 +164,8 @@ function classifyNamedTarget(entry) {
   return { family: "named-target", trigger: a.trigger, descriptors };
 }
 function planNamedTargetProbes(entry, options = {}) {
+    const unitBase = classifyNamedUnitBaseDamage(entry);
+    if (unitBase) return planNamedUnitBaseDamage(entry, unitBase, options);
     const damage = classifyNamedDamage(entry);
     if (damage) return planNamedDamageProbes(entry, damage, options);
   const shape = classifyNamedTarget(entry);
@@ -681,7 +683,7 @@ function planAttack(entry, shape, options) {
   }
   return result;
 }
-module.exports = { classifyNamedTarget, classifyNamedDamage, planNamedTargetProbes };
+module.exports = { classifyNamedTarget, classifyNamedDamage, classifyNamedUnitBaseDamage, planNamedTargetProbes };
 
 function classifyNamedDamage(entry) {
     const abilities=Object.values(entry.abilities??{}).flat(),a=abilities[0],kw=entry.keywordValues??{};
@@ -1218,5 +1220,68 @@ function planMixedEvent(entry, shape, options) {
       "No actual source-card construction for this dimension; primitive diagnostics are separate",
     );
   }
+  return result;
+}
+
+function classifyNamedUnitBaseDamage(entry) {
+  const a = entry.abilities?.card?.[0];
+  if (entry.status !== 'supported' || entry.baseClass !== 'NonLeaderUnitCard' ||
+      !same(entry.card?.types, ['unit']) || entry.card.arena !== 'space' ||
+      typeof entry.card.unique !== 'boolean' || !Number.isInteger(entry.card.power) || entry.card.power < 1 ||
+      !Number.isInteger(entry.card.hp) || entry.card.hp < 1 ||
+      Object.values(entry.abilities ?? {}).flat().length !== 1 ||
+      entry.attachCondition || entry.piloting || entry.card.pilotText || entry.card.pilotBox || entry.card.pilotingBox ||
+      !same(entry.keywordValues ?? {}, {}) || !same(entry.card.keywords ?? [], []) ||
+      !keys(a, ['trigger','title','costs','effect','targetResolvers']) || a.trigger !== 'onAttack' ||
+      typeof a.title !== 'string' || !same(a.costs, []) || !same(a.effect, {kind:'noAction'}) || a.targetResolvers?.length !== 2) return null;
+  const descriptors = [];
+  for (const [i,d] of a.targetResolvers.entries()) {
+    const r = d?.targetResolver;
+    if (!keys(d,['name','chooser','targetResolver','effect']) || typeof d.name !== 'string' ||
+        !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(d.name) || ['target','constructor','prototype','__proto__'].includes(d.name) || d.chooser !== 'self' ||
+        !keys(r,['owner','type','zone','arena','promptTitle']) || typeof r.promptTitle !== 'string' || !r.promptTitle ||
+        !same(d.effect,{kind:'damage',target:'chosen',amount:{kind:'const',value:2}}) ||
+        (i === 0 ? r.owner !== 'opponent' || r.type !== 'any' || r.zone !== 'arena' || r.arena !== 'ground' :
+          r.owner !== 'any' || r.type !== 'base' || r.zone !== 'anyAttackable' || r.arena !== undefined)) return null;
+    descriptors.push({name:d.name,promptTitle:r.promptTitle,amount:2,domain:i?'bases':'enemy-ground'});
+  }
+  if (descriptors[0].name === descriptors[1].name || descriptors[0].promptTitle === descriptors[1].promptTitle) return null;
+  return {family:'named-target',effectFamily:'unit-base-damage',trigger:'onAttack',descriptors};
+}
+
+function planNamedUnitBaseDamage(entry, shape, options = {}) {
+  const defs = Array.isArray(options.catalogue) ? options.catalogue : options.catalogue?.cards ?? [];
+  const quiet = e => e.status === 'supported' && (e.baseClass === 'NonLeaderUnitCard' || (!e.baseClass && e.sourcePath === null && e.sourceHash === null && !e.card.text)) && same(e.card?.types,['unit']) &&
+    !e.card.unique && !e.card.keywords?.length && !Object.keys(e.keywordValues ?? {}).length &&
+    !Object.values(e.abilities ?? {}).flat().length && !e.attachCondition && !e.piloting && !e.card.pilotText && !e.card.pilotBox && !e.card.pilotingBox;
+  const ground = defs.filter(quiet).sort((a,b)=>a.setCode.localeCompare(b.setCode)).find(e=>e.card.arena==='ground' && e.card.hp>=4);
+  const space = defs.filter(quiet).sort((a,b)=>a.setCode.localeCompare(b.setCode)).find(e=>e.card.arena==='space' && e.card.hp>=entry.card.power+1 && e.card.power<entry.card.hp);
+  const result = {schema:'swu-card-probes/v1',cardId:entry.setCode,sourceHash:entry.sourceHash,cases:[],obligations:[],uncovered:[]};
+  const obligation = (dimension, reason) => {
+    const id = `${entry.setCode}:named-unit-base-damage:${dimension}`;
+    result.obligations.push({id,path:'named-target',dimension});
+    if(reason) result.uncovered.push({id,path:'named-target',reason});
+    return id;
+  };
+  if (!ground || !space) { obligation('quiet-donors','Missing real quiet ground/space construction donors'); return result; }
+  const row=(e,owner,extra={})=>({code:e.setCode,owner,arena:e.card.arena,exhausted:true,...extra});
+  const mixed=[row(ground,'self'),row(ground,'opponent'),row(space,'self'),row(space,'opponent')];
+  const add=(name,extra={},targets=mixed)=>{
+    const id=obligation(name);
+    result.cases.push({id:`auto/${entry.setCode}/named-unit-base-damage-${name}`,name:`named-unit-base-damage-${name}`,kind:'probe',focusCardIds:[entry.setCode],
+      setupCardIds:[...new Set([...targets.map(t=>t.code),...targets.flatMap(t=>(t.attachments??[]).map(a=>a.code)),...(extra.forceDeath?['TOKEN_THE_FORCE']:[])])].sort(),
+      behaviorIds:['named-targets','damage','on-attack'],assertionStages:['construction','activation','observation'],coverageObligationIds:[id],
+      probe:{...shape,cardId:entry.setCode,sourceArena:'space',targets,resourceCount:16,initiative:'self',sourceSeat:1,unitChoice:1,baseChoice:'enemy',attackBase:true,...extra}});
+  };
+  add('enemy-base'); add('own-base',{baseChoice:'own'}); add('opposite-source-controller',{sourceSeat:2,initiative:'opponent'});
+  add('space-unit-combat',{attackBase:false,attackTarget:3});
+  add('missing-ground',{},mixed.filter(t=>t.arena==='space'));
+  add('wrong-owner-ground-only',{},mixed.filter(t=>t.owner==='self'));
+  for (const n of [1,2]) add(`shield-${n}`,{},mixed.map((t,i)=>i===1?{...t,attachments:Array.from({length:n},()=>({code:'TOKEN_SHIELD',token:'shield'}))}:t));
+  add('lethal-ground',{},mixed.map((t,i)=>i===1?{...t,damage:ground.card.hp-1}:t));
+  const gain=defs.find(e=>e.status==='supported'&&e.baseClass==='NonLeaderUnitCard'&&same(e.card?.types,['unit'])&&e.card.arena==='ground'&&!e.card.unique&&!e.card.keywords?.length&&!Object.keys(e.keywordValues??{}).length&&!e.attachCondition&&!e.piloting&&!e.card.pilotText&&!e.card.pilotBox&&!e.card.pilotingBox&&Object.values(e.abilities??{}).flat().length===2&&same(e.abilities.card?.map(a=>a.trigger),['onAttack','whenDefeated'])&&e.abilities.card.every(a=>keys(a,['trigger','title','costs','effect'])&&same(a.costs,[])&&same(a.effect,{kind:'gainForce',target:'ownPlayer'})));
+  if(gain) for(const enemyBaseDamage of [0,27]) add(enemyBaseDamage?'both-bases-lethal-latch':'own-base-lethal-captured-death',{baseChoice:'own',ownBaseDamage:28,enemyBaseDamage,forceDeath:true},[row(ground,'self'),row(gain,'opponent',{damage:gain.card.hp-1}),row(space,'opponent')]);
+  else obligation('fatal-captured-death','No bounded actual gainForce death donor');
+  for(const gap of ['unique-source-replacement','source-departure','deployed-leader-token-recipients','attachment-cleanup','captured-defense','gained-overwhelm','controller-transfer','multiplayer']) obligation(gap,'No actual full-source construction for this interaction');
   return result;
 }
