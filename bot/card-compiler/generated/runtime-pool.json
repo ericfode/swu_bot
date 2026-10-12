@@ -13421,6 +13421,47 @@
       "aspects": [
         "vigilance",
         "command",
+        "villainy"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "3310848830",
+      "internalName": "bossk#join-our-merry-band",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "LAW_031",
+      "setCodes": [
+        {
+          "number": 31,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 31,
+        "set": "LAW"
+      },
+      "subtitle": "Join Our Merry Band",
+      "text": "On Attack: Give a unit +1/+1 for this phase. You may give a unit –1/–1 for this phase.",
+      "title": "Bossk",
+      "traits": [
+        "underworld",
+        "bounty hunter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "command",
         "heroism"
       ],
       "cost": 4,
@@ -14037,6 +14078,48 @@
       "traits": [
         "underworld",
         "bounty hunter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "command",
+        "cunning",
+        "heroism"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "4954007620",
+      "internalName": "millennium-falcon#dodging-patrols",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "LAW_068",
+      "setCodes": [
+        {
+          "number": 68,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 68,
+        "set": "LAW"
+      },
+      "subtitle": "Dodging Patrols",
+      "text": "On Attack: You may give a space unit –2/–0 for this phase. You may give a ground unit +2/+0 for this phase.",
+      "title": "Millennium Falcon",
+      "traits": [
+        "rebel",
+        "vehicle",
+        "transport"
       ],
       "types": [
         "unit"

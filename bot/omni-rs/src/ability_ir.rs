@@ -965,22 +965,29 @@ impl Program {
         }
 
         if !ability.target_resolvers.is_empty() {
-            if depth!=0 || !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
-                return Err("named selectors require two independent standalone event/WhenPlayed stat systems".into());
+            if depth!=0 || !["event","whenPlayed","onAttack"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
+                return Err("named selectors require two independent standalone event/WhenPlayed/OnAttack stat systems".into());
             }
             let mut names=std::collections::HashSet::new();
             let mut effects=Vec::new();
-            for descriptor in &ability.target_resolvers {
+            for (index,descriptor) in ability.target_resolvers.iter().enumerate() {
                 if descriptor.name.is_empty() || descriptor.name=="target" || !descriptor.name.chars().all(|c|c.is_ascii_alphanumeric()||c=='_') || !names.insert(descriptor.name.as_str()) || descriptor.chooser!="self" {return Err("named selectors require distinct ordinary names and own chooser".into());}
                 let mut r=descriptor.target_resolver.clone();
                 r.prompt_title=None;
                 r.validate()?;
-                if r.owner!="any" || r.card_type!="unit" || !r.optional || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) {return Err("named selectors require optional scalar any-owner arena units".into());}
+                if r.owner!="any" || r.card_type!="unit" || (!r.optional && !(ability.trigger=="onAttack" && index==0)) || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) {return Err("named selectors require optional scalar any-owner arena units".into());}
+                if ability.trigger=="onAttack" && r.predicate.is_some() {return Err("named attack selectors require unconditional arena domains".into());}
                 if let Some(predicate)=&r.predicate {
                     if !matches!(predicate,Expr::Query{name,receiver,args} if name=="hasSomeTrait" && matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card") && args.len()==1 && matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|v|!v.is_empty()))) {return Err("named selector predicates require one literal unit trait".into());}
                 }
-                if !matches!(&descriptor.effect,Effect::ModifyStats{target:Target::Name(n),duration,power:Expr::Const{value:p},hp:Expr::Const{value:h}} if n=="chosen" && duration=="phase" && p.as_i64().is_some_and(|v|(-65535..=65535).contains(&v)) && h.as_i64().is_some_and(|v|(-65535..=65535).contains(&v))) {return Err("named selectors require literal scalar phase stats".into());}
-                effects.push(Effect::Select{target_resolver:r,effect:Box::new(descriptor.effect.clone())});
+                fn literal(e:&Expr,negative:bool)->Option<Expr> {
+                    match e {Expr::Const{value} if value.as_i64().is_some_and(|v|(-65535..=65535).contains(&v))=>Some(e.clone()),Expr::Unary{op,value} if negative && op=="-"=>match value.as_ref(){Expr::Const{value}=>value.as_u64().filter(|v|*v<=65535).map(|v|Expr::Const{value:Value::from(-(v as i64))}),_=>None},_=>None}
+                }
+                let effect=match &descriptor.effect {
+                    Effect::ModifyStats{target:Target::Name(n),duration,power,hp} if n=="chosen" && duration=="phase"=>Effect::ModifyStats{target:Target::Name(n.clone()),duration:duration.clone(),power:literal(power,ability.trigger=="onAttack").ok_or("named selectors require literal scalar phase power")?,hp:literal(hp,ability.trigger=="onAttack").ok_or("named selectors require literal scalar phase HP")?},
+                    _=>return Err("named selectors require literal scalar phase stats".into()),
+                };
+                effects.push(Effect::Select{target_resolver:r,effect:Box::new(effect)});
             }
             let effect=Effect::Simultaneous{effects};
             self.validate_group(&effect,1)?;
@@ -1405,7 +1412,7 @@ impl Catalogue {
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
-                if sides.leader.iter().chain(&sides.unit).any(|a|!a.target_resolvers.is_empty()) || sides.card.iter().any(|a|!a.target_resolvers.is_empty() && !((a.trigger=="event" && entry["baseClass"]=="EventCard" && exact_type("event")) || (a.trigger=="whenPlayed" && entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit")))) {return Err("named selectors support ordinary unit WhenPlayed or event card-side sources".into());}
+                if sides.leader.iter().chain(&sides.unit).any(|a|!a.target_resolvers.is_empty()) || sides.card.iter().any(|a|!a.target_resolvers.is_empty() && !((a.trigger=="event" && entry["baseClass"]=="EventCard" && exact_type("event")) || (["whenPlayed","onAttack"].contains(&a.trigger.as_str()) && entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit")))) {return Err("named selectors support ordinary unit WhenPlayed or event card-side sources".into());}
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Weakness source must be an ordinary unit card-side registration".into());}
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}

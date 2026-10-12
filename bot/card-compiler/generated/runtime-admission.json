@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 552
+    "sourceIr": 554
   },
   "runtimeAdmittedCards": [
     {
@@ -1667,6 +1667,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "bossk#join-our-merry-band",
+      "setCode": "LAW_031"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "ezra-bridger#spectre-six",
       "setCode": "LAW_035"
     },
@@ -1739,6 +1744,11 @@
       "implementation": "sourceIr",
       "internalName": "zuckuss#dangerous",
       "setCode": "LAW_064"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "millennium-falcon#dodging-patrols",
+      "setCode": "LAW_068"
     },
     {
       "implementation": "sourceIr",
@@ -4651,7 +4661,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 928,
+  "runtimeAdmittedCount": 930,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -7354,11 +7364,6 @@
       "setCode": "LAW_030"
     },
     {
-      "internalName": "bossk#join-our-merry-band",
-      "reason": "bossk#join-our-merry-band: named selectors support ordinary unit WhenPlayed or event card-side sources",
-      "setCode": "LAW_031"
-    },
-    {
       "internalName": "cad-bane#now-its-my-turn",
       "reason": "cad-bane#now-its-my-turn: compiler rejected \"cad-bane#now-its-my-turn\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/07_LAW/units/CadBaneNowItsMyTurn.ts\",\"line\":21,\"message\":\"unsupported-field:condition\",\"pattern\":\"unsupported-field:condition\"}]",
       "setCode": "LAW_032"
@@ -7462,11 +7467,6 @@
       "internalName": "jyn-erso#take-the-next-chance",
       "reason": "jyn-erso#take-the-next-chance: compiler rejected \"jyn-erso#take-the-next-chance\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":26,\"file\":\"game/cards/07_LAW/units/JynErsoTakeTheNextChance.ts\",\"line\":19,\"message\":\"unsupported-field:choices\",\"pattern\":\"unsupported-field:choices\"}]",
       "setCode": "LAW_067"
-    },
-    {
-      "internalName": "millennium-falcon#dodging-patrols",
-      "reason": "millennium-falcon#dodging-patrols: named selectors support ordinary unit WhenPlayed or event card-side sources",
-      "setCode": "LAW_068"
     },
     {
       "internalName": "the-max-rebo-band#jatzwailers",
@@ -7810,7 +7810,7 @@
     },
     {
       "internalName": "aerie#cloudrider-dropship",
-      "reason": "aerie#cloudrider-dropship: named selectors support ordinary unit WhenPlayed or event card-side sources",
+      "reason": "aerie#cloudrider-dropship: named selectors require optional scalar any-owner arena units",
       "setCode": "LAW_184"
     },
     {
@@ -8280,7 +8280,7 @@
     },
     {
       "internalName": "calm-in-the-storm",
-      "reason": "calm-in-the-storm: named selectors require two independent standalone event/WhenPlayed stat systems",
+      "reason": "calm-in-the-storm: named selectors require two independent standalone event/WhenPlayed/OnAttack stat systems",
       "setCode": "LOF_054"
     },
     {
@@ -11390,7 +11390,7 @@
     },
     {
       "internalName": "ziton-moj#sowing-chaos",
-      "reason": "ziton-moj#sowing-chaos: named selectors support ordinary unit WhenPlayed or event card-side sources",
+      "reason": "ziton-moj#sowing-chaos: named selectors require optional scalar any-owner arena units",
       "setCode": "TS26_029"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1530,
+  "runtimeRejectedCount": 1528,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

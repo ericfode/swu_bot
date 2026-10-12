@@ -146,6 +146,18 @@ delay the remaining prompts until after payment. Effects wait for both choices.
 Unique-source departure, recipient reentry, overlapping trait recipients, lethal
 expiry, and token/deployed-leader interactions remain explicit coverage gaps.
 
+Named On Attack phase-stat experiments normally play the source, wait for natural
+readiness, then declare an attack. They cover mandatory and optional selectors,
+both recipient controllers, arena restrictions, same-recipient stacking, zero
+power clamping and phase expiry. Separate actual-source cases check lethal
+recipient HP loss, captured defense and death triggers, attacker or defender
+departure, and an ordinary upgrade granting Overwhelm before a defender departs.
+A positive HP bonus can preserve a damaged recipient until natural expiry.
+Same-recipient positive-then-negative HP proves deferral and stacking; it does
+not distinguish an intermediate lethal sweep. Reversed source seats, unique
+replacement, recipient reentry, broad token/leader combinations and framework
+stat-death ordering remain explicit gaps.
+
 Weakness experiments cover optional play/death registrations, both controllers,
 damaged-only choices, exact resource thresholds, the entering source, signed
 stat stacking and zero-power clamping, lethal HP loss, and native token/deployed

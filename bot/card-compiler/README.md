@@ -148,6 +148,15 @@ Supported draw/discard groups prepare choices before resolving their effects.
 Mixed damage with hand effects or newly created unit tokens remains rejected.
 The runtime checks its bounded storage and fails explicitly on overflow.
 
+Two independent named phase-stat selectors also support ordinary-unit On Attack
+registrations. The first selector may be mandatory; the second remains optional.
+Each uses a static unit domain in either arena or one named arena, with either
+controller eligible. Both choices are captured before applying the modifiers,
+and the pending attack resumes after resulting defeat triggers. Bounded literal
+negative stats, including negative zero, retain their source meaning. Dependent
+names, other named effect families and additional attack predicates remain
+rejected. Named groups use the validated interpreter fallback in Auto mode.
+
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or
 side-effecting callbacks. Other constant abilities, arbitrary event watchers,

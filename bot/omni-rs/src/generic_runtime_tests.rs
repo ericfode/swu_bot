@@ -2139,7 +2139,7 @@ fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigg
 #[test]
 fn named_two_admission_preserves_other_descriptor_rejections() {
     let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["HMW_263","LAW_031","LAW_068","LAW_099","LAW_184","LOF_054","SEC_030","SOR_218","TS26_029","TS26_072","TS26_081","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    for code in ["HMW_263","LAW_099","LAW_184","LOF_054","SEC_030","SOR_218","TS26_029","TS26_072","TS26_081","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
     assert_eq!(std::mem::size_of::<State>(),18560);
 }
 #[test]
@@ -2175,7 +2175,8 @@ fn named_descriptors_fail_closed_for_dependencies_duplicates_and_other_systems()
     for name in ["","target","groundUnit","bad.name"] {let mut v=valid.clone();v["targetResolvers"][1]["name"]=json!(name);invalid.push(v);}
     for (key,value) in [("chooser",json!("opponent")),("bogus",json!(true))] {let mut v=valid.clone();v["targetResolvers"][0][key]=value;invalid.push(v);}
     for (key,value) in [("owner",json!("self")),("optional",json!(false)),("type",json!("base")),("zone",json!("discard")),("mode",json!("upTo"))] {let mut v=valid.clone();v["targetResolvers"][0]["targetResolver"][key]=value;invalid.push(v);}
-    for trigger in ["onAttack","onDefense","action","whenDefeated","constant"] {let mut v=valid.clone();v["trigger"]=json!(trigger);invalid.push(v);}
+    let mut attack=valid.clone();attack["trigger"]=json!("onAttack");assert!(compile(attack));
+    for trigger in ["onDefense","action","whenDefeated","constant"] {let mut v=valid.clone();v["trigger"]=json!(trigger);invalid.push(v);}
     for (key,value) in [("optional",json!(true)),("condition",json!({"kind":"const","value":true})),("costs",json!([{"kind":"exhaustSelf"}])),("targetResolver",json!({"type":"unit","zone":"arena"}))] {let mut v=valid.clone();v[key]=value;invalid.push(v);}
     let mut v=valid.clone();v["targetResolvers"][0]["effect"]["power"]=json!({"kind":"ref","path":["source","damage"]});invalid.push(v);
     let mut v=valid.clone();v["targetResolvers"][0]["effect"]["target"]=json!({"kind":"ref","path":["targets","spaceUnit"]});invalid.push(v);
@@ -2481,4 +2482,24 @@ fn resource_self_eeth_nonarena_zones_and_mercenary_condition_are_distinct() {
 #[test]
 fn resource_self_resupply_commits_cost_and_survives_event_finish() {
  let e=engine();let mut s=board(&e);let source=hand(&e,&mut s,"TWI_127");let old=s.players[0].resources;let next=s.next_id;let done=e.apply(&s,&e.card_action(&s,source)).unwrap();assert!(done.players[0].resources.contains(source));assert_eq!(done.players[0].resources.len,old.len+1);assert_eq!(done.players[0].resources.as_slice().last(),Some(&source));assert!(!done.players[0].hand.contains(source));assert!(!done.players[0].discard.contains(source));assert!(done.card(source).exhausted);assert_eq!(done.next_id,next);assert!(old.as_slice().iter().filter(|&&id|done.card(id).exhausted).count()>=3);assert_eq!(done.active,Seat::P2);
+}
+#[test]
+fn named_attack_bossk_mandatory_first_defers_stats_and_restores_combat() {
+ let e=engine();let mut s=board(&e);let bossk=unit(&e,&mut s,Seat::P1,"LAW_031");s.card_mut(bossk).exhausted=false;let ally=unit(&e,&mut s,Seat::P1,"LOF_256");let base=s.players[1].base;let power=e.power(&s,ally,false);let hp=e.hp(&s,ally);let prompt=declaration(&e,s,bossk,base);assert_eq!(prompt.decision,Decision::AbilityTarget);assert!(!e.legal_actions(&prompt).iter().any(|a|["Pass","Choose nothing","Cancel"].contains(&a.label.as_str())));assert_eq!(prompt.attack_source,bossk);assert_eq!(prompt.attack_defender,base);
+ let second=e.apply(&prompt,&e.card_action(&prompt,ally)).unwrap();assert_eq!(e.power(&second,ally,false),power);assert_eq!(e.hp(&second,ally),hp);assert_eq!(second.decision,Decision::AbilityTarget);assert!(e.legal_actions(&second).iter().any(|a|a.label=="Choose nothing"));let done=e.apply(&second,&e.card_action(&second,ally)).unwrap();assert_eq!(e.power(&done,ally,false),power);assert_eq!(e.hp(&done,ally),hp);assert!(done.card(base).damage>0);assert_eq!(done.attack_source,0);
+}
+#[test]
+fn named_attack_falcon_arena_domains_literal_negative_zero_and_declines() {
+ let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LAW_068");s.card_mut(source).exhausted=false;let space=unit(&e,&mut s,Seat::P2,"LOF_119");let ground=unit(&e,&mut s,Seat::P2,"LOF_256");let base=s.players[1].base;let power=e.power(&s,space,false);let hp=e.hp(&s,space);let prompt=declaration(&e,s,source,base);let targets=e.legal_actions(&prompt);assert!(targets.iter().any(|a|a.card==Some(format!("c{}",space-1))));assert!(!targets.iter().any(|a|a.card==Some(format!("c{}",ground-1))));let next=e.apply(&prompt,&e.card_action(&prompt,space)).unwrap();assert_eq!(e.power(&next,space,false),power);assert_eq!(e.hp(&next,space),hp);let done=named_button(&e,&next,"Choose nothing");assert_eq!(e.power(&done,space,false),power.saturating_sub(2));assert_eq!(e.hp(&done,space),hp);let declined=named_button(&e,&named_button(&e,&prompt,"Choose nothing"),"Choose nothing");assert_eq!(e.power(&declined,space,false),power);
+}
+#[test]
+fn named_attack_raw_shapes_reject_unwitnessed_primitive_headers_and_literals() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for (field,value) in [("kind",json!("damage")),("duration",json!("persistent")),("target",json!("self"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_031").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["effect"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_031"));}
+ for expression in [json!({"kind":"unary","op":"+","value":{"kind":"const","value":1}}),json!({"kind":"unary","op":"-","value":{"kind":"ref","path":["source","power"]}})] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_031").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["effect"]["power"]=expression;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_031"));}
+ let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_031").unwrap();card["abilities"]["card"][0]["targetResolvers"][1]["targetResolver"]["optional"]=json!(false);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_031"));
+}
+#[test]
+fn named_attack_bossk_distinct_wounded_lethal_resolves_captured_death_then_combat() {
+ let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LAW_031");s.card_mut(source).exhausted=false;let victim=unit(&e,&mut s,Seat::P2,"LOF_129");s.card_mut(victim).damage=e.hp(&s,victim)-1;let base=s.players[1].base;let power=e.power(&s,source,false);let prompt=declaration(&e,s,source,base);let second=e.apply(&prompt,&e.card_action(&prompt,source)).unwrap();assert!(e.in_arena(&second,victim));assert!(!second.players[1].force_held);let done=e.apply(&second,&e.card_action(&second,victim)).unwrap();assert!(done.players[1].discard.contains(victim));assert!(done.players[1].force_held);assert_eq!(done.card(base).damage,power+1);assert_eq!(done.attack_source,0);assert_eq!(done.death_depth,0);
 }
