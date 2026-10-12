@@ -10,7 +10,13 @@ node analysis/karabast/losses.js --games <dir> [--json facts.json]              
 node analysis/karabast/redecide.js --bots c-clock,c-clock2 --out d.jsonl <run>/frames/*.jsonl
 node analysis/karabast/deck-test.js --deck luke-skywalker_jtl_data-vault --bots c-clock,c-clock2 --out t.jsonl
 node analysis/karabast/deck-test.js --summary t-*.jsonl                          # join shards (--shard i/n)
+bash analysis/karabast/fetch.sh <dir>                                            # every run from the Sprite -> <dir>/runs
+node analysis/karabast/review.js --games <dir> [--since <ISO>] [--json r.json]   # strategy review: each bot's record and play facts
 ```
+
+The strategy review runs every 4 hours (fetch, games.js, review.js); its outputs and the replays are kept in
+`/mnt/project-files/karabast-bot-games/`. Opponents get stronger or weaker with the time of day, so review.js also splits
+each bot's record by 6-hour UTC block: compare bots within a block.
 
 Opponents' names are never read: they live in a separate file on the Sprite (bot/karabast/README.md, "Watch a game").
 
