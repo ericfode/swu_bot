@@ -1,0 +1,55 @@
+# The Fly app swu-arena-games: the games machine (bot/arena/games.js, Dockerfile.games). It plays the bots people
+# submit on the window (swu-arena, fly.toml) and sends the results there. Deployed by .github/workflows/deploy-games.yml.
+#
+# It has a private address only (`fly ips allocate-v6 --private -a swu-arena-games`, no public IP), so only machines in
+# the same Fly organization reach it: the window calls http://swu-arena-games.flycast/wake (ARENA_GAMES_WAKE in
+# fly.toml) on each submission and every 6 hours, and Fly's proxy starts the stopped machine for that request. games.js
+# exits when it has nothing to do, and the machine stays stopped until the next wake-up (restart only on failure).
+# Secret (`fly secrets set ... -a swu-arena-games`): SWU_WINDOW_TOKEN, a token the window accepts as the project's
+# (ARENA_GAMES_TOKEN in fly.toml's secrets).
+app = "swu-arena-games"
+primary_region = "dfw"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile.games"
+  ignorefile = "Dockerfile.games.dockerignore"
+
+[env]
+  SWU_WINDOW = "https://swu-arena.fly.dev"
+  GAMES_DATA = "/data"
+  PORT = "8080"
+
+[[mounts]]
+  source = "games_data"
+  destination = "/data"
+  initial_size = "3gb"
+
+# flycast only: reached at swu-arena-games.flycast over the private network, never from the internet
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  auto_start_machines = true
+  # games.js decides when to stop (a round has no requests while it plays)
+  auto_stop_machines = "off"
+  min_machines_running = 0
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.http_checks]]
+    grace_period = "60s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[restart]]
+  policy = "on-failure"
+  retries = 3
+
+[[vm]]
+  size = "performance-2x"
+  memory = "4gb"

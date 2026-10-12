@@ -2,7 +2,8 @@
 # Deployed by .github/workflows/deploy-arena.yml on every merge to main that touches the image (Dockerfile).
 # Secrets (set with `fly secrets set ... -a swu-arena`): ARENA_PUSH_TOKEN (the project's push token; the same value
 # is the cloud environment's network secret for swu-arena.fly.dev), GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET (the
-# GitHub OAuth App for sign-in), optionally ARENA_ADMIN_TOKEN and ARENA_INVITES.
+# GitHub OAuth App for sign-in), ARENA_GAMES_TOKEN (the games machine's own project token, the same value as its
+# SWU_WINDOW_TOKEN; fly.games.toml), optionally ARENA_ADMIN_TOKEN and ARENA_INVITES.
 app = "swu-arena"
 primary_region = "dfw"
 
@@ -14,6 +15,8 @@ primary_region = "dfw"
   WINDOW_HOME = "/data/window"
   ARENA_PUBLIC_URL = "https://swu-arena.fly.dev"
   ARENA_ADMINS = "ericfode"
+  # the games machine (fly.games.toml): woken over Fly's private network on every submission and every 6 hours
+  ARENA_GAMES_WAKE = "http://swu-arena-games.flycast/wake"
 
 [[mounts]]
   source = "arena_data"

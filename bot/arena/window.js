@@ -18,7 +18,9 @@
  *
  * push.js is the client and CLI for the push side. Who may do what is in auth.js: friends read, the project's token
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
- * Start it with ARENA_MODE=window node bot/arena/server.js --host 0.0.0.0 --port 8080.
+ * Start it with ARENA_MODE=window node bot/arena/server.js --host 0.0.0.0 --port 8080. With ARENA_GAMES_WAKE set (the
+ * games machine's private address, http://swu-arena-games.flycast/wake), every submission wakes the games machine
+ * (games.js), and server.js wakes it every 6 hours.
  */
 const fs = require('fs');
 const path = require('path');
@@ -513,6 +515,17 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
  * The window's request handler. opts: home (storage folder), auth (an auth.js instance; default from the environment),
  * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts (for tests).
  */
+/**
+ * Wakes the games machine (games.js POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
+ * a stopped machine on the request. Never waits on it and never fails: the machine also wakes every 6 hours.
+ */
+function wakeGamesAt(url, { fetchImpl = fetch } = {}) {
+    if (!url) {
+        return;
+    }
+    fetchImpl(url, { method: 'POST', signal: AbortSignal.timeout(60000) }).then((r) => r.body?.cancel?.(), (e) => console.error(`window: waking the games machine: ${e.message}`));
+}
+
 function createWindow(opts = {}) {
     const home = path.resolve(opts.home ?? process.env.WINDOW_HOME ?? '/data/window');
     const store = new Store(home);
@@ -521,6 +534,8 @@ function createWindow(opts = {}) {
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
     const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
+    // the games machine (games.js), woken when a bot comes in; a stopped machine starts on the request
+    const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
     const webFile = opts.web ?? path.join(__dirname, 'web', 'index.html');
@@ -666,6 +681,7 @@ function createWindow(opts = {}) {
         const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
             state: 'pending', submittedAt: new Date(now).toISOString() };
         store.putDoc('submissions', id, JSON.stringify(doc));
+        wakeGames();
         return { id, name: n, kind, state: 'pending',
             next: 'The arena packs it, starts it once in its sandbox and enters it; arena_my_submissions shows the version it rates, or what to fix. While the arena is not running, it waits.' };
     }
@@ -1071,7 +1087,7 @@ function createWindow(opts = {}) {
         }
     }
 
-    return { handle, store, auth };
+    return { handle, store, auth, wakeGames };
 }
 
-module.exports = { createWindow, Store, storeReader, scrub, appBuilder, NS, FRIEND_NS };
+module.exports = { createWindow, wakeGamesAt, Store, storeReader, scrub, appBuilder, NS, FRIEND_NS };

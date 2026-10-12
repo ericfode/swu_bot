@@ -226,6 +226,18 @@ async function pushDir(ns, dir) {
  * the replays of its newest round ladders.
  */
 async function pushArena({ everyMs = 20000, once = false } = {}) {
+    const pusher = arenaPusher();
+    for (;;) {
+        const ok = await pusher.once();
+        if (once) {
+            return ok;
+        }
+        await sleep(everyMs);
+    }
+}
+
+/** pushArena's state between passes: `once()` sends what changed since its last pass; false when it failed (logged). */
+function arenaPusher() {
     const { call } = require('./api');
     const home = require('./home');
     const docs = new Map();
@@ -234,7 +246,7 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
         const r = await call(m, a);
         return r.error ? null : r.result;
     };
-    for (;;) {
+    const once = async () => {
         try {
             const roster = home.roster();
             const t = home.readJson(path.join(home.HOME, 'tournament.json'), null);
@@ -293,12 +305,11 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
             }
         } catch (e) {
             console.error(`push: arena: ${e.message}`);
+            return false;
         }
-        if (once) {
-            return;
-        }
-        await sleep(everyMs);
-    }
+        return true;
+    };
+    return { once };
 }
 
 /**
@@ -341,7 +352,9 @@ async function main(argv) {
         return `run ${path.basename(path.resolve(pos[0]))}: ${r.sent} replays sent${r.going ? ', still playing' : ''}`;
     }
     if (cmd === 'arena') {
-        await pushArena({ everyMs: Number(opt('every', 20)) * 1000, once: flag('once') });
+        if ((await pushArena({ everyMs: Number(opt('every', 20)) * 1000, once: flag('once') })) === false) {
+            throw new Error('arena: the push failed (see above)');
+        }
         return 'arena pushed';
     }
     if (cmd === 'invites' && pos.length === 1) {
@@ -365,4 +378,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { putDoc, putChanged, syncReplay, pushRun, pushRunOnce, pushDir, pushArena, followRun, request };
+module.exports = { putDoc, putChanged, syncReplay, pushRun, pushRunOnce, pushDir, pushArena, arenaPusher, followRun, request };

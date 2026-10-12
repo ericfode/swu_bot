@@ -82,7 +82,7 @@ Usage rule for every thread. Perch (semantic lint with Jev) is advisory, never a
 
 ## Fly.io (MCP server)
 
-`.mcp.json` starts Fly's MCP server (`flyctl mcp server`, through `tools/bin/fly-mcp`): tools for apps, machines, volumes, secrets, certs, IPs and logs. In cloud sessions `.claude/hooks/session-start.sh` builds flyctl from source through the Go module proxy (a few minutes the first time), and the egress proxy injects the Fly key for api.fly.io and api.machines.dev, so no key is stored anywhere. Locally, flyctl uses your own `fly auth login`. Creating Fly resources costs money: the compute budget is $70 a month.
+`.mcp.json` starts Fly's MCP server (`flyctl mcp server`, through `tools/bin/fly-mcp`): tools for apps, machines, volumes, secrets, certs, IPs and logs. In cloud sessions `.claude/hooks/session-start.sh` builds flyctl from source through the Go module proxy (a few minutes the first time), and the egress proxy injects the Fly key for api.fly.io and api.machines.dev, so no key is stored anywhere. Locally, flyctl uses your own `fly auth login`. Creating Fly resources costs money: the compute budget is $70 a month. Two apps: `swu-arena` (the window, `fly.toml`) and `swu-arena-games` (the games machine that plays submitted bots, `fly.games.toml`, private address only; `bot/arena/WINDOW.md`).
 
 ## Architecture of `bot/env.js`
 

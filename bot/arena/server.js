@@ -161,6 +161,8 @@ if (require.main === module) {
         const { createWindow } = require('./window');
         const w = createWindow();
         http.createServer((req, res) => w.handle(req, res)).listen(port, host, () => console.log(`arena window on http://${host}:${port}/ (data in ${w.store.dir})`));
+        // the games machine stops when idle: woken on every submission, and every 6 hours for its daily replays
+        setInterval(() => w.wakeGames(), 6 * 3600000).unref();
     } else {
         http.createServer(handler).listen(port, host, () => console.log(`arena API on http://${host}:${port}/api`));
     }

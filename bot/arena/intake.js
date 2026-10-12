@@ -317,11 +317,15 @@ function toolchainMissing() {
  * the window did not take (it was down), sent again first. Nothing is checked while the toolchain is missing. A check
  * that ends with no result (the arena's fault) leaves the submission pending, tried again later, RETRIES times at most.
  */
-async function intakeOnce({ benchNew = false, window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated } = {}) {
+async function intakeOnce({ benchNew = false, window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {} } = {}) {
+    // for the games machine (games.js): how many submissions are still open after this pass, and how many it accepted
+    stats.open = 0;
+    stats.accepted = 0;
     // without the toolchain every check would fail: submissions stay pending until it is there
     const why = missing();
     if (why) {
         log(`intake: waiting, ${why}`);
+        stats.open = null; // not known
         return 0;
     }
     for (const [id, out] of unsent) {
@@ -342,6 +346,9 @@ async function intakeOnce({ benchNew = false, window = require('./push'), finish
             continue;
         }
         const stuck = doc?.state === 'checking' && Date.now() - Date.parse(doc.checkingAt ?? 0) > STUCK_MS;
+        if (doc) {
+            stats.open++;
+        }
         if (!doc || !(doc.state === 'pending' || stuck) || (doc.retryAt && Date.parse(doc.retryAt) > Date.now())) {
             continue;
         }
@@ -368,6 +375,8 @@ async function intakeOnce({ benchNew = false, window = require('./push'), finish
             throw e;
         }
         finished.add(id);
+        stats.open--;
+        stats.accepted += res.ok ? 1 : 0;
         log(`${id}: ${out.state}${res.ok ? ` as ${res.version}${res.benched ? ' (benched)' : ''}` : `: ${String(res.error).split('\n')[0]}`}`);
         done++;
     }

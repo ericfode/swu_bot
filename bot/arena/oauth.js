@@ -10,7 +10,7 @@
  *   POST /oauth/token      a code and its PKCE verifier (S256) -> an access token (1 hour) and a refresh token
  *                          (30 days from its last use, a new one each time; an old one used again ends the grant)
  *   POST /oauth/revoke     ends the grant a token belongs to (RFC 7009)
- * An agent with no browser (a person's Claude on their own Sprite, bot/arena/sprite) connects with the device grant
+ * An agent with no browser (a person's Claude Code on their own computer, through bot/arena/connect.js) connects with the device grant
  * (RFC 8628) instead, for one competitor name of its person:
  *   POST /oauth/device_authorization  {name, label} -> a device code for the agent and a user code + link for the person
  *   GET  /oauth/device     the person signs in, checks the code and allows or denies "<label> submits as <name>"

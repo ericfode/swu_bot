@@ -1,0 +1,51 @@
+# The games machine: what the Fly app swu-arena-games runs (fly.games.toml). bot/arena/games.js takes the bots people
+# submit on the window (swu-arena.fly.dev), plays them against each other and the resident bots, and sends the results
+# back to the window. Built from the repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's
+# builders (never from a thread's container). The build context is filtered by Dockerfile.games.dockerignore.
+# No stage installs system packages: each takes what it needs from an official image (node, python, rust).
+
+# the engine: forceteki built at the commit this repo pins, its card data fetched, only its runtime packages kept
+FROM node:22-bookworm AS engine
+WORKDIR /src/forceteki
+COPY forceteki/package.json forceteki/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY forceteki/ ./
+RUN npm run get-cards && npm run build && npm prune --omit=dev --no-audit --no-fund
+
+# the Python packages bot/compiled pins (toolchain.json): wasmtime runs the bundles, ziglang compiles the C resident
+FROM python:3.12-slim-bookworm AS pydeps
+COPY bot/compiled/toolchain.json /toolchain.json
+RUN pip install --no-cache-dir --target /opt/zig "ziglang==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['ziglang'])")" \
+ && pip install --no-cache-dir --target /opt/py "wasmtime==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['wasmtime'])")"
+
+# the resident bots as WebAssembly bundles (bot/compiled), and the tools the intake packs submissions with: Javy and
+# CPython for WASI (pinned in toolchain.json, checked by sha256)
+FROM rust:1.97-bookworm AS wasm
+RUN rustup target add wasm32-wasip1
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=pydeps /opt/py /opt/py
+COPY --from=pydeps /opt/zig /opt/zig
+ENV PYTHONPATH=/opt/py:/opt/zig
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY bot bot
+RUN python3 bot/compiled/build.py c-clock rust-greedy2 rust-search node-search py-clock \
+ && rm -rf build/compiled/.cargo build/compiled/.work build/compiled/.cache build/compiled/.tools/downloads
+
+# python3 runs bundles under wasmtime (bot/compiled/run.py); bash, unshare and setpriv run isolate.sh; the bots and the
+# intake's checker run as the user arena
+FROM python:3.12-slim-bookworm
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
+RUN useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin arena
+ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
+WORKDIR /app
+COPY package.json ./
+COPY bot bot
+COPY --from=engine /src/forceteki/package.json forceteki/package.json
+COPY --from=engine /src/forceteki/build forceteki/build
+COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
+COPY --from=engine /src/forceteki/test/json forceteki/test/json
+COPY --from=wasm /src/build/compiled build/compiled
+EXPOSE 8080
+CMD ["node", "bot/arena/games.js"]

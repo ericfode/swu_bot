@@ -130,6 +130,8 @@ this site's own pages: Origin and JSON).
   2026-10-12 ~04:45 get it as the environment variable `ARENA_PUSH_TOKEN`, which `push.js` reads (after
   `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. The arena's
   uplink (`ops/launch.sh`) does not pass it on: competitors run as the same user and could read it from `/proc`. Elsewhere set `SWU_WINDOW_TOKEN`.
+- `ARENA_GAMES_TOKEN` is role project too: the games machine's own token (its secret `SWU_WINDOW_TOKEN`), so it can be
+  replaced without touching the threads' token.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
 - An MCP app's access token (`swua_...`, from `/oauth/token`) reads as its person with role friend, never more.
 
@@ -165,6 +167,35 @@ secret `ARENA_PUSH_TOKEN`; a GitHub OAuth App with callback `https://swu-arena.f
 client ID and secret as `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`; an `ARENA_ADMIN_TOKEN` Fly secret, if invites
 should change without a deploy; and a deploy token as the repository secret `FLY_API_TOKEN` (until it is set, merges
 run the tests and deploy nothing). Threads send data when `SWU_WINDOW=https://swu-arena.fly.dev` is set in their environment.
+
+## The games machine (swu-arena-games)
+
+The window stores submissions; the games machine plays them. It is the Fly app `swu-arena-games` (`fly.games.toml`,
+`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running `bot/arena/games.js`:
+
+```
+ window ──POST /wake──▶ games.js ──intake.js──▶ versions/ ──referee.js──▶ ladder (bots as user arena, WebAssembly)
+   ▲      (flycast)        │
+   └── submissions, standings, round replays (its own token) ──┘
+```
+
+- It has a private address only (flycast). The window calls `http://swu-arena-games.flycast/wake` (`ARENA_GAMES_WAKE`)
+  on every submission and every 6 hours; Fly's proxy starts the stopped machine for that request.
+- Every minute it runs the intake, then starts a round when the lineup changed (90 s after the last version came in,
+  so a quick fix joins the same round) or the last round is a day old. Rounds are round robins of every competitor's
+  newest version and the residents (the roster's baselines: heuristic, rush, and c-clock, rust-greedy2, rust-search,
+  node-search and py-clock built to WebAssembly in the image; `ARENA_RESIDENTS` overrides), 2 games a pair.
+- It pushes the arena's state and the round replays to the window every 20 s, like the old uplink, into the same
+  `arena`, `runs` and `ladders` collections the app reads.
+- With nothing to do for 10 minutes it exits, and the machine stays stopped until the next wake-up.
+- Only games.js holds the window token. The referee runs with a minimal environment in its own namespaces with `/.fly`
+  hidden, and the ladders and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
+
+Deploys: `.github/workflows/deploy-games.yml` on every merge that touches `bot/`, the engine pin or the image, with the
+repository secret `FLY_GAMES_TOKEN` (`fly tokens create deploy -a swu-arena-games`). It checks out forceteki with
+`FORCETEKI_TOKEN` when that secret exists. Locally, `GAMES_DATA=/srv/x SWU_WINDOW=http://localhost:8080
+SWU_WINDOW_TOKEN=t node bot/arena/games.js --idle-min 1` plays against a local window (outside /tmp: isolate.sh gives
+the referee its own /tmp).
 
 ## Run it locally
 

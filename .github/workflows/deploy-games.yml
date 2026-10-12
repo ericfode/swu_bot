@@ -1,0 +1,57 @@
+# Builds the games image (Dockerfile.games) on Fly's builders and rolls it out to swu-arena-games (fly.games.toml) after
+# the arena tests pass. Needs the repository secret FLY_GAMES_TOKEN (`fly tokens create deploy -a swu-arena-games`).
+# The image builds forceteki from the submodule: when that repository is private, FORCETEKI_TOKEN (a token that can
+# read it) checks it out; otherwise the workflow's own token does.
+name: Deploy the games machine
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bot/**'
+      - 'forceteki'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Dockerfile.games'
+      - 'Dockerfile.games.dockerignore'
+      - 'fly.games.toml'
+      - '.github/workflows/deploy-games.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-games
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test bot/test/games.test.js bot/test/window.test.js
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_GAMES_TOKEN }}
+    steps:
+      # until the deploy token is added, merges run the tests and deploy nothing
+      - if: env.FLY_API_TOKEN == ''
+        run: echo "::notice::FLY_GAMES_TOKEN is not set, so the games machine was not deployed"
+      - if: env.FLY_API_TOKEN != ''
+        uses: actions/checkout@v4
+      # the engine at the commit this repo pins; FORCETEKI_TOKEN replaces the workflow's token for it when set
+      - if: env.FLY_API_TOKEN != ''
+        env:
+          TOKEN: ${{ secrets.FORCETEKI_TOKEN || github.token }}
+        run: |
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c 'http.https://github.com/.extraheader=' -c "http.https://github.com/.extraheader=$auth" submodule update --init --depth 1 forceteki \
+            || git -c 'http.https://github.com/.extraheader=' -c "http.https://github.com/.extraheader=$auth" submodule update --init forceteki
+          git -C forceteki log -1 --format='forceteki %h %s'
+      - if: env.FLY_API_TOKEN != ''
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      - if: env.FLY_API_TOKEN != ''
+        run: flyctl deploy --remote-only -c fly.games.toml

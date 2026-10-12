@@ -11,7 +11,7 @@ test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 // a scratch arena for anything that loads home.js (server.js, which window.js uses, loads api.js): never the project's
 Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RESULTS: path.join(tmp, 'arena-results'), ARENA_DASH: path.join(tmp, 'no-dash') });
 
-const { createWindow, Store, storeReader, scrub } = require('../arena/window');
+const { createWindow, wakeGamesAt, Store, storeReader, scrub } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 
 const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
@@ -27,13 +27,13 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0 });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -91,6 +91,9 @@ test('auth: bearer tokens give roles, a wrong one is refused, and a session cook
     const two = createAuth({ dir: path.join(tmp, 'auth1b'), env: { ARENA_FEED_TOKEN_FOO: 'foo-secret', ARENA_FEED_TOKEN_FOO_BAR: 'foo-bar-secret' } });
     assert.deepStrictEqual(two.who(req({ authorization: 'Bearer foo-secret' })), { role: 'feed', feed: 'foo', via: 'bearer' });
     assert.deepStrictEqual(two.who(req({ authorization: 'Bearer foo-bar-secret' })), { role: 'bad', via: 'bearer' }, 'a feed name is letters and digits, so FOO_BAR never owns foo-<id> names');
+    const games = createAuth({ dir: path.join(tmp, 'auth1c'), env: { ARENA_PUSH_TOKEN: 'push-secret', ARENA_GAMES_TOKEN: 'games-secret' } });
+    assert.deepStrictEqual(games.who(req({ authorization: 'Bearer games-secret' })), { role: 'project', games: true, via: 'bearer' }, "the games machine's own token");
+    assert.deepStrictEqual(games.who(req({ authorization: 'Bearer push-secret' })), { role: 'project', via: 'bearer' });
     assert.deepStrictEqual(auth.who(req({})), { role: 'anon', via: 'cookie' });
     const pal = auth.sign({ l: 'pal', exp: now + 60000 });
     assert.deepStrictEqual(auth.who(req({ cookie: `swu_session=${pal}` })), { role: 'friend', login: 'pal', via: 'cookie' });
@@ -690,7 +693,8 @@ async function mcpToken(w, go, login) {
 }
 
 test('mcp submit: a signed-in person submits a bot, reads only their own submissions, and the arena\'s result comes back', async () => {
-    const w = makeWindow('w-submit');
+    let wakes = 0;
+    const w = makeWindow('w-submit', { wakeGames: () => wakes++ });
     const { go, close } = await serve(w);
     try {
         w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['Kim-B', 'lee', 'kim-b-x'] }));
@@ -722,8 +726,10 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
             const r = await call(kim, 'arena_submit', args);
             assert.ok(r.error && why.test(r.value), `${JSON.stringify(args).slice(0, 80)}: ${r.value}`);
         }
+        assert.strictEqual(wakes, 0, 'a refused submission wakes nothing');
         const first = (await call(kim, 'arena_submit', bot)).value;
         assert.deepStrictEqual([first.name, first.kind, first.state], ['kim_b', 'js', 'pending']);
+        assert.strictEqual(wakes, 1, 'a stored submission wakes the games machine');
         assert.match(first.id, /^kim-b\./);
         assert.strictEqual((await call(kim, 'arena_submit', { ...bot, name: 'kim_b_two' })).value.name, 'kim_b_two', 'a second competitor of their own');
         const stored = JSON.parse(w.store.getDoc('submissions', first.id));
@@ -991,4 +997,20 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
     } finally {
         await close();
     }
+});
+
+test('wakeGamesAt: posts to the games machine without waiting, and does nothing without an address', async () => {
+    const calls = [];
+    const fetchImpl = (url, opts) => {
+        calls.push([url, opts.method]);
+        return Promise.resolve({ body: null });
+    };
+    wakeGamesAt('', { fetchImpl });
+    wakeGamesAt(undefined, { fetchImpl });
+    assert.strictEqual(calls.length, 0);
+    wakeGamesAt('http://swu-arena-games.flycast/wake', { fetchImpl });
+    assert.deepStrictEqual(calls, [['http://swu-arena-games.flycast/wake', 'POST']]);
+    // a machine that cannot be reached is only logged
+    wakeGamesAt('http://nowhere.invalid/wake', { fetchImpl: () => Promise.reject(new Error('getaddrinfo ENOTFOUND')) });
+    await new Promise((r) => setTimeout(r, 10));
 });
