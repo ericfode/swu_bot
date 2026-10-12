@@ -7,8 +7,9 @@
  *   node analysis/karabast/redecide.js --bots c-clock,c-clock2 --deck <deck name> --out <file.jsonl> <frame file>...
  *
  * --deck names our deck in bot/decks/ash-meta-2026-09.json (the hello's deck list; default luke-skywalker_jtl_data-vault).
- * Each output line is one decision: { game, k, round, prompt, labels, picks: { bot: action index } }. With
- * --stderr <dir>, each bot's stderr goes to <dir>/<bot>.<game>.log, so SWU_C_DEBUG=1 shows c-clock's reasons there.
+ * Each output line is one decision: { game, k, round, prompt, labels, picks: { bot: action index } }; a bot that
+ * answers anything but an action stops the run. With --stderr <dir>, each bot's stderr goes to
+ * <dir>/<bot>.<game>.log, so SWU_C_DEBUG=1 shows c-clock's reasons there.
  * The game itself went the way the recorded bot played it, so after the first disagreement the later decisions are
  * ones the other bot might never have faced: count disagreements by kind, not as a score.
  */
@@ -99,10 +100,13 @@ async function redecide(file, { bots, programs, deck, sink, stderr }) {
             if (!hello) {
                 const { deck: own, opponent } = obs.decks(gs, deck);
                 for (const x of clients) {
-                    await answer(x.c, {
+                    const r = await answer(x.c, {
                         t: 'hello', protocol: 'swu-bot-stdio', v: 1, versions: [1, 2], bot: x.name, you: 'p1', seed: 1, ms: 30000,
                         players: [{ id: 'p1', name: 'p1', bot: x.name }, { id: 'p2', name: 'p2', bot: 'karabast-player' }], deck: own, opponent
                     }, noSim);
+                    if (r?.t !== 'ready') {
+                        throw new Error(`${x.name}: expected ready at hello, got ${JSON.stringify(r)?.slice(0, 120)}`);
+                    }
                 }
                 hello = true;
             }
@@ -113,7 +117,10 @@ async function redecide(file, { bots, programs, deck, sink, stderr }) {
                     fs.writeSync(x.fd, `@@ decision ${k}\n`);
                 }
                 const r = await answer(x.c, msg, noSim);
-                picks[x.name] = Number.isInteger(r?.i) ? r.i : null;
+                if (r?.t !== 'act' || !Number.isInteger(r.i)) {
+                    throw new Error(`${x.name}: no action at ${game} decision ${k}: ${JSON.stringify(r)?.slice(0, 120)}`);
+                }
+                picks[x.name] = r.i;
             }
             const labels = d.actions.map((a) => `${a.kind}:${a.label ?? a.card?.n ?? ''}`);
             sink.write(`${JSON.stringify({ game, k, round: d.state.round, prompt: d.prompt.title ?? d.prompt.promptTitle ?? null, labels, picks })}\n`);
