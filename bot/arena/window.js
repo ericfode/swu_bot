@@ -504,7 +504,10 @@ function createWindow(opts = {}) {
                 return scrub(JSON.parse(text));
             } },
         { name: 'window_replays', annotations: RO, description: "A run's recorded games (replays) and their sizes in bytes.", inputSchema: schema({ run: TYPE.string }, ['run']),
-            call: (ctx, { run }) => store.listReplays(String(run ?? '')).map((id) => ({ id, size: store.replaySize(run, id) })) },
+            call: (ctx, { run }) => {
+                const r = String(run ?? '');
+                return store.listReplays(r).map((id) => ({ id, size: store.replaySize(r, id) }));
+            } },
         { name: 'window_replay', annotations: RO,
             description: `Part of one game's replay: JSON lines, a header, then one step per decision with the board (spec/replay-format.md in the swu_bot repo). Up to ${REPLAY_SLICE} bytes per call from byte \`from\`; size says how much there is.`,
             inputSchema: schema({ run: TYPE.string, game: TYPE.string, from: TYPE.integer, length: TYPE.integer }, ['run', 'game']),
