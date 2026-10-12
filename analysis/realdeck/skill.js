@@ -22,6 +22,12 @@
  * anything else are counted, by outcome, and left out. Games still running are ignored. The reference itself is 50% by
  * definition.
  *
+ * Deck-type row (`skill.byStyle`): the same score split by the style of the deck the challenger holds (hyperaggro ..
+ * hardcontrol, from the deck file's metadata.style as compare.js reads it), with a Wilson CI each. The reference holds
+ * the other deck of the game, so a row below 50% for one type says the challenger pilots that type worse than the
+ * reference pilots the decks it meets. Styles come from the `styles` option (deck name -> style) or else from the
+ * compare.js result's decks; without either there is no row.
+ *
  * Paired: for every two challengers, the seeds both played with the same decks from the same seats and the same game
  * key (or none on both) with all four games decided. Per seed d = (A's score − B's score) / 2 over its two games; the
  * mean d with a normal 95% CI (clamped to ±1), and how many seeds each side did better. A is the challenger with the
@@ -54,6 +60,7 @@ const { readRun, wilson } = require('./compare');
 
 const AGGRO = ['hyperaggro', 'softaggro'];
 const CONTROL = ['softcontrol', 'hardcontrol'];
+const STYLES = [...AGGRO, 'midrange', ...CONTROL];
 const EXACT_MAX = 8; // 8! = 40,320 orderings
 const Z95 = 1.959964;
 const MEASURES = [
@@ -204,6 +211,33 @@ function skillOf(t) {
         score: t.score, winRate: rate, ci, elo: elo(rate), eloCI: ci ? [elo(ci[0]), elo(ci[1])] : null,
         bySeat: { p1: seat(t.bySeat.p1), p2: seat(t.bySeat.p2) }
     };
+}
+
+/**
+ * A challenger's score against the reference by the style of the deck it holds (its deck-type row). styleOf: Map deck
+ * name -> style; a deck it does not know counts under 'unknown'. Decided games only, as in skillOf. Styles in STYLES
+ * order, then any others.
+ */
+function styleRow(t, styleOf) {
+    const acc = new Map();
+    for (const rec of t.seeds.values()) {
+        for (const seat of ['p1', 'p2']) {
+            const g = rec[seat];
+            if (!g || g.y === null || !g.decks?.[seat]) {
+                continue;
+            }
+            const style = styleOf.get(g.decks[seat]) ?? 'unknown';
+            const x = acc.get(style) ?? { decided: 0, score: 0 };
+            x.decided++;
+            x.score += g.y;
+            acc.set(style, x);
+        }
+    }
+    const order = [...STYLES.filter((s) => acc.has(s)), ...[...acc.keys()].filter((s) => !STYLES.includes(s)).sort()];
+    return Object.fromEntries(order.map((s) => {
+        const x = acc.get(s);
+        return [s, { decided: x.decided, score: x.score, winRate: x.score / x.decided, ci: wilson(x.score, x.decided) }];
+    }));
 }
 
 const sameDecks = (x, y) => !!x && !!y && x.p1 === y.p1 && x.p2 === y.p2;
@@ -391,10 +425,13 @@ function spearmanExact(xs, ys) {
 }
 
 /**
- * The whole join. gauntlets: from readGauntlet; cmp: a parsed compare.js result (or null). Pure apart from `now`.
+ * The whole join. gauntlets: from readGauntlet; cmp: a parsed compare.js result (or null); styles: deck name -> style
+ * (an object or a Map) for the deck-type rows, else taken from cmp.decks. Pure apart from `now`.
  */
-function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
+function skillVsAgreement(gauntlets, cmp, { now = new Date(), styles = null } = {}) {
     const { reference, tallies, warnings } = gauntletTallies(gauntlets);
+    const styleOf = new Map(styles instanceof Map ? styles : styles ? Object.entries(styles)
+        : (cmp?.decks ?? []).filter((d) => d?.name && d.style).map((d) => [d.name, d.style]));
     const mirrors = mirrorRuns(cmp);
     const refRun = mirrors.get(reference)?.run.id ?? null;
     if (cmp && !refRun) {
@@ -407,7 +444,7 @@ function skillVsAgreement(gauntlets, cmp, { now = new Date() } = {}) {
         const pick = mirrors.get(bot);
         return {
             bot, reference: isRef,
-            skill: isRef ? { winRate: 0.5, elo: 0, reference: true } : t ? skillOf(t) : null,
+            skill: isRef ? { winRate: 0.5, elo: 0, reference: true } : t ? { ...skillOf(t), byStyle: styleOf.size ? styleRow(t, styleOf) : null } : null,
             agreement: pick ? agreementOf(cmp, pick, refRun) : null
         };
     });
@@ -497,6 +534,19 @@ function summaryText(r) {
             : `${`${f2(a.deckR)} (${f2(a.deckRDisattenuated)})`.padEnd(27)} ${(a.favouriteShare === null ? '-' : `${pc(a.favouriteShare)}%`).padEnd(10)} ${`${f2(a.style.botGap)} / ${f2(a.style.humanGap)}`.padEnd(20)} ${b.reference ? 'ref' : f2(a.withReference)}`;
         L.push(`${b.bot.padEnd(28)} ${sk} | ${ag}`);
     }
+    const rows = r.bots.filter((b) => b.skill?.byStyle);
+    if (rows.length) {
+        const cols = [...new Set(rows.flatMap((b) => Object.keys(b.skill.byStyle)))];
+        L.push('');
+        L.push(`by deck type: win% vs ${r.reference} when the bot holds a deck of that type (decided games)`);
+        L.push(`${''.padEnd(28)} ${cols.map((c) => c.padEnd(13)).join(' ')}`.trimEnd());
+        for (const b of rows) {
+            L.push(`${b.bot.padEnd(28)} ${cols.map((c) => {
+                const x = b.skill.byStyle[c];
+                return (x ? `${pc(x.winRate)} (${x.decided})` : '-').padEnd(13);
+            }).join(' ')}`.trimEnd());
+        }
+    }
     if (r.paired.length) {
         L.push('');
         L.push('paired, same deals (score difference per seed, A minus B):');
@@ -544,6 +594,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-    MEASURES, parseArgs, readGauntlet, gauntletTallies, elo, skillOf, deckBalance, pairedDifference, styleGap, mirrorRuns, agreementOf,
+    MEASURES, STYLES, parseArgs, readGauntlet, gauntletTallies, elo, skillOf, styleRow, deckBalance, pairedDifference, styleGap, mirrorRuns, agreementOf,
     permutations, spearmanExact, skillVsAgreement, summaryText
 };

@@ -45,6 +45,7 @@ npm run app                  # SWU Arena app -> app/dist/app.html (--public for 
 npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
+npm run realdeck:test -- --bot <bot>   # standard bot test: 702 games vs c-clock on 27 real decks, same deals as every bot (analysis/realdeck/README.md)
 npm test                     # unit tests (ratings, ladder report, bot logic on mock boards, importer); no card data needed
 node importer/import.js <capture>... --out replays/human   # import human Karabast games
 npm run lint                 # Perch semantic lint with Jev (see "Linting" below)

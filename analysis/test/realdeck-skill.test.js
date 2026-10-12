@@ -287,6 +287,32 @@ const cmpFixture = () => {
     assert.match(r5.warnings.join('\n'), /deck files differ \(sha256 compare.json aaaaaaaaaaaa, mirror heu cccccccccccc, gl aaaaaaaaaaaa\)/);
 }
 
+// 5b. deck-type rows: the challenger's score by the style of the deck it holds, from the styles option or cmp.decks
+{
+    const styleOf = new Map([['d0', 'hyperaggro'], ['d1', 'hardcontrol'], ['d2', 'midrange'], ['d3', 'hyperaggro']]);
+    const games = [
+        ...seedGames('heuristic', 'c-clock', 1, [1, 0], { p1: 'd0', p2: 'd1' }),
+        ...seedGames('heuristic', 'c-clock', 2, [0.5, null], { p1: 'd3', p2: 'd2' }),
+        ...seedGames('heuristic', 'c-clock', 3, [1, 1], { p1: 'd1', p2: 'd0' }),
+        ...seedGames('heuristic', 'c-clock', 4, [0, 0], { p1: 'd4', p2: 'd2' })
+    ];
+    const t = sk.gauntletTallies([{ id: 'g', vs: ['c-clock'], games }]).tallies.get('heuristic');
+    const row = sk.styleRow(t, styleOf);
+    assert.deepStrictEqual(Object.keys(row), ['hyperaggro', 'hardcontrol', 'unknown'], 'STYLES order, then the rest');
+    // a bot keeps its deck in both games of a seed: d0 twice, d3 once (a draw; the incomplete game is out)
+    assert.deepStrictEqual([row.hyperaggro.decided, row.hyperaggro.score, row.hyperaggro.winRate], [3, 1.5, 0.5]);
+    assert.deepStrictEqual(row.hyperaggro.ci, wilson(1.5, 3));
+    assert.deepStrictEqual([row.hardcontrol.decided, row.hardcontrol.score, row.unknown.decided, row.unknown.score], [2, 2, 2, 0]);
+    const gl = { id: 'g', vs: ['c-clock'], challengers: ['heuristic'], games, decks: 5 };
+    assert.strictEqual(Object.values(row).reduce((a, x) => a + x.decided, 0), sk.skillOf(t).decided, 'every decided game in one row');
+    const fromCmp = sk.skillVsAgreement([gl], { ...cmpFixture(), decks: [...styleOf].map(([name, style]) => ({ name, style })) });
+    assert.deepStrictEqual(fromCmp.bots.find((b) => b.bot === 'heuristic').skill.byStyle, row);
+    const given = sk.skillVsAgreement([gl], null, { styles: { d0: 'midrange' } });
+    assert.deepStrictEqual(Object.keys(given.bots.find((b) => b.bot === 'heuristic').skill.byStyle), ['midrange', 'unknown']);
+    assert.strictEqual(sk.skillVsAgreement([gl], cmpFixture()).bots.find((b) => b.bot === 'heuristic').skill.byStyle, null, 'no styles, no row');
+    assert.match(sk.summaryText(fromCmp), /by deck type: win% vs c-clock[^\n]*\n\s+hyperaggro\s+hardcontrol\s+unknown\nheuristic\s+50\.0 \(3\)\s+100\.0 \(2\)\s+0\.0 \(2\)$/m);
+}
+
 // 6. the command line, on a run directory written like ladder.js writes a gauntlet
 {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'realdeck-skill-'));
@@ -328,4 +354,4 @@ const cmpFixture = () => {
     }
 }
 
-console.log('ok: realdeck skill tallies, paired differences, style gap, exact Spearman, join, cli');
+console.log('ok: realdeck skill tallies, paired differences, style gap, exact Spearman, join, deck-type rows, cli');

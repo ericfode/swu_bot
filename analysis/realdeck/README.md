@@ -117,6 +117,41 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
 - **Trend**: Spearman of skill against each of those over the bots that have both, with an exact two-sided permutation
   p for up to 8 bots. With a handful of bots this describes; it does not prove a rule.
 
+- **Deck-type row** (`skill.byStyle`): the challenger's score against the reference split by the style of the deck it
+  holds (hyperaggro .. hardcontrol, from the deck file's `metadata.style`), with a Wilson CI each. A bot keeps its deck
+  in both games of a seed and the reference holds the other one, so a low cell says the bot pilots that deck type worse
+  than the reference pilots the decks it meets.
+
+## The standard bot test (`bot-test.js`)
+
+Every new bot gets the same test: one pass of the 27 decks against c-clock (702 games), on the same deals as every bot
+tested before, so its score compares with theirs and pairs with them game for game.
+
+```bash
+npm run realdeck:test -- --bot <bot> [--mirror] [--record] [--workers 4] [--panel /mnt/project-files/dashboard/panels/realdeck-test.json]
+npm run realdeck:test -- --report [--panel ...]     # rebuild skill.json and the panel from the runs already played
+npm run realdeck:test -- --bot <bot> --dry-run      # print the commands only
+```
+
+- Runs go in `--dir` (default `/mnt/project-files/human-meta/realdeck` when it exists, else `results/realdeck`): the
+  gauntlet as `test-<bot>-<n>`, the mirror (with `--mirror`) as `mirror-<bot>-<n>`. `--resume <run id>` finishes a
+  gauntlet that stopped.
+- **Same deals**: the run key comes from the first finished gauntlet against c-clock in that folder on the same deck
+  file and seed 1 (its `ladder.json` `config.key`). In a folder with none, the first test draws a new key and the
+  later ones reuse it. The key also lets a program rebuild the hidden cards, so it is read from that run only and
+  never committed.
+- **Report**: every gauntlet in the folder on those deals (the others are listed as left out, with the reason), the
+  newest run of each challenger (a bot tested again replaces its older games), joined through `skill.js` with
+  `compare-702.json` (compare.js on one-pass mirrors). `--mirror` reruns compare.js on the mirrors in that file with
+  this bot's replaced by the new one, so the report has its agreement with humans. Writes `skill.json` and `skill.txt`
+  in the folder.
+- **Panel** (`--panel <file>`, research dashboard contract section 5): each bot's score against c-clock as a face-off
+  with its 95% CI, a table of each bot's score by the deck type it holds (Atlas edge colours), the latest bot's
+  deck-type row as face-offs, and the agreement table for bots with a mirror. The goal, mental model, plan and
+  thoughts of an existing panel file are kept; testing a bot adds one thought with its result.
+- A pass takes about as long as 702 games of the bot (c-clock answers in well under a millisecond). Bots that need
+  more time per decision can use `--workers`.
+
 ## Read with care
 
 - The human field rate is for the archetype (leader + base group) over every list of it in 53 events, not for this
