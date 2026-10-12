@@ -139,6 +139,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'arena-stat-filter') return require('./arena-stat-filter-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'weakness') return require('./weakness-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'named-target') return require('./named-target-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-keyword') return require('./arena-keyword-probe-fixture').fixture(env, pool, scenario, seed);
@@ -380,6 +381,8 @@ module.exports = {
     buildDeck,
     dependencies: [
         'bot/cards/pipeline/probes.js',
+        'bot/cards/pipeline/arena-stat-filter-probes.js',
+        'bot/cards/pipeline/arena-stat-filter-probe-fixture.js',
         'bot/cards/pipeline/weakness-probes.js',
         'bot/cards/pipeline/weakness-probe-fixture.js',
         'bot/cards/pipeline/named-target-probes.js',

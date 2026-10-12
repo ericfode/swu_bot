@@ -344,7 +344,27 @@ pub struct ArenaListTarget { pub kind: ArenaListKind, pub receiver: Expr, pub pr
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ArenaListKind { #[serde(rename = "arenaList")] ArenaList }
 impl ArenaListTarget {
-    fn validate_phase_stats(&self)->Result<(),String> { self.validate_scope(false) }
+    fn validate_phase_stats(&self)->Result<(),String> {
+        if self.validate_scope(false).is_ok() {return Ok(());}
+        self.receiver.validate()?;self.predicate.validate()?;
+        if !matches!(&self.receiver,Expr::Ref{path} if path.len()==1&&["player","opponent"].contains(&path[0].as_str())) {return Err("phase-stat lists require one player arena inventory".into());}
+        fn reference(e:&Expr,name:&str)->bool {matches!(e,Expr::Ref{path} if path.len()==1&&path[0]==name)}
+        fn predicate(e:&Expr)->bool {
+            // getArenaUnits({otherThan:source}) generates the nullable exclusion.
+            if matches!(e,Expr::Binary{op,left,right} if op=="||" && matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source"))) {return true;}
+            match e {
+                Expr::Const{value}=>value.is_boolean(),
+                Expr::Binary{op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left)&&predicate(right),
+                Expr::Query{name,receiver,args} if name=="hasSomeTrait" && reference(receiver,"card") && args.len()==1=>matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|v|!v.is_empty())),
+                Expr::Binary{op,left,right} if op=="==="=> {
+                    let zone=|e:&Expr|matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
+                    let name=|e:&Expr|matches!(e,Expr::Const{value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
+                    (zone(left)&&name(right))||(name(left)&&name(right))
+                },_=>false,
+            }
+        }
+        if !predicate(&self.predicate) {return Err("phase-stat filters require static traits, arenas or source exclusion".into());}Ok(())
+    }
     fn validate_scope(&self, global:bool)->Result<(),String> {
         if !(global && matches!(&self.receiver,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["game"])) {self.receiver.validate()?;}
         self.predicate.validate()?;
@@ -734,7 +754,7 @@ impl Program {
             list.validate_scope(true)?;
         }
         if let Effect::ModifyStats {target:Target::ArenaList(list),power,hp,duration}=&ability.effect {
-            if ability.trigger!="event" || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate || duration!="phase" {return Err("arena-list phase stats require a standalone event without selectors or continuations".into());}
+            if !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate || ability.optional || ability.requires_confirmation || !ability.costs.is_empty() || !ability.context_title.is_empty() || !ability.target_resolvers.is_empty() || duration!="phase" {return Err("arena-list phase stats require a standalone event or WhenPlayed without selectors, costs or continuations".into());}
             list.validate_phase_stats()?;
             fn literal(e:&Expr)->bool {match e {Expr::Const {value}=>value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n)),Expr::Unary {op,value} if ["+","-"].contains(&op.as_str())=>matches!(value.as_ref(),Expr::Const {value} if value.as_i64().is_some_and(|n|(0..=65535).contains(&n))),_=>false}}
             if !literal(power)||!literal(hp) {return Err("arena-list phase stats require bounded signed literals".into());}
@@ -1232,8 +1252,16 @@ impl Program {
                 if matches!(target,Target::ArenaList(_)) && depth!=0 {return Err("nested arena-list modifiers require explicit continuation witnesses".into());}
                 if duration != "phase" && !(self.trigger=="constant" && duration=="persistent") { return Err("only phase stat modifications execute".into()); }
                 if let Target::ArenaList(list)=target {list.validate_phase_stats()?;}else{target.validate()?;}
-                if duration=="persistent" {power.live_stat_bounds()?;hp.live_stat_bounds()?;}else{power.validate_number()?;hp.validate_number()?;}
-                self.instructions.push(Instruction::Apply(effect.clone()));
+                if matches!(target,Target::ArenaList(_)) {
+                    // Unary plus is emitted by signed source literals. Normalize only this
+                    // bounded stat scope; general expression unary-plus remains rejected.
+                    fn normalized(e:&Expr)->Expr {match e {Expr::Unary{op,value} if op=="+" && matches!(value.as_ref(),Expr::Const{value} if value.as_i64().is_some_and(|n|(0..=65535).contains(&n)))=>*value.clone(),_=>e.clone()}}
+                    let power=normalized(power);let hp=normalized(hp);power.validate_number()?;hp.validate_number()?;
+                    self.instructions.push(Instruction::Apply(Effect::ModifyStats{target:target.clone(),power,hp,duration:duration.clone()}));
+                }else {
+                    if duration=="persistent" {power.live_stat_bounds()?;hp.live_stat_bounds()?;}else{power.validate_number()?;hp.validate_number()?;}
+                    self.instructions.push(Instruction::Apply(effect.clone()));
+                }
             }
             Effect::GainKeyword { target, keyword, amount, duration } => {
                 validate_keyword(keyword)?;
@@ -1316,6 +1344,8 @@ impl Catalogue {
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
                 if sides.leader.iter().chain(&sides.unit).any(|a|!a.target_resolvers.is_empty()) || sides.card.iter().any(|a|!a.target_resolvers.is_empty() && !((a.trigger=="event" && entry["baseClass"]=="EventCard" && exact_type("event")) || (a.trigger=="whenPlayed" && entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit")))) {return Err("named selectors support ordinary unit WhenPlayed or event card-side sources".into());}
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Weakness source must be an ordinary unit card-side registration".into());}
+                let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
+                if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}
@@ -1562,11 +1592,11 @@ mod arena_list_phase_tests {
         let mut v=ability();let mut predicate=json!({"kind":"const","value":true});
         for _ in 0..20 {predicate=json!({"kind":"unary","op":"!","value":predicate});}
         v["effect"]["target"]["predicate"]=predicate;assert!(compile(v).is_err(),"arena-list expressions retain the general depth bound");
-        let mut v=ability();v["trigger"]=json!("whenPlayed");assert!(compile(v).is_err());
+        let mut v=ability();v["trigger"]=json!("whenPlayed");assert!(compile(v).is_ok(),"ordinary WhenPlayed list effects are now source-witnessed");
         let mut v=ability();v["then"]=json!({"title":"Continuation","effect":{"kind":"noAction"}});assert!(compile(v).is_err());
         let mut v=ability();v["targetResolver"]=json!({"type":"unit"});assert!(compile(v).is_err());
         let mut v=ability();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["game"]});assert!(compile(v).is_err());
-        let mut v=ability();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"hasSomeTrait","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":"creature"}]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"hasSomeTrait","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":"creature"}]});assert!(compile(v).is_ok(),"one static card trait is now source-witnessed");
         let mut v=ability();v["effect"]["power"]=json!({"kind":"ref","path":["target","damage"]});assert!(compile(v).is_err());
         let mut v=ability();v["effect"]["kind"]=json!("damage");v["effect"].as_object_mut().unwrap().remove("duration");v["effect"].as_object_mut().unwrap().remove("power");v["effect"].as_object_mut().unwrap().remove("hp");v["effect"]["amount"]=json!({"kind":"const","value":1});assert!(compile(v).is_err());
         let mut v=ability();v["effect"]=json!({"kind":"sequence","effects":[v["effect"].clone()]});assert!(compile(v).is_err());

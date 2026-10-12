@@ -156,6 +156,14 @@ reviewed separately from the three printed source cards; its setup appearance
 is not an ordinary token-play witness. Mixed attachment cleanup, removal/return,
 replacement, and multiple-recipient or mixed-effect groups remain explicit gaps.
 
+Friendly arena-list phase-stat experiments cover static trait filters and source
+exclusion, mixed controllers and arenas, native token and deployed-leader
+recipients, source departure, later arrivals, stacking, and empty-event payment
+and cancellation. Actual damage while an HP bonus is active establishes survival
+followed by defeat at natural phase expiry. Recipient reentry, later trait
+changes, simultaneous expiry deaths, aura/attachment deaths, and matching
+Creature leaders remain explicit gaps.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

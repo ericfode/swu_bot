@@ -2267,3 +2267,46 @@ fn weakness_static_native_dependency_rejects_missing_invalid_and_unselected_toke
     let e=engine();let mut pool=e.compiled_pool().unwrap();pool["cards"].as_array_mut().unwrap().retain(|c|c["setCode"]!="TOKEN_WEAKNESS");assert!(Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),include_bytes!("../../card-compiler/generated/catalog.json")).err().unwrap().contains("GiveWeakness cards must include"));
     pool["cards"].as_array_mut().unwrap().retain(|c|!["HMW_059","HMW_087","HMW_242"].contains(&c["setCode"].as_str().unwrap()));Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
 }
+#[test]
+fn arena_stat_filter_admission_is_exact_two_and_unary_plus_normalizes_only_here() {
+    let e=engine();for code in ["HMW_111","LOF_127"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+    let p=e.program(e.definitions[*e.by_code.get("HMW_111").unwrap() as usize].programs.card[0]);assert!(matches!(&p.instructions[0],Instruction::Apply(Effect::ModifyStats{power:Expr::Const{value:p},hp:Expr::Const{value:h},..}) if p==2&&h==2));
+    let plus:Expr=serde_json::from_value(json!({"kind":"unary","op":"+","value":{"kind":"const","value":2}})).unwrap();assert!(plus.validate().is_err());assert_eq!(std::mem::size_of::<State>(),18552);
+}
+#[test]
+fn actual_lander_excludes_entering_source_and_keeps_captured_both_arena_recipients() {
+    let e=engine();let mut s=board(&e);let ground=unit(&e,&mut s,Seat::P1,"LOF_256");let space=unit(&e,&mut s,Seat::P1,"ASH_201");let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let token=unit(&e,&mut s,Seat::P1,"TOKEN_CLONE_TROOPER");let leader=s.players[0].leader;s.card_mut(leader).deployed=true;e.add_arena(&mut s,leader).unwrap();let shield=add(&e,&mut s,Seat::P1,"TOKEN_SHIELD");e.attach(&mut s,shield,ground);
+    let source=hand(&e,&mut s,"HMW_111");for _ in 0..12 {let id=add(&e,&mut s,Seat::P1,"LOF_254");s.players[0].resources.push(id).unwrap();}let played=e.apply(&s,&e.card_action(&s,source)).unwrap();assert!(played.players[0].space.contains(source));assert_eq!(played.card(source).phase_power,0);assert_eq!(played.card(source).phase_hp,0);for id in [ground,space,token,leader] {assert_eq!(played.card(id).phase_power,2);assert_eq!(played.card(id).phase_hp,2);}assert_eq!(played.card(enemy).phase_power,0);assert_eq!(played.card(shield).phase_power,0);
+    let mut after=played;e.leave_play(&mut after,source).unwrap();let newcomer=unit(&e,&mut after,Seat::P1,"LOF_256");assert_eq!(after.card(newcomer).phase_hp,0);assert_eq!(after.card(ground).phase_hp,2);
+    e.leave_play(&mut after,ground).unwrap();after.players[0].discard.remove(ground);e.add_arena(&mut after,ground).unwrap();assert_eq!(after.card(ground).phase_hp,0);assert_eq!(after.card(space).phase_hp,2);
+    after.players[0].out=true;after.players[1].out=true;e.advance(&mut after).unwrap();assert_eq!(after.card(space).phase_hp,0);assert_eq!(after.card(token).phase_power,0);
+    let mut empty=board(&e);let source=hand(&e,&mut empty,"HMW_111");for _ in 0..12 {let id=add(&e,&mut empty,Seat::P1,"LOF_254");empty.players[0].resources.push(id).unwrap();}let played=e.apply(&empty,&e.card_action(&empty,source)).unwrap();assert_eq!(played.decision,Decision::Window);assert!(played.players[0].space.contains(source));assert_eq!(played.card(source).phase_hp,0);
+}
+#[test]
+fn actual_rampage_static_traits_snapshot_beast_owner_and_empty_cost_confirmation() {
+    let e=engine();let mut s=board(&e);let ground=unit(&e,&mut s,Seat::P1,"ASH_131");let space=unit(&e,&mut s,Seat::P1,"LOF_119");let beast=unit(&e,&mut s,Seat::P1,"TOKEN_BEAST");let enemy=unit(&e,&mut s,Seat::P2,"ASH_131");let other=unit(&e,&mut s,Seat::P1,"LOF_256");let event=hand(&e,&mut s,"LOF_127");for _ in 0..12 {let id=add(&e,&mut s,Seat::P1,"LOF_254");s.players[0].resources.push(id).unwrap();}let resolved=e.apply(&s,&e.card_action(&s,event)).unwrap();for id in [ground,space,beast] {assert_eq!(resolved.card(id).phase_power,2);assert_eq!(resolved.card(id).phase_hp,2);}for id in [enemy,other] {assert_eq!(resolved.card(id).phase_hp,0);}
+    let mut stack=resolved;let second=add(&e,&mut stack,Seat::P1,"LOF_127");stack.players[0].hand.push(second).unwrap();stack.active=Seat::P1;stack.action_player=Some(Seat::P1);let stacked=e.apply(&stack,&e.card_action(&stack,second)).unwrap();assert_eq!(stacked.card(beast).phase_hp,4);
+    let mut empty=board(&e);unit(&e,&mut empty,Seat::P2,"ASH_131");unit(&e,&mut empty,Seat::P1,"LOF_256");let event=hand(&e,&mut empty,"LOF_127");let prompt=e.apply(&empty,&e.card_action(&empty,event)).unwrap();assert_eq!(prompt.decision,Decision::AbilityNoEffect);assert_eq!(named_button(&e,&prompt,"Cancel").zobrist(),empty.zobrist());let paid=named_button(&e,&prompt,"Play anyway");assert!(paid.players[0].discard.contains(event));assert_eq!(paid.decision,Decision::Window);
+}
+#[test]
+fn arena_stat_filter_guards_do_not_widen_defeat_keywords_or_nested_registrations() {
+    let catalog:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let valid=catalog["cards"].as_array().unwrap().iter().find(|c|c["setCode"]=="LOF_127").unwrap()["abilities"]["card"][0].clone();let compile=|v:Value|serde_json::from_value::<crate::ability_ir::Ability>(v).ok().is_some_and(|a|crate::ability_ir::Program::compile(&a).is_ok());assert!(compile(valid.clone()));let mut bad=Vec::new();
+    for trigger in ["onAttack","onDefense","action","whenDefeated","constant"] {let mut v=valid.clone();v["trigger"]=json!(trigger);bad.push(v);}
+    for (key,value) in [("optional",json!(true)),("coordinate",json!(true)),("condition",json!({"kind":"const","value":true})),("costs",json!([{"kind":"exhaustSelf"}])),("targetResolver",json!({"type":"unit","zone":"arena"})),("contextTitle",json!([{"kind":"const","value":"Dynamic"}]))] {let mut v=valid.clone();v[key]=value;bad.push(v);}
+    for key in ["then","ifYouDo"] {let mut v=valid.clone();v[key]=json!({"title":"Draw","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}});bad.push(v);let mut nested=valid.clone();nested.as_object_mut().unwrap().remove("trigger");bad.push(json!({"trigger":"event","title":"Nested","effect":{"kind":"noAction"},key:nested}));}
+    for kind in ["sequence","simultaneous","phaseModifiers"] {let mut v=valid.clone();v["effect"]=json!({"kind":kind,"effects":[valid["effect"].clone()]});bad.push(v);}
+    for receiver in ["game","source","target"] {let mut v=valid.clone();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":[receiver]});bad.push(v);}
+    let mut v=valid.clone();v["effect"]["target"]["predicate"]["right"]["receiver"]=json!({"kind":"ref","path":["source"]});bad.push(v);
+    let mut v=valid.clone();v["effect"]["target"]["predicate"]["right"]["args"]=json!([{ "kind":"ref","path":["source","title"]}]);bad.push(v);
+    for kind in ["defeat","gainKeyword","loseKeyword"] {let mut v=valid.clone();v["effect"]=json!({"kind":kind,"target":valid["effect"]["target"]});if kind!="defeat" {v["effect"]["duration"]=json!("phase");v["effect"]["keyword"]=json!("hidden");if kind=="gainKeyword" {v["effect"]["amount"]=json!({"kind":"const","value":1});}}bad.push(v);}
+    for v in bad {assert!(!compile(v.clone()),"{v}");}
+}
+#[test]
+fn arena_stat_filter_source_domains_and_malformed_exclusions_reject() {
+    let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let lander=original["cards"].as_array().unwrap().iter().find(|c|c["setCode"]=="HMW_111").unwrap();
+    for (field,value) in [("baseClass",json!("LeaderCard")),("baseClass",json!("TokenUnitCard")),("types",json!(["unit","leader"])),("types",json!(["event"])),("types",json!(["unit","token"]))] {let mut entry=lander.clone();if field=="types" {entry["card"][field]=value;}else{entry[field]=value;}let c=crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap();assert!(c.rejected.contains_key("HMW_111"));}
+    for side in ["unit","leader"] {let mut entry=lander.clone();entry["abilities"][side]=entry["abilities"]["card"].clone();entry["abilities"]["card"]=json!([]);let c=crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap();assert!(c.rejected.contains_key("HMW_111"));}
+    let rampage=original["cards"].as_array().unwrap().iter().find(|c|c["setCode"]=="LOF_127").unwrap();let mut entry=rampage.clone();entry["card"]["types"]=json!(["unit"]);assert!(crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap().rejected.contains_key("LOF_127"));
+    let valid=lander["abilities"]["card"][0].clone();let mut bad=Vec::new();let mut v=valid.clone();v["effect"]["target"]["predicate"]["right"]["right"]["right"]=json!({"kind":"ref","path":["target"]});bad.push(v);let mut v=valid.clone();v["effect"]["target"]["predicate"]=json!({"kind":"unary","op":"!","value":{"kind":"ref","path":["source"]}});bad.push(v);let mut v=valid.clone();v["effect"]["power"]["value"]=json!({"kind":"ref","path":["source","damage"]});bad.push(v);
+    for v in bad {let a:crate::ability_ir::Ability=serde_json::from_value(v.clone()).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err(),"{v}");}
+}

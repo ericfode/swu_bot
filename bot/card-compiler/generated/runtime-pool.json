@@ -5413,6 +5413,47 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 7,
+      "id": "1582734327",
+      "internalName": "invasion-lander",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "HMW_111",
+      "setCodes": [
+        {
+          "number": 111,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 111,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: Give each other friendly unit +2/+2 for this phase.",
+      "title": "Invasion Lander",
+      "traits": [
+        "separatist",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "command",
@@ -18553,6 +18594,43 @@
       "subtitle": "",
       "text": "Give a unit +3/+3 and Overwhelm for this phase. (When attacking an enemy unit, deal excess damage to the opponent's base.)",
       "title": "Overpower",
+      "traits": [
+        "innate"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "command"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "8241022502",
+      "internalName": "rampage",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_127",
+      "setCodes": [
+        {
+          "number": 127,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 127,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Each friendly Creature unit gets +2/+2 for this phase.",
+      "title": "Rampage",
       "traits": [
         "innate"
       ],

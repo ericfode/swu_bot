@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 3,
-    "sourceIr": 530
+    "sourceIr": 532
   },
   "runtimeAdmittedCards": [
     {
@@ -689,6 +689,11 @@
       "implementation": "sourceIr",
       "internalName": "stormtrooper-patrol",
       "setCode": "HMW_107"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "invasion-lander",
+      "setCode": "HMW_111"
     },
     {
       "implementation": "dataOnly",
@@ -2294,6 +2299,11 @@
       "implementation": "sourceIr",
       "internalName": "overpower",
       "setCode": "LOF_126"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "rampage",
+      "setCode": "LOF_127"
     },
     {
       "implementation": "dataOnly",
@@ -4536,7 +4546,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 905,
+  "runtimeAdmittedCount": 907,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5712,11 +5722,6 @@
       "internalName": "emperor-palpatine#consolidating-power",
       "reason": "emperor-palpatine#consolidating-power: compiler rejected \"emperor-palpatine#consolidating-power\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/EmperorPalpatineConsolidatingPower.ts\",\"line\":21,\"message\":\"immediateEffect:takeControlOfUnit\",\"pattern\":\"immediateEffect:takeControlOfUnit\"}]",
       "setCode": "HMW_110"
-    },
-    {
-      "internalName": "invasion-lander",
-      "reason": "invasion-lander: arena-list phase stats require a standalone event without selectors or continuations",
-      "setCode": "HMW_111"
     },
     {
       "internalName": "military-academy",
@@ -8407,11 +8412,6 @@
       "internalName": "the-burden-of-masters",
       "reason": "the-burden-of-masters: compiler rejected \"the-burden-of-masters\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/events/TheBurdenOfMasters.ts\",\"line\":22,\"message\":\"immediateEffect:moveToBottomOfDeck\",\"pattern\":\"immediateEffect:moveToBottomOfDeck\"}]",
       "setCode": "LOF_125"
-    },
-    {
-      "internalName": "rampage",
-      "reason": "rampage: arena-list phase-stat predicate requires verified arena-only scope",
-      "setCode": "LOF_127"
     },
     {
       "internalName": "protect-the-pod",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1553,
+  "runtimeRejectedCount": 1551,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 681
 }

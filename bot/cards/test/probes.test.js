@@ -132,8 +132,13 @@ test('arena-list phase stats construct mixed owners/arenas, empty sets and letha
     assert.deepEqual(plan('TWI_126').cases[0].probe.selectedTargetIndices, [0, 1]);
     assert.equal(plan('TWI_075').cases.find(c => c.name.endsWith('simultaneous-lethal')).probe.targets.length, 2);
 });
-test('arena-list probes fail closed on unsupported predicates and triggers', () => {
-    for (const id of ['LOF_127','HMW_111']) assert.equal(plan(id).cases.length, 0);
+test('arena-list probes keep unsupported predicates and triggers explicit', () => {
+    for (const id of ['LOF_127', 'HMW_111']) {
+        assert.ok(plan(id).cases.some(c => c.probe.family === 'arena-stat-filter'));
+        const unsupported = structuredClone(catalogue.cards.find(c => c.setCode === id));
+        unsupported.abilities.card[0].trigger = 'onAttack';
+        assert.equal(planCardProbes(unsupported, { catalogue }).cases.length, 0);
+    }
     const e = structuredClone(catalogue.cards.find(c => c.setCode === 'TWI_126'));
     e.abilities.card[0].effect.target.receiver.hidden = true;
     assert.equal(planCardProbes(e, {catalogue}).cases.length, 0);
