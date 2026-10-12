@@ -124,8 +124,9 @@ function sideFeatures(ps, opp, state, seat, { handVisible, deck, db }) {
     f.leaderReady = ps.leader && !ps.leader.dep && !ps.leader.x ? 1 : 0;
     f.resources = ps.res.total;
     f.readyResources = ps.res.ready;
-    f.hand = ps.hand.length;
-    if (handVisible) {
+    // a bot's own view (bot/view.js view(eg, seat)) lists only that seat's hand; the other side has handCount alone
+    f.hand = ps.hand?.length ?? ps.handCount ?? 0;
+    if (handVisible && ps.hand) {
         for (const c of ps.hand) {
             const st = cardStats(db.get(c.s));
             f.handCost += st.cost;
