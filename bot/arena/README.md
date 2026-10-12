@@ -81,7 +81,9 @@ seeds. Your standings and lost-game replays are in `/mnt/project-files/arena/rou
 `api.js` is the tournament layer. The same methods and JSON shapes are reachable three ways:
 
     node bot/arena/server.js [--port 7070]      HTTP: GET or POST /api/<method>; GET / is the web UI
-    node bot/arena/mcp.js [--remote URL]        MCP (stdio): one tool per method, named arena_<method>
+    node bot/arena/mcp.js [--remote URL]        MCP (stdio): one tool per method, named arena_<method>; pointed at
+                                                the arena window it offers the window's reads plus window_* tools
+                                                that upload local runs and documents (WINDOW.md)
     node bot/arena/cli.js <method> '{json}'     shell; ARENA_URL=http://host:7070 talks to a remote arena
 
 Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say`, `send`, `inbox`, `eval`,

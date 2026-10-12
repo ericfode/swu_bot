@@ -46,6 +46,16 @@ except an admin changing the invite list from the app's Share page (below):
   `ARENA_PUBLIC_URL` and a JSON body, so a page elsewhere cannot send it. A change takes effect on the next request.
 - `GET /api/me` answers `{login, role}` for the app (the Share page shows the invite list to admins).
 
+## Through MCP
+
+`node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]` is the same API as MCP tools, for a Claude (or
+any MCP client) that loads data the way a user would. It offers the arena reads the window answers (`arena_status`,
+`arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`) and the window's own tools:
+`window_docs` and `window_replays` read, `window_put_run` uploads a local results run (index, ladder, replays; only
+what the window lacks, and it reports how many replays the window has), `window_put_doc` one JSON document (a local
+.json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
+proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR) gets the reads only.
+
 ## Who may do what (auth.js)
 
 - Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the

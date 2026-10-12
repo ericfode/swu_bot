@@ -417,3 +417,77 @@ test('push: the arena uplink sends the roster without token hashes, the bench in
         await close();
     }
 });
+
+/** Runs bot/arena/mcp.js with these arguments and answers each JSON-RPC request in turn. */
+async function mcpSession(args, env = {}) {
+    const { spawn } = require('child_process');
+    const child = spawn(process.execPath, [path.join(__dirname, '..', 'arena', 'mcp.js'), ...args], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const waiting = new Map();
+    let buf = '';
+    child.stdout.on('data', (d) => {
+        buf += d;
+        for (let i; (i = buf.indexOf('\n')) >= 0;) {
+            const msg = JSON.parse(buf.slice(0, i));
+            buf = buf.slice(i + 1);
+            waiting.get(msg.id)?.(msg);
+        }
+    });
+    let n = 0;
+    const ask = (method, params = {}) => new Promise((resolve) => {
+        const id = ++n;
+        waiting.set(id, resolve);
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+    });
+    const tool = async (name, a = {}) => {
+        const r = (await ask('tools/call', { name, arguments: a })).result;
+        return { error: r.isError, value: JSON.parse(r.content[0].text) };
+    };
+    return { ask, tool, close: () => child.kill() };
+}
+
+test('mcp: pointed at the window, it reads with GET and uploads a run and documents with the push token', async () => {
+    const w = makeWindow('w8');
+    const { srv, close } = await serve(w);
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const dir = path.join(tmp, 'mcp-runs', 'mcp-ladder');
+    fs.mkdirSync(path.join(dir, 'games'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ id: 'mcp-ladder', games: [{ id: 'g1', outcome: 'won' }, { id: 'g2', outcome: 'won' }] }));
+    fs.writeFileSync(path.join(dir, 'games', 'g1.jsonl'), '{"t":"header"}\n{"t":"end"}\n');
+    fs.writeFileSync(path.join(dir, 'games', 'g2.jsonl'), '{"t":"header"}\n');
+    const docFile = path.join(tmp, 'mcp-doc.json');
+    fs.writeFileSync(docFile, JSON.stringify({ id: 'arena-x', title: 'x' }));
+    w.store.putDoc('arena', 'status', JSON.stringify({ tournament: null, round: 3, phase: 'work', competitors: [] }));
+    const project = await mcpSession(['--remote', base, '--token', 'push-secret']);
+    const friendless = await mcpSession(['--remote', base]);
+    const competitor = await mcpSession(['--remote', base, '--token', 'push-secret'], { ARENA_COMPETITOR: 'aa' });
+    try {
+        await project.ask('initialize');
+        const names = (await project.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(names.includes('arena_status') && !names.includes('arena_submit'), 'only the arena reads the window answers');
+        assert.ok(['window_docs', 'window_replays', 'window_put_doc', 'window_put_dir', 'window_put_run'].every((x) => names.includes(x)));
+        assert.deepStrictEqual(await project.tool('arena_status'), { error: false, value: { tournament: null, round: 3, phase: 'work', competitors: [] } });
+
+        const r = await project.tool('window_put_run', { path: dir });
+        assert.deepStrictEqual(r.value, { run: 'mcp-ladder', replays: 2, onWindow: 2, missing: [], stillPlaying: false });
+        assert.strictEqual(w.store.readReplay('mcp-ladder', 'g1').toString(), '{"t":"header"}\n{"t":"end"}\n');
+        assert.strictEqual(JSON.parse(w.store.getDoc('runs', 'mcp-ladder')).games.length, 2);
+        assert.strictEqual((await project.tool('window_put_doc', { collection: 'panels', id: 'arena-x', path: docFile })).value.uploaded, 'panels/arena-x');
+        assert.strictEqual((await project.tool('window_docs', { collection: 'panels', id: 'arena-x' })).value.title, 'x');
+        assert.strictEqual((await project.tool('window_put_doc', { collection: 'panels', id: 'y', path: '/etc/hostname' })).error, true, 'only .json files');
+        assert.strictEqual((await project.tool('window_put_doc', { collection: 'admin', id: 'invites', doc: { logins: ['z'] } })).error, true, 'the invite list needs the admin token');
+
+        // no token: still the window's tools (it answers /healthz), and every call is refused by the window itself
+        const plain = (await friendless.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(plain.includes('window_put_run') && plain.includes('arena_status') && !plain.includes('arena_register'));
+        assert.strictEqual((await friendless.tool('arena_status')).error, true);
+        // a competitor's server reads, and never changes the window
+        const mine = (await competitor.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(mine.includes('arena_status') && !mine.some((x) => x.startsWith('window_')));
+        assert.strictEqual((await competitor.tool('window_put_doc', { collection: 'panels', id: 'p', doc: {} })).error, true);
+    } finally {
+        project.close();
+        friendless.close();
+        competitor.close();
+        await close();
+    }
+});
