@@ -179,5 +179,8 @@ test('buildModel: a tournament keeps its round ladders and its rules (from tourn
     const fromStandings = model.buildModel(tinySources(), { arena: { tournament: { id: 'arena-t1', rounds }, standings: { rounds: [], tournament: { rules: { holdout: { fraction: 0.25 } } } } } }, null);
     assert.equal(fromStandings.arena.tournament.rules.holdout.fraction, 0.25);
     const plain = model.buildModel(tinySources(), { arena: { tournament: { id: 'x', rounds: [] } } }, null);
+    const roster = { agents: [{ name: 'act' }], bench: [{ name: 'off', benchedAt: '2026-10-12T05:00:00Z' }], baselines: [] };
+    const cs = model.buildModel(tinySources(), { arena: { roster } }, null).arena.competitors;
+    assert.deepEqual(cs.map((c) => [c.name, !!c.benched]), [['act', false], ['off', true]], 'a benched builder stays listed, marked');
     assert.equal(plain.arena.tournament.rules, null);
 });

@@ -111,7 +111,8 @@ setup() {
         ln -s "$SRC/node_modules" "$BASE/referee/node_modules"
     fi
     local names
-    names=$(node -e "const r=require('$ARENA_HOME/roster.json'); console.log(r.agents.filter(a=>a.harness&&!a.harness.selfRun&&['claude-code','script','command'].includes(a.harness.kind)).map(a=>a.name).join(' '))")
+    # benched competitors too: rejoin gives them work windows again without another setup
+    names=$(node -e "const r=require('$ARENA_HOME/roster.json'); console.log([...r.agents, ...(r.bench ?? [])].filter(a=>a.harness&&!a.harness.selfRun&&['claude-code','script','command'].includes(a.harness.kind)).map(a=>a.name).join(' '))")
     for n in $names; do
         local d=$BASE/repos/$n
         [ -e "$d/bot/arena/eval.js" ] && [ -d "$d/forceteki/build/server" ] && [ "$(at "$d")" = "$commit" ] && continue
@@ -197,12 +198,29 @@ start_uplink() {
     say "uplink to $window started (pid $!)"
 }
 
+# whether any of these processes is still running
+alive() {
+    local p
+    for p in "$@"; do
+        kill -0 "$p" 2>/dev/null && return 0
+    done
+    return 1
+}
+
 stop_uplink() {
     local window pids
     window=$(window_url)
     pids=$(pgrep -f "$UPLINK_LOOP" || true)
-    # stop the loop first, so a push of its still in flight cannot land after the last one
-    [ -n "$pids" ] && kill $pids && say "uplink stopped"
+    # stop the loop first and wait until it has exited, so a request of its still open cannot land after the last push
+    if [ -n "$pids" ]; then
+        kill $pids 2>/dev/null || true
+        for _ in $(seq 50); do
+            alive $pids || break
+            sleep 0.2
+        done
+        kill -9 $pids 2>/dev/null || true
+        say "uplink stopped"
+    fi
     if [ -n "$window" ]; then
         uplink_env "$window"
         (cd "$BASE/referee" && "${UPLINK[@]}" node bot/arena/push.js arena --once >> "$BASE/uplink.log" 2>&1) || say "the last push to $window failed (see $BASE/uplink.log)"

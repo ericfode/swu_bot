@@ -16,7 +16,9 @@
  *   submit {name, note, bot?}                   freeze the live bot as the next version; bot = {kind:'js'} (default:
  *                                               agents/<name>/) or {kind:'stdio', cmd, args?}: the folder is frozen either way and a stdio cmd
  *                                               runs in it. bot.files (text) is laid over the folder first. A JS bot must load
- *                                               (require bot.js, createBot) or the submit fails with code bad_bot.
+ *                                               (require bot.js, createBot) and a bot program must start and answer hello
+ *                                               with ready, or the submit fails with code bad_bot.
+ *   withdraw {name, version?} / rejoin {...}    bench a competitor or stop rating one version, from the next ladder to start; undo
  *   versions {name}                             submitted versions with notes
  *   standings {}                                every rated round so far, all-round Elo
  *   report {round?}                             a round's markdown report (default: latest)
@@ -53,6 +55,8 @@ const INBOX = (n) => path.join(home.HOME, 'inbox', `${n}.jsonl`);
 // error codes a client may see; anything else is reported as 'internal'
 const CODES = new Set(['bad_request', 'unauthorized', 'not_found', 'conflict', 'bad_bot', 'unsupported']);
 const LOAD_CHECK_MS = 30000;
+// a bot program's hello: the referee's own budget for it (30 s, it includes starting the program)
+const START_CHECK_MS = 30000;
 const ARCHIVE_ID = /^[\w-]{1,64}$/;
 
 class ArenaError extends Error {
@@ -70,19 +74,21 @@ function need(cond, code, msg) {
 
 // bot/players pulls in the engine wrapper (~1 s), and mcp.js --remote must work without the engine: load it on use
 const describeBot = (name) => require('../players').describeBot(name);
+const cardJson = () => require('./registry').CARD_JSON;
 
 /** An integer argument that may arrive as a string (query strings, shells); anything else is returned unchanged. */
 const int = (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v);
 
-function competitor(name) {
-    const c = home.roster().agents.find((a) => a.name === name);
+function competitor(name, { benched = false } = {}) {
+    const r = home.roster();
+    const c = r.agents.find((a) => a.name === name) ?? (benched ? (r.bench ?? []).find((a) => a.name === name) : undefined);
     need(c, 'not_found', `no competitor "${name}" (see status)`);
     return c;
 }
 
-/** The competitor, checked against its token when the arena requires tokens. */
-function owned(name, token) {
-    const c = competitor(name);
+/** The competitor (benched ones too when asked), checked against its token when the arena requires tokens. */
+function owned(name, token, opts) {
+    const c = competitor(name, opts);
     if (AUTH) {
         const admin = process.env.ARENA_ADMIN_TOKEN && token === process.env.ARENA_ADMIN_TOKEN;
         need(admin || (c.tokenHash && token && hash(token) === c.tokenHash), 'unauthorized', `wrong or missing token for "${name}"`);
@@ -118,13 +124,17 @@ function clock(now = Date.now()) {
  */
 function notify({ to, from = 'referee', text } = {}) {
     need(typeof text === 'string' && text.trim(), 'bad_request', 'text is required');
-    const targets = to === 'all' ? home.roster().agents.map((a) => a.name) : (Array.isArray(to) ? to : [to]).map((n) => competitor(n).name);
+    // "all" is the competitors playing; a benched one named directly still gets the message, to read once it rejoins
+    const targets = to === 'all' ? home.roster().agents.map((a) => a.name) : (Array.isArray(to) ? to : [to]).map((n) => competitor(n, { benched: true }).name);
     const msg = { t: new Date().toISOString(), from: String(from), text: text.trim() };
     for (const n of targets) {
         home.appendJsonl(INBOX(n), msg);
     }
     return { delivered: targets };
 }
+
+// submitted code must not see the arena's secrets, nor the egress proxy (in a cloud session it adds credentials)
+const checkEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/TOKEN|SECRET|KEY|PASSWORD|AUTH|PROXY/i.test(k)));
 
 // Runs in a child process: a bot that fails to load, loops at load time or exits must not take the server down.
 // Errors from require and createBot are left uncaught, so node prints them with file, line and caret.
@@ -141,8 +151,7 @@ process.exit(0);
 /** Throws bad_bot unless dir/bot.js loads and createBot returns a bot. Paths in the error read as `shownAs`. */
 function loadCheck(dir, version, shownAs) {
     const r = spawnSync(process.execPath, ['-e', LOAD_CHECK, path.join(dir, 'bot.js'), version], {
-        // submitted code must not see the arena's secrets
-        env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/TOKEN|SECRET|KEY|PASSWORD|AUTH/i.test(k))), ARENA_HOME: home.HOME }, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', timeout: LOAD_CHECK_MS, killSignal: 'SIGKILL'
+        env: { ...checkEnv(), ARENA_HOME: home.HOME }, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', timeout: LOAD_CHECK_MS, killSignal: 'SIGKILL'
     });
     if (r.status === 0) {
         return;
@@ -150,6 +159,39 @@ function loadCheck(dir, version, shownAs) {
     const why = r.error?.code === 'ETIMEDOUT' ? `took more than ${LOAD_CHECK_MS / 1000} s` : r.error ? r.error.message : r.signal ? `killed by ${r.signal}` : `exit code ${r.status}`;
     const lines = String(r.stderr ?? '').split(dir).join(shownAs).split('\n').filter((l) => l.trim()).slice(0, 8);
     throw new ArenaError('bad_bot', `${version} failed the load check (require bot.js, call createBot): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}`);
+}
+
+// Runs in a child process: starts a submitted bot program in its folder, as the registry does for a game, and sends it the
+// hello the referee sends (two real deck lists), then expects ready. Never resolves on its own: the timer ends it.
+const START_CHECK = `
+const [stdio, decksFile, dir, name, spec, ms] = process.argv.slice(1);
+const { StdioClient } = require(stdio);
+const { cmd, args } = JSON.parse(spec);
+const decks = require(decksFile);
+const bye = (code, msg) => { if (msg) process.stderr.write(msg + '\\n'); process.exit(code); };
+setTimeout(() => bye(1, 'no reply to hello within ' + ms + ' ms'), Number(ms));
+const client = new StdioClient(name, { cmd: /[\\\\/]/.test(cmd) ? require('path').join(dir, cmd) : cmd, args, cwd: dir });
+client.hello({ t: 'hello', protocol: 'swu-bot-stdio', v: 1, versions: [1, 2], bot: name, you: 'p1', seed: 1,
+    players: [{ id: 'p1', name: 'p1', bot: name }, { id: 'p2', name: 'p2', bot: 'heuristic' }], deck: decks[0], opponent: decks[1], ms: Number(ms) })
+    .then((r) => r?.t === 'ready' && [1, 2].includes(r.v ?? 1) ? bye(0) : bye(1, 'expected {"t":"ready","v":2}, got ' + JSON.stringify(r).slice(0, 200)),
+          (e) => bye(1, e.message));
+`;
+
+/** Throws bad_bot unless the bot program in dir starts and answers hello with ready (same environment as a game). */
+function startCheck(dir, version, bot, shownAs) {
+    const r = spawnSync(process.execPath, ['-e', START_CHECK, path.join(__dirname, '..', 'stdio.js'), path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'),
+        dir, version, JSON.stringify({ cmd: bot.cmd, args: bot.args ?? [] }), String(START_CHECK_MS)], {
+        env: { ...checkEnv(), SWU_CARD_JSON: cardJson() },
+        stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', timeout: START_CHECK_MS + 5000, killSignal: 'SIGKILL'
+    });
+    if (r.status === 0) {
+        return;
+    }
+    const why = r.error?.code === 'ETIMEDOUT' ? `took more than ${START_CHECK_MS / 1000} s` : r.error ? r.error.message : r.signal ? `killed by ${r.signal}` : `exit code ${r.status}`;
+    const lines = String(r.stderr ?? '').split(dir).join(shownAs).split('\n').filter((l) => l.trim()).slice(-8);
+    // a file in the arena folder may have lost its exec bit (a synced folder keeps none): run it through its interpreter
+    const hint = lines.some((l) => /EACCES/.test(l)) ? `\n${bot.cmd} is not executable in the arena folder (it keeps no exec bits): start it through its interpreter, e.g. {"cmd": "sh", "args": ["${bot.cmd}"]} for a shell script` : '';
+    throw new ArenaError('bad_bot', `${version} failed the start check (start ${bot.cmd}, send hello, expect ready): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}${hint}`);
 }
 
 /** Whether `o` may be an eval opponent: a built-in bot, a baseline, or an existing <agent>-v<N> of any competitor. */
@@ -162,7 +204,8 @@ function opponentOk(o) {
         return true;
     }
     const v = /^([a-z][a-z0-9_]*)-v(\d+)$/.exec(o);
-    if (v && r.agents.some((a) => a.name === v[1])) {
+    // a benched competitor's frozen versions stay fair opponents
+    if (v && [...r.agents, ...(r.bench ?? [])].some((a) => a.name === v[1])) {
         return home.versionsOf(v[1]).includes(Number(v[2]));
     }
     const info = describeBot(o);
@@ -177,8 +220,11 @@ const api = {
             ...clock(),
             thinkCapMs: r.thinkCapMs,
             baselines: r.baselines,
-            competitors: r.agents.map((a) => ({
+            // benched competitors too (api.withdraw): still registered, with their versions and ratings, and may rejoin
+            competitors: [...r.agents.map((a) => [a, false]), ...(r.bench ?? []).map((a) => [a, true])].map(([a, benched]) => ({
                 name: a.name, title: a.title, harness: a.harness ?? null, owner: a.owner ?? null, philosophy: a.philosophy ?? '',
+                ...(benched ? { benched: true, benchedAt: a.benchedAt ?? null } : {}),
+                ...(a.withdrawn?.length ? { withdrawn: a.withdrawn.map((v) => `${a.name}-v${v}`) } : {}),
                 latest: (() => { const v = home.versionsOf(a.name).pop(); return v === undefined ? null : `${a.name}-v${v}`; })(),
                 elo: (() => { const v = home.versionsOf(a.name).pop(); return v === undefined ? null : st.global?.[`${a.name}-v${v}`] ?? null; })()
             }))
@@ -255,7 +301,7 @@ const api = {
         // stamped just before the version is renamed into place, after its load check: a submit that finishes after the
         // round's deadline is late (lineup() rates it next round), however early it started
         const meta = (n) => ({ name: `${name}-v${n}`, agent: name, version: n, note: note.trim(), bot: botMeta, files: files ? Object.keys(files) : undefined,
-                               submittedAt: new Date().toISOString(), round, checked: bot.kind === 'js' });
+                               submittedAt: new Date().toISOString(), round, checked: true });
         const staging = home.stagingDir(name);
         try {
             if (home.exists(live)) {
@@ -276,6 +322,8 @@ const api = {
             let n = (home.versionsOf(name).pop() ?? -1) + 1;
             if (bot.kind === 'js') {
                 loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
+            } else {
+                startCheck(staging, `${name}-v${n}`, bot, upload ? `(uploaded) ${name}` : live);
             }
             // a concurrent submit may take the number first: then take the next free one (and load-check under that
             // name, since createBot gets the version name)
@@ -288,6 +336,8 @@ const api = {
                 n = Math.max(n + 1, (home.versionsOf(name).pop() ?? -1) + 1);
                 if (bot.kind === 'js') {
                     loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
+                } else {
+                    startCheck(staging, `${name}-v${n}`, bot, upload ? `(uploaded) ${name}` : live); // hello names the version
                 }
             }
             if (upload) {
@@ -307,8 +357,54 @@ const api = {
         }
     },
 
+    withdraw({ name, version, token } = {}) {
+        // a competitor leaves every ladder that starts from now on (this round's too, if its ladder has not started:
+        // lineup() reads the roster when the ladder starts) and the runner from the next round, or one broken version
+        // stops being rated the same way; a ladder already running keeps its lineup. Versions, games and ratings stay,
+        // and rejoin undoes either
+        owned(name, token, { benched: true });
+        version = int(version);
+        const at = new Date().toISOString();
+        if (version === undefined || version === null) {
+            home.updateRoster((r) => {
+                const a = r.agents.find((x) => x.name === name);
+                return a ? { ...r, agents: r.agents.filter((x) => x !== a), bench: [...(r.bench ?? []).filter((x) => x.name !== name), { ...a, benchedAt: at }] } : r;
+            });
+            return { name, benched: true, note: `${name} plays no ladder that starts from now on (this round's too, if it has not started) and gets no work window from the next round, until rejoin` };
+        }
+        need(Number.isInteger(version) && home.versionsOf(name).includes(version), 'not_found', `${name} has no version ${version} (see versions)`);
+        // benched or not: the list applies whenever the competitor plays
+        const off = (a) => (a.name === name ? { ...a, withdrawn: [...new Set([...(a.withdrawn ?? []), version])].sort((x, y) => x - y) } : a);
+        const r = home.updateRoster((ro) => ({ ...ro, agents: ro.agents.map(off), ...(ro.bench ? { bench: ro.bench.map(off) } : {}) }));
+        const out = [...r.agents, ...(r.bench ?? [])].find((a) => a.name === name)?.withdrawn ?? [];
+        const left = home.versionsOf(name).filter((v) => !out.includes(v));
+        return { name, withdrawn: `${name}-v${version}`, rated: left.length ? `${name}-v${left[left.length - 1]}` : null };
+    },
+
+    rejoin({ name, version, token } = {}) {
+        owned(name, token, { benched: true });
+        version = int(version);
+        if (version === undefined || version === null) {
+            home.updateRoster((r) => {
+                const a = (r.bench ?? []).find((x) => x.name === name);
+                if (!a) {
+                    return r;
+                }
+                const { benchedAt, ...back } = a;
+                return { ...r, bench: r.bench.filter((x) => x !== a), agents: [...r.agents.filter((x) => x.name !== name), back] };
+            });
+            return { name, benched: false, note: `${name} is rated in the next ladder to start (this round's, if it has not started) and gets a work window from the next round` };
+        }
+        need(Number.isInteger(version) && home.versionsOf(name).includes(version), 'not_found', `${name} has no version ${version} (see versions)`);
+        // a benched competitor keeps its list too: it applies once it rejoins
+        const back = (a) => (a.name === name ? { ...a, withdrawn: (a.withdrawn ?? []).filter((v) => v !== version) } : a);
+        const r = home.updateRoster((ro) => ({ ...ro, agents: ro.agents.map(back), ...(ro.bench ? { bench: ro.bench.map(back) } : {}) }));
+        const benched = !r.agents.some((a) => a.name === name);
+        return { name, rated: `${name}-v${version}`, ...(benched ? { benched: true, note: `${name} is benched: rejoin {name} to play again` } : {}) };
+    },
+
     versions({ name } = {}) {
-        competitor(name);
+        competitor(name, { benched: true }); // a benched competitor's versions stay, and stay eval opponents
         return home.versionsOf(name).map((n) => home.readJson(path.join(home.VERSIONS, `${name}-v${n}`, 'SUBMISSION.json'), { name: `${name}-v${n}` }));
     },
 
@@ -384,14 +480,14 @@ const api = {
     },
 
     panel({ name } = {}) {
-        competitor(name);
+        competitor(name, { benched: true });
         // composed from the halves kept in ARENA_HOME, so it works without the research dashboard folder
         return dash.composePanel(name);
     },
 
     panels() {
         // every panel the research dashboard shows for the arena, from ARENA_HOME (the dashboard's files are copies)
-        return { ...dash.boards(), panels: home.roster().agents.map((a) => dash.composePanel(a.name)) };
+        return { ...dash.boards(), panels: [...home.roster().agents, ...(home.roster().bench ?? [])].map((a) => dash.composePanel(a.name)) };
     },
 
     games({ round } = {}) {
@@ -483,12 +579,53 @@ function roundLadder(round) {
 }
 
 /** Calls a method by name with an args object; resolves {result} or {error: {code, message}}. */
+// what only the arena does to a competitor that runner.js runs: it runs it for the whole tournament
+const BENCH = ['withdraw', 'rejoin'];
+
+/**
+ * A call made for one competitor (runner.js sets ARENA_COMPETITOR for the harnesses it starts and their MCP server):
+ * that name is the default and the only one allowed, it registers and benches nobody, and it sends as itself, to one
+ * competitor. Returns {args} to go on with, or {error}. call() applies it, so the CLI, scripts and mcp.js get the same
+ * rules; mcp.js applies it too before it forwards to a remote arena. On a local arena, whose competitors share the arena
+ * folder, this keeps honest agents on their own name; a hosted arena's tokens (ARENA_AUTH) are the boundary.
+ */
+function asCompetitor(me, method, args) {
+    const no = (message) => ({ error: { code: 'unauthorized', message } });
+    if (method === 'register') {
+        return no('a competitor cannot register other competitors');
+    }
+    if (BENCH.includes(method)) {
+        return no('the arena runs you for the whole tournament; it alone benches competitors');
+    }
+    let a = args ?? {};
+    if (METHODS[method]?.required?.includes('name')) {
+        if (a.name !== undefined && a.name !== me) {
+            return no(`you are "${me}": this call acts for you only`);
+        }
+        a = { ...a, name: me };
+    }
+    if (method === 'send') {
+        if (a.to === 'all') {
+            return no('a competitor sends to one competitor at a time');
+        }
+        a = { ...a, from: me };
+    }
+    return { args: a };
+}
+
 async function call(method, args = {}) {
     if (!Object.prototype.hasOwnProperty.call(METHODS, method) || typeof api[method] !== 'function') {
         return { error: { code: 'not_found', message: `unknown method "${method}" (known: ${Object.keys(METHODS).join(', ')})` } };
     }
     if (args !== undefined && args !== null && (typeof args !== 'object' || Array.isArray(args))) {
         return { error: { code: 'bad_request', message: 'arguments must be a JSON object' } };
+    }
+    if (process.env.ARENA_COMPETITOR) {
+        const s = asCompetitor(process.env.ARENA_COMPETITOR, method, args);
+        if (s.error) {
+            return s;
+        }
+        args = s.args;
     }
     try {
         return { result: await api[method](args ?? {}) };
@@ -499,9 +636,11 @@ async function call(method, args = {}) {
 
 // readOnly: changes nothing (MCP readOnlyHint); destructive: may overwrite existing data (the live folder, on upload)
 const METHODS = {
-    status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo.', props: {} },
+    status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
-    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout). The bot must load (require bot.js, createBot) or the submit fails with code bad_bot and the first lines of the error.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
+    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout). The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
+    withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started, and get no work window from the next round. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },
+    rejoin: { token: true, desc: "Undo withdraw: rated again from the next ladder to start (this round's, if it has not started), with a work window from the next round; or with version, rate that version again.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
     standings: { readOnly: true, desc: 'Every rated round so far with per-bot results and the all-round Elo.', props: {} },
     report: { readOnly: true, desc: 'A round report in markdown: standings, results per opponent, lost games with replay paths. Default: latest round.', props: { round: 'integer' } },
@@ -518,4 +657,4 @@ const METHODS = {
     inbox: { token: true, readOnly: true, desc: 'Messages for you (from Eric, the referee or others), oldest first. Read it at the start of every round.', props: { name: 'string', since: 'string' }, required: ['name'] }
 };
 
-module.exports = { api, call, clock, notify, METHODS, ArenaError, TOURNAMENT };
+module.exports = { api, call, asCompetitor, BENCH, clock, notify, METHODS, ArenaError, TOURNAMENT };

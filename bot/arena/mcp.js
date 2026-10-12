@@ -20,7 +20,7 @@
  * (messages without an id) and responses are never answered. Tools carry MCP annotations (readOnlyHint etc.) from METHODS.
  */
 const readline = require('readline');
-const { call, METHODS } = require('./api');
+const { call, asCompetitor, BENCH, METHODS } = require('./api');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -59,11 +59,16 @@ const windowTool = ([m, d]) => ({ ...arenaTool([m, d]), name: `window_${m}` });
 // the window's arena reads when its GET /api cannot say (no valid token yet)
 const WINDOW_READS = ['status', 'standings', 'report', 'versions', 'panel', 'games'];
 
+// a remote that accepts the connection and then never answers must not hold up tools/list
+const PROBE_MS = Number(process.env.ARENA_PROBE_MS) || 5000;
+
 /** What --remote is: {kind: 'window', reads: [...]} for the arena window, else {kind: 'arena'}. Asked once. */
 let target = null;
 async function remoteKind() {
     target ??= (async () => {
-        const j = await fetch(`${REMOTE}/api`, { headers: auth() }).then((r) => r.json()).catch(() => null);
+        // one deadline for both requests, so a silent remote costs PROBE_MS in all
+        const signal = AbortSignal.timeout(PROBE_MS);
+        const j = await fetch(`${REMOTE}/api`, { headers: auth(), signal }).then((r) => r.json()).catch(() => null);
         if (Array.isArray(j?.result?.collections)) {
             return { kind: 'window', reads: (j.result.arena ?? []).filter((m) => METHODS[m]) };
         }
@@ -71,7 +76,7 @@ async function remoteKind() {
             return { kind: 'arena' };
         }
         // refused or unreachable: only the window answers /healthz without a token
-        const health = await fetch(`${REMOTE}/healthz`).then(async (r) => r.ok && (await r.text()).trim() === 'ok').catch(() => false);
+        const health = signal.aborted ? false : await fetch(`${REMOTE}/healthz`, { signal }).then(async (r) => r.ok && (await r.text()).trim() === 'ok').catch(() => false);
         if (!health) {
             target = null; // ask again next time
         }
@@ -83,7 +88,7 @@ async function remoteKind() {
 async function toolList() {
     const kind = REMOTE ? await remoteKind() : { kind: 'arena' };
     if (kind.kind !== 'window') {
-        return Object.entries(METHODS).map(arenaTool);
+        return Object.entries(METHODS).filter(([m]) => !(process.env.ARENA_COMPETITOR && BENCH.includes(m))).map(arenaTool);
     }
     const arena = Object.entries(METHODS).filter(([m]) => kind.reads.includes(m)).map(arenaTool);
     return process.env.ARENA_COMPETITOR ? arena : [...arena, ...Object.entries(WINDOW_TOOLS).map(windowTool)];
@@ -91,9 +96,12 @@ async function toolList() {
 
 const auth = () => (TOKEN ? { authorization: `Bearer ${TOKEN}` } : {});
 
-/** A remote call: reads as GET with query parameters (scalars only), the rest as POST with a JSON body. */
+/**
+ * A remote call: reads as GET with query parameters (scalars only), the rest as POST with a JSON body. A read that
+ * carries a competitor token (inbox) goes as POST too, so the token never lands in a URL or an access log.
+ */
 async function remote(method, args) {
-    if (METHODS[method]?.readOnly) {
+    if (METHODS[method]?.readOnly && args?.token === undefined) {
         const q = new URLSearchParams(Object.entries(args ?? {}).filter(([, v]) => v !== undefined && v !== null && typeof v !== 'object').map(([k, v]) => [k, String(v)]));
         const res = await fetch(`${REMOTE}/api/${method}${q.size ? `?${q}` : ''}`, { headers: auth() });
         return res.json();
@@ -178,26 +186,18 @@ async function windowCall(method, a = {}) {
 }
 
 async function invoke(method, args) {
-    if (process.env.ARENA_COMPETITOR_TOKEN && args && args.token === undefined) {
+    // only the calls that take a token get it
+    if (process.env.ARENA_COMPETITOR_TOKEN && METHODS[method]?.token && args && args.token === undefined) {
         args = { ...args, token: process.env.ARENA_COMPETITOR_TOKEN };
     }
-    // a server started for one competitor (runner.js sets ARENA_COMPETITOR) acts as that competitor only: its name is the
-    // default and the only one allowed, it registers nobody, and it sends as itself
-    const me = process.env.ARENA_COMPETITOR;
-    if (me && method === 'register') {
-        return { error: { code: 'unauthorized', message: 'a competitor cannot register other competitors' } };
-    }
-    if (me && METHODS[method]?.required?.includes('name')) {
-        if (args?.name !== undefined && args.name !== me) {
-            return { error: { code: 'unauthorized', message: `you are "${me}": this tool acts for you only` } };
+    // a server started for one competitor (runner.js sets ARENA_COMPETITOR) acts as that competitor only (api.js
+    // asCompetitor); call() applies the same rules, and a remote arena gets the call already scoped
+    if (process.env.ARENA_COMPETITOR) {
+        const s = asCompetitor(process.env.ARENA_COMPETITOR, method, args);
+        if (s.error) {
+            return s;
         }
-        args = { ...args, name: me };
-    }
-    if (me && method === 'send') {
-        if (args?.to === 'all') {
-            return { error: { code: 'unauthorized', message: 'a competitor sends to one competitor at a time' } };
-        }
-        args = { ...args, from: me };
+        args = s.args;
     }
     if (!REMOTE) {
         return call(method, args);

@@ -14,13 +14,16 @@ process.env.ARENA_SECRET_FILE = path.join(tmp, 'secret');
 fs.mkdirSync(process.env.ARENA_DASH, { recursive: true });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const { cappedScore, scoreRound, globalElo, lineup, roundSeed, loadSecret } = require('../arena/referee');
+const { cappedScore, scoreRound, globalElo, lineup, stillIn, roundSeed, loadSecret } = require('../arena/referee');
 const dash = require('../arena/dash');
 const { HOME, writeJson, readJson } = require('../arena/home');
 
 const t = (p1, p2) => ({ p1: { ms: p1, n: 10, p95: 1 }, p2: { ms: p2, n: 10, p95: 1 } });
 const dashFile = (...p) => readJson(path.join(process.env.ARENA_DASH, ...p), null);
 const ladderOf = (bots, games, status = 'running') => ({ id: 'arena-r1', status, config: { bots, firstSeed: 77, gamesPerPair: 2 }, progress: { scheduled: 4 }, games });
+
+// a minimal bot program (spec/protocol.md): ready to hello, the first action to decide, ok to over
+const PY_BOT = 'import json, sys\nfor line in sys.stdin:\n    t = json.loads(line)["t"]\n    print(json.dumps({"hello": {"t": "ready", "v": 2}, "over": {"t": "ok"}}.get(t, {"t": "act", "i": 0})), flush=True)\n';
 
 function setRoster(agents, baselines = ['rush', 'heuristic']) {
     writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines, agents: agents.map((name) => ({ name, title: name, start: 'rush', philosophy: `${name}'s prompt` })) });
@@ -64,6 +67,13 @@ test('scoreRound counts results, forfeits, lost games and pins the baselines to 
     assert.strictEqual(rd.leader, 'x-v0');
     const bl = rd.bots.filter((b) => b.name !== 'x-v0');
     assert.ok(Math.abs((bl[0].btElo + bl[1].btElo) / 2 - 1500) <= 1);
+});
+
+test('a competitor benched while its round runs still owns the games of that round', () => {
+    writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines: ['rush'], agents: [], bench: [{ name: 'gone', title: 'gone' }] });
+    const rd = scoreRound(1, ladderOf(['gone-v0', 'rush'], [{ id: 'g1', p1: 'gone-v0', p2: 'rush', outcome: 'won', winner: 'gone-v0', winnerSeat: 'p1', timing: t(5, 5), rounds: 5 }]));
+    assert.strictEqual(rd.bots.find((b) => b.name === 'gone-v0').agent, 'gone');
+    assert.strictEqual(rd.leader, 'gone-v0');
 });
 
 test('a round without rated games has no Elo, ranks or leader', () => {
@@ -140,6 +150,17 @@ test('dashboard: progress counts planned rounds, series are best first, and done
     assert.strictEqual(dashFile('panels', 'arena-lo.json').status, 'done');
 });
 
+test('dashboard: a competitor that sat out the latest round shows the round its stats come from', () => {
+    setRoster(['sat', 'on']);
+    const win = (id, w, l) => ({ id, p1: w, p2: l, outcome: 'won', winner: w, winnerSeat: 'p1', timing: t(5, 5), rounds: 5 });
+    const r1 = scoreRound(1, ladderOf(['sat-v0', 'on-v0', 'rush'], [win('g1', 'sat-v0', 'rush'), win('g2', 'sat-v0', 'on-v0'), win('g3', 'rush', 'on-v0')], 'done'));
+    const r2 = scoreRound(2, ladderOf(['on-v0', 'rush'], [win('g4', 'on-v0', 'rush')], 'done'));
+    dash.publishStandings({ status: 'running', rounds: [r1, r2], global: globalElo([r1, r2]), tournament: { id: 't', plannedRounds: 3, rounds: [1, 2] } });
+    const items = (n) => Object.fromEntries(dashFile('panels', `arena-${n}.json`).widgets[0].items.map((i) => [i.label, i.value]));
+    assert.strictEqual(items('sat')['rank in round 1'], '1 / 3');
+    assert.strictEqual(items('on')['rank in round 2'], '1 / 2');
+});
+
 test('dashboard: say and the referee write separate halves, so neither loses the other\'s update', () => {
     setRoster(['half']);
     const diagram = { type: 'strategy', title: 'd', nodes: [{ id: 'n', label: 'n', kind: 'input' }], edges: [], highlight: [], steps: [] };
@@ -175,10 +196,10 @@ test('a stdio submission freezes its folder: cmd is a file in it or a program on
     const { api } = require('../arena/api');
     api.register({ name: 'pyb', start: 'rush' });
     const live = path.join(HOME, 'agents', 'pyb');
-    fs.writeFileSync(path.join(live, 'bot.py'), 'print("v1")\n');
+    fs.writeFileSync(path.join(live, 'bot.py'), `${PY_BOT}# v1\n`);
     const v = api.submit({ name: 'pyb', note: 'stdio', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }).version;
-    fs.writeFileSync(path.join(live, 'bot.py'), 'print("v2")\n');
-    assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', v, 'bot.py'), 'utf8'), 'print("v1")\n');
+    fs.writeFileSync(path.join(live, 'bot.py'), `${PY_BOT}# v2\n`);
+    assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', v, 'bot.py'), 'utf8'), `${PY_BOT}# v1\n`);
     const { resolveArena } = require('../arena/registry');
     assert.strictEqual(resolveArena(v).dir, path.join(HOME, 'versions', v));
     for (const bot of [{ kind: 'stdio', cmd: '/usr/bin/python3' }, { kind: 'stdio', cmd: '../x' }, { kind: 'stdio', cmd: './missing' }, { kind: 'stdio', cmd: 'python3', cwd: '/tmp' },
@@ -191,6 +212,115 @@ test('a stdio submission freezes its folder: cmd is a file in it or a program on
     const prog = makeArenaBot(v);
     assert.ok(prog instanceof StdioClient);
     assert.deepStrictEqual([prog.name, prog.opts.cmd, prog.opts.args, prog.opts.cwd], [v, 'python3', ['bot.py'], path.join(HOME, 'versions', v)]);
+    // with the card data: the version folder has none
+    assert.strictEqual(prog.opts.env.SWU_CARD_JSON, require('../arena/registry').CARD_JSON);
+});
+
+test('a bot program must start and answer hello with ready, or the submit fails and no version is made', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'mute', start: 'rush' });
+    const live = path.join(HOME, 'agents', 'mute');
+    const before = require('../arena/home').versionsOf('mute');
+    fs.writeFileSync(path.join(live, 'bot.py'), 'import sys\nprint("hi")\n');
+    assert.throws(() => api.submit({ name: 'mute', note: 'not json', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }),
+        (e) => e.code === 'bad_bot' && /failed the start check/.test(e.message) && /not JSON/.test(e.message));
+    fs.writeFileSync(path.join(live, 'bot.py'), 'import sys\nsys.exit(3)\n');
+    assert.throws(() => api.submit({ name: 'mute', note: 'exits', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }), (e) => e.code === 'bad_bot' && /exited \(code 3/.test(e.message));
+    // a file without its exec bit (a synced arena folder keeps none) cannot start: the error says how to run it instead
+    fs.writeFileSync(path.join(live, 'run.sh'), `#!/bin/sh\nexec python3 -c '${PY_BOT.replace(/'/g, "'\\''")}'\n`, { mode: 0o644 });
+    assert.throws(() => api.submit({ name: 'mute', note: 'no x bit', bot: { kind: 'stdio', cmd: './run.sh' } }),
+        (e) => e.code === 'bad_bot' && /EACCES/.test(e.message) && /"cmd": "sh", "args": \["\.\/run\.sh"\]/.test(e.message));
+    assert.deepStrictEqual(require('../arena/home').versionsOf('mute'), before);
+    const v = api.submit({ name: 'mute', note: 'through sh', bot: { kind: 'stdio', cmd: 'sh', args: ['run.sh'] } }).version;
+    assert.strictEqual(readJson(path.join(HOME, 'versions', v, 'SUBMISSION.json'), {}).checked, true);
+});
+
+test('the load check runs submitted code without the arena secrets or the egress proxy', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'nosy', start: 'rush' });
+    fs.writeFileSync(path.join(HOME, 'agents', 'nosy', 'bot.js'),
+        "const leak = ['HTTPS_PROXY', 'https_proxy', 'ARENA_ADMIN_TOKEN'].filter((k) => process.env[k]);\nif (leak.length) throw new Error('saw ' + leak.join(' '));\nexports.createBot = (name) => ({ name, choose: () => 0 });\n");
+    const saved = { HTTPS_PROXY: process.env.HTTPS_PROXY, https_proxy: process.env.https_proxy, ARENA_ADMIN_TOKEN: process.env.ARENA_ADMIN_TOKEN };
+    Object.assign(process.env, { HTTPS_PROXY: 'http://proxy.invalid:1', https_proxy: 'http://proxy.invalid:1', ARENA_ADMIN_TOKEN: 'x' });
+    try {
+        assert.ok(api.submit({ name: 'nosy', note: 'env' }).version);
+    } finally {
+        for (const [k, v] of Object.entries(saved)) {
+            if (v === undefined) {
+                delete process.env[k];
+            } else {
+                process.env[k] = v;
+            }
+        }
+    }
+});
+
+test('withdraw benches a competitor or stops rating one version; rejoin undoes either', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'wd', start: 'rush' });
+    api.submit({ name: 'wd', note: 'v1' });
+    api.submit({ name: 'wd', note: 'v2, broken' });
+    assert.ok(lineup().includes('wd-v2'));
+    assert.deepStrictEqual(api.withdraw({ name: 'wd', version: 2 }), { name: 'wd', withdrawn: 'wd-v2', rated: 'wd-v1' });
+    assert.ok(lineup().includes('wd-v1') && !lineup().includes('wd-v2'));
+    assert.throws(() => api.withdraw({ name: 'wd', version: 9 }), (e) => e.code === 'not_found');
+    assert.throws(() => api.rejoin({ name: 'wd', version: 9 }), (e) => e.code === 'not_found');
+    api.rejoin({ name: 'wd', version: '2' }); // query strings and shells send numbers as text
+    assert.ok(lineup().includes('wd-v2'));
+    assert.strictEqual(api.withdraw({ name: 'wd' }).benched, true);
+    const r = readJson(path.join(HOME, 'roster.json'), {});
+    assert.deepStrictEqual([r.agents.map((a) => a.name), r.bench.map((a) => a.name)], [[], ['wd']]);
+    assert.ok(!lineup().some((b) => b.startsWith('wd-')));
+    assert.deepStrictEqual(stillIn(['wd-v1', 'rush']), ['rush'], 'a lineup replayed later (the held-out ladder) drops it too');
+    assert.deepStrictEqual(api.send({ to: 'wd', text: 'for when you are back' }).delivered, ['wd'], 'a benched competitor can be messaged by name');
+    assert.strictEqual(api.status().competitors.find((c) => c.name === 'wd')?.benched, true, 'status still lists it, marked benched');
+    assert.ok(api.panel({ name: 'wd' }) && api.panels().panels.length >= 1, 'its panel stays readable');
+    assert.deepStrictEqual(api.versions({ name: 'wd' }).map((v) => v.name), ['wd-v0', 'wd-v1', 'wd-v2'], 'its versions stay readable');
+    assert.throws(() => api.submit({ name: 'wd', note: 'benched' }), (e) => e.code === 'not_found');
+    // its frozen versions stay eval opponents for the others
+    api.register({ name: 'wo', start: 'rush' });
+    const ev = api.eval({ name: 'wo', vs: ['wd-v1'] });
+    assert.strictEqual(ev.state, 'queued');
+    fs.rmSync(path.join(HOME, 'queue', `${ev.id}.json`));
+    // a version withdrawn and rejoined while benched applies once the competitor rejoins
+    assert.strictEqual(api.withdraw({ name: 'wd', version: 1 }).withdrawn, 'wd-v1');
+    assert.strictEqual(api.rejoin({ name: 'wd', version: 1 }).benched, true);
+    api.withdraw({ name: 'wd', version: 2 });
+    api.rejoin({ name: 'wd' });
+    assert.ok(lineup().includes('wd-v1') && !lineup().includes('wd-v2'));
+    assert.deepStrictEqual(stillIn(['wd-v1', 'wd-v2', 'rush']), ['wd-v1', 'rush']);
+    api.rejoin({ name: 'wd', version: 2 });
+    const back = readJson(path.join(HOME, 'roster.json'), {});
+    assert.deepStrictEqual([back.agents.map((a) => a.name), back.bench.length, 'benchedAt' in back.agents[1]], [['wo', 'wd'], 0, false]);
+    assert.ok(lineup().includes('wd-v2'));
+});
+
+test('a call made for one competitor (ARENA_COMPETITOR) acts for it only, whatever the front end', async () => {
+    setRoster([]);
+    const { api, call } = require('../arena/api');
+    api.register({ name: 'me1', start: 'rush' });
+    api.register({ name: 'you1', start: 'rush' });
+    process.env.ARENA_COMPETITOR = 'me1';
+    try {
+        const refused = async (m, a, re) => {
+            const r = await call(m, a);
+            assert.strictEqual(r.error?.code, 'unauthorized', `${m} ${JSON.stringify(a)}`);
+            assert.match(r.error.message, re);
+        };
+        await refused('withdraw', { name: 'you1' }, /it alone benches/);
+        await refused('rejoin', { name: 'me1' }, /it alone benches/);
+        await refused('register', { name: 'new1', start: 'rush' }, /cannot register/);
+        await refused('say', { name: 'you1', text: 'hi' }, /you are "me1"/);
+        await refused('send', { to: 'all', text: 'hi' }, /one competitor at a time/);
+        assert.ok((await call('say', { text: 'my name is filled in' })).result.ok);
+        assert.ok((await call('status')).result);
+    } finally {
+        delete process.env.ARENA_COMPETITOR;
+    }
+    assert.strictEqual(readJson(path.join(HOME, 'roster.json'), {}).agents.length, 2, 'nobody was benched');
 });
 
 test('an in-process protocol client passes the load check and plays as one', () => {
@@ -342,6 +472,25 @@ test('runner: the usage brake stops Claude sessions only, and the runner starts 
     assert.ok(runnable({ kind: 'command', cmd: ['prog', '{prompt_file}'] }));
     for (const h of [{ kind: 'script' }, { kind: 'command', cmd: [] }, { kind: 'codex' }, { kind: 'Claude Code' }, null]) {
         assert.ok(!runnable(h), JSON.stringify(h));
+    }
+});
+
+test('runner: with every competitor benched it waits instead of failing (the keeper would restart it every minute)', () => {
+    const { spawnSync } = require('child_process');
+    writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines: ['rush'], agents: [], bench: [{ name: 'b', title: 'b', harness: { kind: 'claude-code' } }] });
+    writeJson(path.join(HOME, 'tournament.json'), { id: 'bench-t', state: 'done', rounds: [] });
+    // it worked in an earlier round, before a restart: its logs are published at the end all the same
+    fs.mkdirSync(path.join(tmp, 'bench-logs', 'b'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'bench-logs', 'b', 'usage.jsonl'), '{"round":1}\n');
+    try {
+        const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'arena', 'runner.js'), '--logs', path.join(tmp, 'bench-logs')],
+            { env: process.env, encoding: 'utf8', timeout: 20000 });
+        assert.strictEqual(r.status, 0, r.stderr);
+        assert.match(r.stdout + r.stderr, /no competitor .* yet/);
+        assert.match(r.stdout + r.stderr, /the tournament is over/);
+        assert.ok(fs.existsSync(path.join(HOME, 'logs', 'b', 'usage.jsonl')), 'the benched competitor\'s logs are published');
+    } finally {
+        fs.rmSync(path.join(HOME, 'tournament.json'), { force: true });
     }
 });
 

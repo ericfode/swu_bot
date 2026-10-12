@@ -58,7 +58,8 @@ function arg(name, dflt) {
 }
 
 let roster = loadRoster();
-const agentOf = (bot) => roster.agents.find((a) => bot === a.name || bot.startsWith(`${a.name}-v`))?.name ?? null;
+// benched competitors too: one withdrawn while its last round's ladder runs still owns that round's games
+const agentOf = (bot) => [...roster.agents, ...(roster.bench ?? [])].find((a) => bot === a.name || bot.startsWith(`${a.name}-v`))?.name ?? null;
 
 /**
  * Score of a finished game for p1, or null (unrated). A game a bot broke (outcome ERROR, `by` = the seat whose bot
@@ -318,7 +319,8 @@ function lineup(cutoff = null) {
     const until = cutoff ? Date.parse(cutoff) : Infinity;
     const agents = [];
     for (const a of roster.agents) {
-        const all = versionsOf(a.name);
+        // versions the owner withdrew (api.js withdraw) are not rated
+        const all = versionsOf(a.name).filter((v) => !(a.withdrawn ?? []).includes(v));
         const ok = all.filter((v) => !(Date.parse(submissionOf(`${a.name}-v${v}`).submittedAt) > until));
         if (ok.length < all.length) {
             console.log(`${a.name}: ${all.filter((v) => !ok.includes(v)).map((v) => `v${v}`).join(', ')} came in after ${cutoff}, rated next round`);
@@ -333,6 +335,27 @@ function lineup(cutoff = null) {
         }
     }
     return [...agents, ...roster.baselines];
+}
+
+/**
+ * An earlier round's bots minus the versions benched or withdrawn since (api.js withdraw), for a ladder that replays
+ * that lineup (the held-out ladder). Baselines stay; a withdrawn version is dropped, not swapped for an older one, so
+ * the held-out ranks still compare the versions the training ladder rated.
+ */
+function stillIn(bots) {
+    roster = loadRoster();
+    return bots.filter((b) => {
+        const v = /^([a-z][a-z0-9_]*)-v(\d+)$/.exec(b);
+        if (!v || roster.baselines.includes(b)) {
+            return true;
+        }
+        const a = roster.agents.find((x) => x.name === v[1]);
+        if (a && !(a.withdrawn ?? []).includes(Number(v[2]))) {
+            return true;
+        }
+        console.log(`${b}: ${a ? 'withdrawn' : 'benched'} by its owner, sits out`);
+        return false;
+    });
 }
 
 // child processes (ladder, evals) die with the referee
@@ -627,7 +650,7 @@ async function tournament() {
                 // the held-out ladder: no work window, the versions of the last round, decks from the held-out cards
                 const last = r;
                 const now = new Date().toISOString();
-                r = { n, kind: 'holdout', ladder: ladderIdOf(n, t), workStart: now, workEnd: now, ladderStart: now, bots: last.bots, seed: roundSeed(secret, t.id, n) };
+                r = { n, kind: 'holdout', ladder: ladderIdOf(n, t), workStart: now, workEnd: now, ladderStart: now, bots: stillIn(last.bots), seed: roundSeed(secret, t.id, n) };
                 t.rounds.push(r);
                 save();
                 broadcast(`The work rounds are over. Last ladder (round ${n}): the versions rated in round ${last.n} play again on decks dealt only from the ${t.rules.holdout.counts.holdout} held-out cards. Its report compares every bot's rank on the training and the held-out cards.`);
@@ -717,4 +740,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning, ladderIdOf, rankCorrelation };
+module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, stillIn, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning, ladderIdOf, rankCorrelation };
