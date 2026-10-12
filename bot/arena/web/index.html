@@ -151,14 +151,14 @@ async function refresh() {
     rows.forEach((r, i) => {
       const tr = document.createElement('tr');
       const h = r.harness ? [r.harness.kind, r.harness.model].filter(Boolean).join(' · ') : '';
-      for (const [v, cls] of [[i + 1], [r.name + (r.title && r.title !== r.name ? ` (${r.title})` : '')], [h], [r.latest ?? '-'], [eloText(r), 'num'], [r.lr ? `${r.lr.rank == null ? 'no games yet' : '#' + r.lr.rank} · ${r.lr.wins}-${r.lr.losses}` : '-'], [r.lr?.msPerDecision ?? '-', 'num']]) tr.append(mk('td', cls, String(v)));
+      for (const [v, cls] of [[i + 1], [r.name + (r.title && r.title !== r.name ? ` (${r.title})` : '') + (r.benched ? ' · benched' : '')], [h], [r.latest ?? '-'], [eloText(r), 'num'], [r.lr ? `${r.lr.rank == null ? 'no games yet' : '#' + r.lr.rank} · ${r.lr.wins}-${r.lr.losses}` : '-'], [r.lr?.msPerDecision ?? '-', 'num']]) tr.append(mk('td', cls, String(v)));
       if (r.eloFrom) tr.children[4].title = `${r.latest} has no rating yet; this is the Elo of ${r.eloFrom}, its newest rated version`;
       tb.append(tr);
     });
     const cards = $('cards'); cards.textContent = '';
     for (const x of st.competitors) {
       const card = mk('div', 'card');
-      card.append(mk('h3', '', x.name), mk('div', 'muted', [x.title, x.harness && [x.harness.kind, x.harness.model, x.harness.effort].filter(Boolean).join(' · ')].filter(Boolean).join(' — ')));
+      card.append(mk('h3', '', x.name + (x.benched ? ' (benched)' : '')), mk('div', 'muted', [x.title, x.harness && [x.harness.kind, x.harness.model, x.harness.effort].filter(Boolean).join(' · ')].filter(Boolean).join(' — ')));
       card.append(mk('div', '', `Latest ${x.latest ?? '-'} · Elo ${eloText({ ...x, ...ratedElo(x, sd.global) })}`));
       api('panel', { name: x.name }).then((p) => {
         const box = strategyBox(x.name, (p?.widgets || []).find((w) => w.type === 'strategy'));

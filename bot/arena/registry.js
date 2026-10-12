@@ -6,7 +6,7 @@
  *   <agent>        the live, editable version in <ARENA_HOME>/agents/<agent>/
  *   <agent>-v<N>   submitted version N in <ARENA_HOME>/versions/<agent>-v<N>/ (what the referee rates); a version whose
  *                  SUBMISSION.json has bot.kind 'stdio' is a bot program (bot/stdio.js StdioClient), started in its
- *                  version folder for each game and closed after it
+ *                  version folder for each game and closed after it, with $SWU_CARD_JSON naming the card data
  * Anything after '#' is ignored (same as players/index.js).
  *
  * The time cap is not applied here: the game runner (ladder-worker.js) guards every bot, baselines included, with
@@ -19,6 +19,9 @@ const { StdioClient } = require('../stdio');
 const { AGENTS, VERSIONS, readJson } = require('./home');
 
 const NAME = /^[a-z][a-z0-9_]*$/;
+// where bot programs find the card data (the folder that holds Card/): they run in their version folder, which has none.
+// The bots' own convention: $SWU_CARD_JSON, else forceteki/test/json under the working directory
+const CARD_JSON = process.env.SWU_CARD_JSON || path.join(__dirname, '..', '..', 'forceteki', 'test', 'json');
 
 function resolveArena(name) {
     const base = String(name).split('#')[0];
@@ -52,7 +55,7 @@ function makeArenaBot(name) {
         // a bot program in its frozen version folder (cmd ./x is a file there). The guard times it by wall clock, and with
         // a cap the per-game budget, not the referee's per-message limits, decides a slow answer (ladder-worker.js)
         const cmd = /[\\/]/.test(r.stdio.cmd) ? path.join(r.dir, r.stdio.cmd) : r.stdio.cmd;
-        return new StdioClient(name, { cmd, args: r.stdio.args ?? [], cwd: r.dir });
+        return new StdioClient(name, { cmd, args: r.stdio.args ?? [], cwd: r.dir, env: { SWU_CARD_JSON: CARD_JSON } });
     }
     const bot = require(r.file).createBot(name);
     if (!bot || (typeof bot.choose !== 'function' && typeof bot.decide !== 'function')) {
@@ -62,4 +65,4 @@ function makeArenaBot(name) {
     return bot;
 }
 
-module.exports = { resolveArena, describeArenaBot, makeArenaBot };
+module.exports = { resolveArena, describeArenaBot, makeArenaBot, CARD_JSON };

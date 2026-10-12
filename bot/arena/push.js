@@ -12,9 +12,9 @@
  *   node bot/arena/push.js invites <login>[,<login>...]         who may sign in, besides ARENA_ADMINS (replaces the list;
  *                                                              needs SWU_WINDOW_TOKEN set to the admin token)
  *
- * SWU_WINDOW is the window's address (default https://swu-arena.fly.dev). The token is SWU_WINDOW_TOKEN, else
- * ARENA_PUSH_TOKEN (how the project's newer cloud sessions get it), else none: where the egress proxy adds the token
- * for that host, any placeholder works.
+ * SWU_WINDOW is the window's address (default https://swu-arena.fly.dev). In the project's cloud sessions the egress
+ * proxy adds the push token for that host, so no thread holds it; elsewhere set SWU_WINDOW_TOKEN. Cloud sessions
+ * that hold the token as the variable ARENA_PUSH_TOKEN use it when SWU_WINDOW_TOKEN is unset.
  * ladder.js starts `run --follow` for itself when SWU_WINDOW is set (followRun below).
  */
 const fs = require('fs');
@@ -254,7 +254,7 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
                 }
             };
             await reports(path.join(home.HOME, 'rounds'), 'report-');
-            for (const a of roster.agents) {
+            for (const a of [...roster.agents, ...(roster.bench ?? [])]) {
                 const vs = home.versionsOf(a.name);
                 const list = (await result('versions', { name: a.name })) ?? [];
                 await put(`versions-${a.name}`, list.map((s, i) => ({ v: vs[i], ...s })));

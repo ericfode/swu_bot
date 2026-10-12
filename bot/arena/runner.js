@@ -110,11 +110,15 @@ function fill(tpl, vars) {
     return tpl.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 }
 
-function cleanEnv(homeDir, tag) {
+function cleanEnv(homeDir, tag, who = null) {
     const env = Object.fromEntries(PASS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
     env.HOME = homeDir;
     env.ARENA_HOME = home.HOME;
     env.ARENA_RUN = tag;
+    if (who) {
+        // the arena's CLI and scripts then act for this competitor only, as its MCP server does (api.js asCompetitor)
+        env.ARENA_COMPETITOR = who;
+    }
     // what a competitor knows comes from its folder, its notes and the brief: no Claude Code memory, no CLAUDE.md from
     // the folders above its own (another competitor could write one there)
     env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
@@ -458,7 +462,7 @@ async function work(c, st) {
         return;
     }
     if (h.kind === 'claude-code') {
-        const env = cleanEnv(path.join(LOGS, 'homes', `${c.name}-r${k}`), tag);
+        const env = cleanEnv(path.join(LOGS, 'homes', `${c.name}-r${k}`), tag, c.name);
         const memory = memoryBlock(c, env);
         let spent = spentIn(dir, k);
         let sessionId = null;
@@ -535,7 +539,7 @@ async function work(c, st) {
         return;
     }
     if (h.kind === 'script' || h.kind === 'command') {
-        const env = cleanEnv(path.join(LOGS, 'homes', c.name), tag);
+        const env = cleanEnv(path.join(LOGS, 'homes', c.name), tag, c.name);
         const out = path.join(dir, `r${k}-1.log`);
         let cmd;
         let args;
@@ -670,7 +674,9 @@ async function main() {
     };
     let runners = current();
     if (!runners.length) {
-        throw new Error('no competitor with a harness the runner can start and a checkout (roster.json agents[].harness, --repo)');
+        // every competitor benched (api.js withdraw), or none registered yet: wait, since one may (re)join next round,
+        // rather than exit and be restarted by the keeper every minute
+        log('runner: no competitor with a harness the runner can start and a checkout yet (roster.json agents[].harness, --repo); checking again each round');
     }
     const everyone = new Map(runners.map((c) => [c.name, c])); // whoever ran, for publishLogs at the end
     log(`runner: ${runners.map((a) => a.name).join(', ')}; repo ${REPO}; logs ${LOGS}; $${BUDGET_USD} per competitor per round;`
@@ -719,6 +725,13 @@ async function main() {
         }
         const st = clock();
         if (st.phase === 'done' && !busy.size) {
+            // whoever ran under this runner, plus any competitor with logs from before a restart (one benched since)
+            const r = home.roster();
+            for (const a of [...r.agents, ...(r.bench ?? [])]) {
+                if (!everyone.has(a.name) && fs.existsSync(path.join(LOGS, a.name))) {
+                    everyone.set(a.name, a);
+                }
+            }
             publishLogs([...everyone.values()]);
             log('runner: the tournament is over');
             await new Promise((res) => (mirrorChild && mirrorChild.exitCode === null ? mirrorChild.on('exit', res) : res()));

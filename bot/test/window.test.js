@@ -613,6 +613,65 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
     }
 });
 
+test('mcp: a competitor the runner starts can neither see nor call withdraw and rejoin', async () => {
+    const competitor = await mcpSession([], { ARENA_COMPETITOR: 'aa' });
+    const owner = await mcpSession([]);
+    try {
+        await competitor.ask('initialize');
+        const names = (await competitor.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(names.includes('arena_submit') && !names.includes('arena_withdraw') && !names.includes('arena_rejoin'));
+        const r = await competitor.tool('arena_withdraw', {});
+        assert.strictEqual(r.error, true);
+        assert.match(JSON.stringify(r.value), /it alone benches/);
+        await owner.ask('initialize');
+        const all = (await owner.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(all.includes('arena_withdraw') && all.includes('arena_rejoin'));
+    } finally {
+        competitor.close();
+        owner.close();
+    }
+});
+
+test('mcp: a competitor token never goes into a URL, and a remote that never answers does not hold up tools/list', async () => {
+    const http = require('http');
+    const seen = [];
+    const arena = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', (d) => (body += d));
+        req.on('end', () => {
+            seen.push({ method: req.method, url: req.url, body });
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ result: req.url === '/api' ? { methods: [] } : { ok: true } }));
+        });
+    });
+    const silent = http.createServer(() => undefined); // accepts, never answers
+    await Promise.all([arena, silent].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
+    const url = (s) => `http://127.0.0.1:${s.address().port}`;
+    const remote = await mcpSession(['--remote', url(arena)], { ARENA_COMPETITOR: 'aa', ARENA_COMPETITOR_TOKEN: 'secret-token' });
+    const stuck = await mcpSession(['--remote', url(silent)], { ARENA_PROBE_MS: '1000' });
+    try {
+        await remote.ask('initialize');
+        await remote.tool('arena_status');
+        await remote.tool('arena_inbox', {});
+        const status = seen.find((r) => r.url.startsWith('/api/status'));
+        const inbox = seen.find((r) => r.url.startsWith('/api/inbox'));
+        assert.deepStrictEqual([status.method, status.url], ['GET', '/api/status'], 'a read without a token is a GET, and status takes none');
+        assert.strictEqual(inbox.method, 'POST');
+        assert.ok(!inbox.url.includes('secret-token') && JSON.parse(inbox.body).token === 'secret-token');
+        await stuck.ask('initialize');
+        const t0 = Date.now();
+        const names = (await stuck.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(names.includes('arena_submit'), 'falls back to the arena tools');
+        assert.ok(Date.now() - t0 < 1800, `one probe deadline for both requests (took ${Date.now() - t0} ms)`);
+    } finally {
+        remote.close();
+        stuck.close();
+        arena.close();
+        silent.closeAllConnections?.();
+        silent.close();
+    }
+});
+
 test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads as themselves, and can disconnect it', async () => {
     const crypto = require('crypto');
     const w = makeWindow('w-oauth');

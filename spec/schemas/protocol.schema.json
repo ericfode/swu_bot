@@ -229,6 +229,12 @@
           "type": "boolean",
           "description": "v2: ask for simulations."
         },
+        "simEngine": {
+          "enum": [
+            "rust"
+          ],
+          "description": "v2, with sim: simulate on the Rust simulator when it knows every card in the game."
+        },
         "version": {
           "type": "string",
           "maxLength": 200,
@@ -528,6 +534,12 @@
         "sim": {
           "type": "boolean",
           "description": "v2: sim requests are allowed for this decision."
+        },
+        "simEngine": {
+          "enum": [
+            "rust"
+          ],
+          "description": "v2: this decision's simulations run on the Rust simulator (absent: forceteki)."
         },
         "ms": {
           "$ref": "#/$defs/Ms"

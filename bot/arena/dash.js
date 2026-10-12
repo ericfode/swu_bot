@@ -31,7 +31,9 @@ function enabled() {
 const panelFile = (agent) => path.join(DASH, 'panels', `arena-${agent}.json`);
 const halfFile = (agent, side) => path.join(HOME, 'panels', `${agent}.${side}.json`);
 const boardFile = (name) => path.join(HOME, 'panels', `${name}.json`);
-const agentInfo = (agent) => roster().agents.find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
+// benched competitors (api.js withdraw) keep their panels, ratings and history
+const everyone = (r) => [...r.agents, ...(r.bench ?? [])];
+const agentInfo = (agent) => everyone(roster()).find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
 
 /** A trimmed string of at most max chars, or undefined (null, empty, objects). */
 function text(v, max) {
@@ -123,18 +125,20 @@ function publishStandings(st) {
     const show = (v) => (v === null || v === undefined ? '-' : v);
     const t = new Date().toISOString();
     const done = st.status === 'done';
-    const eloSeries = () => bestFirst(r.agents.map((a) => ({ name: a.name, points: rounds.filter((rd) => eloOf(a.name, rd) !== null).map((rd) => [rd.round, eloOf(a.name, rd)]) })));
+    const eloSeries = () => bestFirst(everyone(r).map((a) => ({ name: a.name, points: rounds.filter((rd) => eloOf(a.name, rd) !== null).map((rd) => [rd.round, eloOf(a.name, rd)]) })));
 
-    for (const a of r.agents) {
+    for (const a of everyone(r)) {
         const rows = rounds.map((rd) => ({ rd, b: rd.bots.find((b) => b.agent === a.name) })).filter((x) => x.b);
         const cur = rows[rows.length - 1]?.b;
+        // the round those stats are from: the latest one it played (a benched or missing competitor sat out the later ones)
+        const curRd = rows[rows.length - 1]?.rd ?? last;
         const curElo = cur ? elo(cur.name) : null;
         writeJson(halfFile(a.name, 'rated'), {
             bots: [...new Set(rows.map((x) => x.b.name))], status: done ? 'done' : 'running', updatedAt: t,
             widgets: [
                 { type: 'stats', items: [
                     { label: 'Elo (all rounds)', value: !cur ? '-' : curElo === null ? NO_GAMES : curElo },
-                    { label: `rank in round ${last?.round ?? '-'}`, value: !cur ? '-' : cur.rank === null || cur.rank === undefined ? NO_GAMES : `${cur.rank} / ${last.bots.length}` },
+                    { label: `rank in round ${curRd?.round ?? '-'}`, value: !cur ? '-' : cur.rank === null || cur.rank === undefined ? NO_GAMES : `${cur.rank} / ${curRd.bots.length}` },
                     { label: 'win rate', value: cur?.winRate === null || !cur ? '-' : `${Math.round(cur.winRate * 100)}%` },
                     { label: 'ms / decision', value: cur?.msPerDecision ?? '-' },
                     { label: 'forfeits', value: cur?.forfeits ?? 0 }

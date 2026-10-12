@@ -214,10 +214,11 @@
         const A = extra?.arena || {};
         const T = A.tournament, cur = T?.rounds?.at(-1) || null;
         const phase = !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
-        const competitors = (A.roster?.agents || []).map(a => {
+        // benched builders (arena withdraw) stay listed, marked, with their versions and panels; rejoin brings them back
+        const competitors = [...(A.roster?.agents || []), ...(A.roster?.bench || []).map(a => ({ ...a, benched: true }))].map(a => {
             const vs = A.versions?.[a.name] || [];
             const panel = (src.panels || []).find(p => p.id === `arena-${a.name}`) || null;
-            return { name: a.name, title: a.title, harness: a.harness || null, philosophy: a.philosophy || '', start: a.start, registeredAt: a.registeredAt, versions: vs, latest: vs.at(-1)?.name || null, panel };
+            return { name: a.name, title: a.title, harness: a.harness || null, philosophy: a.philosophy || '', start: a.start, registeredAt: a.registeredAt, versions: vs, latest: vs.at(-1)?.name || null, panel, ...(a.benched ? { benched: true } : {}) };
         });
         const arena = {
             phase, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
