@@ -17,7 +17,8 @@
 # (push.js and api.js's read methods). The referee and the bots never get the proxy: a bot could push as the project.
 #
 # Layout under $BASE (default /root/arena-run, local disk):
-#   referee/        frozen git worktree of the commit; forceteki/ and node_modules/ link to $SRC's built engine
+#   referee/        frozen git worktree of the commit; forceteki/ and node_modules/ link to $SRC's built engine, which
+#                   setup checks out at the revision the commit pins (from the address in its .gitmodules) and builds
 #   repos/<name>/   each competitor's own copy (runner --repo): a clone of the commit with its own engine copy and no
 #                   usable remote, so an edit or a git command there changes nothing for the referee or the others
 #   results/        ARENA_RESULTS: ladders record here; the runner mirrors it into $SHARED_RESULTS
@@ -49,8 +50,29 @@ say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
 # a launch setting from launch.json, or $2 when it has none
 setting() { node -e "const j=require('$LAUNCH'); process.stdout.write(String(j[process.argv[1]] ?? process.argv[2] ?? ''))" "$1" "${2:-}"; }
 
-engine() {
+# check out in $SRC/forceteki the engine revision <commit> pins, from the address <commit>'s .gitmodules names
+# (PR #105 moved it to the fork; a plain `git submodule update` fails until the address is synced)
+pin() {
+    local commit=$1 want have url
     [ -e "$SRC/forceteki/package.json" ] || git -C "$SRC" submodule update --init
+    want=$(git -C "$SRC" rev-parse "$commit:forceteki")
+    have=$(git -C "$SRC/forceteki" rev-parse HEAD)
+    [ "$want" = "$have" ] && return
+    if [ -n "$(git -C "$SRC/forceteki" status --porcelain --untracked-files=no)" ]; then
+        say "$SRC/forceteki has uncommitted changes; the arena runs only a committed engine revision"
+        exit 1
+    fi
+    url=$(git -C "$SRC" config --blob "$commit:.gitmodules" submodule.forceteki.url)
+    say "moving $SRC/forceteki from $have to $want, the revision $commit pins ($url)"
+    git -C "$SRC" config submodule.forceteki.url "$url"
+    git -C "$SRC/forceteki" remote set-url origin "$url"
+    if ! git -C "$SRC/forceteki" fetch --quiet origin "$want" || ! git -C "$SRC/forceteki" checkout --quiet --detach "$want"; then
+        say "could not check out forceteki $want from $url"
+        exit 1
+    fi
+}
+
+engine() {
     # an edited engine would not match the revision its build records (and the engine is read-only here): refuse it
     if [ -n "$(git -C "$SRC/forceteki" status --porcelain --untracked-files=no)" ]; then
         say "$SRC/forceteki has uncommitted changes; the arena runs only a committed engine revision"
@@ -74,15 +96,9 @@ engine() {
 setup() {
     local commit=$1
     mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools"
+    # the engine is built once, in $SRC, at the forceteki revision <commit> pins
+    pin "$commit"
     engine
-    # the engine is built once, in $SRC: it must be the forceteki revision <commit> pins
-    local want have
-    want=$(git -C "$SRC" rev-parse "$commit:forceteki")
-    have=$(git -C "$SRC/forceteki" rev-parse HEAD)
-    if [ "$want" != "$have" ]; then
-        say "$commit pins forceteki $want, but $SRC/forceteki is at $have: check that out and rebuild (npm run build in forceteki), then launch again"
-        exit 1
-    fi
     # a checkout of another commit (an earlier tournament's) is made again
     at() { git -C "$1" rev-parse HEAD 2>/dev/null || true; }
     if [ ! -e "$BASE/referee/bot/arena/referee.js" ] || [ "$(at "$BASE/referee")" != "$commit" ]; then
@@ -185,11 +201,12 @@ stop_uplink() {
     local window pids
     window=$(window_url)
     pids=$(pgrep -f "$UPLINK_LOOP" || true)
+    # stop the loop first, so a push of its still in flight cannot land after the last one
+    [ -n "$pids" ] && kill $pids && say "uplink stopped"
     if [ -n "$window" ]; then
         uplink_env "$window"
         (cd "$BASE/referee" && "${UPLINK[@]}" node bot/arena/push.js arena --once >> "$BASE/uplink.log" 2>&1) || say "the last push to $window failed (see $BASE/uplink.log)"
     fi
-    [ -n "$pids" ] && kill $pids && say "uplink stopped"
     return 0
 }
 
