@@ -40,6 +40,16 @@ Writes need a bearer token (the project token, or the admin token); a session co
 - `PUT /api/docs/admin/invites` with `{"logins": [...]}` changes who may sign in, without a deploy
   (`SWU_WINDOW_TOKEN=<ARENA_ADMIN_TOKEN> node bot/arena/push.js invites a,b,c`).
 
+## Through MCP
+
+`node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]` is the same API as MCP tools, for a Claude (or
+any MCP client) that loads data the way a user would. It offers the arena reads the window answers (`arena_status`,
+`arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`) and the window's own tools:
+`window_docs` and `window_replays` read, `window_put_run` uploads a local results run (index, ladder, replays; only
+what the window lacks, and it reports how many replays the window has), `window_put_doc` one JSON document (a local
+.json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
+proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR) gets the reads only.
+
 ## Who may do what (auth.js)
 
 - Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
