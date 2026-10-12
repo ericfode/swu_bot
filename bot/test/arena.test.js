@@ -475,6 +475,99 @@ test('runner: the usage brake stops Claude sessions only, and the runner starts 
     }
 });
 
+test('referee lock: pids decide inside one PID namespace, the heartbeat across namespaces (launch.sh isolates the referee)', () => {
+    const { takeLock, releaseLock } = require('../arena/referee');
+    const dir = fs.mkdtempSync(path.join(tmp, 'lock-'));
+    const file = path.join(dir, 'referee.lock');
+    const ns = fs.readlinkSync('/proc/self/ns/pid');
+    const dead = 2 ** 22 + 7; // above pid_max on Linux, so never a live process
+    writeJson(file, { pid: dead, host: os.hostname(), pidns: ns });
+    takeLock(dir); // a dead holder in this namespace: taken at once
+    assert.strictEqual(readJson(file, {}).pid, process.pid);
+    releaseLock();
+    writeJson(file, { pid: dead, host: os.hostname(), pidns: 'pid:[1]' });
+    assert.throws(() => takeLock(dir), /is running the ladder/, 'another namespace with a fresh heartbeat may still be running');
+    const old = (Date.now() - 80000) / 1000;
+    fs.utimesSync(file, old, old);
+    takeLock(dir);
+    assert.strictEqual(readJson(file, {}).pidns, ns);
+    releaseLock();
+    assert.ok(!fs.existsSync(file));
+});
+
+test('isolate.sh: the command sees only its own processes, hidden paths are empty, /tmp is its own, and --user cannot undo it', { skip: process.getuid?.() !== 0 && 'needs root (unshare)' }, () => {
+    const { spawnSync } = require('child_process');
+    const secret = path.join(tmp, 'secret.txt');
+    fs.writeFileSync(secret, 'the round seeds');
+    const script = `echo "procs $(ls /proc | grep -c '^[0-9]')"; echo "file [$(cat ${secret})]"; cat /proc/${process.pid}/environ 2>/dev/null | tr '\\0' '\\n' | grep -c ISO_PARENT_SECRET; exit 4`;
+    const r = spawnSync('bash', [path.join(__dirname, '..', 'arena', 'ops', 'isolate.sh'), '--hide', secret, '--', 'sh', '-c', script],
+        { env: { ...process.env, ISO_PARENT_SECRET: 'x' }, encoding: 'utf8', timeout: 20000 });
+    if (/unshare failed|Operation not permitted/.test(r.stderr)) {
+        return; // a container without namespaces: nothing to check here
+    }
+    assert.strictEqual(r.status, 4, r.stderr);
+    assert.ok(Number(/procs (\d+)/.exec(r.stdout)[1]) < 10, r.stdout);
+    assert.match(r.stdout, /file \[\]/);
+    assert.match(r.stdout, /^0$/m, 'the test process\'s environment is out of reach');
+    assert.strictEqual(fs.readFileSync(secret, 'utf8'), 'the round seeds', 'hidden, not changed');
+    // --tmp: a folder of its own in place of /tmp, where nothing of the real /tmp shows
+    const own = path.join(tmp, 'own-tmp');
+    const marker = `/tmp/isolate-outside-${process.pid}`;
+    fs.writeFileSync(marker, 'x');
+    try {
+        const t = spawnSync('bash', [path.join(__dirname, '..', 'arena', 'ops', 'isolate.sh'), '--tmp', own, '--', 'sh', '-c', `[ -e ${marker} ] && echo seen; echo made > /tmp/inside`],
+            { encoding: 'utf8', timeout: 20000 });
+        assert.strictEqual(t.status, 0, t.stderr);
+        assert.doesNotMatch(t.stdout, /seen/);
+        assert.strictEqual(fs.readFileSync(path.join(own, 'inside'), 'utf8'), 'made\n');
+    } finally {
+        fs.rmSync(marker, { force: true });
+    }
+    // --user: the command runs as that user without capabilities, so it cannot undo the hiding
+    const u = spawnSync('bash', [path.join(__dirname, '..', 'arena', 'ops', 'isolate.sh'), '--user', 'nobody', '--hide', secret, '--', 'sh', '-c',
+        `id -u; umount ${secret} 2>/dev/null && echo unmounted; umount -l /proc 2>/dev/null && echo proc-unmounted; grep CapEff /proc/self/status`],
+        { encoding: 'utf8', timeout: 20000 });
+    assert.strictEqual(u.status, 0, u.stderr);
+    assert.match(u.stdout, /^65534$/m);
+    assert.doesNotMatch(u.stdout, /unmounted/);
+    assert.match(u.stdout, /CapEff:\s+0+$/m);
+});
+
+test('referee: bot code (ladders, evals) runs as ARENA_BOT_USER, cannot read the round-seed secret and does not get its path', { skip: process.getuid?.() !== 0 && 'needs root (setpriv)' }, async () => {
+    const { spawnBots, giveToBots } = require('../arena/referee');
+    // a folder the bot user can reach (the test's own is closed to it), holding a root-only secret
+    const open = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-bot-user-'));
+    fs.chmodSync(open, 0o755);
+    const secret = path.join(open, 'secret');
+    fs.writeFileSync(secret, 'the round seeds', { mode: 0o600 });
+    const dir = path.join(open, 'ladder');
+    fs.mkdirSync(dir);
+    const saved = { user: process.env.ARENA_BOT_USER, file: process.env.ARENA_SECRET_FILE };
+    process.env.ARENA_BOT_USER = 'nobody';
+    process.env.ARENA_SECRET_FILE = secret;
+    try {
+        giveToBots(dir);
+        assert.strictEqual(fs.statSync(dir).uid, 65534);
+        const script = `const fs = require('fs'); let read = 'refused'; try { read = fs.readFileSync(${JSON.stringify(secret)}, 'utf8'); } catch {}
+            fs.writeFileSync(${JSON.stringify(path.join(dir, 'out.json'))}, JSON.stringify({ uid: process.getuid(), read, path: process.env.ARENA_SECRET_FILE ?? null,
+                cap: /CapEff:\\s+(\\w+)/.exec(fs.readFileSync('/proc/self/status', 'utf8'))[1] }));`;
+        const child = spawnBots(['-e', script], { stdio: 'ignore', cwd: open });
+        const code = await new Promise((resolve) => child.on('exit', resolve));
+        assert.strictEqual(code, 0);
+        const out = readJson(path.join(dir, 'out.json'), {});
+        assert.deepStrictEqual([out.uid, out.read, out.path, /^0+$/.test(out.cap)], [65534, 'refused', null, true]);
+    } finally {
+        fs.rmSync(open, { recursive: true, force: true });
+        for (const [k, v] of [['ARENA_BOT_USER', saved.user], ['ARENA_SECRET_FILE', saved.file]]) {
+            if (v === undefined) {
+                delete process.env[k];
+            } else {
+                process.env[k] = v;
+            }
+        }
+    }
+});
+
 test('runner: with every competitor benched it waits instead of failing (the keeper would restart it every minute)', () => {
     const { spawnSync } = require('child_process');
     writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines: ['rush'], agents: [], bench: [{ name: 'b', title: 'b', harness: { kind: 'claude-code' } }] });

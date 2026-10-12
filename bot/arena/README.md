@@ -133,7 +133,13 @@ is the only way between containers until the arena is on Fly. Those writes stop 
   the boundary against a hostile one is a hosted arena's tokens.
 - Unattended competitors: `runner.js` starts each roster agent's `harness` (headless Claude Code, a script or any
   command) when a round's work window opens and stops it, with everything it started, before the window ends. See its
-  header for flags, the per-round budget and the usage brake.
+  header for flags, the per-round budget and the usage brake. `ops/launch.sh` starts the referee and the runner with a
+  minimal environment, each in its own PID and mount namespace (`ops/isolate.sh`, needs root): competitors and bot
+  programs see only their own process tree, a `/tmp` of their own and none of the session's credential files, and the
+  runner's side cannot read the round-seed secret. The referee stays root and alone reads that secret; every ladder and
+  eval it starts, where bots run, runs as the user `arena` without capabilities, so a bot can neither undo the hiding
+  nor read the secret. The runner and its Claude Code competitors stay root, since Claude Code signs in with a file only
+  root may read. The network and the arena folder stay shared.
 
 The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live panel and strategy diagram), games
 (rated round replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).

@@ -16,7 +16,7 @@
 # It is the only process that gets the egress proxy, which adds the window's push token, and it runs only our own code
 # (push.js and api.js's read methods). The referee and the bots never get the proxy: a bot could push as the project.
 #
-# Layout under $BASE (default /root/arena-run, local disk):
+# Layout under $BASE (default /srv/arena-run, local disk):
 #   referee/        frozen git worktree of the commit; forceteki/ and node_modules/ link to $SRC's built engine, which
 #                   setup checks out at the revision the commit pins (from the address in its .gitmodules) and builds
 #   repos/<name>/   each competitor's own copy (runner --repo): a clone of the commit with its own engine copy and no
@@ -24,12 +24,30 @@
 #   results/        ARENA_RESULTS: ladders record here; the runner mirrors it into $SHARED_RESULTS
 #   logs/           runner logs, competitor HOMEs, transcripts; usage, prompts and OptMem memory are backed up to $BACKUP
 #   tools/memo      OptMem (it must be executable, so not on the shared mount)
+#   home/, etc/     the HOME of the ladders' user, a copy of the CA bundle
 # ARENA_HOME stays the shared /mnt/project-files/arena (roster, agents/, versions/, tournament.json, standings).
 # Both processes start with a minimal environment (env -i): no session tokens and no NODE_OPTIONS reach the bots.
+# Each also starts in its own PID and mount namespace (isolate.sh): what runs under it, competitors and bot programs
+# included, sees only its own processes, so it cannot read another process's environment (this session's tokens, the
+# uplink's). The session's credential files are hidden, and /tmp is a folder of its own. The referee itself (our own
+# code) stays root there and alone reads the round-seed secret. Every ladder and eval it starts, where bot programs and
+# in-process bots run, runs as the user $ARENA_USER (default arena, made by setup) with no capabilities: bot code cannot
+# undo the hiding, and reads none of root's files, the secret included. It writes only $BASE/results, home/ and the
+# shared folders; the referee's worktree and the engine stay root's. The runner and the Claude Code competitors it
+# starts still run as root (Claude Code signs in with a credential only root may read), so they could undo it; the
+# runner's side also hides the secret. The network is shared, and the arena folder stays writable: this keeps secrets
+# from bots, while the integrity of a tournament still rests on the competitors' honesty (a hosted arena is the real
+# boundary).
 set -euo pipefail
 MODE=${1:?usage: launch.sh start <commit> | resume | referee | runner}
 SRC=${SRC:-/home/user/swu_bot}
-BASE=${BASE:-/root/arena-run}
+BASE=${BASE:-/srv/arena-run}
+ARENA_USER=${ARENA_USER:-arena}
+# the round seeds' secret: root's alone (the referee reads it; bot code, as $ARENA_USER, cannot)
+SECRET=${ARENA_SECRET_FILE:-/root/.arena-secret}
+# the CA bundle the cloud container's certificate settings name, copied where $ARENA_USER may read it
+CA_SRC=${NODE_EXTRA_CA_CERTS:-${SSL_CERT_FILE:-}}
+CA=${CA_SRC:+$BASE/etc/ca-bundle.crt}
 ARENA_HOME=${ARENA_HOME:-/mnt/project-files/arena}
 SHARED_RESULTS=${SHARED_RESULTS:-/mnt/project-files/results}
 BACKUP=${BACKUP:-/mnt/project-files/arena-runner}
@@ -38,13 +56,27 @@ LAUNCH=$ARENA_HOME/launch.json
 LAUNCH_TOURNAMENT=$ARENA_HOME/tournament.json
 
 # a minimal environment for the referee and the runner (the runner passes even less on to competitors)
-CLEAN=(env -i "PATH=$PATH" "HOME=/root" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
-       "NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}" "SSL_CERT_FILE=${SSL_CERT_FILE:-}" "ARENA_HOME=$ARENA_HOME" "ARENA_RESULTS=$BASE/results"
-       "ARENA_PUBLIC_RESULTS=$SHARED_RESULTS")
-# a rehearsal points these elsewhere too (defaults: the project's dashboard folder and ~/.arena-secret)
+# (git: the ladders' user reads the root-owned worktree and engine, which git refuses unless told they are safe)
+CLEAN=(env -i "PATH=$PATH" "HOME=$BASE/home" "LANG=${LANG:-C.UTF-8}" "TZ=UTC" "NO_PROXY=${NO_PROXY:-}" "no_proxy=${no_proxy:-}"
+       "NODE_EXTRA_CA_CERTS=$CA" "SSL_CERT_FILE=$CA" "ARENA_HOME=$ARENA_HOME" "ARENA_RESULTS=$BASE/results"
+       "ARENA_PUBLIC_RESULTS=$SHARED_RESULTS" "ARENA_SECRET_FILE=$SECRET" "ARENA_BOT_USER=$ARENA_USER"
+       "GIT_CONFIG_COUNT=1" "GIT_CONFIG_KEY_0=safe.directory" "GIT_CONFIG_VALUE_0=*")
+# a rehearsal points this elsewhere too (default: the project's dashboard folder)
 [ -n "${ARENA_DASH:-}" ] && CLEAN+=("ARENA_DASH=$ARENA_DASH")
-[ -n "${ARENA_SECRET_FILE:-}" ] && CLEAN+=("ARENA_SECRET_FILE=$ARENA_SECRET_FILE")
 UPLINK_LOOP='bot/arena/push.js arena --every'
+# the session's credentials and settings (and the usual places of others, hidden only where they exist), hidden from
+# the referee and the runner and all they start. Each gets a /tmp of its own under $BASE/tmp, so the session's
+# scratchpad and anything else in the real /tmp is out of reach too, and the other's /tmp is hidden.
+SECRETS=(/root/.claude /root/.claude.json /root/.config /root/.fly /root/.aws /root/.boto /root/.ssh /root/.gitconfig
+         /root/.git-credentials /root/.netrc /root/.npmrc /root/.docker /root/.kube /root/.pki /root/.hex /root/.mix
+         /root/.cargo/credentials /root/.cargo/credentials.toml /root/.gradle/gradle.properties /root/.ccr-hearth-status-nudge
+         /home/claude/.claude/remote/.session_ingress_token)
+ISOLATE=(bash "$(dirname "$(readlink -f "$0")")/isolate.sh")
+for p in "${SECRETS[@]}"; do ISOLATE+=(--hide "$p"); done
+# the runner's side (competitors) must not learn the round seeds either; the referee needs the secret to draw them
+ISOLATE_RUNNER=("${ISOLATE[@]}" --tmp "$BASE/tmp/runner" --hide "$SECRET" --hide "$BASE/tmp/referee" --)
+# the referee's side needs no sign-in at all; the referee starts its ladders and evals as $ARENA_USER (ARENA_BOT_USER)
+ISOLATE+=(--tmp "$BASE/tmp/referee" --hide /home/claude/.claude --hide "$BASE/tmp/runner" --)
 
 say() { echo "[launch $(date -u +%H:%M:%S)] $*"; }
 # a launch setting from launch.json, or $2 when it has none
@@ -93,9 +125,23 @@ engine() {
     [ -d "$SRC/node_modules" ] || (cd "$SRC" && npm install --no-audit --no-fund)
 }
 
+# the user the referee runs as: no capabilities, so nothing it starts can undo isolate.sh's hiding
+arena_user() {
+    id -u "$ARENA_USER" > /dev/null 2>&1 && return
+    say "adding the user $ARENA_USER"
+    useradd --system --user-group --no-create-home --home-dir "$BASE/home" --shell /usr/sbin/nologin "$ARENA_USER"
+}
+
 setup() {
     local commit=$1
-    mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools"
+    arena_user
+    mkdir -p "$BASE/results" "$BASE/logs" "$BASE/repos" "$BASE/tools" "$BASE/home" "$BASE/etc"
+    # $BASE (and the folders above it) must let $ARENA_USER through to the worktree and its own folders
+    chmod 755 "$BASE"
+    if ! runuser -u "$ARENA_USER" -- test -x "$BASE/home"; then
+        say "$ARENA_USER cannot reach $BASE (a folder above it is closed, e.g. /root): pick a BASE outside it (default /srv/arena-run)"
+        exit 1
+    fi
     # the engine is built once, in $SRC, at the forceteki revision <commit> pins
     pin "$commit"
     engine
@@ -150,23 +196,42 @@ console.log([...ids].join('\n'));" "$ARENA_HOME/standings.json" "$LAUNCH_TOURNAM
     if [ -d "$BACKUP" ] && [ -z "$(ls -A "$BASE/logs" 2>/dev/null)" ]; then
         cp -a "$BACKUP/." "$BASE/logs/" && say "restored the runner's logs backup from $BACKUP"
     fi
+    # made here (the referee would make it too) so that the runner's side hides it from its very first start
+    if [ ! -s "$SECRET" ]; then
+        mkdir -p "$(dirname "$SECRET")"
+        (umask 077 && node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > "$SECRET")
+    fi
+    [ -n "$CA" ] && install -m 644 "$CA_SRC" "$CA"
+    # what the ladders write is their user's; the secret, the worktree, the engine, the tools and the runner's folders
+    # stay root's
+    chown -R "$ARENA_USER:" "$BASE/results" "$BASE/home"
+    chown root: "$SECRET"
+    chmod 600 "$SECRET"
+    # the arena and dashboard folders: the shared mount lets any user write, a rehearsal's local copy is made its user's
+    local d
+    for d in "$ARENA_HOME" "${ARENA_DASH:-}"; do
+        [ -n "$d" ] && [ -d "$d" ] || continue
+        runuser -u "$ARENA_USER" -- test -w "$d" || chown -R "$ARENA_USER:" "$d"
+    done
 }
 
 start_referee() {
     local resume=$1
+    mkdir -p "$BASE/tmp/referee" "$BASE/tmp/runner"
     cd "$BASE/referee"
     if [ "$resume" = 1 ]; then
-        "${CLEAN[@]}" setsid nohup node bot/arena/referee.js --tournament --resume --workers 3 --eval-workers 1 >> "$BASE/referee.log" 2>&1 < /dev/null &
+        "${CLEAN[@]}" setsid nohup "${ISOLATE[@]}" node bot/arena/referee.js --tournament --resume --workers 3 --eval-workers 1 >> "$BASE/referee.log" 2>&1 < /dev/null &
     else
-        "${CLEAN[@]}" setsid nohup node bot/arena/referee.js --tournament --rounds "${ROUNDS:-3}" --minutes "${MINUTES:-60}" --games "${GAMES:-2}" \
+        "${CLEAN[@]}" setsid nohup "${ISOLATE[@]}" node bot/arena/referee.js --tournament --rounds "${ROUNDS:-3}" --minutes "${MINUTES:-60}" --games "${GAMES:-2}" \
             --workers 3 --eval-workers 1 --title "${TITLE:?TITLE}" --task "${TASK:-}" ${HOLDOUT:+--holdout "$HOLDOUT"} >> "$BASE/referee.log" 2>&1 < /dev/null &
     fi
     say "referee started (pid $!)"
 }
 
 start_runner() {
+    mkdir -p "$BASE/tmp/referee" "$BASE/tmp/runner"
     cd "$BASE/referee"
-    "${CLEAN[@]}" setsid nohup node bot/arena/runner.js --repo "$BASE/repos/{name}" --logs "$BASE/logs" --memo "$BASE/tools/memo" \
+    "${CLEAN[@]}" setsid nohup "${ISOLATE_RUNNER[@]}" node bot/arena/runner.js --repo "$BASE/repos/{name}" --logs "$BASE/logs" --memo "$BASE/tools/memo" \
         --budget-usd "$(setting budgetUSD 50)" --brake-5h "$(setting brake5h 0.8)" --brake-7d "$(setting brake7d 0.85)" --mirror "$BASE/results" "$SHARED_RESULTS" --backup "$BACKUP" >> "$BASE/runner.log" 2>&1 < /dev/null &
     say "runner started (pid $!)"
 }
@@ -181,7 +246,10 @@ uplink_env() {
             "NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}" "SSL_CERT_FILE=${SSL_CERT_FILE:-}" "ARENA_HOME=$ARENA_HOME"
             "ARENA_RESULTS=$BASE/results" "ARENA_PUBLIC_RESULTS=$BASE/results" "SWU_WINDOW=$1")
     [ -n "${ARENA_DASH:-}" ] && UPLINK+=("ARENA_DASH=$ARENA_DASH")
-    [ -n "${SWU_WINDOW_TOKEN:-}" ] && UPLINK+=("SWU_WINDOW_TOKEN=$SWU_WINDOW_TOKEN")
+    # the uplink alone gets the push token (SWU_WINDOW_TOKEN, else ARENA_PUSH_TOKEN). Nothing the referee or the runner
+    # starts can read the uplink's environment: they see only their own processes (isolate.sh)
+    local tok=${SWU_WINDOW_TOKEN:-${ARENA_PUSH_TOKEN:-}}
+    [ -n "$tok" ] && UPLINK+=("SWU_WINDOW_TOKEN=$tok")
     return 0
 }
 
@@ -237,7 +305,9 @@ case "$MODE" in
         node -e "require('fs').writeFileSync('$LAUNCH', JSON.stringify({commit: process.argv[1], budgetUSD: Number(process.argv[2]), brake5h: Number(process.argv[3]), brake7d: Number(process.argv[4]), window: process.argv[5] || null, startedAt: new Date().toISOString()}, null, 1))" \
             "$COMMIT" "${BUDGET_USD:-50}" "${BRAKE_5H:-0.8}" "${BRAKE_7D:-0.85}" "${SWU_WINDOW:-}"
         setup "$COMMIT"
-        (cd "$BASE/referee" && "${CLEAN[@]}" npm run -s gate)
+        # a new tournament starts with an empty /tmp for the referee and the runner (a restart keeps it)
+        rm -rf "$BASE/tmp"
+        (cd "$BASE/referee" && "${CLEAN[@]}" HOME=/root npm run -s gate)
         start_referee 0
         sleep 5
         start_runner

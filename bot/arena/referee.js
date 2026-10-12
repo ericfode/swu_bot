@@ -38,7 +38,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const { bradleyTerry } = require('../ratings');
 const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, roster: loadRoster, versionsOf } = require('./home');
 const dash = require('./dash');
@@ -51,6 +51,9 @@ const EVAL_JS = path.join(__dirname, 'eval.js');
 const EVAL_MIN_LEFT_MS = 120000; // no queued eval starts with less of the work window left
 const EVAL_TRIES = 2; // an eval stopped by the end of a window this often fails with reason 'deadline'
 const LOCK_STALE_MS = 120000; // a lock from another host counts as abandoned once its heartbeat is this old
+// from another PID namespace on this host (a referee restarted by launch.sh): two and a half 30 s heartbeats, so the
+// keeper's restart after a crash does not wait out the full two minutes
+const LOCK_STALE_NS_MS = 75000;
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -388,13 +391,54 @@ function pidAlive(pid) {
     }
 }
 
+// which PID namespace this process is in (launch.sh starts the referee in its own, isolate.sh): pids mean something
+// only inside one
+const PIDNS = (() => {
+    try {
+        return fs.readlinkSync('/proc/self/ns/pid');
+    } catch {
+        return null;
+    }
+})();
+
+// Bot code runs in the ladders and evals the referee starts. When the referee runs as root (launch.sh, in its own
+// namespace), they run as ARENA_BOT_USER with no capabilities: a bot then cannot undo the namespace's hiding, and cannot
+// read the round-seed secret, which stays root's (a bot running as the referee's own user could read its file, its
+// environment or its memory). Neither ever gets the secret's path.
+/** [uid, gid] of ARENA_BOT_USER when the referee runs as root, else null. */
+function botUser() {
+    const name = process.getuid?.() === 0 ? process.env.ARENA_BOT_USER : null;
+    return name ? ['-u', '-g'].map((f) => Number(execFileSync('id', [f, name], { encoding: 'utf8' }))) : null;
+}
+
+/** Starts `node args...` for bot code: as ARENA_BOT_USER when set, and without the secret's path in its environment. */
+function spawnBots(args, opts) {
+    const env = { ...process.env };
+    delete env.ARENA_SECRET_FILE;
+    delete env.ARENA_BOT_USER;
+    const ids = botUser();
+    if (!ids) {
+        return spawn(process.execPath, args, { ...opts, env });
+    }
+    return spawn('setpriv', [`--reuid=${ids[0]}`, `--regid=${ids[1]}`, '--clear-groups', '--inh-caps=-all', '--bounding-set=-all', '--no-new-privs',
+        '--', process.execPath, ...args], { ...opts, env });
+}
+
+/** A folder the referee made that bot code writes into (a round's ladder folder) belongs to ARENA_BOT_USER. */
+function giveToBots(dir) {
+    const ids = botUser();
+    if (ids) {
+        fs.chownSync(dir, ids[0], ids[1]);
+    }
+}
+
 /** Takes <dir>/referee.lock, or throws while another live referee holds it. */
 function takeLock(dir) {
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'referee.lock');
     for (let attempt = 0; ; attempt++) {
         try {
-            fs.writeFileSync(file, JSON.stringify({ pid: process.pid, host: os.hostname(), startedAt: new Date().toISOString() }), { flag: 'wx' });
+            fs.writeFileSync(file, JSON.stringify({ pid: process.pid, host: os.hostname(), pidns: PIDNS, startedAt: new Date().toISOString() }), { flag: 'wx' });
             lockFile = file;
             return;
         } catch (e) {
@@ -410,11 +454,12 @@ function takeLock(dir) {
         } catch {
             // unreadable: treat as abandoned
         }
-        // on this host the pids say (the ladder's too: it outlives a referee killed with SIGKILL); from another host (a
-        // shared folder) the heartbeat does, as the 30 s tick touches the file
-        const alive = !held ? false : held.host === os.hostname()
+        // on this host and in this PID namespace the pids say (the ladder's too: it outlives a referee killed with
+        // SIGKILL); from another host (a shared folder) or namespace the heartbeat does, as the 30 s tick touches the file
+        const here = held?.host === os.hostname();
+        const alive = !held ? false : here && (held.pidns ?? null) === PIDNS
             ? (held.pid !== process.pid && pidAlive(held.pid)) || (!!held.ladderPid && pidAlive(held.ladderPid))
-            : age < LOCK_STALE_MS;
+            : age < (here ? LOCK_STALE_NS_MS : LOCK_STALE_MS);
         if (alive) {
             throw new Error(`a referee (pid ${held.pid}${held.ladderPid ? `, ladder pid ${held.ladderPid}` : ''} on ${held.host}) is running the ladder in ${dir}; stop it first (or delete ${file} if it is gone)`);
         }
@@ -451,6 +496,7 @@ async function runRound(round, bots, { games = Number(arg('games', 4)), seed, ke
     const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed), '--key', key,
         '--id', id, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, ...(pool ? ['--pool', pool] : []), '--record', '--resume'];
     takeLock(dir);
+    giveToBots(dir);
     console.log(`round ${round}: ${bots.join(', ')}`);
     let code;
     const tick = setInterval(() => {
@@ -462,7 +508,7 @@ async function runRound(round, bots, { games = Number(arg('games', 4)), seed, ke
         }
     }, 30000);
     try {
-        const child = track(spawn(process.execPath, args, { stdio: 'inherit' }));
+        const child = track(spawnBots(args, { stdio: 'inherit' }));
         lockLadder(child.pid);
         code = await new Promise((resolve) => {
             child.on('exit', (c, sig) => resolve(c ?? sig));
@@ -517,7 +563,7 @@ async function playQueuedEval(deadline, minLeftMs = EVAL_MIN_LEFT_MS) {
     const tries = (j.tries ?? 0) + 1;
     writeJson(file, { ...j, state: 'running', startedAt: new Date().toISOString(), tries });
     console.log(`eval ${j.id}: ${j.bot} vs ${j.vs.join(', ')} (try ${tries})`);
-    const child = track(spawn(process.execPath, [EVAL_JS, '--job', file, '--workers', arg('eval-workers', arg('workers', '3'))], { stdio: ['ignore', 'inherit', 'inherit'] }));
+    const child = track(spawnBots([EVAL_JS, '--job', file, '--workers', arg('eval-workers', arg('workers', '3'))], { stdio: ['ignore', 'inherit', 'inherit'] }));
     let stopped = false;
     const timer = setTimeout(() => {
         stopped = true;
@@ -740,4 +786,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, stillIn, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning, ladderIdOf, rankCorrelation };
+module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, stillIn, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, playQueuedEval, requeueRunning, ladderIdOf, rankCorrelation, spawnBots, giveToBots };

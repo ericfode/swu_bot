@@ -9,7 +9,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ARENA_HOME=${ARENA_HOME:-/mnt/project-files/arena}
-BASE=${BASE:-/root/arena-run}
+BASE=${BASE:-/srv/arena-run}
 END=$(( $(date +%s) + ${KEEP_SECONDS:-6600} ))
 restarts=0
 i=0
