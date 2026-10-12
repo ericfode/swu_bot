@@ -424,7 +424,7 @@ function panelOf(result, { existing = null, now = new Date(), latest = null, tho
     }];
     const withRow = tested.filter((b) => b.skill.byStyle);
     if (withRow.length) {
-        widgets.push({ type: 'html', title: 'Score by the deck type the bot holds, against par for its level', height: Math.min(600, 150 + 44 * (withRow.length + 1)), html: styleTableHtml(withRow, ref) });
+        widgets.push({ type: 'html', title: 'Score by the deck type the bot holds, against par for its level', height: Math.min(600, 190 + 44 * (withRow.length + 1)), html: styleTableHtml(withRow, ref) });
     }
     const last = tested.find((b) => b.bot === latest && b.skill.byStyle);
     if (last) {
