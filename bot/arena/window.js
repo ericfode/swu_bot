@@ -65,6 +65,8 @@ function need(cond, code, msg) {
  */
 const isName = (x) => typeof x === 'string' && /^[A-Za-z0-9][\w .@#+()-]{0,63}$/.test(x) && !(x in Object.prototype);
 const FEED_OUTCOMES = new Set(['running', 'won', 'draw', 'abandoned']);
+// a game's error text could name the person, so a people run keeps only that there was one
+const NO_RESULT = 'no result';
 const count = (x) => (Number.isSafeInteger(x) && x >= 0 ? x : null);
 function feedRun(doc, feed, id) {
     if (!doc || typeof doc !== 'object' || doc.id !== id || !Array.isArray(doc.games)) return null;
@@ -86,7 +88,7 @@ function feedRun(doc, feed, id) {
         const seat = g.outcome === 'won' ? g.winnerSeat : g.outcome === 'draw' ? 'draw' : null;
         const p = { p1: ours.has(g.p1) ? g.p1 : 'opponent', p2: ours.has(g.p2) ? g.p2 : 'opponent' };
         games.push({ id: g.id, ...p, outcome: g.outcome, winnerSeat: seat, winner: seat === 'draw' ? 'draw' : seat ? p[seat] : null,
-            rounds: count(g.rounds), steps: count(g.steps), error: g.error ? g.error.slice(0, 200) : null });
+            rounds: count(g.rounds), steps: count(g.steps), error: g.error ? NO_RESULT : null });
     }
     const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small
     return { id, feed, createdAt: doc.createdAt, ...(doc.bots ? { bots: doc.bots } : {}), ...(per && per <= 20 ? { gamesPerPairing: per } : {}), games };
@@ -366,12 +368,14 @@ const peopleRun = (id, doc) => (typeof doc?.feed === 'string' && doc.feed !== ''
 const oursOf = (doc) => new Set((Array.isArray(doc?.bots) ? doc.bots : []).filter((b) => b !== 'opponent'));
 
 function maskRun(doc) {
-    const ours = oursOf(doc);
-    if (!ours.size || !Array.isArray(doc.games)) {
-        return doc; // with no bots list the person cannot be told from the bot (the app shows such a run unmasked too)
+    if (!Array.isArray(doc.games)) {
+        return doc;
     }
+    // with no bots list the person cannot be told from our bot, so every seat is hidden
+    const ours = oursOf(doc);
     const seat = (n) => (typeof n !== 'string' || ours.has(n) || n === 'draw' ? n : 'opponent');
-    return { ...doc, games: doc.games.map((g) => (g && typeof g === 'object' ? { ...g, p1: seat(g.p1), p2: seat(g.p2), ...('winner' in g ? { winner: seat(g.winner) } : {}) } : g)) };
+    const error = (e) => (!e ? null : /^TIME_FORFEIT (\S+)/.test(String(e)) ? `TIME_FORFEIT ${seat(RegExp.$1)}` : NO_RESULT);
+    return { ...doc, games: doc.games.map((g) => (g && typeof g === 'object' ? { ...g, p1: seat(g.p1), p2: seat(g.p2), ...('winner' in g ? { winner: seat(g.winner) } : {}), ...('error' in g ? { error: error(g.error) } : {}) } : g)) };
 }
 
 /** A readers' copy of a document: a people run masked (above), and for friends without builder and thread names. */
@@ -383,13 +387,13 @@ function readerDoc(ns, id, doc, who) {
 /**
  * A people game's replay as readers get it. The person's seat comes from the run's row for the game (a seat that is
  * "opponent" or outside the bots list), or, before the run names the game, from the header (a player named "opponent"
- * or outside the bots list). Whole lines only: a line still being written waits for its newline, so the copy only ever
+ * or outside the bots list). With no bots list every seat is hidden. Whole lines only: a line still being written waits for its newline, so the copy only ever
  * grows by whole lines and a reader's offsets stay valid while the game is played.
  */
 function maskReplay(buf, doc, game) {
     const ours = oursOf(doc);
     const row = Array.isArray(doc?.games) ? doc.games.find((g) => g?.id === game) : null;
-    const outside = (n) => n === 'opponent' || (ours.size > 0 && !ours.has(n));
+    const outside = (n) => n === 'opponent' || !ours.has(n);
     const isPerson = (p) => (row && typeof row[p.id] === 'string' ? outside(row[p.id]) : outside(p.bot));
     const names = new Map(); // seat -> the names the header gave the person
     const end = buf.lastIndexOf(10) + 1;
@@ -845,6 +849,11 @@ function createWindow(opts = {}) {
                     need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with distinct ids, a createdAt date, and seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
                     // the run keeps which feed sent it, so the app never rates its games (model.cjs)
                     text = JSON.stringify(run);
+                } else if (ns === 'runs' && doc && typeof doc === 'object' && peopleRun(id, doc)) {
+                    // a run against people sent with the project token: it must name our bots, and is stored with every
+                    // other seat as "opponent", like a feed's run, so no read path (the app's model included) sees a name
+                    need(!Array.isArray(doc.games) || !doc.games.length || oursOf(doc).size > 0, 'bad_request', 'a run against people must list our bots in "bots"; every other seat is stored as "opponent"');
+                    text = JSON.stringify(maskRun(doc));
                 }
                 store.putDoc(ns, id, text);
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
