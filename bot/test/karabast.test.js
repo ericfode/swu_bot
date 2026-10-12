@@ -625,6 +625,10 @@ test('opponent names go only to the private names file and the local live view t
     assert.deepStrictEqual(rows.map((r) => [r.game, r.name]), [['q-1/frames/abcdef012345', 'bReyFan/b']]);
     assert.strictEqual(fs.statSync(names).mode & 0o777, 0o600);
     assert.strictEqual(fs.statSync(path.dirname(names)).mode & 0o777, 0o700);
+    fs.chmodSync(names, 0o644); // made wider by hand: the next name narrows it first
+    recordOpponent(names, 'q-1/frames/0000000000bb', gs, 'swu-bot-1');
+    assert.strictEqual(fs.statSync(names).mode & 0o777, 0o600);
+    fs.writeFileSync(names, fs.readFileSync(names, 'utf8').split('\n').slice(0, 1).join('\n') + '\n'); // back to one row
 
     const named = new Games(runs, { names });
     const h = named.get('q-1/frames/abcdef012345').events[0];

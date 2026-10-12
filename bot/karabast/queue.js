@@ -79,6 +79,7 @@ function checkDeck(deck) {
 /**
  * Appends one game's opponent name (the seat that is not `me` in the first full frame) to the private names file. The
  * name is cut to 40 characters without control characters or angle brackets; nothing else about the person is kept.
+ * The file is always mode 600; its folder is made 700 when this creates it.
  */
 function recordOpponent(file, game, gs, me) {
     const p = Object.entries(gs.players).find(([id]) => id !== me)?.[1];
@@ -88,7 +89,14 @@ function recordOpponent(file, game, gs, me) {
         return;
     }
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    fs.appendFileSync(file, JSON.stringify({ game, at: new Date().toISOString(), name }) + '\n', { mode: 0o600 });
+    // a file made earlier with wider permissions is narrowed before the name goes in
+    const fd = fs.openSync(file, 'a', 0o600);
+    try {
+        fs.fchmodSync(fd, 0o600);
+        fs.writeSync(fd, JSON.stringify({ game, at: new Date().toISOString(), name }) + '\n');
+    } finally {
+        fs.closeSync(fd);
+    }
 }
 
 /**
