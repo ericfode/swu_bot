@@ -14,6 +14,10 @@ function mutants(entry) {
         if (!value || typeof value !== 'object') return;
         if (value.kind === 'const' && Number.isSafeInteger(value.value) && Math.abs(value.value) < 1000)
             add([...path, 'value'], 'amount-plus-one', (n) => n + 1);
+        if (value.kind === 'arenaList' && value.receiver?.kind === 'ref' && ['player','opponent'].includes(value.receiver.path?.[0]))
+            add([...path, 'receiver', 'path'], 'swap-owner', (p) => [p[0] === 'player' ? 'opponent' : 'player']);
+        if (value.kind === 'arenaList' && value.predicate?.kind !== 'const')
+            add([...path, 'predicate'], 'all-arenas', () => ({kind:'const',value:true}));
         if (value.kind === 'unary' && value.op === '-') add(path, 'remove-negation', (v) => v.value);
         if (path.at(-1) === 'targetResolver' && value.owner === 'any')
             add([...path, 'owner'], 'friendly-only', () => 'self');

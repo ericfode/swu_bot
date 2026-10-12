@@ -101,3 +101,11 @@ test('pipeline CLI keeps builds mandatory and parses multiple selected cards', (
     assert.throws(() => options(['--no-build']), /Unknown/);
     assert.throws(() => options(['--out']), /Missing/);
 });
+
+ test('arena-list mutants independently alter receiver, arena scope, amount and sign', () => {
+    const entry = catalogue.cards.find(c => c.setCode === 'TS26_048');
+    const changes = mutants(entry);
+    for (const label of ['swap-owner','all-arenas','amount-plus-one','remove-negation'])
+        assert.ok(changes.some(c => c.label === label), label);
+    assert.ok(!changes.some(c => c.label.includes('sequential')));
+});

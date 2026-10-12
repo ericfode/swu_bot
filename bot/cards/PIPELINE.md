@@ -89,8 +89,11 @@ compare equal-work search results and binary size when extending code generation
 ## Experiments and coverage
 
 The planner operates on rule structure. The initial construction vocabulary
-handles simple targeted constant damage and phase stat events, and self stat
-modifiers whose power depends on damage. It selects setup cards from metadata,
+handles simple targeted constant damage and phase stat events, standalone phase
+stat events over owner/arena-filtered arena lists, and self stat modifiers whose
+power depends on damage. Arena-list experiments include mixed controllers and
+arenas, empty sets, expiry and simultaneous lethal targets; aura-dependent
+ordering and attachment cleanup remain explicit gaps. It selects setup cards from metadata,
 uses ordinary engine actions after a disclosed starting position, and records
 oracle observations. It does not compute expected game outcomes from the IR.
 Positive targeting, ownership/arena differences, damaged and lethal targets,

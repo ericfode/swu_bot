@@ -119,3 +119,34 @@ test('base-only selector does not construct unit targets and HP-dependent consta
     dynamic.abilities.card[0].effect.hp = { kind: 'ref', path: ['modifierTarget', 'damage'] };
     assert.equal(planCardProbes(dynamic, { catalogue }).cases.length, 0);
 });
+
+test('arena-list phase stats construct mixed owners/arenas, empty sets and lethal batches', () => {
+    for (const id of ['TWI_126', 'TWI_075', 'TS26_048']) {
+        const p = plan(id);
+        assert.ok(p.cases.some(c => c.probe.autoTargets && c.probe.targets.length === 4));
+        assert.ok(p.cases.some(c => c.probe.autoTargets && c.probe.targets.length === 0));
+        assert.ok(p.cases.some(c => c.probe.waitForExpiry));
+        assert.ok(p.uncovered.some(o => o.id.endsWith(':sequential-sweep-sensitivity')));
+    }
+    assert.deepEqual(plan('TS26_048').cases[0].probe.selectedTargetIndices, [2]);
+    assert.deepEqual(plan('TWI_126').cases[0].probe.selectedTargetIndices, [0, 1]);
+    assert.equal(plan('TWI_075').cases.find(c => c.name.endsWith('simultaneous-lethal')).probe.targets.length, 2);
+});
+test('arena-list probes fail closed on unsupported predicates and triggers', () => {
+    for (const id of ['LOF_127','HMW_111']) assert.equal(plan(id).cases.length, 0);
+    const e = structuredClone(catalogue.cards.find(c => c.setCode === 'TWI_126'));
+    e.abilities.card[0].effect.target.receiver.hidden = true;
+    assert.equal(planCardProbes(e, {catalogue}).cases.length, 0);
+});
+test('arena-list oracle constructions witness membership, expiry, empty sets and lethal batches', async () => {
+    const { Env } = require('../../env'), { loadPool } = require('../../omni/rs/pool'), { fixture } = require('../pipeline/probe-fixture');
+    const pool = loadPool(require('node:path').resolve(__dirname, '../../card-compiler/generated/runtime-pool.json')), env = new Env();
+    for (const id of ['TWI_126', 'TWI_075', 'TS26_048']) if (!pool.cards.some(c => c.setCode === id)) pool.cards.push({...catalogue.cards.find(c => c.setCode === id).card, setCode:id});
+    let seed = 85000;
+    for (const id of ['TWI_126', 'TWI_075', 'TS26_048']) for (const scenario of plan(id).cases) {
+        const {witness} = await fixture(env,pool,scenario,seed++);
+        assert.deepEqual(witness.coverageObligationIds, scenario.coverageObligationIds);
+        if (scenario.name.endsWith('simultaneous-lethal'))
+            assert.ok(witness.observations.find(o => o.stage === 'after-resolution').targets.every(t => t.zone === 'discard'));
+    }
+});

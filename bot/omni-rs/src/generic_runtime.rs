@@ -1662,6 +1662,12 @@ impl Engine {
     fn effect_targets(&self, s: &State, target: &Target) -> Vec<Eval> {
         let owner = s.card(s.source).owner;
         match target {
+            Target::ArenaList(list)=>{
+                let Eval::Player(seat)=self.eval(s,s.source,s.ability_target,&list.receiver) else {return vec![];};
+                // Snapshot candidates before modifiers and the single lethal sweep.
+                // Candidate card and outer selected target retain separate bindings.
+                self.arena_units(s).into_iter().filter(|id|s.card(*id).owner==seat && self.eval_with_card(s,s.source,s.ability_target,*id,&list.predicate).truth()).map(Eval::Card).collect()
+            }
             Target::Expression(e) => {
                 fn flatten(value: Eval, out: &mut Vec<Eval>) {
                     match value {

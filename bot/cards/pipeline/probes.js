@@ -225,6 +225,39 @@ function planCardProbes(entry, options = {}) {
                 );
                 continue;
             }
+            if (effect.kind === 'modifyStats' && effect.target?.kind === 'arenaList') {
+                const constant = (e) => e?.kind === 'const' && Object.keys(e).every(k => ['kind','value'].includes(k)) && Number.isSafeInteger(e.value) ? e.value
+                    : e?.kind === 'unary' && Object.keys(e).every(k => ['kind','op','value'].includes(k)) && ['+', '-'].includes(e.op) && e.value?.kind === 'const' && Object.keys(e.value).every(k => ['kind','value'].includes(k)) && Number.isSafeInteger(e.value.value)
+                    ? (e.op === '-' ? -1 : 1) * e.value.value : null;
+                const power = constant(effect.power), hp = constant(effect.hp), target = effect.target;
+                const receiver = target.receiver?.kind === 'ref' && target.receiver.path?.length === 1 ? target.receiver.path[0] : null;
+                const zonePredicate = (zone) => ({kind:'binary',op:'&&',left:{kind:'const',value:true},right:{kind:'binary',op:'||',left:{kind:'unary',op:'!',value:{kind:'const',value:zone}},right:{kind:'binary',op:'||',left:{kind:'binary',op:'===',left:{kind:'const',value:zone},right:{kind:'const',value:'anyArena'}},right:{kind:'binary',op:'===',left:{kind:'ref',path:['card','zoneName']},right:{kind:'const',value:zone}}}}});
+                const predicate = JSON.stringify(target.predicate);
+                const arena = predicate === JSON.stringify({kind:'const',value:true}) ? 'any'
+                    : ['ground', 'space'].find((a) => predicate === JSON.stringify(zonePredicate(a + 'Arena')));
+                if (side !== 'card' || ability.trigger !== 'event' || ability.targetResolver || effect.duration !== 'phase' ||
+                    !['player', 'opponent'].includes(receiver) || !arena || power === null || hp === null || Math.abs(power) > 65535 || Math.abs(hp) > 65535 ||
+                    Object.keys(target).some((k) => !['kind','receiver','predicate'].includes(k)) || Object.keys(target.receiver).some((k) => !['kind','path'].includes(k))) {
+                    obligation(path, 'execution', 'Only event arena-list phase stats with signed constants and owner/arena filters constructible');
+                    continue;
+                }
+                const ground = unit('ground'), space = unit('space');
+                if (!ground || !space) { obligation(path, 'construction', 'Missing quiet ground/space units'); continue; }
+                const targets = ['self','opponent'].flatMap((owner) => [ground,space].map((e) => ({code:e.setCode,owner,arena:e.card.arena,damage:1})));
+                const selected = (t) => t.owner === (receiver === 'player' ? 'self' : 'opponent') && (arena === 'any' || t.arena === arena);
+                const spec = { targets, autoTargets:true, selectedTargetIndices:targets.map((t,i) => selected(t) ? i : null).filter((i) => i !== null) };
+                add(ability,path,'mixed-membership',spec,[obligation(path+'.effect','mixed-owner-arena-membership')]);
+                add(ability,path,'expiry',{...spec,waitForExpiry:true},[obligation(path+'.effect.duration','phase-expiry')]);
+                add(ability,path,'empty-set',{targets:[],autoTargets:true,selectedTargetIndices:[],allowNoChange:true},[obligation(path+'.effect','empty-set')]);
+                if (hp < 0 && -hp < ground.card.hp && arena !== 'space') {
+                    const owner = receiver === 'opponent' ? 'opponent' : 'self';
+                    const lethal = [0,1].map(() => ({code:ground.setCode,owner,arena:'ground',damage:ground.card.hp+hp}));
+                    add(ability,path,'simultaneous-lethal',{targets:lethal,autoTargets:true,selectedTargetIndices:[0,1]},[obligation(path+'.effect','simultaneous-lethal-set')]);
+                } else if (hp > 0) obligation(path+'.effect','expiry-lethal-set','No damage-during-buff followed by lethal expiry construction');
+                for (const dimension of ['aura-death-timing','lethal-attachment-cleanup','shield-independence','deployed-leader','leave-and-reenter','stacking','cancel-before-payment','sequential-sweep-sensitivity'])
+                    obligation(path+'.effect',dimension,'No automatic '+dimension+' construction for arena-list phase stats');
+                continue;
+            }
             const resolver = ability.targetResolver;
             const exprs = effect.kind === 'damage' ? [effect.amount] : [effect.power, effect.hp];
             if (

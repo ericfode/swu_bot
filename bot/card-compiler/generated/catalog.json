@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "01d6adda0f84a1e134f937f632e4bfa234c3d938286f934e978f5d9ba9836fb9",
+  "compilerHash": "a38289c95b424595488e8605c00cb613be0d716458abb2d1af6157d709bd0274",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -20051,17 +20051,8 @@
       "role": "source-without-card-data",
       "id": "avar-kriss#for-light-and-life-id",
       "internalName": "avar-kriss#for-light-and-life",
-      "status": "unsupported",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
-          "file": "game/cards/09_IC27/units/AvarKrissForLightAndLife.ts",
-          "line": 17,
-          "column": 39
-        }
-      ]
+      "status": "supported",
+      "diagnostics": []
     },
     {
       "sourcePath": "game/cards/09_IC27/units/BobaFettCompensatedIfHeDies.ts",
@@ -20121,17 +20112,8 @@
       "role": "source-without-card-data",
       "id": "darth-vader#useless-to-resist-id",
       "internalName": "darth-vader#useless-to-resist",
-      "status": "unsupported",
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
-          "file": "game/cards/09_IC27/units/DarthVaderUselessToResist.ts",
-          "line": 17,
-          "column": 54
-        }
-      ]
+      "status": "supported",
+      "diagnostics": []
     },
     {
       "sourcePath": "game/cards/09_IC27/units/GrandAdmiralThrawnListenToMeCarefully.ts",
@@ -20197,11 +20179,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-query:hasCost",
+          "message": "unsupported-query:hasCost",
           "file": "game/cards/09_IC27/units/MillenniumFalconYahoo.ts",
-          "line": 18,
-          "column": 35
+          "line": 21,
+          "column": 81
         }
       ]
     },
@@ -21425,11 +21407,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-query:friendlyImperialUnitWasDefeatedThisPhase",
+          "message": "unsupported-query:friendlyImperialUnitWasDefeatedThisPhase",
           "file": "game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts",
-          "line": 28,
-          "column": 60
+          "line": 35,
+          "column": 45
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -27954,11 +27936,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/08_ASH/units/PitDroidTeam.ts",
-          "line": 26,
-          "column": 92
+          "line": 29,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -29338,11 +29320,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:deckSearch",
+          "message": "immediateEffect:deckSearch",
           "file": "game/cards/08_ASH/events/Reforge.ts",
-          "line": 26,
-          "column": 210
+          "line": 27,
+          "column": 34
         }
       ],
       "className": "Reforge",
@@ -40273,11 +40255,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/08_ASH/units/JodNaNawoodKeepingSecrets.ts",
-          "line": 17,
-          "column": 27
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "JodNaNawoodKeepingSecrets",
@@ -41793,11 +41775,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/08_ASH/units/MouseDroid.ts",
-          "line": 17,
-          "column": 92
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "MouseDroid",
@@ -44869,11 +44851,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/09_HMW/leaders/TarffulFightingFromTheShadowlands.ts",
-          "line": 27,
-          "column": 27
+          "line": 29,
+          "column": 30
         }
       ],
       "className": "TarffulFightingFromTheShadowlands",
@@ -45536,11 +45518,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/09_HMW/leaders/MaulOldMaster.ts",
-          "line": 29,
-          "column": 60
+          "line": 38,
+          "column": 25
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -52261,11 +52243,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "nonconstant-value",
+          "message": "defeatedUnitCost + 3",
           "file": "game/cards/09_HMW/events/AlwaysABiggerFish.ts",
           "line": 28,
-          "column": 89
+          "column": 109
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -54259,11 +54241,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "invalid-effect-sequence",
+          "message": "invalid-effect-sequence",
           "file": "game/cards/09_HMW/units/BogaLoyalVaractyl.ts",
-          "line": 17,
-          "column": 178
+          "line": 27,
+          "column": 34
         }
       ],
       "className": "BogaLoyalVaractyl",
@@ -54863,11 +54845,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/09_HMW/units/EmerieKarrForYourOwnGood.ts",
-          "line": 17,
-          "column": 127
+          "line": 28,
+          "column": 34
         }
       ],
       "className": "EmerieKarrForYourOwnGood",
@@ -56141,11 +56123,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/09_HMW/units/OriginTreeShyyyo.ts",
-          "line": 26,
-          "column": 138
+          "line": 31,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -59906,11 +59888,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-field:source",
+          "message": "unsupported-field:source",
           "file": "game/cards/09_HMW/events/VolleyFire.ts",
-          "line": 17,
-          "column": 65
+          "line": 36,
+          "column": 33
         }
       ],
       "className": "VolleyFire",
@@ -60780,11 +60762,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromOutOfPlay",
+          "message": "immediateEffect:playCardFromOutOfPlay",
           "file": "game/cards/09_HMW/units/NightbrotherMaulsGauntlet.ts",
-          "line": 18,
-          "column": 68
+          "line": 24,
+          "column": 34
         }
       ],
       "className": "NightbrotherMaulsGauntlet",
@@ -61404,11 +61386,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-live-stat-expression",
+          "message": "unsupported-live-stat-expression",
           "file": "game/cards/09_HMW/units/TheChieftainHereSinceTheOceansDried.ts",
-          "line": 25,
-          "column": 109
+          "line": 34,
+          "column": 24
         }
       ],
       "className": "TheChieftainHereSinceTheOceansDried",
@@ -64311,11 +64293,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "non-path-reference",
+          "message": "eligibleDefenders(context)",
           "file": "game/cards/09_HMW/units/DefoliatorTank.ts",
-          "line": 25,
-          "column": 27
+          "line": 30,
+          "column": 41
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -71482,19 +71464,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/04_JTL/leaders/AdmiralPiettCommandingTheArmada.ts",
-          "line": 18,
-          "column": 92
+          "line": 25,
+          "column": 34
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/04_JTL/leaders/AdmiralPiettCommandingTheArmada.ts",
-          "line": 35,
-          "column": 80
+          "line": 37,
+          "column": 28
         }
       ],
       "className": "AdmiralPiettCommandingTheArmada",
@@ -71755,11 +71737,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCard",
+          "message": "immediateEffect:playCard",
           "file": "game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts",
-          "line": 28,
-          "column": 89
+          "line": 34,
+          "column": 34
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -73347,11 +73329,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts",
-          "line": 25,
-          "column": 99
+          "line": 29,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -77790,11 +77772,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/04_JTL/units/PantoranStarshipThief.ts",
-          "line": 17,
-          "column": 27
+          "line": 20,
+          "column": 30
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -79011,11 +78993,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/04_JTL/units/BlueLeaderScarifAirSupport.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "BlueLeaderScarifAirSupport",
@@ -79160,11 +79142,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/04_JTL/units/SnapWexleyResistanceReconFlier.ts",
-          "line": 17,
-          "column": 94
+          "line": 22,
+          "column": 30
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -84224,11 +84206,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/04_JTL/events/TheyHateThatShip.ts",
-          "line": 25,
-          "column": 92
+          "line": 30,
+          "column": 38
         }
       ],
       "className": "TheyHateThatShip",
@@ -98435,11 +98417,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/07_LAW/units/HonorBoundPartisan.ts",
-          "line": 24,
-          "column": 63
+          "line": 25,
+          "column": 30
         }
       ],
       "className": "HonorBoundPartisan",
@@ -103721,11 +103703,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/ShieldDriveOutfitter.ts",
-          "line": 17,
-          "column": 27
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "ShieldDriveOutfitter",
@@ -106399,11 +106381,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/SmugglersYT2400.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "SmugglersYT2400",
@@ -107144,11 +107126,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/07_LAW/units/KhetannaUponTheDuneSea.ts",
-          "line": 18,
-          "column": 94
+          "line": 23,
+          "column": 30
         }
       ],
       "className": "KhetannaUponTheDuneSea",
@@ -109885,11 +109867,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/MidRimSharpshooter.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "MidRimSharpshooter",
@@ -110319,11 +110301,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/DoggedPursuers.ts",
-          "line": 17,
-          "column": 27
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "DoggedPursuers",
@@ -111553,19 +111535,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/BobaFettForAPrice.ts",
-          "line": 17,
-          "column": 27
+          "line": 19,
+          "column": 30
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/BobaFettForAPrice.ts",
-          "line": 34,
-          "column": 27
+          "line": 36,
+          "column": 30
         }
       ],
       "className": "BobaFettForAPrice",
@@ -112624,11 +112606,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/RookieRocketjumper.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "RookieRocketjumper",
@@ -112792,11 +112774,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts",
-          "line": 26,
-          "column": 91
+          "line": 27,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -113786,11 +113768,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:lookAtAndChooseOption",
+          "message": "immediateEffect:lookAtAndChooseOption",
           "file": "game/cards/07_LAW/events/Improvise.ts",
-          "line": 18,
-          "column": 84
+          "line": 19,
+          "column": 30
+        },
+        {
+          "code": "UNSUPPORTED_SOURCE",
+          "pattern": "unused-source-binding",
+          "file": "game/cards/07_LAW/events/Improvise.ts",
+          "line": 20,
+          "column": 39,
+          "message": "Unused binding topCardOfDeck may contain unconverted behavior"
         }
       ],
       "className": "Improvise",
@@ -113984,11 +113974,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromOutOfPlay",
+          "message": "immediateEffect:playCardFromOutOfPlay",
           "file": "game/cards/07_LAW/events/SalvagedMaterials.ts",
-          "line": 18,
-          "column": 97
+          "line": 24,
+          "column": 21
         }
       ],
       "className": "SalvagedMaterials",
@@ -114888,11 +114878,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/HiddenHandSupplier.ts",
-          "line": 17,
-          "column": 27
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "HiddenHandSupplier",
@@ -114953,11 +114943,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_LAW/units/CriminalContact.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "CriminalContact",
@@ -116058,11 +116048,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts",
-          "line": 60,
-          "column": 63
+          "line": 61,
+          "column": 30
         }
       ],
       "className": "MorganElsbethFollowingTheCall",
@@ -116897,19 +116887,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "cost:useTheForce",
+          "message": "cost:useTheForce",
           "file": "game/cards/05_LOF/leaders/BarrissOffeeWeHaveBecomeVillains.ts",
-          "line": 18,
-          "column": 62
+          "line": 19,
+          "column": 55
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "cost:useTheForce",
+          "message": "cost:useTheForce",
           "file": "game/cards/05_LOF/leaders/BarrissOffeeWeHaveBecomeVillains.ts",
-          "line": 35,
-          "column": 62
+          "line": 36,
+          "column": 19
         }
       ],
       "className": "BarrissOffeeWeHaveBecomeVillains",
@@ -120597,11 +120587,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/01_SOR/units/GuardianOfTheWhills.ts",
-          "line": 36,
-          "column": 80
+          "line": 37,
+          "column": 28
         }
       ],
       "className": "GuardianOfTheWhills",
@@ -123733,11 +123723,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "cost:useTheForce",
+          "message": "cost:useTheForce",
           "file": "game/cards/05_LOF/units/JediConsular.ts",
-          "line": 18,
-          "column": 60
+          "line": 21,
+          "column": 17
         }
       ],
       "className": "JediConsular",
@@ -124239,11 +124229,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:deckSearch",
+          "message": "immediateEffect:deckSearch",
           "file": "game/cards/05_LOF/units/KelleranBeqTheSaberedHand.ts",
-          "line": 18,
-          "column": 104
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "KelleranBeqTheSaberedHand",
@@ -124979,11 +124969,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts",
-          "line": 26,
-          "column": 93
+          "line": 30,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -138413,11 +138403,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/06_SEC/leaders/LamaSuWeModifiedTheirGenetics.ts",
-          "line": 21,
-          "column": 115
+          "line": 28,
+          "column": 34
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -144113,11 +144103,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/06_SEC/units/CongressOfMalastare.ts",
-          "line": 27,
-          "column": 67
+          "line": 30,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -144773,11 +144763,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:delayedPlayerEffect",
+          "message": "immediateEffect:delayedPlayerEffect",
           "file": "game/cards/06_SEC/events/TheEyeOfAldhani.ts",
-          "line": 17,
-          "column": 107
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "TheEyeOfAldhani",
@@ -148065,11 +148055,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/06_SEC/units/GNKPowerDroid.ts",
-          "line": 17,
-          "column": 63
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "GNKPowerDroid",
@@ -157429,11 +157419,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:reveal",
+          "message": "immediateEffect:reveal",
           "file": "game/cards/06_SEC/units/CikatroVizagoBusinessIsWhatMatters.ts",
-          "line": 20,
-          "column": 71
+          "line": 21,
+          "column": 30
         }
       ],
       "className": "CikatroVizagoBusinessIsWhatMatters",
@@ -160762,11 +160752,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/06_SEC/events/RestoreFreedom.ts",
-          "line": 18,
-          "column": 60
+          "line": 24,
+          "column": 34
+        },
+        {
+          "code": "UNSUPPORTED_SOURCE",
+          "pattern": "unused-source-binding",
+          "file": "game/cards/06_SEC/events/RestoreFreedom.ts",
+          "line": 25,
+          "column": 48,
+          "message": "Unused binding heroismAspectCount may contain unconverted behavior"
         }
       ],
       "className": "RestoreFreedom",
@@ -161058,11 +161056,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/06_SEC/units/InspiringSenator.ts",
-          "line": 17,
-          "column": 92
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "InspiringSenator",
@@ -162210,11 +162208,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-field:ability",
+          "message": "unsupported-field:ability",
           "file": "game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts",
-          "line": 17,
-          "column": 128
+          "line": 24,
+          "column": 34
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -162226,11 +162224,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-field:ability",
+          "message": "unsupported-field:ability",
           "file": "game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts",
-          "line": 62,
-          "column": 128
+          "line": 69,
+          "column": 34
         }
       ],
       "className": "JabbaTheHuttHisHighExaltedness",
@@ -162992,19 +162990,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/02_SHD/leaders/HanSoloWorthTheRisk.ts",
-          "line": 18,
-          "column": 60
+          "line": 26,
+          "column": 21
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-field:mustChangeGameState",
+          "message": "unsupported-field:mustChangeGameState",
           "file": "game/cards/02_SHD/leaders/HanSoloWorthTheRisk.ts",
-          "line": 40,
-          "column": 60
+          "line": 46,
+          "column": 38
         }
       ],
       "className": "HanSoloWorthTheRisk",
@@ -163333,19 +163331,19 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "expected-declarative-object",
+          "message": "expected-declarative-object",
           "file": "game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts",
-          "line": 49,
-          "column": 73
+          "line": 51,
+          "column": 29
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "activation-limit",
+          "message": "activation-limit",
           "file": "game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts",
-          "line": 58,
-          "column": 73
+          "line": 59,
+          "column": 20
         }
       ],
       "className": "LandoCalrissianWithImpeccableTaste",
@@ -167410,11 +167408,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/02_SHD/units/FennRauProtectorOfConcordDawn.ts",
-          "line": 18,
-          "column": 64
+          "line": 24,
+          "column": 34
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -169933,11 +169931,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromOutOfPlay",
+          "message": "immediateEffect:playCardFromOutOfPlay",
           "file": "game/cards/02_SHD/events/PalpatinesReturn.ts",
-          "line": 18,
-          "column": 68
+          "line": 26,
+          "column": 29
         }
       ],
       "className": "PalpatinesReturn",
@@ -178192,11 +178190,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:deckSearch",
+          "message": "immediateEffect:deckSearch",
           "file": "game/cards/02_SHD/events/TripleDarkRaid.ts",
-          "line": 18,
-          "column": 115
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "TripleDarkRaid",
@@ -180852,11 +180850,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-named-resolver-field:unlessEffect",
+          "message": "unsupported-named-resolver-field:unlessEffect",
           "file": "game/cards/02_SHD/events/LookTheOtherWay.ts",
-          "line": 18,
-          "column": 65
+          "line": 26,
+          "column": 35
         }
       ],
       "className": "LookTheOtherWay",
@@ -186637,11 +186635,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.increaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.increaseCost",
           "file": "game/cards/01_SOR/units/DelMeekoProvidingOverwatch.ts",
-          "line": 17,
-          "column": 58
+          "line": 19,
+          "column": 28
         }
       ],
       "className": "DelMeekoProvidingOverwatch",
@@ -188683,11 +188681,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/01_SOR/units/BenduTheOneInTheMiddle.ts",
-          "line": 17,
-          "column": 117
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "BenduTheOneInTheMiddle",
@@ -191157,11 +191155,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/01_SOR/units/AllianceDispatcher.ts",
-          "line": 18,
-          "column": 60
+          "line": 25,
+          "column": 34
         }
       ],
       "className": "AllianceDispatcher",
@@ -192034,11 +192032,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromOutOfPlay",
+          "message": "immediateEffect:playCardFromOutOfPlay",
           "file": "game/cards/01_SOR/units/HomeOneAllianceFlagship.ts",
-          "line": 18,
-          "column": 90
+          "line": 23,
+          "column": 34
         }
       ],
       "className": "HomeOneAllianceFlagship",
@@ -197476,11 +197474,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/01_SOR/units/BibFortunaJabbasMajordomo.ts",
-          "line": 18,
-          "column": 62
+          "line": 25,
+          "column": 34
         }
       ],
       "className": "BibFortunaJabbasMajordomo",
@@ -197912,11 +197910,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
+          "message": "unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost",
           "file": "game/cards/01_SOR/units/JabbaTheHuttCunningDaimyo.ts",
-          "line": 17,
-          "column": 75
+          "line": 18,
+          "column": 28
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -199911,11 +199909,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/01_SOR/units/MiningGuildTieFighter.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "MiningGuildTieFighter",
@@ -204389,19 +204387,19 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "cost:readyEnemyUnit",
+          "message": "cost:readyEnemyUnit",
           "file": "game/cards/07_TS26/leaders/RexNoOtherOption.ts",
-          "line": 17,
-          "column": 64
+          "line": 20,
+          "column": 17
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/07_TS26/leaders/RexNoOtherOption.ts",
-          "line": 46,
-          "column": 68
+          "line": 47,
+          "column": 34
         }
       ],
       "className": "RexNoOtherOption",
@@ -204571,11 +204569,19 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:lookAtAndChooseOption",
+          "message": "immediateEffect:lookAtAndChooseOption",
           "file": "game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts",
-          "line": 62,
-          "column": 83
+          "line": 63,
+          "column": 30
+        },
+        {
+          "code": "UNSUPPORTED_SOURCE",
+          "pattern": "unused-source-binding",
+          "file": "game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts",
+          "line": 64,
+          "column": 39,
+          "message": "Unused binding topCardOfDeck may contain unconverted behavior"
         }
       ],
       "className": "AhsokaTanoIHaveAnIdea",
@@ -204710,11 +204716,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/07_TS26/bases/DookusPalace.ts",
-          "line": 18,
-          "column": 60
+          "line": 23,
+          "column": 34
         }
       ],
       "className": "DookusPalace",
@@ -210979,11 +210985,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/07_TS26/units/DeployedDroideka.ts",
-          "line": 16,
-          "column": 27
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "DeployedDroideka",
@@ -229496,11 +229502,11 @@
         },
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-query:wasDefeatedThisPhase",
+          "message": "unsupported-query:wasDefeatedThisPhase",
           "file": "game/cards/03_TWI/events/UnnaturalLife.ts",
-          "line": 26,
-          "column": 107
+          "line": 31,
+          "column": 59
         }
       ],
       "className": "UnnaturalLife",
@@ -230713,11 +230719,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:deckSearch",
+          "message": "immediateEffect:deckSearch",
           "file": "game/cards/03_TWI/events/AidFromTheInnocent.ts",
-          "line": 17,
-          "column": 190
+          "line": 18,
+          "column": 30
         }
       ],
       "className": "AidFromTheInnocent",
@@ -231666,11 +231672,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:payResources",
+          "message": "immediateEffect:payResources",
           "file": "game/cards/03_TWI/units/FreelanceAssassin.ts",
-          "line": 17,
-          "column": 27
+          "line": 19,
+          "column": 30
         }
       ],
       "className": "FreelanceAssassin",
@@ -232639,11 +232645,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "unsupported-query:from",
+          "message": "unsupported-query:from",
           "file": "game/cards/03_TWI/events/NowThereAreTwoOfThem.ts",
-          "line": 18,
-          "column": 171
+          "line": 26,
+          "column": 25
         }
       ],
       "className": "NowThereAreTwoOfThem",
@@ -234340,11 +234346,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "unsupported-title-helper",
-          "message": "unsupported-title-helper",
+          "pattern": "immediateEffect:forThisPhasePlayerEffect",
+          "message": "immediateEffect:forThisPhasePlayerEffect",
           "file": "game/cards/03_TWI/units/TranquilityInspiringFlagship.ts",
-          "line": 28,
-          "column": 103
+          "line": 29,
+          "column": 30
         }
       ],
       "className": "TranquilityInspiringFlagship",

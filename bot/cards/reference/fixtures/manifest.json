@@ -974,6 +974,1702 @@
     },
     {
       "caseDefinition": {
+        "id": "auto/TS26_048/abilities-card-0-empty-set",
+        "name": "abilities-card-0-empty-set",
+        "kind": "probe",
+        "focusCardIds": [
+          "TS26_048"
+        ],
+        "setupCardIds": [],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect:empty-set"
+        ],
+        "probe": {
+          "cardId": "TS26_048",
+          "internalName": "vanquish-the-legion",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [],
+          "autoTargets": true,
+          "selectedTargetIndices": [],
+          "allowNoChange": true
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-empty-set"
+        }
+      },
+      "caseId": "auto/TS26_048/abilities-card-0-empty-set",
+      "traceSha256": "91dbe686a190e62ed0a5a397fce1742106eaf59e461ad76fbe14d3c218c82acd",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 939263,
+      "decisions": 271,
+      "windows": 132,
+      "witness": {
+        "scenario": "abilities-card-0-empty-set",
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect:empty-set"
+        ],
+        "initial": {
+          "source": {
+            "id": "c0",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c0",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TS26_048/abilities-card-0-expiry",
+        "name": "abilities-card-0-expiry",
+        "kind": "probe",
+        "focusCardIds": [
+          "TS26_048"
+        ],
+        "setupCardIds": [
+          "ASH_061",
+          "IBH_022"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect.duration:phase-expiry"
+        ],
+        "probe": {
+          "cardId": "TS26_048",
+          "internalName": "vanquish-the-legion",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "self",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "self",
+              "arena": "space",
+              "damage": 1
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "opponent",
+              "arena": "space",
+              "damage": 1
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            2
+          ],
+          "waitForExpiry": true
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-expiry"
+        }
+      },
+      "caseId": "auto/TS26_048/abilities-card-0-expiry",
+      "traceSha256": "c77c50ad97331653c974e03f384bbed793f71f0fdca84f33d251230f18d6afd8",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 210882,
+      "decisions": 248,
+      "windows": 107,
+      "witness": {
+        "scenario": "abilities-card-0-expiry",
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect.duration:phase-expiry"
+        ],
+        "initial": {
+          "source": {
+            "id": "c0",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c4",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c6",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            },
+            {
+              "id": "c58",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c60",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c0",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c4",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c6",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c58",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 3,
+                "hp": 3
+              },
+              {
+                "id": "c60",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          },
+          {
+            "stage": "after-expiry",
+            "targets": [
+              {
+                "id": "c4",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c6",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c58",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c60",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": true
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TS26_048/abilities-card-0-mixed-membership",
+        "name": "abilities-card-0-mixed-membership",
+        "kind": "probe",
+        "focusCardIds": [
+          "TS26_048"
+        ],
+        "setupCardIds": [
+          "ASH_061",
+          "IBH_022"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect:mixed-owner-arena-membership"
+        ],
+        "probe": {
+          "cardId": "TS26_048",
+          "internalName": "vanquish-the-legion",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "self",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "self",
+              "arena": "space",
+              "damage": 1
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "opponent",
+              "arena": "space",
+              "damage": 1
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            2
+          ]
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-mixed-membership"
+        }
+      },
+      "caseId": "auto/TS26_048/abilities-card-0-mixed-membership",
+      "traceSha256": "999a08f361a9577e2127b26f011159013cf07e363678f7bbdb0d8bf2bb7e60de",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 447897,
+      "decisions": 218,
+      "windows": 71,
+      "witness": {
+        "scenario": "abilities-card-0-mixed-membership",
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect:mixed-owner-arena-membership"
+        ],
+        "initial": {
+          "source": {
+            "id": "c2",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c5",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c8",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            },
+            {
+              "id": "c56",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c61",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c2",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c5",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c8",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c56",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 3,
+                "hp": 3
+              },
+              {
+                "id": "c61",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TS26_048/abilities-card-0-simultaneous-lethal",
+        "name": "abilities-card-0-simultaneous-lethal",
+        "kind": "probe",
+        "focusCardIds": [
+          "TS26_048"
+        ],
+        "setupCardIds": [
+          "ASH_061"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect:simultaneous-lethal-set"
+        ],
+        "probe": {
+          "cardId": "TS26_048",
+          "internalName": "vanquish-the-legion",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 3
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 3
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            0,
+            1
+          ]
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-simultaneous-lethal"
+        }
+      },
+      "caseId": "auto/TS26_048/abilities-card-0-simultaneous-lethal",
+      "traceSha256": "12751d15ea16da008ab70105f02b025ebaefa5a09a2ccdd0424a64ac6b88e626",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 850533,
+      "decisions": 317,
+      "windows": 120,
+      "witness": {
+        "scenario": "abilities-card-0-simultaneous-lethal",
+        "coverageObligationIds": [
+          "TS26_048:abilities.card.0.effect:simultaneous-lethal-set"
+        ],
+        "initial": {
+          "source": {
+            "id": "c2",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c57",
+              "zone": "groundArena",
+              "damage": 3,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c58",
+              "zone": "groundArena",
+              "damage": 3,
+              "power": 5,
+              "hp": 5
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c2",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c57",
+                "zone": "discard",
+                "damage": null,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c58",
+                "zone": "discard",
+                "damage": null,
+                "power": null,
+                "hp": null
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_075/abilities-card-0-empty-set",
+        "name": "abilities-card-0-empty-set",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_075"
+        ],
+        "setupCardIds": [],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect:empty-set"
+        ],
+        "probe": {
+          "cardId": "TWI_075",
+          "internalName": "disruptive-burst",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [],
+          "autoTargets": true,
+          "selectedTargetIndices": [],
+          "allowNoChange": true
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-empty-set"
+        }
+      },
+      "caseId": "auto/TWI_075/abilities-card-0-empty-set",
+      "traceSha256": "b9ed31cccd189408a652fc56ec89f6827d1dc589aff4f90a098bd01145f72e06",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 477311,
+      "decisions": 289,
+      "windows": 127,
+      "witness": {
+        "scenario": "abilities-card-0-empty-set",
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect:empty-set"
+        ],
+        "initial": {
+          "source": {
+            "id": "c2",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c2",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_075/abilities-card-0-expiry",
+        "name": "abilities-card-0-expiry",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_075"
+        ],
+        "setupCardIds": [
+          "ASH_061",
+          "IBH_022"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect.duration:phase-expiry"
+        ],
+        "probe": {
+          "cardId": "TWI_075",
+          "internalName": "disruptive-burst",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "self",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "self",
+              "arena": "space",
+              "damage": 1
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "opponent",
+              "arena": "space",
+              "damage": 1
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            2,
+            3
+          ],
+          "waitForExpiry": true
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-expiry"
+        }
+      },
+      "caseId": "auto/TWI_075/abilities-card-0-expiry",
+      "traceSha256": "2f933484317e352bbd244a3f8d54bb5957c7eccc501c22f36c904c536597cfb7",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 502765,
+      "decisions": 182,
+      "windows": 70,
+      "witness": {
+        "scenario": "abilities-card-0-expiry",
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect.duration:phase-expiry"
+        ],
+        "initial": {
+          "source": {
+            "id": "c2",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c5",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c8",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            },
+            {
+              "id": "c56",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c60",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c2",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c5",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c8",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c56",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 4,
+                "hp": 4
+              },
+              {
+                "id": "c60",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 4,
+                "hp": 3
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          },
+          {
+            "stage": "after-expiry",
+            "targets": [
+              {
+                "id": "c5",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c8",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c56",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c60",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": true
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_075/abilities-card-0-mixed-membership",
+        "name": "abilities-card-0-mixed-membership",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_075"
+        ],
+        "setupCardIds": [
+          "ASH_061",
+          "IBH_022"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect:mixed-owner-arena-membership"
+        ],
+        "probe": {
+          "cardId": "TWI_075",
+          "internalName": "disruptive-burst",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "self",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "self",
+              "arena": "space",
+              "damage": 1
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "opponent",
+              "arena": "space",
+              "damage": 1
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            2,
+            3
+          ]
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-mixed-membership"
+        }
+      },
+      "caseId": "auto/TWI_075/abilities-card-0-mixed-membership",
+      "traceSha256": "f14e71696326aa085fa3c68423adc1dda174e4f2a48df606facb3ec848e504e9",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 503221,
+      "decisions": 324,
+      "windows": 133,
+      "witness": {
+        "scenario": "abilities-card-0-mixed-membership",
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect:mixed-owner-arena-membership"
+        ],
+        "initial": {
+          "source": {
+            "id": "c0",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c5",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c6",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            },
+            {
+              "id": "c57",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c60",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c0",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c5",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c6",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c57",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 4,
+                "hp": 4
+              },
+              {
+                "id": "c60",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 4,
+                "hp": 3
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_075/abilities-card-0-simultaneous-lethal",
+        "name": "abilities-card-0-simultaneous-lethal",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_075"
+        ],
+        "setupCardIds": [
+          "ASH_061"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect:simultaneous-lethal-set"
+        ],
+        "probe": {
+          "cardId": "TWI_075",
+          "internalName": "disruptive-burst",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 4
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 4
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            0,
+            1
+          ]
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-simultaneous-lethal"
+        }
+      },
+      "caseId": "auto/TWI_075/abilities-card-0-simultaneous-lethal",
+      "traceSha256": "23cd4d2b03e06a4806d3475198abfbe514f8fcade63f933d2b3c9c8cbf27172c",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 525123,
+      "decisions": 331,
+      "windows": 144,
+      "witness": {
+        "scenario": "abilities-card-0-simultaneous-lethal",
+        "coverageObligationIds": [
+          "TWI_075:abilities.card.0.effect:simultaneous-lethal-set"
+        ],
+        "initial": {
+          "source": {
+            "id": "c2",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c58",
+              "zone": "groundArena",
+              "damage": 4,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c57",
+              "zone": "groundArena",
+              "damage": 4,
+              "power": 5,
+              "hp": 5
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c2",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c58",
+                "zone": "discard",
+                "damage": null,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c57",
+                "zone": "discard",
+                "damage": null,
+                "power": null,
+                "hp": null
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
         "id": "auto/TWI_124/abilities-card-0-invalid-hand-target",
         "name": "abilities-card-0-invalid-hand-target",
         "kind": "probe",
@@ -3586,6 +5282,660 @@
           "command": "npm run build"
         },
         "sourceCatalogueSha256": "a27311a8f2ed04a129922580a0c09e30931725e11577a267812a5910845900fd",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_126/abilities-card-0-empty-set",
+        "name": "abilities-card-0-empty-set",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_126"
+        ],
+        "setupCardIds": [],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_126:abilities.card.0.effect:empty-set"
+        ],
+        "probe": {
+          "cardId": "TWI_126",
+          "internalName": "encouraging-leadership",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [],
+          "autoTargets": true,
+          "selectedTargetIndices": [],
+          "allowNoChange": true
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-empty-set"
+        }
+      },
+      "caseId": "auto/TWI_126/abilities-card-0-empty-set",
+      "traceSha256": "e77b8fc9c74d8c435cbede2ac6522111df6de19efd4a0ef49950e84bbd4147e5",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 765810,
+      "decisions": 263,
+      "windows": 101,
+      "witness": {
+        "scenario": "abilities-card-0-empty-set",
+        "coverageObligationIds": [
+          "TWI_126:abilities.card.0.effect:empty-set"
+        ],
+        "initial": {
+          "source": {
+            "id": "c0",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c0",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_126/abilities-card-0-expiry",
+        "name": "abilities-card-0-expiry",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_126"
+        ],
+        "setupCardIds": [
+          "ASH_061",
+          "IBH_022"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_126:abilities.card.0.effect.duration:phase-expiry"
+        ],
+        "probe": {
+          "cardId": "TWI_126",
+          "internalName": "encouraging-leadership",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "self",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "self",
+              "arena": "space",
+              "damage": 1
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "opponent",
+              "arena": "space",
+              "damage": 1
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            0,
+            1
+          ],
+          "waitForExpiry": true
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-expiry"
+        }
+      },
+      "caseId": "auto/TWI_126/abilities-card-0-expiry",
+      "traceSha256": "44d436391087530b2f7f91176788ee51fffe473f2f0c2115e6c3a9a06afdb831",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 5079,
+      "decisions": 362,
+      "windows": 132,
+      "witness": {
+        "scenario": "abilities-card-0-expiry",
+        "coverageObligationIds": [
+          "TWI_126:abilities.card.0.effect.duration:phase-expiry"
+        ],
+        "initial": {
+          "source": {
+            "id": "c0",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c4",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c7",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            },
+            {
+              "id": "c58",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c61",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c0",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c4",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 6,
+                "hp": 6
+              },
+              {
+                "id": "c7",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 6,
+                "hp": 5
+              },
+              {
+                "id": "c58",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c61",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          },
+          {
+            "stage": "after-expiry",
+            "targets": [
+              {
+                "id": "c4",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c7",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              },
+              {
+                "id": "c58",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c61",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": true
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
+        "nodeVersion": "v22.22.3"
+      },
+      "runtimeConformance": "unassessed",
+      "engineOnly": false
+    },
+    {
+      "caseDefinition": {
+        "id": "auto/TWI_126/abilities-card-0-mixed-membership",
+        "name": "abilities-card-0-mixed-membership",
+        "kind": "probe",
+        "focusCardIds": [
+          "TWI_126"
+        ],
+        "setupCardIds": [
+          "ASH_061",
+          "IBH_022"
+        ],
+        "behaviorIds": [
+          "phase-stats"
+        ],
+        "assertionStages": [
+          "construction",
+          "activation",
+          "observation"
+        ],
+        "coverageObligationIds": [
+          "TWI_126:abilities.card.0.effect:mixed-owner-arena-membership"
+        ],
+        "probe": {
+          "cardId": "TWI_126",
+          "internalName": "encouraging-leadership",
+          "sourceTypes": [
+            "event"
+          ],
+          "sourceArena": null,
+          "abilityPath": "abilities.card.0",
+          "trigger": "event",
+          "effectKind": "modifyStats",
+          "duration": "phase",
+          "targets": [
+            {
+              "code": "ASH_061",
+              "owner": "self",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "self",
+              "arena": "space",
+              "damage": 1
+            },
+            {
+              "code": "ASH_061",
+              "owner": "opponent",
+              "arena": "ground",
+              "damage": 1
+            },
+            {
+              "code": "IBH_022",
+              "owner": "opponent",
+              "arena": "space",
+              "damage": 1
+            }
+          ],
+          "autoTargets": true,
+          "selectedTargetIndices": [
+            0,
+            1
+          ]
+        },
+        "source": {
+          "module": "../pipeline/probe-fixture.js",
+          "scenario": "abilities-card-0-mixed-membership"
+        }
+      },
+      "caseId": "auto/TWI_126/abilities-card-0-mixed-membership",
+      "traceSha256": "6c0e4e491823a17f089ae1f8d261bb7be93c9e66c2fe7aee0be8561c150d0524",
+      "poolSha256": "4ce76dc7f2cdb5b10fb802f18d27939c54797570eca498a1a9d0e84ece2f1c36",
+      "seed": 645396,
+      "decisions": 305,
+      "windows": 129,
+      "witness": {
+        "scenario": "abilities-card-0-mixed-membership",
+        "coverageObligationIds": [
+          "TWI_126:abilities.card.0.effect:mixed-owner-arena-membership"
+        ],
+        "initial": {
+          "source": {
+            "id": "c2",
+            "zone": "hand",
+            "damage": null,
+            "power": null,
+            "hp": null
+          },
+          "targets": [
+            {
+              "id": "c5",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c8",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            },
+            {
+              "id": "c57",
+              "zone": "groundArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 5
+            },
+            {
+              "id": "c60",
+              "zone": "spaceArena",
+              "damage": 1,
+              "power": 5,
+              "hp": 4
+            }
+          ],
+          "bases": [
+            {
+              "id": "c50",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            },
+            {
+              "id": "c103",
+              "zone": "base",
+              "damage": 0,
+              "power": null,
+              "hp": null
+            }
+          ]
+        },
+        "observations": [
+          {
+            "stage": "after-resolution",
+            "source": {
+              "id": "c2",
+              "zone": "discard",
+              "damage": null,
+              "power": null,
+              "hp": null
+            },
+            "targets": [
+              {
+                "id": "c5",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 6,
+                "hp": 6
+              },
+              {
+                "id": "c8",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 6,
+                "hp": 5
+              },
+              {
+                "id": "c57",
+                "zone": "groundArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 5
+              },
+              {
+                "id": "c60",
+                "zone": "spaceArena",
+                "damage": 1,
+                "power": 5,
+                "hp": 4
+              }
+            ],
+            "bases": [
+              {
+                "id": "c50",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              },
+              {
+                "id": "c103",
+                "zone": "base",
+                "damage": 0,
+                "power": null,
+                "hp": null
+              }
+            ]
+          }
+        ],
+        "played": true,
+        "targetSelected": false,
+        "negativeChecked": false,
+        "expired": false
+      },
+      "provenance": {
+        "engineRevision": null,
+        "expectedEngineRevision": "2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a",
+        "engineSourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+        "engineBuildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+        "cardDataSha256": "008470d666467746d68f9ff627b63961b5dbb22ee7606196879e90c4edfd45b5",
+        "scenarioLibrarySha256": "9cdb7192f9e9e70137fcd258dba90322dde6ac681a94c0f399fd8288ddeb897a",
+        "playerCodeSha256": "bf93ded1c17c5c6326444fac9af28f917ca9a7b26d33239be5d7c4efbb8fb040",
+        "pipelineCodeSha256": "f3b9216c5a0a567cc6c22489943341ff5cc6abdb3d7d97b88935f5e04789280e",
+        "sources": {
+          "bot/env.js": "d77c0789c0d9ab51a2d7514efc6ce370617d0603f77b8e12d69526cc83cefb7d",
+          "bot/view.js": "726c8358aa2e039ba1fafb17ecdb31e71ceb8875d5b30e2e4974f40e56211e60",
+          "bot/omni/rs/state.js": "9b41912a1d87682d02c00794eddb49e8b027f79ca728bb107b360c40fea8775f",
+          "bot/omni/rs/pool.js": "c5f2101d5d5032be5bbb3c2bfc7e8ebe5fb7b0e56a8ef4c4ea8ec73cef842f8a",
+          "bot/cards/reference/generate.js": "ac53da16bf055e7744241f43fa0aa5b9af84bc4d7d21067f6278f534ece3e726"
+        },
+        "buildVerification": {
+          "inputs": {
+            "sourceSha256": "bc123bb3d42cc56be5f8669bcb8d3932ec27bcbe17de3a2291b0790b451a9d85",
+            "scriptsSha256": "3580a186d4c248b370e2f4c2662181d35a3b40ec0e67f3bd3127dd56092390fa",
+            "config": {
+              "package-lock.json": "9e85b158558824f7c8a78d55dd59c2435053732644891caa3751a3d03a622d2f",
+              "package.json": "2bccc2ea65919b9e9306c3d9e0696287b96b58d9a89887862faad50454de8fd4",
+              "tsconfig.json": "6eb5f9b5b1f090e6ee82d9745a287b1db5f5898fcd607875075bf52476b8436c",
+              "tsconfig.production.json": "3514b0a6b445426121531c1ad5d3288dcd560ba079228b21ecfd764e7ba6d94c"
+            }
+          },
+          "buildSha256": "6efdc0a524796664637156de1ce19eb2f220b473a361749cf1753754d21ea751",
+          "command": "npm run build"
+        },
+        "sourceCatalogueSha256": "88429ff455c390736de9e3024fe4d522be5cac7b71b8dd15003d220e8e8f5dec",
         "nodeVersion": "v22.22.3"
       },
       "runtimeConformance": "unassessed",

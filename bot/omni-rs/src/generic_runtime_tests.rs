@@ -1784,3 +1784,42 @@ fn aot_identity_is_content_based_and_unknown_programs_have_explicit_fallback() {
     let prompt=external.apply(&s,&external.card_action(&s,event)).unwrap();
     let actual=external.apply(&prompt,&external.card_action(&prompt,target)).unwrap();assert_eq!(actual.card(target).damage,3);
 }
+
+#[test]
+fn arena_list_phase_stats_snapshot_owner_arena_and_expiry() {
+    let e=engine();
+    let mut s=board(&e);
+    let friendly=unit(&e,&mut s,Seat::P1,"ASH_029");
+    let ground=unit(&e,&mut s,Seat::P2,"ASH_029");
+    let space=unit(&e,&mut s,Seat::P2,"ASH_029");
+    s.players[1].ground.remove(space);s.players[1].space.push(space).unwrap();
+    s.source=hand(&e,&mut s,"TS26_048");s.ability_target=friendly;
+    let effect:Effect=serde_json::from_value(json!({"kind":"modifyStats","duration":"phase","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["opponent"]},"predicate":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"groundArena"}}},"power":{"kind":"const","value":-1},"hp":{"kind":"const","value":-1}})).unwrap();
+    e.apply_effect(&mut s,&effect).unwrap();
+    assert_eq!((s.card(friendly).phase_power,s.card(space).phase_power),(0,0));
+    assert_eq!((s.card(ground).phase_power,s.card(ground).phase_hp),(-1,-1));
+    assert_eq!(s.ability_target,friendly,"candidate must not overwrite outer binding");
+    s.players[0].out=true;s.players[1].out=true;e.advance(&mut s).unwrap();
+    assert_eq!((s.card(ground).phase_power,s.card(ground).phase_hp),(0,0));
+}
+
+#[test]
+fn arena_list_phase_stats_support_more_than_prepared_group_capacity() {
+    let e=engine();let mut s=board(&e);
+    for _ in 0..40 {unit(&e,&mut s,Seat::P1,"LOF_254");}
+    s.source=hand(&e,&mut s,"TWI_126");
+    let effect:Effect=serde_json::from_value(json!({"kind":"modifyStats","duration":"phase","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"const","value":true}},"power":{"kind":"const","value":1},"hp":{"kind":"const","value":1}})).unwrap();
+    assert_eq!(e.apply_effect(&mut s,&effect).unwrap(),(40,true));
+    assert!(e.arena_units(&s).iter().all(|id|s.card(*id).phase_hp==1));
+}
+
+#[test]
+fn arena_list_phase_stats_collect_complete_lethal_set_and_ignore_shields() {
+    let e=engine();let mut s=board(&e);
+    let a=unit(&e,&mut s,Seat::P2,"LOF_254");let b=unit(&e,&mut s,Seat::P2,"LOF_254");
+    e.create_token(&mut s,a,false).unwrap();
+    s.source=hand(&e,&mut s,"TWI_075");
+    let effect:Effect=serde_json::from_value(json!({"kind":"modifyStats","duration":"phase","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["opponent"]},"predicate":{"kind":"const","value":true}},"power":{"kind":"const","value":-65535},"hp":{"kind":"const","value":-65535}})).unwrap();
+    e.apply_effect(&mut s,&effect).unwrap();assert!(!e.in_arena(&s,a));assert!(!e.in_arena(&s,b));
+    assert_eq!(e.apply_effect(&mut s,&effect).unwrap(),(0,false));
+}

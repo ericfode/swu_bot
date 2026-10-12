@@ -1,5 +1,5 @@
 {
-  "catalogueHash": "dfb82a08a0cec9cd1fa8278d415dab9c1aa0c06948ef80c5e5586cc2e9dc05bc",
+  "catalogueHash": "106c2cdfddd838421a513f0292c123e767d461341a29eafa5a43ae054c55a08c",
   "dataOnlyConvertedCount": 339,
   "gameConformance": "not assessed by this report",
   "irConvertedCount": 999,
@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 339,
     "nativeAdapters": 2,
-    "sourceIr": 489
+    "sourceIr": 492
   },
   "runtimeAdmittedCards": [
     {
@@ -3582,6 +3582,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "vanquish-the-legion",
+      "setCode": "TS26_048"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "general-grievous#crush-them",
       "setCode": "TS26_050"
     },
@@ -3767,6 +3772,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "disruptive-burst",
+      "setCode": "TWI_075"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "death-by-droids",
       "setCode": "TWI_076"
     },
@@ -3874,6 +3884,11 @@
       "implementation": "sourceIr",
       "internalName": "tactical-advantage",
       "setCode": "TWI_124"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "encouraging-leadership",
+      "setCode": "TWI_126"
     },
     {
       "implementation": "sourceIr",
@@ -4161,7 +4176,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 830,
+  "runtimeAdmittedCount": 833,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -4195,7 +4210,7 @@
     },
     {
       "internalName": "moff-gideon#indomitable-warlord",
-      "reason": "moff-gideon#indomitable-warlord: compiler rejected \"moff-gideon#indomitable-warlord\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":13,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":22,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":28,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":46,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":47,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":48,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":49,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":50,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":51,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":52,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":53,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":56,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:friendlyImperialUnitWasDefeatedThisPhase\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":63,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:addKeywordCopyAbility\"}]",
+      "reason": "moff-gideon#indomitable-warlord: compiler rejected \"moff-gideon#indomitable-warlord\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":13,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":22,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":45,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":35,\"message\":\"unsupported-query:friendlyImperialUnitWasDefeatedThisPhase\",\"pattern\":\"unsupported-query:friendlyImperialUnitWasDefeatedThisPhase\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":46,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":47,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":48,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":49,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":50,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":51,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":52,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":53,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":56,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:friendlyImperialUnitWasDefeatedThisPhase\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/leaders/MoffGideonIndomitableWarlord.ts\",\"line\":63,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:addKeywordCopyAbility\"}]",
       "setCode": "ASH_008"
     },
     {
@@ -4380,7 +4395,7 @@
     },
     {
       "internalName": "the-armorer#secrecy-is-our-survival",
-      "reason": "the-armorer#secrecy-is-our-survival: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "the-armorer#secrecy-is-our-survival: arena lists require standalone verified phase-stat semantics",
       "setCode": "ASH_064"
     },
     {
@@ -4415,7 +4430,7 @@
     },
     {
       "internalName": "pit-droid-team",
-      "reason": "pit-droid-team: compiler rejected \"pit-droid-team\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":92,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":26,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":41,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUpgradePlayedOnAnotherFriendlyUnitThisPhase\"}]",
+      "reason": "pit-droid-team: compiler rejected \"pit-droid-team\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":29,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PitDroidTeam.ts\",\"line\":41,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUpgradePlayedOnAnotherFriendlyUnitThisPhase\"}]",
       "setCode": "ASH_075"
     },
     {
@@ -4430,7 +4445,7 @@
     },
     {
       "internalName": "summaverminoth",
-      "reason": "summaverminoth: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "summaverminoth: arena lists require standalone verified phase-stat semantics",
       "setCode": "ASH_083"
     },
     {
@@ -4450,7 +4465,7 @@
     },
     {
       "internalName": "reforge",
-      "reason": "reforge: compiler rejected \"reforge\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":210,\"file\":\"game/cards/08_ASH/events/Reforge.ts\",\"line\":26,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "reforge: compiler rejected \"reforge\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/08_ASH/events/Reforge.ts\",\"line\":27,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "ASH_090"
     },
     {
@@ -4530,7 +4545,7 @@
     },
     {
       "internalName": "luke-skywalker#answering-the-call",
-      "reason": "luke-skywalker#answering-the-call: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "luke-skywalker#answering-the-call: arena lists require standalone verified phase-stat semantics",
       "setCode": "ASH_112"
     },
     {
@@ -4640,7 +4655,7 @@
     },
     {
       "internalName": "operation-cinder",
-      "reason": "operation-cinder: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "operation-cinder: arena lists require standalone verified phase-stat semantics",
       "setCode": "ASH_151"
     },
     {
@@ -4895,7 +4910,7 @@
     },
     {
       "internalName": "jod-na-nawood#keeping-secrets",
-      "reason": "jod-na-nawood#keeping-secrets: compiler rejected \"jod-na-nawood#keeping-secrets\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/08_ASH/units/JodNaNawoodKeepingSecrets.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "jod-na-nawood#keeping-secrets: compiler rejected \"jod-na-nawood#keeping-secrets\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/08_ASH/units/JodNaNawoodKeepingSecrets.ts\",\"line\":19,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "ASH_219"
     },
     {
@@ -4970,7 +4985,7 @@
     },
     {
       "internalName": "mouse-droid",
-      "reason": "mouse-droid: compiler rejected \"mouse-droid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":92,\"file\":\"game/cards/08_ASH/units/MouseDroid.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "mouse-droid: compiler rejected \"mouse-droid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/08_ASH/units/MouseDroid.ts\",\"line\":18,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "ASH_237"
     },
     {
@@ -5105,7 +5120,7 @@
     },
     {
       "internalName": "tarfful#fighting-from-the-shadowlands",
-      "reason": "tarfful#fighting-from-the-shadowlands: compiler rejected \"tarfful#fighting-from-the-shadowlands\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":109,\"file\":\"game/cards/09_HMW/leaders/TarffulFightingFromTheShadowlands.ts\",\"line\":20,\"message\":\"cost:discardCardFromOwnHand\",\"pattern\":\"cost:discardCardFromOwnHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/09_HMW/leaders/TarffulFightingFromTheShadowlands.ts\",\"line\":27,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "tarfful#fighting-from-the-shadowlands: compiler rejected \"tarfful#fighting-from-the-shadowlands\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":109,\"file\":\"game/cards/09_HMW/leaders/TarffulFightingFromTheShadowlands.ts\",\"line\":20,\"message\":\"cost:discardCardFromOwnHand\",\"pattern\":\"cost:discardCardFromOwnHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/09_HMW/leaders/TarffulFightingFromTheShadowlands.ts\",\"line\":29,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "HMW_010"
     },
     {
@@ -5135,7 +5150,7 @@
     },
     {
       "internalName": "maul#old-master",
-      "reason": "maul#old-master: compiler rejected \"maul#old-master\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":14,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":23,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":29,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":53,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"}]",
+      "reason": "maul#old-master: compiler rejected \"maul#old-master\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":14,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":23,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":38,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/leaders/MaulOldMaster.ts\",\"line\":53,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"}]",
       "setCode": "HMW_016"
     },
     {
@@ -5345,7 +5360,7 @@
     },
     {
       "internalName": "always-a-bigger-fish",
-      "reason": "always-a-bigger-fish: compiler rejected \"always-a-bigger-fish\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":89,\"file\":\"game/cards/09_HMW/events/AlwaysABiggerFish.ts\",\"line\":28,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/09_HMW/events/AlwaysABiggerFish.ts\",\"line\":26,\"message\":\"Unused binding defeatedUnitCost may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
+      "reason": "always-a-bigger-fish: compiler rejected \"always-a-bigger-fish\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":109,\"file\":\"game/cards/09_HMW/events/AlwaysABiggerFish.ts\",\"line\":28,\"message\":\"defeatedUnitCost + 3\",\"pattern\":\"nonconstant-value\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/09_HMW/events/AlwaysABiggerFish.ts\",\"line\":26,\"message\":\"Unused binding defeatedUnitCost may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
       "setCode": "HMW_099"
     },
     {
@@ -5390,7 +5405,7 @@
     },
     {
       "internalName": "invasion-lander",
-      "reason": "invasion-lander: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "invasion-lander: arena-list phase stats require a standalone event without selectors or continuations",
       "setCode": "HMW_111"
     },
     {
@@ -5425,7 +5440,7 @@
     },
     {
       "internalName": "boga#loyal-varactyl",
-      "reason": "boga#loyal-varactyl: compiler rejected \"boga#loyal-varactyl\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":178,\"file\":\"game/cards/09_HMW/units/BogaLoyalVaractyl.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "boga#loyal-varactyl: compiler rejected \"boga#loyal-varactyl\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/BogaLoyalVaractyl.ts\",\"line\":27,\"message\":\"invalid-effect-sequence\",\"pattern\":\"invalid-effect-sequence\"}]",
       "setCode": "HMW_122"
     },
     {
@@ -5455,7 +5470,7 @@
     },
     {
       "internalName": "emerie-karr#for-your-own-good",
-      "reason": "emerie-karr#for-your-own-good: compiler rejected \"emerie-karr#for-your-own-good\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":127,\"file\":\"game/cards/09_HMW/units/EmerieKarrForYourOwnGood.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "emerie-karr#for-your-own-good: compiler rejected \"emerie-karr#for-your-own-good\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/EmerieKarrForYourOwnGood.ts\",\"line\":28,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "HMW_130"
     },
     {
@@ -5480,7 +5495,7 @@
     },
     {
       "internalName": "origin-tree-shyyyo",
-      "reason": "origin-tree-shyyyo: compiler rejected \"origin-tree-shyyyo\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":138,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":26,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":39,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:getUnitsPlayedThisRoundCount\"}]",
+      "reason": "origin-tree-shyyyo: compiler rejected \"origin-tree-shyyyo\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":31,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/OriginTreeShyyyo.ts\",\"line\":39,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:getUnitsPlayedThisRoundCount\"}]",
       "setCode": "HMW_145"
     },
     {
@@ -5615,7 +5630,7 @@
     },
     {
       "internalName": "volley-fire",
-      "reason": "volley-fire: compiler rejected \"volley-fire\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":65,\"file\":\"game/cards/09_HMW/events/VolleyFire.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "volley-fire: compiler rejected \"volley-fire\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/09_HMW/events/VolleyFire.ts\",\"line\":36,\"message\":\"unsupported-field:source\",\"pattern\":\"unsupported-field:source\"}]",
       "setCode": "HMW_192"
     },
     {
@@ -5660,7 +5675,7 @@
     },
     {
       "internalName": "nightbrother#mauls-gauntlet",
-      "reason": "nightbrother#mauls-gauntlet: compiler rejected \"nightbrother#mauls-gauntlet\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":68,\"file\":\"game/cards/09_HMW/units/NightbrotherMaulsGauntlet.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "nightbrother#mauls-gauntlet: compiler rejected \"nightbrother#mauls-gauntlet\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/09_HMW/units/NightbrotherMaulsGauntlet.ts\",\"line\":24,\"message\":\"immediateEffect:playCardFromOutOfPlay\",\"pattern\":\"immediateEffect:playCardFromOutOfPlay\"}]",
       "setCode": "HMW_204"
     },
     {
@@ -5690,7 +5705,7 @@
     },
     {
       "internalName": "the-chieftain#here-since-the-oceans-dried",
-      "reason": "the-chieftain#here-since-the-oceans-dried: compiler rejected \"the-chieftain#here-since-the-oceans-dried\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":67,\"file\":\"game/cards/09_HMW/units/TheChieftainHereSinceTheOceansDried.ts\",\"line\":20,\"message\":\"arena-query-card-capture\",\"pattern\":\"arena-query-card-capture\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":109,\"file\":\"game/cards/09_HMW/units/TheChieftainHereSinceTheOceansDried.ts\",\"line\":25,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "the-chieftain#here-since-the-oceans-dried: compiler rejected \"the-chieftain#here-since-the-oceans-dried\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":67,\"file\":\"game/cards/09_HMW/units/TheChieftainHereSinceTheOceansDried.ts\",\"line\":20,\"message\":\"arena-query-card-capture\",\"pattern\":\"arena-query-card-capture\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":24,\"file\":\"game/cards/09_HMW/units/TheChieftainHereSinceTheOceansDried.ts\",\"line\":34,\"message\":\"unsupported-live-stat-expression\",\"pattern\":\"unsupported-live-stat-expression\"}]",
       "setCode": "HMW_212"
     },
     {
@@ -5790,7 +5805,7 @@
     },
     {
       "internalName": "defoliator-tank",
-      "reason": "defoliator-tank: compiler rejected \"defoliator-tank\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/09_HMW/units/DefoliatorTank.ts\",\"line\":25,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/units/DefoliatorTank.ts\",\"line\":19,\"message\":\"Unused binding eligibleDefenders may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
+      "reason": "defoliator-tank: compiler rejected \"defoliator-tank\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/09_HMW/units/DefoliatorTank.ts\",\"line\":30,\"message\":\"eligibleDefenders(context)\",\"pattern\":\"non-path-reference\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/units/DefoliatorTank.ts\",\"line\":19,\"message\":\"Unused binding eligibleDefenders may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
       "setCode": "HMW_248"
     },
     {
@@ -5900,7 +5915,7 @@
     },
     {
       "internalName": "avenger#hunting-the-rebels",
-      "reason": "avenger#hunting-the-rebels: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "avenger#hunting-the-rebels: arena lists require standalone verified phase-stat semantics",
       "setCode": "IBH_072"
     },
     {
@@ -5925,7 +5940,7 @@
     },
     {
       "internalName": "admiral-piett#commanding-the-armada",
-      "reason": "admiral-piett#commanding-the-armada: compiler rejected \"admiral-piett#commanding-the-armada\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":92,\"file\":\"game/cards/04_JTL/leaders/AdmiralPiettCommandingTheArmada.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":80,\"file\":\"game/cards/04_JTL/leaders/AdmiralPiettCommandingTheArmada.ts\",\"line\":35,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "admiral-piett#commanding-the-armada: compiler rejected \"admiral-piett#commanding-the-armada\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/04_JTL/leaders/AdmiralPiettCommandingTheArmada.ts\",\"line\":25,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/04_JTL/leaders/AdmiralPiettCommandingTheArmada.ts\",\"line\":37,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"}]",
       "setCode": "JTL_005"
     },
     {
@@ -5940,7 +5955,7 @@
     },
     {
       "internalName": "wedge-antilles#leader-of-red-squadron",
-      "reason": "wedge-antilles#leader-of-red-squadron: compiler rejected \"wedge-antilles#leader-of-red-squadron\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts\",\"line\":25,\"message\":\"registrar:addPilotDeploy\",\"pattern\":\"registrar:addPilotDeploy\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":89,\"file\":\"game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts\",\"line\":28,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts\",\"line\":44,\"message\":\"registrar:addPilotingGainAbilityTargetingAttached\",\"pattern\":\"registrar:addPilotingGainAbilityTargetingAttached\"}]",
+      "reason": "wedge-antilles#leader-of-red-squadron: compiler rejected \"wedge-antilles#leader-of-red-squadron\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts\",\"line\":25,\"message\":\"registrar:addPilotDeploy\",\"pattern\":\"registrar:addPilotDeploy\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts\",\"line\":34,\"message\":\"immediateEffect:playCard\",\"pattern\":\"immediateEffect:playCard\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/leaders/WedgeAntillesLeaderOfRedSquadron.ts\",\"line\":44,\"message\":\"registrar:addPilotingGainAbilityTargetingAttached\",\"pattern\":\"registrar:addPilotingGainAbilityTargetingAttached\"}]",
       "setCode": "JTL_008"
     },
     {
@@ -6015,7 +6030,7 @@
     },
     {
       "internalName": "director-krennic#on-the-verge-of-greatness",
-      "reason": "director-krennic#on-the-verge-of-greatness: compiler rejected \"director-krennic#on-the-verge-of-greatness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":10,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":19,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":99,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":25,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":37,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUnitWithWhenDefeatedPlayedThisPhase\"}]",
+      "reason": "director-krennic#on-the-verge-of-greatness: compiler rejected \"director-krennic#on-the-verge-of-greatness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":10,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":19,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":29,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/04_JTL/units/DirectorKrennicOnTheVergeOfGreatness.ts\",\"line\":37,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUnitWithWhenDefeatedPlayedThisPhase\"}]",
       "setCode": "JTL_032"
     },
     {
@@ -6155,12 +6170,12 @@
     },
     {
       "internalName": "in-the-heat-of-battle",
-      "reason": "in-the-heat-of-battle: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "in-the-heat-of-battle: arena lists require standalone verified phase-stat semantics",
       "setCode": "JTL_077"
     },
     {
       "internalName": "nebula-ignition",
-      "reason": "nebula-ignition: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "nebula-ignition: arena lists require standalone verified phase-stat semantics",
       "setCode": "JTL_080"
     },
     {
@@ -6170,7 +6185,7 @@
     },
     {
       "internalName": "pantoran-starship-thief",
-      "reason": "pantoran-starship-thief: compiler rejected \"pantoran-starship-thief\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/04_JTL/units/PantoranStarshipThief.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/units/PantoranStarshipThief.ts\",\"line\":44,\"message\":\"registrar:addPilotingAbility\",\"pattern\":\"registrar:addPilotingAbility\"}]",
+      "reason": "pantoran-starship-thief: compiler rejected \"pantoran-starship-thief\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/04_JTL/units/PantoranStarshipThief.ts\",\"line\":20,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/units/PantoranStarshipThief.ts\",\"line\":44,\"message\":\"registrar:addPilotingAbility\",\"pattern\":\"registrar:addPilotingAbility\"}]",
       "setCode": "JTL_083"
     },
     {
@@ -6210,7 +6225,7 @@
     },
     {
       "internalName": "blue-leader#scarif-air-support",
-      "reason": "blue-leader#scarif-air-support: compiler rejected \"blue-leader#scarif-air-support\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/04_JTL/units/BlueLeaderScarifAirSupport.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "blue-leader#scarif-air-support: compiler rejected \"blue-leader#scarif-air-support\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/04_JTL/units/BlueLeaderScarifAirSupport.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "JTL_096"
     },
     {
@@ -6220,7 +6235,7 @@
     },
     {
       "internalName": "snap-wexley#resistance-recon-flier",
-      "reason": "snap-wexley#resistance-recon-flier: compiler rejected \"snap-wexley#resistance-recon-flier\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":94,\"file\":\"game/cards/04_JTL/units/SnapWexleyResistanceReconFlier.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/units/SnapWexleyResistanceReconFlier.ts\",\"line\":32,\"message\":\"registrar:addPilotingAbility\",\"pattern\":\"registrar:addPilotingAbility\"}]",
+      "reason": "snap-wexley#resistance-recon-flier: compiler rejected \"snap-wexley#resistance-recon-flier\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/04_JTL/units/SnapWexleyResistanceReconFlier.ts\",\"line\":22,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/04_JTL/units/SnapWexleyResistanceReconFlier.ts\",\"line\":32,\"message\":\"registrar:addPilotingAbility\",\"pattern\":\"registrar:addPilotingAbility\"}]",
       "setCode": "JTL_098"
     },
     {
@@ -6430,7 +6445,7 @@
     },
     {
       "internalName": "they-hate-that-ship",
-      "reason": "they-hate-that-ship: compiler rejected \"they-hate-that-ship\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":92,\"file\":\"game/cards/04_JTL/events/TheyHateThatShip.ts\",\"line\":25,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "they-hate-that-ship: compiler rejected \"they-hate-that-ship\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/04_JTL/events/TheyHateThatShip.ts\",\"line\":30,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "JTL_155"
     },
     {
@@ -6655,7 +6670,7 @@
     },
     {
       "internalName": "its-a-trap",
-      "reason": "its-a-trap: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "its-a-trap: arena lists require standalone verified phase-stat semantics",
       "setCode": "JTL_209"
     },
     {
@@ -7070,7 +7085,7 @@
     },
     {
       "internalName": "honorbound-partisan",
-      "reason": "honorbound-partisan: compiler rejected \"honorbound-partisan\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":63,\"file\":\"game/cards/07_LAW/units/HonorBoundPartisan.ts\",\"line\":24,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "honorbound-partisan: compiler rejected \"honorbound-partisan\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/HonorBoundPartisan.ts\",\"line\":25,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "LAW_058"
     },
     {
@@ -7245,7 +7260,7 @@
     },
     {
       "internalName": "shield-drive-outfitter",
-      "reason": "shield-drive-outfitter: compiler rejected \"shield-drive-outfitter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/ShieldDriveOutfitter.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "shield-drive-outfitter: compiler rejected \"shield-drive-outfitter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/ShieldDriveOutfitter.ts\",\"line\":19,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_113"
     },
     {
@@ -7345,7 +7360,7 @@
     },
     {
       "internalName": "smugglers-yt2400",
-      "reason": "smugglers-yt2400: compiler rejected \"smugglers-yt2400\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/SmugglersYT2400.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "smugglers-yt2400: compiler rejected \"smugglers-yt2400\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/SmugglersYT2400.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_148"
     },
     {
@@ -7380,7 +7395,7 @@
     },
     {
       "internalName": "khetanna#upon-the-dune-sea",
-      "reason": "khetanna#upon-the-dune-sea: compiler rejected \"khetanna#upon-the-dune-sea\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":94,\"file\":\"game/cards/07_LAW/units/KhetannaUponTheDuneSea.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "khetanna#upon-the-dune-sea: compiler rejected \"khetanna#upon-the-dune-sea\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/KhetannaUponTheDuneSea.ts\",\"line\":23,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "LAW_158"
     },
     {
@@ -7485,7 +7500,7 @@
     },
     {
       "internalName": "mid-rim-sharpshooter",
-      "reason": "mid-rim-sharpshooter: compiler rejected \"mid-rim-sharpshooter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/MidRimSharpshooter.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "mid-rim-sharpshooter: compiler rejected \"mid-rim-sharpshooter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/MidRimSharpshooter.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_193"
     },
     {
@@ -7505,7 +7520,7 @@
     },
     {
       "internalName": "dogged-pursuers",
-      "reason": "dogged-pursuers: compiler rejected \"dogged-pursuers\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/DoggedPursuers.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "dogged-pursuers: compiler rejected \"dogged-pursuers\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/DoggedPursuers.ts\",\"line\":19,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_198"
     },
     {
@@ -7570,7 +7585,7 @@
     },
     {
       "internalName": "boba-fett#for-a-price",
-      "reason": "boba-fett#for-a-price: compiler rejected \"boba-fett#for-a-price\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/BobaFettForAPrice.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/BobaFettForAPrice.ts\",\"line\":34,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "boba-fett#for-a-price: compiler rejected \"boba-fett#for-a-price\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/BobaFettForAPrice.ts\",\"line\":19,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/BobaFettForAPrice.ts\",\"line\":36,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_214"
     },
     {
@@ -7625,7 +7640,7 @@
     },
     {
       "internalName": "rookie-rocketjumper",
-      "reason": "rookie-rocketjumper: compiler rejected \"rookie-rocketjumper\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/RookieRocketjumper.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "rookie-rocketjumper: compiler rejected \"rookie-rocketjumper\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/RookieRocketjumper.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_227"
     },
     {
@@ -7635,7 +7650,7 @@
     },
     {
       "internalName": "the-master-codebreaker#high-stakes",
-      "reason": "the-master-codebreaker#high-stakes: compiler rejected \"the-master-codebreaker#high-stakes\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":91,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":26,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":35,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":46,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstGambitYouPlayedThisPhase\"}]",
+      "reason": "the-master-codebreaker#high-stakes: compiler rejected \"the-master-codebreaker#high-stakes\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":27,\"message\":\"unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":35,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/TheMasterCodebreakerHighStakes.ts\",\"line\":46,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstGambitYouPlayedThisPhase\"}]",
       "setCode": "LAW_229"
     },
     {
@@ -7675,7 +7690,7 @@
     },
     {
       "internalName": "improvise",
-      "reason": "improvise: compiler rejected \"improvise\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":84,\"file\":\"game/cards/07_LAW/events/Improvise.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "improvise: compiler rejected \"improvise\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/events/Improvise.ts\",\"line\":19,\"message\":\"immediateEffect:lookAtAndChooseOption\",\"pattern\":\"immediateEffect:lookAtAndChooseOption\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":39,\"file\":\"game/cards/07_LAW/events/Improvise.ts\",\"line\":20,\"message\":\"Unused binding topCardOfDeck may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
       "setCode": "LAW_242"
     },
     {
@@ -7690,7 +7705,7 @@
     },
     {
       "internalName": "salvaged-materials",
-      "reason": "salvaged-materials: compiler rejected \"salvaged-materials\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":97,\"file\":\"game/cards/07_LAW/events/SalvagedMaterials.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "salvaged-materials: compiler rejected \"salvaged-materials\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":21,\"file\":\"game/cards/07_LAW/events/SalvagedMaterials.ts\",\"line\":24,\"message\":\"immediateEffect:playCardFromOutOfPlay\",\"pattern\":\"immediateEffect:playCardFromOutOfPlay\"}]",
       "setCode": "LAW_245"
     },
     {
@@ -7715,12 +7730,12 @@
     },
     {
       "internalName": "hidden-hand-supplier",
-      "reason": "hidden-hand-supplier: compiler rejected \"hidden-hand-supplier\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/HiddenHandSupplier.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "hidden-hand-supplier: compiler rejected \"hidden-hand-supplier\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/HiddenHandSupplier.ts\",\"line\":19,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_257"
     },
     {
       "internalName": "criminal-contact",
-      "reason": "criminal-contact: compiler rejected \"criminal-contact\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_LAW/units/CriminalContact.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "criminal-contact: compiler rejected \"criminal-contact\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/CriminalContact.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_258"
     },
     {
@@ -7755,7 +7770,7 @@
     },
     {
       "internalName": "morgan-elsbeth#following-the-call",
-      "reason": "morgan-elsbeth#following-the-call: compiler rejected \"morgan-elsbeth#following-the-call\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":12,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:attacksThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":21,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":36,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":26,\"message\":\"named-target-cost-or-limit\",\"pattern\":\"named-target-cost-or-limit\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":63,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":60,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "morgan-elsbeth#following-the-call: compiler rejected \"morgan-elsbeth#following-the-call\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":12,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:attacksThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":21,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":36,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":26,\"message\":\"named-target-cost-or-limit\",\"pattern\":\"named-target-cost-or-limit\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/leaders/MorganElsbethFollowingTheCall.ts\",\"line\":61,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "LOF_005"
     },
     {
@@ -7795,7 +7810,7 @@
     },
     {
       "internalName": "barriss-offee#we-have-become-villains",
-      "reason": "barriss-offee#we-have-become-villains: compiler rejected \"barriss-offee#we-have-become-villains\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":62,\"file\":\"game/cards/05_LOF/leaders/BarrissOffeeWeHaveBecomeVillains.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":62,\"file\":\"game/cards/05_LOF/leaders/BarrissOffeeWeHaveBecomeVillains.ts\",\"line\":35,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "barriss-offee#we-have-become-villains: compiler rejected \"barriss-offee#we-have-become-villains\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":55,\"file\":\"game/cards/05_LOF/leaders/BarrissOffeeWeHaveBecomeVillains.ts\",\"line\":19,\"message\":\"cost:useTheForce\",\"pattern\":\"cost:useTheForce\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":19,\"file\":\"game/cards/05_LOF/leaders/BarrissOffeeWeHaveBecomeVillains.ts\",\"line\":36,\"message\":\"cost:useTheForce\",\"pattern\":\"cost:useTheForce\"}]",
       "setCode": "LOF_013"
     },
     {
@@ -7945,7 +7960,7 @@
     },
     {
       "internalName": "yaddle#a-chance-to-make-things-right",
-      "reason": "yaddle#a-chance-to-make-things-right: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "yaddle#a-chance-to-make-things-right: arena lists require standalone verified phase-stat semantics",
       "setCode": "LOF_045"
     },
     {
@@ -7995,7 +8010,7 @@
     },
     {
       "internalName": "guardian-of-the-whills",
-      "reason": "guardian-of-the-whills: compiler rejected \"guardian-of-the-whills\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":24,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUpgradePlayedOnThisCopy\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":80,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":36,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "guardian-of-the-whills: compiler rejected \"guardian-of-the-whills\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":24,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUpgradePlayedOnThisCopy\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/01_SOR/units/GuardianOfTheWhills.ts\",\"line\":37,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"}]",
       "setCode": "LOF_058"
     },
     {
@@ -8100,7 +8115,7 @@
     },
     {
       "internalName": "jedi-consular",
-      "reason": "jedi-consular: compiler rejected \"jedi-consular\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/05_LOF/units/JediConsular.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "jedi-consular: compiler rejected \"jedi-consular\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/05_LOF/units/JediConsular.ts\",\"line\":21,\"message\":\"cost:useTheForce\",\"pattern\":\"cost:useTheForce\"}]",
       "setCode": "LOF_094"
     },
     {
@@ -8120,7 +8135,7 @@
     },
     {
       "internalName": "kelleran-beq#the-sabered-hand",
-      "reason": "kelleran-beq#the-sabered-hand: compiler rejected \"kelleran-beq#the-sabered-hand\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":104,\"file\":\"game/cards/05_LOF/units/KelleranBeqTheSaberedHand.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "kelleran-beq#the-sabered-hand: compiler rejected \"kelleran-beq#the-sabered-hand\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/KelleranBeqTheSaberedHand.ts\",\"line\":19,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "LOF_100"
     },
     {
@@ -8155,7 +8170,7 @@
     },
     {
       "internalName": "malakili#loving-rancor-keeper",
-      "reason": "malakili#loving-rancor-keeper: compiler rejected \"malakili#loving-rancor-keeper\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":93,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":26,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":38,\"message\":\"registrar:addDamageModificationAbility\",\"pattern\":\"registrar:addDamageModificationAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":45,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isDamageFromFriendlyCreatureUnit\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":62,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstCreaturePlayedByControllerThisPhase\"}]",
+      "reason": "malakili#loving-rancor-keeper: compiler rejected \"malakili#loving-rancor-keeper\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":30,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":38,\"message\":\"registrar:addDamageModificationAbility\",\"pattern\":\"registrar:addDamageModificationAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":45,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isDamageFromFriendlyCreatureUnit\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/MalakiliLovingRancorKeeper.ts\",\"line\":62,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstCreaturePlayedByControllerThisPhase\"}]",
       "setCode": "LOF_108"
     },
     {
@@ -8200,7 +8215,7 @@
     },
     {
       "internalName": "rampage",
-      "reason": "rampage: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "rampage: arena-list phase-stat predicate requires verified arena-only scope",
       "setCode": "LOF_127"
     },
     {
@@ -8245,7 +8260,7 @@
     },
     {
       "internalName": "death-field",
-      "reason": "death-field: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "death-field: arena lists require standalone verified phase-stat semantics",
       "setCode": "LOF_141"
     },
     {
@@ -8290,7 +8305,7 @@
     },
     {
       "internalName": "focus-determines-reality",
-      "reason": "focus-determines-reality: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "focus-determines-reality: arena lists require standalone verified phase-stat semantics",
       "setCode": "LOF_152"
     },
     {
@@ -8325,7 +8340,7 @@
     },
     {
       "internalName": "bendu#do-you-fear-the-storm",
-      "reason": "bendu#do-you-fear-the-storm: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "bendu#do-you-fear-the-storm: arena lists require standalone verified phase-stat semantics",
       "setCode": "LOF_170"
     },
     {
@@ -8650,7 +8665,7 @@
     },
     {
       "internalName": "lama-su#we-modified-their-genetics",
-      "reason": "lama-su#we-modified-their-genetics: compiler rejected \"lama-su#we-modified-their-genetics\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":115,\"file\":\"game/cards/06_SEC/leaders/LamaSuWeModifiedTheirGenetics.ts\",\"line\":21,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/06_SEC/leaders/LamaSuWeModifiedTheirGenetics.ts\",\"line\":53,\"message\":\"unsupported-field:attackerMustSurvive\",\"pattern\":\"unsupported-field:attackerMustSurvive\"}]",
+      "reason": "lama-su#we-modified-their-genetics: compiler rejected \"lama-su#we-modified-their-genetics\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/06_SEC/leaders/LamaSuWeModifiedTheirGenetics.ts\",\"line\":28,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/06_SEC/leaders/LamaSuWeModifiedTheirGenetics.ts\",\"line\":53,\"message\":\"unsupported-field:attackerMustSurvive\",\"pattern\":\"unsupported-field:attackerMustSurvive\"}]",
       "setCode": "SEC_003"
     },
     {
@@ -8830,7 +8845,7 @@
     },
     {
       "internalName": "congress-of-malastare",
-      "reason": "congress-of-malastare: compiler rejected \"congress-of-malastare\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":12,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":21,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":67,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":27,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":39,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUpgradePlayedByControllerThisPhase\"}]",
+      "reason": "congress-of-malastare: compiler rejected \"congress-of-malastare\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":12,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":21,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":30,\"message\":\"unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:abilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/units/CongressOfMalastare.ts\",\"line\":39,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstUpgradePlayedByControllerThisPhase\"}]",
       "setCode": "SEC_064"
     },
     {
@@ -8870,7 +8885,7 @@
     },
     {
       "internalName": "the-eye-of-aldhani",
-      "reason": "the-eye-of-aldhani: compiler rejected \"the-eye-of-aldhani\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":107,\"file\":\"game/cards/06_SEC/events/TheEyeOfAldhani.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "the-eye-of-aldhani: compiler rejected \"the-eye-of-aldhani\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/events/TheEyeOfAldhani.ts\",\"line\":18,\"message\":\"immediateEffect:delayedPlayerEffect\",\"pattern\":\"immediateEffect:delayedPlayerEffect\"}]",
       "setCode": "SEC_073"
     },
     {
@@ -8890,7 +8905,7 @@
     },
     {
       "internalName": "hyperspace-disaster",
-      "reason": "hyperspace-disaster: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "hyperspace-disaster: arena lists require standalone verified phase-stat semantics",
       "setCode": "SEC_078"
     },
     {
@@ -8930,7 +8945,7 @@
     },
     {
       "internalName": "corporate-warmongering",
-      "reason": "corporate-warmongering: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "corporate-warmongering: nested arena-list modifiers require explicit continuation witnesses",
       "setCode": "SEC_091"
     },
     {
@@ -9005,7 +9020,7 @@
     },
     {
       "internalName": "gnk-power-droid",
-      "reason": "gnk-power-droid: compiler rejected \"gnk-power-droid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":63,\"file\":\"game/cards/06_SEC/units/GNKPowerDroid.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "gnk-power-droid: compiler rejected \"gnk-power-droid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/GNKPowerDroid.ts\",\"line\":18,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "SEC_110"
     },
     {
@@ -9020,7 +9035,7 @@
     },
     {
       "internalName": "crucible#centuries-of-wisdom",
-      "reason": "crucible#centuries-of-wisdom: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "crucible#centuries-of-wisdom: arena lists require standalone verified phase-stat semantics",
       "setCode": "SEC_119"
     },
     {
@@ -9255,7 +9270,7 @@
     },
     {
       "internalName": "topple-the-summit",
-      "reason": "topple-the-summit: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "topple-the-summit: arena lists require standalone verified phase-stat semantics",
       "setCode": "SEC_183"
     },
     {
@@ -9385,7 +9400,7 @@
     },
     {
       "internalName": "cikatro-vizago#business-is-what-matters",
-      "reason": "cikatro-vizago#business-is-what-matters: compiler rejected \"cikatro-vizago#business-is-what-matters\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":71,\"file\":\"game/cards/06_SEC/units/CikatroVizagoBusinessIsWhatMatters.ts\",\"line\":20,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "cikatro-vizago#business-is-what-matters: compiler rejected \"cikatro-vizago#business-is-what-matters\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/CikatroVizagoBusinessIsWhatMatters.ts\",\"line\":21,\"message\":\"immediateEffect:reveal\",\"pattern\":\"immediateEffect:reveal\"}]",
       "setCode": "SEC_218"
     },
     {
@@ -9510,7 +9525,7 @@
     },
     {
       "internalName": "maarva-andor#weve-been-sleeping",
-      "reason": "maarva-andor#weve-been-sleeping: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "maarva-andor#weve-been-sleeping: arena lists require standalone verified phase-stat semantics",
       "setCode": "SEC_252"
     },
     {
@@ -9530,7 +9545,7 @@
     },
     {
       "internalName": "restore-freedom",
-      "reason": "restore-freedom: compiler rejected \"restore-freedom\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/06_SEC/events/RestoreFreedom.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "restore-freedom: compiler rejected \"restore-freedom\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/06_SEC/events/RestoreFreedom.ts\",\"line\":24,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":48,\"file\":\"game/cards/06_SEC/events/RestoreFreedom.ts\",\"line\":25,\"message\":\"Unused binding heroismAspectCount may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
       "setCode": "SEC_257"
     },
     {
@@ -9540,12 +9555,12 @@
     },
     {
       "internalName": "inspiring-senator",
-      "reason": "inspiring-senator: compiler rejected \"inspiring-senator\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":92,\"file\":\"game/cards/06_SEC/units/InspiringSenator.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "inspiring-senator: compiler rejected \"inspiring-senator\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/InspiringSenator.ts\",\"line\":18,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "SEC_261"
     },
     {
       "internalName": "assassin-probe",
-      "reason": "assassin-probe: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "assassin-probe: arena lists require standalone verified phase-stat semantics",
       "setCode": "SEC_263"
     },
     {
@@ -9575,7 +9590,7 @@
     },
     {
       "internalName": "jabba-the-hutt#his-high-exaltedness",
-      "reason": "jabba-the-hutt#his-high-exaltedness: compiler rejected \"jabba-the-hutt#his-high-exaltedness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":128,\"file\":\"game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts\",\"line\":44,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":128,\"file\":\"game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts\",\"line\":62,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "jabba-the-hutt#his-high-exaltedness: compiler rejected \"jabba-the-hutt#his-high-exaltedness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts\",\"line\":24,\"message\":\"unsupported-field:ability\",\"pattern\":\"unsupported-field:ability\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts\",\"line\":44,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/02_SHD/leaders/JabbaTheHuttHisHighExaltedness.ts\",\"line\":69,\"message\":\"unsupported-field:ability\",\"pattern\":\"unsupported-field:ability\"}]",
       "setCode": "SHD_006"
     },
     {
@@ -9610,7 +9625,7 @@
     },
     {
       "internalName": "han-solo#worth-the-risk",
-      "reason": "han-solo#worth-the-risk: compiler rejected \"han-solo#worth-the-risk\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/02_SHD/leaders/HanSoloWorthTheRisk.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/02_SHD/leaders/HanSoloWorthTheRisk.ts\",\"line\":40,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "han-solo#worth-the-risk: compiler rejected \"han-solo#worth-the-risk\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":21,\"file\":\"game/cards/02_SHD/leaders/HanSoloWorthTheRisk.ts\",\"line\":26,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/02_SHD/leaders/HanSoloWorthTheRisk.ts\",\"line\":46,\"message\":\"unsupported-field:mustChangeGameState\",\"pattern\":\"unsupported-field:mustChangeGameState\"}]",
       "setCode": "SHD_013"
     },
     {
@@ -9630,7 +9645,7 @@
     },
     {
       "internalName": "lando-calrissian#with-impeccable-taste",
-      "reason": "lando-calrissian#with-impeccable-taste: compiler rejected \"lando-calrissian#with-impeccable-taste\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:buildSmuggleCardAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":33,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:buildDefeatResourceAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":73,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":49,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":73,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":58,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "lando-calrissian#with-impeccable-taste: compiler rejected \"lando-calrissian#with-impeccable-taste\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:buildSmuggleCardAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":33,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:buildDefeatResourceAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":51,\"message\":\"expected-declarative-object\",\"pattern\":\"expected-declarative-object\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":20,\"file\":\"game/cards/02_SHD/leaders/LandoCalrissianWithImpeccableTaste.ts\",\"line\":59,\"message\":\"activation-limit\",\"pattern\":\"activation-limit\"}]",
       "setCode": "SHD_017"
     },
     {
@@ -9745,7 +9760,7 @@
     },
     {
       "internalName": "fenn-rau#protector-of-concord-dawn",
-      "reason": "fenn-rau#protector-of-concord-dawn: compiler rejected \"fenn-rau#protector-of-concord-dawn\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":64,\"file\":\"game/cards/02_SHD/units/FennRauProtectorOfConcordDawn.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/02_SHD/units/FennRauProtectorOfConcordDawn.ts\",\"line\":34,\"message\":\"trigger-alias-hook:onCardPlayed\",\"pattern\":\"trigger-alias-hook:onCardPlayed\"}]",
+      "reason": "fenn-rau#protector-of-concord-dawn: compiler rejected \"fenn-rau#protector-of-concord-dawn\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/02_SHD/units/FennRauProtectorOfConcordDawn.ts\",\"line\":24,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/02_SHD/units/FennRauProtectorOfConcordDawn.ts\",\"line\":34,\"message\":\"trigger-alias-hook:onCardPlayed\",\"pattern\":\"trigger-alias-hook:onCardPlayed\"}]",
       "setCode": "SHD_067"
     },
     {
@@ -9850,7 +9865,7 @@
     },
     {
       "internalName": "palpatines-return",
-      "reason": "palpatines-return: compiler rejected \"palpatines-return\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":68,\"file\":\"game/cards/02_SHD/events/PalpatinesReturn.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "palpatines-return: compiler rejected \"palpatines-return\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/02_SHD/events/PalpatinesReturn.ts\",\"line\":26,\"message\":\"immediateEffect:playCardFromOutOfPlay\",\"pattern\":\"immediateEffect:playCardFromOutOfPlay\"}]",
       "setCode": "SHD_094"
     },
     {
@@ -10100,7 +10115,7 @@
     },
     {
       "internalName": "wild-rancor",
-      "reason": "wild-rancor: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "wild-rancor: arena lists require standalone verified phase-stat semantics",
       "setCode": "SHD_158"
     },
     {
@@ -10235,7 +10250,7 @@
     },
     {
       "internalName": "triple-dark-raid",
-      "reason": "triple-dark-raid: compiler rejected \"triple-dark-raid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":115,\"file\":\"game/cards/02_SHD/events/TripleDarkRaid.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "triple-dark-raid: compiler rejected \"triple-dark-raid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/02_SHD/events/TripleDarkRaid.ts\",\"line\":19,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "SHD_194"
     },
     {
@@ -10375,7 +10390,7 @@
     },
     {
       "internalName": "look-the-other-way",
-      "reason": "look-the-other-way: compiler rejected \"look-the-other-way\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":65,\"file\":\"game/cards/02_SHD/events/LookTheOtherWay.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "look-the-other-way: compiler rejected \"look-the-other-way\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/02_SHD/events/LookTheOtherWay.ts\",\"line\":26,\"message\":\"unsupported-named-resolver-field:unlessEffect\",\"pattern\":\"unsupported-named-resolver-field:unlessEffect\"}]",
       "setCode": "SHD_227"
     },
     {
@@ -10400,7 +10415,7 @@
     },
     {
       "internalName": "evacuate",
-      "reason": "evacuate: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "evacuate: arena lists require standalone verified phase-stat semantics",
       "setCode": "SHD_233"
     },
     {
@@ -10585,7 +10600,7 @@
     },
     {
       "internalName": "del-meeko#providing-overwatch",
-      "reason": "del-meeko#providing-overwatch: compiler rejected \"del-meeko#providing-overwatch\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":58,\"file\":\"game/cards/01_SOR/units/DelMeekoProvidingOverwatch.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "del-meeko#providing-overwatch: compiler rejected \"del-meeko#providing-overwatch\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/01_SOR/units/DelMeekoProvidingOverwatch.ts\",\"line\":19,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.increaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.increaseCost\"}]",
       "setCode": "SOR_034"
     },
     {
@@ -10600,7 +10615,7 @@
     },
     {
       "internalName": "academy-defense-walker",
-      "reason": "academy-defense-walker: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "academy-defense-walker: arena lists require standalone verified phase-stat semantics",
       "setCode": "SOR_037"
     },
     {
@@ -10625,7 +10640,7 @@
     },
     {
       "internalName": "superlaser-blast",
-      "reason": "superlaser-blast: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "superlaser-blast: arena lists require standalone verified phase-stat semantics",
       "setCode": "SOR_043"
     },
     {
@@ -10665,7 +10680,7 @@
     },
     {
       "internalName": "bendu#the-one-in-the-middle",
-      "reason": "bendu#the-one-in-the-middle: compiler rejected \"bendu#the-one-in-the-middle\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":117,\"file\":\"game/cards/01_SOR/units/BenduTheOneInTheMiddle.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "bendu#the-one-in-the-middle: compiler rejected \"bendu#the-one-in-the-middle\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/01_SOR/units/BenduTheOneInTheMiddle.ts\",\"line\":18,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "SOR_056"
     },
     {
@@ -10740,7 +10755,7 @@
     },
     {
       "internalName": "alliance-dispatcher",
-      "reason": "alliance-dispatcher: compiler rejected \"alliance-dispatcher\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/01_SOR/units/AllianceDispatcher.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "alliance-dispatcher: compiler rejected \"alliance-dispatcher\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/01_SOR/units/AllianceDispatcher.ts\",\"line\":25,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "SOR_093"
     },
     {
@@ -10755,7 +10770,7 @@
     },
     {
       "internalName": "home-one#alliance-flagship",
-      "reason": "home-one#alliance-flagship: compiler rejected \"home-one#alliance-flagship\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":90,\"file\":\"game/cards/01_SOR/units/HomeOneAllianceFlagship.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "home-one#alliance-flagship: compiler rejected \"home-one#alliance-flagship\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/01_SOR/units/HomeOneAllianceFlagship.ts\",\"line\":23,\"message\":\"immediateEffect:playCardFromOutOfPlay\",\"pattern\":\"immediateEffect:playCardFromOutOfPlay\"}]",
       "setCode": "SOR_102"
     },
     {
@@ -10925,7 +10940,7 @@
     },
     {
       "internalName": "rallying-cry",
-      "reason": "rallying-cry: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "rallying-cry: arena lists require standalone verified phase-stat semantics",
       "setCode": "SOR_154"
     },
     {
@@ -10980,7 +10995,7 @@
     },
     {
       "internalName": "bib-fortuna#jabbas-majordomo",
-      "reason": "bib-fortuna#jabbas-majordomo: compiler rejected \"bib-fortuna#jabbas-majordomo\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":62,\"file\":\"game/cards/01_SOR/units/BibFortunaJabbasMajordomo.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "bib-fortuna#jabbas-majordomo: compiler rejected \"bib-fortuna#jabbas-majordomo\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/01_SOR/units/BibFortunaJabbasMajordomo.ts\",\"line\":25,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "SOR_177"
     },
     {
@@ -10990,7 +11005,7 @@
     },
     {
       "internalName": "jabba-the-hutt#cunning-daimyo",
-      "reason": "jabba-the-hutt#cunning-daimyo: compiler rejected \"jabba-the-hutt#cunning-daimyo\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":75,\"file\":\"game/cards/01_SOR/units/JabbaTheHuttCunningDaimyo.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/01_SOR/units/JabbaTheHuttCunningDaimyo.ts\",\"line\":27,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
+      "reason": "jabba-the-hutt#cunning-daimyo: compiler rejected \"jabba-the-hutt#cunning-daimyo\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/01_SOR/units/JabbaTheHuttCunningDaimyo.ts\",\"line\":18,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/01_SOR/units/JabbaTheHuttCunningDaimyo.ts\",\"line\":27,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "SOR_181"
     },
     {
@@ -11095,7 +11110,7 @@
     },
     {
       "internalName": "mining-guild-tie-fighter",
-      "reason": "mining-guild-tie-fighter: compiler rejected \"mining-guild-tie-fighter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/01_SOR/units/MiningGuildTieFighter.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "mining-guild-tie-fighter: compiler rejected \"mining-guild-tie-fighter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/01_SOR/units/MiningGuildTieFighter.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "SOR_206"
     },
     {
@@ -11240,7 +11255,7 @@
     },
     {
       "internalName": "rex#no-other-option",
-      "reason": "rex#no-other-option: compiler rejected \"rex#no-other-option\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":64,\"file\":\"game/cards/07_TS26/leaders/RexNoOtherOption.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":68,\"file\":\"game/cards/07_TS26/leaders/RexNoOtherOption.ts\",\"line\":46,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "rex#no-other-option: compiler rejected \"rex#no-other-option\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/07_TS26/leaders/RexNoOtherOption.ts\",\"line\":20,\"message\":\"cost:readyEnemyUnit\",\"pattern\":\"cost:readyEnemyUnit\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/07_TS26/leaders/RexNoOtherOption.ts\",\"line\":47,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "TS26_006"
     },
     {
@@ -11250,7 +11265,7 @@
     },
     {
       "internalName": "ahsoka-tano#i-have-an-idea",
-      "reason": "ahsoka-tano#i-have-an-idea: compiler rejected \"ahsoka-tano#i-have-an-idea\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts\",\"line\":23,\"message\":\"trigger-alias-hook:onCardPlayed\",\"pattern\":\"trigger-alias-hook:onCardPlayed\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":83,\"file\":\"game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts\",\"line\":62,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "ahsoka-tano#i-have-an-idea: compiler rejected \"ahsoka-tano#i-have-an-idea\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts\",\"line\":23,\"message\":\"trigger-alias-hook:onCardPlayed\",\"pattern\":\"trigger-alias-hook:onCardPlayed\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts\",\"line\":63,\"message\":\"immediateEffect:lookAtAndChooseOption\",\"pattern\":\"immediateEffect:lookAtAndChooseOption\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":39,\"file\":\"game/cards/07_TS26/leaders/AhsokaTanoIHaveAnIdea.ts\",\"line\":64,\"message\":\"Unused binding topCardOfDeck may contain unconverted behavior\",\"pattern\":\"unused-source-binding\"}]",
       "setCode": "TS26_008"
     },
     {
@@ -11260,7 +11275,7 @@
     },
     {
       "internalName": "dookus-palace",
-      "reason": "dookus-palace: compiler rejected \"dookus-palace\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":60,\"file\":\"game/cards/07_TS26/bases/DookusPalace.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "dookus-palace: compiler rejected \"dookus-palace\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/07_TS26/bases/DookusPalace.ts\",\"line\":23,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "TS26_010"
     },
     {
@@ -11290,7 +11305,7 @@
     },
     {
       "internalName": "king-katuunko#great-king-of-toydaria",
-      "reason": "king-katuunko#great-king-of-toydaria: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "king-katuunko#great-king-of-toydaria: arena lists require standalone verified phase-stat semantics",
       "setCode": "TS26_016"
     },
     {
@@ -11340,7 +11355,7 @@
     },
     {
       "internalName": "prime-minister-almec#scheming-populist",
-      "reason": "prime-minister-almec#scheming-populist: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "prime-minister-almec#scheming-populist: arena lists require standalone verified phase-stat semantics",
       "setCode": "TS26_028"
     },
     {
@@ -11417,11 +11432,6 @@
       "internalName": "take-cover",
       "reason": "take-cover: compiler rejected \"take-cover\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/07_TS26/events/TakeCover.ts\",\"line\":16,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/07_TS26/events/TakeCover.ts\",\"line\":33,\"message\":\"thenContext.events.find((x) => x.name === EventName.OnDamageHealed)\",\"pattern\":\"non-path-reference\"}]",
       "setCode": "TS26_047"
-    },
-    {
-      "internalName": "vanquish-the-legion",
-      "reason": "vanquish-the-legion: invalid ability IR: data did not match any variant of untagged enum Target",
-      "setCode": "TS26_048"
     },
     {
       "internalName": "separatist-council#quarrelsome-holdouts",
@@ -11535,7 +11545,7 @@
     },
     {
       "internalName": "deployed-droideka",
-      "reason": "deployed-droideka: compiler rejected \"deployed-droideka\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/07_TS26/units/DeployedDroideka.ts\",\"line\":16,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "deployed-droideka: compiler rejected \"deployed-droideka\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_TS26/units/DeployedDroideka.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "TS26_077"
     },
     {
@@ -11784,13 +11794,8 @@
       "setCode": "TWI_072"
     },
     {
-      "internalName": "disruptive-burst",
-      "reason": "disruptive-burst: invalid ability IR: data did not match any variant of untagged enum Target",
-      "setCode": "TWI_075"
-    },
-    {
       "internalName": "the-invasion-of-christophsis",
-      "reason": "the-invasion-of-christophsis: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "the-invasion-of-christophsis: arena lists require standalone verified phase-stat semantics",
       "setCode": "TWI_078"
     },
     {
@@ -11929,11 +11934,6 @@
       "setCode": "TWI_125"
     },
     {
-      "internalName": "encouraging-leadership",
-      "reason": "encouraging-leadership: invalid ability IR: data did not match any variant of untagged enum Target",
-      "setCode": "TWI_126"
-    },
-    {
       "internalName": "resupply",
       "reason": "resupply: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "TWI_127"
@@ -11990,7 +11990,7 @@
     },
     {
       "internalName": "saw-gerrera#resistance-is-not-terrorism",
-      "reason": "saw-gerrera#resistance-is-not-terrorism: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "saw-gerrera#resistance-is-not-terrorism: arena lists require standalone verified phase-stat semantics",
       "setCode": "TWI_150"
     },
     {
@@ -12020,7 +12020,7 @@
     },
     {
       "internalName": "hevy#staunch-martyr",
-      "reason": "hevy#staunch-martyr: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "hevy#staunch-martyr: arena lists require standalone verified phase-stat semantics",
       "setCode": "TWI_164"
     },
     {
@@ -12105,7 +12105,7 @@
     },
     {
       "internalName": "unnatural-life",
-      "reason": "unnatural-life: compiler rejected \"unnatural-life\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/03_TWI/events/UnnaturalLife.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/03_TWI/events/UnnaturalLife.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":107,\"file\":\"game/cards/03_TWI/events/UnnaturalLife.ts\",\"line\":26,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "unnatural-life: compiler rejected \"unnatural-life\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/03_TWI/events/UnnaturalLife.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/03_TWI/events/UnnaturalLife.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":59,\"file\":\"game/cards/03_TWI/events/UnnaturalLife.ts\",\"line\":31,\"message\":\"unsupported-query:wasDefeatedThisPhase\",\"pattern\":\"unsupported-query:wasDefeatedThisPhase\"}]",
       "setCode": "TWI_189"
     },
     {
@@ -12135,7 +12135,7 @@
     },
     {
       "internalName": "aid-from-the-innocent",
-      "reason": "aid-from-the-innocent: compiler rejected \"aid-from-the-innocent\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":190,\"file\":\"game/cards/03_TWI/events/AidFromTheInnocent.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "aid-from-the-innocent: compiler rejected \"aid-from-the-innocent\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/03_TWI/events/AidFromTheInnocent.ts\",\"line\":18,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "TWI_201"
     },
     {
@@ -12165,7 +12165,7 @@
     },
     {
       "internalName": "freelance-assassin",
-      "reason": "freelance-assassin: compiler rejected \"freelance-assassin\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":27,\"file\":\"game/cards/03_TWI/units/FreelanceAssassin.ts\",\"line\":17,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "freelance-assassin: compiler rejected \"freelance-assassin\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/03_TWI/units/FreelanceAssassin.ts\",\"line\":19,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "TWI_212"
     },
     {
@@ -12220,7 +12220,7 @@
     },
     {
       "internalName": "now-there-are-two-of-them",
-      "reason": "now-there-are-two-of-them: compiler rejected \"now-there-are-two-of-them\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":171,\"file\":\"game/cards/03_TWI/events/NowThereAreTwoOfThem.ts\",\"line\":18,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "now-there-are-two-of-them: compiler rejected \"now-there-are-two-of-them\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/03_TWI/events/NowThereAreTwoOfThem.ts\",\"line\":26,\"message\":\"unsupported-query:from\",\"pattern\":\"unsupported-query:from\"}]",
       "setCode": "TWI_225"
     },
     {
@@ -12260,7 +12260,7 @@
     },
     {
       "internalName": "tranquility#inspiring-flagship",
-      "reason": "tranquility#inspiring-flagship: compiler rejected \"tranquility#inspiring-flagship\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":103,\"file\":\"game/cards/03_TWI/units/TranquilityInspiringFlagship.ts\",\"line\":28,\"message\":\"unsupported-title-helper\",\"pattern\":\"unsupported-title-helper\"}]",
+      "reason": "tranquility#inspiring-flagship: compiler rejected \"tranquility#inspiring-flagship\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/03_TWI/units/TranquilityInspiringFlagship.ts\",\"line\":29,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "TWI_246"
     },
     {
@@ -12275,7 +12275,7 @@
     },
     {
       "internalName": "sword-and-shield-maneuver",
-      "reason": "sword-and-shield-maneuver: invalid ability IR: data did not match any variant of untagged enum Target",
+      "reason": "sword-and-shield-maneuver: arena lists require standalone verified phase-stat semantics",
       "setCode": "TWI_250"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1628,
+  "runtimeRejectedCount": 1625,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 660
 }

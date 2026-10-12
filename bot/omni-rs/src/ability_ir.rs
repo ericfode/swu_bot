@@ -334,6 +334,29 @@ impl Expr {
 pub enum Target {
     Name(String),
     Expression(Expr),
+    ArenaList(ArenaListTarget),
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArenaListTarget { pub kind: ArenaListKind, pub receiver: Expr, pub predicate: Expr }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ArenaListKind { #[serde(rename = "arenaList")] ArenaList }
+impl ArenaListTarget {
+    fn validate_phase_stats(&self)->Result<(),String> {
+        self.receiver.validate()?;
+        self.predicate.validate()?;
+        if !matches!(&self.receiver,Expr::Ref {path} if path.len()==1 && ["player","opponent"].contains(&path[0].as_str())) {return Err("arena-list phase stats require player or opponent receiver".into());}
+        fn predicate(e:&Expr)->bool {match e {
+            Expr::Const {value}=>value.is_boolean(),
+            Expr::Unary {op,value} if op=="!"=>predicate(value)||matches!(value.as_ref(),Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"))),
+            Expr::Binary {op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left)&&predicate(right),
+            Expr::Binary {op,left,right} if op=="==="=>{
+                let zone=|e:&Expr|matches!(e,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
+                let name=|e:&Expr|matches!(e,Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
+                (zone(left)&&name(right))||(name(left)&&name(right))
+            },_=>false}}
+        if !predicate(&self.predicate) {return Err("arena-list phase-stat predicate requires verified arena-only scope".into());}Ok(())
+    }
 }
 impl Target {
     pub fn name(name: &str) -> Self {
@@ -341,6 +364,7 @@ impl Target {
     }
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            Self::ArenaList(_)=>Err("arena lists require standalone verified phase-stat semantics".into()),
             Self::Name(s)
                 if [
                     "self",
@@ -645,6 +669,12 @@ impl Program {
                 _ => e.validate(),
             }
         }
+        if let Effect::ModifyStats {target:Target::ArenaList(list),power,hp,duration}=&ability.effect {
+            if ability.trigger!="event" || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate || duration!="phase" {return Err("arena-list phase stats require a standalone event without selectors or continuations".into());}
+            list.validate_phase_stats()?;
+            fn literal(e:&Expr)->bool {match e {Expr::Const {value}=>value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n)),Expr::Unary {op,value} if ["+","-"].contains(&op.as_str())=>matches!(value.as_ref(),Expr::Const {value} if value.as_i64().is_some_and(|n|(0..=65535).contains(&n))),_=>false}}
+            if !literal(power)||!literal(hp) {return Err("arena-list phase stats require bounded signed literals".into());}
+        }
         if ability.target_resolver.as_ref().is_some_and(|r|r.card_type=="upgrade" && (r.is_multiple() || !matches!(ability.effect,Effect::Defeat {..}))) {return Err("upgrade selection supports only scalar defeat".into());}
         if ability.coordinate && !["constant","onAttack"].contains(&ability.trigger.as_str()) {return Err("Coordinate supports only constant or onAttack registrations".into());}
         if ability.then.as_ref().is_some_and(|a|a.coordinate) || ability.if_you_do.as_ref().is_some_and(|a|a.coordinate) {return Err("Coordinate cannot register on a continuation".into());}
@@ -888,6 +918,7 @@ impl Program {
                     _ => Err("card event groups do not support player targets".into()),
                 },
                 Target::Expression(e) => { card_expr(e,array)?; Ok(1) },
+                Target::ArenaList(_)=>Err("grouped arena lists require separate event-capacity witnesses".into()),
             }
         }
         fn walk(p: &Program, effect: &Effect, targets: usize, array: bool, depth: usize) -> Result<(usize, bool, bool), String> {
@@ -963,7 +994,7 @@ impl Program {
         }
         fn contains_select(e: &Effect) -> bool { match e { Effect::Select {..}=>true,Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}|Effect::Sequence {effects}=>effects.iter().any(contains_select),Effect::Conditional {on_true,on_false,..}=>contains_select(on_true)||on_false.as_deref().is_some_and(contains_select),_=>false } }
         fn primitive_captures_target(e: &Effect) -> bool {
-            fn target(t: &Target) -> bool { match t { Target::Name(n)=>n=="chosen",Target::Expression(e)=>target_dependent(e) } }
+            fn target(t: &Target) -> bool { match t { Target::Name(n)=>n=="chosen",Target::Expression(e)=>target_dependent(e),Target::ArenaList(_)=>true } }
             match e {
                 Effect::Damage {target:t,amount}|Effect::Heal {target:t,amount}|Effect::Draw {target:t,amount}|Effect::GiveShield {target:t,amount}|Effect::GiveExperience {target:t,amount}|Effect::ReadyResources {target:t,amount}|Effect::GainKeyword {target:t,amount,..}=>target(t)||target_dependent(amount),
                 Effect::ModifyStats {target:t,power,hp,..}=>target(t)||target_dependent(power)||target_dependent(hp),
@@ -1092,8 +1123,9 @@ impl Program {
             Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::ModifyStats { target, power, hp, duration } => {
+                if matches!(target,Target::ArenaList(_)) && depth!=0 {return Err("nested arena-list modifiers require explicit continuation witnesses".into());}
                 if duration != "phase" && !(self.trigger=="constant" && duration=="persistent") { return Err("only phase stat modifications execute".into()); }
-                target.validate()?;
+                if let Target::ArenaList(list)=target {list.validate_phase_stats()?;}else{target.validate()?;}
                 if duration=="persistent" {power.live_stat_bounds()?;hp.live_stat_bounds()?;}else{power.validate_number()?;hp.validate_number()?;}
                 self.instructions.push(Instruction::Apply(effect.clone()));
             }
@@ -1403,3 +1435,25 @@ mod tests {
 
 pub const CORE_KEYWORDS: [&str; 8] = ["sentinel", "overwhelm", "saboteur", "ambush", "grit", "shielded", "raid", "restore"];
 fn validate_keyword(keyword: &str) -> Result<(), String> { if CORE_KEYWORDS.contains(&keyword) { Ok(()) } else { Err(format!("unsupported keyword {keyword}")) } }
+
+#[cfg(test)]
+mod arena_list_phase_tests {
+    use super::*;
+    use serde_json::json;
+    fn ability()->serde_json::Value {json!({"trigger":"event","title":"Phase stats","effect":{"kind":"modifyStats","duration":"phase","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"const","value":true}},"power":{"kind":"const","value":1},"hp":{"kind":"const","value":1}}})}
+    fn compile(v:serde_json::Value)->Result<Program,String>{Program::compile(&serde_json::from_value(v).unwrap())}
+    #[test] fn accepts_only_witnessed_standalone_shape() {
+        assert!(compile(ability()).is_ok());
+        let mut v=ability();let mut predicate=json!({"kind":"const","value":true});
+        for _ in 0..20 {predicate=json!({"kind":"unary","op":"!","value":predicate});}
+        v["effect"]["target"]["predicate"]=predicate;assert!(compile(v).is_err(),"arena-list expressions retain the general depth bound");
+        let mut v=ability();v["trigger"]=json!("whenPlayed");assert!(compile(v).is_err());
+        let mut v=ability();v["then"]=json!({"title":"Continuation","effect":{"kind":"noAction"}});assert!(compile(v).is_err());
+        let mut v=ability();v["targetResolver"]=json!({"type":"unit"});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["game"]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"hasSomeTrait","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":"creature"}]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["power"]=json!({"kind":"ref","path":["target","damage"]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["kind"]=json!("damage");v["effect"].as_object_mut().unwrap().remove("duration");v["effect"].as_object_mut().unwrap().remove("power");v["effect"].as_object_mut().unwrap().remove("hp");v["effect"]["amount"]=json!({"kind":"const","value":1});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]=json!({"kind":"sequence","effects":[v["effect"].clone()]});assert!(compile(v).is_err());
+    }
+}

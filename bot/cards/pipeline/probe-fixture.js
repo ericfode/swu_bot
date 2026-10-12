@@ -134,7 +134,7 @@ async function fixture(env, pool, scenario, seed) {
             decks: [deck, deck],
             scenario: scenario.name,
             fixtureConstruction:
-                'Deterministic metadata-selected deck; at first natural action window move real source/target deck cards to specified zones, initialize disclosed damage, twelve real cards to resources; thereafter normal engine inputs only.',
+                'Deterministic metadata-selected deck; at first natural action window move real source/target deck cards to specified zones, initialize disclosed damage and exhausted state, twelve real cards to resources; thereafter normal engine inputs only.',
             constructionParameters: p,
         },
     ];
@@ -280,7 +280,7 @@ async function fixture(env, pool, scenario, seed) {
         assert.ok(settled, 'No post-activation experiment observation');
         if (!p.observeOnly && !p.negativeOnly) {
             assert.ok(witness.played, 'Missing actual source onCardPlayed');
-            assert.ok(witness.targetSelected, 'Missing positive target selection');
+            if (!p.autoTargets) assert.ok(witness.targetSelected, 'Missing positive target selection');
         }
         if (p.negativeOnly) assert.ok(witness.negativeChecked, 'No invalidity observation');
         if (p.waitForExpiry) assert.ok(witness.expired, 'Phase expiry not reached');
@@ -296,7 +296,13 @@ async function fixture(env, pool, scenario, seed) {
                 : p.chosenBase
                 ? after.bases[p.chosenBase === 'self' ? 0 : 1]
                 : after.targets[p.chosenTarget ?? 0];
-            assert.notDeepEqual(observed, before, 'Positive experiment must change observed target state');
+            if (p.autoTargets) {
+                for (const [i, initial] of witness.initial.targets.entries()) {
+                    const current = after.targets[i];
+                    if (p.selectedTargetIndices.includes(i)) assert.notDeepEqual(current, initial, 'Selected auto-target must change');
+                    else assert.deepEqual(current, initial, 'Excluded auto-target must stay unchanged');
+                }
+            } else assert.notDeepEqual(observed, before, 'Positive experiment must change observed target state');
             if (p.mutateSource) {
                 assert.notEqual(observed.damage, before.damage, 'Live mutation must change source damage');
                 assert.notEqual(observed.power, before.power, 'Live damage expression must change observed power');

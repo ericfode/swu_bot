@@ -28832,6 +28832,43 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "5236803699",
+      "internalName": "vanquish-the-legion",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TS26_048",
+      "setCodes": [
+        {
+          "number": 48,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 48,
+        "set": "TS26"
+      },
+      "subtitle": "",
+      "text": "Give each enemy ground unit –2/–2 for this phase.",
+      "title": "Vanquish the Legion",
+      "traits": [
+        "tactic"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "command",
@@ -30310,6 +30347,43 @@
       "aspects": [
         "vigilance"
       ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "3596811933",
+      "internalName": "disruptive-burst",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TWI_075",
+      "setCodes": [
+        {
+          "number": 75,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 75,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "Give each enemy unit –1/–1 for this phase.",
+      "title": "Disruptive Burst",
+      "traits": [
+        "tactic"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
       "cost": 5,
       "deployBox": null,
       "epicAction": null,
@@ -31203,6 +31277,43 @@
       "title": "Tactical Advantage",
       "traits": [
         "tactic"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "command"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "4916334670",
+      "internalName": "encouraging-leadership",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TWI_126",
+      "setCodes": [
+        {
+          "number": 126,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 126,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "Give each friendly unit +1/+1 for this phase.",
+      "title": "Encouraging Leadership",
+      "traits": [
+        "learned"
       ],
       "types": [
         "event"

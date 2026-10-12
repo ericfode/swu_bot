@@ -89,6 +89,31 @@ function titleHelper(node, ctx) {
         return name;
     }
     if(ts.isCallExpression(node)&&node.expression.getText(ctx.source).startsWith('TextHelper.')) {
+        if(node.expression.getText(ctx.source)==='TextHelper.resource') {
+            if(node.arguments.length!==1)fail(ctx,node,'unsupported-title-helper');
+            const amount=literal(node.arguments[0],ctx);
+            if(!Number.isSafeInteger(amount)||amount<0)fail(ctx,node,'title-helper-amount');
+            // Env defaults NODE_ENV to test: preserve the real headless labels.
+            return `${amount} resource${amount!==1?'s':''}`;
+        }
+        if(node.expression.getText(ctx.source)==='TextHelper.keyword') {
+            if(node.arguments.length!==1)fail(ctx,node,'unsupported-title-helper');
+            const input=unwrap(node.arguments[0]);
+            let keyword, amount;
+            if(ts.isObjectLiteralExpression(input)) {
+                const obj=object(input,ctx);
+                for(const key of obj.props.keys())if(!['keyword','amount'].includes(key))fail(ctx,input,'unsupported-title-helper');
+                if(!obj.props.has('keyword'))fail(ctx,input,'unsupported-title-helper');
+                keyword=literal(obj.props.get('keyword'),obj.ctx);
+                if(obj.props.has('amount')) {
+                    amount=literal(obj.props.get('amount'),obj.ctx);
+                    if(!Number.isSafeInteger(amount)||amount<0)fail(ctx,input,'title-helper-amount');
+                }
+            } else keyword=literal(input,ctx);
+            const keywords=Object.entries(ctx.enums).filter(([key])=>key.startsWith('KeywordName.')).map(([,value])=>value);
+            if(typeof keyword!=='string'||!keywords.includes(keyword))fail(ctx,input,'unsupported-title-helper');
+            return keyword.charAt(0).toUpperCase()+keyword.slice(1)+(amount===undefined?'':` ${amount}`);
+        }
         if(node.expression.getText(ctx.source)==='TextHelper.aspectList') {
             if(node.arguments.length<1||node.arguments.length>2)fail(ctx,node,'unsupported-title-helper');
             const values=literal(node.arguments[0],ctx), conjunction=node.arguments.length===2?literal(node.arguments[1],ctx):null;

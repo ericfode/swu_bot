@@ -54,7 +54,7 @@ compile. Unmatched sources and shared base files remain in the source inventory;
 test mocks are counted separately. A compiler exception fails the build rather
 than being relabeled as a normal unsupported pattern.
 
-Provenance covers all engine server TypeScript, every card JSON file, the mock
+Provenance covers all engine server TypeScript and JavaScript, every card JSON file, the mock
 list, compiler JavaScript, and its keyword-parser dependency. Outputs have no
 timestamps or absolute machine paths, so identical inputs produce identical
 bytes. The catalog also records the TypeScript parser version.
