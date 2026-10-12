@@ -12,8 +12,9 @@
  *   node bot/arena/push.js invites <login>[,<login>...]         who may sign in, besides ARENA_ADMINS (replaces the list;
  *                                                              needs SWU_WINDOW_TOKEN set to the admin token)
  *
- * SWU_WINDOW is the window's address (default https://swu-arena.fly.dev). In the project's cloud sessions the egress
- * proxy adds the push token for that host, so no thread holds it; elsewhere set SWU_WINDOW_TOKEN.
+ * SWU_WINDOW is the window's address (default https://swu-arena.fly.dev). The token is SWU_WINDOW_TOKEN, else
+ * ARENA_PUSH_TOKEN (how the project's newer cloud sessions get it), else none: where the egress proxy adds the token
+ * for that host, any placeholder works.
  * ladder.js starts `run --follow` for itself when SWU_WINDOW is set (followRun below).
  */
 const fs = require('fs');
@@ -23,7 +24,7 @@ const { spawn } = require('child_process');
 
 const BASE = String(process.env.SWU_WINDOW || 'https://swu-arena.fly.dev').replace(/\/+$/, '');
 // any value works where the proxy adds the token: it replaces the Authorization header
-const TOKEN = process.env.SWU_WINDOW_TOKEN || 'added-by-the-proxy';
+const TOKEN = process.env.SWU_WINDOW_TOKEN || process.env.ARENA_PUSH_TOKEN || 'added-by-the-proxy';
 const STATE = path.join(require('os').tmpdir(), 'swu-window-push');
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

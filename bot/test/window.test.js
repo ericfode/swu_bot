@@ -361,9 +361,9 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: ['opponent'] }))).status, 400, '"opponent" is no bot');
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, bots: ['rush'] }))).status, 400, 'every game seats one of its bots');
         // a seat outside the bots list is a person: stored as "opponent", the winner too, so no name is kept
-        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, games: [{ id: 'karabast-9', p1: 'alice', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1' }] }))).status, 200);
+        assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ ...sent, games: [{ id: 'karabast-9', p1: 'alice', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1', error: 'alice left the lobby' }] }))).status, 200);
         const kept = JSON.stringify((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result);
-        assert.ok(!kept.includes('alice') && kept.includes('"p1":"opponent"') && kept.includes('"winner":"opponent"'), kept);
+        assert.ok(!kept.includes('alice') && kept.includes('"p1":"opponent"') && kept.includes('"winner":"opponent"') && kept.includes('"error":"no result"'), kept);
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify(sent))).status, 200);
         assert.deepStrictEqual((await (await go('/api/docs/runs/karabast', { token: 'feed-secret' })).json()).result, { id: 'karabast', feed: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock'], gamesPerPairing: 1, games: [
             { id: 'karabast-1', p1: 'c-clock', p2: 'opponent', outcome: 'running', winnerSeat: null, winner: null, rounds: 2, steps: 40, error: null },
@@ -392,9 +392,18 @@ test('people are never named to readers: writers read back their own bytes, ever
     try {
         const friend = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
         const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
-        // pushed with the project token, which the window stores as sent
-        const run = { id: 'karabast-p', createdAt: '2026-10-12T00:00:00Z', bots: ['c-clock'], owner: 'x', games: [{ id: 'g1', p1: 'bob', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1', winner: 'bob' }] };
-        assert.strictEqual((await go('/api/docs/runs/karabast-p', { method: 'PUT', token: 'push-secret', body: JSON.stringify(run) })).status, 200);
+        // pushed with the project token: a run against people must name our bots, and is stored with the person as "opponent"
+        const run = { id: 'karabast-p', createdAt: '2026-10-12T00:00:00Z', bots: ['c-clock'], owner: 'x', games: [{ id: 'g1', p1: 'bob', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1', winner: 'bob' },
+            { id: 'g2', p1: 'c-clock', p2: 'bob', outcome: 'ERROR', error: 'bob disconnected' }, { id: 'g3', p1: 'c-clock', p2: 'bob', outcome: 'ERROR', error: 'TIME_FORFEIT bob' }] };
+        const putRun = (doc) => go(`/api/docs/runs/${doc.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify(doc) });
+        assert.strictEqual((await putRun({ ...run, bots: undefined })).status, 400, 'no bots list');
+        assert.strictEqual((await putRun({ ...run, bots: ['opponent'] })).status, 400);
+        assert.strictEqual((await putRun({ ...run, id: 'other', feed: 'sprite', bots: [] })).status, 400, 'a run marked as a feed\'s is a people run too');
+        assert.strictEqual((await putRun(run)).status, 200);
+        const stored = JSON.parse(w.store.getDoc('runs', 'karabast-p'));
+        assert.deepStrictEqual(stored.games.map((g) => [g.p1, g.p2, g.winner, g.error]), [['opponent', 'c-clock', 'opponent', undefined], ['c-clock', 'opponent', undefined, 'no result'], ['c-clock', 'opponent', undefined, 'TIME_FORFEIT opponent']]);
+        assert.strictEqual((await putRun({ id: 'ladder-2', createdAt: '2026-10-12T00:00:00Z', games: [{ id: 'g1', p1: 'zed-bot', p2: 'rush' }] })).status, 200, 'bot runs are stored as sent');
+        assert.match(w.store.getDoc('runs', 'ladder-2'), /"zed-bot"/);
         const lines = [{ t: 'header', players: [{ id: 'p1', bot: 'bob' }, { id: 'p2', bot: 'c-clock' }] }, { t: 'step', state: { players: { p1: { name: 'bob' }, p2: { name: 'c-clock' } } } }].map((x) => `${JSON.stringify(x)}\n`);
         const append = (at, body) => go(`/api/replays/karabast-p/g1?at=${at}`, { method: 'POST', token: 'push-secret', body, type: 'application/x-ndjson' });
         assert.strictEqual((await append(0, lines[0] + lines[1].slice(0, 20))).status, 200, 'the step line is still being written');
@@ -417,7 +426,6 @@ test('people are never named to readers: writers read back their own bytes, ever
             assert.ok(!doc.includes('bob') && doc.includes('"p1":"opponent"') && doc.includes('"winner":"opponent"'), doc);
         }
         assert.ok(!JSON.stringify((await (await go('/api/docs/runs?full=1', { cookie: friend })).json()).result).includes('bob'));
-        assert.ok((await (await go('/api/docs/runs/karabast-p', { token: 'push-secret' })).text()).includes('bob'), 'the writer reads what it wrote');
         for (const p of ['/replays/karabast-p/index.json', '/replays/karabast-p/games/g1.jsonl']) {
             assert.ok(!(await (await go(p, { cookie: friend })).text()).includes('bob'), p);
         }
@@ -514,9 +522,10 @@ test('push: the arena uplink sends the roster without token hashes, the bench in
         agents: [{ name: 'aa', title: 'aa', philosophy: '', start: 'rush', tokenHash: 'h1' }], bench: [{ name: 'bb', title: 'bb', tokenHash: 'h2' }] }));
     const w = makeWindow('w7');
     const { srv, close } = await serve(w);
+    const had = process.env.ARENA_PUSH_TOKEN;
     try {
         process.env.SWU_WINDOW = `http://127.0.0.1:${srv.address().port}`;
-        process.env.SWU_WINDOW_TOKEN = 'push-secret';
+        process.env.ARENA_PUSH_TOKEN = 'push-secret'; // how newer cloud sessions get the token
         delete require.cache[require.resolve('../arena/push')];
         await require('../arena/push').pushArena({ once: true });
         const roster = JSON.parse(w.store.getDoc('arena', 'roster'));
@@ -524,7 +533,8 @@ test('push: the arena uplink sends the roster without token hashes, the bench in
         assert.doesNotMatch(JSON.stringify(roster), /tokenHash/);
     } finally {
         delete process.env.SWU_WINDOW;
-        delete process.env.SWU_WINDOW_TOKEN;
+        if (had === undefined) delete process.env.ARENA_PUSH_TOKEN;
+        else process.env.ARENA_PUSH_TOKEN = had;
         await close();
     }
 });
