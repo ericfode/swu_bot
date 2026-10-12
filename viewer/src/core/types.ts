@@ -68,6 +68,8 @@ export interface End {
     outcome: string;
     error: string | null;
     by?: Seat | null;
+    /** With by, in runs on bot/game-pool.js: how that bot failed. */
+    faultKind?: 'load' | 'error' | 'time' | 'hang' | null;
     key?: string;
 }
 
@@ -89,6 +91,8 @@ export interface IndexGame {
     outcome: string;
     error: string | null;
     by?: Seat | null;
+    /** With by, in runs on bot/game-pool.js: how that bot failed. */
+    faultKind?: 'load' | 'error' | 'time' | 'hang' | null;
     ms: number;
     timing?: Record<Seat, Timing>;
     key?: string;

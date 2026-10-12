@@ -1,9 +1,9 @@
 //! Policies: given one decision, return the index of the action to take.
 
 mod greedy;
-mod greedy2;
+pub mod greedy2;
 mod random;
-mod search;
+pub mod search;
 
 use crate::cards::CardDb;
 use crate::protocol::{Decide, DistShare, Hello, Simulated};

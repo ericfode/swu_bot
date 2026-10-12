@@ -40,7 +40,8 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
 - `c/` — `c-clock`, a bot in C on that protocol (`make -C bot/c` first). See `c/README.md`.
 - The full interface and replay format are written up in `spec/`.
 - `jev/jev_bot.py` — `jev`: each move is picked by TypeSafe's Jev model (a Choice over the legal actions). See `jev/README.md`.
-- `rust/` — Rust bot (`swu-bot-rs`, policies `random`, `greedy`, `greedy2` and `search`) speaking the stdio protocol (v1, or v2 with simulations when offered); registered as `rust-<policy>` in `external-bots.json`. `greedy2` reads card stats from `forceteki/test/json`. Build with `cargo build --release --manifest-path bot/rust/Cargo.toml`, test with `cargo test --manifest-path bot/rust/Cargo.toml`, then `node bot/rust/check.js [gamesPerSeat] [startSeed] [cardJsonDir]` plays both against `random-a` on the real engine. Why a subprocess rather than WASM or a native addon: see `rust/README.md`.
+- `rust/` — Rust bot (`swu-bot-rs`, policies `random`, `greedy`, `greedy2` and `search`) speaking the stdio protocol (v1, or v2 with simulations when offered); registered as `rust-<policy>` in `external-bots.json`. `greedy2` reads card stats from `forceteki/test/json`. Build with `cargo build --release` at the repo root (Cargo workspace, binaries in `target/release/`), test with `cargo test --workspace`, then `node bot/rust/check.js [gamesPerSeat] [startSeed] [cardJsonDir]` plays both against `random-a` on the real engine. Why a subprocess rather than WASM or a native addon: see `rust/README.md`.
+- `rust-omni/` — `rust-omni`: rust-search with its playouts in the native rules simulator (`omni-rs/`), in-process and about 15 times faster per decision. It searches only games whose decks come from the simulator's card pool (`node bot/rust-omni/pool-decks.js` makes such decks for `ladder.js --decks`); other games it plays as rust-search. See `rust-omni/README.md`.
 - `clojure/` — `clj-forecast` (Clojure): plays each legal action on its own immutable board model and lets the opponent answer in a 3-ply alpha-beta search; card stats from `forceteki/test/json`. Needs Java only (`clojure/run.sh` fetches Clojure from Maven Central). `bot/clojure/run.sh test` runs its tests. See `clojure/README.md`.
 - `tools/synth-cards.js [outDir]` — writes a stand-in card-data folder (real card classes, invented stats, default `replays/.synth-cards`) for machines that cannot download card data. Pass the folder to `new Env(dir)` or as `cardJsonDir` above. Results on it are plumbing checks, not SWU balance numbers.
 
@@ -70,4 +71,19 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
   replays (~1 MB each). `--out` defaults to `/mnt/project-files/results` when it exists, else `results/`.
 - `--vs a,b,c` turns the ladder into a gauntlet: each `--bots` entry plays each `--vs` entry on the same seeds (not each
   other), which is what a parameter sweep needs: `node bot/ladder.js --bots ismcts-b0,ismcts-b1,ismcts-b4 --vs rush,heuristic --games 8`.
+- `--decks <file>` plays fixed deck lists instead of random decks (`decklists.js`; real tournament decks in `decks/`, see
+  `decks/README.md`). Seed `--seed + s` plays deck pair `s mod P` (P = n(n-1)/2), so the deal depends on the seed minus
+  `--seed`, not on the seed alone. The pairs come in round-robin rounds, so a run cut after whole rounds has given every
+  deck the same number of games (when n is odd, a deck that sat out a round has one seed less: 2 games less per bot
+  pair). Each bot keeps its deck when the seats swap; both games of a seed use the same engine seed, but the seats get
+  the same shuffles only when both decks have the same size. In one pass over the pairs each bot holds each deck about half the time, and the next pass
+  gives each bot the other deck of every pair. Give each bot pair whole passes (`--games` a multiple of 2P, e.g. 702 or
+  7020 for 27 decks), otherwise some pairs play more than others (the ladder warns). Index entries then carry
+  `decks: {p1, p2}`. A mirror (`--bots c-clock#a,c-clock#b`) cancels the bots out, so it rates the decks:
+  `analysis/realdeck/compare.js` compares that with human results.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
+
+## Arena (competing Claudes)
+- `bot/arena/` runs a competition where several Claude threads, each with its own research prompt, improve their own
+  bot. Bots live in the shared project folder (`/mnt/project-files/arena/`); `players/index.js` resolves `<agent>` and
+  `<agent>-v<N>` names through `arena/registry.js`. See `bot/arena/README.md`.

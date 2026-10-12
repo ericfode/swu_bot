@@ -47,6 +47,11 @@ Values are rational, because SWU's randomness is uniform over finite sets.
 | `value_affine`, `rescore_flips_lottery` | Transform | With chance (SWU shuffles), a score must be calibrated: affine rescoring is safe, a merely monotone one can flip a decision. |
 | `omniscience_bias`, `_min`, `_strict` | Information | Seeing hidden cards before choosing is worth ≥ choosing blind: omniscient evaluation overrates the side to move. |
 | `maximin_le_minimax`, `maximin_lt_minimax_pennies` | Information | Answering a simultaneous prompt in order favors whoever answers second. |
+| `perf_diff` | Hidden | Value minus what two policies get = expected sum, along their play, of each move's loss in true value. |
+| `regret_bound` | Hidden | If each player-1 move gives up at most δ of true value, player 1 keeps ≥ value − δ × (moves left) against anyone. |
+| `Info`, `Info.blind`, `blind_le_value`, `blind_gap` | Hidden | Information sets for player 1 and blind (observation-only) policies; the omniscient value overrates any blind player, by exactly its expected regret along play. |
+| `pimc_choice_loss`, `blind_choice_loss_ge`, `pimc_loss_nonneg` | Hidden | At one information set, PIMC's move loses exactly the omniscience bias in expectation, and no blind move loses less. |
+| `hiddenCoin_blind` | Hidden | A whole game where every blind policy gets 1/2 and the omniscient value is 1. |
 | `coinFlip_value` | Example | The assumptions are consistent (a concrete game satisfies them). |
 
 ## What is assumed, not proven
@@ -57,8 +62,39 @@ Values are rational, because SWU's randomness is uniform over finite sets.
   shuffle results are frozen per event or drawn independently.
 - **One fixed deal, perfect information.** Real SWU hides hands and deck order. Its true value
   is a Nash equilibrium of an imperfect-information game (exists by Nash/Kuhn); that is cited,
-  not formalized. The Information file only bounds the gap.
+  not formalized. The Information and Hidden files bound the gap: at one decision, and over a
+  whole game for a blind player 1. Not formalized: that the belief PIMC samples from equals the
+  true conditional distribution of hidden cards given the play so far, which is what turns
+  `perf_diff` plus `pimc_choice_loss` into "the omniscient value overrates PIMC by the expected
+  sum of the information sets' biases along play". Player 2's information sets are not modelled
+  (the opponent is omniscient or arbitrary).
 - **Simultaneous prompts** (mulligan, setup and regroup resourcing) have a mixed-strategy value
   between maximin and minimax (von Neumann's minimax theorem, cited, not formalized).
 - **Policy values are expected game results.** `polVal` is defined as that expectation by
   recursion; there is no separate formal model of sampled game trajectories.
+
+## Measured: the PIMC gap on real endgames (`measure/pimc_bias.py`)
+
+`bot/omni-rs/src/bin/omni-pimc.rs` takes the last 8 action windows of recorded games in the omni-rs
+card subset. For each window it re-deals what the side to move cannot see (the opponent's hand,
+face-down resources and deck together, keeping zone sizes, and the order of its own deck), 8 deals including the real
+one. It solves every legal move in every deal with the Rust prover (depth 12, 20,000 nodes per
+solve) and reports `E[best per deal] − best average`, the gap of `pimc_choice_loss`. Unproven moves
+count as anywhere in [0, 1], which gives bounds on the gap.
+
+```sh
+cargo build --release -p omni-rs
+node bot/omni/rs/trace.js --pool bot/omni/rs/pool.json --bots heuristic,heuristic --seeds 201-230 --out replays/pimc-traces --gzip
+target/release/omni-pimc replays/pimc-traces/*.jsonl.gz --deals 8 --last 8 --nodes 20000 > pimc.jsonl
+python3 theory/measure/pimc_bias.py pimc.jsonl
+```
+
+2026-10-11, 120 games (heuristic/heuristic, aggro/control, tempo/rush, random/heuristic; seeds
+201-230), 960 windows: 740 had a proven move on the real deal; in 529 the gap is pinned down, and
+it is 0 in all of them, so the sum over each game's settled windows is 0 (163 player-games).
+With the unsettled windows counted too, the sum is pinned to 0 for only 42 of 240 player-games;
+the rest have a nonzero upper bound or a window with no move proven. Hidden cards changed
+some move's value in 3 of the 740 windows; in the two that settled, a move that wins in every deal
+existed. The other 211 windows are not settled within the budget (gap between 0 and its upper bound). Limits:
+the subset has units only (no events, no leader actions), the windows that settle are mostly the
+last 4, and the belief ignores what the opponent's earlier choices reveal.

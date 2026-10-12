@@ -1,0 +1,38 @@
+# The Fly app swu-arena: the arena window today (bot/arena/window.js), the whole arena in phase B.
+# Deployed by .github/workflows/deploy-arena.yml on every merge to main that touches the image (Dockerfile).
+# Secrets (set with `fly secrets set ... -a swu-arena`): ARENA_PUSH_TOKEN (the project's push token; the same value
+# is the cloud environment's network secret for swu-arena.fly.dev), GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET (the
+# GitHub OAuth App for sign-in), optionally ARENA_ADMIN_TOKEN and ARENA_INVITES.
+app = "swu-arena"
+primary_region = "dfw"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ARENA_MODE = "window"
+  WINDOW_HOME = "/data/window"
+  ARENA_PUBLIC_URL = "https://swu-arena.fly.dev"
+  ARENA_ADMINS = "ericfode"
+
+[[mounts]]
+  source = "arena_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

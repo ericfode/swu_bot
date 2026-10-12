@@ -1,0 +1,13 @@
+# The arena image needs bot/arena, app, meta/atlas-kit.js, dashboard/site and studio (Dockerfile); keep the rest out
+*
+!package.json
+!bot/arena
+!app
+!meta/atlas-kit.js
+!dashboard/site
+!studio
+studio/node_modules
+studio/dist*
+studio/static-*
+studio/fixtures/replays
+app/dist

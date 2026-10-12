@@ -39,7 +39,9 @@ The process also needs memory outside that heap. If the workspace cannot provide
 enough memory, use a larger workspace rather than repeatedly retrying the build.
 
 The engine revision is the Git submodule pin, currently
-`2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a`. Setup never advances it to a remote
+`2ebed8ca2dce46ced42ca90de470e0f427c596dd` on `https://github.com/ericfode/forceteki`.
+An existing clone needs `git submodule sync && git submodule update --init` after
+the pin or its URL changes. Setup never advances it to a remote
 branch. Card data is fetched from a live upstream API and is not content-pinned
 by the npm lockfiles; matching code and dependencies alone cannot guarantee
 identical future card data. Record the source revision and card-data snapshot
@@ -48,9 +50,8 @@ when comparing experiments.
 `smoke` runs the existing root and analysis tests and builds both viewers.
 It requires a normal Git checkout with history (including commit `5123bc4`), Git
 itself, and local HTTP sockets for the mocked Perch integration tests.
-`gate` runs seeds 1–3 with and without recording. It prints results rather than
-asserting them; compare both runs and check for errors. The documented baseline
-is 594/342/486 steps with p2 winning each game.
+`gate` runs seeds 1–3 with and without recording and exits 1 unless both runs
+give 594/342/486 steps with p2 winning each game.
 
 ## Restricted networks and fixture development
 
@@ -124,7 +125,7 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run setup -- --skip-cards
 npm run smoke:source
 ```
 
-`smoke:source` runs bot and importer tests, analysis checks, and both viewer
+`smoke:source` runs bot, importer and app tests, analysis checks, and both viewer
 builds. It explicitly skips the one legacy-evaluation comparison that reads
 `5123bc4` from Git, and omits the Perch tooling suite (Git snapshots, parser
 cache, and local HTTP mocks). It is narrower than `smoke`; passing it does not

@@ -100,5 +100,129 @@ The eval.js columns are against the handicapped rush (see above): compare rows w
 later version learned "who is ahead" better (up to 74% on unseen games) and played worse. Choosing a move needs
 the difference between moves from one position, and the outcome label says almost nothing about that, least of
 all in lopsided games (adding rust-greedy2 games made it worse). The latent is fine: linear probes read the board
-back with R² 0.95 to 0.99. The weak part is the score on imagined futures. Next: self-play with exploration (same
-kind of position, different moves), search-based move labels, and rolling the predictor more than one step.
+back with R² 0.95 to 0.99. The weak part is the score on imagined futures, and the test below traces that to the predictor.
+
+## Which part is weak (oracle test)
+
+Swap one part for a perfect stand-in and see what changes. Protocol v2 lets a bot play moves on a private copy of
+the game (`sim`), so `jepa_bot.py --score` can replace the predictor's imagined future with the real one:
+
+- `--score sim-v` (`jepa-sim-v`): play each move on the copy, then score the real next position with the same
+  encoder and value head. A perfect predictor.
+- `--score sim-eval` (`jepa-sim-eval`): the same real position, scored by the position-evaluation thread's
+  `linear-deck-g4` (`bot/eval`) through `eval_helper.js`. A perfect predictor and a better judge.
+- `--log <file>` with any score mode writes all three score lists for every action window, and
+  `oracle_report.py` compares them.
+
+Inside a simulation the opponent plays like rush (the training data's main opponent; a stand-in that always
+passed made Pass look best). `--judge round` (default) plays both seats rush-style to the end of the round's action
+phase and scores my first decision after it; `--judge window` scores my next action window, which favours Pass and
+Claim Initiative because they get judged after the next draw. Moves that change nothing (a cancelled click) score 0.
+Simulations are only allowed at action windows, so the other 63% of decisions (targets, cards, resources) still
+use the imagined score, and a 2.5 s guard falls back to it when time runs short.
+
+```bash
+python3 bot/jepa/oracle_report.py jepa-h1.jsonl --json report.json
+```
+
+Results on jepa-h1's own action windows (about 2,600 per run; ladders `jepa-oracle-1-window` and
+`jepa-oracle-2` in `/mnt/project-files/results`):
+
+| Comparison | run 1 (window): agree / chance, ρ | run 2 (round): agree / chance, ρ |
+|---|---|---|
+| imagined vs real, same value head | 16% / 25%, −0.44 | 48% / 38%, 0.46 |
+| imagined vs real, evaluator | 15% / 25%, −0.50 | 31% / 36%, −0.18 |
+| value head vs evaluator, both real | 63% / 25%, 0.97 | 59% / 36%, 0.77 |
+| score spread over a position's moves, imagined / real | 3.3 / 16.9 pts | 3.0 / 4.2 pts |
+
+*Agree* = both rank the same move first; ρ = Spearman over one position's moves, median over positions.
+
+**The predictor is the weak part.** The encoder holds the board and the value head ranks real futures like the
+fitted evaluator. The imagined futures barely differ between moves, and their ranking is near or below chance. The
+likely cause is the data: each game shows one move per position, so the predictor learns roughly the average
+future. A better predictor should raise imagined-vs-real agreement toward the value-head-vs-evaluator level.
+
+Play does not separate the parts yet: the test bots were +83 / +161 Elo over jepa-h1 in run 1 and −110 / −160 in
+run 2, inside the ±100 noise of 10 games per pair, because most of their decisions still come from imagination.
+Next: train the predictor on simulated branches (every legal move from sampled positions) and re-run the
+comparison.
+
+## Training the predictor on branches (v1b)
+
+Eric's pick after the oracle test. `branches.js` plays rush and random games and, at a third of the action windows
+(the only place the engine rolls back exactly), plays every legal move on the same game with rollback, then both
+seats play on until the mover's next and 4th next decision. `branch_train.py` fine-tunes the predictor and the
+action encoder on those futures, with the encoder and value head frozen: the plain error plus the error after
+subtracting each position's mean over its moves (the part that tells moves apart), mixed with recorded games.
+
+```bash
+node bot/jepa/branches.js --games 1000 --workers 4 --seed 700000 --bots rush,random --out data/branch/rush-random
+node bot/jepa/branches.js --games 800 --workers 4 --seed 710000 --bots rush,rush --out data/branch/rush-rush
+python3 bot/jepa/branch_train.py --model bot/jepa/models/jepa-v1.safetensors --branches data/branch/rush-random \
+    data/branch/rush-rush --data data/jepa/mix-v1.npz --cache data/jepa/branches-v1.npz --out bot/jepa/models/jepa-v1b
+```
+
+1,800 games gave 30,417 branch points (about 5 moves each) in 40 minutes; 1% of games ended early on engine errors
+after a rollback (known engine bug 6 in the repo CLAUDE.md, plus bug 7). v1b and the numbers below predate
+`--w-terminal`: moves that end the game before their target (2% before the next decision, 8% before the 4th) were
+left out of training and of the held-out comparison; both now use the result. On 2,983 held-out branch points the
+imagined ranking of moves got much closer to the real one:
+
+| Score of a move vs the real future | v1 | v1b |
+|---|---|---|
+| next decision: median ρ, top-1 agree (chance 31%) | 0.43, 43% | 0.69, 61% |
+| 4 decisions on: median ρ, top-1 agree (chance 30%) | 0.40, 38% | 0.50, 43% |
+
+On the bots' own action windows in a ladder (`results/jepa-branch-2`, judged after the round as in the oracle
+test), v1b's ranking also agrees with `linear-deck-g4` on the real future (ρ 0.40, top-1 53% vs chance 48%) where
+v1's did not (ρ −0.16, 34% vs 38%).
+
+**It plays worse.** `jepa-branch-2` (10 games per pair): jepa-h1 1542 (29-31), jepa-b (v1b, mix 0.5) 1431,
+jepa-h1b (v1b, mix 0) 1378 (19-41); jepa-h1 beat jepa-h1b 9-1. v1b also changed the prompts branches cannot cover
+(same pick as v1 in 24% of resource prompts, 70% of target prompts, 48% of action windows), so `jepa-h1w` uses v1b
+in action windows only (`--window-model`). `jepa-branch-3` (20 games per pair): jepa-h1 1414, jepa-h1b 1299,
+jepa-h1w 1278; jepa-h1 beat jepa-h1w 13-7 and jepa-h1b 14-6. So the window choices themselves got worse.
+
+**Lesson: a predictor that tracks the real next position better does not make this planner stronger.** The
+yardstick from the oracle test (imagined-vs-real agreement) rose and play fell. This fits the oracle runs, where the
+perfect predictor (`jepa-sim-v`) was not clearly stronger either. What limits the bot is the planning itself: one
+move scored by V a short way ahead, while 63% of decisions are follow-up and resource prompts it plans no further.
+jepa-h1 (v1) stays the JEPA entry.
+
+## Planning whole moves (jepa-plan)
+
+`--score plan` (registered as `jepa-plan`: model v1, mix 0) plans each action window on the referee's copy of the game
+(protocol v2 simulations). Every candidate move (the 16 best by the imagined score, plus Pass) is played together with
+its follow-up choices: at each of my follow-up prompts (targets, cards, options) the best 6 options by the imagined
+score each get a line of their own, 3 at the second level, the greedy choice below that. The opponent's prompts inside
+my move are played like rush. A line stops where the move has settled: anyone's next action window, the end of the
+action phase, or the end of the game. The value head scores that real position (an opponent-to-act position is read as
+my action window, the same way for every move); a move's score is its best line. The chosen line's follow-up choices
+are replayed at the real follow-up prompts while the prompt matches; resource prompts and anything else use the
+imagined score.
+
+```bash
+node bot/ladder.js --bots jepa-plan,jepa-h1,rush,rust-greedy2,h@linear-deck-g4 --games 20 --workers 4 --seed 860000 --id jepa-plan-1
+```
+
+Result (`results/jepa-plan-1`, 20 games per pair, random decks, seats alternate):
+
+| Bot | W-L | BT Elo | vs jepa-plan |
+|---|---|---|---|
+| rust-greedy2 | 63-17 | 1723 | 17-3 |
+| h@linear-deck-g4 | 60-20 | 1693 | 16-4 |
+| rush | 37-43 | 1483 | 9-11 |
+| **jepa-plan** | 33-47 | 1446 | |
+| jepa-h1 | 7-73 | 1155 | 5-15 |
+
+Planning whole moves lifts the bot by about 290 Elo: it beats jepa-h1 15-5 and rush 11-9, where jepa-h1 went 0-20
+against rush in the same run (3-17 and 2-8 in the branch runs). It planned all 2,014 of its action windows, 9.6 lines
+and 0.32 s each (no window ran out of time); 1,308 follow-up prompts were answered from the plan, 29 plans were dropped
+because the real prompt differed, and 2,288 resource prompts plus about 200 other prompts used the imagined score.
+
+So the planning scope was the main limit. h@linear-deck-g4 plans the same way (each move with its first follow-up
+choices, judged where the move settles, `bot/players/heuristic.js`) and answers the other prompts with hand-written
+rules; it also runs inside the engine, so its lookahead sees the real hidden cards. The remaining gap (about 250 Elo)
+therefore sits in the scorer (value head against the fitted linear-deck evaluator) and the unplanned prompts, mostly
+resources, which simulations cannot reach (sims are allowed only in action windows). A run of the same planner scored
+by the linear-deck evaluator would measure the scorer's share. jepa-plan is now the JEPA entry.

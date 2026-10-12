@@ -23,7 +23,8 @@ function cardSummaries(frame) {
             return;
         }
         if (typeof x.uuid === 'string' && !out.has(x.uuid)) {
-            out.set(x.uuid, x);
+            // the Force token carries its flags in selectionState instead of on the summary
+            out.set(x.uuid, isObj(x.selectionState) ? { ...x, ...x.selectionState } : x);
         }
         for (const [k, v] of Object.entries(x)) {
             walk(v, k);
@@ -115,6 +116,22 @@ function decisionKey(frame, me, actions = legalActions(frame, me)) {
     return JSON.stringify([p.promptUuid ?? null, p.menuTitle ?? null, actions.map((a) => [a.kind, a.label, a.cardUuid ?? null, a.arg ?? null])]);
 }
 
+/** A legal random split for a distribute action: one point at a time onto targets with room left. */
+function randomSplit(a, rng) {
+    const { spec, targets, caps } = a;
+    const max = Math.min(spec.maxTargets ?? targets.length, targets.length);
+    const given = new Map();
+    for (let k = 0; k < spec.amount; k++) {
+        const open = targets.map((t, i) => i).filter((i) => (given.get(i) ?? 0) < caps[i] && (given.has(i) || given.size < max));
+        if (!open.length) {
+            break;
+        }
+        const i = open[Math.floor(rng() * open.length)];
+        given.set(i, (given.get(i) ?? 0) + 1);
+    }
+    return [...given].map(([i, amount]) => ({ id: targets[i], amount }));
+}
+
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -190,4 +207,4 @@ function makeScrubber(extraNames = []) {
     };
 }
 
-module.exports = { legalActions, gameMessage, decisionKey, cardSummaries, makeScrubber, remainingHp };
+module.exports = { legalActions, gameMessage, decisionKey, cardSummaries, makeScrubber, remainingHp, randomSplit };

@@ -1,4 +1,5 @@
 node_modules/
+/target/
 .env
 .env.*
 !.env.example
@@ -11,11 +12,17 @@ studio/fixtures/replays/
 studio/static-replays/
 studio/static-data/
 studio/dist-kit/
+studio/.check/
+studio/fixtures/lens-cases/golden/
+studio/fixtures/lens-cases/out/
 analysis/node_modules/
 analysis/.cache/
 analysis/out/
 results/
+arena-home/
 data/
+# the viewer keeps source code in studio/src/data
+!studio/src/data/
 __pycache__/
 .perch/*
 !.perch/closed.jsonl
@@ -25,3 +32,9 @@ __pycache__/
 .claude/worktrees/
 bot/c/swu-c
 bot/c/*.o
+
+# compiled bot bundles and their tools (bot/compiled)
+/build/
+
+# SWU Arena app builds (app/build.mjs)
+app/dist/

@@ -29,6 +29,12 @@ pub struct CardInfo {
     #[serde(default)]
     pub text: Option<String>,
     #[serde(default)]
+    pub deploy_box: Option<String>,
+    #[serde(default)]
+    pub epic_action: Option<String>,
+    #[serde(default)]
+    pub unique: bool,
+    #[serde(default)]
     pub arena: Option<String>,
     #[serde(default)]
     aspects: Option<Vec<String>>,

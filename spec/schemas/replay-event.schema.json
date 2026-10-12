@@ -608,6 +608,16 @@
           ],
           "description": "For ERROR: the seat whose bot caused it, which loses; null = engine or referee (added)."
         },
+        "faultKind": {
+          "enum": [
+            "load",
+            "error",
+            "time",
+            "hang",
+            null
+          ],
+          "description": "With by, in runs on bot/game-pool.js: how the bot failed (load, error, time cap, watchdog hang); null otherwise (added, optional)."
+        },
         "key": {
           "type": "string",
           "description": "The game's own secret key, in keyed games (added)."
