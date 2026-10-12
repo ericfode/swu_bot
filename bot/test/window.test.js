@@ -386,6 +386,49 @@ test('a feed token writes only what carries its name, and reads like a friend', 
     }
 });
 
+test('people are never named to readers: writers read back their own bytes, everyone else reads "a person"', async () => {
+    const w = makeWindow('w-people');
+    const { go, close } = await serve(w);
+    try {
+        const friend = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        // pushed with the project token, which the window stores as sent
+        const run = { id: 'karabast-p', createdAt: '2026-10-12T00:00:00Z', bots: ['c-clock'], owner: 'x', games: [{ id: 'g1', p1: 'bob', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1', winner: 'bob' }] };
+        assert.strictEqual((await go('/api/docs/runs/karabast-p', { method: 'PUT', token: 'push-secret', body: JSON.stringify(run) })).status, 200);
+        const lines = [{ t: 'header', players: [{ id: 'p1', bot: 'bob' }, { id: 'p2', bot: 'c-clock' }] }, { t: 'step', state: { players: { p1: { name: 'bob' }, p2: { name: 'c-clock' } } } }].map((x) => `${JSON.stringify(x)}\n`);
+        const append = (at, body) => go(`/api/replays/karabast-p/g1?at=${at}`, { method: 'POST', token: 'push-secret', body, type: 'application/x-ndjson' });
+        assert.strictEqual((await append(0, lines[0] + lines[1].slice(0, 20))).status, 200, 'the step line is still being written');
+        const read = async (who, from = 0) => {
+            const r = await go(`/api/replays/karabast-p/g1?from=${from}`, who);
+            return { text: await r.text(), size: Number(r.headers.get('x-size')) };
+        };
+        const first = await read({ cookie: friend });
+        assert.deepStrictEqual(first, { text: `${JSON.stringify({ t: 'header', players: [{ id: 'p1', bot: 'a person' }, { id: 'p2', bot: 'c-clock' }] })}\n`, size: first.text.length }, 'whole lines only');
+        assert.strictEqual((await read({ token: 'push-secret' })).text, lines[0] + lines[1].slice(0, 20), 'the writer reads its own bytes');
+        assert.strictEqual((await append(Buffer.byteLength(lines[0]) + 20, lines[1].slice(20))).status, 200);
+        const next = await read({ cookie: eric }, first.size);
+        assert.strictEqual(next.text, `${JSON.stringify({ t: 'step', state: { players: { p1: { name: 'a person' }, p2: { name: 'c-clock' } } } })}\n`, 'a reader tailing from its own offset gets the next whole line, masked; an admin\'s sign-in too');
+        assert.strictEqual(next.size, first.size + next.text.length);
+        assert.deepStrictEqual((await (await go('/api/replays/karabast-p?sizes=1', { cookie: friend })).json()).result, [{ id: 'g1', size: null }]);
+        assert.deepStrictEqual((await (await go('/api/replays/karabast-p?sizes=1', { token: 'push-secret' })).json()).result, [{ id: 'g1', size: Buffer.byteLength(lines.join('')) }]);
+        // the run document: the person's seat and win read "opponent"
+        for (const who of [{ cookie: friend }, { cookie: eric }]) {
+            const doc = JSON.stringify((await (await go('/api/docs/runs/karabast-p', who)).json()).result);
+            assert.ok(!doc.includes('bob') && doc.includes('"p1":"opponent"') && doc.includes('"winner":"opponent"'), doc);
+        }
+        assert.ok(!JSON.stringify((await (await go('/api/docs/runs?full=1', { cookie: friend })).json()).result).includes('bob'));
+        assert.ok((await (await go('/api/docs/runs/karabast-p', { token: 'push-secret' })).text()).includes('bob'), 'the writer reads what it wrote');
+        for (const p of ['/replays/karabast-p/index.json', '/replays/karabast-p/games/g1.jsonl']) {
+            assert.ok(!(await (await go(p, { cookie: friend })).text()).includes('bob'), p);
+        }
+        // bot-vs-bot runs are served exactly as stored
+        w.store.putReplay('ladder-1', 'g1', Buffer.from(lines[0]));
+        assert.strictEqual(await (await go('/api/replays/ladder-1/g1', { cookie: friend })).text(), lines[0]);
+    } finally {
+        await close();
+    }
+});
+
 test('the invite list can change without a deploy', async () => {
     const w = makeWindow('w4');
     const { go, close } = await serve(w);
@@ -646,6 +689,26 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
         assert.strictEqual((await call(tok.access_token, 'window_docs', { collection: 'admin', id: 'invites' })).error, true);
         assert.strictEqual((await call(tok.access_token, 'arena_versions', {})).error, true);
         assert.strictEqual((await go('/mcp', { token: tok.access_token })).status, 405, 'no event stream');
+        // a game against a person, sent with the person's name: the app never shows it, so neither does the MCP
+        w.store.putDoc('runs', 'karabast-x', JSON.stringify({ id: 'karabast-x', createdAt: '2026-10-12T00:00:00Z', bots: ['c-clock'], games: [{ id: 'k1', p1: 'c-clock', p2: 'alice', outcome: 'won', winnerSeat: 'p2', winner: 'alice' }] }));
+        w.store.putReplay('karabast-x', 'k1', Buffer.from(`${JSON.stringify({ t: 'header', players: [{ id: 'p1', name: 'p1', bot: 'c-clock' }, { id: 'p2', name: 'alice', bot: 'alice' }] })}\n${JSON.stringify({ t: 'step', state: { players: { p1: { name: 'c-clock' }, p2: { name: 'alice' } } } })}\n`));
+        assert.deepStrictEqual((await call(tok.access_token, 'window_replays', { run: 'karabast-x' })).value, [{ id: 'k1', size: null }]);
+        const masked = (await call(tok.access_token, 'window_replay', { run: 'karabast-x', game: 'k1' })).value;
+        assert.ok(!masked.text.includes('alice') && masked.text.includes('"bot":"a person"') && masked.text.includes('"p2":{"name":"a person"}'), masked.text);
+        assert.strictEqual(masked.size, Buffer.byteLength(masked.text));
+        assert.ok(!JSON.stringify((await call(tok.access_token, 'window_docs', { collection: 'runs', id: 'karabast-x' })).value).includes('alice'));
+        // slices start and end on whole characters, and read one after another they join back into the replay
+        w.store.putReplay('demo', 'u1', Buffer.from(`${JSON.stringify({ t: 'header', note: 'Ça, Ünlü, 星' })}\n`));
+        let joined = '', at = 0;
+        for (let n = 0; n < 40; n++) {
+            const s = (await call(tok.access_token, 'window_replay', { run: 'demo', game: 'u1', from: at, length: 3 })).value;
+            assert.ok(!s.text.includes('�'), JSON.stringify(s));
+            joined += s.text;
+            at = s.from + s.length;
+            if (at >= s.size) break;
+        }
+        assert.strictEqual(joined, `${JSON.stringify({ t: 'header', note: 'Ça, Ünlü, 星' })}\n`);
+        assert.strictEqual((await call(tok.access_token, 'window_replay', { run: 'demo', game: 'u1', from: 35, length: 1 })).value.text, '星', 'less than one character gives that character');
         // the token reads like a friend and never writes; an admin's token is no admin either
         assert.strictEqual((await go('/api/docs/runs/demo', { method: 'PUT', token: tok.access_token, body: '{}' })).status, 403);
         assert.strictEqual((await go('/api/share', { token: tok.access_token })).status, 403);

@@ -353,6 +353,81 @@ function scrub(x) {
     return x;
 }
 
+/**
+ * People are never named to readers. A run of games against people (one a feed sent, or an id starting "karabast", as
+ * app/src/model.cjs tells them apart) is stored as its writer sent it, and the programs that write (bearer tokens from
+ * feed up) read it back that way, so their sizes and offsets match what they wrote. Everyone else (a sign-in, a view
+ * link's guest, an MCP app) reads a copy where a seat outside the run's own bots list is "opponent" in the run document,
+ * and "a person" in a replay's header and on each board, as the app shows it.
+ */
+const PERSON = 'a person';
+const readsMasked = (who) => !(who.via === 'bearer' && atLeast(who.role, 'feed'));
+const peopleRun = (id, doc) => (typeof doc?.feed === 'string' && doc.feed !== '') || /^karabast(-|$)/.test(id);
+const oursOf = (doc) => new Set((Array.isArray(doc?.bots) ? doc.bots : []).filter((b) => b !== 'opponent'));
+
+function maskRun(doc) {
+    const ours = oursOf(doc);
+    if (!ours.size || !Array.isArray(doc.games)) {
+        return doc; // with no bots list the person cannot be told from the bot (the app shows such a run unmasked too)
+    }
+    const seat = (n) => (typeof n !== 'string' || ours.has(n) || n === 'draw' ? n : 'opponent');
+    return { ...doc, games: doc.games.map((g) => (g && typeof g === 'object' ? { ...g, p1: seat(g.p1), p2: seat(g.p2), ...('winner' in g ? { winner: seat(g.winner) } : {}) } : g)) };
+}
+
+/** A readers' copy of a document: a people run masked (above), and for friends without builder and thread names. */
+function readerDoc(ns, id, doc, who) {
+    const d = ns === 'runs' && doc && typeof doc === 'object' && readsMasked(who) && peopleRun(id, doc) ? maskRun(doc) : doc;
+    return atLeast(who.role, 'project') ? d : scrub(d);
+}
+
+/**
+ * A people game's replay as readers get it. The person's seat comes from the run's row for the game (a seat that is
+ * "opponent" or outside the bots list), or, before the run names the game, from the header (a player named "opponent"
+ * or outside the bots list). Whole lines only: a line still being written waits for its newline, so the copy only ever
+ * grows by whole lines and a reader's offsets stay valid while the game is played.
+ */
+function maskReplay(buf, doc, game) {
+    const ours = oursOf(doc);
+    const row = Array.isArray(doc?.games) ? doc.games.find((g) => g?.id === game) : null;
+    const outside = (n) => n === 'opponent' || (ours.size > 0 && !ours.has(n));
+    const isPerson = (p) => (row && typeof row[p.id] === 'string' ? outside(row[p.id]) : outside(p.bot));
+    const names = new Map(); // seat -> the names the header gave the person
+    const end = buf.lastIndexOf(10) + 1;
+    const lines = buf.subarray(0, end).toString('utf8').split('\n');
+    lines.pop();
+    const out = lines.map((line) => {
+        if (!line.includes('"header"') && ![...names.values()].some((ns) => ns.some((n) => line.includes(JSON.stringify(n))))) {
+            return line;
+        }
+        let e;
+        try {
+            e = JSON.parse(line);
+        } catch {
+            return line;
+        }
+        let changed = false;
+        if (e?.t === 'header' && Array.isArray(e.players)) {
+            e.players = e.players.map((p) => {
+                if (!p || typeof p !== 'object' || !isPerson(p)) {
+                    return p;
+                }
+                names.set(p.id, [p.bot, p.name].filter((n) => typeof n === 'string' && n !== '' && n !== p.id));
+                changed = true;
+                return { ...p, bot: PERSON, ...(typeof p.name === 'string' && p.name !== p.id ? { name: PERSON } : {}) };
+            });
+        }
+        for (const [seat, ns] of names) {
+            const pl = e?.state?.players?.[seat];
+            if (pl && ns.includes(pl.name)) {
+                pl.name = PERSON;
+                changed = true;
+            }
+        }
+        return changed ? JSON.stringify(e) : line;
+    });
+    return Buffer.from(out.length ? `${out.join('\n')}\n` : '', 'utf8');
+}
+
 /** The app's code, loaded once: the research loader, the Atlas kit and the app model. null when a part is missing. */
 function loadAppParts() {
     const first = (...ps) => ps.find((p) => p && fs.existsSync(p)) || null;
@@ -473,6 +548,37 @@ function createWindow(opts = {}) {
         }
     };
 
+    // a replay as this reader may see it (maskReplay above), or null; the last few masked copies are kept
+    const masked = new Map();
+    function replayFor(who, run, game) {
+        const buf = store.readReplay(run, game);
+        if (!buf || !readsMasked(who)) {
+            return buf;
+        }
+        const doc = parseOr(store.getDoc('runs', run), null);
+        if (!peopleRun(run, doc)) {
+            return buf;
+        }
+        const k = `${run}/${game}`;
+        const sig = crypto.createHash('sha256').update(buf).update(JSON.stringify([doc?.bots ?? null, Array.isArray(doc?.games) ? doc.games.find((g) => g?.id === game) ?? null : null])).digest('hex');
+        const hit = masked.get(k);
+        if (hit?.sig === sig) {
+            return hit.buf;
+        }
+        const out = maskReplay(buf, doc, game);
+        masked.delete(k);
+        masked.set(k, { sig, buf: out });
+        if (masked.size > 24) {
+            masked.delete(masked.keys().next().value);
+        }
+        return out;
+    }
+    // a run's replays with sizes; a people run's copies for readers are sized when each one is read (window_replay)
+    const replaySizes = (who, run) => {
+        const people = readsMasked(who) && peopleRun(run, parseOr(store.getDoc('runs', run), null));
+        return store.listReplays(run).map((id) => ({ id, size: people ? null : store.replaySize(run, id) }));
+    };
+
     // ---- /mcp: each person's own MCP client (Claude, Claude Code, Cursor...) signs in with GitHub through OAuth
     // (oauth.js) and reads as that person; the project token stays with bot/arena/mcp.js for pushing ----
     const oauth = createOAuth({ dir: path.join(home, 'auth'), auth });
@@ -501,21 +607,27 @@ function createWindow(opts = {}) {
                 }
                 const text = store.getDoc(collection, String(id));
                 need(text != null, 'not_found', `no ${collection}/${id}`);
-                return scrub(JSON.parse(text));
+                return readerDoc(collection, String(id), JSON.parse(text), ctx.who);
             } },
-        { name: 'window_replays', annotations: RO, description: "A run's recorded games (replays) and their sizes in bytes.", inputSchema: schema({ run: TYPE.string }, ['run']),
-            call: (ctx, { run }) => {
-                const r = String(run ?? '');
-                return store.listReplays(r).map((id) => ({ id, size: store.replaySize(r, id) }));
-            } },
+        { name: 'window_replays', annotations: RO, description: "A run's recorded games (replays) and their sizes in bytes (in a run against people, window_replay gives each size).", inputSchema: schema({ run: TYPE.string }, ['run']),
+            call: (ctx, { run }) => replaySizes(ctx.who, String(run ?? '')) },
         { name: 'window_replay', annotations: RO,
             description: `Part of one game's replay: JSON lines, a header, then one step per decision with the board (spec/replay-format.md in the swu_bot repo). Up to ${REPLAY_SLICE} bytes per call from byte \`from\`; size says how much there is.`,
             inputSchema: schema({ run: TYPE.string, game: TYPE.string, from: TYPE.integer, length: TYPE.integer }, ['run', 'game']),
             call: (ctx, { run, game, from = 0, length = REPLAY_SLICE }) => {
-                const buf = store.readReplay(String(run ?? ''), String(game ?? ''));
+                const buf = replayFor(ctx.who, String(run ?? ''), String(game ?? ''));
                 need(buf, 'not_found', `no replay ${run}/${game}`);
-                const a = Math.min(buf.length, Math.max(0, Number(from) || 0));
-                const slice = buf.subarray(a, Math.min(buf.length, a + Math.min(REPLAY_SLICE, Math.max(0, Number(length) || REPLAY_SLICE))));
+                // a slice starts and ends on whole characters, so slices read one after another (from + length) join
+                // back into the replay; length says how many bytes this one holds
+                const inside = (i) => i < buf.length && (buf[i] & 0xc0) === 0x80; // a UTF-8 continuation byte
+                let a = Math.min(buf.length, Math.max(0, Number(from) || 0));
+                while (inside(a)) a++;
+                let b = Math.min(buf.length, a + Math.min(REPLAY_SLICE, Math.max(1, Number(length) || REPLAY_SLICE)));
+                while (b > a && inside(b)) b--;
+                if (b === a && a < buf.length) {
+                    for (b = a + 1; inside(b); b++); // asked for less than one character: give that character
+                }
+                const slice = buf.subarray(a, b);
                 return { run, game, size: buf.length, from: a, length: slice.length, text: slice.toString('utf8') };
             } }
     ];
@@ -706,13 +818,14 @@ function createWindow(opts = {}) {
                 if (!id) {
                     const list = store.listDocs(ns);
                     if (q.full === '1') {
-                        return sendJson(res, 200, { result: list.map((d) => ({ ...d, doc: (friend ? scrub : (x) => x)(parseOr(store.getDoc(ns, d.id), null)) })) }, req);
+                        return sendJson(res, 200, { result: list.map((d) => ({ ...d, doc: readerDoc(ns, d.id, parseOr(store.getDoc(ns, d.id), null), who) })) }, req);
                     }
                     return sendJson(res, 200, { result: list }, req);
                 }
                 const text = store.getDoc(ns, id);
                 need(text != null, 'not_found', `no ${ns}/${id}`);
-                return friend ? sendJson(res, 200, { result: scrub(JSON.parse(text)) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
+                const doc = friend || (ns === 'runs' && readsMasked(who)) ? JSON.parse(text) : null;
+                return doc && (friend || (readsMasked(who) && peopleRun(id, doc))) ? sendJson(res, 200, { result: readerDoc(ns, id, doc, who) }, req) : sendText(res, req, 200, 'application/json', `{"result":${text}}`);
             }
             canWrite(who, ns, id);
             need(id, 'bad_request', 'use /api/docs/<collection>/<id>');
@@ -746,10 +859,9 @@ function createWindow(opts = {}) {
             need(parts.length <= 3 && run, 'not_found', 'use /api/replays/<run>[/<game>]');
             if (req.method === 'GET') {
                 if (!game) {
-                    const ids = store.listReplays(run);
-                    return sendJson(res, 200, { result: q.sizes === '1' ? ids.map((id) => ({ id, size: store.replaySize(run, id) })) : ids }, req);
+                    return sendJson(res, 200, { result: q.sizes === '1' ? replaySizes(who, run) : store.listReplays(run) }, req);
                 }
-                const buf = store.readReplay(run, game);
+                const buf = replayFor(who, run, game);
                 need(buf, 'not_found', `no replay ${run}/${game}`);
                 const from = Math.min(buf.length, Math.max(0, Number(q.from) || 0));
                 const to = q.length ? Math.min(buf.length, from + Math.max(0, Number(q.length) || 0)) : buf.length;
@@ -834,7 +946,8 @@ function createWindow(opts = {}) {
                         return '';
                     }
                 };
-                const text = rep[3] ? store.getDoc('runs', dec(rep[1])) : store.readReplay(dec(rep[1]), dec(rep[2]));
+                const runDoc = rep[3] ? parseOr(store.getDoc('runs', dec(rep[1])), null) : null;
+                const text = rep[3] ? runDoc && JSON.stringify(readerDoc('runs', dec(rep[1]), runDoc, who)) : replayFor(who, dec(rep[1]), dec(rep[2]));
                 return text == null ? sendText(res, req, 404, 'text/plain', 'not found') : sendText(res, req, 200, rep[3] ? 'application/json' : 'application/x-ndjson', text);
             }
             return sendText(res, req, 404, 'text/plain', 'not found');

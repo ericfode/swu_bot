@@ -666,7 +666,7 @@ async function syncApi() {
 }
 async function startApi() {
   S.files = apiFiles(); S.reader = apiReader(); S.api = true;
-  fetch('/api/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(j => { if (j?.result) { S.me = j.result; if (route().parts[0] === 'share') render(true); } }).catch(() => {});
+  fetch('/api/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(j => { if (j?.result) { S.me = j.result; const p = route().parts; if (p[0] === 'share' || (p[0] === 'arena' && p[1] === 'join')) render(true); } }).catch(() => {});
   $('livetext').textContent = 'Connecting to the arena…';
   try { await syncApi(); } catch (e) { S.api = false; S.files = null; S.reader = null; $('livetext').textContent = `Offline (${e?.message || 'error'}) · showing snapshot`; }
 }
