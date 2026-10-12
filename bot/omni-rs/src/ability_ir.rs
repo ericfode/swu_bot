@@ -740,7 +740,7 @@ impl Program {
             if literal_bytes > 1024 { return Err("context title aggregate literal bytes exceed capacity".into()); }
         }
 
-        if !["action", "whenPlayed", "whenDefeated", "onAttack", "event", "constant"]
+        if !["action", "whenPlayed", "whenDefeated", "onAttack", "onDefense", "event", "constant"]
             .contains(&ability.trigger.as_str())
         {
             return Err(format!("unsupported runtime trigger {}", ability.trigger));

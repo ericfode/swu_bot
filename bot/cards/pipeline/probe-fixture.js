@@ -137,6 +137,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'on-defense') return require('./on-defense-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'upgrade-return') return require('./upgrade-return-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'cost-query') return require('./cost-probe-fixture').fixture(env, pool, scenario, seed);
     const setup = await constructProbeFixture(env, pool, scenario, seed);
@@ -373,6 +374,8 @@ module.exports = {
     dependencies: [
         'bot/cards/pipeline/probes.js',
         'bot/cards/pipeline/probe-fixture.js',
+        'bot/cards/pipeline/on-defense-probes.js',
+        'bot/cards/pipeline/on-defense-probe-fixture.js',
         'bot/cards/pipeline/cost-probes.js',
         'bot/cards/pipeline/cost-probe-fixture.js',
         'bot/cards/pipeline/upgrade-return-probes.js',

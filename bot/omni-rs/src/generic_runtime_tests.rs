@@ -1946,3 +1946,82 @@ fn scalar_upgrade_return_rejects_unsupported_operations_in_every_continuation_se
         value[continuation]=json!({"title":"unsupported discard upgrade action","targetResolver":{"type":"upgrade","owner":"self","zone":"discard"},"effect":effect});let ability:crate::ability_ir::Ability=serde_json::from_value(value).unwrap();assert!(crate::ability_ir::Program::compile(&ability).unwrap_err().contains("upgrade selection supports only scalar defeat or return to hand"));
     }}
 }
+
+fn declaration(e:&Engine,mut s:State,attacker:CardId,defender:CardId)->State {
+    s.active=s.card(attacker).owner;s.source=attacker;s.decision=Decision::AttackTarget;
+    e.apply(&s,&e.card_action(&s,defender)).unwrap()
+}
+fn named_button(e:&Engine,s:&State,label:&str)->State {let a=e.legal_actions(s).into_iter().find(|a|a.label==label).unwrap_or_else(||panic!("missing {label}: {:?}",e.legal_actions(s)));e.apply(s,&a).unwrap()}
+#[test]
+fn defense_admission_is_generic_six_complete_cards_and_hidden_stays_rejected() {
+    let e=engine();for code in ["LOF_047","SHD_035","SOR_196","TS26_024","TWI_049","TWI_083"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+    assert!(e.rejected_cards().unwrap()["SEC_187"].contains("hidden"));eprintln!("State bytes={} (no storage growth for declaration windows)",std::mem::size_of::<State>());
+}
+#[test]
+fn defense_optional_uses_defender_owner_and_preserves_attack_while_prompting() {
+    let e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"JTL_212");let defender=unit(&e,&mut s,Seat::P1,"LOF_047");let base=s.players[0].base;
+    let s=declaration(&e,s,attacker,defender);assert_eq!(s.active,Seat::P1);assert_eq!(s.source,defender);assert_eq!(s.decision,Decision::AbilityOptional);assert!(s.card(attacker).exhausted);assert_eq!((s.attack_source,s.attack_defender),(attacker,defender));assert_eq!(e.is_attacking(&s,attacker),true);assert_eq!(e.is_defending(&s,defender),true);
+    let passed=named_button(&e,&s,"Pass");assert_eq!(passed.card(defender).experience,0);assert_eq!(passed.card(base).damage,0);
+    let triggered=named_button(&e,&s,"Trigger");assert_ne!(triggered.card(defender).experience,0);assert_eq!(triggered.card(base).damage,0);assert_eq!(triggered.attack_source,0);assert_eq!(triggered.death_depth,0);
+}
+#[test]
+fn defense_joint_owner_priority_is_action_player_even_when_initiative_is_opponent() {
+    let e=engine();let mut s=board(&e);s.initiative=Seat::P1;let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let defender=unit(&e,&mut s,Seat::P1,"SOR_196");s.card_mut(defender).exhausted=true;let own=s.players[1].base;s.card_mut(own).damage=4;let restoration=add(&e,&mut s,Seat::P2,"HMW_096");e.attach(&mut s,restoration,attacker);
+    let started=declaration(&e,s,attacker,defender);assert_eq!(started.decision,Decision::DeathPlayer);assert_eq!(started.active,Seat::P2);
+    for label in ["You","Opponent"] {let done=named_button(&e,&started,label);assert_eq!(done.card(own).damage,2);assert!(!done.card(defender).exhausted);assert_eq!(done.death_depth,0);assert_eq!(done.attack_source,0);}
+}
+#[test]
+fn defense_saboteur_feasibility_and_resolution_survive_other_owner_optional_prompt() {
+    let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"JTL_212");let defender=unit(&e,&mut s,Seat::P1,"LOF_047");e.definitions[s.card(attacker).def as usize].flags|=SABOTEUR;e.create_token(&mut s,defender,false).unwrap();e.create_token(&mut s,defender,false).unwrap();let started=declaration(&e,s,attacker,defender);assert_eq!(started.decision,Decision::DeathPlayer);
+    for priority in ["You","Opponent"] {let mut done=named_button(&e,&started,priority);assert_eq!(done.active,Seat::P1);assert_eq!(done.decision,Decision::AbilityOptional);done=named_button(&e,&done,"Trigger");assert_eq!(done.card(defender).shield,0);assert_ne!(done.card(defender).experience,0);assert_eq!(done.death_depth,0);e.validate_attachment_links(&done).unwrap();}
+}
+#[test]
+fn defense_mandatory_token_registration_survives_source_removed_by_attack_trigger() {
+    // Synthetic attack registration isolates capture-vs-resolution; pipeline
+    // witnesses use the pinned actual attacker and actual defender definitions.
+    for code in ["TWI_049","TWI_083"] {let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let defender=unit(&e,&mut s,Seat::P1,code);
+        death_program(&mut e,&s,attacker,json!({"trigger":"onAttack","title":"remove defender","targetResolver":{"type":"unit","owner":"opponent","zone":"arena"},"effect":{"kind":"defeat","target":"chosen"}}));
+        let started=declaration(&e,s,attacker,defender);assert_eq!(started.decision,Decision::DeathPlayer);let picked=named_button(&e,&started,"You");assert_eq!(picked.decision,Decision::AbilityTarget);
+        let done=e.apply(&picked,&e.card_action(&picked,defender)).unwrap();assert_eq!(done.players[0].ground.len,1);assert!(done.players[0].discard.contains(defender));assert_eq!(done.players[1].ground.len,1);assert_eq!(done.death_depth,0);
+    }
+}
+#[test]
+fn defense_initial_attack_stat_death_joins_one_declaration_owner_window() {
+    // Synthetic instance diagnostics mirror the independently recorded engine
+    // attack-aura boundary. They are not printed-card acceptance evidence.
+    let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let defender=unit(&e,&mut s,Seat::P1,"TWI_049");let own_draw=deck_card(&e,&mut s,Seat::P1);let enemy_draw=deck_card(&e,&mut s,Seat::P2);
+    death_program(&mut e,&s,defender,draw_death(false));death_program(&mut e,&s,attacker,json!({"trigger":"constant","title":"SYNTHETIC attack aura","condition":{"kind":"query","name":"isAttacking","receiver":{"kind":"ref","path":["source"]},"args":[]},"targetResolver":{"owner":"opponent","type":"unit","zone":"arena"},"effect":{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"const","value":0},"hp":{"kind":"const","value":-1}}}));death_program(&mut e,&s,attacker,json!({"trigger":"onAttack","title":"SYNTHETIC attacker draw","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}}));
+    s.card_mut(defender).damage=e.hp(&s,defender)-1;let started=declaration(&e,s,attacker,defender);assert!(started.players[0].discard.contains(defender));assert_eq!(started.active,Seat::P2);assert_eq!(started.decision,Decision::DeathPlayer);
+    for priority in ["You","Opponent"] {let chosen=named_button(&e,&started,priority);assert_eq!(chosen.decision,Decision::DeathOrder);assert_eq!(chosen.active,Seat::P1);let labels:Vec<_>=e.legal_actions(&chosen).iter().map(|a|a.label.clone()).collect();assert!(labels.contains(&"Create a Clone Trooper token.".to_string()));assert!(labels.contains(&"Draw a card".to_string()));assert_eq!(chosen.players[1].hand.contains(enemy_draw),priority=="You");let done=named_button(&e,&chosen,"Create a Clone Trooper token.");assert!(done.players[0].hand.contains(own_draw));assert!(done.players[1].hand.contains(enemy_draw));assert_eq!(done.players[0].ground.len,1);assert_eq!(done.death_depth,0);}
+}
+#[test]
+fn defense_metadata_scope_rejects_unwitnessed_token_leader_upgrade_and_front_sources() {
+    let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    for (types,base) in [(json!(["unit","token"]),"TokenUnitCard"),(json!(["leader"]),"LeaderUnitCard"),(json!(["upgrade"]),"UpgradeCard"),(json!(["base"]),"BaseCard"),(json!(["event"]),"EventCard"),(json!(["unit"]),"UnknownUnitBase")] {
+        let mut value=original.clone();let entry=value["cards"].as_array_mut().unwrap().iter_mut().find(|x|x["setCode"]=="TWI_049").unwrap();entry["card"]["types"]=types;entry["baseClass"]=json!(base);let engine=Engine::from_catalogue_value(&value).unwrap();assert!(engine.rejected_cards().unwrap()["TWI_049"].contains("ordinary nonleader unit"));
+    }
+}
+#[test]
+fn defense_all_ineffective_window_skips_order_but_effective_other_owner_keeps_both_choices() {
+    let e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let defender=unit(&e,&mut s,Seat::P1,"SOR_196");let restoration=add(&e,&mut s,Seat::P2,"HMW_096");e.attach(&mut s,restoration,attacker);let base=s.players[1].base;
+    let mut effective=s;s.card_mut(base).damage=0;let ineffective=declaration(&e,s,attacker,defender);assert_ne!(ineffective.decision,Decision::DeathPlayer);assert_eq!(ineffective.death_depth,0);
+    effective.card_mut(base).damage=4;let effective=declaration(&e,effective,attacker,defender);assert_eq!(effective.decision,Decision::DeathPlayer);assert_eq!(effective.active,Seat::P2);assert_eq!(e.legal_actions(&effective).iter().map(|a|a.label.as_str()).collect::<Vec<_>>(),vec!["You","Opponent"]);
+}
+#[test]
+fn defense_selected_attack_stat_death_nests_before_remaining_declaration_entries() {
+    // Optional synthetic death draw provides an observable pause at the same
+    // child-event boundary recorded with mandatory draw by the engine diagnostic.
+    let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let defender=unit(&e,&mut s,Seat::P1,"TWI_049");let own_draw=deck_card(&e,&mut s,Seat::P1);let enemy_draw=deck_card(&e,&mut s,Seat::P2);death_program(&mut e,&s,defender,draw_death(true));
+    death_program(&mut e,&s,attacker,json!({"trigger":"onAttack","title":"SYNTHETIC lower defender HP","targetResolver":{"type":"unit","owner":"opponent","zone":"arena"},"effect":{"kind":"modifyStats","target":"chosen","duration":"phase","power":{"kind":"const","value":0},"hp":{"kind":"const","value":-1}}}));death_program(&mut e,&s,attacker,json!({"trigger":"onAttack","title":"SYNTHETIC attacker draw","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}}));
+    s.card_mut(defender).damage=e.hp(&s,defender)-1;let started=declaration(&e,s,attacker,defender);let owner=named_button(&e,&started,"You");assert_eq!(owner.decision,Decision::DeathOrder);let target=named_button(&e,&owner,"SYNTHETIC lower defender HP");let paused=e.apply(&target,&e.card_action(&target,defender)).unwrap();
+    assert_eq!(paused.active,Seat::P1);assert_eq!(paused.decision,Decision::AbilityOptional);assert_eq!(paused.death_depth,2);assert!(paused.players[0].discard.contains(defender));assert_eq!(paused.players[0].ground.len,0);assert!(!paused.players[1].hand.contains(enemy_draw));assert_eq!((paused.attack_source,paused.attack_defender),(attacker,defender));
+    let done=named_button(&e,&paused,"Trigger");assert!(done.players[0].hand.contains(own_draw));assert!(done.players[1].hand.contains(enemy_draw));assert_eq!(done.players[0].ground.len,1);assert_eq!(done.death_depth,0);
+}
+#[test]
+fn defense_synthetic_return_redirects_live_overwhelm_without_admitting_hidden_card() {
+    for overwhelm in [false,true] {for priority in ["You","Opponent"] {let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let defender=unit(&e,&mut s,Seat::P1,"LOF_254");let base=s.players[0].base;let power=e.power(&s,attacker,false);
+        if overwhelm {e.definitions[s.card(attacker).def as usize].flags|=OVERWHELM;}
+        death_program(&mut e,&s,defender,json!({"trigger":"onDefense","title":"SYNTHETIC return self","effect":{"kind":"returnToHand","target":"self"}}));death_program(&mut e,&s,attacker,json!({"trigger":"onAttack","title":"SYNTHETIC live power boost","effect":{"kind":"modifyStats","target":"self","duration":"phase","power":{"kind":"const","value":2},"hp":{"kind":"const","value":0}}}));
+        let started=declaration(&e,s,attacker,defender);assert_eq!(started.decision,Decision::DeathPlayer);let done=named_button(&e,&started,priority);assert!(done.players[0].hand.contains(defender));assert_eq!(done.card(defender).damage,0);assert_eq!(done.card(base).damage,if overwhelm {power+2}else{0});assert_eq!(done.attack_source,0);assert_eq!(done.death_depth,0);
+    }}
+}

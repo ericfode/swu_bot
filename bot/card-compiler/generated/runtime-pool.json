@@ -16227,6 +16227,47 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "2134957922",
+      "internalName": "t6-shuttle-1974#stay-close",
+      "keywords": [],
+      "power": 3,
+      "rules": "\"When this unit is attacked\" triggers at the same time as \"On Attack\" abilities.\nOn Defense abilities trigger when this unit is chosen as the defender for an attack, in the same window as the attacker's On Attack abilities.\n",
+      "setCode": "LOF_047",
+      "setCodes": [
+        {
+          "number": 47,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 47,
+        "set": "LOF"
+      },
+      "subtitle": "Stay Close",
+      "text": "When this unit is attacked (before damage is dealt): You may give an Experience token to this unit.",
+      "title": "T-6 Shuttle 1974",
+      "traits": [
+        "fringe",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "vigilance",
@@ -23230,6 +23271,49 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "villainy",
+        "vigilance"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 5,
+      "id": "8228196561",
+      "internalName": "clan-saxon-gauntlet",
+      "keywords": [
+        "sentinel"
+      ],
+      "power": 4,
+      "rules": "When this unit is attacked” triggers at the same time as “On Attack” abilities.\nOn Defense abilities trigger when this unit is chosen as the defender for an attack, in the same window as the attacker's On Attack abilities. / updated templating\n",
+      "setCode": "SHD_035",
+      "setCodes": [
+        {
+          "number": 35,
+          "set": "SHD"
+        }
+      ],
+      "setId": {
+        "number": 35,
+        "set": "SHD"
+      },
+      "subtitle": "",
+      "text": "Sentinel (Units in this arena can't attack your non-Sentinel units or your base.)\nWhen this unit is attacked: You may give an Experience token to a unit (before damage is dealt).",
+      "title": "Clan Saxon Gauntlet",
+      "traits": [
+        "mandalorian",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "villainy",
@@ -28053,6 +28137,48 @@
       "arena": "ground",
       "aspects": [
         "cunning",
+        "heroism"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 6,
+      "id": "8918765832",
+      "internalName": "chewbacca#loyal-companion",
+      "keywords": [
+        "sentinel"
+      ],
+      "power": 3,
+      "rules": "“When this unit is attacked” triggers at the same time as “On Attack” abilities.\nOn Defense abilities trigger when this unit is chosen as the defender for an attack, in the same window as the attacker's On Attack abilities.\n",
+      "setCode": "SOR_196",
+      "setCodes": [
+        {
+          "number": 196,
+          "set": "SOR"
+        }
+      ],
+      "setId": {
+        "number": 196,
+        "set": "SOR"
+      },
+      "subtitle": "Loyal Companion",
+      "text": "Sentinel (Units in this arena can't attack your non-Sentinel units or your base.)\n\nWhen this unit is attacked: Ready him.",
+      "title": "Chewbacca",
+      "traits": [
+        "underworld",
+        "wookiee"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
         "cunning"
       ],
       "cost": 5,
@@ -29095,6 +29221,49 @@
         "republic",
         "clone",
         "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "command",
+        "aggression"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "1109370851",
+      "internalName": "sundari-gauntlet",
+      "keywords": [
+        "sentinel"
+      ],
+      "power": 6,
+      "rules": "“On Defense” abilities trigger at the same time as “On Attack” abilities.\n",
+      "setCode": "TS26_024",
+      "setCodes": [
+        {
+          "number": 24,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 24,
+        "set": "TS26"
+      },
+      "subtitle": "",
+      "text": "Sentinel (Enemy units in this arena must attack a Sentinel when they attack you.)\nOn Defense: Deal 1 damage to your base.",
+      "title": "Sundari Gauntlet",
+      "traits": [
+        "mandalorian",
+        "vehicle",
+        "transport"
       ],
       "types": [
         "unit"
@@ -30260,6 +30429,47 @@
         "vigilance",
         "heroism"
       ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 7,
+      "id": "4541556921",
+      "internalName": "knight-of-the-republic",
+      "keywords": [],
+      "power": 4,
+      "rules": "“When this unit is attacked” triggers at the same time as “On Attack” abilities.\nOn Defense abilities trigger when this unit is chosen as the defender for an attack, in the same window as the attacker's On Attack abilities.\n",
+      "setCode": "TWI_049",
+      "setCodes": [
+        {
+          "number": 49,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 49,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "When this unit is attacked: Create a Clone Trooper token.",
+      "title": "Knight of the Republic",
+      "traits": [
+        "force",
+        "jedi",
+        "republic"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
       "cost": 7,
       "deployBox": null,
       "epicAction": null,
@@ -31005,6 +31215,46 @@
         "separatist",
         "droid",
         "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 4,
+      "id": "3876951742",
+      "internalName": "generals-guardian",
+      "keywords": [],
+      "power": 4,
+      "rules": "“When this unit is attacked” triggers at the same time as “On Attack” abilities.\nOn Defense abilities trigger when this unit is chosen as the defender for an attack, in the same window as the attacker's On Attack abilities.\n",
+      "setCode": "TWI_083",
+      "setCodes": [
+        {
+          "number": 83,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 83,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "When this unit is attacked: Create a Battle Droid token.",
+      "title": "General's Guardian",
+      "traits": [
+        "separatist",
+        "droid"
       ],
       "types": [
         "unit"

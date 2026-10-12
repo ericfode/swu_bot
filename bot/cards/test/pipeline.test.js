@@ -144,3 +144,15 @@ test('upgrade return mutations challenge movement, inventory, optionality and so
     for (const id of ['HMW_236','SEC_200'])
         assert.ok(byId(id).some(c => c.label === 'unit-type-instead-of-upgrade'));
 });
+
+
+test('defense trigger mutations challenge registration, mandatory effects and controller-relative results',()=>{
+    const changes=id=>mutants(catalogue.cards.find(c=>c.setCode===id));
+    for(const id of ['LOF_047','SHD_035','SOR_196','TS26_024','TWI_049','TWI_083'])
+        assert.ok(changes(id).some(c=>c.label==='attack-instead-of-defense'));
+    assert.ok(changes('SOR_196').some(c=>c.label==='reverse-readiness'));
+    assert.ok(changes('TS26_024').some(c=>c.label==='swap-effect-owner'));
+    assert.ok(changes('SHD_035').some(c=>c.label==='shield-instead-of-experience'));
+    for(const label of ['optional-instead-of-mandatory','reverse-token-readiness','wrong-token-type','swap-effect-owner'])
+        assert.ok(changes('TWI_049').some(c=>c.label===label));
+});

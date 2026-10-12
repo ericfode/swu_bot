@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 339,
     "nativeAdapters": 2,
-    "sourceIr": 504
+    "sourceIr": 510
   },
   "runtimeAdmittedCards": [
     {
@@ -2007,6 +2007,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "t6-shuttle-1974#stay-close",
+      "setCode": "LOF_047"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "jedi-guardian",
       "setCode": "LOF_049"
     },
@@ -2882,6 +2887,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "clan-saxon-gauntlet",
+      "setCode": "SHD_035"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "supreme-leader-snoke#shadow-ruler",
       "setCode": "SHD_037"
     },
@@ -3477,6 +3487,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "chewbacca#loyal-companion",
+      "setCode": "SOR_196"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "cantina-bouncer",
       "setCode": "SOR_202"
     },
@@ -3614,6 +3629,11 @@
       "implementation": "sourceIr",
       "internalName": "501st-veteran",
       "setCode": "TS26_020"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "sundari-gauntlet",
+      "setCode": "TS26_024"
     },
     {
       "implementation": "sourceIr",
@@ -3762,6 +3782,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "knight-of-the-republic",
+      "setCode": "TWI_049"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "luminara-unduli#softspoken-master",
       "setCode": "TWI_050"
     },
@@ -3854,6 +3879,11 @@
       "implementation": "sourceIr",
       "internalName": "droid-commando",
       "setCode": "TWI_081"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "generals-guardian",
+      "setCode": "TWI_083"
     },
     {
       "implementation": "sourceIr",
@@ -4236,7 +4266,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 845,
+  "runtimeAdmittedCount": 851,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -7999,11 +8029,6 @@
       "setCode": "LOF_045"
     },
     {
-      "internalName": "t6-shuttle-1974#stay-close",
-      "reason": "t6-shuttle-1974#stay-close: unsupported runtime trigger onDefense",
-      "setCode": "LOF_047"
-    },
-    {
       "internalName": "itinerant-warrior",
       "reason": "itinerant-warrior: compiler rejected \"itinerant-warrior\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/ItinerantWarrior.ts\",\"line\":18,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
       "setCode": "LOF_048"
@@ -9315,7 +9340,7 @@
     },
     {
       "internalName": "general-grievous#scuttling-to-safety",
-      "reason": "general-grievous#scuttling-to-safety: unsupported runtime trigger onDefense",
+      "reason": "unimplemented runtime keyword hidden",
       "setCode": "SEC_187"
     },
     {
@@ -9697,11 +9722,6 @@
       "internalName": "synara-san#loyal-to-kragan",
       "reason": "synara-san#loyal-to-kragan: compiler rejected \"synara-san#loyal-to-kragan\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":26,\"file\":\"game/cards/02_SHD/units/SynaraSanLoyalToKragan.ts\",\"line\":21,\"message\":\"unsupported-field:ability\",\"pattern\":\"unsupported-field:ability\"}]",
       "setCode": "SHD_033"
-    },
-    {
-      "internalName": "clan-saxon-gauntlet",
-      "reason": "clan-saxon-gauntlet: unsupported runtime trigger onDefense",
-      "setCode": "SHD_035"
     },
     {
       "internalName": "first-light#headquarters-of-the-crimson-dawn",
@@ -11074,11 +11094,6 @@
       "setCode": "SOR_193"
     },
     {
-      "internalName": "chewbacca#loyal-companion",
-      "reason": "chewbacca#loyal-companion: unsupported runtime trigger onDefense",
-      "setCode": "SOR_196"
-    },
-    {
       "internalName": "lando-calrissian#responsible-businessman",
       "reason": "lando-calrissian#responsible-businessman: unsupported target zone Some(\"resource\")",
       "setCode": "SOR_197"
@@ -11337,11 +11352,6 @@
       "internalName": "assault-lander-laat",
       "reason": "assault-lander-laat: compiler rejected \"assault-lander-laat\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/07_TS26/units/AssaultLanderLAAT.ts\",\"line\":23,\"message\":\"trigger-alias-hook:onPhaseStarted\",\"pattern\":\"trigger-alias-hook:onPhaseStarted\"}]",
       "setCode": "TS26_023"
-    },
-    {
-      "internalName": "sundari-gauntlet",
-      "reason": "sundari-gauntlet: unsupported runtime trigger onDefense",
-      "setCode": "TS26_024"
     },
     {
       "internalName": "fiery-alliance",
@@ -11739,11 +11749,6 @@
       "setCode": "TWI_047"
     },
     {
-      "internalName": "knight-of-the-republic",
-      "reason": "knight-of-the-republic: unsupported runtime trigger onDefense",
-      "setCode": "TWI_049"
-    },
-    {
       "internalName": "for-the-republic",
       "reason": "for-the-republic: compiler rejected \"for-the-republic\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/03_TWI/upgrades/ForTheRepublic.ts\",\"line\":16,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":22,\"file\":\"game/cards/03_TWI/upgrades/ForTheRepublic.ts\",\"line\":24,\"message\":\"unsupported-attached-keyword-field:ability\",\"pattern\":\"unsupported-attached-keyword-field:ability\"}]",
       "setCode": "TWI_051"
@@ -11807,11 +11812,6 @@
       "internalName": "magnaguard-wing-leader",
       "reason": "magnaguard-wing-leader: compiler rejected \"magnaguard-wing-leader\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":20,\"file\":\"game/cards/03_TWI/units/MagnaguardWingLeader.ts\",\"line\":18,\"message\":\"activation-limit\",\"pattern\":\"activation-limit\"}]",
       "setCode": "TWI_082"
-    },
-    {
-      "internalName": "generals-guardian",
-      "reason": "generals-guardian: unsupported runtime trigger onDefense",
-      "setCode": "TWI_083"
     },
     {
       "internalName": "kraken#confederate-tactician",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1613,
+  "runtimeRejectedCount": 1607,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 666
 }

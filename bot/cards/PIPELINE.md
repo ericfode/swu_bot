@@ -95,7 +95,14 @@ depends on damage, and bounded cost-query conditions for discard, upgrade defeat
 death-triggered ready and upgrade attachment. Scalar upgrade-return experiments
 cover ordinary and token attachments, ownership across host controllers, discard
 recovery, cost and uniqueness filters, base-trait conditions, optional decline,
-and host death after losing an attachment HP bonus. It selects setup cards from metadata,
+and host death after losing an attachment HP bonus. On Defense experiments cover
+attacker-owned trigger ordering, Restore, Saboteur removing specific Shields,
+ordinary Ambush play, a captured defense trigger after lethal On Attack damage,
+optional Experience, cross-arena unit choices, readiness and terminal own-base
+damage. Initial attack stat deaths and nested ability-caused deaths also have
+separate synthetic diagnostics; those are not printed-card reference witnesses.
+Controller changes, multi-target attacks and token-entry aura deaths remain
+explicit gaps for this family. It selects setup cards from metadata,
 uses ordinary engine actions after a disclosed starting position, and records
 oracle observations. Arena-list defeat experiments exercise global entry order,
 death draws, reverse cleanup across multiple parents, token removal and eligible

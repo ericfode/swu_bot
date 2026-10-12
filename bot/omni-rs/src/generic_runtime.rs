@@ -91,6 +91,7 @@ impl Engine {
                     }
                 }
                 let programs = catalogue.cards.get(&code).cloned().unwrap_or_default();
+                if programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|catalogue.programs[*p as usize].trigger=="onDefense") && (!info.is("unit") || info.is("leader") || info.is("token") || entry["baseClass"]!="NonLeaderUnitCard" || !programs.unit.is_empty() || !programs.leader.is_empty()) {return Err("OnDefense currently requires an ordinary nonleader unit source".into());}
                 if native_token {
                     let expected_hash = if code == "TOKEN_SHIELD" {
                         "39f1c6699c36ba309a8fe8e053f9b94ddbb8877991767b6664fcd88d447be91f"
@@ -2120,8 +2121,52 @@ impl Engine {
         for e in &old.entries[..old.len as usize] {let n=merged.len as usize;if n==MAX_DEATH_TRIGGERS {return Err("merged trigger window capacity exceeded".into());}merged.entries[n]=*e;merged.len+=1;}
         s.death_pending=merged;s.pending_programs=0;s.pending_triggers=0;Ok(())
     }
+    /// Capture one declaration window before either player's effects resolve.
+    /// Existing source-only attack protocol stays intact without defender triggers.
+    pub(super) fn has_defense_registration(&self,s:&State,id:CardId)->bool {
+        self.catalogue.is_some() && self.card_programs(s,id).iter().any(|p|self.program(*p).trigger=="onDefense")
+    }
+    pub(super) fn capture_defense_window(&self,s:&mut State,declaration:&State)->Result<bool,String> {
+        if self.catalogue.is_none() || !self.in_arena(declaration,declaration.attack_defender) {return Ok(false);}
+        let defender=declaration.attack_defender;
+        let programs:Vec<_>=self.card_programs(declaration,defender).iter().copied().filter(|p| {let p=self.program(*p);p.trigger=="onDefense" && p.condition.as_ref().is_none_or(|condition|self.eval(declaration,defender,0,condition).truth())}).collect();
+        if programs.is_empty() {return Ok(false);}
+        let mut registration=*declaration;
+        registration.pending_triggers=0;registration.attack_restore=self.keyword_amount(&registration,registration.source,"restore");
+        if self.has_keyword(&registration,registration.source,"restore") {registration.pending_triggers|=T_RESTORE;}
+        if self.keyword_amount(&registration,registration.source,"saboteur")>0 && self.in_arena(&registration,defender) {registration.pending_triggers|=T_SABOTEUR;}
+        self.queue_programs(&mut registration,"onAttack");s.attack_restore=registration.attack_restore;
+        let mut entries=Vec::new();
+        for (i,&program) in self.card_programs(&registration,registration.source).iter().enumerate() {if registration.pending_programs&(1<<i)!=0 {entries.push(DeathTrigger {source:registration.source,program,player:registration.card(registration.source).owner,..DeathTrigger::default()});}}
+        for keyword in self.trigger_bits(&registration) {entries.push(DeathTrigger {source:registration.source,keyword,player:registration.card(registration.source).owner,..DeathTrigger::default()});}
+        for program in programs {entries.push(DeathTrigger {source:defender,program,player:declaration.card(defender).owner,..DeathTrigger::default()});}
+        // Stat deaths newly queued by setCurrentAttack belong to declaration:
+        // engine framework child windows pass their triggers to that parent.
+        let start=declaration.death_pending.len as usize;
+        let end=s.death_pending.len as usize;
+        if end<start {return Err("declaration pending trigger accounting changed".into());}
+        entries.extend_from_slice(&s.death_pending.entries[start..end]);
+        s.death_pending.entries[start..end].fill(DeathTrigger::default());s.death_pending.len=start as u8;
+        if entries.len()>MAX_DEATH_TRIGGERS {return Err("attack declaration trigger capacity exceeded".into());}
+        let n=s.death_depth as usize;if n==MAX_DEATH_DEPTH {return Err("nested attack declaration capacity exceeded".into());}
+        s.pending_programs=0;s.pending_triggers=0;
+        let initiator=if n==0 {s.active}else{s.death_window.initiator};
+        s.death_frames[n]=DeathFrame {context:ResolutionContext::capture(s),window:s.death_window,resume:2};s.death_depth+=1;
+        let mut window=DeathWindow::default();window.initiator=initiator;
+        for entry in entries {let index=window.len as usize;window.entries[index]=entry;window.len+=1;}
+        s.death_window=window;s.ability_program=0;
+        // Prior framework deaths keep their own nested window rather than
+        // becoming declaration triggers in the same player-choice menu.
+        if !self.open_deaths(s,6)? {self.process_deaths(s)?;}
+        Ok(true)
+    }
+    fn captured_trigger_context(&self,s:&State,e:DeathTrigger)->State {
+        let mut context=*s;context.source=e.source;context.active=e.player;
+        if e.keyword==T_SABOTEUR && context.attack_defender!=0 {context.target=context.attack_defender;}
+        context
+    }
     fn death_title(&self,s:&State,e:DeathTrigger,static_title:bool)->String {
-        let mut c=*s;c.source=e.source;c.active=e.player;
+        let c=self.captured_trigger_context(s,e);
         if e.keyword!=0 {let title=self.trigger_title(&c,e.keyword);if !static_title&&!self.trigger_effect(&c,e.keyword) {format!("(No effect) {title}")}else{title}}
         else if static_title {self.program(e.program).title.clone()}else{self.program_menu_title(&c,e.source,e.program)}
     }
@@ -2139,7 +2184,7 @@ impl Engine {
         groups
     }
     fn death_has_effect(&self,s:&State,e:DeathTrigger)->bool {
-        let mut context=*s;context.active=e.player;context.source=e.source;
+        let context=self.captured_trigger_context(s,e);
         if e.keyword!=0 {self.trigger_effect(&context,e.keyword)}else{self.program_has_effect(&context,e.source,e.program)}
     }
     fn remove_death(&self,s:&mut State,i:usize)->DeathTrigger {
@@ -2148,12 +2193,17 @@ impl Engine {
         s.death_window.entries[n-1]=DeathTrigger::default();e
     }
     fn resolve_death(&self,s:&mut State,i:usize)->Result<(),String> {
-        let e=self.remove_death(s,i);s.source=e.source;s.active=e.player;s.target=0;s.trigger_context=0;
+        let e=self.remove_death(s,i);s.source=e.source;s.active=e.player;s.target=if e.keyword==T_SABOTEUR {s.attack_defender}else{0};s.trigger_context=0;
         if e.keyword!=0 {s.trigger_context=4;self.resolve_trigger(s,e.keyword)}else{self.begin_program(s,e.program,2)}
     }
     pub(super) fn process_deaths(&self,s:&mut State)->Result<(),String> {
         loop {
             if !s.death_window.player_chosen {
+                // Pinned cleanup suppresses an entirely ineffective window, but
+                // keeps both owner buckets when any registration can resolve.
+                if !s.death_window.entries[..s.death_window.len as usize].iter().any(|e|self.death_has_effect(s,*e)) {
+                    s.death_window.entries.fill(DeathTrigger::default());s.death_window.len=0;
+                }
                 let mask=s.death_window.entries[..s.death_window.len as usize].iter().fold(0u8,|m,e|m|(1<<e.player.index()));
                 if mask==3 {s.active=s.death_window.initiator;s.decision=Decision::DeathPlayer;return Ok(());}
                 s.death_window.player=if mask==2 {Seat::P2}else{Seat::P1};s.death_window.player_chosen=true;
@@ -2165,7 +2215,7 @@ impl Engine {
                 if s.death_window.len>0 {s.death_window.player=player.other();s.death_window.resolve_all=false;continue;}
                 let n=s.death_depth as usize-1;let frame=s.death_frames[n];s.death_frames[n]=DeathFrame::default();s.death_depth-=1;
                 s.death_window=frame.window;frame.context.restore(s);
-                return match frame.resume {1=>self.run_program(s),2=>self.process_triggers(s),3=>self.finish(s),4=>self.advance_after_expiry(s),5=>self.combat_after_damage(s),_=>Err("invalid defeat continuation".into())};
+                return match frame.resume {1=>self.run_program(s),2=>self.process_triggers(s),3=>self.finish(s),4=>self.advance_after_expiry(s),5=>self.combat_after_damage(s),6=>self.process_deaths(s),_=>Err("invalid defeat continuation".into())};
             }
             s.active=s.death_window.player;
             if s.death_window.resolve_all {
@@ -2277,6 +2327,15 @@ impl Engine {
                 && (self.in_arena(s, s.target) || self.def(s, s.target).info.is("base"))
             {
                 self.combat(s)
+            } else if self.in_arena(s,s.source) && s.attack_defender!=0 {
+                // A still-legal defender can leave play before damage. The pinned
+                // attack retains it and sends full Overwhelm damage to its base.
+                if self.keyword_amount(s,s.source,"overwhelm")>0 {
+                    let base=s.player(s.card(s.attack_defender).owner).base;
+                    let amount=self.power(s,s.source,true);
+                    self.damage(s,base,amount);self.check_win(s);
+                }
+                self.combat_after_damage(s)
             } else {
                 self.finish(s)
             }
