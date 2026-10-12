@@ -273,7 +273,7 @@ function fillSpotBar(v) {
   if (!st?.players) return;
   const i = gameIdx.get(v.game), x = i != null ? gameRow(M.games[i]) : { p1: g.header?.p1, p2: g.header?.p2 };
   const sig = `${st.round}|${AT.spotsAt(st, 'p1')}|${AT.spotsAt(st, 'p2')}`; if (el.dataset.sig === sig) return; el.dataset.sig = sig;
-  const row = (pid, name) => { const sp = st.round >= 1 ? AT.spotsAt(st, pid) : [], a = atl(name); return `<div class="sb-row">${botLink(name)}${styleTag(a?.summary?.style)}${sp.length ? sp.map(sid => { const c = a?.situations?.[sid], best = ATL()?.best?.[sid]; return `<span class="sb-spot" title="${esc(sit(sid).short)}">${spotIcon(sid, 'pict s')}<b>${esc(sit(sid).label)}</b>${c?.n ? `<em class="${c.edge >= 0 ? 'good' : 'bad'}" title="this bot, ${c.n} games in this spot">${edgeTxt(c.edge)} pts</em>` : '<em class="faint">no data</em>'}${best === name ? '<span class="mk star" title="best of all bots in this spot">★</span>' : ''}</span>`; }).join('') : '<span class="muted">no spot yet: even, early game</span>'}</div>`; };
+  const row = (pid, name) => { const sp = st.round >= 1 ? AT.spotsAt(st, pid) : [], a = atl(name); return `<div class="sb-row">${x.human === pid ? personChip() : botLink(name)}${x.human === pid ? '' : styleTag(a?.summary?.style)}${sp.length ? sp.map(sid => { const c = a?.situations?.[sid], best = ATL()?.best?.[sid]; return `<span class="sb-spot" title="${esc(sit(sid).short)}">${spotIcon(sid, 'pict s')}<b>${esc(sit(sid).label)}</b>${c?.n ? `<em class="${c.edge >= 0 ? 'good' : 'bad'}" title="this bot, ${c.n} games in this spot">${edgeTxt(c.edge)} pts</em>` : '<em class="faint">no data</em>'}${best === name ? '<span class="mk star" title="best of all bots in this spot">★</span>' : ''}</span>`; }).join('') : '<span class="muted">no spot yet: even, early game</span>'}</div>`; };
   el.innerHTML = `<div class="sb-head"><span>Atlas spots on this board · round ${st.round ?? '-'}</span><span>pts = this bot vs an average bot in that spot</span></div>${row('p1', x.p1)}${row('p2', x.p2)}`;
 }
 
@@ -404,6 +404,23 @@ async function replayText(key) {
   if (t) { REPLAYS.set(key, t); if (REPLAYS.size > 6) REPLAYS.delete(REPLAYS.keys().next().value); }
   return t;
 }
+/** For a game against a person: a function that rewrites one replay line so the person's seat reads "a person" in the
+ *  header's player list and in each board's player name (the viewer kit shows both); null for any other game. People
+ *  are never named in the app, whatever a feed wrote. */
+function personMask(key) {
+  const i = gameIdx.get(key), x = i == null ? null : gameRow(M.games[i]);
+  if (x?.run?.kind !== 'people') return null;
+  const seats = new Map(); // seat -> the name the header gave the person
+  return line => {
+    if (!line.includes('"header"') && ![...seats.values()].some(n => line.includes(JSON.stringify(n)))) return line;
+    try {
+      const e = JSON.parse(line);
+      if (e?.t === 'header' && Array.isArray(e.players)) e.players = e.players.map(p => p && (p.id === x.human || isPerson(x.run, p.bot)) ? (seats.set(p.id, String(p.bot)), { ...p, bot: 'a person' }) : p);
+      for (const [seat, name] of seats) if (e?.state?.players?.[seat]?.name === name) e.state.players[seat].name = 'a person';
+      return JSON.stringify(e);
+    } catch { return line; }
+  };
+}
 async function sideFile(kind, id) {
   if (kind === 'evals' && DATA.evals[id]) return DATA.evals[id];
   if (kind === 'lens' && DATA.lens[id]) return DATA.lens[id];
@@ -421,7 +438,8 @@ async function mountViewer(v, host) {
   host.innerHTML = '';
   const step = +(route().qs.get('step') || 0) || undefined;
   try {
-    v.v = KIT.mount(host, { jsonl: text, evals: evals || undefined, lens: lens || undefined, layout: host.dataset.layout || 'full', ...(step ? { stepN: step } : {}), persist: 'swuapp.viewer', follow: true,
+    v.mask = personMask(v.game);
+    v.v = KIT.mount(host, { jsonl: v.mask ? text.split('\n').map(v.mask).join('\n') : text, evals: evals || undefined, lens: lens || undefined, layout: host.dataset.layout || 'full', ...(step ? { stepN: step } : {}), persist: 'swuapp.viewer', follow: true,
       onStep: (i, n) => { v.step = n; v.idx = i; if (!v.raf) v.raf = requestAnimationFrame(() => { v.raf = 0; fillSpotBar(v); }); } });
     v.offset = new TextEncoder().encode(text).length;
     v.ended = /"t":"end"/.test(text.slice(-4000));
@@ -461,7 +479,7 @@ async function tailViewers() {
       if (!res.bytes.length) continue;
       v.offset += res.bytes.length;
       const txt = (v.partial || '') + new TextDecoder().decode(res.bytes), parts = txt.split('\n'); v.partial = parts.pop();
-      const lines = parts.filter(Boolean); if (lines.length) { v.v.append(lines); if (lines.some(l => l.includes('"t":"end"'))) v.ended = true; }
+      const lines = parts.filter(Boolean).map(l => v.mask ? v.mask(l) : l); if (lines.length) { v.v.append(lines); if (lines.some(l => l.includes('"t":"end"'))) v.ended = true; }
     } catch {}
   }
 }
