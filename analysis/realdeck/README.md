@@ -119,8 +119,12 @@ node analysis/realdeck/skill.js --gauntlet <gauntlet dir>[,<gauntlet dir>...] --
 
 - **Deck-type row** (`skill.byStyle`): the challenger's score against the reference split by the style of the deck it
   holds (hyperaggro .. hardcontrol, from the deck file's `metadata.style`), with a Wilson CI each. A bot keeps its deck
-  in both games of a seed and the reference holds the other one, so a low cell says the bot pilots that deck type worse
-  than the reference pilots the decks it meets.
+  in both games of a seed, so within a pass it holds one side of each deck pair: the overall score is fair, but in a
+  split the cards stay in, and a bot that played exactly like the reference would score its decks' strength there, not
+  50%. So each cell also has `expected`, what the reference scores with the same decks from the same seats (the deck
+  model compare.js fits to the reference's mirror: P(p1 wins) = σ(s[p1 deck] − s[p2 deck] + seat)), and `edge` = score
+  − expected. A positive edge says the bot pilots that deck type better than the reference; negative, worse. Without
+  a mirror of the reference in the compare file there is no `expected`.
 
 ## The standard bot test (`bot-test.js`)
 
@@ -135,20 +139,26 @@ npm run realdeck:test -- --bot <bot> --dry-run      # print the commands only
 
 - Runs go in `--dir` (default `/mnt/project-files/human-meta/realdeck` when it exists, else `results/realdeck`): the
   gauntlet as `test-<bot>-<n>`, the mirror (with `--mirror`) as `mirror-<bot>-<n>`. `--resume <run id>` finishes a
-  gauntlet that stopped.
-- **Same deals**: the run key comes from the first finished gauntlet against c-clock in that folder on the same deck
-  file and seed 1 (its `ladder.json` `config.key`). In a folder with none, the first test draws a new key and the
-  later ones reuse it. The key also lets a program rebuild the hidden cards, so it is read from that run only and
-  never committed.
-- **Report**: every gauntlet in the folder on those deals (the others are listed as left out, with the reason), the
-  newest run of each challenger (a bot tested again replaces its older games), joined through `skill.js` with
-  `compare-702.json` (compare.js on one-pass mirrors). `--mirror` reruns compare.js on the mirrors in that file with
-  this bot's replaced by the new one, so the report has its agreement with humans. Writes `skill.json` and `skill.txt`
-  in the folder.
+  gauntlet of the same bot that stopped. It is refused for a run of another bot, deck file, seed or key, and for a run
+  whose key is not published yet (ladder.js publishes it when a run finishes; a resume would deal the rest from a new
+  key).
+- **Same deals**: the run key is the one the last report named (`skill.json` `standard.keyId`), else the key of the
+  gauntlet against c-clock on the same deck file and seed 1 that finished first (its `ladder.json` `config.key`). In a
+  folder with none, the first test draws a new key and the later ones reuse it; a test started while that first one
+  is still running warns that one of the two will be left out. The key also lets a program rebuild the hidden cards,
+  so it is read from that run only, printed only as its id, and never committed.
+- **Report**: every gauntlet in the folder on those deals (the others are listed as left out, with the reason) and
+  one run per challenger: its newest finished run, or its newest unfinished one when it has none (a bot tested again
+  replaces its older games once the new run is done). They are joined through `skill.js` with `compare-702.json`
+  (compare.js on one-pass mirrors). `--mirror` reruns compare.js on the mirrors in that file with this bot's replaced
+  by the new one (mirrors whose folder is gone are listed and dropped), so the report has its agreement with humans,
+  and rewrites `compare-702.json` and `.txt`. Writes `skill.json` and `skill.txt` in the folder.
 - **Panel** (`--panel <file>`, research dashboard contract section 5): each bot's score against c-clock as a face-off
-  with its 95% CI, a table of each bot's score by the deck type it holds (Atlas edge colours), the latest bot's
-  deck-type row as face-offs, and the agreement table for bots with a mirror. The goal, mental model, plan and
-  thoughts of an existing panel file are kept; testing a bot adds one thought with its result.
+  with its 95% CI (and "running, k of 702 games" while its run goes on, or "stopped" once it has not written for an
+  hour), a table of each bot's score by the deck type it holds with c-clock's own expected score with the same decks
+  as its first row and each cell coloured by its edge (Atlas edge steps), the latest bot's deck-type row as
+  face-offs, and the agreement table for bots with a mirror. The goal, mental model, plan and thoughts of an
+  existing panel file are kept; a finished test adds one thought with its result.
 - A pass takes about as long as 702 games of the bot (c-clock answers in well under a millisecond). Bots that need
   more time per decision can use `--workers`.
 

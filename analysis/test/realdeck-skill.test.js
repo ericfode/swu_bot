@@ -310,7 +310,29 @@ const cmpFixture = () => {
     const given = sk.skillVsAgreement([gl], null, { styles: { d0: 'midrange' } });
     assert.deepStrictEqual(Object.keys(given.bots.find((b) => b.bot === 'heuristic').skill.byStyle), ['midrange', 'unknown']);
     assert.strictEqual(sk.skillVsAgreement([gl], cmpFixture()).bots.find((b) => b.bot === 'heuristic').skill.byStyle, null, 'no styles, no row');
-    assert.match(sk.summaryText(fromCmp), /by deck type: win% vs c-clock[^\n]*\n\s+hyperaggro\s+hardcontrol\s+unknown\nheuristic\s+50\.0 \(3\)\s+100\.0 \(2\)\s+0\.0 \(2\)$/m);
+    assert.match(sk.summaryText(fromCmp), /by deck type: win% vs c-clock[^\n]*\n[^\n]*\n\s+hyperaggro\s+hardcontrol\s+unknown\nheuristic\s+50\.0 \(3\)\s+100\.0 \(2\)\s+0\.0 \(2\)$/m);
+    assert.deepStrictEqual([row.hyperaggro.expected, row.hyperaggro.edge, row.hyperaggro.expectedGames], [null, null, 0], 'no reference model, no expectation');
+
+    // what the reference scores with the same decks: its mirror's deck model, σ(s[held] − s[opp] ± seat)
+    const sig = (x) => 1 / (1 + Math.exp(-x));
+    const strengths = { d0: 1, d1: -1, d2: 0, d3: 0.5 };
+    const model = { ...cmpFixture(), decks: [...styleOf].map(([name, style]) => ({ name, style, runs: name in strengths ? { ccl: { strength: strengths[name] } } : {} })) };
+    const m = sk.referenceModel(model, 'ccl');
+    close(m('d0', 'd1', 'p1'), sig(2), 1e-12, 'no seat term in the run: none');
+    assert.strictEqual(m('d4', 'd0', 'p1'), null, 'a deck without a strength');
+    model.runs.find((r) => r.id === 'ccl').seat = { logit: 0.3 };
+    const ms = sk.referenceModel(model, 'ccl');
+    close(ms('d0', 'd1', 'p1'), sig(2.3), 1e-12, 'seat term for p1');
+    close(ms('d0', 'd1', 'p2'), sig(1.7), 1e-12, 'and against p2');
+    assert.strictEqual(sk.referenceModel(model, 'nope'), null);
+    model.runs.find((r) => r.id === 'ccl').seat = { logit: 0 };
+    const byE = sk.skillVsAgreement([gl], model).bots.find((b) => b.bot === 'heuristic').skill.byStyle;
+    // hyperaggro: d0 vs d1 twice (1, 0) and d3 vs d2 once (a draw); hardcontrol: d1 vs d0 twice (1, 1); d4 has no strength
+    close(byE.hyperaggro.expected, (2 * sig(2) + sig(0.5)) / 3, 1e-12, 'expected hyperaggro');
+    close(byE.hyperaggro.edge, (1.5 - 2 * sig(2) - sig(0.5)) / 3, 1e-12, 'edge hyperaggro');
+    close(byE.hardcontrol.edge, 1 - sig(-2), 1e-12, 'edge hardcontrol');
+    assert.deepStrictEqual([byE.unknown.expected, byE.unknown.edge, byE.unknown.expectedGames, byE.unknown.decided], [null, null, 0, 2]);
+    assert.match(sk.summaryText(sk.skillVsAgreement([gl], model)), /heuristic\s+50\.0 \(3\) -29\s+100\.0 \(2\) \+88\s+0\.0 \(2\)$/m);
 }
 
 // 6. the command line, on a run directory written like ladder.js writes a gauntlet
