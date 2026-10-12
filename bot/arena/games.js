@@ -91,6 +91,12 @@ function setup() {
     for (const d of Object.values(DIRS)) {
         fs.mkdirSync(d, { recursive: true });
     }
+    // the intake's folder stays root's: each check gets a folder in it whose layout the checker cannot change
+    // (intake.js checkIsolated); checks left by a stop are gone with the process that made them
+    for (const f of fs.readdirSync(DIRS.intake).filter((x) => x.startsWith('job-'))) {
+        home.removeTree(path.join(DIRS.intake, f));
+    }
+    fs.chmodSync(DIRS.intake, 0o755);
     fs.chmodSync(DIRS.secret, 0o700);
     if (!fs.existsSync(SECRET) || !fs.statSync(SECRET).size) {
         fs.writeFileSync(SECRET, require('crypto').randomBytes(32).toString('hex'), { mode: 0o600 });
@@ -100,22 +106,30 @@ function setup() {
     // the residents are the baselines; the competitors stay as they are
     home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: RESIDENTS, agents: r.agents ?? [] }));
     if (asRoot()) {
-        // what bot code and the intake's checker write is the bots' user's; the secret stays root's
+        // what bot code writes is the bots' user's; the secret, the intake's folder and the referee's /tmp stay root's
         const [uid, gid] = idsOf(BOT_USER);
-        for (const k of ['home', 'results', 'intake', 'cache', 'botHome', 'dash']) {
+        for (const k of ['home', 'results', 'cache', 'botHome', 'dash']) {
             execFileSync('chown', ['-R', `${uid}:${gid}`, DIRS[k]]);
         }
-        fs.chownSync(DIRS.secret, 0, 0);
+        for (const k of ['intake', 'secret', 'tmp']) {
+            fs.chownSync(DIRS[k], 0, 0);
+        }
         fs.chownSync(SECRET, 0, 0);
     }
+    return { residents: RESIDENTS };
 }
 
-/** Compiles the resident bundles into the cache, as the bots' user, so their first game does not pay for it. */
+/**
+ * Compiles the resident bundles into the cache, as the bots' user, so their first game does not pay for it. Returns
+ * {warmed: [name], failed: [{name, error}]}.
+ */
 function warm() {
+    const out = { warmed: [], failed: [] };
     for (const name of RESIDENTS.filter((n) => n.endsWith('-wasm'))) {
         const dir = path.join(ROOT, 'build', 'compiled', name.slice(0, -5));
         if (!fs.existsSync(path.join(dir, 'arena.json'))) {
             log(`resident ${name}: no bundle at ${dir}`);
+            out.failed.push({ name, error: 'no bundle' });
             continue;
         }
         const cmd = ['python3', path.join(ROOT, 'bot', 'compiled', 'run.py'), '--warm', dir];
@@ -123,10 +137,14 @@ function warm() {
         try {
             const { ARENA_SECRET_FILE, ARENA_BOT_USER, ...env } = botEnv();
             execFileSync(run[0], run.slice(1), { stdio: ['ignore', 'ignore', 'pipe'], env, timeout: 120000 });
+            out.warmed.push(name);
         } catch (e) {
-            log(`resident ${name}: could not compile (${String(e.stderr ?? e.message).trim().split('\n').pop()})`);
+            const error = String(e.stderr ?? e.message).trim().split('\n').pop();
+            log(`resident ${name}: could not compile (${error})`);
+            out.failed.push({ name, error });
         }
     }
+    return out;
 }
 
 /** The referee's environment: the arena's folders and nothing else (no token, no Fly variables). */
@@ -140,39 +158,67 @@ function botEnv() {
 }
 
 /**
- * The round to play now, or null: [] for the next round, ['--round', K] to finish round K (a stop cut it short). A
- * round needs at least one competitor, and a new or changed lineup or a last round older than replayMs.
+ * The round to play now: {round: K, resume, why}, or {round: null, why}. resume: round K is the last one and a stop cut
+ * it short. Otherwise K is the next round, played when the lineup changed (a new or withdrawn version) or the last
+ * round is older than replayMs, and only once settledSince (when the last version came in) is SETTLE_MS old. A round
+ * needs at least one competitor.
  */
-function roundToPlay({ replayMs, settledSince }) {
+function planRound({ replayMs, settledSince }) {
     const { lineup } = require('./referee');
     const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] });
     const last = st.rounds.at(-1);
     if (last && last.status !== 'done') {
-        return ['--round', String(last.round)];
+        return { round: last.round, resume: true, why: 'resume' };
     }
     const bots = lineup();
     const baselines = home.roster().baselines ?? [];
     if (!bots.some((b) => !baselines.includes(b))) {
-        return null;
+        return { round: null, why: 'no-competitor' };
     }
     const before = (last?.bots ?? []).map((b) => b.name);
     const changed = bots.some((b) => !before.includes(b)) || before.some((b) => !bots.includes(b));
     const stale = last && Date.now() - Date.parse(st.updatedAt ?? 0) > replayMs;
     if (!changed && !stale) {
-        return null;
+        return { round: null, why: 'same' };
     }
     // a version that just came in may be followed by a quick fix: let it settle
-    return Date.now() - settledSince < SETTLE_MS ? null : [];
+    if (Date.now() - settledSince < SETTLE_MS) {
+        return { round: null, why: 'settling' };
+    }
+    // the referee numbers rounds the same way (referee.js nextRound)
+    return { round: (last?.round ?? -1) + 1, resume: false, why: changed ? 'changed' : 'stale' };
 }
 
-/** Starts the referee for one round: root in its own namespaces, HIDE hidden, with the minimal environment. */
-function startReferee(roundArgs, { games, workers }) {
+/** planRound as the referee's arguments: null, [] for the next round, or ['--round', K] to finish round K. */
+function roundToPlay(opts) {
+    const p = planRound(opts);
+    return p.round === null ? null : p.resume ? ['--round', String(p.round)] : [];
+}
+
+/**
+ * The command that plays round K: root in its own namespaces (isolate.sh) with HIDE hidden, and the minimal
+ * environment. Only one referee runs here at a time, so a lock the last one left (a stop, a crash) is stale: removing
+ * it spares the next one the wait for it to go stale.
+ */
+function refereeCommand(k, { games, workers }) {
+    const { ladderIdOf } = require('./referee');
+    // only in a real folder: the results folder is the bots' user's, who could put a link in its place
+    const dir = path.join(home.RESULTS, ladderIdOf(k));
+    if (fs.lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
+        fs.rmSync(path.join(dir, 'referee.lock'), { force: true });
+    }
     const isolate = asRoot()
         ? ['bash', path.join(__dirname, 'ops', 'isolate.sh'), '--tmp', DIRS.tmp, ...HIDE.flatMap((p) => ['--hide', p]), '--']
         : [];
-    const cmd = [...isolate, process.execPath, path.join(__dirname, 'referee.js'), ...roundArgs, '--games', String(games), '--workers', String(workers)];
-    const child = spawn(cmd[0], cmd.slice(1), { cwd: ROOT, env: botEnv(), stdio: ['ignore', 'inherit', 'inherit'], detached: true });
-    log(`round started (${roundArgs.length ? `finishing round ${roundArgs[1]}` : 'next round'}, pid ${child.pid})`);
+    const cmd = [...isolate, process.execPath, path.join(__dirname, 'referee.js'), '--round', String(k), '--games', String(games), '--workers', String(workers)];
+    return { cmd, env: botEnv(), cwd: ROOT };
+}
+
+/** Starts the referee for round K (refereeCommand). */
+function startReferee(k, { games, workers, resume }) {
+    const { cmd, env, cwd } = refereeCommand(k, { games, workers });
+    const child = spawn(cmd[0], cmd.slice(1), { cwd, env, stdio: ['ignore', 'inherit', 'inherit'], detached: true });
+    log(`round ${k} started (${resume ? 'finishing it' : 'new'}, pid ${child.pid})`);
     return child;
 }
 
@@ -257,11 +303,11 @@ async function main(argv) {
             }
         }
         if (!referee) {
-            const roundArgs = roundToPlay({ replayMs, settledSince });
-            const key = roundArgs?.join(' ');
+            const plan = planRound({ replayMs, settledSince });
+            const key = plan.round;
             // a round whose referee failed twice waits for the next start (a wake-up, or the next deploy)
-            if (roundArgs && (failed.get(key) ?? 0) < 2) {
-                referee = startReferee(roundArgs, { games, workers });
+            if (plan.round !== null && (failed.get(key) ?? 0) < 2) {
+                referee = startReferee(plan.round, { games, workers, resume: plan.resume });
                 referee.on('exit', (code, sig) => {
                     log(`round ended (${code ?? sig})`);
                     if (code !== 0) {
@@ -297,4 +343,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundToPlay, botEnv, RESIDENTS };
+module.exports = { setup, warm, planRound, roundToPlay, refereeCommand, botEnv, RESIDENTS, DIRS, HIDE, SECRET };

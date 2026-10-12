@@ -69,28 +69,47 @@ async function putChanged(seen, ns, id, doc) {
 }
 
 /**
+ * A file's bytes and stat, only when it is a regular file reached without a symlink at its last step; null otherwise.
+ * On the games machine the arena's folders belong to the bots' user, so a link planted there must not make the pusher
+ * publish what it points at (a secret, another process's environment). `want(stat)` false: the stat only (buf null).
+ */
+function readRegular(file, want = () => true) {
+    let fd;
+    try {
+        fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    } catch {
+        return null;
+    }
+    try {
+        const stat = fs.fstatSync(fd);
+        return stat.isFile() ? { buf: want(stat) ? fs.readFileSync(fd) : null, stat } : null;
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+/**
  * Keeps one replay file in step with the window. Lines of a game being played go as appends (only whole lines); a
  * finished game, or a file rewritten in place (ladder.js adds the game's key at the end), goes whole.
  * st: {sent, mtime, size, whole} kept by the caller between calls.
  */
 async function syncReplay(run, game, file, st, { finished }) {
-    let stat;
-    try {
-        stat = fs.statSync(file);
-    } catch {
+    // read only what will be sent: a finished game already sent whole is skipped below without reading it
+    const read = readRegular(file, (s) => s.size !== st.size || s.mtimeMs !== st.mtime || (finished && !st.whole));
+    if (!read) {
         return false;
     }
+    const { buf, stat } = read;
     const changed = stat.size !== st.size || stat.mtimeMs !== st.mtime;
     if (!changed && (st.whole || !finished)) {
         return false;
     }
     const url = `/api/replays/${seg(run)}/${seg(game)}`;
     if (finished || stat.size < (st.sent ?? 0)) {
-        await request('PUT', url, { body: fs.readFileSync(file), type: 'application/x-ndjson' });
+        await request('PUT', url, { body: buf, type: 'application/x-ndjson' });
         Object.assign(st, { sent: stat.size, size: stat.size, mtime: stat.mtimeMs, whole: finished });
         return true;
     }
-    const buf = fs.readFileSync(file);
     const end = buf.lastIndexOf(10) + 1; // only whole lines
     let at = st.sent ?? 0;
     for (let tries = 0; tries < 2 && end > at; tries++) {
@@ -115,7 +134,7 @@ async function syncReplay(run, game, file, st, { finished }) {
 
 const readJson = (f) => {
     try {
-        return JSON.parse(fs.readFileSync(f, 'utf8'));
+        return JSON.parse(readRegular(f).buf.toString('utf8'));
     } catch {
         return null;
     }
@@ -140,8 +159,8 @@ async function pushRunOnce(dir, mem) {
         mem.known = new Map(((await request('GET', `/api/replays/${seg(id)}`, { query: { sizes: 1 } }).catch(() => [])) || []).map((x) => [x.id, x.size]));
         for (const f of files) {
             const game = f.slice(0, -6);
-            const stat = fs.statSync(path.join(gamesDir, f));
-            if (mem.known.get(game) === stat.size && !running.has(game)) {
+            const stat = fs.lstatSync(path.join(gamesDir, f));
+            if (stat.isFile() && mem.known.get(game) === stat.size && !running.has(game)) {
                 mem.replays.set(game, { sent: stat.size, size: stat.size, mtime: stat.mtimeMs, whole: true });
             }
         }
@@ -182,7 +201,7 @@ async function pushRun(dir, { follow = false, parent = null, everyMs = 3000 } = 
         quietDone = !r.going && (r.started || !parent) ? quietDone + 1 : 0;
         if (parentGone || quietDone >= 3) {
             if (parentGone) {
-                await pushRunOnce(dir, mem).catch(() => {});
+                await pushRunOnce(dir, mem).catch((e) => console.error(`push: run ${dir}, last pass: ${e.message}`));
             }
             return r;
         }
@@ -236,12 +255,13 @@ async function pushArena({ everyMs = 20000, once = false } = {}) {
     }
 }
 
-/** pushArena's state between passes: `once()` sends what changed since its last pass; false when it failed (logged). */
-function arenaPusher() {
+/**
+ * pushArena's state between passes: `once()` sends what changed since its last pass; false when it failed (logged).
+ * `docs` (hashes of the documents sent) and `runs` (per round ladder) can come from an earlier process (gamesctl push).
+ */
+function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
     const { call } = require('./api');
     const home = require('./home');
-    const docs = new Map();
-    const runs = new Map();
     const result = async (m, a) => {
         const r = await call(m, a);
         return r.error ? null : r.result;
@@ -249,8 +269,8 @@ function arenaPusher() {
     const once = async () => {
         try {
             const roster = home.roster();
-            const t = home.readJson(path.join(home.HOME, 'tournament.json'), null);
-            const standings = home.readJson(path.join(home.HOME, 'standings.json'), null);
+            const t = readJson(path.join(home.HOME, 'tournament.json'));
+            const standings = readJson(path.join(home.HOME, 'standings.json'));
             const put = (id, doc) => (doc == null ? null : putChanged(docs, 'arena', id, doc));
             await put('status', await result('status'));
             await put('standings', standings);
@@ -260,8 +280,9 @@ function arenaPusher() {
             const reports = async (dir, prefix) => {
                 for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
                     const m = /^r(\d+)\.md$/.exec(f);
-                    if (m) {
-                        await put(`${prefix}${m[1]}`, { round: Number(m[1]), markdown: fs.readFileSync(path.join(dir, f), 'utf8') });
+                    const read = m && readRegular(path.join(dir, f));
+                    if (read) {
+                        await put(`${prefix}${m[1]}`, { round: Number(m[1]), markdown: read.buf.toString('utf8') });
                     }
                 }
             };
@@ -283,7 +304,7 @@ function arenaPusher() {
             }
             const t0 = path.join(home.HOME, 'archive', 't0');
             if (fs.existsSync(t0)) {
-                await put('archive-t0-standings', home.readJson(path.join(t0, 'standings.json'), null));
+                await put('archive-t0-standings', readJson(path.join(t0, 'standings.json')));
                 await reports(path.join(t0, 'rounds'), 'archive-t0-report-');
                 const pd = path.join(t0, 'panels');
                 const panels = fs.existsSync(pd) ? fs.readdirSync(pd).filter((f) => /^arena-.*\.json$/.test(f) && f !== 'arena-leaderboard.json').map((f) => readJson(path.join(pd, f))).filter(Boolean) : [];
@@ -309,7 +330,7 @@ function arenaPusher() {
         }
         return true;
     };
-    return { once };
+    return { once, docs, runs };
 }
 
 /**

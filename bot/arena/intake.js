@@ -204,30 +204,44 @@ function check(job, { benchNew = false, work }) {
     return { name: job.name, version: v.version, benched: benched() };
 }
 
-/** Runs check() for one submission in a child process, isolated when possible; returns {ok, ...} for the window. */
+/**
+ * Runs check() for one submission in a child process, isolated when possible; returns {ok, ...} for the window.
+ *
+ *     WORK/job-XXXX/        root's (0755): the checker cannot swap what is in it
+ *         tmp/              root's (1777): the checker's /tmp (isolate.sh --tmp)
+ *         home/             the checker's user's (0700): job.json, its HOME, the packing, the bundle's compiled code
+ *
+ * The result comes back as the last line the checker prints, so the parent never opens a file the checker could have
+ * replaced with a link.
+ */
 async function checkIsolated(job, { benchNew }) {
     fs.mkdirSync(WORK, { recursive: true });
     const work = fs.mkdtempSync(path.join(WORK, 'job-'));
     try {
-        const jobFile = path.join(work, 'job.json');
-        const outFile = path.join(work, 'result.json');
-        fs.writeFileSync(jobFile, JSON.stringify(job));
+        fs.chmodSync(work, 0o755);
+        fs.mkdirSync(path.join(work, 'tmp'), { mode: 0o1777 });
+        fs.chmodSync(path.join(work, 'tmp'), 0o1777);
+        const jobHome = path.join(work, 'home');
+        fs.mkdirSync(jobHome, { mode: 0o700 });
+        const jobFile = path.join(jobHome, 'job.json');
+        fs.writeFileSync(jobFile, JSON.stringify(job), { flag: 'wx' });
         // only what the checker needs: no token, no proxy (the toolchain is fetched beforehand)
         // (a hosted arena's register and submit take the admin token; the tools that read submitted files never get it)
         const keep = ['PATH', 'HOME', 'LANG', 'TZ', 'ARENA_HOME', 'ARENA_DASH', 'ARENA_RESULTS', 'SWU_CARD_JSON', 'ARENA_ADMIN_TOKEN', 'ARENA_AUTH'];
         const env = Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
         // compiled code of a bot that may be rejected stays with the job and goes with it; the ladders compile their own
-        env.SWU_WASM_CACHE = path.join(work, 'wasm-cache');
-        const node = [process.execPath, __filename, '--check', jobFile, outFile, ...(benchNew ? ['--bench-new'] : [])];
+        env.SWU_WASM_CACHE = path.join(jobHome, 'wasm-cache');
+        const node = [process.execPath, __filename, '--check', jobFile, '-', ...(benchNew ? ['--bench-new'] : [])];
         const isolated = process.getuid?.() === 0 && !process.env.ARENA_INTAKE_NO_ISOLATE;
         // as root, the checker runs as ARENA_USER (launch.sh: arena), which cannot undo isolate.sh's hiding: it gets
-        // the job's folder, and that folder as its HOME
+        // the job's home folder, as its HOME
         const user = isolated ? process.env.ARENA_USER : null;
         if (user) {
-            const id = (flag) => Number(require('child_process').execFileSync('id', [flag, user], { encoding: 'utf8' }));
-            fs.chownSync(work, id('-u'), id('-g'));
-            fs.chownSync(jobFile, id('-u'), id('-g'));
-            env.HOME = work;
+            const [uid, gid] = ['-u', '-g'].map((flag) => Number(require('child_process').execFileSync('id', [flag, user], { encoding: 'utf8' })));
+            // the file first, while its folder is still root's 0700 (nothing can swap it for a link yet), the folder last
+            fs.lchownSync(jobFile, uid, gid);
+            fs.chownSync(jobHome, uid, gid);
+            env.HOME = jobHome;
         }
         const isolate = isolated
             ? ['bash', path.join(__dirname, 'ops', 'isolate.sh'), ...(user ? ['--user', user] : []), '--tmp', path.join(work, 'tmp'),
@@ -246,7 +260,10 @@ async function checkIsolated(job, { benchNew }) {
         checkers.add(child.pid);
         fs.writeFileSync(CHECKER_PID, String(child.pid));
         let err = '';
-        child.stdout.on('data', () => {});
+        let out = '';
+        child.stdout.on('data', (d) => {
+            out = (out + d).slice(-OUT_CHARS);
+        });
         child.stderr.on('data', (d) => {
             err = (err + d).slice(-20000);
         });
@@ -260,8 +277,9 @@ async function checkIsolated(job, { benchNew }) {
         stop('SIGKILL'); // whatever the checker left behind (a bot its start check gave up on, outside isolate.sh)
         checkers.delete(child.pid);
         fs.rmSync(CHECKER_PID, { force: true });
-        if (fs.existsSync(outFile)) {
-            return JSON.parse(fs.readFileSync(outFile, 'utf8'));
+        const res = lastResult(out);
+        if (res) {
+            return res;
         }
         log(`check of ${job.id} ended with ${code} and no result:\n${err}`);
         // stopped at its time limit: the bot's doing (Javy on a huge file, a bot that never answers). Any other end with
@@ -269,16 +287,33 @@ async function checkIsolated(job, { benchNew }) {
         return code === null ? { ok: false, error: `the check took more than ${CHECK_MS / 60000} minutes` }
             : { ok: false, retry: true, error: 'the arena could not check it (its error is in the intake log)' };
     } finally {
-        fs.rmSync(work, { recursive: true, force: true });
+        require('./home').removeTree(work);
+    }
+}
+
+const OUT_CHARS = 64 * 1024; // what is kept of a checker's stdout: its result is the last line
+
+/** The checker's result: its last stdout line, when that is {ok: true|false, ...}; null otherwise. */
+function lastResult(out) {
+    const line = String(out).trimEnd().split('\n').pop();
+    try {
+        const r = JSON.parse(line);
+        return r && typeof r === 'object' && typeof r.ok === 'boolean' ? r : null;
+    } catch {
+        return null;
     }
 }
 
 const checkers = new Set(); // process groups of the checks running now
+// stopCheckers ran: the intake is stopping. A check it killed is no result (not the bot's doing), and nothing more is
+// claimed or written: release() puts the submission back, or the stuck rule picks it up later
+let stopping = false;
 // next to WORK, never in it: WORK belongs to the checker's user, who could put a link there for us to write through
 const CHECKER_PID = `${WORK}.checker.pid`;
 
 /** Kills every running check's process group (the intake is stopping). */
 function stopCheckers() {
+    stopping = true;
     for (const pgid of checkers) {
         try {
             process.kill(-pgid, 'SIGKILL');
@@ -317,10 +352,14 @@ function toolchainMissing() {
  * the window did not take (it was down), sent again first. Nothing is checked while the toolchain is missing. A check
  * that ends with no result (the arena's fault) leaves the submission pending, tried again later, RETRIES times at most.
  */
-async function intakeOnce({ benchNew = false, window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {} } = {}) {
+async function intakeOnce({ benchNew = false, window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {}, current = {} } = {}) {
     // for the games machine (games.js): how many submissions are still open after this pass, and how many it accepted
     stats.open = 0;
     stats.accepted = 0;
+    if (stopping) {
+        stats.open = null;
+        return 0;
+    }
     // without the toolchain every check would fail: submissions stay pending until it is there
     const why = missing();
     if (why) {
@@ -337,6 +376,9 @@ async function intakeOnce({ benchNew = false, window = require('./push'), finish
     const list = await window.request('GET', '/api/docs/submissions');
     let done = 0;
     for (const { id } of [...(list ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+        if (stopping) {
+            break;
+        }
         if (finished.has(id)) {
             continue;
         }
@@ -352,18 +394,49 @@ async function intakeOnce({ benchNew = false, window = require('./push'), finish
         if (!doc || !(doc.state === 'pending' || stuck) || (doc.retryAt && Date.parse(doc.retryAt) > Date.now())) {
             continue;
         }
-        await window.putDoc('submissions', id, { ...doc, state: 'checking', checkingAt: new Date().toISOString() });
-        log(`${id}: checking ${doc.kind} bot "${doc.name}" from @${doc.owner}`);
-        const res = await checker({ ...doc, id }, { benchNew });
-        const tries = (doc.tries ?? 0) + 1;
+        // a check the arena never finished (it stopped or crashed) counts as a try, so a submission that takes the
+        // machine down cannot be checked forever
+        const claimed = stuck ? { ...doc, tries: (doc.tries ?? 0) + 1 } : doc;
+        if (stuck && claimed.tries >= RETRIES) {
+            const { files, base64, checkingAt, ...rest } = claimed;
+            const out = { ...rest, fileNames: Object.keys(files ?? {}), state: 'rejected', checkedAt: new Date().toISOString(),
+                error: `the arena stopped during its check ${claimed.tries} times; submit it again later` };
+            await window.putDoc('submissions', id, out);
+            finished.add(id);
+            stats.open--;
+            log(`${id}: rejected (the arena stopped during its check ${claimed.tries} times)`);
+            done++;
+            continue;
+        }
+        if (stopping) {
+            break;
+        }
+        // what a stop puts back (release): the submission as it was before this claim, with the tries counted so far
+        Object.assign(current, { id, doc: claimed });
+        let res;
+        try {
+            await window.putDoc('submissions', id, { ...claimed, state: 'checking', checkingAt: new Date().toISOString() });
+            if (stopping) {
+                break; // stopped while claiming: release() puts it back
+            }
+            log(`${id}: checking ${doc.kind} bot "${doc.name}" from @${doc.owner}`);
+            res = await checker({ ...doc, id }, { benchNew });
+        } finally {
+            delete current.id;
+            delete current.doc;
+        }
+        if (stopping) {
+            break; // the check was killed: no result to write
+        }
+        const tries = (claimed.tries ?? 0) + 1;
         if (res.retry && tries < RETRIES) {
             // the arena's fault: the submission waits, files and all, and is tried again later
-            const { checkingAt, ...back } = doc;
+            const { checkingAt, ...back } = claimed;
             await window.putDoc('submissions', id, { ...back, state: 'pending', tries, retryAt: new Date(Date.now() + RETRY_MS * tries).toISOString() });
             log(`${id}: no result (try ${tries} of ${RETRIES}), tried again later`);
             continue;
         }
-        const { files, base64, ...rest } = doc;
+        const { files, base64, checkingAt, ...rest } = claimed;
         const fileNames = Object.keys(files ?? {});
         const out = res.ok
             ? { ...rest, fileNames, state: 'accepted', version: res.version, benched: res.benched, checkedAt: new Date().toISOString() }
@@ -381,6 +454,22 @@ async function intakeOnce({ benchNew = false, window = require('./push'), finish
         done++;
     }
     return done;
+}
+
+/**
+ * A stopping intake puts the submission it was checking back to pending (with the tries counted so far), so the next
+ * start checks it at once instead of waiting for it to look stuck. `current` is the object intakeOnce was given.
+ */
+async function release(current, window = require('./push')) {
+    const doc = current?.doc;
+    if (!current?.id || !doc) {
+        return false;
+    }
+    const { id } = current;
+    const { checkingAt, ...back } = doc;
+    await window.putDoc('submissions', id, { ...back, state: 'pending' });
+    log(`${id}: put back to pending (the intake stopped during its check)`);
+    return true;
 }
 
 /** One intake at a time (a second would check the same submission twice): its pid in WORK/intake.pid. */
@@ -417,7 +506,9 @@ async function main(argv) {
         return i >= 0 ? argv[i + 1] : d;
     };
     if (flag('check')) {
-        const [jobFile, outFile] = argv.slice(argv.indexOf('--check') + 1);
+        // the result is the last line on stdout (checkIsolated reads it); everything else goes to stderr
+        console.log = console.error;
+        const [jobFile] = argv.slice(argv.indexOf('--check') + 1);
         const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
         let res;
         try {
@@ -426,20 +517,25 @@ async function main(argv) {
             if (!(e instanceof IntakeError) && !e.code) {
                 throw e; // a bug of ours: no result, so the main loop says to try later and logs this
             }
-            res = { ok: false, error: e.message };
+            // capped as intakeOnce caps it, so the line always fits what checkIsolated keeps (OUT_CHARS)
+            res = { ok: false, error: String(e.message).slice(0, ERROR_CHARS) };
         }
-        fs.writeFileSync(outFile, JSON.stringify(res));
+        process.stdout.write(`${JSON.stringify(res)}\n`);
         return;
     }
     if (!onlyIntake()) {
         log('intake: another intake is running for this arena; this one stops');
         return;
     }
-    // a stopped intake takes its running check with it (the check is a process group of its own)
+    // a stopped intake takes its running check with it (the check is a process group of its own), and puts that
+    // submission back (at most 5 s: a window that does not answer leaves it to the stuck rule)
+    const current = {};
     for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
         process.on(sig, () => {
             stopCheckers();
-            process.exit(128 + require('os').constants.signals[sig]);
+            const code = 128 + require('os').constants.signals[sig];
+            setTimeout(() => process.exit(code), 5000).unref();
+            release(current).catch((e) => log(`intake: ${e.message}`)).finally(() => process.exit(code));
         });
     }
     const benchNew = flag('bench-new');
@@ -448,7 +544,7 @@ async function main(argv) {
     const unsent = new Map();
     for (;;) {
         try {
-            await intakeOnce({ benchNew, finished, unsent });
+            await intakeOnce({ benchNew, finished, unsent, current });
         } catch (e) {
             log(`intake: ${e.message}`);
             if (flag('once')) {
@@ -462,7 +558,7 @@ async function main(argv) {
     }
 }
 
-module.exports = { pack, check, checkIsolated, intakeOnce, onlyIntake, stopCheckers, bundleFiles, writeFiles };
+module.exports = { pack, check, checkIsolated, intakeOnce, release, onlyIntake, stopCheckers, toolchainMissing, lastResult, bundleFiles, writeFiles, RETRIES };
 if (require.main === module) {
     main(process.argv.slice(2)).catch((e) => {
         console.error(e.stack ?? e.message);

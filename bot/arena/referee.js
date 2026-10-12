@@ -40,7 +40,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 const { bradleyTerry } = require('../ratings');
-const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, roster: loadRoster, versionsOf } = require('./home');
+const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, writeAtomic, roster: loadRoster, versionsOf } = require('./home');
 const dash = require('./dash');
 const { TOURNAMENT, notify } = require('./api');
 const { resolveArena } = require('./registry');
@@ -293,7 +293,7 @@ function publish(round, t = null, id = ladderIdOf(round, t)) {
     st.now = rd.status === 'done' ? `Round ${round} done, ${lead}` : `Round ${round} running: ${rd.games}/${rd.scheduled} games${rd.rated ? '' : ', no games yet'}`;
     fs.mkdirSync(path.join(HOME, 'rounds'), { recursive: true });
     writeJson(STANDINGS, st);
-    fs.writeFileSync(path.join(HOME, 'rounds', `r${round}.md`), report(rd, st.global, cmp));
+    writeAtomic(path.join(HOME, 'rounds', `r${round}.md`), report(rd, st.global, cmp));
     dash.publishStandings(st);
     return rd;
 }
@@ -424,17 +424,28 @@ function spawnBots(args, opts) {
         '--', process.execPath, ...args], { ...opts, env });
 }
 
-/** A folder the referee made that bot code writes into (a round's ladder folder) belongs to ARENA_BOT_USER. */
+/**
+ * A folder the referee made that bot code writes into (a round's ladder folder) belongs to ARENA_BOT_USER. Changed
+ * through a handle opened without following a link: the results folder is that user's, who could put a link there.
+ */
 function giveToBots(dir) {
     const ids = botUser();
     if (ids) {
-        fs.chownSync(dir, ids[0], ids[1]);
+        const fd = fs.openSync(dir, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+        try {
+            fs.fchownSync(fd, ids[0], ids[1]);
+        } finally {
+            fs.closeSync(fd);
+        }
     }
 }
 
 /** Takes <dir>/referee.lock, or throws while another live referee holds it. */
 function takeLock(dir) {
     fs.mkdirSync(dir, { recursive: true });
+    if (!fs.lstatSync(dir).isDirectory()) {
+        throw new Error(`${dir} is not a folder (a link?): the referee does not write through it`);
+    }
     const file = path.join(dir, 'referee.lock');
     for (let attempt = 0; ; attempt++) {
         try {

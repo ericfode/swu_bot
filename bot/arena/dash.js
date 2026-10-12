@@ -28,11 +28,20 @@ function enabled() {
     return fs.existsSync(DASH);
 }
 
-const panelFile = (agent) => path.join(DASH, 'panels', `arena-${agent}.json`);
-const halfFile = (agent, side) => path.join(HOME, 'panels', `${agent}.${side}.json`);
+// a competitor's name is part of a file name: only names api.js register allows (roster.json is the bots' user's, and
+// the referee writing these runs as root)
+const NAME = /^[a-z][a-z0-9_]{0,31}$/;
+const named = (agent) => {
+    if (!NAME.test(String(agent))) {
+        throw new Error(`not a competitor name: ${JSON.stringify(agent)}`);
+    }
+    return agent;
+};
+const panelFile = (agent) => path.join(DASH, 'panels', `arena-${named(agent)}.json`);
+const halfFile = (agent, side) => path.join(HOME, 'panels', `${named(agent)}.${side}.json`);
 const boardFile = (name) => path.join(HOME, 'panels', `${name}.json`);
 // benched competitors (api.js withdraw) keep their panels, ratings and history
-const everyone = (r) => [...r.agents, ...(r.bench ?? [])];
+const everyone = (r) => [...r.agents, ...(r.bench ?? [])].filter((a) => NAME.test(String(a?.name)));
 const agentInfo = (agent) => everyone(roster()).find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
 
 /** A trimmed string of at most max chars, or undefined (null, empty, objects). */

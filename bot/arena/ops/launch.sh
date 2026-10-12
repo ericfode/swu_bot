@@ -222,9 +222,11 @@ console.log([...ids].join('\n'));" "$ARENA_HOME/standings.json" "$LAUNCH_TOURNAM
         (umask 077 && node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > "$SECRET")
     fi
     [ -n "$CA" ] && install -m 644 "$CA_SRC" "$CA"
-    # what the ladders and the intake's checker write is their user's; the secret, the worktree, the engine, the tools
-    # and the runner's folders stay root's
-    chown -R "$ARENA_USER:" "$BASE/results" "$BASE/home" "$BASE/wasm-cache" "$BASE/intake"
+    # what the ladders write is their user's; the secret, the worktree, the engine, the tools, the runner's folders and
+    # the intake's folder stay root's (each check gets a folder there whose layout its checker cannot change: intake.js)
+    chown -R "$ARENA_USER:" "$BASE/results" "$BASE/home" "$BASE/wasm-cache"
+    chown root: "$BASE/intake"
+    chmod 755 "$BASE/intake"
     chown root: "$SECRET"
     chmod 600 "$SECRET"
     # the arena and dashboard folders: the shared mount lets any user write, a rehearsal's local copy is made its user's
