@@ -418,6 +418,8 @@ impl Target {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TargetResolver {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    pub prompt_title: Option<String>,
     #[serde(default = "any_owner")]
     pub owner: String,
     #[serde(rename = "type", default = "any_owner")]
@@ -473,6 +475,7 @@ impl TargetResolver {
     }
     pub fn is_multiple(&self) -> bool { matches!(self.mode.as_deref(), Some("upTo" | "unlimited")) }
     pub fn validate(&self) -> Result<(), String> {
+        if self.prompt_title.is_some() {return Err("named prompt titles require a named descriptor".into());}
         self.max_targets()?;
         if self.card_type=="any" && self.mentions_upgrade_query() && !self.is_upgrade_domain() {return Err("mixed upgrade selector domains are not modeled".into());}
         if self.is_upgrade_domain() && (self.arena.is_some() || !matches!(self.zone.as_deref(),None|Some("arena"|"anyAttackable"|"discard"))) {return Err("upgrade selectors require arena/anyAttackable without an arena filter".into());}
@@ -617,6 +620,8 @@ fn one() -> Expr {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Ability {
+    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    pub target_resolvers: Vec<NamedTargetResolver>,
     #[serde(default)]
     pub trigger: String,
     #[serde(default)]
@@ -641,6 +646,15 @@ pub struct Ability {
     pub if_you_do: Option<Box<Ability>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct NamedTargetResolver {
+    pub name:String,
+    pub target_resolver:TargetResolver,
+    pub chooser:String,
+    pub effect:Effect,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sides {
@@ -663,6 +677,8 @@ pub enum Instruction {
     Jump { to: usize },
     Apply(Effect),
     Group(Effect),
+    /// Independent named selectors prepare before commitment and share one event window.
+    NamedGroup(Effect),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -854,6 +870,30 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if !ability.target_resolvers.is_empty() {
+            if depth!=0 || !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
+                return Err("named selectors require two independent standalone event/WhenPlayed stat systems".into());
+            }
+            let mut names=std::collections::HashSet::new();
+            let mut effects=Vec::new();
+            for descriptor in &ability.target_resolvers {
+                if descriptor.name.is_empty() || descriptor.name=="target" || !descriptor.name.chars().all(|c|c.is_ascii_alphanumeric()||c=='_') || !names.insert(descriptor.name.as_str()) || descriptor.chooser!="self" {return Err("named selectors require distinct ordinary names and own chooser".into());}
+                let mut r=descriptor.target_resolver.clone();
+                r.prompt_title=None;
+                r.validate()?;
+                if r.owner!="any" || r.card_type!="unit" || !r.optional || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) {return Err("named selectors require optional scalar any-owner arena units".into());}
+                if let Some(predicate)=&r.predicate {
+                    if !matches!(predicate,Expr::Query{name,receiver,args} if name=="hasSomeTrait" && matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card") && args.len()==1 && matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|v|!v.is_empty()))) {return Err("named selector predicates require one literal unit trait".into());}
+                }
+                if !matches!(&descriptor.effect,Effect::ModifyStats{target:Target::Name(n),duration,power:Expr::Const{value:p},hp:Expr::Const{value:h}} if n=="chosen" && duration=="phase" && p.as_i64().is_some_and(|v|(-65535..=65535).contains(&v)) && h.as_i64().is_some_and(|v|(-65535..=65535).contains(&v))) {return Err("named selectors require literal scalar phase stats".into());}
+                effects.push(Effect::Select{target_resolver:r,effect:Box::new(descriptor.effect.clone())});
+            }
+            let effect=Effect::Simultaneous{effects};
+            self.validate_group(&effect,1)?;
+            self.instructions.push(Instruction::NamedGroup(effect));
+            return Ok(());
+        }
+
         if matches!(&ability.effect,Effect::GainKeyword {target:Target::ArenaList(_),..}|Effect::LoseKeyword {target:Target::ArenaList(_),..}) {
             if depth!=0 || !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.optional || ability.target_resolver.is_some() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.coordinate || !ability.context_title.is_empty() {
                 return Err("arena-list keywords require a standalone event or WhenPlayed registration".into());
@@ -1259,6 +1299,8 @@ impl Catalogue {
                 if parent_reference(&entry["abilities"]) && entry["baseClass"]!="UpgradeCard" {return Err("parent references require an ordinary attached upgrade".into());}
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
+                let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
+                if sides.leader.iter().chain(&sides.unit).any(|a|!a.target_resolvers.is_empty()) || sides.card.iter().any(|a|!a.target_resolvers.is_empty() && !((a.trigger=="event" && entry["baseClass"]=="EventCard" && exact_type("event")) || (a.trigger=="whenPlayed" && entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit")))) {return Err("named selectors support ordinary unit WhenPlayed or event card-side sources".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}

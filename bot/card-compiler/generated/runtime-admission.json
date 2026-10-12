@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 2,
-    "sourceIr": 525
+    "sourceIr": 527
   },
   "runtimeAdmittedCards": [
     {
@@ -1027,6 +1027,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "c3po#captivating-storyteller",
+      "setCode": "HMW_255"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "jedi-interceptor",
       "setCode": "HMW_256"
     },
@@ -1614,6 +1619,11 @@
       "implementation": "sourceIr",
       "internalName": "tantive-iv#fleeing-the-empire",
       "setCode": "JTL_252"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "coordinated-front",
+      "setCode": "JTL_253"
     },
     {
       "implementation": "sourceIr",
@@ -4506,7 +4516,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 899,
+  "runtimeAdmittedCount": 901,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -6064,11 +6074,6 @@
       "setCode": "HMW_253"
     },
     {
-      "internalName": "c3po#captivating-storyteller",
-      "reason": "c3po#captivating-storyteller: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
-      "setCode": "HMW_255"
-    },
-    {
       "internalName": "ewok-archers",
       "reason": "ewok-archers: compiler rejected \"ewok-archers\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/09_HMW/units/EwokArchers.ts\",\"line\":20,\"message\":\"unsupported-field:sourceZoneFilter\",\"pattern\":\"unsupported-field:sourceZoneFilter\"}]",
       "setCode": "HMW_257"
@@ -6080,7 +6085,7 @@
     },
     {
       "internalName": "wrecker#wrecking-the-empire",
-      "reason": "wrecker#wrecking-the-empire: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "wrecker#wrecking-the-empire: named selectors require distinct ordinary names and own chooser",
       "setCode": "HMW_263"
     },
     {
@@ -6350,7 +6355,7 @@
     },
     {
       "internalName": "youre-all-clear-kid",
-      "reason": "youre-all-clear-kid: invalid ability IR: unknown field `ifYouDoCondition`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "youre-all-clear-kid: invalid ability IR: unknown field `ifYouDoCondition`, expected one of `targetResolvers`, `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
       "setCode": "JTL_055"
     },
     {
@@ -7059,11 +7064,6 @@
       "setCode": "JTL_250"
     },
     {
-      "internalName": "coordinated-front",
-      "reason": "coordinated-front: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
-      "setCode": "JTL_253"
-    },
-    {
       "internalName": "sullustan-spacer",
       "reason": "sullustan-spacer: compiler rejected \"sullustan-spacer\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/sullustan-spacer.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
       "setCode": "JTL_255"
@@ -7240,7 +7240,7 @@
     },
     {
       "internalName": "bossk#join-our-merry-band",
-      "reason": "bossk#join-our-merry-band: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "bossk#join-our-merry-band: named selectors support ordinary unit WhenPlayed or event card-side sources",
       "setCode": "LAW_031"
     },
     {
@@ -7350,7 +7350,7 @@
     },
     {
       "internalName": "millennium-falcon#dodging-patrols",
-      "reason": "millennium-falcon#dodging-patrols: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "millennium-falcon#dodging-patrols: named selectors support ordinary unit WhenPlayed or event card-side sources",
       "setCode": "LAW_068"
     },
     {
@@ -7440,7 +7440,7 @@
     },
     {
       "internalName": "governors-shuttle",
-      "reason": "governors-shuttle: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "governors-shuttle: named selectors require distinct ordinary names and own chooser",
       "setCode": "LAW_099"
     },
     {
@@ -7700,7 +7700,7 @@
     },
     {
       "internalName": "aerie#cloudrider-dropship",
-      "reason": "aerie#cloudrider-dropship: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "aerie#cloudrider-dropship: named selectors support ordinary unit WhenPlayed or event card-side sources",
       "setCode": "LAW_184"
     },
     {
@@ -8190,7 +8190,7 @@
     },
     {
       "internalName": "calm-in-the-storm",
-      "reason": "calm-in-the-storm: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "calm-in-the-storm: named selectors require two independent standalone event/WhenPlayed stat systems",
       "setCode": "LOF_054"
     },
     {
@@ -8855,7 +8855,7 @@
     },
     {
       "internalName": "death-trooper",
-      "reason": "death-trooper: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "death-trooper: named selectors require optional scalar any-owner arena units",
       "setCode": "SEC_030"
     },
     {
@@ -10760,7 +10760,7 @@
     },
     {
       "internalName": "it-binds-all-things",
-      "reason": "it-binds-all-things: invalid ability IR: unknown field `thenCondition`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "it-binds-all-things: invalid ability IR: unknown field `thenCondition`, expected one of `targetResolvers`, `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
       "setCode": "SOR_075"
     },
     {
@@ -11175,7 +11175,7 @@
     },
     {
       "internalName": "asteroid-sanctuary",
-      "reason": "asteroid-sanctuary: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "asteroid-sanctuary: named selectors require optional scalar any-owner arena units",
       "setCode": "SOR_218"
     },
     {
@@ -11385,7 +11385,7 @@
     },
     {
       "internalName": "ziton-moj#sowing-chaos",
-      "reason": "ziton-moj#sowing-chaos: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "ziton-moj#sowing-chaos: named selectors support ordinary unit WhenPlayed or event card-side sources",
       "setCode": "TS26_029"
     },
     {
@@ -11450,7 +11450,7 @@
     },
     {
       "internalName": "secret-marriage",
-      "reason": "secret-marriage: invalid ability IR: unknown field `ifYouDoCondition`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "secret-marriage: invalid ability IR: unknown field `ifYouDoCondition`, expected one of `targetResolvers`, `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
       "setCode": "TS26_046"
     },
     {
@@ -11540,7 +11540,7 @@
     },
     {
       "internalName": "fervor",
-      "reason": "fervor: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "fervor: named selectors require optional scalar any-owner arena units",
       "setCode": "TS26_072"
     },
     {
@@ -11575,7 +11575,7 @@
     },
     {
       "internalName": "mislead",
-      "reason": "mislead: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "mislead: named selectors require optional scalar any-owner arena units",
       "setCode": "TS26_081"
     },
     {
@@ -12010,7 +12010,7 @@
     },
     {
       "internalName": "unlimited-power",
-      "reason": "unlimited-power: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "unlimited-power: invalid ability IR: unknown field `dependsOn`, expected one of `name`, `targetResolver`, `chooser`, `effect`",
       "setCode": "TWI_156"
     },
     {
@@ -12040,7 +12040,7 @@
     },
     {
       "internalName": "grenade-strike",
-      "reason": "grenade-strike: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "grenade-strike: invalid ability IR: unknown field `dependsOn`, expected one of `name`, `targetResolver`, `chooser`, `effect`",
       "setCode": "TWI_171"
     },
     {
@@ -12250,7 +12250,7 @@
     },
     {
       "internalName": "merciless-contest",
-      "reason": "merciless-contest: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "merciless-contest: named selectors require distinct ordinary names and own chooser",
       "setCode": "TWI_238"
     },
     {
@@ -12270,7 +12270,7 @@
     },
     {
       "internalName": "heroes-on-both-sides",
-      "reason": "heroes-on-both-sides: invalid ability IR: unknown field `targetResolvers`, expected one of `trigger`, `coordinate`, `title`, `contextTitle`, `costs`, `optional`, `requiresConfirmation`, `targetResolver`, `condition`, `effect`, `then`, `ifYouDo`",
+      "reason": "heroes-on-both-sides: unsupported target mode/count; unlimited selection is base-only",
       "setCode": "TWI_249"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1559,
+  "runtimeRejectedCount": 1557,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 672
 }

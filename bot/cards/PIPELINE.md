@@ -137,6 +137,15 @@ stacking, recipient reentry, capped or ineffective Restore, Sentinel precedence,
 and live Hidden regain remain explicit gaps. Capacity and overflow checks are
 separate runtime tests.
 
+Named-target experiments cover two independent optional unit selectors with
+literal phase stats. They compare both owners, trait and arena filters, voluntary
+declines, cancellation at each prepayment prompt, empty-event confirmation,
+missing descriptors, entering-source eligibility, and natural phase expiry.
+Selections prepare before event payment when available; a missing descriptor can
+delay the remaining prompts until after payment. Effects wait for both choices.
+Unique-source departure, recipient reentry, overlapping trait recipients, lethal
+expiry, and token/deployed-leader interactions remain explicit coverage gaps.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

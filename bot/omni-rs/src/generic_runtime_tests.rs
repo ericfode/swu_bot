@@ -2132,3 +2132,68 @@ fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigg
         if code=="TS26_016" {assert_eq!(e.keyword_amount(&played,source,"restore"),1);}else{assert_eq!(e.keyword_amount(&played,source,"raid"),2);assert_eq!(played.card(source).lost_keyword_mask()&(1<<8),0);}
     }
 }
+
+#[test]
+fn named_two_admission_preserves_other_descriptor_rejections() {
+    let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+    for code in ["HMW_263","LAW_031","LAW_068","LAW_099","LAW_184","LOF_054","SEC_030","SOR_218","TS26_029","TS26_072","TS26_081","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    assert_eq!(std::mem::size_of::<State>(),18552);
+}
+#[test]
+fn actual_named_event_prepares_both_choices_before_costs_and_effects() {
+    let e=engine();let mut s=board(&e);let ground=unit(&e,&mut s,Seat::P2,"LOF_256");let space=unit(&e,&mut s,Seat::P2,"ASH_201");let event=hand(&e,&mut s,"JTL_253");
+    let base_power=e.power(&s,ground,false);let base_space=e.power(&s,space,false);
+    let prompt=e.apply(&s,&e.card_action(&s,event)).unwrap();assert_eq!(prompt.decision,Decision::AbilityTarget);assert!(prompt.players[0].hand.contains(event));
+    let buttons=e.legal_actions(&prompt).into_iter().filter(|a|a.id().is_none()).collect::<Vec<_>>();assert_eq!(buttons,vec![Action::button("Choose nothing","done"),Action::button("Cancel","cancel")]);
+    let next=e.apply(&prompt,&e.card_action(&prompt,ground)).unwrap();assert_eq!(next.decision,Decision::AbilityTarget);assert!(next.players[0].hand.contains(event));assert_eq!(e.power(&next,ground,false),base_power);assert!(next.players[0].resources.as_slice().iter().all(|id|!next.card(*id).exhausted));
+    let resolved=e.apply(&next,&e.card_action(&next,space)).unwrap();assert!(resolved.players[0].discard.contains(event));assert_eq!(e.power(&resolved,ground,false),base_power+2);assert_eq!(e.power(&resolved,space,false),base_space+2);assert_eq!(resolved.decision,Decision::Window);
+    let cancelled=named_button(&e,&next,"Cancel");assert_eq!(cancelled.zobrist(),s.zobrist());
+    let first_declined=named_button(&e,&prompt,"Choose nothing");let both_declined=named_button(&e,&first_declined,"Choose nothing");assert!(both_declined.players[0].discard.contains(event));assert_eq!(both_declined.decision,Decision::Window);assert_eq!(e.power(&both_declined,ground,false),base_power);
+}
+#[test]
+fn actual_named_event_missing_first_delays_remaining_until_paid_and_all_missing_confirms() {
+    let e=engine();let mut s=board(&e);let space=unit(&e,&mut s,Seat::P2,"ASH_201");let event=hand(&e,&mut s,"JTL_253");
+    let prompt=e.apply(&s,&e.card_action(&s,event)).unwrap();assert_eq!(prompt.decision,Decision::AbilityTarget);assert!(prompt.players[0].discard.contains(event));assert!(!e.legal_actions(&prompt).iter().any(|a|a.label=="Cancel"));assert!(e.legal_actions(&prompt).contains(&e.card_action(&prompt,space)));
+    let skipped=named_button(&e,&prompt,"Choose nothing");assert_eq!(skipped.decision,Decision::Window);
+    let mut empty=board(&e);let event=hand(&e,&mut empty,"JTL_253");let prompt=e.apply(&empty,&e.card_action(&empty,event)).unwrap();assert_eq!(prompt.decision,Decision::AbilityNoEffect);assert_eq!(named_button(&e,&prompt,"Cancel").zobrist(),empty.zobrist());assert!(named_button(&e,&prompt,"Play anyway").players[0].discard.contains(event));
+    let mut ground_only=board(&e);unit(&e,&mut ground_only,Seat::P2,"LOF_256");let event=hand(&e,&mut ground_only,"JTL_253");let prompt=e.apply(&ground_only,&e.card_action(&ground_only,event)).unwrap();let skipped=named_button(&e,&prompt,"Choose nothing");assert_eq!(skipped.decision,Decision::Window);assert!(skipped.players[0].discard.contains(event));
+}
+#[test]
+fn actual_c3po_without_ewok_still_selects_its_entering_rebel_source() {
+    let e=engine();let mut s=board(&e);let source=hand(&e,&mut s,"HMW_255");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(prompt.decision,Decision::AbilityTarget);assert!(prompt.players[0].ground.contains(source));assert!(e.legal_actions(&prompt).contains(&e.card_action(&prompt,source)));assert!(!e.legal_actions(&prompt).iter().any(|a|a.label=="Cancel"));
+    let power=e.power(&prompt,source,false);let resolved=e.apply(&prompt,&e.card_action(&prompt,source)).unwrap();assert_eq!(e.power(&resolved,source,false),power+2);assert_eq!(resolved.decision,Decision::Window);
+}
+
+#[test]
+fn named_descriptors_fail_closed_for_dependencies_duplicates_and_other_systems() {
+    let catalogue:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let card=catalogue["cards"].as_array().unwrap().iter().find(|v|v["setCode"]=="JTL_253").unwrap();let valid=card["abilities"]["card"][0].clone();
+    let compile=|v:Value|->bool {serde_json::from_value::<crate::ability_ir::Ability>(v).ok().is_some_and(|a|crate::ability_ir::Program::compile(&a).is_ok())};assert!(compile(valid.clone()));
+    let mut invalid=Vec::new();
+    for name in ["","target","groundUnit","bad.name"] {let mut v=valid.clone();v["targetResolvers"][1]["name"]=json!(name);invalid.push(v);}
+    for (key,value) in [("chooser",json!("opponent")),("bogus",json!(true))] {let mut v=valid.clone();v["targetResolvers"][0][key]=value;invalid.push(v);}
+    for (key,value) in [("owner",json!("self")),("optional",json!(false)),("type",json!("base")),("zone",json!("discard")),("mode",json!("upTo"))] {let mut v=valid.clone();v["targetResolvers"][0]["targetResolver"][key]=value;invalid.push(v);}
+    for trigger in ["onAttack","onDefense","action","whenDefeated","constant"] {let mut v=valid.clone();v["trigger"]=json!(trigger);invalid.push(v);}
+    for (key,value) in [("optional",json!(true)),("condition",json!({"kind":"const","value":true})),("costs",json!([{"kind":"exhaustSelf"}])),("targetResolver",json!({"type":"unit","zone":"arena"}))] {let mut v=valid.clone();v[key]=value;invalid.push(v);}
+    let mut v=valid.clone();v["targetResolvers"][0]["effect"]["power"]=json!({"kind":"ref","path":["source","damage"]});invalid.push(v);
+    let mut v=valid.clone();v["targetResolvers"][0]["effect"]["target"]=json!({"kind":"ref","path":["targets","spaceUnit"]});invalid.push(v);
+    let mut v=valid.clone();v["targetResolvers"][0]["effect"]=json!({"kind":"damage","amount":{"kind":"const","value":2},"target":"chosen"});invalid.push(v);
+    for key in ["then","ifYouDo"] {let mut v=valid.clone();v[key]=json!({"title":"No action","effect":{"kind":"noAction"}});invalid.push(v);let mut nested=valid.clone();nested.as_object_mut().unwrap().remove("trigger");invalid.push(json!({"trigger":"event","title":"Nested","effect":{"kind":"noAction"},key:nested}));}
+    for v in invalid {assert!(!compile(v.clone()),"{v}");}
+    // promptTitle alone must not silently widen ordinary resolver admission.
+    assert!(!compile(json!({"trigger":"event","title":"Ordinary","targetResolver":{"type":"unit","zone":"arena","promptTitle":"Unexpected"},"effect":{"kind":"modifyStats","target":"chosen","duration":"phase","power":{"kind":"const","value":2},"hp":{"kind":"const","value":2}}})));
+}
+#[test]
+fn synthetic_overlapping_named_traits_retain_two_same_recipient_events_and_phase_expiry() {
+    let mut e=engine();let mut s=board(&e);let other=unit(&e,&mut s,Seat::P2,"LOF_256");e.definitions[s.card(other).def as usize].traits=vec!["ewok".into(),"rebel".into()];
+    let source=hand(&e,&mut s,"HMW_255");let prompt=e.apply(&s,&e.card_action(&s,source)).unwrap();let next=e.apply(&prompt,&e.card_action(&prompt,other)).unwrap();assert_eq!(next.card(other).phase_power,0);let resolved=e.apply(&next,&e.card_action(&next,other)).unwrap();assert_eq!(resolved.card(other).phase_power,4);assert_eq!(resolved.card(other).phase_hp,4);assert_eq!(resolved.card(source).phase_power,0);
+    let mut expired=resolved;expired.players[0].out=true;expired.players[1].out=true;e.advance(&mut expired).unwrap();assert_eq!(expired.card(other).phase_power,0);assert_eq!(expired.card(other).phase_hp,0);
+}
+#[test]
+fn named_descriptor_catalogue_sources_exclude_leaders_tokens_and_upgrades() {
+    let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let template=original["cards"].as_array().unwrap().iter().find(|v|v["setCode"]=="HMW_255").unwrap();
+    for base_class in ["LeaderCard","UpgradeCard","TokenUnitCard","BaseCard"] {let mut entry=template.clone();entry["baseClass"]=json!(base_class);let catalogue=json!({"schema":original["schema"],"cards":[entry]});let loaded=crate::ability_ir::Catalogue::load(&catalogue).unwrap();assert!(loaded.rejected.contains_key("HMW_255"),"{base_class}");}
+    for types in [json!([]),json!(["leader","unit"]),json!(["upgrade"]),json!(["base"]),json!(["event"]),json!(["unit","event"])] {let mut entry=template.clone();entry["card"]["types"]=types;let loaded=crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap();assert!(loaded.rejected.contains_key("HMW_255"));}
+    let event=original["cards"].as_array().unwrap().iter().find(|v|v["setCode"]=="JTL_253").unwrap();for types in [json!(["unit"]),json!(["event","leader"]),json!([])] {let mut entry=event.clone();entry["card"]["types"]=types;let loaded=crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap();assert!(loaded.rejected.contains_key("JTL_253"));}
+    let mut entry=template.clone();entry["card"]["types"]=json!(["unit","token"]);let loaded=crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap();assert!(loaded.rejected.contains_key("HMW_255"));
+    for side in ["leader","unit"] {let mut entry=template.clone();let ability=entry["abilities"]["card"][0].clone();entry["abilities"]["card"]=json!([]);entry["abilities"][side]=json!([ability]);let loaded=crate::ability_ir::Catalogue::load(&json!({"schema":original["schema"],"cards":[entry]})).unwrap();assert!(loaded.rejected.contains_key("HMW_255"));}
+}

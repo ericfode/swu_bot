@@ -1003,7 +1003,7 @@ impl Engine {
                     );
                 }
                 Instruction::IfResult { .. } => break,
-                Instruction::Apply(effect) | Instruction::Group(effect) => {
+                Instruction::Apply(effect) | Instruction::Group(effect) | Instruction::NamedGroup(effect) => {
                     if self.effect_can_affect(s, source, target, effect, require_change) {
                         return true;
                     }
@@ -1140,7 +1140,8 @@ impl Engine {
                 let (r,child)=if let Some((r,e))=self.current_group_resolver(s,p) { (r,Some(e)) } else {
                     let Instruction::Select(r)=&p.instructions[s.ability_pc as usize] else { unreachable!() }; (r,None)
                 };
-                if !s.ability_committed && s.ability_return==0 { out.push(Action::button("Cancel","cancel")); }
+                let named=matches!(p.instructions[s.ability_pc as usize],Instruction::NamedGroup(_));
+                if !named && !s.ability_committed && s.ability_return==0 { out.push(Action::button("Cancel","cancel")); }
                 if child.is_none() && p.optional && s.ability_pc==0 { out.push(Action::button("Pass","passAbility")); }
                 let picks=if child.is_some() { s.event_group.picks } else { s.ability_selection };
                 if r.is_multiple() {
@@ -1151,6 +1152,7 @@ impl Engine {
                         out.push(Action::button("Choose nothing","done"));
                     } else { out.push(Action::button("Choose no target","noTarget")); }
                 }
+                if named && !s.ability_committed && s.ability_return==0 { out.push(Action::button("Cancel","cancel")); }
                 let candidates=if let Some(e)=child { self.group_candidates(s,r,e,false) } else {
                     self.program_targets(s,source,s.ability_program-1,s.ability_pc as usize,r,false)
                 };
@@ -1331,14 +1333,16 @@ impl Engine {
                     s.decision = Decision::AbilityDistribute;
                     return Ok(());
                 }
-                Instruction::Group(effect) => {
-                    self.commit_program(s)?;
+                Instruction::Group(effect) | Instruction::NamedGroup(effect) => {
+                    let named=matches!(instruction,Instruction::NamedGroup(_));
+                    if !named { self.commit_program(s)?; }
                     if !s.event_group.active {
                         s.ability_succeeded=false;
                         s.event_group.active=true; s.event_group.initiator=s.active;
                         s.event_group.context=if s.ability_selection.len>0 { s.ability_selection } else { Selection::one(s.ability_target) };
                     }
                     if !self.generate_group(s,effect)? { return Ok(()); }
+                    if named { self.commit_program(s)?; }
                     if !self.resolve_group(s,effect)? { return Ok(()); }
                     s.event_group=EventGroupState::default();
                     s.ability_selection=Selection::default();
@@ -1355,7 +1359,7 @@ impl Engine {
         }
     }
     fn current_group_resolver<'a>(&self, s: &State, p: &'a Program) -> Option<(&'a TargetResolver,&'a Effect)> {
-        let Instruction::Group(effect)=&p.instructions[s.ability_pc as usize] else { return None; };
+        let (Instruction::Group(effect)|Instruction::NamedGroup(effect))=&p.instructions[s.ability_pc as usize] else { return None; };
         match group_ops(effect).get(s.event_group.pc as usize) {
             Some(GroupOp::Select(r,e,_))=>Some((r,e)), _=>None,
         }
@@ -1437,7 +1441,11 @@ impl Engine {
                 GroupOp::Branch(expr,to)=> { if !self.eval(s,s.source,s.ability_target,expr).truth() { s.event_group.pc=*to as u16; continue; } }
                 GroupOp::Jump(to)=> { s.event_group.pc=*to as u16; continue; }
                 GroupOp::Select(r,child,end)=> {
-                    if self.group_candidates(s,r,child,true).is_empty() { s.event_group.pc=*end as u16; continue; }
+                    if self.group_candidates(s,r,child,true).is_empty() {
+                        // A missing pretarget delays the remaining named resolver chain until costs.
+                        if !s.ability_committed && matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedGroup(_)) {self.commit_program(s)?;}
+                        s.event_group.pc=*end as u16; continue;
+                    }
                     s.decision=Decision::AbilityTarget; return Ok(false);
                 }
                 GroupOp::Pop=> {

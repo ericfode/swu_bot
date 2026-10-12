@@ -8106,6 +8106,45 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "9713461356",
+      "internalName": "c3po#captivating-storyteller",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "HMW_255",
+      "setCodes": [
+        {
+          "number": 255,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 255,
+        "set": "HMW"
+      },
+      "subtitle": "Captivating Storyteller",
+      "text": "When Played: You may give an Ewok unit +2/+2 for this phase. You may give a Rebel unit +2/+2 for this phase.",
+      "title": "C-3PO",
+      "traits": [
+        "rebel",
+        "droid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "heroism"
@@ -13024,6 +13063,43 @@
         "unit"
       ],
       "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "9595202461",
+      "internalName": "coordinated-front",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "JTL_253",
+      "setCodes": [
+        {
+          "number": 253,
+          "set": "JTL"
+        }
+      ],
+      "setId": {
+        "number": 253,
+        "set": "JTL"
+      },
+      "subtitle": "",
+      "text": "You may give a ground unit +2/+2 for this phase.\nYou may give a space unit +2/+2 for this phase.",
+      "title": "Coordinated Front",
+      "traits": [
+        "plan"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
       "upgradeHp": null,
       "upgradePower": null
     },
