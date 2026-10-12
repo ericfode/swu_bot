@@ -44,7 +44,13 @@ except an admin changing the invite list from the app's Share page (below):
   `POST /api/share` with `{"add": "<login>"}` or `{"remove": "<login>"}` changes the invite document. Admins only: the
   admin token, or an admin's sign-in from the app's Share page, where the request must carry `Origin` equal to
   `ARENA_PUBLIC_URL` and a JSON body, so a page elsewhere cannot send it. A change takes effect on the next request.
-- `GET /api/me` answers `{login, role}` for the app (the Share page shows the invite list to admins).
+- `POST /api/share` with `{"addLink": "<who it is for>"}` makes a view link, `{"removeLink": "<id>"}` removes one
+  (the `admin/links` document). Opening `/v/<key>` lets anyone holding the link read the window with no sign-in (Eric's
+  typed OK, 2026-10-12 04:30): it sets a 30-day guest session tied to that link and sends the browser to `/`, which
+  keeps the link's `#/page`. A guest reads like a friend and never writes; removing the link locks its guests out on
+  their next request. Someone already signed in keeps their own session when they open a link.
+- `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
+  the invite list and the view links to admins.
 
 ## Through MCP
 
@@ -60,6 +66,8 @@ proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR
 
 - Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
   invite document is a friend; anyone else sees who to ask. Sessions last 14 days and survive deploys.
+- A view link (`/v/<key>`, made on the Share page) lets in anyone holding it as a guest: role friend, no login, for 30
+  days or until the link is removed.
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). In cloud sessions the egress
   proxy adds it for swu-arena.fly.dev (a network secret in the environment's settings), so no thread holds the token.
   Elsewhere set `SWU_WINDOW_TOKEN`.

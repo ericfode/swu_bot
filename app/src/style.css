@@ -639,3 +639,8 @@ figure.pd { margin: 0; }
 .invites { list-style: none; padding: 0; margin: var(--sp-10) 0 0; display: grid; }
 .invites li { display: flex; gap: var(--sp-10); align-items: center; padding: var(--sp-6) 0; border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
 .invites li button { margin-left: auto; }
+.invites li.vlink { flex-wrap: wrap; }
+.vlink > span:first-child { display: grid; gap: var(--sp-2); min-width: 0; flex: 1 1 260px; }
+.vlink .vurl { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vlink .vbtns { display: flex; gap: var(--sp-6); margin-left: auto; }
+.vlink .vbtns button { margin-left: 0; }

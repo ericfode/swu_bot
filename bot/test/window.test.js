@@ -30,7 +30,7 @@ async function serve(w) {
 function makeWindow(name, { fetchImpl } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
-    const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins });
+    const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
     return createWindow({ home, auth, app, minMs: 0 });
@@ -224,7 +224,7 @@ test('share: an admin invites and removes people from the Share page, and no one
         const kim = `swu_session=${w.auth.sign({ l: 'kim-b', exp: Date.now() + 60000 })}`;
         const site = 'https://swu-arena.fly.dev';
         const post = (body, opts = {}) => go('/api/share', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
-        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result, { invites: [], admins: ['ericfode'], fromEnv: ['pal'] });
+        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result, { invites: [], admins: ['ericfode'], fromEnv: ['pal'], links: [] });
         assert.strictEqual((await go('/api/share', { cookie: pal })).status, 403, 'a friend cannot see the list');
         assert.strictEqual((await go('/api/share', { cookie: kim })).status, 401);
         assert.strictEqual((await go('/', { cookie: kim })).status, 403);
@@ -250,6 +250,55 @@ test('share: an admin invites and removes people from the Share page, and no one
         assert.strictEqual((await go('/api/share', { method: 'POST', token: 'admin-secret', body: '{"add":"kim-b"}' })).status, 200);
         assert.strictEqual((await go('/api/share', { method: 'POST', token: 'push-secret', body: '{"add":"x"}' })).status, 403, 'the project token cannot');
         assert.deepStrictEqual(JSON.parse(w.store.getDoc('admin', 'invites')).logins, ['kim-b']);
+    } finally {
+        await close();
+    }
+});
+
+test('view links: a guest reads with no sign-in while the link exists, and never writes', async () => {
+    const w = makeWindow('w-links');
+    const { go, close } = await serve(w);
+    try {
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const post = (body, opts = {}) => go('/api/share', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
+        assert.strictEqual((await post({ addLink: 'for Sam' }, { cookie: pal })).status, 403, 'a friend cannot make one');
+        assert.strictEqual((await post({ addLink: 'for Sam' }, { origin: 'https://evil.fly.dev' })).status, 403);
+        for (const bad of [{ addLink: '' }, { addLink: 'x'.repeat(61) }, { addLink: 'a\u0007b' }, { addLink: 'x', add: 'y' }, { removeLink: 'nope' }]) {
+            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
+        }
+        const made = (await (await post({ addLink: '  for   Sam ' })).json()).result.links;
+        assert.strictEqual(made.length, 1);
+        const [{ id, key, label }] = made;
+        assert.strictEqual(label, 'for Sam');
+        assert.match(id, /^[0-9a-f]{12}$/);
+        assert.match(key, /^[A-Za-z0-9_-]{32}$/);
+
+        assert.strictEqual((await go('/v/not-a-real-key-at-all')).status, 404);
+        const open = await go(`/v/${key}`);
+        assert.strictEqual(open.status, 302);
+        assert.strictEqual(open.headers.get('location'), '/');
+        const guest = open.headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
+        assert.match(open.headers.getSetCookie().join(), /Max-Age=2592000/);
+        assert.strictEqual((await go('/', { cookie: guest })).status, 200);
+        assert.match(await (await go('/', { cookie: guest })).text(), /<title>app/);
+        assert.deepStrictEqual((await (await go('/api/me', { cookie: guest })).json()).result, { login: null, role: 'friend', guest: true });
+        assert.strictEqual((await go('/api/app', { cookie: guest })).status, 200);
+        assert.strictEqual((await go('/api/share', { cookie: guest })).status, 403, 'a guest never sees the links');
+        assert.strictEqual((await go('/api/docs/runs/x', { method: 'PUT', cookie: guest, body: '{}' })).status, 403, 'a guest never writes');
+        assert.strictEqual((await go('/api/share', { method: 'POST', cookie: guest, origin: site, body: '{"addLink":"me"}' })).status, 403);
+
+        // someone already signed in keeps their own session when they open a link
+        const mine = await go(`/v/${key}`, { cookie: eric });
+        assert.strictEqual(mine.status, 302);
+        assert.strictEqual(mine.headers.getSetCookie().length, 0);
+
+        // removing the link locks the guest out at once
+        assert.deepStrictEqual((await (await post({ removeLink: id })).json()).result.links, []);
+        assert.strictEqual((await go('/api/app', { cookie: guest })).status, 401);
+        assert.match(await (await go('/', { cookie: guest })).text(), /Sign in with GitHub/);
+        assert.strictEqual((await go(`/v/${key}`)).status, 404);
     } finally {
         await close();
     }

@@ -341,6 +341,12 @@ function afterRender() {
   for (const b of document.querySelectorAll('[data-act]')) b.addEventListener('click', () => ACTIONS[b.dataset.act]?.(b));
   for (const i of document.querySelectorAll('[data-input]')) i.addEventListener(i.tagName === 'SELECT' || i.type === 'checkbox' ? 'change' : 'input', () => ACTIONS[i.dataset.input]?.(i));
   if ($('guide-svg')) startGuide();
+  $('linkform')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('linklabel').value.replace(/\s+/g, ' ').trim();
+    if (!v) { S.share = { ...S.share, linkMsg: 'Write who the link is for, so you can tell the links apart.' }; render(true); return; }
+    shareChange({ addLink: v.slice(0, 60) });
+  });
   $('inviteform')?.addEventListener('submit', e => {
     e.preventDefault();
     const v = $('invitelogin').value.trim().replace(/^@/, '').toLowerCase();
@@ -368,6 +374,9 @@ const ACTIONS = {
   shareCopy: async b => { const el = $('sharelink'); try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } },
   shareSend: async () => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games, replays and research', url: $('sharelink').value }); } catch {} },
   inviteRemove: b => { if (confirm(`Remove @${b.dataset.login}? They lose access at once.`)) shareChange({ remove: b.dataset.login }); },
+  linkCopy: async b => { try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = 'Copied'; } catch { prompt('Copy this link', b.dataset.url); } },
+  linkSend: async b => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games, replays and research', url: b.dataset.url }); } catch {} },
+  linkRemove: b => { if (confirm(`Remove the view link "${b.dataset.label}"? Anyone using it is locked out at once.`)) shareChange({ removeLink: b.dataset.id }); },
 };
 
 // ---------- viewers (the shared viewer kit), kept alive across re-renders ----------
@@ -1106,7 +1115,7 @@ function peopleCard() {
 const PEOPLE_F = [['all', 'All'], ['playing', 'Playing'], ['won', 'Our bot won'], ['lost', 'Our bot lost'], ['abandoned', 'Abandoned']];
 function pagePeople() {
   const P = peopleStats();
-  const head = `<div class="phead"><h1>Bots vs people</h1><p class="lede">Our bots play real people on karabast.net, the public Star Wars Unlimited site. These games never change a bot's rating; ratings come from bot-vs-bot games only. People are never named here: each one shows as "a person".</p></div>`;
+  const head = `<div class="phead"><h1>Bots vs people</h1><p class="lede">Our bots play real people on karabast.net, the public Star Wars Unlimited site. These games never change a bot's rating; ratings come from bot-vs-bot games only. People are never named here: each one shows as "a person".${HOSTED ? ` <a href="#/share?from=${encodeURIComponent('#/people')}">Share this tab</a>` : ''}</p></div>`;
   if (!P.games.length) return `${head}<div class="grid"><div class="c6 box">${peopleDiagram()}</div><div class="c6 box"><p class="muted">No games against people yet.</p></div></div>`;
   const all = P.bots.reduce((a, B) => ({ w: a.w + B.w, l: a.l + B.l, d: a.d + B.d, n: a.n + B.n, ab: a.ab + B.ab, live: a.live + B.live }), { w: 0, l: 0, d: 0, n: 0, ab: 0, live: 0 });
   const { playing, done } = gridGames({ people: true, max: 12, finished: 6 });
@@ -1138,32 +1147,38 @@ async function loadShare() {
   if (route().parts[0] === 'share') render(true);
 }
 async function shareChange(body) {
-  const keep = S.share; S.share = { ...keep, busy: true, msg: '' }; render(true);
+  const keep = S.share; S.share = { ...keep, busy: true, msg: '', linkMsg: '' }; render(true);
+  const done = body.add ? { msg: `@${body.add} can sign in now. Send them the link above.` } : body.remove ? { msg: `@${body.remove} can no longer sign in.` }
+    : body.addLink ? { linkMsg: `Made a view link: ${body.addLink}. Copy or send it below.` } : { linkMsg: 'Removed. Anyone using that link is locked out.' };
   try {
     const r = await fetch('/api/share', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), j = await r.json().catch(() => ({}));
-    S.share = r.ok ? { ...j.result, msg: body.add ? `@${body.add} can sign in now. Send them the link above.` : `@${body.remove} can no longer sign in.` } : { ...keep, busy: false, msg: j.error?.message || `HTTP ${r.status}` };
+    S.share = r.ok ? { ...j.result, ...done } : { ...keep, busy: false, [body.addLink || body.removeLink ? 'linkMsg' : 'msg']: j.error?.message || `HTTP ${r.status}` };
   } catch (e) { S.share = { ...keep, busy: false, msg: e?.message || 'offline' }; }
   render(true);
 }
-/** The mental model: GitHub says who someone is, the invite list says whether they may look, and looking is all they can do. */
+/** The mental model: two ways in (a GitHub sign-in on the invite list, or a view link), one arena, view only. */
 function shareDiagram(admin) {
-  const box = (x, t, s) => `<rect x="${x}" y="6" width="98" height="42" rx="6" style="fill:var(--raised);stroke:var(--line-2)" stroke-width="1.5"/><text x="${x + 49}" y="24" text-anchor="middle" class="pd-t">${t}</text><text x="${x + 49}" y="39" text-anchor="middle" class="pd-s">${s}</text>`;
-  const arrow = (x, label) => `<line x1="${x}" y1="27" x2="${x + 14}" y2="27" style="stroke:var(--muted)" stroke-width="1.5"/><path d="M${x + 14} 22.5l6 4.5-6 4.5z" style="fill:var(--muted)"/><text x="${x + 11}" y="64" text-anchor="middle" class="pd-s">${label}</text>`;
-  return `<figure class="pd"><svg viewBox="0 0 344 70" role="img" aria-label="GitHub sign-in says who someone is; the invite list says whether they may look; then they see the arena, read only.">${box(2, 'GitHub sign-in', 'who they are')}${arrow(101, 'checked on')}${box(123, 'Invite list', admin ? 'you edit it here' : 'Eric keeps it')}${arrow(222, 'lets in')}${box(244, 'The arena', 'view only')}</svg><figcaption>Removing a name locks that person out on their next click.</figcaption></figure>`;
+  const box = (y, t, s) => `<rect x="4" y="${y}" width="150" height="42" rx="6" style="fill:var(--raised);stroke:var(--line-2)" stroke-width="1.5"/><text x="79" y="${y + 18}" text-anchor="middle" class="pd-t">${t}</text><text x="79" y="${y + 33}" text-anchor="middle" class="pd-s">${s}</text>`;
+  const arrow = (y1, y2) => `<line x1="156" y1="${y1}" x2="214" y2="${y2}" style="stroke:var(--muted)" stroke-width="1.5"/><path d="M214 ${y2 - 4.5}l7 4.5-7 4.5z" style="fill:var(--muted)"/>`;
+  return `<figure class="pd"><svg viewBox="0 0 340 112" role="img" aria-label="Two ways in: signing in with GitHub when your name is on the invite list, or opening a view link. Both open the same arena, view only.">${box(6, 'GitHub sign-in', admin ? 'name on your invite list' : 'name on the invite list')}${box(64, 'View link', 'anyone holding it')}${arrow(27, 52)}${arrow(85, 60)}<rect x="222" y="35" width="114" height="42" rx="6" style="fill:var(--raised);stroke:var(--accent)" stroke-width="1.5"/><text x="279" y="53" text-anchor="middle" class="pd-t">The arena</text><text x="279" y="68" text-anchor="middle" class="pd-s">view only</text></svg><figcaption>Two ways in, one arena. Removing a name or a link locks it out on the next click.</figcaption></figure>`;
 }
 function pageShare(r) {
-  const head = `<div class="phead"><h1>Share the arena</h1><p class="lede">People you invite sign in with GitHub and see everything here: games and replays, bots and their histories, the research. They can't change anything.</p></div>`;
+  const head = `<div class="phead"><h1>Share the arena</h1><p class="lede">Two ways in: sign in with GitHub when your name is on the invite list, or open a view link, which needs no account. Either way you see everything here: games and replays, bots and their histories, the research. Nobody who comes in can change anything.</p></div>`;
   if (!HOSTED) return `${head}<div class="notice">Sharing is part of the hosted arena at swu-arena.fly.dev; this copy is a snapshot.</div>`;
-  const admin = S.me?.role === 'admin', sh = S.share || {};
+  const admin = S.me?.role === 'admin', sh = S.share || {}, from = r.qs.get('from'), hash = /^#\/(?!share)./.test(from || '') ? from : '';
   if (admin && !S.share) { S.share = { busy: true }; setTimeout(loadShare); }
   const who = (l, how, rm) => `<li><span class="mono">@${esc(l)}</span><span class="muted">${how}</span>${rm ? `<button type="button" data-act="inviteRemove" data-login="${esc(l)}" ${sh.busy ? 'disabled' : ''}>Remove</button>` : ''}</li>`;
   const list = sh.err ? `<p class="bad" style="margin-top:8px">${esc(sh.err)}</p>` : !sh.invites ? '<p class="muted" style="margin-top:8px">Loading…</p>'
     : `<ul class="invites">${[...(sh.admins || []).map(l => who(l, 'admin', false)), ...(sh.fromEnv || []).filter(l => !(sh.admins || []).includes(l)).map(l => who(l, 'set on the server', false)), ...sh.invites.map(l => who(l, 'invited here', true))].join('')}</ul>${sh.invites.length ? '' : '<p class="muted" style="margin-top:6px;font-size:var(--fs-md)">Nobody invited here yet.</p>'}`;
+  const linkUrl = l => `${location.origin}/v/${l.key}${hash}`;
+  const links = !sh.links ? '' : sh.links.length ? `<ul class="invites">${[...sh.links].reverse().map(l => `<li class="vlink"><span><b>${esc(l.label)}</b> <span class="muted">made ${ago(l.createdAt) === 'now' ? 'just now' : `${ago(l.createdAt)} ago`}</span><span class="mono faint vurl">${esc(linkUrl(l))}</span></span><span class="vbtns"><button type="button" data-act="linkCopy" data-url="${esc(linkUrl(l))}">Copy</button>${navigator.share ? `<button type="button" data-act="linkSend" data-url="${esc(linkUrl(l))}">Send</button>` : ''}<button type="button" data-act="linkRemove" data-id="${esc(l.id)}" data-label="${esc(l.label)}" ${sh.busy ? 'disabled' : ''}>Remove</button></span></li>`).join('')}</ul>` : '<p class="muted" style="margin-top:6px;font-size:var(--fs-md)">No view links yet.</p>';
+  const notAdmin = S.me?.guest ? 'You came in by a view link. To share the arena, ask Eric for a link of your own.' : 'Only Eric adds people: send him their GitHub username, or ask him for a view link.';
   return `${head}<div class="grid">
-    <section class="c7 box"><div class="bh"><h3>Link to the page you were on</h3></div><div class="sharerow"><input id="sharelink" readonly value="${esc(shareLink(r.qs.get('from')))}" aria-label="Link"><button type="button" data-act="shareCopy">Copy</button>${navigator.share ? '<button type="button" data-act="shareSend">Send</button>' : ''}</div><p class="muted" style="font-size:var(--fs-md);margin-top:6px">It opens that same page for anyone invited, right after they sign in.</p></section>
+    <section class="c7 box"><div class="bh"><h3>Link to the page you were on</h3></div><div class="sharerow"><input id="sharelink" readonly value="${esc(shareLink(from))}" aria-label="Link"><button type="button" data-act="shareCopy">Copy</button>${navigator.share ? '<button type="button" data-act="shareSend">Send</button>' : ''}</div><p class="muted" style="font-size:var(--fs-md);margin-top:6px">It opens that same page for anyone invited, right after they sign in.${admin ? ' For someone without GitHub, send a view link (below).' : ''}</p></section>
     <section class="c5 box">${shareDiagram(admin)}</section>
-    ${admin ? `<section class="c12 box"><div class="bh"><h3>Who can sign in</h3><span class="sub">changes take effect at once</span></div><form id="inviteform" class="sharerow"><input id="invitelogin" placeholder="GitHub username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="GitHub username"><button type="submit" ${sh.busy ? 'disabled' : ''}>Invite</button></form>${sh.msg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.msg)}</p>` : ''}${list}</section>`
-      : '<section class="c12 box"><p>Only Eric adds people: send him their GitHub username.</p></section>'}
+    ${admin ? `<section class="c12 box"><div class="bh"><h3>View links</h3><span class="sub">no account needed${hash ? `; each opens ${esc(hash)}` : ''}</span></div><p class="muted" style="font-size:var(--fs-md);margin-bottom:8px">Anyone holding a view link sees the arena with no sign-in, and a forwarded link works too. Make one per person, so you can remove one without the others.</p><form id="linkform" class="sharerow"><input id="linklabel" placeholder="Who is it for? (only you see this)" maxlength="60" autocomplete="off" aria-label="Who the link is for"><button type="submit" ${sh.busy ? 'disabled' : ''}>Make a link</button></form>${sh.linkMsg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.linkMsg)}</p>` : ''}${links}</section>
+    <section class="c12 box"><div class="bh"><h3>Who can sign in</h3><span class="sub">changes take effect at once</span></div><form id="inviteform" class="sharerow"><input id="invitelogin" placeholder="GitHub username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="GitHub username"><button type="submit" ${sh.busy ? 'disabled' : ''}>Invite</button></form>${sh.msg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.msg)}</p>` : ''}${list}</section>`
+      : `<section class="c12 box"><p>${notAdmin}</p></section>`}
   </div>${S.me?.login ? `<p class="muted" style="margin-top:10px;font-size:var(--fs-md)">Signed in as @${esc(S.me.login)} · <a href="/auth/logout">Sign out</a></p>` : ''}`;
 }
 

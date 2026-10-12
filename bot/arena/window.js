@@ -20,6 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
@@ -416,7 +417,11 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
 function createWindow(opts = {}) {
     const home = path.resolve(opts.home ?? process.env.WINDOW_HOME ?? '/data/window');
     const store = new Store(home);
-    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [] });
+    const viewLinks = () => {
+        const d = parseOr(store.getDoc('admin', 'links'), null);
+        return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
+    };
+    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
     const webFile = opts.web ?? path.join(__dirname, 'web', 'index.html');
@@ -506,18 +511,20 @@ function createWindow(opts = {}) {
         const d = parseOr(store.getDoc('admin', 'invites'), null);
         return Array.isArray(d?.logins) ? d.logins.filter((x) => typeof x === 'string').map((x) => x.toLowerCase()) : [];
     };
+    const shared = () => ({ invites: invited(), ...auth.fixed(), links: viewLinks().map(({ id, key, label, createdAt }) => ({ id, key, label, createdAt })) });
     /**
-     * Who may sign in, for Eric's Share page: GET lists it, POST {add: login} or {remove: login} changes the invite
-     * document. The one write a signed-in browser may make: only an admin, only from this site's own pages (the Origin
-     * header; a page elsewhere cannot set it), and only as JSON (a plain form cannot send that). Removing a login takes
-     * effect on that person's next request.
+     * Who may look, for Eric's Share page: GET lists the invited GitHub logins and the view links; POST changes one of
+     * them: {add: login} or {remove: login} on the invite document, {addLink: note} or {removeLink: id} on the view
+     * links (admin/links; a view link lets anyone holding it read, with no sign-in). The one write a signed-in browser
+     * may make: only an admin, only from this site's own pages (the Origin header; a page elsewhere cannot set it), and
+     * only as JSON (a plain form cannot send that). A removal takes effect on that person's next request.
      */
     async function share(req, res, who) {
-        need(who.role === 'admin', 'forbidden', 'only an admin changes who is invited');
+        need(who.role === 'admin', 'forbidden', 'only an admin changes who can look');
         if (req.method === 'GET') {
-            return sendJson(res, 200, { result: { invites: invited(), ...auth.fixed() } }, req);
+            return sendJson(res, 200, { result: shared() }, req);
         }
-        need(req.method === 'POST', 'bad_request', 'GET, or POST {add} or {remove}');
+        need(req.method === 'POST', 'bad_request', 'GET, or POST {add}, {remove}, {addLink} or {removeLink}');
         if (who.via === 'cookie') {
             need(req.headers.origin === auth.origin, 'forbidden', "the invite list changes only from this site's own pages");
             need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
@@ -528,15 +535,32 @@ function createWindow(opts = {}) {
         } catch (e) {
             throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
         }
-        const adding = typeof q?.add === 'string';
-        const login = String((adding ? q.add : q?.remove) ?? '').trim().replace(/^@/, '').toLowerCase();
-        need(adding !== (typeof q?.remove === 'string') && LOGIN.test(login), 'bad_request', 'send {"add": "<GitHub login>"} or {"remove": "<GitHub login>"}');
-        const cur = invited();
-        const next = adding ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
-        need(next.length <= 500, 'too_large', 'at most 500 invites');
-        const doc = parseOr(store.getDoc('admin', 'invites'), null);
-        store.putDoc('admin', 'invites', JSON.stringify({ ...(doc && typeof doc === 'object' && !Array.isArray(doc) ? doc : {}), logins: next, updatedAt: new Date().toISOString() }));
-        return sendJson(res, 200, { result: { invites: next, ...auth.fixed() } }, req);
+        const ops = ['add', 'remove', 'addLink', 'removeLink'].filter((k) => typeof q?.[k] === 'string');
+        need(ops.length === 1, 'bad_request', 'send one of {"add": "<GitHub login>"}, {"remove": "<GitHub login>"}, {"addLink": "<who it is for>"}, {"removeLink": "<id>"}');
+        const keep = (ns) => {
+            const d = parseOr(store.getDoc('admin', ns), null);
+            return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+        };
+        if (ops[0] === 'add' || ops[0] === 'remove') {
+            const login = q[ops[0]].trim().replace(/^@/, '').toLowerCase();
+            need(LOGIN.test(login), 'bad_request', 'a GitHub login: letters, digits and dashes, up to 39');
+            const cur = invited();
+            const next = ops[0] === 'add' ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
+            need(next.length <= 500, 'too_large', 'at most 500 invites');
+            store.putDoc('admin', 'invites', JSON.stringify({ ...keep('invites'), logins: next, updatedAt: new Date().toISOString() }));
+        } else if (ops[0] === 'addLink') {
+            // the note says who the link is for; only admins ever see it
+            const label = q.addLink.replace(/\s+/g, ' ').trim();
+            need(label.length >= 1 && label.length <= 60 && !/[\u0000-\u001f\u007f]/.test(label), 'bad_request', 'a short note, up to 60 characters: who the link is for');
+            const cur = viewLinks();
+            need(cur.length < 100, 'too_large', 'at most 100 view links; remove one first');
+            const link = { id: crypto.randomBytes(6).toString('hex'), key: crypto.randomBytes(24).toString('base64url'), label, createdAt: new Date().toISOString() };
+            store.putDoc('admin', 'links', JSON.stringify({ ...keep('links'), links: [...cur, link] }));
+        } else {
+            need(/^[0-9a-f]{12}$/.test(q.removeLink), 'bad_request', 'removeLink: the id of a view link');
+            store.putDoc('admin', 'links', JSON.stringify({ ...keep('links'), links: viewLinks().filter((l) => l.id !== q.removeLink) }));
+        }
+        return sendJson(res, 200, { result: shared() }, req);
     }
 
     async function api(req, res, url, who) {
@@ -550,7 +574,7 @@ function createWindow(opts = {}) {
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
-            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role } }, req);
+            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}) } }, req);
         }
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);

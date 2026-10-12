@@ -2,7 +2,9 @@
 /**
  * Who is asking, on the hosted arena (the window now, the whole arena on Fly later). Every request carries one of:
  *   a session cookie   a person who signed in with GitHub: 'admin' when their login is in ARENA_ADMINS, 'friend' when
- *                      invited (ARENA_INVITES, or the admin/invites document {logins: [...]}), else no role
+ *                      invited (ARENA_INVITES, or the admin/invites document {logins: [...]}), else no role; or a
+ *                      guest who opened a view link (/v/<key>, from the admin/links document): 'friend' while that
+ *                      link exists (Eric, 2026-10-12 04:30: "yes: add view links to the arena window")
  *   a bearer token     a program: ARENA_PUSH_TOKEN is 'project' (the project's threads push and read; the cloud proxy
  *                      adds it to their requests, so no thread holds it), ARENA_ADMIN_TOKEN is 'admin' (the same admin
  *                      token api.js accepts); ARENA_FEED_TOKEN_<NAME> is 'feed' for one outside machine (a Sprite
@@ -26,6 +28,7 @@ const atLeast = (role, min) => ROLES.indexOf(role) >= ROLES.indexOf(min);
 const SESSION = 'swu_session';
 const OAUTH = 'swu_oauth';
 const SESSION_DAYS = 14;
+const VIEW_DAYS = 30; // a guest's session; opening the link again starts a new one
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 
 const b64 = (buf) => Buffer.from(buf).toString('base64url');
@@ -48,9 +51,10 @@ function parseCookies(header) {
 
 /**
  * opts: dir (where the session key lives), invites() (extra invited logins, e.g. from the admin/invites document),
- * env (default process.env), fetch (for GitHub; tests pass a fake), now() (for tests).
+ * links() (view links [{id, key}], from the admin/links document), env (default process.env), fetch (for GitHub; tests
+ * pass a fake), now() (for tests).
  */
-function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+function createAuth({ dir, invites = () => [], links = () => [], env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const publicUrl = String(env.ARENA_PUBLIC_URL ?? 'https://swu-arena.fly.dev').replace(/\/+$/, '');
     const origin = new URL(publicUrl).origin; // what a browser sends as Origin from this site's own pages
     const secure = publicUrl.startsWith('https:');
@@ -118,9 +122,17 @@ function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchIm
         return logins(env.ARENA_INVITES).includes(l) || extra.includes(l) ? 'friend' : 'anon';
     }
 
+    const viewLinks = () => {
+        try {
+            return (links() || []).filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string');
+        } catch {
+            return [];
+        }
+    };
+
     /**
-     * {role, via, login?}: `via` is 'bearer' or 'cookie' (writes need 'bearer'); role 'bad' means a bearer token was
-     * sent and is wrong.
+     * {role, via, login?, guest?}: `via` is 'bearer' or 'cookie' (writes need 'bearer'); role 'bad' means a bearer
+     * token was sent and is wrong; `guest` is the id of the view link a guest came in by.
      */
     function who(req) {
         const h = String(req.headers.authorization ?? '');
@@ -142,6 +154,10 @@ function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchIm
             return { role: 'bad', via: 'bearer' };
         }
         const s = verify(parseCookies(req.headers.cookie)[SESSION]);
+        if (s && typeof s.v === 'string') {
+            // a guest is let in only while the link they came by exists, so removing it locks them out at once
+            return viewLinks().some((l) => l.id === s.v) ? { role: 'friend', guest: s.v, via: 'cookie' } : { role: 'anon', via: 'cookie' };
+        }
         return s ? { role: roleOf(s.l), login: s.l, via: 'cookie' } : { role: 'anon', via: 'cookie' };
     }
 
@@ -158,8 +174,20 @@ function createAuth({ dir, invites = () => [], env = process.env, fetch: fetchIm
         res.end(html);
     }
 
-    /** Handles /auth/*; true when it answered. */
+    /** Handles /auth/* and view links (/v/<key>); true when it answered. */
     async function routes(req, res, url) {
+        const view = /^\/v\/([A-Za-z0-9_-]{16,64})\/?$/.exec(url.pathname);
+        if (view) {
+            const link = viewLinks().find((l) => same(view[1], l.key));
+            if (!link) {
+                page(res, 404, signInPage('/', null, 'That view link was removed, or it never existed. Ask Eric for a new one.'));
+                return true;
+            }
+            // someone already let in (Eric trying his own link) keeps their own session; the browser keeps the #/page
+            const cur = who(req);
+            redirect(res, '/', atLeast(cur.role, 'friend') && cur.via === 'cookie' ? [] : [cookie(SESSION, sign({ v: link.id, exp: now() + VIEW_DAYS * 864e5 }), VIEW_DAYS * 86400)]);
+            return true;
+        }
         if (!url.pathname.startsWith('/auth/')) {
             return false;
         }
