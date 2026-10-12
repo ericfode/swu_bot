@@ -100,7 +100,11 @@ function pairedChange(before, after) {
     }
     means.sort((a, b) => a - b);
     const interval = values.length < 5 ? null : [means[249], means[9749]];
-    return { percentTimeChange: stats(values), pairedBootstrap95PercentInterval: interval,
+    const changes = stats(values);
+    // Percent changes are signed and can have a mean near zero; a coefficient
+    // of variation is meaningful for positive timings, not these differences.
+    delete changes.coefficientOfVariation;
+    return { percentTimeChange: changes, pairedBootstrap95PercentInterval: interval,
         interpretation: !interval || (interval[0] <= 0 && interval[1] >= 0) ? 'no resolved direction' :
             (interval[1] < 0 ? 'lower measured search time' : 'higher measured search time') };
 }

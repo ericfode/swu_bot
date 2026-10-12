@@ -17,6 +17,7 @@ test('summary reports sample variance and paired uncertainty without rounding aw
     assert.equal(pairedChange([10, 10, 10, 10, 10], [10, 10, 10, 10, 10]).interpretation, 'no resolved direction');
     assert.equal(pairedChange([10, 10, 10, 10, 10], [8, 8, 8, 8, 8]).interpretation, 'lower measured search time');
     assert.equal(pairedChange([10, 10], [8, 8]).pairedBootstrap95PercentInterval, null);
+    assert.equal('coefficientOfVariation' in pairedChange([10, 10], [8, 8]).percentTimeChange, false);
 });
 
 test('semantic comparison removes timing only; counts, identity and result remain', () => {
