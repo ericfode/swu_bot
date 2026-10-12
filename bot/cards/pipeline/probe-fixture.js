@@ -139,6 +139,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'force-presence') return require('./force-presence-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-followon') return require('./force-followon-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force') return require('./force-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-stat-filter') return require('./arena-stat-filter-probe-fixture').fixture(env, pool, scenario, seed);
@@ -383,6 +384,8 @@ module.exports = {
     buildDeck,
     dependencies: [
         'bot/cards/pipeline/probes.js',
+        'bot/cards/pipeline/force-presence-probes.js',
+        'bot/cards/pipeline/force-presence-probe-fixture.js',
         'bot/cards/pipeline/force-followon-probes.js',
         'bot/cards/pipeline/force-followon-probe-fixture.js',
         'bot/cards/pipeline/force-probes.js',

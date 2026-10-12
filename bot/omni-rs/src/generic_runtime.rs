@@ -127,7 +127,7 @@ fn reviewed_force_entry(entry:&Value)->bool {
 }"#).expect("reviewed Force metadata");
     entry["sourceHash"]=="3ff3888f5186845acdd8d3ef96f396875b2daf4f9b808fa9b4a2ef03a1b954b6" && entry["baseClass"]=="TokenCard" && entry["card"]==metadata && entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]}) && entry["keywordValues"]==serde_json::json!({}) && entry["attachCondition"].is_null()
 }
-fn program_needs_force(program:&Program)->bool {program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::UseForce{..}|Effect::GainForce{..})))}
+fn program_needs_force(program:&Program)->bool {crate::ability_ir::contains_force_presence(program) || program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::UseForce{..}|Effect::GainForce{..})))}
 
 impl Engine {
     pub(super) fn needs_force_state(&self)->bool {
@@ -439,7 +439,7 @@ impl Engine {
             return Err("pool must include TOKEN_SHIELD".into());
         }
         if !included.contains("TOKEN_WEAKNESS") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])))) {return Err("pool containing GiveWeakness cards must include reviewed TOKEN_WEAKNESS".into());}
-        if !included.contains("TOKEN_THE_FORCE") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))) {return Err("pool containing Force gain/use cards must include reviewed TOKEN_THE_FORCE".into());}
+        if !included.contains("TOKEN_THE_FORCE") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))) {return Err("pool containing Force gain/use/presence cards must include reviewed TOKEN_THE_FORCE".into());}
         catalogue.metadata.retain(|code, _| included.contains(code));
         engine.pool_hash = format!("{:x}", Sha256::digest(pool_bytes));
         Ok(engine)
@@ -705,6 +705,7 @@ impl Engine {
                                 Eval::Card(s.player(p).base)
                             }
                         }
+                        Some("hasTheForce") if root=="player" && path.len()==2 => Eval::Bool(s.force_state_exact && s.player(p).force_held),
                         Some("readyResourceCount") => {
                             Eval::Number(self.ready_resources(s, p) as i64)
                         }

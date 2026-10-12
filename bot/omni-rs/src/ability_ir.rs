@@ -6,6 +6,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+// Inspect every serialized expression position, including selectors and continuations.
+pub(crate) fn contains_force_presence<T: Serialize>(value:&T)->bool {
+    fn visit(v:&Value)->bool {match v {
+        Value::Object(o)=> (o.get("kind").is_some_and(|k|k=="ref") && o.get("path").and_then(Value::as_array).is_some_and(|p|p.last().is_some_and(|v|v=="hasTheForce"))) || (o.get("kind").is_some_and(|k|k=="query") && o.get("name").is_some_and(|n|n=="hasTheForce")) || o.values().any(visit),
+        Value::Array(a)=>a.iter().any(visit),_=>false,
+    }}
+    visit(&serde_json::to_value(value).expect("typed IR serializes"))
+}
+
 pub const SCHEMA: &str = "swu-card-ir/v1";
 pub const MAX_PROGRAM_INSTRUCTIONS: usize = 128;
 pub const MAX_GROUP_RECORDS: usize = 32;
@@ -250,6 +259,7 @@ impl Expr {
                 {
                     ["source" | "target" | "card" | "player" | "opponent"] => true,
                     ["source" | "target" | "card", "title"] => true,
+                    ["player", "hasTheForce"] => true,
                     ["card","activeAttack","attacker"] => true,
                     ["modifierTarget"] | ["modifierTarget","damage"|"controller"] | ["modifierTarget","controller","resources","length"] => true,
                     ["source", "parentCard" | "parentUnit"] => true,
@@ -900,6 +910,12 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if contains_force_presence(ability) {
+            let header=depth==0 && ability.trigger=="constant" && !ability.optional && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolvers.is_empty() && ability.then.is_none() && ability.if_you_do.is_none() && matches!(&ability.condition,Some(Expr::Ref{path}) if path.iter().map(String::as_str).collect::<Vec<_>>()==["player","hasTheForce"]);
+            let keyword=ability.target_resolver.is_none() && matches!(&ability.effect,Effect::GainKeyword{target:Target::Name(n),duration,keyword,amount:Expr::Const{value}} if n=="self" && duration=="persistent" && ["grit","sentinel","ambush"].contains(&keyword.as_str()) && value.as_u64()==Some(1));
+            let aura=ability.target_resolver.as_ref().is_some_and(|r|r.owner=="self" && r.card_type=="unit" && r.zone.as_deref()==Some("arena") && r.arena.is_none() && !r.optional && r.mode.is_none() && r.count.is_none() && r.prompt_title.is_none() && matches!(&r.predicate,Some(Expr::Query{name,receiver,args}) if name=="isUnit" && args.is_empty() && matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card"))) && matches!(&ability.effect,Effect::ModifyStats{target:Target::Name(n),duration,power:Expr::Const{value:p},hp:Expr::Const{value:h}} if n=="chosen" && duration=="persistent" && p.as_i64().is_some_and(|n|(-65535..=65535).contains(&n)) && h.as_i64()==Some(0));
+            if !header || !(keyword||aura){return Err("Force presence supports bounded ordinary constant own-player keyword or friendly literal stat aura".into());}
+        }
         if contains_force(&ability.effect) {
             let root=depth==0 && ["whenPlayed","whenDefeated","event"].contains(&ability.trigger.as_str()) && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
             let gain=ability.trigger=="whenPlayed" && matches!(&ability.effect,Effect::GainForce{target:Target::Name(n)} if n=="ownPlayer") && !ability.optional && ability.if_you_do.is_none();
@@ -1378,6 +1394,7 @@ impl Catalogue {
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && ["whenPlayed","whenDefeated"].contains(&a.trigger.as_str())) || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event"))) {return Err("Force registration requires ordinary unit card-side metadata".into());}
+                if sides.leader.iter().chain(&sides.unit).any(contains_force_presence) || sides.card.iter().any(|a|contains_force_presence(a) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Force presence requires ordinary unit card-side metadata".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}

@@ -2378,3 +2378,48 @@ fn force_continuation_selects_only_after_spend_and_retains_source_actor() {
 fn force_death_continuation_opponent_chooses_discard_after_source_departure() {
  let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_159");let card=add(&e,&mut s,Seat::P2,"LOF_256");s.players[1].hand.push(card).unwrap();let program=e.def(&s,source).programs.card[0];e.leave_play(&mut s,source).unwrap();s.source=source;s.players[0].force_held=true;e.begin_program(&mut s,program,0).unwrap();let selected=named_button(&e,&s,"Trigger");assert!(!selected.players[0].force_held);assert_eq!(selected.active,Seat::P2);assert!(e.legal_actions(&selected).iter().any(|a|a.card==Some(format!("c{}",card-1))));let action=e.legal_actions(&selected).into_iter().find(|a|a.card==Some(format!("c{}",card-1))).unwrap();let done=e.apply(&selected,&action).unwrap();assert!(done.players[1].discard.contains(card));assert!(!done.players[1].hand.contains(card));
 }
+#[test]
+fn force_presence_live_grit_and_aura_follow_controller_not_active_player() {
+ let e=engine();let mut s=board(&e);let plo=unit(&e,&mut s,Seat::P1,"LOF_050");s.card_mut(plo).damage=2;let original=e.power(&s,plo,false);s.active=Seat::P2;s.players[1].force_held=true;assert_eq!(e.keyword_amount(&s,plo,"grit"),0);s.players[0].force_held=true;assert_eq!(e.keyword_amount(&s,plo,"grit"),1);assert_eq!(e.power(&s,plo,false),original+2);s.players[0].force_held=false;assert_eq!(e.power(&s,plo,false),original);
+ let son=unit(&e,&mut s,Seat::P1,"LOF_237");let own=unit(&e,&mut s,Seat::P1,"LOF_256");let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");let before=[e.power(&s,son,false),e.power(&s,own,false),e.power(&s,enemy,false)];s.players[0].force_held=true;assert_eq!(e.power(&s,son,false),before[0]+2);assert_eq!(e.power(&s,own,false),before[1]+2);assert_eq!(e.power(&s,enemy,false),before[2]);let entrant=unit(&e,&mut s,Seat::P1,"LOF_256");assert_eq!(e.power(&s,entrant,false),before[1]+2);e.leave_play(&mut s,son).unwrap();assert_eq!(e.power(&s,own,false),before[1]);
+}
+#[test]
+fn force_presence_sentinel_changes_attack_domain_and_overrides_hidden() {
+ let e=engine();let mut s=board(&e);let sentinel=unit(&e,&mut s,Seat::P1,"LOF_196");let attacker=unit(&e,&mut s,Seat::P2,"LOF_256");let base=s.players[0].base;s.players[1].force_held=true;assert!(e.attack_targets(&s,attacker,false).contains(&base));s.players[0].force_held=true;assert_eq!(e.attack_targets(&s,attacker,false),vec![sentinel]);s.card_mut(sentinel).set_hidden_qualified(true);s.source=sentinel;let hidden=serde_json::from_value(json!({"kind":"gainKeyword","target":"self","duration":"phase","keyword":"hidden","amount":{"kind":"const","value":1}})).unwrap();e.apply_effect(&mut s,&hidden).unwrap();assert!(e.attack_targets(&s,attacker,false).contains(&sentinel));s.players[0].force_held=false;assert!(!e.attack_targets(&s,attacker,false).contains(&sentinel));assert!(e.attack_targets(&s,attacker,false).contains(&base));
+}
+#[test]
+fn force_presence_selected_queries_require_native_and_explicit_history_even_when_absent() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let mut bad=original.clone();bad["cards"].as_array_mut().unwrap().retain(|v|v["setCode"]!="TOKEN_THE_FORCE");let rejected=Engine::from_catalogue_value(&bad).unwrap();for code in ["LOF_050","LOF_196","LOF_231","LOF_237"]{assert!(!rejected.by_code.contains_key(code));}
+ let mut e=engine();let mut snapshot=e.snapshot(&board(&e));snapshot.as_object_mut().unwrap().remove("forceStateVersion");for seat in ["p1","p2"]{snapshot["players"][seat].as_object_mut().unwrap().remove("forceToken");}
+ e.catalogue.as_mut().unwrap().metadata.retain(|code,_|["ASH_019","SOR_014","IBH_053","LOF_050","TOKEN_THE_FORCE"].contains(&code.as_str()));assert!(e.load_state(&snapshot).unwrap_err().contains("Force"));e.catalogue.as_mut().unwrap().metadata.remove("LOF_050");assert!(e.load_state(&snapshot).is_ok());
+}
+#[test]
+fn force_presence_tyranus_ambush_is_captured_at_entry_not_invented_on_later_gain() {
+ let e=engine();let mut s=board(&e);unit(&e,&mut s,Seat::P2,"LOF_256");let source=hand(&e,&mut s,"LOF_231");while s.players[0].resources.len<e.cost(&s,source) as u8 {let r=add(&e,&mut s,Seat::P1,"LOF_254");s.players[0].resources.push(r).unwrap();}let mut held=s;held.players[0].force_held=true;let entered=e.apply(&held,&e.card_action(&held,source)).unwrap();assert_eq!(entered.decision,Decision::TriggerOrder);assert!(entered.pending_triggers&T_AMBUSH!=0);assert!(entered.pending_triggers&T_SHIELD!=0);let mut captured=entered; e.apply_effect(&mut captured,&crate::ability_ir::Effect::UseForce{target:crate::ability_ir::Target::Name("ownPlayer".into())}).unwrap();assert_eq!(e.keyword_amount(&captured,source,"ambush"),0);assert!(captured.pending_triggers&T_AMBUSH!=0);assert!(e.trigger_effect(&captured,T_AMBUSH));
+ let mut absent=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(absent.decision,Decision::Window);assert_eq!(e.keyword_amount(&absent,source,"ambush"),0);let decision=absent.decision;absent.source=source;e.apply_effect(&mut absent,&crate::ability_ir::Effect::GainForce{target:crate::ability_ir::Target::Name("ownPlayer".into())}).unwrap();assert_eq!(e.keyword_amount(&absent,source,"ambush"),1);assert_eq!(absent.decision,decision);assert_eq!(absent.pending_triggers,0);
+}
+#[test]
+fn force_presence_recursive_scope_rejects_nonconstant_and_wrong_receivers() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for path in [json!(["opponent","hasTheForce"]),json!(["source","hasTheForce"]),json!(["player","hasTheForce","extra"])] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_050").unwrap();card["abilities"]["card"][0]["condition"]["path"]=path;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_050"));}
+ for (field,value) in [("trigger",json!("whenPlayed")),("optional",json!(true)),("then",json!({"condition":{"kind":"ref","path":["player","hasTheForce"]},"effect":{"kind":"noAction"}})),("condition",json!({"kind":"unary","op":"!","value":{"kind":"ref","path":["player","hasTheForce"]}}))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_050").unwrap();card["abilities"]["card"][0][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_050"),"{field}");}
+ let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_146").unwrap();card["abilities"]["card"][0]["ifYouDo"]["condition"]=json!({"kind":"ref","path":["player","hasTheForce"]});assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_146"));
+}
+#[test]
+fn force_presence_pool_dependency_uses_selected_programs_and_preserves_unrelated_legacy() {
+ let e=engine();let catalogue=include_bytes!("../../card-compiler/generated/catalog.json");let metadata=&e.catalogue.as_ref().unwrap().metadata;
+ let make=|codes:&[&str]|serde_json::to_vec(&json!({"schema":"omni-rs-pool-v1","cards":codes.iter().map(|code|{let mut card=metadata[*code].clone();card["setCode"]=json!(code);card}).collect::<Vec<_>>()})).unwrap();
+ let unrelated=make(&["ASH_019","SOR_014","IBH_053","TOKEN_SHIELD"]);assert!(Engine::from_compiled_pool_bytes(&unrelated,catalogue).is_ok());
+ let missing=make(&["ASH_019","SOR_014","IBH_053","TOKEN_SHIELD","LOF_050"]);assert!(Engine::from_compiled_pool_bytes(&missing,catalogue).err().unwrap().contains("TOKEN_THE_FORCE"));
+ let complete=make(&["ASH_019","SOR_014","IBH_053","TOKEN_SHIELD","LOF_050","TOKEN_THE_FORCE"]);assert!(Engine::from_compiled_pool_bytes(&complete,catalogue).is_ok());
+}
+#[test]
+fn force_presence_unwitnessed_hp_changes_and_nonordinary_sources_reject() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for hp in [-2,2] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_237").unwrap();card["abilities"]["card"][0]["effect"]["hp"]["value"]=json!(hp);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_237"));}
+ for types in [json!(["leader","unit"]),json!(["unit","token"]),json!(["event"])] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_050").unwrap();card["card"]["types"]=types;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_050"));}
+}
+#[test]
+fn force_presence_power_aura_covers_both_arenas_tokens_and_deployed_leaders() {
+ let e=engine();let mut s=board(&e);unit(&e,&mut s,Seat::P1,"LOF_237");let ground=unit(&e,&mut s,Seat::P1,"LOF_256");let space=unit(&e,&mut s,Seat::P1,"LOF_119");let token=unit(&e,&mut s,Seat::P1,"TOKEN_BEAST");let leader=s.players[0].leader;s.card_mut(leader).deployed=true;e.add_arena(&mut s,leader).unwrap();let ids=[ground,space,token,leader];let before=ids.map(|id|e.power(&s,id,false));s.players[0].force_held=true;for (i,id) in ids.iter().enumerate(){assert_eq!(e.power(&s,*id,false),before[i]+2,"{}",e.def(&s,*id).code);}
+}

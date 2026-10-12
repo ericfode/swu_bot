@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 543
+    "sourceIr": 547
   },
   "runtimeAdmittedCards": [
     {
@@ -2162,6 +2162,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "plo-koon#i-dont-believe-in-chance",
+      "setCode": "LOF_050"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "heirloom-lightsaber",
       "setCode": "LOF_053"
     },
@@ -2517,6 +2522,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "jedi-sentinel",
+      "setCode": "LOF_196"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "stinger-mantis#where-are-we-going",
       "setCode": "LOF_198"
     },
@@ -2581,6 +2591,11 @@
       "setCode": "LOF_230"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "darth-tyranus#servant-of-sidious",
+      "setCode": "LOF_231"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "sandtrooper-cavalry",
       "setCode": "LOF_232"
@@ -2594,6 +2609,11 @@
       "implementation": "dataOnly",
       "internalName": "army-of-the-dead",
       "setCode": "LOF_236"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "the-son#embodiment-of-darkness",
+      "setCode": "LOF_237"
     },
     {
       "implementation": "sourceIr",
@@ -4606,7 +4626,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 919,
+  "runtimeAdmittedCount": 923,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -8229,11 +8249,6 @@
       "setCode": "LOF_045"
     },
     {
-      "internalName": "plo-koon#i-dont-believe-in-chance",
-      "reason": "plo-koon#i-dont-believe-in-chance: unsupported runtime reference player.hasTheForce",
-      "setCode": "LOF_050"
-    },
-    {
       "internalName": "jedi-holocron",
       "reason": "jedi-holocron: compiler rejected \"jedi-holocron\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/upgrades/JediHolocron.ts\",\"line\":16,\"message\":\"registrar:addGainOnAttackAbilityTargetingAttached\",\"pattern\":\"registrar:addGainOnAttackAbilityTargetingAttached\"}]",
       "setCode": "LOF_051"
@@ -8604,11 +8619,6 @@
       "setCode": "LOF_191"
     },
     {
-      "internalName": "jedi-sentinel",
-      "reason": "jedi-sentinel: unsupported runtime reference player.hasTheForce",
-      "setCode": "LOF_196"
-    },
-    {
       "internalName": "quigon-jinns-aethersprite#guided-by-the-force",
       "reason": "quigon-jinns-aethersprite#guided-by-the-force: compiler rejected \"quigon-jinns-aethersprite#guided-by-the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/QuiGonJinnsAetherspriteGuidedByTheForce.ts\",\"line\":17,\"message\":\"immediateEffect:delayedPlayerEffect\",\"pattern\":\"immediateEffect:delayedPlayerEffect\"}]",
       "setCode": "LOF_197"
@@ -8714,11 +8724,6 @@
       "setCode": "LOF_229"
     },
     {
-      "internalName": "darth-tyranus#servant-of-sidious",
-      "reason": "darth-tyranus#servant-of-sidious: unsupported runtime reference player.hasTheForce",
-      "setCode": "LOF_231"
-    },
-    {
       "internalName": "darth-malak#covetous-apprentice",
       "reason": "darth-malak#covetous-apprentice: compiler rejected \"darth-malak#covetous-apprentice\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/05_LOF/units/DarthMalakCovetousApprentice.ts\",\"line\":19,\"message\":\"unsupported-query:hasSomeArenaCard\",\"pattern\":\"unsupported-query:hasSomeArenaCard\"}]",
       "setCode": "LOF_234"
@@ -8727,11 +8732,6 @@
       "internalName": "hk87-assassin-droid",
       "reason": "hk87-assassin-droid: compiler rejected \"hk87-assassin-droid\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/05_LOF/units/HK87AssassinDroid.ts\",\"line\":19,\"message\":\"unsupported-arena-collection:concat\",\"pattern\":\"unsupported-arena-collection:concat\"}]",
       "setCode": "LOF_235"
-    },
-    {
-      "internalName": "the-son#embodiment-of-darkness",
-      "reason": "the-son#embodiment-of-darkness: unsupported runtime reference player.hasTheForce",
-      "setCode": "LOF_237"
     },
     {
       "internalName": "flight-of-the-inquisitor",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1539,
+  "runtimeRejectedCount": 1535,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

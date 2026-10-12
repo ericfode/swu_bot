@@ -175,7 +175,17 @@ scalar damage, healing, phase stats or opposing hand choice. They distinguish
 absent Force and optional decline, prepayment event confirmation/cancellation,
 post-use target selection, ineffective continuations, recipient deaths, Shield
 prevention, and Shielded trigger ordering. Printed Overwhelm combat and Hidden
-attack protection have their own witnesses. Other Force queries, hooks, costs,
+attack protection have their own witnesses.
+
+Force-presence experiments cover actual gain/use/regain changing self Grit,
+Sentinel attack menus and friendly power in both arenas. Enemy-only Force does
+not activate these effects, and phase changes preserve them. Conditional Ambush
+experiments cover both Shielded trigger orders, accept/decline, no enemy target,
+and later Force gain without a retroactive attack. Actual Hidden grants test the
+Sentinel exception as Force changes. Power-aura cases include a Beast token and
+source departure. Deployed-leader membership and pending-window Force loss have
+separate runtime diagnostics; controller transfer, unique replacement, reentry
+and aura stacking remain explicit gaps. Other Force queries, hooks, costs,
 groups and continuations remain uncovered or runtime-rejected; passing these
 experiments does not establish them.
 

@@ -17480,6 +17480,49 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 8,
+      "id": "2352895392",
+      "internalName": "plo-koon#i-dont-believe-in-chance",
+      "keywords": [
+        "grit"
+      ],
+      "power": 6,
+      "rules": null,
+      "setCode": "LOF_050",
+      "setCodes": [
+        {
+          "number": 50,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 50,
+        "set": "LOF"
+      },
+      "subtitle": "I Don't Believe in Chance",
+      "text": "While the Force is with you, this unit gains Grit. (He gets +1/+0 for each damage on him.)",
+      "title": "Plo Koon",
+      "traits": [
+        "force",
+        "jedi",
+        "republic"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "vigilance",
         "heroism"
@@ -20358,6 +20401,48 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "5573238875",
+      "internalName": "jedi-sentinel",
+      "keywords": [
+        "sentinel"
+      ],
+      "power": 5,
+      "rules": null,
+      "setCode": "LOF_196",
+      "setCodes": [
+        {
+          "number": 196,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 196,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "While the Force is with you, this unit gains Sentinel. (Enemy units in this arena must attack a Sentinel when they attack you.)",
+      "title": "Jedi Sentinel",
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "cunning",
@@ -20890,6 +20975,49 @@
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
+      "hp": 3,
+      "id": "4347039495",
+      "internalName": "darth-tyranus#servant-of-sidious",
+      "keywords": [
+        "shielded",
+        "ambush"
+      ],
+      "power": 4,
+      "rules": "Ambush is an ability that triggers at the same time as \"When Played\" abilities. If there is no enemy unit that can be attacked, the unit does not ready.\n",
+      "setCode": "LOF_231",
+      "setCodes": [
+        {
+          "number": 231,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 231,
+        "set": "LOF"
+      },
+      "subtitle": "Servant of Sidious",
+      "text": "Shielded (When you play this unit, give a Shield token to him.)\nWhile the Force is with you, this unit gains Ambush. (When you play this unit, he may attack an enemy unit.)",
+      "title": "Darth Tyranus",
+      "traits": [
+        "force",
+        "separatist",
+        "sith"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
       "hp": 6,
       "id": "3612941171",
       "internalName": "sandtrooper-cavalry",
@@ -21000,6 +21128,44 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 7,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 8,
+      "id": "5460831827",
+      "internalName": "the-son#embodiment-of-darkness",
+      "keywords": [],
+      "power": 6,
+      "rules": null,
+      "setCode": "LOF_237",
+      "setCodes": [
+        {
+          "number": 237,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 237,
+        "set": "LOF"
+      },
+      "subtitle": "Embodiment of Darkness",
+      "text": "While the Force is with you, each friendly unit gets +2/+0.",
+      "title": "The Son",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

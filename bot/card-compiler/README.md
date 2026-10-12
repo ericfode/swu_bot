@@ -113,9 +113,16 @@ include draw-two, self-ready, scalar unit damage, unit/base healing, unit phase
 stats, and the opponent choosing one card to discard. Force is spent before the
 continuation and remains spent even when it has no eligible or beneficial target.
 Captured source identity survives departure and unique replacement. These
-operations use the validated interpreter fallback in Auto mode. Other Force
-targets, costs, queries, groups, hooks, and continuations remain explicit
-rejections. Source conversion and runtime admission remain separate.
+operations use the validated interpreter fallback in Auto mode.
+
+Ordinary-unit constants may read their controller's current Force presence to
+grant self Grit, Sentinel or Ambush, or a friendly power-only aura. Grit, Sentinel
+and power update live when Force changes; Ambush registration is captured on
+entry, so gaining Force later does not create an attack. Presence reads require
+the same native-token and versioned-state evidence even when Force is absent.
+Force-dependent HP changes, other query receivers, costs, groups, hooks and
+continuations remain explicit rejections. Source conversion and runtime admission
+remain separate.
 
 Bounded simultaneous groups preserve separate event preparation and resolution.
 The runtime supports selected combinations of damage, healing, tokens, readiness,
