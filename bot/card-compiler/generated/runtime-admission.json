@@ -1,5 +1,5 @@
 {
-  "catalogueHash": "7f982b685306d049bde7bc972c7dd87556962d4ab52120e8c4762924ec7829b9",
+  "catalogueHash": "d80857c9c3388c738133c7eac9e49c0481562cd6328d63ae20dc8c1204354c48",
   "dataOnlyConvertedCount": 372,
   "gameConformance": "not assessed by this report",
   "irConvertedCount": 1070,
@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 549
+    "sourceIr": 552
   },
   "runtimeAdmittedCards": [
     {
@@ -1916,6 +1916,11 @@
       "setCode": "LAW_154"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "expendable-mercenary",
+      "setCode": "LAW_159"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "hidden-hunters",
       "setCode": "LAW_160"
@@ -2259,6 +2264,11 @@
       "implementation": "sourceIr",
       "internalName": "lor-san-tekka#secret-keeper",
       "setCode": "LOF_095"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "eeth-koth#spiritual-warrior",
+      "setCode": "LOF_097"
     },
     {
       "implementation": "sourceIr",
@@ -4352,6 +4362,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "resupply",
+      "setCode": "TWI_127"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "bokatan-kryze#death-watch-lieutenant",
       "setCode": "TWI_130"
     },
@@ -4636,7 +4651,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 925,
+  "runtimeAdmittedCount": 928,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5380,7 +5395,7 @@
     },
     {
       "internalName": "qira#master-of-teras-kasi",
-      "reason": "qira#master-of-teras-kasi: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "qira#master-of-teras-kasi: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `resourceCard`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "ASH_226"
     },
     {
@@ -7729,11 +7744,6 @@
       "setCode": "LAW_158"
     },
     {
-      "internalName": "expendable-mercenary",
-      "reason": "expendable-mercenary: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
-      "setCode": "LAW_159"
-    },
-    {
       "internalName": "partisan-uwing",
       "reason": "partisan-uwing: compiler rejected \"partisan-uwing\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/PartisanU-Wing.ts\",\"line\":8,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/PartisanU-Wing.ts\",\"line\":16,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/07_LAW/units/PartisanU-Wing.ts\",\"line\":24,\"message\":\"unsupported-query:someDefeatedUnitControlledByPlayer\",\"pattern\":\"unsupported-query:someDefeatedUnitControlledByPlayer\"}]",
       "setCode": "LAW_161"
@@ -8394,11 +8404,6 @@
       "setCode": "LOF_096"
     },
     {
-      "internalName": "eeth-koth#spiritual-warrior",
-      "reason": "eeth-koth#spiritual-warrior: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
-      "setCode": "LOF_097"
-    },
-    {
       "internalName": "leia-organa#extraordinary",
       "reason": "leia-organa#extraordinary: compiler rejected \"leia-organa#extraordinary\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/05_LOF/units/LeiaOrganaExtraordinary.ts\",\"line\":20,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.cardCannot\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.cardCannot\"}]",
       "setCode": "LOF_098"
@@ -8545,7 +8550,7 @@
     },
     {
       "internalName": "merrin#alone-with-the-dead",
-      "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `resourceCard`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_160"
     },
     {
@@ -8565,7 +8570,7 @@
     },
     {
       "internalName": "lightsaber-throw",
-      "reason": "lightsaber-throw: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "lightsaber-throw: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `resourceCard`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_176"
     },
     {
@@ -8665,7 +8670,7 @@
     },
     {
       "internalName": "the-legacy-run#doomed-debris",
-      "reason": "the-legacy-run#doomed-debris: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "the-legacy-run#doomed-debris: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `resourceCard`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_213"
     },
     {
@@ -9985,7 +9990,7 @@
     },
     {
       "internalName": "enterprising-lackeys",
-      "reason": "enterprising-lackeys: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "enterprising-lackeys: resourceCard requires bounded self event/death registration",
       "setCode": "SHD_107"
     },
     {
@@ -10925,7 +10930,7 @@
     },
     {
       "internalName": "emperor-palpatine#master-of-the-dark-side",
-      "reason": "emperor-palpatine#master-of-the-dark-side: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "emperor-palpatine#master-of-the-dark-side: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `resourceCard`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "SOR_135"
     },
     {
@@ -11934,11 +11939,6 @@
       "setCode": "TWI_125"
     },
     {
-      "internalName": "resupply",
-      "reason": "resupply: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
-      "setCode": "TWI_127"
-    },
-    {
       "internalName": "take-captive",
       "reason": "take-captive: compiler rejected \"take-captive\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/02_SHD/events/TakeCaptive.ts\",\"line\":27,\"message\":\"immediateEffect:capture\",\"pattern\":\"immediateEffect:capture\"}]",
       "setCode": "TWI_128"
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1533,
+  "runtimeRejectedCount": 1530,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

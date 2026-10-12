@@ -38,6 +38,8 @@ function mutants(entry) {
         }
         if (value.kind && ['ownBase','enemyBase','ownPlayer','enemyPlayer'].includes(value.target))
             add([...path, 'target'], 'swap-effect-owner', target => ({ownBase:'enemyBase',enemyBase:'ownBase',ownPlayer:'enemyPlayer',enemyPlayer:'ownPlayer'})[target]);
+        if (value.kind === 'resourceCard')
+            add([...path, 'kind'], 'hand-instead-of-resource', () => 'returnToHand');
         if (value.kind === 'returnToHand' && value.target === 'chosen')
             add([...path, 'kind'], 'defeat-instead-of-return', () => 'defeat');
         if (value.kind === 'query' && value.name === 'hasSomeKeyword' &&

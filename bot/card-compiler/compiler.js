@@ -714,6 +714,10 @@ function effect(input, context, defaultTarget = 'self') {
         knownProperties(obj, []);
         return { kind: kind === 'useTheForce' ? 'useForce' : 'gainForce', target: 'ownPlayer' };
     }
+    if (kind === 'resourceCard') {
+        knownProperties(obj, ['target']);
+        return { kind, target: target(obj.props.get('target'), obj.ctx, defaultTarget) };
+    }
     if (kind === 'giveWeakness') {
         knownProperties(obj, ['amount', 'target']);
         return { kind, target: target(obj.props.get('target'), obj.ctx, defaultTarget), amount: obj.props.has('amount') ? expr(obj.props.get('amount'), obj.ctx) : constant(1) };

@@ -127,6 +127,16 @@ Force-dependent HP changes, other query receivers, costs, groups, hooks and
 continuations remain explicit rejections. Source conversion and runtime admission
 remain separate.
 
+A bounded self-resource operation moves an existing event or defeated ordinary
+unit into its owner's resources, exhausted, without allocating a new card.
+Supported sources are standalone events, optional death registrations with a
+live discard-zone guard, and optional death-time Force use followed by self
+movement. The Force continuation preserves the source's current legal nonarena
+zone; it does not acquire an implicit discard condition. Already-owned resources
+keep their readiness, and destination capacity is checked before removal.
+Other targets, ready entry, resource defeat and controller changes remain rejected.
+This operation uses the validated interpreter fallback in Auto mode.
+
 Bounded simultaneous groups preserve separate event preparation and resolution.
 The runtime supports selected combinations of damage, healing, tokens, readiness,
 and phase modifiers, with independent nested selections. Up-to selections retain

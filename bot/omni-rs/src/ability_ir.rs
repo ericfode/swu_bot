@@ -573,6 +573,7 @@ pub enum Effect {
         amount: Expr,
     },
     NoAction,
+    ResourceCard { target: Target },
     ReturnToHand {
         target: Target,
     },
@@ -699,6 +700,11 @@ pub struct Sides {
     pub card: Vec<Ability>,
 }
 
+fn contains_resource<T:Serialize>(v:&T)->bool {
+    fn walk(v:&Value)->bool {v["kind"]=="resourceCard" || match v {Value::Array(a)=>a.iter().any(walk),Value::Object(o)=>o.values().any(walk),_=>false}}
+    serde_json::to_value(v).map(|v|walk(&v)).unwrap_or(true)
+}
+fn resource_self(e:&Effect)->bool {matches!(e,Effect::ResourceCard{target:Target::Name(n)} if n=="self")}
 fn contains_force(effect:&Effect)->bool {
     match effect {Effect::UseForce{..}|Effect::GainForce{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_force(on_true)||on_false.as_deref().is_some_and(contains_force),Effect::Select{effect,..}=>contains_force(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_force),_=>false}
 }
@@ -910,6 +916,13 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if depth==0 && contains_resource(ability) {
+            let header=!ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
+            let event=ability.trigger=="event" && !ability.optional && resource_self(&ability.effect) && ability.if_you_do.is_none();
+            let death=ability.trigger=="whenDefeated" && ability.optional && ability.if_you_do.is_none() && matches!(&ability.effect,Effect::Conditional{condition:Expr::Binary{op,left,right},on_true,on_false} if op=="===" && matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["source","zoneName"]) && matches!(right.as_ref(),Expr::Const{value} if value.as_str()==Some("discard")) && resource_self(on_true) && on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)));
+            let force=ability.trigger=="whenDefeated" && ability.optional && matches!(&ability.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && ability.if_you_do.as_ref().is_some_and(|n|resource_self(&n.effect));
+            if !header || !(event||death||force) {return Err("resourceCard requires bounded self event/death registration".into());}
+        }
         if contains_force_presence(ability) {
             let header=depth==0 && ability.trigger=="constant" && !ability.optional && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolvers.is_empty() && ability.then.is_none() && ability.if_you_do.is_none() && matches!(&ability.condition,Some(Expr::Ref{path}) if path.iter().map(String::as_str).collect::<Vec<_>>()==["player","hasTheForce"]);
             let keyword=ability.target_resolver.is_none() && matches!(&ability.effect,Effect::GainKeyword{target:Target::Name(n),duration,keyword,amount:Expr::Const{value}} if n=="self" && duration=="persistent" && ["grit","sentinel","ambush"].contains(&keyword.as_str()) && value.as_u64()==Some(1));
@@ -923,6 +936,7 @@ impl Program {
                 if !next.trigger.is_empty() || next.coordinate || !next.context_title.is_empty() || !next.costs.is_empty() || next.optional || next.requires_confirmation || !next.target_resolvers.is_empty() || next.condition.is_some() || next.then.is_some() || next.if_you_do.is_some() {return false;}
                 fn bounded(e:&Expr)->bool {matches!(e,Expr::Const{value} if value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n))) || matches!(e,Expr::Unary{op,value} if op=="-" && matches!(value.as_ref(),Expr::Const{value} if value.as_u64().is_some_and(|n|n<=65535)))}
                 match (&next.target_resolver,&next.effect) {
+                    (None,Effect::ResourceCard{target:Target::Name(n)})=>ability.trigger=="whenDefeated" && n=="self",
                     (None,Effect::Draw{target:Target::Name(n),amount:Expr::Const{value}})=>ability.trigger=="whenPlayed" && n=="ownPlayer"&&value.as_u64()==Some(2),
                     (None,Effect::Ready{target:Target::Name(n)})=>ability.trigger=="whenPlayed" && n=="self",
                     (None,Effect::DiscardOwnHand{target:Target::Name(n),amount:Expr::Const{value}})=>ability.trigger=="whenDefeated" && n=="enemyPlayer"&&value.as_u64()==Some(1),
@@ -1295,6 +1309,7 @@ impl Program {
                 if depth!=0 {return Err("nested arena-list defeat requires explicit timing witnesses".into());}
                 list.validate_scope(true)?;self.instructions.push(Instruction::Apply(effect.clone()));
             }
+            Effect::ResourceCard {target} => {if !matches!(target,Target::Name(n) if n=="self") {return Err("resourceCard supports self only".into());} self.instructions.push(Instruction::Apply(effect.clone()));}
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::ModifyStats { target, power, hp, duration } => {
                 if matches!(target,Target::ArenaList(_)) && depth!=0 {return Err("nested arena-list modifiers require explicit continuation witnesses".into());}
@@ -1397,6 +1412,7 @@ impl Catalogue {
                 let upgrade_force=|a:&Ability|entry["baseClass"]=="UpgradeCard" && exact_type("upgrade") && a.trigger=="whenPlayed" && a.optional && matches!(&a.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && a.if_you_do.as_ref().is_some_and(|next|next.target_resolver.as_ref().is_some_and(|r|r.owner=="any" && r.card_type=="any" && r.zone.as_deref()==Some("base")) && matches!(&next.effect,Effect::Heal{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen" && value.as_u64().is_some_and(|n|(1..=65535).contains(&n))));
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && ["whenPlayed","whenDefeated","onAttack"].contains(&a.trigger.as_str())) || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event") || upgrade_force(a))) {return Err("Force registration requires ordinary unit/event or bounded upgrade play-heal metadata".into());}
                 if sides.leader.iter().chain(&sides.unit).any(contains_force_presence) || sides.card.iter().any(|a|contains_force_presence(a) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Force presence requires ordinary unit card-side metadata".into());}
+                if sides.leader.iter().chain(&sides.unit).any(contains_resource) || sides.card.iter().any(|a|contains_resource(a) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && a.trigger=="whenDefeated") || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event"))) {return Err("resourceCard requires ordinary unit death/event metadata".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}

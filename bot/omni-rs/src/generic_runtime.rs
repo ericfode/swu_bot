@@ -1009,7 +1009,7 @@ impl Engine {
                 self.eval(&context, source, context.ability_target, amount)
                     .number(),
             ),
-            Effect::UseForce{target}|Effect::GainForce{target}|Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
+            Effect::ResourceCard{target}|Effect::UseForce{target}|Effect::GainForce{target}|Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -1048,6 +1048,7 @@ impl Engine {
                             unit && (!require_change || !s.card(id).exhausted)
                         }
                         Effect::Defeat { .. } => unit || self.attached_in_play(s,id),
+                        Effect::ResourceCard {..} => self.resource_source_eligible(&context,id) && (!require_change || !s.player(s.card(id).owner).resources.contains(id)),
                         Effect::ReturnToHand { .. } => {
                             !self.def(s, id).info.is("leader")
                                 && (unit || self.attached_in_play(s,id) || s.player(s.card(id).owner).discard.contains(id))
@@ -1860,6 +1861,23 @@ impl Engine {
         };
         u16::try_from(n).map_err(|_| format!("effect amount {n} exceeds bounded runtime"))
     }
+    fn resource_source_eligible(&self,s:&State,id:CardId)->bool {
+        if id==0 || id!=s.source {return false;}
+        let info=&self.def(s,id).info;
+        if info.is("leader") || info.is("token") || !(info.is("unit")||info.is("event")||info.is("upgrade")) {return false;}
+        let p=s.player(s.card(id).owner);
+        p.hand.contains(id)||p.deck.contains(id)||p.discard.contains(id)||p.resources.contains(id)
+    }
+    fn resource_source(&self,s:&mut State,id:CardId)->Result<u16,String> {
+        if !self.resource_source_eligible(s,id) {return Ok(0);}
+        let owner=s.card(id).owner;
+        if s.player(owner).resources.contains(id) {return Ok(0);}
+        if s.player(owner).resources.len as usize>=crate::model::MAX_ZONE {return Err("resource zone capacity exceeded".into());}
+        let p=s.player_mut(owner);
+        p.hand.remove(id);p.deck.remove(id);p.discard.remove(id);p.resources.push(id)?;
+        s.card_mut(id).exhausted=true;
+        Ok(1)
+    }
     fn apply_effect(&self, s: &mut State, e: &Effect) -> Result<(u16, bool), String> {
         if let Effect::Defeat {target:Target::ArenaList(_)}=e {
             if !s.arena_order_exact {return Err("arena-list defeat requires recorded global arena order".into());}
@@ -1891,7 +1909,7 @@ impl Engine {
             | Effect::GiveExperience { target, amount }
             | Effect::GiveWeakness {target,amount}
             | Effect::GainKeyword { target, amount, .. } => (target, self.effect_amount(s, amount)?),
-            Effect::UseForce{target}|Effect::GainForce{target}|Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
+            Effect::ResourceCard{target}|Effect::UseForce{target}|Effect::GainForce{target}|Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -1912,6 +1930,7 @@ impl Engine {
         let mut resources_fully_resolved = true;
         for target in targets {
             match target {
+                Eval::Card(id) if matches!(e,Effect::ResourceCard{..}) => {result=result.saturating_add(self.resource_source(s,id)?);}
                 Eval::Player(player) if matches!(e,Effect::UseForce{..}|Effect::GainForce{..})=> {
                     if !s.force_state_exact || s.player(player).force_id==0 || self.force_def.is_none() {return Err("Force requires exact identity and reviewed native definition".into());}
                     let desired=matches!(e,Effect::GainForce{..});

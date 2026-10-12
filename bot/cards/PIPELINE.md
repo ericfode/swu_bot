@@ -199,6 +199,15 @@ and aura stacking remain explicit gaps. Other Force queries, hooks, costs,
 groups and continuations remain uncovered or runtime-rejected; passing these
 experiments does not establish them.
 
+Self-resource experiments cover real event play and ordinary-unit defeat, both
+controllers, optional decline, own/absent/enemy Force, exact paid cost, exhausted
+entry, persistent card identity, repeated copies and natural phase readiness.
+Wounded sources with ordinary and native attachments exercise real defeat cleanup
+before movement. Event observations establish discard entry before the same card
+becomes a resource. Earlier death-time return to hand and the live discard guard's
+negative branch remain explicit printed-card gaps; current-zone movement,
+already-resource readiness and destination capacity have separate runtime tests.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

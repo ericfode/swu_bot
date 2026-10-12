@@ -15485,6 +15485,45 @@
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
+      "hp": 3,
+      "id": "6434969978",
+      "internalName": "expendable-mercenary",
+      "keywords": [],
+      "power": 3,
+      "rules": "Resources enter play exhausted.\n",
+      "setCode": "LAW_159",
+      "setCodes": [
+        {
+          "number": 159,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 159,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "When Defeated: You may resource this unit from its owner's discard pile.",
+      "title": "Expendable Mercenary",
+      "traits": [
+        "underworld",
+        "bounty hunter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
       "hp": 5,
       "id": "3450378734",
       "internalName": "hidden-hunters",
@@ -18272,6 +18311,47 @@
       "title": "Lor San Tekka",
       "traits": [
         "resistance"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "1160624693",
+      "internalName": "eeth-koth#spiritual-warrior",
+      "keywords": [],
+      "power": 5,
+      "rules": "A card put into play as a resource enters play exhausted.\n(ERRATA) Templating update: “Put into play as a resource” becomes “resource”.\n",
+      "setCode": "LOF_097",
+      "setCodes": [
+        {
+          "number": 97,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 97,
+        "set": "LOF"
+      },
+      "subtitle": "Spiritual Warrior",
+      "text": "When Defeated: You may use the Force. If you do, put this card into play as a resource.",
+      "title": "Eeth Koth",
+      "traits": [
+        "force",
+        "jedi",
+        "republic"
       ],
       "types": [
         "unit"
@@ -35031,6 +35111,47 @@
       "title": "Encouraging Leadership",
       "traits": [
         "learned"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "command"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "2703877689",
+      "internalName": "resupply",
+      "keywords": [],
+      "power": null,
+      "rules": "A card put into play as a resource enters play exhausted.\n(ERRATA) Templating update: “Put into play as a resource” becomes “resource”.\n",
+      "setCode": "TWI_127",
+      "setCodes": [
+        {
+          "number": 126,
+          "set": "SOR"
+        },
+        {
+          "number": 127,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 127,
+        "set": "TWI"
+      },
+      "subtitle": null,
+      "text": "Put this event into play as a resource.",
+      "title": "Resupply",
+      "traits": [
+        "supply"
       ],
       "types": [
         "event"

@@ -69,17 +69,24 @@ async function constructProbeFixture(env, pool, scenario, seed) {
     }
     const own = eg.player(eg.ids[0]),
         enemy = eg.player(eg.ids[1]);
+    const allocated = new Set();
+    const claim = (card) => {
+        assert.ok(card, 'Missing physical construction card');
+        assert.ok(!allocated.has(card.uuid), 'Construction card identity already allocated');
+        allocated.add(card.uuid);
+        return card;
+    };
     const take = (player, code) => {
         const card = [...player.drawDeck, ...player.getCardsInZone('hand'), ...player.getCardsInZone('resource')].find(
-            (c) => matches(c, code),
+            (c) => !allocated.has(c.uuid) && matches(c, code),
         );
-        assert.ok(card, 'Cannot construct ' + code);
-        return card;
+        assert.ok(card, 'Cannot construct unused copy of ' + code);
+        return claim(card);
     };
     const token = (player, name) => {
         const keys = Object.keys(eg.game.tokenFactories).filter(key => key.replace(/-/g,'').toLowerCase() === name.replace(/-/g,'').toLowerCase());
         assert.equal(keys.length,1,'Token metadata name must resolve exactly one engine factory');
-        return eg.game.generateToken(player,keys[0]);
+        return claim(eg.game.generateToken(player,keys[0]));
     };
     const source = take(own, p.cardId);
     source.moveTo(p.sourceInPlay ? p.sourceArena + 'Arena' : 'hand');
@@ -89,11 +96,13 @@ async function constructProbeFixture(env, pool, scenario, seed) {
     }
     const activation = p.activationCode ? take(own, p.activationCode) : source;
     if (p.activationCode) activation.moveTo('hand');
+    const constructionAttachments = [];
     const targets = p.targets.map((t) => {
         const player = t.owner === 'self' ? own : enemy;
-        const card = (t.deployedLeader || t.leader) ? player.getAllDeckLeaders().find(c=>matches(c,t.code)) : t.token ? token(player,t.token) : take(player,t.code);
+        const card = (t.deployedLeader || t.leader) ? player.getAllDeckLeaders().find(c=>!allocated.has(c.uuid)&&matches(c,t.code)) : t.token ? token(player,t.token) : take(player,t.code);
         if (t.deployedLeader || t.leader) {
-            assert.ok(card,'Missing chosen deck leader');
+            assert.ok(card,'Missing unused chosen deck leader');
+            claim(card);
             card.deploy({type:'leaderUnit'});
             card.deployEpicActionLimit.increment(player);
         } else card.moveTo(t.zone ?? t.arena + 'Arena');
@@ -105,9 +114,13 @@ async function constructProbeFixture(env, pool, scenario, seed) {
             const owner = attachment.owner === 'opponent' ? enemy : attachment.owner === 'self' ? own : player;
             const upgrade = attachment.token ? token(owner,attachment.token) : take(owner,attachment.code);
             upgrade.attachTo(card);
+            constructionAttachments.push(upgrade);
         }
         return card;
     });
+    const constructionCards = [source, ...(activation === source ? [] : [activation]), ...targets, ...constructionAttachments];
+    assert.equal(new Set(constructionCards.map(card => card.uuid)).size, constructionCards.length,
+        'Source, activation, targets and attachments require distinct physical identities');
     for (const player of [own, enemy]) {
         for (const card of player.drawDeck.slice(0, p.resourceCount ?? 12)) {
             card.moveTo('resource');
@@ -139,6 +152,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'resource-self') return require('./resource-self-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-triggers') return require('./force-trigger-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-presence') return require('./force-presence-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-followon') return require('./force-followon-probe-fixture').fixture(env, pool, scenario, seed);
@@ -385,6 +399,8 @@ module.exports = {
     buildDeck,
     dependencies: [
         'bot/cards/pipeline/probes.js',
+        'bot/cards/pipeline/resource-self-probes.js',
+        'bot/cards/pipeline/resource-self-probe-fixture.js',
         'bot/cards/pipeline/force-trigger-probes.js',
         'bot/cards/pipeline/force-trigger-probe-fixture.js',
         'bot/cards/pipeline/force-presence-probes.js',

@@ -2452,3 +2452,33 @@ fn force_triggers_raw_shapes_preserve_timing_and_upgrade_domains() {
  for (field,value) in [("owner",json!("self")),("type",json!("unit")),("zone",json!("arena"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_102").unwrap();card["abilities"]["card"][0]["ifYouDo"]["targetResolver"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_102"),"{field}");}
  for types in [json!(["unit"]),json!(["upgrade","token"]),json!(["upgrade","leader"])] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LOF_102").unwrap();card["card"]["types"]=types;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_102"));}
 }
+#[test]
+fn resource_self_identity_current_zone_owner_and_already_ready() {
+ let e=engine();for seat in [Seat::P1,Seat::P2] {let mut s=board(&e);let id=add(&e,&mut s,seat,"LOF_097");s.player_mut(seat).hand.push(id).unwrap();s.source=id;s.active=seat.other();let next=s.next_id;assert!(e.resource_source_eligible(&s,id));assert_eq!(e.resource_source(&mut s,id).unwrap(),1);assert!(s.player(seat).resources.contains(id));assert!(!s.player(seat).hand.contains(id));assert!(s.card(id).exhausted);assert_eq!(s.next_id,next);s.card_mut(id).exhausted=false;assert_eq!(e.resource_source(&mut s,id).unwrap(),0);assert!(!s.card(id).exhausted);}
+}
+#[test]
+fn resource_self_capacity_is_atomic_and_arena_is_ineffective() {
+ let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_097");s.source=source;assert_eq!(e.resource_source(&mut s,source).unwrap(),0);assert!(e.in_arena(&s,source));e.leave_play(&mut s,source).unwrap();for _ in 0..crate::model::MAX_ZONE {let id=add(&e,&mut s,Seat::P1,"LOF_256");s.players[0].resources.push(id).unwrap();}let before=s;assert!(e.resource_source(&mut s,source).is_err());assert_eq!(s.players[0].resources,before.players[0].resources);assert_eq!(s.players[0].discard,before.players[0].discard);assert_eq!(s.next_id,before.next_id);
+}
+#[test]
+fn resource_self_eeth_spends_force_even_when_secondary_is_ineffective() {
+ let e=engine();for arena in [true,false] {let mut s=board(&e);let source=if arena {unit(&e,&mut s,Seat::P1,"LOF_097")}else{let id=add(&e,&mut s,Seat::P1,"LOF_097");s.players[0].resources.push(id).unwrap();s.card_mut(id).exhausted=false;id};s.source=source;s.players[0].force_held=true;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityOptional);let done=named_button(&e,&s,"Trigger");assert!(!done.players[0].force_held);if arena {assert!(e.in_arena(&done,source));}else{assert!(done.players[0].resources.contains(source));assert!(!done.card(source).exhausted);}}
+}
+#[test]
+fn resource_self_raw_shapes_fail_closed_and_exact_three_admit() {
+ let e=engine();for code in ["LAW_159","LOF_097","TWI_127"] {assert!(e.by_code.contains_key(code),"{code}");}assert!(!e.by_code.contains_key("SHD_107"));
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for (field,value) in [("target",json!("chosen")),("amount",json!({"kind":"const","value":1})),("readyResource",json!(true)),("targetPlayer",json!("enemyPlayer"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="TWI_127").unwrap();card["abilities"]["card"][0]["effect"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("TWI_127"),"{field}");}
+ for types in [json!(["unit"]),json!(["event","token"]),json!(["leader","event"])] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="TWI_127").unwrap();card["card"]["types"]=types;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("TWI_127"));}
+}
+
+#[test]
+fn resource_self_eeth_nonarena_zones_and_mercenary_condition_are_distinct() {
+ let e=engine();for zone in ["hand","deck","discard"] {let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"LOF_097");match zone {"hand"=>s.players[0].hand.push(source).unwrap(),"deck"=>s.players[0].deck.push(source).unwrap(),_=>s.players[0].discard.push(source).unwrap()};s.source=source;s.players[0].force_held=true;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();let done=named_button(&e,&s,"Trigger");assert!(!done.players[0].force_held);assert!(done.players[0].resources.contains(source));assert!(done.card(source).exhausted);}
+ let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"LAW_159");s.players[0].hand.push(source).unwrap();s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_ne!(s.decision,Decision::AbilityOptional);assert!(s.players[0].hand.contains(source));assert!(!s.players[0].resources.contains(source));
+ for code in ["TOKEN_SHIELD","SOR_014"] {let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,code);s.source=source;s.players[0].discard.push(source).unwrap();assert!(!e.resource_source_eligible(&s,source));assert_eq!(e.resource_source(&mut s,source).unwrap(),0);}
+}
+#[test]
+fn resource_self_resupply_commits_cost_and_survives_event_finish() {
+ let e=engine();let mut s=board(&e);let source=hand(&e,&mut s,"TWI_127");let old=s.players[0].resources;let next=s.next_id;let done=e.apply(&s,&e.card_action(&s,source)).unwrap();assert!(done.players[0].resources.contains(source));assert_eq!(done.players[0].resources.len,old.len+1);assert_eq!(done.players[0].resources.as_slice().last(),Some(&source));assert!(!done.players[0].hand.contains(source));assert!(!done.players[0].discard.contains(source));assert!(done.card(source).exhausted);assert_eq!(done.next_id,next);assert!(old.as_slice().iter().filter(|&&id|done.card(id).exhausted).count()>=3);assert_eq!(done.active,Seat::P2);
+}
