@@ -72,6 +72,26 @@ impl WasmEngine {
         })
     }
 
+    /// Load source-compiled card programs without a JavaScript callback. When
+    /// supplied, the exact pool JSON restricts the catalogue and binds its
+    /// SHA-256 to exported positions and reference traces.
+    #[wasm_bindgen(js_name = fromCatalogue)]
+    pub fn from_catalogue(
+        catalogue_json: &str,
+        pool_json: Option<String>,
+    ) -> Result<WasmEngine, JsError> {
+        let engine = match pool_json {
+            Some(pool) => {
+                Engine::from_compiled_pool_bytes(pool.as_bytes(), catalogue_json.as_bytes())
+            }
+            None => Engine::from_catalogue_bytes(catalogue_json.as_bytes()),
+        }
+        .map_err(error)?;
+        Ok(Self {
+            engine: Rc::new(engine),
+        })
+    }
+
     #[wasm_bindgen(js_name = poolHash)]
     pub fn pool_hash(&self) -> String {
         self.engine.pool_hash().to_string()

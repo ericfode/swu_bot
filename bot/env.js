@@ -280,9 +280,27 @@ class EnvGame {
             const caps = legal.map((c) => (capped && c.isUnit() ? Math.max(0, c.remainingHp) : Infinity));
             out.push({ kind: 'distribute', label: `distribute ${p.distributeAmongTargets.amount}`, spec: p.distributeAmongTargets, targets: legal.map((c) => c.uuid), caps, uuid: p.promptUuid });
         } else {
+            // SelectCardPrompt highlights candidates more broadly than its click
+            // handler at the selection limit. Inspect the active nested prompt;
+            // selected cards are valid toggles, except protected must-selects.
+            let selectionPrompt = null;
+            let step = this.game.pipeline?.currentStep;
+            const visited = new Set();
+            while (step && !visited.has(step)) {
+                visited.add(step);
+                if (step.constructor?.name === 'SelectCardPrompt' && step.choosingPlayer === pl) {
+                    selectionPrompt = step;
+                    break;
+                }
+                step = step.pipeline?.currentStep;
+            }
             const selected = new Set((ps.selectedCards ?? []).map((c) => c.uuid));
             for (const c of ps.selectableCards ?? []) {
-                if (selected.has(c.uuid)) {
+                if (selectionPrompt) {
+                    const isSelected = selectionPrompt.selectedCards.includes(c);
+                    if (isSelected && selectionPrompt.cannotUnselectMustSelect && selectionPrompt.properties.mustSelect.includes(c)) continue;
+                    if (!isSelected && selectionPrompt.selector.hasReachedLimit(selectionPrompt.selectedCards, selectionPrompt.context)) continue;
+                } else if (selected.has(c.uuid)) {
                     continue;
                 }
                 out.push({ kind: 'card', label: c.internalName ?? c.name, cardUuid: c.uuid, card: c });

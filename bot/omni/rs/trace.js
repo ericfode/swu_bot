@@ -16,11 +16,16 @@ async function traceGame(env, pool, seed, names, maxSteps = 6000) {
     const bots = names.map(makeBot);
     const eg = env.newGame({ seed, deck1: decks[0], deck2: decks[1], undo: bots.some((b) => b.needsUndo) });
     let events = null;
-    for (const name of ['onCardPlayed', 'onAttackDeclared', 'onCardDefeated', 'onLeaderDeployed', 'onUpgradeAttached']) {
+    for (const name of ['onCardPlayed', 'onAttackDeclared', 'onCardDefeated', 'onLeaderDeployed', 'onUpgradeAttached', 'onDamageDealt', 'onDamageHealed', 'onCardReadied', 'onCardExhausted', 'onCardsDrawn']) {
         eg.game.on(name, (event) => {
             if (!events || event.isCancelledOrReplaced) return;
             const c = name === 'onAttackDeclared' ? event.attack.attacker : event.card;
-            if (c) events.push({ name, card: placedRef(eg, c) });
+            const receipt = { name };
+            if (c) receipt.card = placedRef(eg, c);
+            if (event.context?.source?.isCard?.()) receipt.source = placedRef(eg, event.context.source);
+            if (event.player) receipt.player = eg.seatOf(event.player.id);
+            for (const field of ['amount', 'damageDealt', 'damageHealed']) if (typeof event[field] === 'number') receipt[field] = event[field];
+            events.push(receipt);
         });
     }
     const records = [{ type: 'meta', schema: 'omni-rs-trace-v1', pool: pool.provenance, seed, bots: names, decks }];

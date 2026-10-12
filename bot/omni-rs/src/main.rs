@@ -14,15 +14,19 @@ use std::{
 
 const HELP: &str = "omni-rs — independent SWU subset simulator and endgame prover
 
-  omni-rs check <trace.jsonl[.gz]>... [--pool FILE]
-  omni-rs prove <positions.jsonl[.gz]> [--depth 12] [--ms N | --nodes N | --ms-field jsMs] [--pool FILE]
-  omni-rs bench [trace-or-positions.jsonl[.gz]] [--nodes 100000] [--pool FILE]
+  omni-rs check <trace.jsonl[.gz]>... [--pool FILE] [--catalogue FILE]
+  omni-rs prove <positions.jsonl[.gz]> [--depth 12] [--ms N | --nodes N | --ms-field jsMs] [--pool FILE] [--catalogue FILE]
+  omni-rs bench [trace-or-positions.jsonl[.gz]] [--nodes 100000] [--pool FILE] [--catalogue FILE]
+  omni-rs catalogue <catalog.json> [--out-pool FILE]
 
 Proof depth and nodes count action-window moves; decisions also counts prompt inputs.
 All proof limits are cumulative across iterative depths and both candidate winners.
 Positions must contain fullState from a pool-aware export-positions.js run.
 bench excludes loading/parsing, includes all prompt choices between action windows,
 and defaults to the first committed trace fixture. Output is JSON (one line per input).
+--catalogue loads compiled card programs; --pool optionally restricts their card set
+and binds trace provenance to that pool. Without --catalogue the strict pool is used.
+catalogue reports runtime admission and rejection reasons, not game conformance.
 ";
 
 #[derive(Default)]
@@ -37,7 +41,18 @@ impl Args {
         while let Some(value) = values.next() {
             if value.starts_with("--") {
                 let key = value.trim_start_matches("--");
-                if !["pool", "depth", "ms", "nodes", "ms-field", "table-entries"].contains(&key) {
+                if ![
+                    "pool",
+                    "catalogue",
+                    "out-pool",
+                    "depth",
+                    "ms",
+                    "nodes",
+                    "ms-field",
+                    "table-entries",
+                ]
+                .contains(&key)
+                {
                     return Err(format!("unknown option {value}\n{HELP}"));
                 }
                 let next = values
@@ -69,6 +84,108 @@ fn emit(value: &impl serde::Serialize) -> Result<(), String> {
     let mut out = stdout.lock();
     serde_json::to_writer(&mut out, value).map_err(|e| e.to_string())?;
     out.write_all(b"\n").map_err(|e| e.to_string())
+}
+
+fn read_bytes(path: &Path) -> Result<Vec<u8>, String> {
+    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn load_engine(args: &Args) -> Result<Engine, String> {
+    if args.flags.contains_key("out-pool") {
+        return Err("--out-pool is only valid with the catalogue command".into());
+    }
+    if let Some(path) = args.flags.get("catalogue") {
+        let catalogue = read_bytes(Path::new(path))?;
+        if let Some(pool) = args.flags.get("pool") {
+            return Engine::from_compiled_pool_bytes(&read_bytes(Path::new(pool))?, &catalogue);
+        }
+        return Engine::from_catalogue_bytes(&catalogue);
+    }
+    let default_pool = Path::new(env!("CARGO_MANIFEST_DIR")).join("../omni/rs/pool.json");
+    let pool = args
+        .flags
+        .get("pool")
+        .map(PathBuf::from)
+        .unwrap_or(default_pool);
+    Engine::from_pool(&pool)
+}
+
+fn catalogue(args: &Args) -> Result<(), String> {
+    if args.positional.len() != 1 {
+        return Err(format!(
+            "catalogue requires one compiled catalogue file\n{HELP}"
+        ));
+    }
+    for key in args.flags.keys() {
+        if key != "out-pool" {
+            return Err(format!("--{key} is not valid with the catalogue command"));
+        }
+    }
+    let bytes = read_bytes(Path::new(&args.positional[0]))?;
+    let value: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let engine = Engine::from_catalogue_bytes(&bytes)?;
+    let rejected = engine
+        .rejected_cards()
+        .ok_or("catalogue loader did not retain admission results")?;
+    let entries = value["cards"].as_array().ok_or("catalogue missing cards")?;
+    let mut admitted = BTreeMap::new();
+    let mut rejections = BTreeMap::new();
+    let mut admitted_sources = 0;
+    let mut admitted_data = 0;
+    let mut native_adapters = 0;
+    for entry in entries {
+        let code = entry["setCode"]
+            .as_str()
+            .ok_or("catalogue card missing code")?;
+        let name = entry["internalName"]
+            .as_str()
+            .or_else(|| entry["card"]["internalName"].as_str())
+            .unwrap_or("unnamed");
+        if let Some(reason) = rejected.get(code) {
+            rejections.insert(
+                code,
+                json!({"setCode":code,"internalName":name,"reason":reason}),
+            );
+        } else {
+            let implementation = if entry["status"] != "supported" {
+                native_adapters += 1;
+                "nativeAdapter"
+            } else if entry["sourcePath"].is_string() {
+                admitted_sources += 1;
+                "sourceIr"
+            } else {
+                admitted_data += 1;
+                "dataOnly"
+            };
+            admitted.insert(
+                code,
+                json!({"setCode":code,"internalName":name,"implementation":implementation}),
+            );
+        }
+    }
+    if admitted.len() + rejections.len() != entries.len() {
+        return Err("catalogue admission report does not partition all card entries".into());
+    }
+    if let Some(path) = args.flags.get("out-pool") {
+        let mut bytes =
+            serde_json::to_vec_pretty(&engine.compiled_pool()?).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        std::fs::write(path, bytes).map_err(|e| format!("{path}: {e}"))?;
+    }
+    emit(&json!({
+        "schema":"omni-rs-catalogue-report-v1",
+        "catalogueHash":engine.pool_hash(),
+        "knownCards":entries.len(),
+        "irConvertedCount":entries.iter().filter(|entry| entry["status"]=="supported").count(),
+        "sourceAstConvertedCount":entries.iter().filter(|entry| entry["status"]=="supported" && entry["sourcePath"].is_string()).count(),
+        "dataOnlyConvertedCount":entries.iter().filter(|entry| entry["status"]=="supported" && !entry["sourcePath"].is_string()).count(),
+        "runtimeAdmittedCount":admitted.len(),
+        "runtimeRejectedCount":rejections.len(),
+        "runtimeAdmittedBreakdown":{"sourceIr":admitted_sources,"dataOnly":admitted_data,"nativeAdapters":native_adapters},
+        "gameConformance":"not assessed by this report",
+        "runtimeAdmittedCards":admitted.into_values().collect::<Vec<_>>(),
+        "runtimeRejectedCards":rejections.into_values().collect::<Vec<_>>()
+    }))
 }
 
 fn prove(engine: &Engine, args: &Args) -> Result<(), String> {
@@ -223,13 +340,10 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
     let args = Args::parse(values)?;
-    let default_pool = Path::new(env!("CARGO_MANIFEST_DIR")).join("../omni/rs/pool.json");
-    let pool = args
-        .flags
-        .get("pool")
-        .map(PathBuf::from)
-        .unwrap_or(default_pool);
-    let engine = Engine::from_pool(&pool)?;
+    if command == "catalogue" {
+        return catalogue(&args);
+    }
+    let engine = load_engine(&args)?;
     match command.as_str() {
         "check" => {
             if args.positional.is_empty() {
