@@ -99,5 +99,6 @@ view difference either.
 A protocol bot that sends `"simEngine": "rust"` in `ready` gets its simulations from the Rust simulator whenever every
 card in the game is in the pool (`rust-sims.js`; spec/protocol.md#simulations-on-the-rust-engine). Otherwise it gets
 forceteki simulations, as every bot does by default. `node-search-rust` is `node-search` opted in: on pool decks it
-spends about 10 ms per decision against 50 ms (stdio round trips are now most of the cost). The WebAssembly package
+spends about 17 ms per decision against 35 ms, and in three test games (seeds 31-33 against heuristic) it played games of
+the same length with the same winner. The WebAssembly package
 must be built (`npm run wasm:build -- --target node`); without it the referee says so once and serves forceteki.
