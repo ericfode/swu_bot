@@ -86,7 +86,7 @@ impl Engine {
                     serde_json::from_value(entry["card"].clone()).map_err(|e| e.to_string())?;
                 for field in ["cost", "power", "hp"] {
                     let value = &entry["card"][field];
-                    if !value.is_null() && !value.as_u64().is_some_and(|n| n <= 1000) {
+                    if !value.is_null() && !(if info.is("upgrade") && field!="cost" {value.as_i64().is_some_and(|n|(-1000..=1000).contains(&n))}else{value.as_u64().is_some_and(|n| n <= 1000)}) {
                         return Err(format!("{field} must be an integer in 0..=1000"));
                     }
                 }
@@ -129,6 +129,14 @@ impl Engine {
                     {
                         return Err("event needs exactly one event program".into());
                     }
+                } else if info.is("upgrade") {
+                    if entry["baseClass"]!="UpgradeCard" || entry["card"]["pilotText"].as_str().is_some_and(|v|!v.trim().is_empty()) {return Err("pilot/base upgrade execution is not implemented".into());}
+                    for &p in &programs.card {
+                        let program=&catalogue.programs[p as usize];
+                        if !["constant","whenPlayed"].contains(&program.trigger.as_str()) {return Err("upgrade trigger requires dedicated framework event support".into());}
+                        if program.trigger=="constant" && program.instructions.iter().any(|i|match i {Instruction::Apply(Effect::GainKeyword {target:Target::Name(n),..})=>n!="parent",Instruction::EndStep=>false,_=>true}) {return Err("upgrade constants require attached keyword grants".into());}
+                    }
+                    for field in ["upgradePower","upgradeHp"] {if !entry["card"][field].as_i64().is_some_and(|n|(-1000..=1000).contains(&n)) {return Err("upgrade printed stats must be bounded integers".into());}}
                 } else if !info.is("unit") && !info.is("leader") {
                     return Err("runtime card type is not implemented".into());
                 }
@@ -363,7 +371,7 @@ impl Engine {
             let power = d.info.power.unwrap_or(0) as i64
                 + self.token_count(s, s.card(id).experience) as i64
                 + s.card(id).phase_power as i64
-                + constant_power
+                + constant_power + self.upgrade_stats(s,id).0
                 + if self.keyword_amount(s, id, "grit") > 0 {
                     s.card(id).damage as i64
                 } else {
@@ -373,7 +381,7 @@ impl Engine {
             let hp = d.info.hp.unwrap_or(0) as i64
                 + self.token_count(s, s.card(id).experience) as i64
                 + s.card(id).phase_hp as i64
-                + constant_hp;
+                + constant_hp + self.upgrade_stats(s,id).1;
             if power > 65535 || hp > 65535 {
                 return Err("computed stats exceed compact capacity".into());
             }
@@ -388,16 +396,7 @@ impl Engine {
         }
         loop {
             self.check_stat_capacity(s)?;
-            // The reference arena traverses ground cards, then space cards,
-            // retaining entry order within each arena. Relative order across
-            // controllers cannot affect this subset's per-player discard lists.
-            let dead: Vec<_> = s
-                .players
-                .iter()
-                .flat_map(|p| p.ground.as_slice().iter().chain(p.space.as_slice()))
-                .copied()
-                .filter(|&id| s.card(id).damage >= self.hp(s, id))
-                .collect();
+            let dead:Vec<_>=self.arena_units(s).into_iter().filter(|id|s.card(*id).damage>=self.hp(s,*id)).collect();
             if dead.is_empty() {
                 return Ok(());
             }
@@ -410,7 +409,7 @@ impl Engine {
         for source in 1..s.next_id {
             // Incoming unique copies have not activated their ongoing abilities:
             // the engine resolves uniqueness before resolveGameState.
-            if !self.in_arena(s, source)
+            if !(self.in_arena(s, source)||self.attached_in_play(s,source))
                 || source == s.disabled_ongoing_source
                 || (s.decision == Decision::Unique && source == s.source)
             {
@@ -437,7 +436,8 @@ impl Engine {
                         None
                     }
                 });
-                if resolver.map_or(source != target, |r| {
+                let parent_target=program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::GainKeyword {target:Target::Name(n),..}) if n=="parent"));
+                if resolver.map_or(if parent_target {s.card(source).parent!=target}else{source != target}, |r| {
                     !self.matching_targets(s, source, r).contains(&target)
                 }) {
                     continue;
@@ -453,8 +453,8 @@ impl Engine {
         let mut total = (0, 0);
         for (source, effect) in self.constant_effects(s, target, false) {
             if let Effect::ModifyStats { power, hp, .. } = effect {
-                total.0 += self.eval(s, source, target, power).number();
-                total.1 += self.eval(s, source, target, hp).number();
+                total.0 += self.eval_live_stat(s,source,target,power).number();
+                total.1 += self.eval_live_stat(s,source,target,hp).number();
             }
         }
         total
@@ -490,13 +490,8 @@ impl Engine {
     pub(super) fn effective_flags(&self, s: &State, target: CardId) -> u16 {
         crate::ability_ir::CORE_KEYWORDS[..6].iter().enumerate().fold(0, |flags, (i, k)| flags | if self.keyword_amount(s, target, k) > 0 { 1 << i } else { 0 })
     }
-    pub fn hp(&self, s: &State, id: CardId) -> u16 {
-        (self.def(s, id).info.hp.unwrap_or(0) as i64
-            + self.token_count(s, s.card(id).experience) as i64
-            + s.card(id).phase_hp as i64
-            + self.constant_stats(s, id).1)
-            .clamp(0, u16::MAX as i64) as u16
-    }
+    fn raw_hp(&self,s:&State,id:CardId)->i64 {self.def(s,id).info.hp.unwrap_or(0) as i64+self.token_count(s,s.card(id).experience) as i64+s.card(id).phase_hp as i64+self.constant_stats(s,id).1+self.upgrade_stats(s,id).1}
+    pub fn hp(&self,s:&State,id:CardId)->u16 {u16::try_from(self.raw_hp(s,id).max(0)).expect("HP exceeds validated compact capacity")}
     fn program(&self, id: u16) -> &Program {
         &self.catalogue.as_ref().expect("IR catalogue").programs[id as usize]
     }
@@ -540,22 +535,36 @@ impl Engine {
             })
             .collect()
     }
-    pub(super) fn is_attacking(&self, s: &State, id: CardId) -> bool {
-        self.in_arena(s, id) && (id == s.attack_source || s.death_frames[..s.death_depth as usize].iter().any(|frame| frame.context.attack_source == id))
+    fn active_attack_pair(&self,s:&State,id:CardId)->(CardId,CardId) {
+        if s.attack_source!=0 && (s.attack_source==id||s.attack_defender==id) {(s.attack_source,s.attack_defender)}else{s.death_frames[..s.death_depth as usize].iter().rev().find(|f|f.context.attack_source!=0&&(f.context.attack_source==id||f.context.attack_defender==id)).map(|f|(f.context.attack_source,f.context.attack_defender)).unwrap_or((0,0))}
     }
+    pub(super) fn is_attacking(&self,s:&State,id:CardId)->bool {self.in_arena(s,id)&&id==self.active_attack_pair(s,id).0}
+    fn is_defending(&self,s:&State,id:CardId)->bool {(self.in_arena(s,id)||self.def(s,id).info.is("base"))&&id==self.active_attack_pair(s,id).1}
+    fn evaluated_power(&self,s:&State,id:CardId)->i64 {
+        if self.def(s,id).info.is("upgrade") {self.def(s,id).info.upgrade_power.unwrap_or(0) as i64}
+        else {self.raw_power(s,id,self.is_attacking(s,id)).max(0)}
+    }
+    fn evaluated_hp(&self,s:&State,id:CardId)->i64 {
+        if self.def(s,id).info.is("upgrade") {self.def(s,id).info.upgrade_hp.unwrap_or(0) as i64}
+        else {self.raw_hp(s,id).max(0)}
+    }
+    pub(super) fn attachment_condition(&self,s:&State,source:CardId,parent:CardId,e:&Expr)->bool {self.eval(s,source,parent,e).truth()}
     fn eval(&self, s: &State, source: CardId, target: CardId, e: &Expr) -> Eval {
         self.eval_with_card(s, source, target, target, e)
     }
-    fn eval_with_card(
+    fn eval_live_stat(&self,s:&State,source:CardId,affected:CardId,e:&Expr)->Eval {self.eval_with_binding(s,source,affected,affected,affected,e)}
+    fn eval_with_card(&self,s:&State,source:CardId,target:CardId,card:CardId,e:&Expr)->Eval {self.eval_with_binding(s,source,target,card,0,e)}
+    fn eval_with_binding(
         &self,
         s: &State,
         source: CardId,
         target: CardId,
         card: CardId,
+        modifier_target:CardId,
         e: &Expr,
     ) -> Eval {
         let player = s.card(source).owner;
-        let sub = |e| self.eval_with_card(s, source, target, card, e);
+        let sub = |e| self.eval_with_binding(s, source, target, card, modifier_target,e);
         match e {
             Expr::Array { items } => Eval::Array(items.iter().map(sub).collect()),
             Expr::Math { name, args } => {
@@ -611,6 +620,19 @@ impl Engine {
                         _ => Eval::Null,
                     };
                 }
+                if root=="modifierTarget" {
+                    assert!(modifier_target!=0,"modifierTarget unavailable outside persistent stat evaluation");
+                    return match field {None=>Eval::Card(modifier_target),Some("damage")=>Eval::Number(s.card(modifier_target).damage as i64),Some("controller") if path.len()==2=>Eval::Player(s.card(modifier_target).owner),Some("controller") if path.iter().map(String::as_str).collect::<Vec<_>>()==["modifierTarget","controller","resources","length"]=>Eval::Number(s.player(s.card(modifier_target).owner).resources.len as i64),_=>Eval::Null};
+                }
+                if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","activeAttack","attacker"] {return Eval::Card(self.active_attack_pair(s,card).0);}
+                if root=="source" && matches!(field,Some("parentCard"|"parentUnit")) {
+                    let parent=s.card(source).parent;
+                    // Compiler permits parent access only on ordinary attached upgrades.
+                    // Source registrations are evaluated while attachment is valid.
+                    assert!(parent!=0 && self.in_arena(s,parent),"parentCard/parentUnit requires a live attached source");
+                    if let Some(property)=path.get(2) {return self.eval_with_card(s,source,target,parent,&Expr::Ref {path:vec!["card".into(),property.clone()]});}
+                    return Eval::Card(parent);
+                }
                 let id = if root == "source" {
                     source
                 } else if root == "card" {
@@ -627,10 +649,10 @@ impl Engine {
                     Some("damage") => Eval::Number(s.card(id).damage as i64),
                     Some("power") => {
                         Eval::Number(
-                            self.power(s, id, self.is_attacking(s, id)) as i64
+                            self.evaluated_power(s,id)
                         )
                     }
-                    Some("hp") => Eval::Number(self.hp(s, id) as i64),
+                    Some("hp") => Eval::Number(self.evaluated_hp(s,id)),
                     Some("remainingHp") => {
                         Eval::Number(self.hp(s, id).saturating_sub(s.card(id).damage) as i64)
                     }
@@ -638,6 +660,7 @@ impl Engine {
                     Some("cost" | "printedCost") => Eval::Number(self.def(s, id).info.cost() as i64),
                     Some("exhausted") => Eval::Bool(s.card(id).exhausted),
                     Some("zoneName") => {
+                        if self.attached_in_play(s,id) {return Eval::Text(if self.def(s,s.card(id).parent).info.arena.as_deref()==Some("space") {"spaceArena"}else{"groundArena"}.into());}
                         let p = s.player(s.card(id).owner);
                         let zone = if p.ground.contains(id) {
                             "groundArena"
@@ -723,7 +746,7 @@ impl Engine {
                         .iter()
                         .chain(s.player(player).space.as_slice())
                         .filter(|&&card| {
-                            self.eval_with_card(s, source, target, card, predicate)
+                            self.eval_with_binding(s, source, target, card,modifier_target,predicate)
                                 .truth()
                         })
                         .count() as i64;
@@ -733,6 +756,7 @@ impl Engine {
                         Eval::Number(count)
                     };
                 }
+                if name=="resourcePairs" {return if let Eval::Player(p)=sub(receiver) {Eval::Number(s.player(p).resources.len as i64/2)}else{Eval::Null};}
                 if name == "hasInitiative" {
                     return Eval::Bool(matches!(sub(receiver), Eval::Player(p) if s.initiative==p));
                 }
@@ -747,8 +771,11 @@ impl Engine {
                     "isUnit" => Eval::Bool(
                         d.info.is("unit") || (d.info.is("leader") && s.card(id).deployed),
                     ),
+                    "isAttacking"=>Eval::Bool(self.is_attacking(s,id)),
+                    "isDefending"=>Eval::Bool(self.is_defending(s,id)),
+                    "isTokenUnit"=>Eval::Bool(d.info.is("token")&&d.info.is("unit")),
                     "isNonLeaderUnit" => Eval::Bool(d.info.is("unit") && !d.info.is("leader")),
-                    "isInPlay" => Eval::Bool(self.in_arena(s, id) || d.info.is("base")),
+                    "isInPlay" => Eval::Bool(self.in_arena(s, id) || self.attached_in_play(s,id) || d.info.is("base")),
                     "canBeExhausted" => Eval::Bool(
                         d.info.is("unit")
                             || d.info.is("leader")
@@ -756,16 +783,17 @@ impl Engine {
                             || d.info.is("upgrade"),
                     ),
                     "isUpgraded" => {
-                        Eval::Bool(s.card(id).shield != 0 || s.card(id).experience != 0)
+                        Eval::Bool(s.card(id).shield != 0 || s.card(id).experience != 0 || s.card(id).upgrades!=0)
                     }
+                    "isToken" => Eval::Bool(d.info.is("token")),
                     "isBase" => Eval::Bool(d.info.is("base")),
                     "isLeader" => Eval::Bool(d.info.is("leader")),
                     "getPower" => {
                         Eval::Number(
-                            self.power(s, id, self.is_attacking(s, id)) as i64
+                            self.evaluated_power(s,id)
                         )
                     }
-                    "getHp" => Eval::Number(self.hp(s, id) as i64),
+                    "getHp" => Eval::Number(self.evaluated_hp(s,id)),
                     "getCost" | "getPrintedCost" => Eval::Number(d.info.cost() as i64),
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" => {
                         let values = match args.first().map(sub) {
@@ -799,7 +827,9 @@ impl Engine {
                 continue;
             }
             let p = s.player(seat);
-            let candidates: Vec<CardId> = if r.zone.as_deref() == Some("discard") {
+            let candidates: Vec<CardId> = if r.card_type=="upgrade" {
+                (1..s.next_id).filter(|id|s.card(*id).owner==seat && self.attached_in_play(s,*id)).collect()
+            } else if r.zone.as_deref() == Some("discard") {
                 p.discard.as_slice().to_vec()
             } else {
                 p.ground
@@ -815,6 +845,8 @@ impl Engine {
                 let base = id == p.base;
                 let leader = d.info.is("leader");
                 if match r.card_type.as_str() {
+                    "upgrade" => !d.info.is("upgrade"),
+                    "tokenUnit"=> !(d.info.is("token")&&d.info.is("unit")),
                     "unit" => !(d.info.is("unit") || (leader && s.card(id).deployed)),
                     "base" => !base,
                     "nonLeaderUnit" => !d.info.is("unit") || leader,
@@ -863,7 +895,7 @@ impl Engine {
         context.ability_target = target;
         if context.event_group.active { context.event_group.context=Selection::one(target); }
         let (dest, amount) = match e {
-            Effect::DiscardOwnHand {target,amount} | Effect::CreateTokenUnit {target,amount,..} | Effect::ReadyResources { target, amount }
+            Effect::DiscardDeck {target,amount} | Effect::DiscardOwnHand {target,amount} | Effect::CreateTokenUnit {target,amount,..} | Effect::ReadyResources { target, amount }
             | Effect::Damage { target, amount }
             | Effect::Heal { target, amount }
             | Effect::Draw { target, amount }
@@ -884,7 +916,8 @@ impl Engine {
             .into_iter()
             .any(|dest| match dest {
                 Eval::Player(player) => {
-                    if matches!(e,Effect::DiscardOwnHand {..}) {!require_change || (amount>0 && s.player(player).hand.len>0)}
+                    if matches!(e,Effect::DiscardDeck {..}) {amount>0 && (!require_change || s.player(player).deck.len>0)}
+                    else if matches!(e,Effect::DiscardOwnHand {..}) {!require_change || (amount>0 && s.player(player).hand.len>0)}
                     else if matches!(e, Effect::ReadyResources { .. }) {
                         !require_change
                             || s.player(player)
@@ -909,7 +942,7 @@ impl Engine {
                         Effect::Exhaust { .. } => {
                             unit && (!require_change || !s.card(id).exhausted)
                         }
-                        Effect::Defeat { .. } => unit,
+                        Effect::Defeat { .. } => unit || self.attached_in_play(s,id),
                         Effect::ReturnToHand { .. } => {
                             !self.def(s, id).info.is("leader")
                                 && (unit || s.player(s.card(id).owner).discard.contains(id))
@@ -1307,6 +1340,21 @@ impl Engine {
         self.matching_targets(s,s.source,r).into_iter().filter(|id| self.effect_can_affect(s,s.source,*id,e,require_change)).collect()
     }
     fn capture_group_leaf(&self,s:&mut State,op:usize,e:&Effect)->Result<(),String> {
+        if let Effect::DiscardDeck {target,amount}=e {
+            let Eval::Player(player)=self.effect_targets(s,target).into_iter().next().ok_or("deck discard target missing")? else{return Err("deck discard requires a player target".into());};
+            let requested=self.effect_amount(s,amount)?;
+            if requested==0 {return Ok(());}
+            let cards=s.player(player).deck.as_slice().iter().take(requested as usize).copied().collect::<Vec<_>>();
+            if s.event_group.count as usize+cards.len()+1>32 {return Err("prepared deck discard event capacity exceeded".into());}
+            for card in cards {
+                let n=s.event_group.count as usize;
+                s.event_group.records[n]=PreparedEvent {op:op as u16,target:card,amount:1,..PreparedEvent::default()};s.event_group.count+=1;
+            }
+            // Append the successful aggregate event even for an empty deck.
+            let n=s.event_group.count as usize;
+            s.event_group.records[n]=PreparedEvent {op:op as u16,target:s.player(player).base,amount:requested,..PreparedEvent::default()};s.event_group.count+=1;
+            return Ok(());
+        }
         if let Effect::Draw {target,amount}=e {
             let Eval::Player(player)=self.effect_targets(s,target).into_iter().next().ok_or("draw target missing")? else{return Err("group draw requires player target".into());};
             let n=s.event_group.count as usize;if n==32 {return Err("prepared draw event capacity exceeded".into());}
@@ -1316,7 +1364,7 @@ impl Engine {
             s.event_group.records[n]=PreparedEvent {op:op as u16,target:s.player(player).base,amount,hp:fatigue as i32,..PreparedEvent::default()};s.event_group.count+=1;return Ok(());
         }
         if let Effect::CreateTokenUnit {token_type,amount,target,enters_ready}=e {
-            let code=match token_type.as_str() {"battleDroid"=>"TOKEN_BATTLE_DROID","cloneTrooper"=>"TOKEN_CLONE_TROOPER","beast"=>"TOKEN_BEAST","spy"=>"TOKEN_SPY","tieFighter"=>"TOKEN_TIE_FIGHTER","xwing"=>"TOKEN_XWING",_=>return Err("unsupported token unit type".into())};
+            let code=match token_type.as_str() {"battleDroid"=>"TOKEN_BATTLE_DROID","cloneTrooper"=>"TOKEN_CLONE_TROOPER","beast"=>"TOKEN_BEAST","spy"=>"TOKEN_SPY","tieFighter"=>"TOKEN_TIE_FIGHTER","xwing"=>"TOKEN_XWING","mandalorian"=>"TOKEN_MANDALORIAN",_=>return Err("unsupported token unit type".into())};
             let def=*self.by_code.get(code).ok_or("created token definition missing from loaded pool")?;
             let amount=self.effect_amount(s,amount)? as usize;
             let targets=self.effect_targets(s,target);
@@ -1449,6 +1497,7 @@ impl Engine {
         if token==0 { return; }
         if previous==0 { s.card_mut(target).shield=s.card(selected).next_token; }
         else { s.card_mut(previous).next_token=s.card(selected).next_token; }
+        self.detach(s,selected);s.card_mut(selected).next_token=0;
     }
     fn resolve_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
         let ops=group_ops(e);
@@ -1496,7 +1545,12 @@ impl Engine {
         for r in &s.event_group.records[..s.event_group.count as usize] {
             if matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Defeat{..})) && self.in_arena(s,r.target) && !explicit_sources.contains(&r.target) {explicit_sources.push(r.target);}
         }
-        for id in explicit_sources {self.capture_explicit_death(s,id)?;}
+        for &id in &explicit_sources {self.capture_explicit_death(s,id)?;}
+        // Cleanup contingents belong to the whole prepared window. The pinned
+        // unary event-order comparator reverses their combined insertion order
+        // ahead of every primary handler, rather than interleaving per parent.
+        let cleanup=s.event_group.records[..s.event_group.count as usize].iter().filter(|r|matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Defeat {..})) && self.in_arena(s,r.target)).flat_map(|r|self.upgrades(s,r.target)).collect::<Vec<_>>();
+        for upgrade in cleanup.into_iter().rev() {if s.card(upgrade).parent!=0 {self.leave_play_primary(s,upgrade)?;}}
         // Generation can read the preceding step's numeric event context.
         // Reset the new group's result only after those values are captured.
         s.ability_result=0;s.ability_succeeded=false;
@@ -1507,9 +1561,18 @@ impl Engine {
         let is_draw=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::Draw{..}));
         let indices=(0..s.event_group.count as usize).filter(|i|!is_attachment(*i)).map(|i|(i,false))
             .chain((0..s.event_group.count as usize).filter(|i|is_attachment(*i)||is_draw(*i)).map(|i|(i,true))).collect::<Vec<_>>();
+        let mut damage_callbacks=vec![];
         for (index,contingent) in indices {
             let r=s.event_group.records[index];
             let GroupOp::Leaf(effect)=&ops[r.op as usize] else { unreachable!() };
+            if matches!(effect,Effect::DiscardDeck {..}) {
+                if self.def(s,r.target).info.is("base") {s.ability_succeeded=true;}
+                else {
+                    let owner=s.card(r.target).owner;
+                    if s.player_mut(owner).deck.remove(r.target) {s.player_mut(owner).discard.push(r.target)?;s.ability_result=s.ability_result.saturating_add(1);}
+                }
+                continue;
+            }
             if matches!(effect,Effect::DiscardOwnHand {..}) {
                 let owner=s.card(r.target).owner;
                 if s.player_mut(owner).hand.remove(r.target) {s.player_mut(owner).discard.push(r.target)?;s.ability_result=s.ability_result.saturating_add(1);s.ability_succeeded=true;}
@@ -1538,6 +1601,7 @@ impl Engine {
                 let previous=if experience { s.card(r.target).experience } else { s.card(r.target).shield };
                 s.card_mut(r.token).next_token=previous;
                 if experience { s.card_mut(r.target).experience=r.token; } else { s.card_mut(r.target).shield=r.token; }
+                self.attach(s,r.token,r.target);
                 continue;
             }
             let mut effect=(*effect).clone();
@@ -1555,6 +1619,7 @@ impl Engine {
                 if let Effect::Damage{amount,..}=&mut effect { *amount=Expr::number(r.amount.min(remaining) as i64); }
             }
             let (amount,resolved)=self.apply_effect(s,&effect)?;
+            if matches!(effect,Effect::Damage {..}) && amount>0 && self.in_arena(s,r.target) {damage_callbacks.push(r.target);}
             s.ability_result=s.ability_result.saturating_add(amount); s.ability_succeeded|=resolved;
         }
         let created=s.event_group.records[..s.event_group.count as usize].iter().filter(|r|matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::CreateTokenUnit{..}))).map(|r|r.token).collect::<Vec<_>>();
@@ -1570,13 +1635,13 @@ impl Engine {
         // Damage callbacks capture their lethal set in handler/selection order,
         // before any queued source defeat can change another unit's HP aura.
         let mut damage_defeats=vec![];
-        for r in &s.event_group.records[..s.event_group.count as usize] {
-            if r.amount>0 && matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) && self.in_arena(s,r.target) && s.card(r.target).damage>=self.hp(s,r.target) && !damage_defeats.contains(&r.target) { damage_defeats.push(r.target); }
+        for id in damage_callbacks {
+            if self.in_arena(s,id) && s.card(id).damage>=self.hp(s,id) && !damage_defeats.contains(&id) {damage_defeats.push(id);}
         }
         self.check_stat_capacity(s)?; self.check_win(s);
         // Framework HP checks queue their deaths before the defeat subwindow
         // removes any pending source; a negative aura cannot rescue them mid-batch.
-        let framework_dead=s.players.iter().flat_map(|p|p.ground.as_slice().iter().chain(p.space.as_slice())).copied()
+        let framework_dead=self.arena_units(s).into_iter()
             .filter(|id|s.card(*id).damage>=self.hp(s,*id)).collect::<Vec<_>>();
         for id in framework_dead { if !damage_defeats.contains(&id) { damage_defeats.push(id); } }
         self.defeat_many(s,&damage_defeats)?;
@@ -1603,6 +1668,7 @@ impl Engine {
             }
             Target::Name(n) => match n.as_str() {
                 "self" => vec![Eval::Card(s.source)],
+                "parent" if self.attached_in_play(s,s.source) => vec![Eval::Card(s.card(s.source).parent)],
                 "chosen" if s.event_group.active => s.event_group.context.ids[..s.event_group.context.len as usize].iter().map(|id| Eval::Card(*id)).collect(),
                 "chosen" => vec![Eval::Card(s.ability_target)],
                 "ownBase" => vec![Eval::Card(s.player(owner).base)],
@@ -1658,6 +1724,7 @@ impl Engine {
         } else {
             s.card_mut(target).shield = id;
         }
+        self.attach(s,id,target);
         Ok(())
     }
     fn effect_amount(&self, s: &State, e: &Expr) -> Result<u16, String> {
@@ -1741,6 +1808,7 @@ impl Engine {
                     if id != 0
                         && (self.in_arena(s, id)
                             || self.def(s, id).info.is("base")
+                            || (matches!(e,Effect::Defeat {..}) && self.attached_in_play(s,id))
                             || (matches!(e, Effect::ReturnToHand { .. })
                                 && s.player(s.card(id).owner).discard.contains(id))) =>
                 {
@@ -1816,7 +1884,7 @@ impl Engine {
                             s.card_mut(id).phase_hp = next_hp as i32;
                             result += 1;
                         }
-                        Effect::Defeat { .. } if in_arena => {
+                        Effect::Defeat { .. } if in_arena || self.attached_in_play(s,id) => {
                             if !s.event_group.resolving {self.capture_explicit_death(s,id)?;}
                             self.leave_play(s,id)?;
                             result += 1;

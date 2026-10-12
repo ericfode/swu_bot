@@ -168,17 +168,16 @@ push tested conversion/runtime increments. That local schedule is not repository
 CI configuration. Each new executable family still requires real-engine
 comparison before its coverage is claimed.
 
-Follow the repository-local [conversion skill](../../.agents/skills/swu-card-conversion/SKILL.md)
-for measured 100-card batches, disjoint low-effort implementation workers,
-independent high-effort review, and native/Wasm witness requirements. The
-`tools/card-batch.js` accounting helper checks catalogue/admission/pool agreement;
-it deliberately does not label admission as gameplay conformance. Batch fixtures
-and their witness ledgers live in `../omni-rs/tests/card-batches/` and run in both
-native and Wasm CI alongside the original corpora.
+See the [card catalog and reference-test guide](../cards/README.md) for card,
+behavior, and test queries; reusable Karabast generation; and native/Wasm checking.
+The compiler remains the authoritative source of metadata and ability IR, while
+`../cards/` joins it with runtime admission and named semantic cases. Accepted
+recordings live in `../cards/reference/fixtures/` and are checked by both runtimes
+in CI. Work chronology and review journals do not define card coverage.
 
-The committed expanded corpus in `../omni-rs/tests/compiled-fixtures/` currently
-passes all 16 games: 3,748 decisions and 1,274 action windows. It actually plays
-110 distinct cards, 40 with compiled ability programs, and records positive
-witnesses for all eight primitive effect families. This is distinct from the
-original 450-card runtime admission list. Later batch evidence is recorded
-separately, and the current admission count is in `generated/runtime-admission.json`.
+The original strict-pool and compiled-runtime integration corpora remain useful
+smoke tests for their loading modes. Current counts come from `npm run cards --
+summary` and `generated/runtime-admission.json`, rather than historical batch totals.
+
+Follow the repository-local [conversion skill](../../.agents/skills/swu-card-conversion/SKILL.md)
+for implementation, source-derived witnesses, and independent review requirements.

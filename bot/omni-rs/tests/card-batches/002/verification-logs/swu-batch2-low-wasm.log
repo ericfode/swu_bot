@@ -1,3 +1,0 @@
-{"file":"bot/omni-rs/tests/card-batches/002/group-hp/last-shield-hp-loss-damage-before-stat-defeat.jsonl.gz","decisions":115,"windows":41,"winner":"p2","matched":true,"runtime":"wasm-node"}
-{"file":"bot/omni-rs/tests/card-batches/002/group-hp/snoke-last-shield-preselected-dead-set-follower-first.jsonl.gz","decisions":84,"windows":31,"winner":"p1","matched":true,"runtime":"wasm-node"}
-{"file":"bot/omni-rs/tests/card-batches/002/group-hp/snoke-last-shield-preselected-dead-set-snoke-first.jsonl.gz","decisions":52,"windows":13,"winner":"p1","matched":true,"runtime":"wasm-node"}

@@ -222,3 +222,10 @@ The current match runner, setup/mulligans, and full card engine remain in JavaSc
 independent Rust transition/search core for the subset; wiring it into `rust-search`, broader card rules,
 hidden information, and parallel search remain separate work. The Wasm adapter is available for this same subset;
 it does not expose the full forceteki object graph.
+
+## Card and behavior references
+
+See [the card catalog](../cards/README.md) for named semantic cases, immutable
+Karabast recordings and the common generator/checker. `reference_conformance.rs`
+checks every accepted recording against current compiled programs; its corpus is
+shared with the Wasm test suite.

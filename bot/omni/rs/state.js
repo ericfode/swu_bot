@@ -59,6 +59,12 @@ function ref(eg, c) {
     const v = placedRef(eg, c);
     return { id: v.id, setCode: v.s || (c.isToken?.() ? `TOKEN_${c.internalName.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}` : null), name: c.internalName };
 }
+// Arena membership by player loses the order between controllers. That order
+// determines framework defeat events and same-owner enemy attachment cleanup.
+function arenaUnitOrder(eg) {
+    return Object.fromEntries(['ground', 'space'].map((arena) => [arena,
+        eg.game.getArenaUnits({ arena: `${arena}Arena` }).map((card) => eg.cardId(card.uuid))]));
+}
 function fullState(eg, actor = null) {
     const players = {};
     for (const pid of eg.ids) {
@@ -69,7 +75,12 @@ function fullState(eg, actor = null) {
         const bs = p.base.getSummary(p, true);
         const unit = (c) => {
             const s = c.getSummary(p, true);
-            return { ...ref(eg, c), ...phaseStats(c), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => ({ ...ref(eg, u), token: !!u.isToken?.() })) };
+            return { ...ref(eg, c), ...phaseStats(c), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => {
+                const token = !!u.isToken?.();
+                // An enemy unit's attached upgrade keeps its own controller and
+                // physical owner. Tokens retain the original compact trace shape.
+                return { ...ref(eg, u), token, ...(!token ? { controller: eg.seatOf(u.controller.id), owner: eg.seatOf(u.owner.id) } : {}) };
+            }) };
         };
         players[eg.seatOf(pid)] = {
             base: { ...ref(eg, p.base), damage: bs.damage ?? 0, hp: p.base.cardData.hp, epicUsed: !!bs.epicActionSpent },
@@ -83,7 +94,7 @@ function fullState(eg, actor = null) {
             out: !!p.passedActionPhase
         };
     }
-    return { nextCardId: eg.game.state.allCards.length, round: eg.round, phase: eg.phase, initiative: eg.game.initiativePlayer ? eg.seatOf(eg.game.initiativePlayer.id) : null, initiativeClaimed: !!eg.game.isInitiativeClaimed, prevPassed: !!eg.game.prevActionPhasePlayerPassed, activePlayer: eg.game.actionPhaseActivePlayer ? eg.seatOf(eg.game.actionPhaseActivePlayer.id) : null, actor: actor ? eg.seatOf(actor) : null, winner: eg.winner, players };
+    return { arenaUnitOrder: arenaUnitOrder(eg), nextCardId: eg.game.state.allCards.length, round: eg.round, phase: eg.phase, initiative: eg.game.initiativePlayer ? eg.seatOf(eg.game.initiativePlayer.id) : null, initiativeClaimed: !!eg.game.isInitiativeClaimed, prevPassed: !!eg.game.prevActionPhasePlayerPassed, activePlayer: eg.game.actionPhaseActivePlayer ? eg.seatOf(eg.game.actionPhaseActivePlayer.id) : null, actor: actor ? eg.seatOf(actor) : null, winner: eg.winner, players };
 }
 function normalizeArg(eg, value) {
     if (typeof value === 'string' && eg.game.state.allCards.includes(value)) return eg.cardId(value);
@@ -147,4 +158,4 @@ function stableJson(value) {
     return value;
 }
 const stateHash = (state) => require('crypto').createHash('sha256').update(JSON.stringify(stableJson(state))).digest('hex');
-module.exports = { fullState, phaseStats, stateHash, canonicalAction, expandActions };
+module.exports = { fullState, arenaUnitOrder, phaseStats, stateHash, canonicalAction, expandActions };

@@ -212,6 +212,97 @@ impl Engine {
         let p = s.player(s.card(id).owner);
         p.ground.contains(id) || p.space.contains(id)
     }
+    fn arena_units(&self,s:&State)->Vec<CardId> {
+        if s.arena_order_exact {s.arena_unit_order.iter().flat_map(|arena|arena.as_slice()).copied().collect()}
+        else {
+            // Compatibility, not inferred engine order. Historical no-upgrade
+            // traces predate global-order evidence and keep their old semantics.
+            s.players.iter().flat_map(|p|p.ground.as_slice().iter().chain(p.space.as_slice())).copied().collect()
+        }
+    }
+    fn load_arena_order(&self,s:&mut State,v:&Value)->Result<(),String> {
+        if let Some(order)=v.get("arenaUnitOrder") {
+            let object=order.as_object().ok_or("arenaUnitOrder must be an object")?;
+            if object.len()!=2 || !object.contains_key("ground") || !object.contains_key("space") {return Err("arenaUnitOrder must contain ground and space only".into());}
+            for (index,name) in ["ground","space"].iter().enumerate() {
+                let expected=s.players.iter().flat_map(|p|if index==0 {p.ground.as_slice()}else{p.space.as_slice()}).copied().collect::<std::collections::HashSet<_>>();
+                let mut actual=ArenaOrder::default();
+                for id in order[name].as_array().ok_or("arenaUnitOrder arena must be an array")? {
+                    let id=cid(id.as_str().ok_or("arenaUnitOrder needs stable card IDs")?)?;
+                    if !expected.contains(&id) {return Err("arenaUnitOrder contains foreign/wrong-arena/nonunit card".into());}
+                    actual.push(id)?;
+                }
+                if actual.len as usize!=expected.len() {return Err("arenaUnitOrder missing arena unit".into());}
+                for player in s.players {
+                    let own=if index==0 {player.ground.as_slice()}else{player.space.as_slice()};
+                    let subsequence=actual.as_slice().iter().copied().filter(|id|own.contains(id)).collect::<Vec<_>>();
+                    if subsequence.as_slice()!=own {return Err("arenaUnitOrder conflicts with controller arena subsequence".into());}
+                }
+                s.arena_unit_order[index]=actual;
+            }
+            s.arena_order_exact=true;
+        }else{
+            if (1..s.next_id).any(|id|s.card(id).present && self.def(s,id).info.is("upgrade") && !self.def(s,id).info.is("token")) {return Err("ordinary upgrade imports require explicit arenaUnitOrder, including future upgrades in hidden zones".into());}
+            s.arena_order_exact=false;
+            for index in 0..2 {for player in s.players {for &id in if index==0 {player.ground.as_slice()}else{player.space.as_slice()} {s.arena_unit_order[index].push(id)?;}}}
+        }
+        Ok(())
+    }
+    fn attached_in_play(&self,s:&State,id:CardId)->bool {
+        s.card(id).parent!=0 && self.in_arena(s,s.card(id).parent)
+    }
+    fn upgrades(&self,s:&State,parent:CardId)->Vec<CardId> {
+        let mut ids=vec![];let mut id=s.card(parent).upgrades;
+        while id!=0 {ids.push(id);id=s.card(id).next_upgrade;}
+        ids
+    }
+    fn attach(&self,s:&mut State,id:CardId,parent:CardId) {
+        let ids=self.upgrades(s,parent);
+        if let Some(&last)=ids.last() {s.card_mut(last).next_upgrade=id;}else{s.card_mut(parent).upgrades=id;}
+        s.card_mut(id).parent=parent;s.card_mut(id).next_upgrade=0;
+    }
+    fn detach(&self,s:&mut State,id:CardId) {
+        let parent=s.card(id).parent;if parent==0 {return;}
+        for experience in [false,true] {
+            let mut token=if experience {s.card(parent).experience}else{s.card(parent).shield};let mut previous=0;
+            while token!=0 && token!=id {previous=token;token=s.card(token).next_token;}
+            if token!=0 {let next=s.card(token).next_token;if previous==0 {if experience {s.card_mut(parent).experience=next;}else{s.card_mut(parent).shield=next;}}else{s.card_mut(previous).next_token=next;}s.card_mut(token).next_token=0;}
+        }
+        let ids=self.upgrades(s,parent);let next=s.card(id).next_upgrade;
+        if let Some(i)=ids.iter().position(|c|*c==id) {if i==0 {s.card_mut(parent).upgrades=next;}else{s.card_mut(ids[i-1]).next_upgrade=next;}}
+        s.card_mut(id).parent=0;s.card_mut(id).next_upgrade=0;
+    }
+    fn validate_attachment_links(&self,s:&State)->Result<(),String> {
+        let mut seen=std::collections::HashSet::new();
+        for parent in 1..s.next_id {
+            let mut id=s.card(parent).upgrades;let mut chain=std::collections::HashSet::new();
+            while id!=0 {
+                if id>=s.next_id || !s.card(id).present || !chain.insert(id) || !seen.insert(id) {return Err("invalid or cyclic attachment chain".into());}
+                if s.card(id).parent!=parent || !self.in_arena(s,parent) || !self.def(s,id).info.is("upgrade") || s.card(id).upgrades!=0 {return Err("invalid attachment parent/type/arena".into());}
+                id=s.card(id).next_upgrade;
+            }
+            for (head,def) in [(s.card(parent).shield,Some(self.shield_def)),(s.card(parent).experience,self.experience_def)] {
+                let mut id=head;let mut tokens=std::collections::HashSet::new();
+                while id!=0 {
+                    if !tokens.insert(id)||!chain.contains(&id)||Some(s.card(id).def)!=def {return Err("invalid attachment token chain".into());}
+                    id=s.card(id).next_token;
+                }
+                if chain.iter().any(|id|Some(s.card(*id).def)==def && !tokens.contains(id)) {return Err("unreachable token type link".into());}
+            }
+        }
+        if (1..s.next_id).any(|id|s.card(id).parent!=0 && !seen.contains(&id)) {return Err("unreachable parent attachment link".into());}
+        Ok(())
+    }
+    fn upgrade_stats(&self,s:&State,parent:CardId)->(i64,i64) {
+        self.upgrades(s,parent).iter().filter(|id|!self.def(s,**id).info.is("token")).fold((0,0),|a,id| {
+            let info=&self.def(s,*id).info;(a.0+info.upgrade_power.unwrap_or(0) as i64,a.1+info.upgrade_hp.unwrap_or(0) as i64)
+        })
+    }
+    fn upgrade_targets(&self,s:&State,id:CardId)->Vec<CardId> {
+        self.arena_units(s).into_iter().filter(|parent| {
+            self.def(s,*parent).info.is("unit") || (self.def(s,*parent).info.is("leader") && s.card(*parent).deployed)
+        }).filter(|parent|self.def(s,id).programs.attach_condition.as_ref().map_or(true,|e|self.attachment_condition(s,id,*parent,e))).collect()
+    }
     fn card_action(&self, s: &State, id: CardId) -> Action {
         Action::card(id, &self.def(s, id).info.internal_name)
     }
@@ -235,20 +326,10 @@ impl Engine {
             .sum();
         d.info.cost().max(0) as u16 + penalty
     }
-    pub fn power(&self, s: &State, id: CardId, attacking: bool) -> u16 {
-        let d = self.def(s, id);
-        (d.info.power.unwrap_or(0) as i64
-            + if self.keyword_amount(s, id, "grit") > 0 {
-                s.card(id).damage as i64
-            } else {
-                0
-            }
-            + if attacking { self.keyword_amount(s, id, "raid") as i64 } else { 0 }
-            + self.token_count(s, s.card(id).experience) as i64
-            + s.card(id).phase_power as i64
-            + self.constant_stats(s, id).0)
-            .clamp(0, u16::MAX as i64) as u16
+    fn raw_power(&self,s:&State,id:CardId,attacking:bool)->i64 {
+        self.def(s,id).info.power.unwrap_or(0) as i64 + if self.keyword_amount(s,id,"grit")>0 {s.card(id).damage as i64}else{0}+if attacking {self.keyword_amount(s,id,"raid") as i64}else{0}+self.token_count(s,s.card(id).experience) as i64+s.card(id).phase_power as i64+self.constant_stats(s,id).0+self.upgrade_stats(s,id).0
     }
+    pub fn power(&self,s:&State,id:CardId,attacking:bool)->u16 {u16::try_from(self.raw_power(s,id,attacking).max(0)).expect("power exceeds validated compact capacity")}
     fn leader_available(&self, s: &State) -> (bool, bool) {
         if self.catalogue.is_some() {
             let id = s.player(s.active).leader;
@@ -327,6 +408,7 @@ impl Engine {
                     }
                 }
                 for &id in p.hand.as_slice() {
+                    if self.def(s,id).info.is("upgrade") && self.upgrade_targets(s,id).is_empty() {continue;}
                     if self.catalogue.is_some()
                         && self.def(s, id).info.is("event")
                         && self.available_programs(s, id, "event").is_empty()
@@ -428,11 +510,17 @@ impl Engine {
                     }
                 }
             }
+            Decision::UpgradeTarget => {
+                out.push(Action::button("Cancel","cancel"));
+                for id in self.upgrade_targets(s,s.source) {out.push(self.card_action(s,id));}
+            }
             Decision::Unique => {
-                for &id in p.ground.as_slice().iter().chain(p.space.as_slice()) {
-                    if s.card(id).def == s.card(s.source).def {
-                        out.push(self.card_action(s, id));
+                if self.def(s,s.source).info.is("upgrade") {
+                    for id in (1..s.next_id).filter(|id|*id!=s.source).chain(std::iter::once(s.source)) {
+                        if s.card(id).owner==s.active && self.attached_in_play(s,id) && s.card(id).def==s.card(s.source).def {out.push(self.card_action(s,id));}
                     }
+                }else{
+                    for &id in p.ground.as_slice().iter().chain(p.space.as_slice()) {if s.card(id).def==s.card(s.source).def {out.push(self.card_action(s,id));}}
                 }
             }
             Decision::Ambush => {
@@ -514,6 +602,7 @@ impl Engine {
         }
     }
     pub fn apply(&self, s: &State, a: &Action) -> Result<State, String> {
+        self.check_stat_capacity(s)?;
         if !self.legal_actions(s).contains(a) {
             return Err(format!("illegal action {} at {:?}", a.key(), s.decision));
         }
@@ -551,6 +640,7 @@ impl Engine {
                         self.use_leader(&mut t)?;
                     }
                 } else if t.player(seat).hand.contains(id) {
+                    if self.def(&t,id).info.is("upgrade") {t.source=id;t.decision=Decision::UpgradeTarget;return Ok(t);}
                     if self.catalogue.is_some() && self.def(&t, id).info.is("event") {
                         t.source = id;
                         t.trigger_context = 0;
@@ -584,6 +674,16 @@ impl Engine {
                             Decision::AbilityMenu
                         };
                     }
+                }
+            }
+            Decision::UpgradeTarget => {
+                if arg=="cancel" {self.cancel(&mut t);}else{
+                    let upgrade=t.source;self.spend(&mut t,self.cost(s,upgrade));t.player_mut(seat).hand.remove(upgrade);
+                    self.attach(&mut t,upgrade,id);t.trigger_context=1;
+                    if self.def(&t,upgrade).info.unique && self.duplicates(&t,upgrade)>1 {
+                        let same=self.upgrades(&t,id).into_iter().filter(|other|t.card(*other).def==t.card(upgrade).def && t.card(*other).owner==seat).collect::<Vec<_>>();
+                        if same.len()==self.duplicates(&t,upgrade) && same.len()>1 {self.settle_enter_triggers(&mut t,Some(same[0]))?;}else{t.decision=Decision::Unique;}
+                    }else{self.enter_triggers(&mut t)?;}
                 }
             }
             Decision::LeaderMenu => {
@@ -626,7 +726,8 @@ impl Engine {
                     let source = t.source;
                     t.card_mut(source).exhausted = true;
                     t.trigger_context = 2;
-                    t.attack_source = source;
+                    t.attack_source = source;t.attack_defender=id;
+                    self.sweep_stat_defeats(&mut t)?;
                     t.pending_triggers = 0;
                     let d = self.def(&t, source);
                     t.attack_restore = self.keyword_amount(&t, source, "restore");
@@ -740,13 +841,7 @@ impl Engine {
         Ok(t)
     }
     fn duplicates(&self, s: &State, id: CardId) -> usize {
-        let p = s.player(s.card(id).owner);
-        p.ground
-            .as_slice()
-            .iter()
-            .chain(p.space.as_slice())
-            .filter(|&&c| s.card(c).def == s.card(id).def)
-            .count()
+        (1..s.next_id).filter(|c|s.card(*c).owner==s.card(id).owner && s.card(*c).def==s.card(id).def && (self.in_arena(s,*c)||self.attached_in_play(s,*c))).count()
     }
     fn spend(&self, s: &mut State, mut amount: u16) {
         let ids = s.player(s.active).resources;
@@ -761,11 +856,8 @@ impl Engine {
     fn add_arena(&self, s: &mut State, id: CardId) -> Result<(), String> {
         let space = self.def(s, id).info.arena.as_deref() == Some("space");
         let p = s.player_mut(s.card(id).owner);
-        if space {
-            p.space.push(id)
-        } else {
-            p.ground.push(id)
-        }
+        if space {p.space.push(id)?;}else{p.ground.push(id)?;}
+        s.arena_unit_order[usize::from(space)].push(id)
     }
     fn use_leader(&self, s: &mut State) -> Result<(), String> {
         if self.catalogue.is_some() {
@@ -803,7 +895,7 @@ impl Engine {
         Ok(())
     }
     fn cancel(&self, s: &mut State) {
-        s.attack_source=0;
+        s.attack_source=0;s.attack_defender=0;
         s.source = 0;
         s.target = 0;
         s.trigger_context = 0;
@@ -895,7 +987,7 @@ impl Engine {
                     .damage
                     .saturating_sub(s.attack_restore);
             }
-            T_SABOTEUR => s.card_mut(s.target).shield = 0,
+            T_SABOTEUR => {let mut token=s.card(s.target).shield;while token!=0 {let next=s.card(token).next_token;self.detach(s,token);token=next;}s.card_mut(s.target).shield=0;}
             T_LEADER => {
                 if self.def(s, s.source).code == "IBH_053" {
                     s.decision = Decision::VaderBase;
@@ -921,6 +1013,7 @@ impl Engine {
                     ..Card::default()
                 };
                 s.card_mut(s.source).shield = id;
+                self.attach(s,id,s.source);
             }
             T_AMBUSH => {
                 if self.trigger_effect(s, T_AMBUSH) {
@@ -948,6 +1041,7 @@ impl Engine {
             } else {
                 s.card_mut(previous).next_token = 0;
             }
+            self.detach(s,token);s.card_mut(token).next_token=0;
         } else {
             s.card_mut(id).damage = s.card(id).damage.saturating_add(amount);
         }
@@ -968,6 +1062,8 @@ impl Engine {
         let target_unit = self.in_arena(s, target);
         if target_unit {
             let defend = self.power(s, target, false);
+            let source_damage_before=s.card(source).damage;
+            let target_damage_before=s.card(target).damage;
             let remaining = self.hp(s, target).saturating_sub(s.card(target).damage);
             let excess = if self.keyword_amount(s, source, "overwhelm") > 0 && s.card(target).shield == 0 {
                 attack.saturating_sub(remaining)
@@ -986,9 +1082,14 @@ impl Engine {
                 let base = s.player(s.active.other()).base;
                 s.card_mut(base).damage += excess;
             }
-            let source_dead = s.card(source).damage >= self.hp(s, source);
-            let target_dead = s.card(target).damage >= self.hp(s, target);
-            let dead=[(source,source_dead),(target,target_dead)].into_iter().filter_map(|(id,dead)|dead.then_some(id)).collect::<Vec<_>>();
+            // Only actual damage invokes deferred damage-defeat callbacks.
+            // Shield replacement can instead remove an HP grant: those deaths
+            // belong to the later framework sweep in global arena order.
+            let mut dead=vec![];
+            for (id,before) in [(target,target_damage_before),(source,source_damage_before)] {
+                if s.card(id).damage>before && s.card(id).damage>=self.hp(s,id) {dead.push(id);}
+            }
+            for id in self.arena_units(s) {if s.card(id).damage>=self.hp(s,id) && !dead.contains(&id) {dead.push(id);}}
             self.defeat_many(s,&dead)?;
         } else {
             s.card_mut(target).damage += attack;
@@ -1000,7 +1101,7 @@ impl Engine {
     }
     fn combat_after_damage(&self,s:&mut State)->Result<(),String> {
         let source=s.source;
-        s.attack_source=0;
+        s.attack_source=0;s.attack_defender=0;
         self.check_win(s);
         if s.is_terminal() {
             self.finish(s)?;
@@ -1021,19 +1122,32 @@ impl Engine {
         Ok(())
     }
     fn defeat(&self, s: &mut State, id: CardId) -> Result<(), String> {
-        if !self.in_arena(s,id) {return Ok(());}
+        if !self.in_arena(s,id) && !self.attached_in_play(s,id) {return Ok(());}
         self.capture_death(s,id)?;
         self.leave_play(s, id)
     }
     fn defeat_many(&self,s:&mut State,ids:&[CardId])->Result<(),String> {
         for &id in ids {self.capture_death(s,id)?;}
-        for &id in ids {if self.in_arena(s,id) {self.leave_play(s,id)?;}}
+        let attachments=ids.iter().flat_map(|id|self.upgrades(s,*id)).collect::<Vec<_>>();
+        // The pinned engine gives cleanup events order -1, then uses a unary
+        // sort comparator (event => event.order). Its observed order is reverse
+        // cleanup insertion, before the primary parent handlers.
+        for upgrade in attachments.into_iter().rev() {self.leave_play_primary(s,upgrade)?;}
+        for &id in ids {if self.in_arena(s,id)||self.attached_in_play(s,id) {self.leave_play_primary(s,id)?;}}
         Ok(())
     }
-    fn leave_play(&self, s: &mut State, id: CardId) -> Result<(), String> {
+    fn leave_play(&self,s:&mut State,id:CardId)->Result<(),String> {
+        let attachments=self.upgrades(s,id);
+        for upgrade in attachments.into_iter().rev() {self.leave_play_primary(s,upgrade)?;}
+        self.leave_play_primary(s,id)?;
+        Ok(())
+    }
+    fn leave_play_primary(&self, s: &mut State, id: CardId) -> Result<(), String> {
+        self.detach(s,id);
         let owner = s.card(id).owner;
         let leader = id == s.player(owner).leader;
         let token = self.def(s, id).info.is("token");
+        s.arena_unit_order[0].remove(id);s.arena_unit_order[1].remove(id);
         let p = s.player_mut(owner);
         p.ground.remove(id);
         p.space.remove(id);
@@ -1049,6 +1163,7 @@ impl Engine {
         c.phase_lost_keywords = 0;
         c.shield = 0;
         c.experience = 0;
+        c.upgrades = 0;
         c.exhausted = leader;
         c.deployed = false;
         Ok(())
@@ -1091,7 +1206,7 @@ impl Engine {
             return Ok(());
         }
         s.prev_passed = false;
-        s.attack_source=0;
+        s.attack_source=0;s.attack_defender=0;
         s.after_attack_triggers = 0;
         s.after_attack_programs = 0;
         s.pending_programs = 0;
@@ -1242,7 +1357,9 @@ impl Engine {
         s.next_id = s.next_id.max(id + 1);
         if let Some(upgrades) = v["upgrades"].as_array() {
             for u in upgrades {
-                let uid = self.load_card(s, u, owner)?;
+                let upgrade_owner=if u["token"]==false {Seat::parse(u["controller"].as_str().ok_or("ordinary upgrade missing controller")?)?}else{owner};
+                if u["token"]==false && u["owner"].as_str()!=Some(upgrade_owner.as_str()) {return Err("foreign-controlled upgrade imports are unsupported".into());}
+                let uid = self.load_card(s, u, upgrade_owner)?;
                 let prior = if s.card(uid).def == self.shield_def {
                     let prior = s.card(id).shield;
                     s.card_mut(id).shield = uid;
@@ -1252,9 +1369,11 @@ impl Engine {
                     s.card_mut(id).experience = uid;
                     prior
                 } else {
-                    return Err(format!("unsupported upgrade {}", u));
+                    if !self.def(s,uid).info.is("upgrade") || self.def(s,uid).info.is("token") {return Err("unsupported attachment type".into());}
+                    0
                 };
                 s.card_mut(uid).next_token = prior;
+                self.attach(s,uid,id);
             }
         }
         Ok(id)
@@ -1312,6 +1431,8 @@ impl Engine {
                 };
             }
         }
+        self.load_arena_order(&mut s,v)?;
+        self.validate_attachment_links(&s)?;
         if let Some(next) = v["nextCardId"].as_u64() {
             if next >= MAX_CARDS as u64 {
                 return Err("card capacity exceeded".into());
@@ -1323,6 +1444,7 @@ impl Engine {
                     .into(),
             );
         }
+        self.check_stat_capacity(&s)?;
         for seat in [Seat::P1, Seat::P2] {
             let p = &v["players"][seat.as_str()];
             for name in ["ground", "space"] {
@@ -1409,22 +1531,10 @@ impl Engine {
                             v["exhausted"] = json!(c.exhausted);
                             v["power"] = json!(self.power(s, id, self.is_attacking(s, id)));
                             v["hp"] = json!(self.hp(s, id));
-                            let mut ids = Vec::new();
-                            for mut token in [c.shield, c.experience] {
-                                while token != 0 {
-                                    ids.push(token);
-                                    token = s.card(token).next_token;
-                                }
-                            }
-                            ids.sort_unstable();
-                            let upgrades: Vec<_> = ids
-                                .into_iter()
-                                .map(|id| {
-                                    let mut u = self.card_ref(s, id);
-                                    u["token"] = json!(true);
-                                    u
-                                })
-                                .collect();
+                            let upgrades: Vec<_> = self.upgrades(s,id).into_iter().map(|uid| {
+                                let mut u=self.card_ref(s,uid);let token=self.def(s,uid).info.is("token");u["token"]=json!(token);
+                                if !token {u["controller"]=json!(s.card(uid).owner.as_str());u["owner"]=json!(s.card(uid).owner.as_str());}u
+                            }).collect();
                             v["upgrades"] = json!(upgrades);
                             v
                         })
@@ -1438,7 +1548,9 @@ impl Engine {
         } else {
             s.winner().map(Seat::as_str)
         };
-        json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":s.action_player.map(Seat::as_str),"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players})
+        let mut value=json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":s.action_player.map(Seat::as_str),"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players});
+        if s.arena_order_exact {value["arenaUnitOrder"]=json!({"ground":s.arena_unit_order[0].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>(),"space":s.arena_unit_order[1].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>()});}
+        value
     }
 }
 

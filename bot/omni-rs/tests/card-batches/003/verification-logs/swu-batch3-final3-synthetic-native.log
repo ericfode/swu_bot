@@ -1,8 +1,0 @@
-{"file":"/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/review-diagnostics/draw-heal-base29/comparison.jsonl.gz","decisions":3,"windows":3,"winner":"p2","matched":true}
-matched 1 traces, 3 decisions, 3 action windows
-{"file":"/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/review-diagnostics/draw-heal-base1/comparison.jsonl.gz","decisions":61,"windows":20,"winner":"p2","matched":true}
-matched 1 traces, 61 decisions, 20 action windows
-{"file":"/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/review-diagnostics/empty-discard-result/comparison.jsonl.gz","decisions":269,"windows":104,"winner":"p1","matched":true}
-matched 1 traces, 269 decisions, 104 action windows
-{"file":"/Users/ericfode/.codex/worktrees/omni-rs/swu_bot/bot/omni-rs/tests/card-batches/003/review-diagnostics/omitted-conditional-else/comparison.jsonl.gz","decisions":223,"windows":91,"winner":"p1","matched":true}
-matched 1 traces, 223 decisions, 91 action windows

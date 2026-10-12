@@ -112,13 +112,61 @@ impl Expr {
             }
         }
     }
+    fn live_only(&self)->bool {
+        match self {Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
+    }
+    fn live_stat_bounds(&self)->Result<(i64,i64),String> {
+        fn root(e:&Expr,paths:&[&[&str]])->bool {matches!(e,Expr::Ref {path} if paths.iter().any(|p|path.iter().map(String::as_str).collect::<Vec<_>>()==*p))}
+        fn predicate(e:&Expr,depth:usize,identity:bool)->Result<(),String> {
+            if depth>24 {return Err("live predicate depth exceeds capacity".into());}
+            match e {
+                Expr::Const {value} if value.is_boolean()||value.is_string()||value.as_i64().is_some_and(|n|(-1000..=1000).contains(&n))=>Ok(()),
+                Expr::Ref {path} if (path.len()==2 && path[0]=="card" && ["damage","exhausted","unique","zoneName"].contains(&path[1].as_str())) || (identity && path.len()==1 && ["card","source","modifierTarget"].contains(&path[0].as_str()))=>Ok(()),
+                Expr::Unary {op,value} if op=="!"=>predicate(value,depth+1,true),
+                Expr::Binary {op,left,right} if ["&&","||","===","!==",">","<",">=","<="].contains(&op.as_str())=>{let identity=op=="!=="||op=="===";predicate(left,depth+1,identity)?;predicate(right,depth+1,identity)},
+                Expr::Query {name,receiver,args} if root(receiver,&[&["card"]])=>{
+                    if ["isUnit","isTokenUnit"].contains(&name.as_str()) && args.is_empty() {return Ok(());}
+                    if ["hasSomeTrait","hasSomeAspect"].contains(&name.as_str()) && args.len()==1 {
+                        let valid=match &args[0] {Expr::Const {value}=>value.is_string(),Expr::Array {items}=>!items.is_empty()&&items.len()<=8&&items.iter().all(|e|matches!(e,Expr::Const {value} if value.is_string())),_=>false};
+                        if valid {return Ok(());}
+                    }
+                    Err("unsupported live-stat count predicate query".into())
+                },_=>Err("unsupported live-stat predicate or effective-stat dependency".into())
+            }
+        }
+        fn walk(e:&Expr,depth:usize)->Result<(i64,i64),String> {
+            if depth>24 {return Err("live stat depth exceeds capacity".into());}
+            let range=match e {
+                Expr::Const {value}=>{let n=value.as_i64().filter(|n|(-1000..=1000).contains(n)).ok_or("live stats require bounded integer literals")?;(n,n)},
+                Expr::Ref {path} if path==&["modifierTarget","damage"]=>(0,65535),
+                Expr::Ref {path} if path==&["modifierTarget","controller","resources","length"] || (path.len()==3&&["player","opponent"].contains(&path[0].as_str())&&["resources","hand"].contains(&path[1].as_str())&&path[2]=="length")=>(0,64),
+                Expr::Unary {op,value} if op=="-"=>{let (a,b)=walk(value,depth+1)?;(-b,-a)},
+                Expr::Binary {op,left,right} if ["+","-","*"].contains(&op.as_str())=>{let (a,b)=walk(left,depth+1)?;let(c,d)=walk(right,depth+1)?;match op.as_str(){"+"=>(a+c,b+d),"-"=>(a-d,b-c),_=>{let p=[a*c,a*d,b*c,b*d];(*p.iter().min().unwrap(),*p.iter().max().unwrap())}}},
+                Expr::Query {name,receiver,args} if root(receiver,&[&["player"],&["opponent"],&["modifierTarget","controller"]])=>{
+                    if name=="resourcePairs"&&args.is_empty() {(0,32)}else if name=="arenaUnitCount"&&args.len()==1 {predicate(&args[0],depth+1,false)?;(0,255)}else{return Err("unsupported live-stat query".into());}
+                },_=>return Err("unsupported live stat expression or effective-stat dependency".into())
+            };
+            if range.0< -1_000_000 || range.1>1_000_000 {return Err("live stat arithmetic exceeds proven integer bounds".into());}Ok(range)
+        }
+        walk(self,0)
+    }
     pub fn number(n: i64) -> Self {
         Self::Const {
             value: Value::from(n),
         }
     }
     pub fn validate(&self) -> Result<(), String> {
-        self.validate_depth(0)
+        fn positive(e:&Expr)->bool {match e {Expr::Query {name,receiver,args}=>name=="isDefending" && args.is_empty() && matches!(receiver.as_ref(),Expr::Ref {path} if path==&["card"]),Expr::Binary {op,left,right} if op=="&&"=>positive(left)||positive(right),_=>false}}
+        fn guard(e:&Expr,defending:bool)->Result<(),String> {
+            match e {
+                Expr::Ref {path} if path.iter().any(|p|p=="activeAttack") => {if defending && path==&["card","activeAttack","attacker"] {Ok(())}else{Err("active attacker reference requires a dominating card.isDefending guard".into())}},
+                Expr::Binary {op,left,right}=>{guard(left,defending)?;guard(right,defending||(op=="&&"&&positive(left)))},
+                Expr::Query {receiver,args,..}=>{guard(receiver,defending)?;for arg in args {guard(arg,false)?;}Ok(())},
+                Expr::Array {items}|Expr::Math {args:items,..}=>{for item in items {guard(item,defending)?;}Ok(())},
+                Expr::Unary {value,..}=>guard(value,defending),Expr::Conditional {condition,then,r#else}=>{guard(condition,defending)?;guard(then,defending)?;guard(r#else,defending)},_=>Ok(())
+            }
+        }
+        guard(self,false)?;self.validate_depth(0)
     }
     pub fn validate_number(&self) -> Result<(), String> {
         self.validate()?;
@@ -202,6 +250,10 @@ impl Expr {
                 {
                     ["source" | "target" | "card" | "player" | "opponent"] => true,
                     ["source" | "target" | "card", "title"] => true,
+                    ["card","activeAttack","attacker"] => true,
+                    ["modifierTarget"] | ["modifierTarget","damage"|"controller"] | ["modifierTarget","controller","resources","length"] => true,
+                    ["source", "parentCard" | "parentUnit"] => true,
+                    ["source", "parentCard" | "parentUnit", "damage" | "power" | "hp" | "remainingHp" | "controller" | "exhausted" | "unique"] => true,
                     ["source" | "target" | "card", "damage" | "power" | "hp" | "cost" | "printedCost" | "remainingHp" | "exhausted"
                     | "controller" | "unique" | "zoneName"] => true,
                     ["player" | "opponent", "readyResourceCount" | "exhaustedResourceCount" | "base"] => {
@@ -257,7 +309,7 @@ impl Expr {
                 let arity = match name.as_str() {
                     "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
                     | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
-                    | "getCost" | "getPrintedCost" => 0,
+                    | "getCost" | "getPrintedCost" | "isToken" | "isTokenUnit" | "resourcePairs" | "isAttacking" | "isDefending" => 0,
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" | "hasSomeArenaUnit"
                     | "arenaUnitCount" => 1,
                     _ => return Err(format!("unsupported runtime query {name}")),
@@ -265,6 +317,8 @@ impl Expr {
                 if args.len() != arity {
                     return Err(format!("query {name} expects {arity} arguments"));
                 }
+                if name=="isTokenUnit" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("isTokenUnit requires an explicit card receiver".into());}
+                if ["isAttacking","isDefending"].contains(&name.as_str()) && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("attack query requires a scalar source/card/target receiver".into());}
                 sub(receiver)?;
                 for arg in args {
                     sub(arg)?;
@@ -290,6 +344,7 @@ impl Target {
             Self::Name(s)
                 if [
                     "self",
+                    "parent",
                     "ownBase",
                     "enemyBase",
                     "bothBases",
@@ -314,9 +369,10 @@ impl Target {
                             ["source" | "target" | "card" | "player" | "opponent"]
                                 | ["player" | "opponent", "base"]
                                 | ["source" | "target" | "card", "controller"]
+                                | ["source", "parentCard" | "parentUnit"]
                         ),
                         Expr::Conditional { then, r#else, .. } => {
-                            is_target(then) && is_target(r#else)
+                            is_target(then) && (is_target(r#else) || matches!(r#else.as_ref(),Expr::Const {value} if value.is_null()))
                         }
                         _ => false,
                     }
@@ -368,10 +424,11 @@ impl TargetResolver {
     pub fn is_multiple(&self) -> bool { matches!(self.mode.as_deref(), Some("upTo" | "unlimited")) }
     pub fn validate(&self) -> Result<(), String> {
         self.max_targets()?;
+        if self.card_type=="upgrade" && (self.arena.is_some() || !matches!(self.zone.as_deref(),None|Some("arena"|"anyAttackable"))) {return Err("upgrade selectors require arena/anyAttackable without an arena filter".into());}
         if !["self", "opponent", "any"].contains(&self.owner.as_str()) {
             return Err(format!("unsupported target owner {}", self.owner));
         }
-        if !["unit", "base", "any", "nonLeaderUnit", "leaderUnit"]
+        if !["unit", "base", "any", "nonLeaderUnit", "leaderUnit", "upgrade", "tokenUnit"]
             .contains(&self.card_type.as_str())
         {
             return Err(format!("unsupported target type {}", self.card_type));
@@ -408,6 +465,7 @@ pub enum Cost {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Effect {
     DiscardOwnHand {amount:Expr,target:Target},
+    DiscardDeck {amount:Expr,target:Target},
     CreateTokenUnit { #[serde(rename="tokenType")] token_type:String, amount:Expr, target:Target, #[serde(default,rename="entersReady")] enters_ready:bool },
     Damage {
         amount: Expr,
@@ -559,6 +617,22 @@ pub struct Program {
 }
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
+        // Deck discard has per-card events plus an aggregate event. The scalar
+        // result is not a modeled engine event payload; reject payload captures.
+        fn contains(value:&Value, predicate:fn(&Value)->bool)->bool {
+            predicate(value) || match value {Value::Array(a)=>a.iter().any(|v|contains(v,predicate)),Value::Object(o)=>o.values().any(|v|contains(v,predicate)),_=>false}
+        }
+        let encoded=serde_json::to_value(ability).map_err(|e|e.to_string())?;
+        fn binder_context(value:&Value,live:bool)->Result<(),String> {
+            if value["kind"]=="ref"&&value["path"][0]=="modifierTarget"&&!live {return Err("modifierTarget only exists in persistent stat expressions".into());}
+            if value["kind"]=="query"&&value["name"]=="resourcePairs"&&!live {return Err("resourcePairs only exists in persistent stat expressions".into());}
+            match value {Value::Object(object)=>{for(k,v)in object {let stat=value["kind"]=="modifyStats"&&value["duration"]=="persistent"&&["power","hp"].contains(&k.as_str());binder_context(v,live||stat)?;}},Value::Array(items)=>for v in items {binder_context(v,live)?;},_=>{}}Ok(())
+        }
+        binder_context(&encoded,false)?;
+
+        if contains(&encoded,|v|v["kind"]=="discardDeck") && contains(&encoded,|v|v["kind"]=="ref" && v["path"][0]=="event") {
+            return Err("deck discard event payload captures are not modeled".into());
+        }
         fn validate_title(e: &Expr) -> Result<(), String> {
             match e {
                 Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>() == ["source", "title"] => Ok(()),
@@ -569,6 +643,7 @@ impl Program {
                 _ => e.validate(),
             }
         }
+        if ability.target_resolver.as_ref().is_some_and(|r|r.card_type=="upgrade" && (r.is_multiple() || !matches!(ability.effect,Effect::Defeat {..}))) {return Err("upgrade selection supports only scalar defeat".into());}
         if ability.coordinate && !["constant","onAttack"].contains(&ability.trigger.as_str()) {return Err("Coordinate supports only constant or onAttack registrations".into());}
         if ability.then.as_ref().is_some_and(|a|a.coordinate) || ability.if_you_do.as_ref().is_some_and(|a|a.coordinate) {return Err("Coordinate cannot register on a continuation".into());}
         if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
@@ -608,10 +683,9 @@ impl Program {
             }
             fn validate_constant(effect: &Effect, selected: bool) -> Result<(), String> {
                 let expected = if selected { "chosen" } else { "self" };
-                let valid_target = |target: &Target, duration: &str| duration == "persistent" && matches!(target, Target::Name(n) if n == expected);
+                let valid_target = |target: &Target, duration: &str| duration == "persistent" && matches!(target, Target::Name(n) if n == expected || (!selected && n == "parent"));
                 match effect {
-                    Effect::ModifyStats { power: Expr::Const { value: power }, hp: Expr::Const { value: hp }, duration, target }
-                        if valid_target(target, duration) && power.as_i64().is_some_and(|n| (-1000..=1000).contains(&n)) && hp.as_i64().is_some_and(|n| (-1000..=1000).contains(&n)) => Ok(()),
+                    Effect::ModifyStats {power,hp,duration,target} if valid_target(target,duration)=>{power.live_stat_bounds()?;hp.live_stat_bounds()?;Ok(())},
                     Effect::GainKeyword { target, amount, duration, .. } if valid_target(target, duration) && !amount.depends_on_keywords() => Ok(()),
                     Effect::LoseKeyword { target, duration, .. } if valid_target(target, duration) => Ok(()),
                     Effect::Simultaneous { effects } if !effects.is_empty() => { for e in effects { validate_constant(e, selected)?; } Ok(()) }
@@ -752,8 +826,12 @@ impl Program {
         if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("hand effects require a scalar player target".into());}
         match amount {Expr::Const {value}=>value.as_u64().filter(|n|(1..=2).contains(n)).map(|n|n as usize).ok_or("hand effect amount must be 1..2".into()),_=>Err("hand effects require literal bounded amounts".into())}
     }
+    fn scalar_deck_amount(amount:&Expr,target:&Target)->Result<usize,String> {
+        if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("deck discard requires a scalar player target".into());}
+        match amount {Expr::Const {value}=>value.as_u64().filter(|n|*n<=5).map(|n|n as usize).ok_or("deck discard amount must be 0..5".into()),_=>Err("deck discard requires a literal bounded amount".into())}
+    }
     fn token_unit_amount(token_type:&str,amount:&Expr,target:&Target)->Result<usize,String> {
-        if !["battleDroid","cloneTrooper","beast","spy","tieFighter","xwing"].contains(&token_type) {return Err("unsupported created token unit type".into());}
+        if !["battleDroid","cloneTrooper","beast","spy","tieFighter","xwing","mandalorian"].contains(&token_type) {return Err("unsupported created token unit type".into());}
         if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("token creation requires a scalar player target".into());}
         match amount {Expr::Const {value}=>value.as_u64().filter(|n|(1..=5).contains(n)).map(|n|n as usize).ok_or("token creation amount must be 1..5".into()),_=>Err("token creation requires a literal bounded amount".into())}
     }
@@ -824,6 +902,7 @@ impl Program {
                     (a.0.max(b.0),a.1||b.1,a.2||b.2)
                 },
                 Effect::Select {target_resolver, effect} => {
+                    if target_resolver.card_type=="upgrade" {return Err("grouped upgrade selection is not modeled".into());}
                     target_resolver.validate()?;
                     if array && target_resolver.predicate.as_ref().is_some_and(|e|dependent_in_scope(e,true)) { return Err("array-dependent nested selection is unsupported".into()); }
                     // Nested selection replaces the outer selected value, not its multiplicity.
@@ -837,6 +916,7 @@ impl Program {
                     (records,false,true)
                 },
                 Effect::DiscardOwnHand {amount,target} => (Program::scalar_hand_amount(amount,target)?+1,false,false),
+                Effect::DiscardDeck {amount,target} => (Program::scalar_deck_amount(amount,target)?+1,false,false),
                 Effect::Draw {amount,target} => {Program::scalar_hand_amount(amount,target)?;(2,false,false)},
                 Effect::CreateTokenUnit {token_type,amount,target,..} => (Program::token_unit_amount(token_type,amount,target)?+1,false,true),
                 Effect::Sequence { .. } | Effect::ReturnToHand { .. } | Effect::ReadyResources { .. } | Effect::DistributeHealing { .. } => return Err("event group contains an unverified operation".into()),
@@ -862,7 +942,7 @@ impl Program {
             };
             if records > MAX_GROUP_RECORDS { return Err("event group record budget exceeds capacity".into()); }
             if damage && newly_attached { return Err("mixed damage and newly attached tokens/lasting modifiers require dedicated engine witnesses".into()); }
-            fn has_hand_effect(e:&Effect)->bool {match e {Effect::Draw{..}|Effect::DiscardOwnHand{..}=>true,Effect::Simultaneous{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(has_hand_effect),Effect::Conditional{on_true,on_false,..}=>has_hand_effect(on_true)||on_false.as_deref().is_some_and(has_hand_effect),Effect::Select{effect,..}=>has_hand_effect(effect),_=>false}}
+            fn has_hand_effect(e:&Effect)->bool {match e {Effect::Draw{..}|Effect::DiscardOwnHand{..}|Effect::DiscardDeck{..}=>true,Effect::Simultaneous{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(has_hand_effect),Effect::Conditional{on_true,on_false,..}=>has_hand_effect(on_true)||on_false.as_deref().is_some_and(has_hand_effect),Effect::Select{effect,..}=>has_hand_effect(effect),_=>false}}
             if damage && has_hand_effect(effect) {return Err("mixed damage and hand effects require dedicated engine witnesses".into());}
             Ok((records,damage,newly_attached))
         }
@@ -972,6 +1052,7 @@ impl Program {
             return Err("effect nesting exceeds capacity".into());
         }
         match effect {
+            Effect::DiscardDeck {amount,target} => {Self::scalar_deck_amount(amount,target)?;self.instructions.push(Instruction::Group(effect.clone()));}
             Effect::DiscardOwnHand {amount,target} => {Self::scalar_hand_amount(amount,target)?;self.instructions.push(Instruction::Group(effect.clone()));}
             Effect::CreateTokenUnit {token_type,amount,target,..} => {Self::token_unit_amount(token_type,amount,target)?;self.instructions.push(Instruction::Group(effect.clone()));}
             Effect::Sequence { effects } => { for effect in effects { self.compile_effect(effect, depth + 1)?; } }
@@ -998,6 +1079,7 @@ impl Program {
             }
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::Select { target_resolver, effect } => {
+                if target_resolver.card_type=="upgrade" && (target_resolver.is_multiple() || !matches!(effect.as_ref(),Effect::Defeat {..})) {return Err("upgrade selection supports only scalar defeat".into());}
                 target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone()));
                 if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
                 else { self.compile_effect(effect,depth+1)?; }
@@ -1006,7 +1088,8 @@ impl Program {
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::ModifyStats { target, power, hp, duration } => {
                 if duration != "phase" && !(self.trigger=="constant" && duration=="persistent") { return Err("only phase stat modifications execute".into()); }
-                target.validate()?; power.validate_number()?; hp.validate_number()?;
+                target.validate()?;
+                if duration=="persistent" {power.live_stat_bounds()?;hp.live_stat_bounds()?;}else{power.validate_number()?;hp.validate_number()?;}
                 self.instructions.push(Instruction::Apply(effect.clone()));
             }
             Effect::GainKeyword { target, keyword, amount, duration } => {
@@ -1039,6 +1122,7 @@ pub struct CardPrograms {
     pub leader: Vec<u16>,
     pub unit: Vec<u16>,
     pub card: Vec<u16>,
+    pub attach_condition: Option<Expr>,
 }
 
 #[derive(Debug, Default)]
@@ -1074,12 +1158,23 @@ impl Catalogue {
                         entry["internalName"], entry["diagnostics"]
                     ));
                 }
+                fn parent_reference(value:&Value)->bool {
+                    (value["kind"]=="ref" && value["path"][1].as_str().is_some_and(|p|p=="parentCard"||p=="parentUnit")) || (value["target"]=="parent") || match value {Value::Array(a)=>a.iter().any(parent_reference),Value::Object(o)=>o.values().any(parent_reference),_=>false}
+                }
+                if parent_reference(&entry["abilities"]) && entry["baseClass"]!="UpgradeCard" {return Err("parent references require an ordinary attached upgrade".into());}
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}
                 let mut out = CardPrograms::default();
+                if !entry["attachCondition"].is_null() {
+                    if entry["baseClass"] != "UpgradeCard" {return Err("attachCondition requires an ordinary upgrade".into());}
+                    let condition:Expr=serde_json::from_value(entry["attachCondition"].clone()).map_err(|e|e.to_string())?;
+                    if condition.live_only() {return Err("attachment conditions cannot capture modifierTarget/resourcePairs".into());}
+                    condition.validate()?;out.attach_condition=Some(condition);
+                }
+
                 let mut programs = Vec::new();
                 for (src, dst) in [
                     (&sides.leader, &mut out.leader),
@@ -1092,7 +1187,28 @@ impl Catalogue {
                             return Err("ability program capacity exceeded".into());
                         }
                         dst.push(id as u16);
-                        programs.push(Program::compile(ability)?);
+                        let program=Program::compile(ability)?;
+                        if entry["baseClass"]=="UpgradeCard" {
+                            fn source_target(target:&Target)->bool {
+                                match target {
+                                    Target::Name(name)=>name=="self",
+                                    Target::Expression(Expr::Ref {path})=>path.iter().map(String::as_str).collect::<Vec<_>>()==["source"],
+                                    Target::Expression(Expr::Conditional {then,r#else,..})=>source_target(&Target::Expression(*then.clone()))||source_target(&Target::Expression(*r#else.clone())),
+                                    _=>false,
+                                }
+                            }
+                            fn attachment_defeat(effect:&Effect)->bool {
+                                match effect {
+                                    Effect::Defeat {target}=>source_target(target),
+                                    Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}|Effect::Sequence {effects}=>effects.iter().any(attachment_defeat),
+                                    Effect::Select {effect,..}=>attachment_defeat(effect),
+                                    Effect::Conditional {on_true,on_false,..}=>attachment_defeat(on_true)||on_false.as_deref().is_some_and(attachment_defeat),
+                                    _=>false,
+                                }
+                            }
+                            if program.instructions.iter().any(|i|matches!(i,Instruction::Group(effect) if attachment_defeat(effect))) {return Err("grouped upgrade source defeat is not modeled".into());}
+                        }
+                        programs.push(program);
                     }
                 }
                 Ok((out, programs))

@@ -50,7 +50,7 @@ fn add(e: &Engine, s: &mut State, seat: Seat, code: &str) -> CardId {
     s.next_id += 1;
     *s.card_mut(id) = Card {
         present: true,
-        def: *e.by_code.get(code).unwrap(),
+        def: *e.by_code.get(code).unwrap_or_else(||panic!("{code}: {:?}",e.rejected_cards().unwrap().get(code))),
         owner: seat,
         ..Card::default()
     };
@@ -703,8 +703,8 @@ fn simultaneous_stat_defeats_preserve_arena_entry_order_in_discard() {
     let mut s = board(&e);
     let first = unit(&e, &mut s, Seat::P1, "ASH_029");
     let second = unit(&e, &mut s, Seat::P1, "LOF_254");
-    s.players[0].ground.remove(first);
-    s.players[0].ground.push(first).unwrap();
+    e.leave_play(&mut s,first).unwrap();
+    s.players[0].discard.remove(first);e.add_arena(&mut s,first).unwrap();
     s.card_mut(first).damage = e.hp(&s, first);
     s.card_mut(second).damage = e.hp(&s, second);
     e.sweep_stat_defeats(&mut s).unwrap();
@@ -1393,4 +1393,347 @@ fn terminal_death_prompt_snapshot_keeps_live_attacking_raid_power() {
     let snapshot=e.snapshot(&s);assert_eq!(snapshot["players"]["p1"]["ground"][0]["power"],4);
     assert!(e.legal_actions(&s).is_empty());
     s.attack_source=0;assert_eq!(e.snapshot(&s)["players"]["p1"]["ground"][0]["power"],2);
+}
+
+#[test]
+fn deck_discard_prepares_top_cards_then_successful_aggregate_without_fatigue() {
+    let e=engine();
+    for seat in [Seat::P1,Seat::P2] {for available in [0,1,3] {
+        let mut s=board(&e);s.source=s.players[0].leader;
+        let untouched=deck_card(&e,&mut s,seat.other());
+        let cards=(0..available).map(|_|deck_card(&e,&mut s,seat)).collect::<Vec<_>>();
+        let effect=Effect::DiscardDeck {target:Target::name(if seat==Seat::P1 {"ownPlayer"}else{"enemyPlayer"}),amount:Expr::number(2)};
+        s.event_group.active=true;s.event_group.initiator=Seat::P1;
+        e.generate_group(&mut s,&effect).unwrap();
+        let count=available.min(2);
+        assert_eq!(s.event_group.count as usize,count+1);
+        assert_eq!(s.event_group.records[..count].iter().map(|r|r.target).collect::<Vec<_>>(),cards[..count]);
+        assert_eq!(s.event_group.records[count].target,s.player(seat).base);
+        assert_eq!(s.player(seat).deck.as_slice(),cards);
+        e.resolve_group(&mut s,&effect).unwrap();
+        assert_eq!(s.player(seat).discard.as_slice(),&cards[..count]);
+        assert_eq!(s.player(seat).deck.as_slice(),&cards[count..]);
+        assert!(s.player(seat.other()).deck.contains(untouched));
+        assert_eq!(s.ability_result,count as u16);assert!(s.ability_succeeded);
+        assert_eq!(s.player(seat).hand.len,0);assert_eq!(s.card(s.player(seat).base).damage,0);
+    }}
+}
+#[test]
+fn deck_discard_zero_and_raw_ir_bounds_are_strict() {
+    let e=engine();let mut s=board(&e);s.source=s.players[0].leader;let card=deck_card(&e,&mut s,Seat::P2);
+    let effect=Effect::DiscardDeck {target:Target::name("enemyPlayer"),amount:Expr::number(0)};
+    s.event_group.active=true;e.generate_group(&mut s,&effect).unwrap();assert_eq!(s.event_group.count,0);
+    e.resolve_group(&mut s,&effect).unwrap();assert!(!s.ability_succeeded);assert!(s.players[1].deck.contains(card));
+    for effect in [json!({"kind":"discardDeck","target":"bothPlayers","amount":{"kind":"const","value":1}}),json!({"kind":"discardDeck","target":"enemyPlayer","amount":{"kind":"const","value":6}}),json!({"kind":"discardDeck","target":"enemyPlayer","amount":{"kind":"ref","path":["source","damage"]}})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"bad mill","effect":effect})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+}
+#[test]
+fn mandalorian_creation_preserves_pinned_metadata_defaults_and_shielded_trigger() {
+    let mut e=engine();let mut s=board(&e);let source=s.players[0].leader;let start=s.next_id;
+    let token=&e.definitions[*e.by_code.get("TOKEN_MANDALORIAN").unwrap() as usize];
+    assert_eq!(token.info.internal_name,"mandalorian");assert_eq!(token.info.power,Some(2));assert_eq!(token.info.hp,Some(2));
+    assert_eq!(token.info.arena.as_deref(),Some("ground"));assert_eq!(token.info.aspects(),vec!["vigilance"]);assert_eq!(token.flags&SHIELDED,SHIELDED);
+    let p=death_program(&mut e,&s,source,json!({"trigger":"action","title":"Create Mandalorian","effect":{"kind":"createTokenUnit","tokenType":"mandalorian","amount":{"kind":"const","value":1},"target":"ownPlayer"}}));
+    s.source=source;e.begin_program(&mut s,p,0).unwrap();
+    assert_eq!(s.players[0].ground.as_slice(),&[start]);assert_eq!(s.players[1].ground.len,0);
+    assert!(s.card(start).exhausted);assert_eq!(s.card(start).owner,Seat::P1);assert_ne!(s.card(start).shield,0);
+    assert_eq!(e.power(&s,start,false),2);assert_eq!(e.hp(&s,start),2);
+    let snapshot=e.snapshot(&s);assert_eq!(e.snapshot(&e.load_state(&snapshot).unwrap()),snapshot);
+}
+
+#[test]
+fn deck_discard_rejects_unmodeled_event_payload_continuations() {
+    let ability:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"action","title":"Mill","effect":{"kind":"discardDeck","target":"enemyPlayer","amount":{"kind":"const","value":2}},"then":{"title":"Capture","effect":{"kind":"damage","target":"enemyBase","amount":{"kind":"ref","path":["event","totalDistributed"]}}}})).unwrap();
+    assert!(crate::ability_ir::Program::compile(&ability).unwrap_err().contains("payload captures"));
+}
+
+fn upgrade_resources(e:&Engine,s:&mut State,seat:Seat) {
+    for _ in 0..12 {let id=add(e,s,seat,"LOF_254");s.player_mut(seat).resources.push(id).unwrap();}
+}
+fn play_upgrade(e:&Engine,s:&State,upgrade:CardId,parent:CardId)->State {
+    let choice=e.apply(s,&e.card_action(s,upgrade)).unwrap();assert_eq!(choice.decision,Decision::UpgradeTarget);
+    e.apply(&choice,&e.card_action(&choice,parent)).unwrap()
+}
+#[test]
+fn ordinary_upgrades_choose_before_paying_and_keep_enemy_host_controller() {
+    let e=engine();let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);
+    let own=unit(&e,&mut s,Seat::P1,"LOF_254");let enemy=unit(&e,&mut s,Seat::P2,"LOF_254");let upgrade=hand(&e,&mut s,"SOR_057");
+    let before=e.ready_resources(&s,Seat::P1);let choice=e.apply(&s,&e.card_action(&s,upgrade)).unwrap();
+    assert!(e.legal_actions(&choice).contains(&e.card_action(&choice,own)));assert!(e.legal_actions(&choice).contains(&e.card_action(&choice,enemy)));
+    assert_eq!(e.ready_resources(&choice,Seat::P1),before);
+    let cancelled=e.apply(&choice,&Action::button("Cancel","cancel")).unwrap();assert!(cancelled.players[0].hand.contains(upgrade));assert_eq!(e.ready_resources(&cancelled,Seat::P1),before);
+    let old_hp=e.hp(&s,enemy);let old_power=e.power(&s,enemy,false);
+    s=e.apply(&choice,&e.card_action(&choice,enemy)).unwrap();assert_eq!(s.card(upgrade).owner,Seat::P1);assert_eq!(s.card(upgrade).parent,enemy);
+    assert_eq!(e.hp(&s,enemy),old_hp+1);assert_eq!(e.power(&s,enemy,false),old_power+1);assert!(e.has_keyword(&s,enemy,"sentinel"));assert!(!e.has_keyword(&s,own,"sentinel"));
+    assert!(!s.players[0].ground.contains(upgrade));assert!(!s.players[1].ground.contains(upgrade));
+    let snapshot=e.snapshot(&s);assert_eq!(snapshot["players"]["p2"]["ground"][0]["upgrades"][0]["controller"],"p1");
+    assert_eq!(e.snapshot(&e.load_state(&snapshot).unwrap()),snapshot);
+    e.defeat(&mut s,upgrade).unwrap();e.sweep_stat_defeats(&mut s).unwrap();assert_eq!(e.hp(&s,enemy),old_hp);assert!(!e.has_keyword(&s,enemy,"sentinel"));assert!(s.players[0].discard.contains(upgrade));
+}
+#[test]
+fn attachment_predicates_and_live_keyword_loss_use_distinct_source_and_parent() {
+    let e=engine();let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let upgrade=hand(&e,&mut s,"ASH_181");
+    assert!(!e.legal_actions(&s).contains(&e.card_action(&s,upgrade)));s.card_mut(parent).damage=1;
+    assert!(e.legal_actions(&s).contains(&e.card_action(&s,upgrade)));s=play_upgrade(&e,&s,upgrade,parent);assert!(e.has_keyword(&s,parent,"overwhelm"));
+    // Conditional grants use the parent trait, not upgrade trait or controller.
+    let conditional=add(&e,&mut s,Seat::P1,"LOF_238");e.attach(&mut s,conditional,parent);assert!(!e.has_keyword(&s,parent,"grit"));
+    let mut e=e;let def=s.card(parent).def as usize;e.definitions[def].traits.push("sith".into());assert!(e.has_keyword(&s,parent,"grit"));
+    e.definitions[def].traits.retain(|t|t!="sith");assert!(!e.has_keyword(&s,parent,"grit"));e.defeat(&mut s,conditional).unwrap();assert!(!e.has_keyword(&s,parent,"grit"));
+}
+#[test]
+fn ordered_mixed_attachment_cleanup_and_links_survive_import_and_shield_consumption() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_254");
+    let a=add(&e,&mut s,Seat::P1,"SOR_057");let b=add(&e,&mut s,Seat::P2,"HMW_096");
+    e.attach(&mut s,b,parent);e.create_token(&mut s,parent,false).unwrap();let shield=s.card(parent).shield;e.attach(&mut s,a,parent);e.create_token(&mut s,parent,true).unwrap();let xp=s.card(parent).experience;
+    assert_eq!(e.upgrades(&s,parent),vec![b,shield,a,xp]);e.validate_attachment_links(&s).unwrap();
+    let snap=e.snapshot(&s);let imported=e.load_state(&snap).unwrap();assert_eq!(e.upgrades(&imported,parent),vec![b,shield,a,xp]);assert_eq!(imported.zobrist(),s.zobrist());
+    e.damage(&mut s,parent,1);assert_eq!(e.upgrades(&s,parent),vec![b,a,xp]);assert_eq!(s.card(shield).parent,0);e.validate_attachment_links(&s).unwrap();
+    e.defeat(&mut s,parent).unwrap();assert_eq!(s.players[0].discard.as_slice(),&[a]);assert_eq!(s.players[1].discard.as_slice(),&[b,parent]);assert!(!s.players[1].discard.contains(xp));
+    for id in [a,b,xp] {assert_eq!(s.card(id).parent,0);}e.validate_attachment_links(&s).unwrap();
+}
+#[test]
+fn unique_upgrade_same_parent_replaces_oldest_different_parent_requires_choice() {
+    let e=engine();let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);let parent=unit(&e,&mut s,Seat::P1,"LOF_254");
+    let old=add(&e,&mut s,Seat::P1,"LOF_238");e.attach(&mut s,old,parent);let incoming=hand(&e,&mut s,"LOF_238");
+    s=play_upgrade(&e,&s,incoming,parent);assert_ne!(s.decision,Decision::Unique);assert!(s.players[0].discard.contains(old));assert_eq!(e.upgrades(&s,parent),vec![incoming]);
+    let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);let p1=unit(&e,&mut s,Seat::P1,"LOF_254");let p2=unit(&e,&mut s,Seat::P2,"LOF_254");let old=add(&e,&mut s,Seat::P1,"LOF_238");e.attach(&mut s,old,p1);let incoming=hand(&e,&mut s,"LOF_238");
+    let initial_hp=e.hp(&s,p2);s=play_upgrade(&e,&s,incoming,p2);assert_eq!(s.decision,Decision::Unique);assert_eq!(e.hp(&s,p2),initial_hp+2);
+    let legal=e.legal_actions(&s);assert_eq!(legal,vec![e.card_action(&s,old),e.card_action(&s,incoming)]);
+    for removed in [old,incoming] {let t=e.apply(&s,&e.card_action(&s,removed)).unwrap();assert!(t.players[0].discard.contains(removed));assert_eq!(t.card(removed).parent,0);}
+}
+#[test]
+fn upgrade_loss_sweeps_lethal_host_and_negative_upgrade_kills_before_onplay() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_254");let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,upgrade,parent);s.card_mut(parent).damage=e.hp(&s,parent)-1;
+    e.defeat(&mut s,upgrade).unwrap();e.sweep_stat_defeats(&mut s).unwrap();assert!(s.players[1].discard.contains(parent));assert!(s.players[0].discard.contains(upgrade));
+    let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);let parent=unit(&e,&mut s,Seat::P2,"LOF_254");s.card_mut(parent).damage=e.hp(&s,parent)-1;let kill=hand(&e,&mut s,"LAW_127");let draw=deck_card(&e,&mut s,Seat::P1);
+    s=play_upgrade(&e,&s,kill,parent);assert!(s.players[1].discard.contains(parent));assert!(s.players[0].discard.contains(kill));assert!(s.players[0].deck.contains(draw));
+}
+#[test]
+fn ordinary_upgrade_import_rejects_foreign_control_and_duplicate_attachment_identity() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_254");let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,upgrade,parent);
+    let mut snap=e.snapshot(&s);snap["players"]["p2"]["ground"][0]["upgrades"][0]["owner"]=json!("p2");assert!(e.load_state(&snap).unwrap_err().contains("foreign-controlled"));
+    let mut snap=e.snapshot(&s);let duplicate=snap["players"]["p2"]["ground"][0]["upgrades"][0].clone();snap["players"]["p2"]["ground"][0]["upgrades"].as_array_mut().unwrap().push(duplicate);assert!(e.load_state(&snap).is_err());
+    s.card_mut(upgrade).next_upgrade=upgrade;assert!(e.validate_attachment_links(&s).unwrap_err().contains("cyclic"));
+}
+#[test]
+fn attached_restore_stacks_for_enemy_host_and_heals_host_controller_base() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");
+    let a=add(&e,&mut s,Seat::P1,"HMW_096");let b=add(&e,&mut s,Seat::P2,"HMW_096");e.attach(&mut s,a,parent);e.attach(&mut s,b,parent);
+    assert_eq!(e.keyword_amount(&s,parent,"restore"),4);s.source=parent;s.active=Seat::P2;s.attack_restore=4;s.pending_triggers=T_RESTORE;
+    let base=s.players[1].base;s.card_mut(base).damage=9;e.resolve_trigger(&mut s,T_RESTORE).unwrap();assert_eq!(s.card(base).damage,5);assert_eq!(s.card(s.players[0].base).damage,0);
+    e.defeat(&mut s,a).unwrap();assert_eq!(e.keyword_amount(&s,parent,"restore"),2);
+}
+#[test]
+fn upgrade_parent_types_include_space_tokens_and_deployed_leaders_without_unit_count_changes() {
+    let e=engine();let mut s=board(&e);let ground=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let space_code=e.definitions.iter().find(|d|d.info.is("unit")&&!d.info.is("token")&&d.info.arena.as_deref()==Some("space")).unwrap().code.clone();let space=unit(&e,&mut s,Seat::P2,&space_code);
+    let token=unit(&e,&mut s,Seat::P1,"TOKEN_MANDALORIAN");let leader=s.players[1].leader;s.card_mut(leader).deployed=true;s.card_mut(leader).epic_used=true;e.add_arena(&mut s,leader).unwrap();
+    let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");let targets=e.upgrade_targets(&s,upgrade);for id in [ground,space,token,leader] {assert!(targets.contains(&id));}
+    let before=s.players.iter().map(|p|p.ground.len as u16+p.space.len as u16).sum::<u16>();e.attach(&mut s,upgrade,space);assert_eq!(s.players.iter().map(|p|p.ground.len as u16+p.space.len as u16).sum::<u16>(),before);
+    assert!(!e.attack_targets(&s,ground,false).contains(&upgrade));assert!(!e.upgrade_targets(&s,upgrade).contains(&upgrade));
+}
+#[test]
+fn scalar_upgrade_defeat_includes_tokens_and_sweeps_after_printed_hp_loss() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let source=s.players[0].leader;
+    let upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,upgrade,parent);e.create_token(&mut s,parent,false).unwrap();let shield=s.card(parent).shield;
+    let resolver:TargetResolver=serde_json::from_value(json!({"owner":"any","type":"upgrade","zone":"arena"})).unwrap();let candidates=e.matching_targets(&s,source,&resolver);assert_eq!(candidates,vec![upgrade,shield]);
+    s.source=source;s.ability_target=shield;e.apply_effect(&mut s,&Effect::Defeat {target:Target::name("chosen")}).unwrap();assert_eq!(s.card(parent).shield,0);assert_eq!(s.card(shield).parent,0);e.validate_attachment_links(&s).unwrap();
+    s.card_mut(parent).damage=e.hp(&s,parent)-1;s.ability_target=upgrade;e.apply_effect(&mut s,&Effect::Defeat {target:Target::name("chosen")}).unwrap();e.sweep_stat_defeats(&mut s).unwrap();assert!(s.players[1].discard.contains(parent));
+}
+
+#[test]
+fn grouped_upgrade_selection_is_rejected_while_scalar_upgrade_defeat_remains_supported() {
+    let select=json!({"kind":"select","targetResolver":{"type":"upgrade","owner":"any","zone":"arena"},"effect":{"kind":"defeat","target":"chosen"}});
+    let grouped:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Unsupported group","effect":{"kind":"simultaneous","effects":[select.clone()]}})).unwrap();
+    assert!(crate::ability_ir::Program::compile(&grouped).unwrap_err().contains("grouped upgrade selection"));
+    let scalar:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Scalar defeat","effect":select})).unwrap();
+    assert!(crate::ability_ir::Program::compile(&scalar).is_ok());
+}
+#[test]
+fn grouped_upgrade_source_defeat_is_rejected_for_name_reference_and_conditional_targets() {
+    for target in [json!("self"),json!({"kind":"ref","path":["source"]}),json!({"kind":"conditional","condition":{"kind":"const","value":true},"then":{"kind":"ref","path":["source"]},"else":{"kind":"ref","path":["target"]}})] {
+        let mut catalogue:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+        let entry=catalogue["cards"].as_array_mut().unwrap().iter_mut().find(|entry|entry["setCode"]=="SOR_057").unwrap();
+        entry["abilities"]=json!({"leader":[],"unit":[],"card":[{"trigger":"whenPlayed","title":"Unsupported attachment defeat","effect":{"kind":"simultaneous","effects":[{"kind":"defeat","target":target}]}}]});
+        let engine=Engine::from_catalogue_value(&catalogue).unwrap();assert!(!engine.by_code.contains_key("SOR_057"));
+        assert!(engine.rejected_cards().unwrap()["SOR_057"].contains("grouped upgrade source defeat"));
+    }
+}
+
+#[test]
+fn upgrade_selectors_reject_unmodeled_arena_filters_and_nonplay_zones() {
+    for resolver in [json!({"type":"upgrade","owner":"any","zone":"arena","arena":"ground"}),json!({"type":"upgrade","owner":"any","zone":"arena","arena":"space"}),json!({"type":"upgrade","owner":"any","zone":"discard"}),json!({"type":"upgrade","owner":"any","zone":"base"})] {
+        let ability:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"event","title":"Unmodeled attachment zone","targetResolver":resolver,"effect":{"kind":"defeat","target":"chosen"}})).unwrap();
+        assert!(crate::ability_ir::Program::compile(&ability).unwrap_err().contains("without an arena filter"));
+    }
+}
+
+#[test]
+fn pinned_cleanup_reverse_insertion_precedes_all_parent_defeat_handlers() {
+    let e=engine();let mut s=board(&e);let p1=unit(&e,&mut s,Seat::P1,"LOF_256");let p2=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let a=add(&e,&mut s,Seat::P1,"SOR_057");let b=add(&e,&mut s,Seat::P1,"HMW_096");let c=add(&e,&mut s,Seat::P1,"SOR_166");
+    e.attach(&mut s,a,p1);e.create_token(&mut s,p1,false).unwrap();e.attach(&mut s,b,p1);e.attach(&mut s,c,p2);
+    e.defeat_many(&mut s,&[p1,p2]).unwrap();assert_eq!(s.players[0].discard.as_slice(),&[c,b,a,p1,p2]);e.validate_attachment_links(&s).unwrap();
+}
+
+#[test]
+fn grouped_explicit_parent_defeats_share_global_cleanup_before_primary_handlers() {
+    let e=engine();let mut s=board(&e);let p1=unit(&e,&mut s,Seat::P1,"LOF_256");let p2=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let a=add(&e,&mut s,Seat::P1,"SOR_057");let b=add(&e,&mut s,Seat::P1,"HMW_096");let c=add(&e,&mut s,Seat::P1,"SOR_166");
+    e.attach(&mut s,a,p1);e.create_token(&mut s,p1,false).unwrap();e.attach(&mut s,b,p1);e.attach(&mut s,c,p2);
+    s.source=p1;s.ability_target=p2;s.event_group.active=true;s.event_group.context=Selection::one(p2);s.event_group.initiator=Seat::P1;
+    let group=Effect::Simultaneous {effects:vec![Effect::Defeat {target:Target::name("self")},Effect::Defeat {target:Target::name("chosen")}]};
+    e.generate_group(&mut s,&group).unwrap();e.resolve_group(&mut s,&group).unwrap();assert_eq!(s.players[0].discard.as_slice(),&[c,b,a,p1,p2]);assert_eq!(s.ability_result,2);assert!(s.ability_succeeded);e.validate_attachment_links(&s).unwrap();
+}
+
+#[test]
+fn mutual_combat_deaths_capture_defender_then_attacker_before_reverse_attachment_cleanup() {
+    let e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P1,"LOF_256");let defender=unit(&e,&mut s,Seat::P2,"LOF_256");
+    let attacker_upgrade=add(&e,&mut s,Seat::P1,"SOR_057");let defender_upgrade=add(&e,&mut s,Seat::P1,"SOR_057");e.attach(&mut s,attacker_upgrade,attacker);e.attach(&mut s,defender_upgrade,defender);
+    s.card_mut(attacker).damage=e.hp(&s,attacker)-1;s.card_mut(defender).damage=e.hp(&s,defender)-1;
+    s.source=attacker;s.target=defender;s.active=Seat::P1;s.trigger_context=2;s.attack_source=attacker;
+    e.combat(&mut s).unwrap();assert_eq!(s.players[0].discard.as_slice(),&[attacker_upgrade,defender_upgrade,attacker]);assert_eq!(s.players[1].discard.as_slice(),&[defender]);e.validate_attachment_links(&s).unwrap();
+}
+
+#[test]
+fn upgrade_stat_expressions_read_signed_printed_values_without_unit_clamping() {
+    let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"LOF_256");let power_upgrade=add(&e,&mut s,Seat::P1,"ASH_198");let hp_upgrade=add(&e,&mut s,Seat::P1,"LAW_127");e.attach(&mut s,power_upgrade,parent);e.attach(&mut s,hp_upgrade,parent);
+    for (id,field,query,expected) in [(power_upgrade,"power","getPower",-2),(hp_upgrade,"hp","getHp",-1)] {
+        for root in ["source","target","card"] {
+            let expr=Expr::Ref {path:vec![root.into(),field.into()]};assert_eq!(e.eval(&s,id,id,&expr).number(),expected);
+            let expr:Expr=serde_json::from_value(json!({"kind":"query","name":query,"receiver":{"kind":"ref","path":[root]},"args":[]})).unwrap();assert_eq!(e.eval(&s,id,id,&expr).number(),expected);
+        }
+        let resolver:TargetResolver=serde_json::from_value(json!({"owner":"any","type":"upgrade","zone":"arena","predicate":{"kind":"binary","op":"<","left":{"kind":"query","name":query,"receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"const","value":0}}})).unwrap();
+        resolver.validate().unwrap();assert!(e.matching_targets(&s,s.players[0].leader,&resolver).contains(&id));
+    }
+}
+
+#[test]
+fn global_arena_order_controls_cross_controller_framework_deaths_and_attachment_cleanup() {
+    let e=engine();for grouped in [false,true] {
+        let mut s=board(&e);let early=unit(&e,&mut s,Seat::P2,"LOF_256");let late=unit(&e,&mut s,Seat::P1,"LOF_256");
+        let early_upgrade=add(&e,&mut s,Seat::P1,"SOR_057");let late_upgrade=add(&e,&mut s,Seat::P1,"HMW_096");e.attach(&mut s,early_upgrade,early);e.attach(&mut s,late_upgrade,late);
+        assert_eq!(e.arena_units(&s),vec![early,late]);s.card_mut(early).damage=e.hp(&s,early);s.card_mut(late).damage=e.hp(&s,late);
+        if grouped {s.source=late;s.event_group.active=true;s.event_group.initiator=Seat::P1;let group=Effect::Simultaneous {effects:vec![Effect::NoAction]};e.generate_group(&mut s,&group).unwrap();e.resolve_group(&mut s,&group).unwrap();}else{e.sweep_stat_defeats(&mut s).unwrap();}
+        assert_eq!(s.players[0].discard.as_slice(),&[late_upgrade,early_upgrade,late]);assert_eq!(s.players[1].discard.as_slice(),&[early]);assert!(e.arena_units(&s).is_empty());
+    }
+}
+#[test]
+fn arena_order_import_rejects_missing_future_upgrade_and_malformed_memberships() {
+    let e=engine();let mut s=board(&e);let a=unit(&e,&mut s,Seat::P1,"LOF_256");let b=unit(&e,&mut s,Seat::P1,"LOF_256");let c=unit(&e,&mut s,Seat::P2,"LOF_256");
+    let snapshot=e.snapshot(&s);assert_eq!(e.snapshot(&e.load_state(&snapshot).unwrap()),snapshot);
+    for order in [json!({"ground":[format!("c{}",a-1),format!("c{}",b-1)],"space":[]}),json!({"ground":[format!("c{}",a-1),format!("c{}",b-1),format!("c{}",b-1)],"space":[]}),json!({"ground":[format!("c{}",a-1),format!("c{}",b-1)],"space":[format!("c{}",c-1)]}),json!({"ground":[format!("c{}",b-1),format!("c{}",a-1),format!("c{}",c-1)],"space":[]}),json!({"ground":[format!("c{}",a-1),format!("c{}",b-1),"c999"],"space":[]})] {
+        let mut bad=snapshot.clone();bad["arenaUnitOrder"]=order;assert!(e.load_state(&bad).is_err());
+    }
+    for zone in ["hand","deck","resources","discard"] {
+        let mut state=s;let future=add(&e,&mut state,Seat::P1,"SOR_057");match zone {"hand"=>state.players[0].hand.push(future),"deck"=>state.players[0].deck.push(future),"resources"=>state.players[0].resources.push(future),_=>state.players[0].discard.push(future)}.unwrap();
+        let mut bad=e.snapshot(&state);bad.as_object_mut().unwrap().remove("arenaUnitOrder");assert!(e.load_state(&bad).unwrap_err().contains("require explicit arenaUnitOrder"));
+    }
+}
+#[test]
+fn global_arena_order_hash_and_snapshot_preserve_interleaving_departure_reentry_and_legacy_flag() {
+    let e=engine();let mut s=board(&e);let early=unit(&e,&mut s,Seat::P2,"LOF_256");let late=unit(&e,&mut s,Seat::P1,"LOF_256");
+    let snapshot=e.snapshot(&s);let hash=s.zobrist();let mut reverse=s;reverse.arena_unit_order[0].ids.swap(0,1);assert_ne!(reverse.zobrist(),hash);let reverse_snapshot=e.snapshot(&reverse);assert_eq!(e.load_state(&reverse_snapshot).unwrap().zobrist(),reverse.zobrist());
+    e.leave_play(&mut s,early).unwrap();s.players[1].discard.remove(early);e.add_arena(&mut s,early).unwrap();assert_eq!(e.arena_units(&s),vec![late,early]);assert_ne!(s.zobrist(),hash);
+    let token=unit(&e,&mut s,Seat::P2,"TOKEN_MANDALORIAN");let leader=s.players[0].leader;s.card_mut(leader).deployed=true;s.card_mut(leader).epic_used=true;e.add_arena(&mut s,leader).unwrap();assert_eq!(e.arena_units(&s),vec![late,early,token,leader]);
+    let mut legacy=snapshot;legacy.as_object_mut().unwrap().remove("arenaUnitOrder");let legacy_state=e.load_state(&legacy).unwrap();assert!(!legacy_state.arena_order_exact);assert_eq!(e.snapshot(&legacy_state),legacy);assert_ne!(legacy_state.zobrist(),hash);
+}
+#[test]
+fn repeated_defeat_records_prepare_repeated_cleanup_before_deduplicated_handlers() {
+    let e=engine();let mut s=board(&e);let a=unit(&e,&mut s,Seat::P1,"LOF_256");let b=unit(&e,&mut s,Seat::P1,"LOF_256");let ua=add(&e,&mut s,Seat::P1,"SOR_057");let ub=add(&e,&mut s,Seat::P1,"HMW_096");e.attach(&mut s,ua,a);e.attach(&mut s,ub,b);
+    let raw=json!({"kind":"simultaneous","effects":[{"kind":"defeat","target":"self"},{"kind":"defeat","target":"chosen"},{"kind":"defeat","target":"self"}]});let ability:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"whenPlayed","title":"Repeated defeat","effect":raw})).unwrap();crate::ability_ir::Program::compile(&ability).unwrap();
+    s.source=a;s.ability_target=b;s.event_group.active=true;s.event_group.context=Selection::one(b);s.event_group.initiator=Seat::P1;e.generate_group(&mut s,&ability.effect).unwrap();e.resolve_group(&mut s,&ability.effect).unwrap();assert_eq!(s.players[0].discard.as_slice(),&[ua,ub,a,b]);assert_eq!(s.ability_result,2);e.validate_attachment_links(&s).unwrap();
+}
+
+#[test]
+fn shield_only_combat_stat_deaths_follow_global_framework_order_without_damage_callbacks() {
+    let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P1,"SHD_056");let defender=unit(&e,&mut s,Seat::P2,"SHD_056");
+    death_program(&mut e,&s,attacker,draw_death(true));e.create_token(&mut s,attacker,false).unwrap();e.create_token(&mut s,defender,false).unwrap();assert_eq!(e.hp(&s,attacker),4);assert_eq!(e.hp(&s,defender),4);
+    s.card_mut(attacker).damage=3;s.card_mut(defender).damage=3;s.source=attacker;s.target=defender;s.active=Seat::P1;s.trigger_context=3;s.attack_source=attacker;
+    e.combat(&mut s).unwrap();assert_eq!(s.players[0].discard.as_slice(),&[attacker]);assert_eq!(s.players[1].discard.as_slice(),&[defender]);assert_eq!(s.death_window.entries[..s.death_window.len as usize].iter().map(|event|event.source).collect::<Vec<_>>(),vec![attacker,defender]);
+}
+#[test]
+fn grouped_shield_replacement_stat_deaths_ignore_damage_record_order() {
+    let mut e=engine();let mut s=board(&e);let first=unit(&e,&mut s,Seat::P1,"SHD_056");let second=unit(&e,&mut s,Seat::P2,"SHD_056");death_program(&mut e,&s,first,draw_death(true));
+    e.create_token(&mut s,first,false).unwrap();e.create_token(&mut s,second,false).unwrap();s.card_mut(first).damage=3;s.card_mut(second).damage=3;
+    s.source=first;s.ability_target=second;s.event_group.active=true;s.event_group.context=Selection::one(second);s.event_group.initiator=Seat::P1;
+    let group=Effect::Simultaneous {effects:vec![Effect::Damage {target:Target::name("chosen"),amount:Expr::number(1)},Effect::Damage {target:Target::name("self"),amount:Expr::number(1)}]};e.generate_group(&mut s,&group).unwrap();s.event_group.shield_priority=1;assert!(e.resolve_group(&mut s,&group).unwrap());
+    assert_eq!(s.ability_result,0);assert_eq!(s.death_pending.entries[..s.death_pending.len as usize].iter().map(|event|event.source).collect::<Vec<_>>(),vec![first,second]);
+}
+#[test]
+fn live_resource_pairs_damage_and_hp_recompute_without_readiness_aliases() {
+    let e=engine();let mut s=board(&e);let rebel=unit(&e,&mut s,Seat::P2,"HMW_133");let frigate=unit(&e,&mut s,Seat::P1,"JTL_052");let paz=unit(&e,&mut s,Seat::P1,"LOF_153");
+    let base=e.def(&s,rebel).info.power.unwrap() as u16;
+    for count in 0..=5 {if count>0 {let id=add(&e,&mut s,Seat::P2,"LOF_256");s.players[1].resources.push(id).unwrap();s.card_mut(id).exhausted=true;}assert_eq!(e.power(&s,rebel,false),base+count/2);}
+    let power=e.power(&s,paz,false);s.card_mut(paz).damage=2;assert_eq!(e.power(&s,paz,false),power+4);s.card_mut(paz).damage=1;assert_eq!(e.power(&s,paz,false),power+2);
+    let printed=e.power(&s,frigate,false);s.card_mut(frigate).damage=1;assert_eq!(e.power(&s,frigate,false),printed.saturating_sub(1));s.card_mut(frigate).damage=65535;assert_eq!(e.power(&s,frigate,false),0);
+    let mut s=board(&e);let legion=add(&e,&mut s,Seat::P2,"SOR_118");for _ in 0..6 {let id=add(&e,&mut s,Seat::P2,"LOF_256");s.players[1].resources.push(id).unwrap();}e.add_arena(&mut s,legion).unwrap();s.card_mut(legion).damage=5;assert_eq!(e.hp(&s,legion),6);
+    let resource=s.players[1].resources.ids[0];s.players[1].resources.remove(resource);s.players[1].hand.push(resource).unwrap();e.sweep_stat_defeats(&mut s).unwrap();assert!(s.players[1].discard.contains(legion));
+}
+#[test]
+fn live_modifier_binding_distinguishes_registration_affected_candidate_and_controller() {
+    let mut e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_256");let affected=unit(&e,&mut s,Seat::P2,"LOF_256");let other=unit(&e,&mut s,Seat::P2,"LOF_256");
+    for _ in 0..5 {let id=add(&e,&mut s,Seat::P2,"LOF_256");s.players[1].resources.push(id).unwrap();}let resource=add(&e,&mut s,Seat::P1,"LOF_256");s.players[0].resources.push(resource).unwrap();
+    let count=json!({"kind":"query","name":"arenaUnitCount","receiver":{"kind":"ref","path":["modifierTarget","controller"]},"args":[{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["modifierTarget"]}}]});
+    death_program(&mut e,&s,source,json!({"trigger":"constant","title":"Live aura","targetResolver":{"owner":"opponent","type":"unit","zone":"arena"},"effect":{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"binary","op":"+","left":count,"right":{"kind":"query","name":"resourcePairs","receiver":{"kind":"ref","path":["modifierTarget","controller"]},"args":[]}},"hp":{"kind":"const","value":0}}}));
+    assert_eq!(e.constant_stats(&s,affected).0,3);assert_eq!(e.constant_stats(&s,other).0,3);assert_eq!(e.constant_stats(&s,source).0,0);
+    e.leave_play(&mut s,other).unwrap();assert_eq!(e.constant_stats(&s,affected).0,2);
+}
+#[test]
+fn persistent_stat_raw_ir_rejects_cycles_fractional_math_and_unavailable_binders() {
+    for expr in [json!({"kind":"ref","path":["modifierTarget","power"]}),json!({"kind":"ref","path":["target","damage"]}),json!({"kind":"query","name":"getHp","receiver":{"kind":"ref","path":["source"]},"args":[]}),json!({"kind":"binary","op":"/","left":{"kind":"ref","path":["modifierTarget","damage"]},"right":{"kind":"const","value":2}}),json!({"kind":"query","name":"arenaUnitCount","receiver":{"kind":"ref","path":["player"]},"args":[{"kind":"query","name":"hasSomeKeyword","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":"sentinel"}]}]}),json!({"kind":"binary","op":"*","left":{"kind":"ref","path":["modifierTarget","damage"]},"right":{"kind":"const","value":1000}})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"constant","title":"Bad live stat","effect":{"kind":"modifyStats","target":"self","duration":"persistent","power":expr,"hp":{"kind":"const","value":0}}})).unwrap();assert!(crate::ability_ir::Program::compile(&a).is_err());
+    }
+    for effect in [json!({"kind":"damage","target":"chosen","amount":{"kind":"ref","path":["modifierTarget","damage"]}}),json!({"kind":"modifyStats","target":"self","duration":"phase","power":{"kind":"ref","path":["modifierTarget","damage"]},"hp":{"kind":"const","value":0}})] {
+        let a:crate::ability_ir::Ability=serde_json::from_value(json!({"trigger":"action","title":"Unavailable binder","effect":effect})).unwrap();assert!(crate::ability_ir::Program::compile(&a).unwrap_err().contains("only exists"));
+    }
+}
+#[test]
+fn live_aggregate_overflow_rejects_transactional_apply_and_import_without_clipping() {
+    let mut e=engine();let mut s=board(&e);let a=unit(&e,&mut s,Seat::P1,"LOF_256");let b=unit(&e,&mut s,Seat::P1,"ASH_029");let victim=unit(&e,&mut s,Seat::P2,"LOF_256");s.card_mut(victim).phase_hp=50000;s.card_mut(victim).damage=40000;
+    for source in [a,b] {death_program(&mut e,&s,source,json!({"trigger":"constant","title":"Large live aura","targetResolver":{"owner":"opponent","type":"unit","zone":"arena"},"effect":{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"ref","path":["modifierTarget","damage"]},"hp":{"kind":"const","value":0}}}));}
+    assert!(e.evaluated_power(&s,victim)>65535);assert!(e.check_stat_capacity(&s).unwrap_err().contains("capacity"));let before=s.zobrist();assert!(e.apply(&s,&Action::button("Pass","pass")).unwrap_err().contains("capacity"));assert_eq!(s.zobrist(),before);
+    let mut clean=s;clean.card_mut(victim).damage=0;let mut snapshot=e.snapshot(&clean);snapshot["players"]["p2"]["ground"][0]["damage"]=json!(40000);assert!(e.load_state(&snapshot).unwrap_err().contains("capacity"));
+}
+#[test]
+fn attack_queries_use_stable_participants_through_nested_context_and_cleanup() {
+    let e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P1,"TWI_205");let defender=unit(&e,&mut s,Seat::P2,"ASH_073");let other=unit(&e,&mut s,Seat::P2,"LOF_256");
+    let attacking:Expr=serde_json::from_value(json!({"kind":"query","name":"isAttacking","receiver":{"kind":"ref","path":["card"]},"args":[]})).unwrap();let defending:Expr=serde_json::from_value(json!({"kind":"query","name":"isDefending","receiver":{"kind":"ref","path":["card"]},"args":[]})).unwrap();
+    assert!(!e.eval_with_card(&s,other,defender,defender,&defending).truth());s.attack_source=attacker;s.attack_defender=defender;let power=e.def(&s,defender).info.power.unwrap() as u16;assert_eq!(e.power(&s,defender,false),power+2);
+    assert!(e.eval_with_card(&s,other,other,attacker,&attacking).truth());assert!(e.eval_with_card(&s,other,other,defender,&defending).truth());assert!(!e.eval_with_card(&s,other,other,other,&defending).truth());
+    let context=ResolutionContext::capture(&s);let hash=s.zobrist();s.attack_defender=other;assert_ne!(s.zobrist(),hash);context.restore(&mut s);assert_eq!(s.zobrist(),hash);
+    s.death_frames[0].context=context;s.death_depth=1;s.attack_source=0;s.attack_defender=0;s.source=other;s.target=other;assert!(e.eval_with_card(&s,other,other,defender,&defending).truth());assert_eq!(e.active_attack_pair(&s,defender).0,attacker);
+    e.leave_play(&mut s,attacker).unwrap();assert!(!e.is_attacking(&s,attacker));assert!(e.is_defending(&s,defender));assert_eq!(e.active_attack_pair(&s,defender).0,attacker);
+    s.death_depth=0;e.cancel(&mut s);assert!(!e.is_defending(&s,defender));assert_eq!(e.power(&s,defender,false),power);
+}
+#[test]
+fn guarded_attacker_raw_ir_requires_positive_same_candidate_guard_and_zero_argument_queries() {
+    let guard=json!({"kind":"query","name":"isDefending","receiver":{"kind":"ref","path":["card"]},"args":[]});let relation=json!({"kind":"binary","op":"===","left":{"kind":"ref","path":["card","activeAttack","attacker"]},"right":{"kind":"ref","path":["source"]}});
+    let valid:Expr=serde_json::from_value(json!({"kind":"binary","op":"&&","left":guard.clone(),"right":relation.clone()})).unwrap();valid.validate().unwrap();
+    for expr in [relation.clone(),json!({"kind":"binary","op":"&&","left":relation.clone(),"right":guard.clone()}),json!({"kind":"binary","op":"||","left":guard.clone(),"right":relation.clone()}),json!({"kind":"binary","op":"&&","left":{"kind":"unary","op":"!","value":guard.clone()},"right":relation.clone()}),json!({"kind":"query","name":"isAttacking","receiver":{"kind":"ref","path":["source"]},"args":[{"kind":"const","value":true}]}),json!({"kind":"binary","op":"&&","left":{"kind":"query","name":"isDefending","receiver":{"kind":"ref","path":["source"]},"args":[]},"right":relation})] {let expr:Expr=serde_json::from_value(expr).unwrap();assert!(expr.validate().is_err());}
+}
+#[test]
+fn complete_source_admission_preserves_secondary_and_printed_keyword_blockers() {
+    let e=engine();for code in ["ASH_226","JTL_170","ASH_046","HMW_233"] {assert!(!e.by_code.contains_key(code),"partial card {code} admitted");}
+    assert!(e.rejected_cards().unwrap()["ASH_046"].contains("keyword support"));assert!(e.rejected_cards().unwrap()["HMW_233"].contains("keyword hidden"));
+    assert!(e.by_code.contains_key("SEC_011"));assert!(e.by_code.contains_key("TWI_094"));
+}
+#[test]
+fn token_unit_selector_and_aura_exclude_upgrades_opponents_and_ordinary_units() {
+    let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"TWI_094");let own=unit(&e,&mut s,Seat::P1,"TOKEN_CLONE_TROOPER");let enemy=unit(&e,&mut s,Seat::P2,"TOKEN_CLONE_TROOPER");let ordinary=unit(&e,&mut s,Seat::P1,"LOF_256");e.create_token(&mut s,ordinary,false).unwrap();
+    assert_eq!(e.constant_stats(&s,own).0,1);assert_eq!(e.constant_stats(&s,enemy).0,0);assert_eq!(e.constant_stats(&s,ordinary).0,0);assert_eq!(e.constant_stats(&s,source).0,0);
+    let r:TargetResolver=serde_json::from_value(json!({"owner":"any","type":"tokenUnit","zone":"anyAttackable"})).unwrap();let candidates=e.matching_targets(&s,source,&r);assert!(candidates.contains(&own));assert!(candidates.contains(&enemy));assert!(!candidates.contains(&ordinary));assert!(!candidates.contains(&s.card(ordinary).shield));
+}
+#[test]
+fn attachment_predicate_cannot_capture_live_modifier_binding() {
+    let mut catalogue:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let entry=catalogue["cards"].as_array_mut().unwrap().iter_mut().find(|entry|entry["setCode"]=="SOR_057").unwrap();entry["attachCondition"]=json!({"kind":"binary","op":">","left":{"kind":"ref","path":["modifierTarget","damage"]},"right":{"kind":"const","value":0}});
+    let e=Engine::from_catalogue_value(&catalogue).unwrap();assert!(!e.by_code.contains_key("SOR_057"));assert!(e.rejected_cards().unwrap()["SOR_057"].contains("cannot capture"));
+}
+#[test]
+fn confirmed_attack_enables_relationship_hp_aura_before_damage_and_cleans_up_after_defender_death() {
+    let mut e=engine();let mut s=board(&e);let attacker=unit(&e,&mut s,Seat::P1,"LOF_256");let defender=unit(&e,&mut s,Seat::P2,"LOF_256");let base=s.players[1].base;s.card_mut(defender).damage=e.hp(&s,defender)-1;
+    death_program(&mut e,&s,attacker,json!({"trigger":"constant","title":"Attacking defender loses HP","targetResolver":{"owner":"opponent","type":"unit","zone":"arena","predicate":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isDefending","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","activeAttack","attacker"]},"right":{"kind":"ref","path":["source"]}}}},"effect":{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"const","value":0},"hp":{"kind":"const","value":-1}}}));
+    s=e.apply(&s,&e.card_action(&s,attacker)).unwrap();assert_eq!(s.decision,Decision::AttackTarget);assert!(s.players[1].ground.contains(defender));assert_eq!(s.attack_source,0);
+    s=e.apply(&s,&e.card_action(&s,defender)).unwrap();assert!(s.players[1].discard.contains(defender));assert_eq!(s.card(attacker).damage,0);assert_eq!(s.card(base).damage,0);assert_eq!(s.attack_source,0);assert_eq!(s.attack_defender,0);
 }

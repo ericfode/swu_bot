@@ -39,3 +39,17 @@ test('phase keyword export rejects unsupported mechanics, malformed values and l
     assert.deepEqual(phaseStats(card([constant])), {});
     assert.throws(() => phaseStats(card([keywordEffect('sentinel', 'gainKeyword', 'persistent')])), /duration/);
 });
+
+
+test('arena order preserves engine entry order across controllers and affects receipt hashes', () => {
+    const { arenaUnitOrder, stateHash } = require('../omni/rs/state');
+    const calls = [];
+    const eg = { cardId: (uuid) => uuid, game: { getArenaUnits: ({ arena }) => {
+        calls.push(arena);
+        return (arena === 'groundArena' ? ['c53', 'c2', 'c51'] : ['c91', 'c30']).map((uuid) => ({ uuid }));
+    } } };
+    const order = arenaUnitOrder(eg);
+    assert.deepEqual(calls, ['groundArena', 'spaceArena']);
+    assert.deepEqual(order, { ground: ['c53', 'c2', 'c51'], space: ['c91', 'c30'] });
+    assert.notEqual(stateHash({ arenaUnitOrder: order }), stateHash({ arenaUnitOrder: { ...order, ground: ['c2', 'c53', 'c51'] } }));
+});

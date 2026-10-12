@@ -85,7 +85,7 @@ test('constant static modifiers distinguish self defaults from continuous aura f
     assert.equal(enemy.status,'supported');
     assert.deepEqual(enemy.abilities.card[0].targetResolver,{owner:'opponent',type:'nonLeaderUnit',zone:'arena',arena:'space'});
 });
-test('constant modifiers reject live stat dependencies, dynamic amounts and custom zones', () => {
+test('constant modifiers reject live stat dependencies, unsupported amounts and custom zones', () => {
     for(const fields of [
         'condition:ctx=>ctx.source.getPower()>2,',
         'condition:ctx=>ctx.source.hp>2,',
@@ -94,7 +94,7 @@ test('constant modifiers reject live stat dependencies, dynamic amounts and cust
         'targetZoneFilter:"hand",',
     ]) assert.equal(compile(`registrar.addConstantAbility({${fields}ongoingEffect:AbilityHelper.ongoingEffects.modifyStats({power:1,hp:1})});`).status,'unsupported',fields);
     for(const modifier of [
-        'AbilityHelper.ongoingEffects.modifyStats((target)=>({power:target.damage,hp:0}))',
+        'AbilityHelper.ongoingEffects.modifyStats((target)=>({power:target.power,hp:0}))',
         'AbilityHelper.ongoingEffects.modifyStats({power:ctx=>ctx.source.damage,hp:0})',
         'AbilityHelper.ongoingEffects.modifyStats({power:1.5,hp:0})',
         'AbilityHelper.ongoingEffects.modifyStats({power:1,hp:0,extra:1})',
@@ -125,7 +125,6 @@ test('arena queries reject unsupported filters, collections and captured card re
         'ctx=>ctx.player.hasSomeArenaUnit({condition:(unit,context)=>unit===context.source})',
         'ctx=>ctx.player.hasSomeArenaUnit({condition:unit=>{unit.damage++;return true;}})',
         'ctx=>ctx.player.hasSomeArenaUnit({}, {})',
-        'ctx=>ctx.player.getArenaUnits().some(unit=>unit.damage>0)',
     ]) assert.equal(compile(action('draw()',`condition:${condition},`)).status,'unsupported',condition);
     const captured=compile(`registrar.addWhenPlayedAbility({targetResolver:{cardTypeFilter:'unit',cardCondition:(candidate,ctx)=>ctx.player.hasSomeArenaUnit({condition:unit=>unit!==candidate}),immediateEffect:AbilityHelper.immediateEffects.ready()}});`);
     assert.equal(captured.status,'unsupported');
@@ -422,7 +421,7 @@ test('Coordinate rejects unaudited registration shapes and extra semantics', () 
 
 
 test('token-unit helpers preserve fixed type and engine factory defaults', () => {
-    for (const [helper,tokenType] of Object.entries({createBattleDroid:'battleDroid',createCloneTrooper:'cloneTrooper',createXWing:'xwing',createTieFighter:'tieFighter',createSpy:'spy',createBeast:'beast'})) {
+    for (const [helper,tokenType] of Object.entries({createBattleDroid:'battleDroid',createCloneTrooper:'cloneTrooper',createXWing:'xwing',createTieFighter:'tieFighter',createSpy:'spy',createBeast:'beast',createMandalorian:'mandalorian'})) {
         const c=compile(action(`${helper}()`));
         assert.equal(c.status,'supported',JSON.stringify(c.diagnostics));
         assert.deepEqual(c.abilities.card[0].effect,{kind:'createTokenUnit',tokenType,amount:{kind:'const',value:1},target:'ownPlayer',entersReady:false});
@@ -437,7 +436,6 @@ test('token-unit lowering rejects unsafe amounts, entry effects and extra proper
     for (const fields of ['amount:0','amount:-1','amount:6','amount:1.5','amount:9007199254740992','amount:"2"','amount:ctx=>2','amount:ctx.source.power','entersReady:1','entersReady:ctx=>true','tokenType:"spy"','unknown:true','isCost:true','effect:"hidden mutation"','enterPlayEffect:AbilityHelper.immediateEffects.damage({amount:1})','target:ctx.source','target:[ctx.player,ctx.player.opponent]']) {
         assert.equal(compile(action(`createBattleDroid(ctx=>({${fields}}))`)).status,'unsupported',fields);
     }
-    assert.equal(compile(action('createMandalorian()')).status,'unsupported');
     assert.equal(compile(action('createBattleDroid(ctx=>{ctx.source.damage=1;return {};})')).status,'unsupported');
     assert.equal(compile(action('createBattleDroid({}, {})')).status,'unsupported');
     assert.equal(compile(`registrar.addWhenPlayedAbility({immediateEffect:AbilityHelper.immediateEffects.createCloneTrooper(),then:ctx=>({immediateEffect:AbilityHelper.immediateEffects.damage({amount:ctx.events[0].amount,target:ctx.player.base})})});`).status,'unsupported');

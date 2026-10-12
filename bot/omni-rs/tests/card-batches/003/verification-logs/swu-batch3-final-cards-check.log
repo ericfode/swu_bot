@@ -1,6 +1,0 @@
-
-> swu-bot@0.1.0 cards:check
-> node bot/card-compiler/build.js --check && node tools/card-runtime-report.js --check
-
-{"known":2458,"converted":895,"unconverted":1563,"runtimeReady":null,"sourceFiles":2074,"sourceHash":"5f0ca3885bb5d079266e33259dd31d0cea84b65568a49c365b2bd38ed85ab661","compilerHash":"223361bccc31517005b33d959f9e38cf02ab33ecc7ae0aaf4eb6a1861b88b1cb","checked":true}
-{"runtimeAdmitted":767,"runtimeRejected":1691,"checked":true}

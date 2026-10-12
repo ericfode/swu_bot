@@ -49,6 +49,9 @@ function readConstant(name, ctx) {
 }
 function bindConstant(ctx, name, node) {
     ctx.constants.set(name, node);
+    ctx.constantScopes?.set(node, new Map(ctx.scope));
+    ctx.constantEnvs?.set(node, new Map(ctx.constants));
+    ctx.constantStages?.set(node, ctx.callbackStage || null);
     ctx.bindings?.push({ name, node });
 }
 function literal(node, ctx) {
@@ -67,7 +70,7 @@ function literal(node, ctx) {
         const name = node.getText(ctx.source);
         if (Object.hasOwn(ctx.enums, name)) return ctx.enums[name];
     }
-    if (ts.isIdentifier(node) && ctx.constants?.has(node.text)) return literal(readConstant(node.text, ctx), ctx);
+    if (ts.isIdentifier(node) && ctx.constants?.has(node.text)) { const initializer=readConstant(node.text,ctx); return literal(initializer,constantContext(initializer,ctx)); }
     fail(ctx, node, 'nonconstant-value', node.getText(ctx.source));
 }
 function titleHelper(node, ctx) {
@@ -139,11 +142,17 @@ function lambda(node, ctx, names = ['context']) {
     node = unwrap(node);
     if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return { node, ctx };
     const scope = new Map(ctx.scope);
+    const constants = new Map(ctx.constants);
     node.parameters.forEach((p, i) => {
         if (!ts.isIdentifier(p.name)) fail(ctx, p, 'destructured-callback-parameter');
         scope.set(p.name.text, reference(names[i] || `arg${i}`));
+        constants.delete(p.name.text);
     });
-    const child = { ...ctx, scope, constants: new Map(ctx.constants) };
+    // A nested callback can bind a new candidate to the same IR root. An
+    // outer candidate's active-attack guard must not guard that new candidate.
+    const attackDefenders = new Set(ctx.attackDefenders || []);
+    node.parameters.forEach((_,i)=>attackDefenders.delete(names[i] || `arg${i}`));
+    const child = { ...ctx, scope, constants, attackDefenders, callbackStage: ctx.syncArenaPredicate ? ctx.callbackStage : node, syncArenaPredicate: false };
     if (!ts.isBlock(node.body)) return { node: unwrap(node.body), ctx: child };
     let returned = null;
     for (const statement of node.body.statements) {
@@ -167,28 +176,113 @@ function normalizeRef(parts) {
     if (parts[0] === 'this') parts = ['source', ...parts.slice(1)];
     return parts;
 }
-function arenaQuery(node, ctx, name, filterProps = null) {
-    if (!filterProps && node.arguments.length > 1) fail(ctx, node, 'arena-query-arity');
-    const receiver = expr(node.expression.expression, ctx);
-    if (receiver.kind !== 'ref' || receiver.path.length !== 1 || !['player', 'opponent'].includes(receiver.path[0])) fail(ctx, node, 'arena-query-receiver');
-    const obj = filterProps ? { props: filterProps, ctx, node } : node.arguments.length ? object(node.arguments[0], ctx) : { props: new Map(), ctx, node };
-    for (const value of obj.props.values()) {
-        const visit = (child, bound = new Set()) => {
-            if (ts.isArrowFunction(child) || ts.isFunctionExpression(child)) {
-                const local = new Set(bound);
-                for (const parameter of child.parameters) if (ts.isIdentifier(parameter.name)) local.add(parameter.name.text);
-                visit(child.body, local);
-                return;
-            }
-            if (ts.isIdentifier(child) && !bound.has(child.text) && obj.ctx.scope.get(child.text)?.path?.[0] === 'card' && !(ts.isPropertyAccessExpression(child.parent) && child.parent.name === child)) fail(obj.ctx, child, 'arena-query-card-capture');
-            if (ts.isIdentifier(child) && !bound.has(child.text) && obj.ctx.constants.has(child.text) && !(ts.isPropertyAccessExpression(child.parent) && child.parent.name === child)) {
-                visit(readConstant(child.text, obj.ctx), bound);
-                return;
-            }
-            ts.forEachChild(child, (nested) => visit(nested, bound));
-        };
-        visit(value);
+// Readonly is about assignment, not evaluation time. An arena query initializer
+// holds a snapshot; replacing it with a live query in a later callback is wrong.
+function capturesArenaSnapshot(node, ctx, seen = new Set(), controllerOnly = false) {
+    node = unwrap(node);
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return false;
+    if (controllerOnly && ts.isPropertyAccessExpression(node) && node.name.text === 'controller') return true;
+    if (!controllerOnly && ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && ['getArenaUnits','hasSomeArenaUnit','isTraitInPlay','isAspectInPlay','isKeywordInPlay'].includes(node.expression.name.text)) return true;
+    if (ts.isIdentifier(node) && ctx.constants.has(node.text) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)) {
+        const initializer = ctx.constants.get(node.text);
+        if (seen.has(initializer)) return false; // Normal alias resolution diagnoses cycles.
+        const next = new Set(seen); next.add(initializer);
+        return capturesArenaSnapshot(initializer, { ...ctx, constants: ctx.constantEnvs?.get(initializer) || ctx.constants }, next, controllerOnly);
     }
+    let captured = false;
+    ts.forEachChild(node, child => { if (capturesArenaSnapshot(child, ctx, seen, controllerOnly)) captured = true; });
+    return captured;
+}
+function constantContext(node, ctx) {
+    const trail = new Set(ctx.constantTrail || []);
+    if (trail.has(node)) fail(ctx, node, 'cyclic-readonly-binding');
+    trail.add(node);
+    const lexicalConstants = ctx.constantEnvs?.get(node) || ctx.constants;
+    if (capturesArenaSnapshot(node, { ...ctx, constants: lexicalConstants }) && (!ctx.callbackStage || ctx.constantStages?.get(node) !== ctx.callbackStage)) fail(ctx, node, 'arena-query-snapshot-capture');
+    if (ctx.arenaReceiver && capturesArenaSnapshot(node, { ...ctx, constants: lexicalConstants }, new Set(), true) && (!ctx.callbackStage || ctx.constantStages?.get(node) !== ctx.callbackStage)) fail(ctx, node, 'arena-controller-snapshot-capture');
+    return { ...ctx, scope: ctx.constantScopes?.get(node) || ctx.scope, constants: ctx.constantEnvs?.get(node) || ctx.constants, constantTrail: trail };
+}
+const isArenaList = (value) => ['arenaList', 'arenaFilter'].includes(value.kind);
+function arenaCapture(node, ctx, bound = new Set(), seen = new Set()) {
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+        const local = new Set(bound);
+        for (const parameter of node.parameters) if (ts.isIdentifier(parameter.name)) local.add(parameter.name.text);
+        arenaCapture(node.body, ctx, local, seen);
+        return;
+    }
+    if (ts.isIdentifier(node) && !bound.has(node.text) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)) {
+        if (ctx.scope.get(node.text)?.path?.[0] === 'card') fail(ctx, node, 'arena-query-card-capture');
+        if (ctx.constants.has(node.text)) {
+            const initializer = readConstant(node.text, ctx);
+            if (seen.has(initializer)) fail(ctx, node, 'cyclic-readonly-binding');
+            const next = new Set(seen); next.add(initializer);
+            arenaCapture(initializer, { ...ctx, scope: ctx.constantScopes?.get(initializer) || ctx.scope, constants: ctx.constantEnvs?.get(initializer) || ctx.constants }, bound, next);
+            return;
+        }
+    }
+    ts.forEachChild(node, (child) => arenaCapture(child, ctx, bound, seen));
+}
+// List predicates use one candidate register. Nested list algebra, arbitrary
+// collections and array-selected outer targets need additional typed registers.
+function arenaPredicate(value, ctx, node, depth = 0) {
+    if (depth > 24) fail(ctx, node, 'arena-predicate-bound');
+    if (value.kind === 'ref') {
+        const [root, ...parts] = value.path;
+        const cardFields = ['power','hp','damage','remainingHp','cost','printedCost','exhausted','unique','zoneName','controller','title'];
+        const validCard = ['card','source','target'].includes(root) && (parts.length === 0 || (parts.length === 1 && cardFields.includes(parts[0])));
+        const validPlayer = ['player','opponent'].includes(root) && (parts.length === 0 || ['base.damage','hand.length','resources.length','readyResourceCount','exhaustedResourceCount'].includes(parts.join('.')));
+        if (!validCard && !validPlayer) fail(ctx, node, 'arena-predicate-reference');
+        return;
+    }
+    if (!['const','binary','unary','conditional','query','math','array'].includes(value.kind)) fail(ctx, node, 'arena-predicate-expression');
+    if (value.kind === 'query' && !['isUnit','isBase','isLeader','isNonLeaderUnit','isUpgrade','isToken','isEvent','hasSomeTrait','hasEveryTrait','hasSomeAspect','hasEveryAspect','hasSomeKeyword','hasEveryKeyword','getPower','getHp','getCost','getPrintedCost','hasInitiative','getNumericKeywordTotal','isInPlay','isDeployed','isUpgraded','canBeDamaged','canBeExhausted'].includes(value.name)) fail(ctx, node, 'arena-predicate-query');
+    for (const child of Object.values(value)) {
+        if (Array.isArray(child)) { for (const item of child) if (item && typeof item === 'object') arenaPredicate(item, ctx, node, depth + 1); }
+        else if (child && typeof child === 'object') arenaPredicate(child, ctx, node, depth + 1);
+    }
+}
+function arenaListNode(node, ctx, depth = 0) {
+    node = unwrap(node);
+    if (depth > 24) fail(ctx, node, 'arena-list-bound');
+    if (ts.isIdentifier(node) && ctx.constants.has(node.text)) {
+        const initializer = readConstant(node.text, ctx);
+        return arenaListNode(initializer, constantContext(initializer, ctx), depth + 1);
+    }
+    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return null;
+    const name = node.expression.name.text;
+    if (name === 'getArenaUnits') {
+        if (node.questionDotToken || node.expression.questionDotToken) fail(ctx, node, 'optional-arena-list');
+        const query = arenaQuery(node, ctx, 'arenaList');
+        arenaPredicate(query.args[0], ctx, node);
+        return { kind: 'arenaList', receiver: query.receiver, predicate: query.args[0] };
+    }
+    if (name === 'filter') {
+        const receiver = arenaListNode(node.expression.expression, ctx, depth + 1);
+        if (!receiver) return null;
+        if (node.questionDotToken || node.expression.questionDotToken) fail(ctx, node, 'optional-arena-list');
+        if (node.arguments.length !== 1) fail(ctx, node, 'arena-filter-arity');
+        const callback = unwrap(node.arguments[0]);
+        if ((!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || callback.parameters.length !== 1) fail(ctx, callback, 'arena-predicate-shape');
+        arenaCapture(callback, ctx);
+        const predicate = expr(callback, { ...ctx, allowArenaList: false, syncArenaPredicate: true }, ['card']);
+        arenaPredicate(predicate, ctx, callback);
+        return { kind: 'arenaFilter', receiver, predicate };
+    }
+    return null;
+}
+function arenaQuery(node, ctx, name, filterProps = null) {
+    if (!ctx.callbackStage) fail(ctx, node, 'arena-query-evaluation-stage');
+    if (!filterProps && node.arguments.length > 1) fail(ctx, node, 'arena-query-arity');
+    let receiver = expr(node.expression.expression, { ...ctx, arenaReceiver: true });
+    if (name === 'arenaList' && receiver.kind === 'ref') {
+        if (receiver.path.join('.') === 'source.controller') receiver = reference('player');
+        if (receiver.path.join('.') === 'source.controller.opponent') receiver = reference('opponent');
+    }
+    const playerReceiver = receiver.kind === 'ref' && ((receiver.path.length === 1 && ['player', 'opponent'].includes(receiver.path[0])) || (ctx.liveStats && receiver.path.join('.') === 'modifierTarget.controller'));
+    const gameReceiver = name === 'arenaList' && receiver.kind === 'ref' && receiver.path.join('.') === 'game';
+    if (!playerReceiver && !gameReceiver) fail(ctx, node, 'arena-query-receiver');
+    const obj = filterProps ? { props: filterProps, ctx, node } : node.arguments.length ? object(node.arguments[0], ctx) : { props: new Map(), ctx, node };
+    for (const value of obj.props.values()) arenaCapture(value, obj.ctx);
     // Player.getArenaUnits fixes controller and unit type; zone filter fields
     // intersect, while trait/aspect/keyword arrays each use OR semantics.
     for (const [key, value] of obj.props) if (!['arena', 'trait', 'aspect', 'keyword', 'otherThan', 'condition'].includes(key)) fail(obj.ctx, value, 'arena-query-filter:' + key);
@@ -209,45 +303,126 @@ function arenaQuery(node, ctx, name, filterProps = null) {
         if (containsCard(excluded)) fail(ctx, obj.props.get('otherThan'), 'arena-query-card-capture');
         intersect({ kind: 'binary', op: '||', left: { kind: 'unary', op: '!', value: excluded }, right: { kind: 'binary', op: '!==', left: reference('card'), right: excluded } });
     }
-    if (obj.props.has('condition')) intersect(expr(obj.props.get('condition'), obj.ctx, ['card']));
+    if (obj.props.has('condition')) {
+        if (name === 'arenaList') {
+            const callback = unwrap(obj.props.get('condition'));
+            if ((!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || callback.parameters.length !== 1) fail(ctx, callback, 'arena-predicate-shape');
+        }
+        intersect(expr(obj.props.get('condition'), { ...obj.ctx, syncArenaPredicate: true }, ['card']));
+    }
     return { kind: 'query', name, receiver, args: [predicate] };
 }
 function expr(input, context, params = ['context']) {
     let { node, ctx } = lambda(input, context, params);
     node = unwrap(node);
-    if (ts.isIdentifier(node) && ctx.constants?.has(node.text)) return expr(readConstant(node.text, ctx), ctx);
-    if (ts.isPropertyAccessExpression(node) && node.name.text === 'length' && ts.isCallExpression(node.expression) && ts.isPropertyAccessExpression(node.expression.expression) && node.expression.expression.name.text === 'getArenaUnits') return arenaQuery(node.expression, ctx, 'arenaUnitCount');
+    if (ts.isIdentifier(node) && ctx.constants?.has(node.text)) { const initializer = readConstant(node.text, ctx); return expr(initializer, constantContext(initializer, ctx)); }
+    if (ts.isPropertyAccessExpression(node) && node.name.text === 'length') {
+        // Preserve the established direct Player count representation byte-for-byte.
+        if (ts.isCallExpression(node.expression) && ts.isPropertyAccessExpression(node.expression.expression) && node.expression.expression.name.text === 'getArenaUnits') {
+            const receiver = expr(node.expression.expression.expression, { ...ctx, arenaReceiver: true });
+            if (receiver.kind === 'ref' && ['player', 'opponent', 'modifierTarget.controller'].includes(receiver.path.join('.'))) return arenaQuery(node.expression, ctx, 'arenaUnitCount');
+        }
+        const receiver = arenaListNode(node.expression, ctx);
+        if (receiver) return { kind: 'arenaLength', receiver };
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'some') {
+        const receiver = arenaListNode(node.expression.expression, ctx);
+        if (receiver) {
+            if (node.questionDotToken || node.expression.questionDotToken) fail(ctx, node, 'optional-arena-list');
+            if (node.arguments.length !== 1) fail(ctx, node, 'arena-some-arity');
+            const callback = unwrap(node.arguments[0]);
+            if ((!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || callback.parameters.length !== 1) fail(ctx, callback, 'arena-predicate-shape');
+            arenaCapture(callback, ctx);
+            const predicate = expr(callback, { ...ctx, allowArenaList: false, syncArenaPredicate: true }, ['card']);
+            arenaPredicate(predicate, ctx, callback);
+            return { kind: 'arenaSome', receiver, predicate };
+        }
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && ['getArenaUnits', 'filter'].includes(node.expression.name.text)) {
+        const list = arenaListNode(node, ctx);
+        if (list) {
+            if (!ctx.allowArenaList) fail(ctx, node, 'arena-list-scalar');
+            return list;
+        }
+    }
     if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(node.kind)) return constant(literal(node, ctx));
     if (ts.isIdentifier(node) || ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || node.kind === ts.SyntaxKind.ThisKeyword) {
         const enumValue = ctx.enums[node.getText(ctx.source)];
         if (enumValue !== undefined) return constant(enumValue);
         let parts = access(node, ctx);
-        const binding = ctx.scope.get(parts[0]);
+        let resolvedAlias = false;
+        if (ctx.constants.has(parts[0])) {
+            const initializer = readConstant(parts[0], ctx);
+            const value = expr(initializer, constantContext(initializer, ctx));
+            if (value.kind !== 'ref') fail(ctx, node, 'property-of-nonreference-local');
+            parts = [...value.path, ...parts.slice(1)];
+            resolvedAlias = true;
+        }
+        const binding = resolvedAlias ? null : ctx.scope.get(parts[0]);
         if (binding) {
             if (binding.kind !== 'ref') fail(ctx, node, 'property-of-nonreference-local');
             parts = [...binding.path, ...parts.slice(1)];
-        } else if (parts[0] !== 'this') fail(ctx, node, 'unbound-reference:' + parts[0]);
+        } else if (!resolvedAlias && parts[0] !== 'this') fail(ctx, node, 'unbound-reference:' + parts[0]);
         parts = normalizeRef(parts);
+        if (ctx.namedTargets && parts[0]==='targets') {
+            const name=parts[1],slot=ctx.namedTargets.get(name);
+            if (!slot) fail(ctx,node,'unknown-named-target:'+name);
+            if (parts.length>2 && (slot.array || parts.length!==3 || !['power','hp','damage','remainingHp','cost','printedCost','exhausted','unique','zoneName','controller','title'].includes(parts[2]))) fail(ctx,node,'unsupported-named-target-property');
+            parts=['namedTargets',...parts.slice(1)];
+        } else if(ctx.namedTargets && parts[0]==='target') {
+            const slot=ctx.namedTargets.get('target');
+            if(!slot) fail(ctx,node,'unnamed-target-in-named-scope');
+            if(parts.length>1 && (slot.array || parts.length!==2 || !['power','hp','damage','remainingHp','cost','printedCost','exhausted','unique','zoneName','controller','title'].includes(parts[1]))) fail(ctx,node,'unsupported-named-target-property');
+            parts=['namedTargets','target',...parts.slice(1)];
+        }
+        if (parts.includes('activeAttack') && !(parts.join('.')==='card.activeAttack.attacker' && ctx.attackDefenders?.has('card'))) fail(ctx,node,'unsupported-attack-reference');
+        if (ctx.liveStats && parts.length===3 && parts[0]==='card' && parts[1]==='zone' && parts[2]==='name') parts=['card','zoneName'];
         const roots = new Set(['source', 'player', 'opponent', 'target', 'targets', 'card', 'event', 'attack']);
+        if (ctx.arenaReceiver) roots.add('game');
+        if (ctx.attachPredicate) roots.add('attachTarget');
+        if (ctx.liveStats) roots.add('modifierTarget');
+        if (ctx.namedTargets) roots.add('namedTargets');
         if (!roots.has(parts[0])) fail(ctx, node, 'unimplemented-context-field:' + parts[0]);
         return reference(...parts);
     }
-    if (ts.isArrayLiteralExpression(node)) return { kind: 'array', items: node.elements.map((e) => expr(e, ctx)) };
+    if (ts.isArrayLiteralExpression(node)) return { kind: 'array', items: node.elements.map((e) => expr(e, { ...ctx, allowArenaList: false })) };
     if (ts.isPrefixUnaryExpression(node)) {
         const op = ts.tokenToString(node.operator);
         if (!['!', '-', '+', '~'].includes(op)) fail(ctx, node, 'unsupported-unary:' + op);
-        return { kind: 'unary', op, value: expr(node.operand, ctx) };
+        return { kind: 'unary', op, value: expr(node.operand, { ...ctx, allowArenaList: false }) };
     }
     if (ts.isBinaryExpression(node)) {
         const op = node.operatorToken.getText(ctx.source);
         if (!['+', '-', '*', '/', '%', '===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||', '??', '&', '|'].includes(op)) fail(ctx, node, 'side-effecting-expression:' + op);
-        return { kind: 'binary', op, left: expr(node.left, ctx), right: expr(node.right, ctx) };
+        ctx = { ...ctx, allowArenaList: false };
+        const left = expr(node.left,ctx);
+        let rightContext=ctx;
+        if(op==='&&') {
+            const attackDefenders=new Set(ctx.attackDefenders || []);
+            const guards=v=> {
+                if(v.kind==='query'&&v.name==='isDefending'&&v.receiver.kind==='ref'&&v.receiver.path.length===1) attackDefenders.add(v.receiver.path[0]);
+                if(v.kind==='binary'&&v.op==='&&') {guards(v.left);guards(v.right);}
+            };
+            guards(left);rightContext={...ctx,attackDefenders};
+        }
+        return { kind:'binary',op,left,right:expr(node.right,rightContext) };
     }
-    if (ts.isConditionalExpression(node)) return { kind: 'conditional', condition: expr(node.condition, ctx), then: expr(node.whenTrue, ctx), else: expr(node.whenFalse, ctx) };
+    if (ts.isConditionalExpression(node)) return { kind: 'conditional', condition: expr(node.condition, { ...ctx, allowArenaList: false }), then: expr(node.whenTrue, { ...ctx, allowArenaList: false }), else: expr(node.whenFalse, { ...ctx, allowArenaList: false }) };
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const call = node.expression;
         const name = call.name.text;
+        if (['isAttacking','isDefending'].includes(name)) {
+            if(node.questionDotToken || call.questionDotToken) fail(ctx,node,'optional-attack-query');
+            if(node.arguments.length) fail(ctx,node,'attack-query-arity');
+            const receiver=expr(call.expression,ctx);
+            if(receiver.kind!=='ref'||receiver.path.length!==1||!['source','card','target'].includes(receiver.path[0])) fail(ctx,node,'attack-query-receiver');
+            return {kind:'query',name,receiver,args:[]};
+        }
         if (name === 'hasSomeArenaUnit') return arenaQuery(node, ctx, name);
+        if (ctx.liveStats && name === 'isTokenUnit') {
+            if (node.arguments.length) fail(ctx,node,'live-stat-token-query-arity');
+            return {kind:'query',name,receiver:expr(call.expression,ctx),args:[]};
+        }
         if (['isTraitInPlay', 'isAspectInPlay', 'isKeywordInPlay'].includes(name)) {
             if (node.arguments.length < 1 || node.arguments.length > 2) fail(ctx, node, 'arena-query-alias-arity');
             const field = { isTraitInPlay: 'trait', isAspectInPlay: 'aspect', isKeywordInPlay: 'keyword' }[name];
@@ -255,10 +430,19 @@ function expr(input, context, params = ['context']) {
             if (node.arguments.length === 2) filters.set('otherThan', node.arguments[1]);
             return arenaQuery(node, ctx, 'hasSomeArenaUnit', filters);
         }
+        if (ctx.liveStats && call.expression.getText(ctx.source) === 'Math' && name === 'floor') {
+            if (node.arguments.length !== 1) fail(ctx,node,'live-stat-resource-pairs-shape');
+            const divided = unwrap(node.arguments[0]);
+            if (!ts.isBinaryExpression(divided) || divided.operatorToken.kind !== ts.SyntaxKind.SlashToken || literal(divided.right,ctx) !== 2) fail(ctx,node,'live-stat-resource-pairs-shape');
+            const count = expr(divided.left,ctx);
+            if (count.kind !== 'ref' || !['modifierTarget.controller.resources.length','player.resources.length','opponent.resources.length'].includes(count.path.join('.'))) fail(ctx,node,'live-stat-resource-pairs-shape');
+            return {kind:'query',name:'resourcePairs',receiver:reference(...count.path.slice(0,-2)),args:[]};
+        }
         if (call.expression.getText(ctx.source) === 'Math' && ['min', 'max', 'floor', 'ceil', 'abs'].includes(name)) return { kind: 'math', name, args: node.arguments.map((a) => expr(a, ctx)) };
         if (QUERY_NAMES.has(name)) return { kind: 'query', name, receiver: expr(call.expression, ctx), args: node.arguments.map((a) => expr(a, ctx)) };
         if (['some', 'every', 'filter', 'map', 'find', 'includes', 'concat', 'slice'].includes(name)) {
             const receiver = expr(call.expression, ctx);
+            if (isArenaList(receiver)) fail(ctx, node, 'unsupported-arena-collection:' + name);
             const args = node.arguments.map((a) => expr(a, ctx, ['card', 'index']));
             return { kind: 'collection', name, receiver, args, limit: 256 };
         }
@@ -269,7 +453,7 @@ function expr(input, context, params = ['context']) {
 function object(input, context) {
     let { node, ctx } = lambda(input, context);
     node = unwrap(node);
-    if (ts.isIdentifier(node) && ctx.constants.has(node.text)) return object(readConstant(node.text, ctx), ctx);
+    if (ts.isIdentifier(node) && ctx.constants.has(node.text)) { const initializer=readConstant(node.text,ctx); return object(initializer,constantContext(initializer,ctx)); }
     if (!ts.isObjectLiteralExpression(node)) fail(ctx, node, 'expected-declarative-object');
     const props = new Map();
     for (const p of node.properties) {
@@ -288,7 +472,7 @@ function knownProperties(obj, names) {
 }
 function target(node, ctx, fallback = 'self') {
     if (!node) return fallback;
-    const e = expr(node, ctx);
+    const e = expr(node, { ...ctx, allowArenaList: true });
     const stringify = (v) => v.kind === 'ref' ? v.path.join('.') : null;
     const mappings = { source: 'self', target: 'chosen', 'player.base': 'ownBase', 'opponent.base': 'enemyBase', player: 'ownPlayer', opponent: 'enemyPlayer' };
     if (mappings[stringify(e)]) return mappings[stringify(e)];
@@ -298,6 +482,70 @@ function target(node, ctx, fallback = 'self') {
         if (paths.length === 2 && paths.includes('player') && paths.includes('opponent')) return 'bothPlayers';
     }
     return e;
+}
+// This grammar is mirrored by raw-IR admission. modifierTarget is the
+// affected card, card is an arena-query candidate, and source/target keep their
+// existing meanings. Live values cannot depend on effective stats or keywords.
+function liveStatBounds(value, ctx, node, depth = 0) {
+    if (depth > 24) fail(ctx,node,'live-stat-expression-bound');
+    const rejected = () => fail(ctx,node,'unsupported-live-stat-expression');
+    if (value.kind === 'const') {
+        if (!Number.isSafeInteger(value.value) || Math.abs(value.value) > 1000) rejected();
+        return [value.value,value.value];
+    }
+    if (value.kind === 'ref') {
+        const p=value.path.join('.');
+        if (p === 'modifierTarget.damage') return [0,65535];
+        if (['modifierTarget.controller.resources.length','player.resources.length','opponent.resources.length','player.hand.length','opponent.hand.length'].includes(p)) return [0,64];
+        rejected();
+    }
+    if (value.kind === 'unary' && value.op === '-') {
+        const [lo,hi]=liveStatBounds(value.value,ctx,node,depth+1);return [-hi,-lo];
+    }
+    if (value.kind === 'binary' && ['+','-','*'].includes(value.op)) {
+        const [a,b]=liveStatBounds(value.left,ctx,node,depth+1),[c,d]=liveStatBounds(value.right,ctx,node,depth+1);
+        const values=value.op==='+'?[a+c,b+d]:value.op==='-'?[a-d,b-c]:[a*c,a*d,b*c,b*d];
+        const bounds=[Math.min(...values),Math.max(...values)];
+        if (bounds.some(n=>!Number.isSafeInteger(n)||Math.abs(n)>1000000)) fail(ctx,node,'live-stat-value-bound');
+        return bounds;
+    }
+    if (value.kind === 'query' && ['arenaUnitCount','resourcePairs'].includes(value.name)) {
+        const path=value.receiver.kind==='ref'?value.receiver.path.join('.'):'';
+        if (!['player','opponent','modifierTarget.controller'].includes(path)) rejected();
+        if (value.name==='resourcePairs') {if(value.args.length) rejected();return [0,32];}
+        if (value.args.length!==1) rejected();
+        const check=(v, exclusion=false, nesting=0)=> {
+            if(!v||typeof v!=='object'||nesting>24) fail(ctx,node,'live-stat-expression-bound');
+            if(v.kind==='const') {
+                if (!['boolean','string','number'].includes(typeof v.value) || (typeof v.value==='number' && (!Number.isSafeInteger(v.value)||Math.abs(v.value)>1000))) rejected();
+                return;
+            }
+            if(v.kind==='ref') {
+                const path=v.path.join('.');
+                if (['modifierTarget','source'].includes(path) && exclusion) return;
+                if (['card','card.damage','card.exhausted','card.unique','card.zoneName','card.zone.name'].includes(path)) return;
+                if(v.path.some(p=>['power','hp','remainingHp'].includes(p))) fail(ctx,node,'constant-stat-dependency');
+                fail(ctx,node,'live-stat-arena-capture');
+            }
+            if(v.kind==='query') {
+                if(['getPower','getHp','hasSomeKeyword','hasEveryKeyword','getNumericKeywordTotal'].includes(v.name)) fail(ctx,node,'constant-stat-dependency');
+                if (!['isUnit','isTokenUnit','hasSomeTrait','hasSomeAspect'].includes(v.name) || v.receiver.kind!=='ref' || v.receiver.path.join('.')!=='card') rejected();
+                const arity=['isUnit','isTokenUnit'].includes(v.name)?0:1;
+                if(v.args.length!==arity || v.args.some(a=>a.kind!=='const'&&!(a.kind==='array'&&a.items.every(x=>x.kind==='const')))) rejected();
+                if(arity && v.args.some(a=>a.kind==='const'?typeof a.value!=='string':a.items.some(x=>typeof x.value!=='string'))) rejected();
+                return;
+            }
+            if(v.kind==='binary') {
+                if(!['&&','||','===','!==','>','>=','<','<='].includes(v.op)) rejected();
+                check(v.left,v.op==='!==',nesting+1);check(v.right,v.op==='!==',nesting+1);return;
+            }
+            if(v.kind==='unary'&&v.op==='!') {check(v.value,v.value.kind==='ref',nesting+1);return;}
+            rejected();
+        };
+        check(value.args[0]);
+        return [0,255];
+    }
+    rejected();
 }
 const MODIFIER_KEYWORDS = new Set(['sentinel','saboteur','overwhelm','grit','raid','restore','ambush','shielded']);
 function modifierEffects(input, ctx, duration, targetValue) {
@@ -315,15 +563,20 @@ function modifierEffects(input, ctx, duration, targetValue) {
         while (ts.isIdentifier(value) && ctx.constants.has(value.text)) value = unwrap(readConstant(value.text, ctx));
         const dynamic = ts.isArrowFunction(value) || ts.isFunctionExpression(value);
         if (kind === 'modifyStats') {
-            if (dynamic) fail(ctx,value,duration === 'phase' ? 'dynamic-ongoing-stat-modifier' : 'dynamic-constant-stat-modifier');
-            const obj = object(value,ctx); knownProperties(obj,['power','hp']);
+            if (dynamic && duration === 'phase') fail(ctx,value,'dynamic-ongoing-stat-modifier');
+            const lowered = dynamic ? lambda(value,{...ctx,liveStats:true},['modifierTarget','context']) : {node:value,ctx};
+            const obj = object(lowered.node,lowered.ctx);
+            // Every modifier field is semantic; descriptive-property exemptions
+            // used by ordinary ability objects do not apply to live stat objects.
+            for (const [key,v] of obj.props) if (!['power','hp'].includes(key)) fail(obj.ctx,v,'unsupported-stat-modifier-field:'+key);
             const out={kind,target:targetValue,duration};
             for (const stat of ['power','hp']) {
                 if (!obj.props.has(stat)) fail(ctx,value,'incomplete-stat-modifier');
                 let v=unwrap(obj.props.get(stat));
                 while(ts.isIdentifier(v)&&obj.ctx.constants.has(v.text))v=unwrap(readConstant(v.text,obj.ctx));
                 if(ts.isArrowFunction(v)||ts.isFunctionExpression(v))fail(ctx,v,'function-valued-stat-modifier');
-                if(duration === 'persistent') { const n=literal(v,obj.ctx); if(!Number.isSafeInteger(n))fail(ctx,v,'noninteger-stat-modifier'); out[stat]=constant(n); }
+                if(dynamic) {out[stat]=expr(v,obj.ctx);liveStatBounds(out[stat],obj.ctx,v);}
+                else if(duration === 'persistent') { const n=literal(v,obj.ctx); if(!Number.isSafeInteger(n))fail(ctx,v,'noninteger-stat-modifier'); out[stat]=constant(n); }
                 else out[stat]=expr(v,obj.ctx);
             }
             return [out];
@@ -375,7 +628,18 @@ function effect(input, context, defaultTarget = 'self') {
         if (!['ownPlayer', 'enemyPlayer'].includes(playerTarget)) fail(obj.ctx, obj.props.get('target') || node, 'hand-discard-player-target');
         return { kind:'discardOwnHand', amount:constant(amount), target:playerTarget };
     }
-    const tokenTypes = { createBattleDroid:'battleDroid', createCloneTrooper:'cloneTrooper', createXWing:'xwing', createTieFighter:'tieFighter', createSpy:'spy', createBeast:'beast' };
+    if (kind === 'discardFromDeck') {
+        for (const [key, value] of obj.props) if (!['amount', 'target'].includes(key)) fail(obj.ctx, value, 'unsupported-deck-discard-field:' + key);
+        // DiscardFromDeckSystem supplies no amount default; the inherited
+        // PlayerTargetSystem default targets the opponent.
+        if (!obj.props.has('amount')) fail(ctx, node, 'deck-discard-missing-amount');
+        const amount = literal(obj.props.get('amount'), obj.ctx);
+        if (!Number.isSafeInteger(amount) || amount < 0 || amount > 5) fail(obj.ctx, obj.props.get('amount'), 'deck-discard-amount-bound');
+        const playerTarget = target(obj.props.get('target'), obj.ctx, 'enemyPlayer');
+        if (!['ownPlayer', 'enemyPlayer'].includes(playerTarget)) fail(obj.ctx, obj.props.get('target') || node, 'deck-discard-player-target');
+        return { kind:'discardDeck', amount:constant(amount), target:playerTarget };
+    }
+    const tokenTypes = { createBattleDroid:'battleDroid', createCloneTrooper:'cloneTrooper', createXWing:'xwing', createTieFighter:'tieFighter', createSpy:'spy', createBeast:'beast', createMandalorian:'mandalorian' };
     if (Object.hasOwn(tokenTypes, kind)) {
         // Token factory wrappers append their fixed type; caller-supplied type,
         // entry effects and event captures require their own execution contract.
@@ -450,7 +714,7 @@ function targetResolverProperties(obj) {
                 let root=n;while(ts.isPropertyAccessExpression(root)||ts.isElementAccessExpression(root))root=root.expression;
                 if(ts.isIdentifier(root)&&!bound.has(root.text)&&ctx.scope.has(root.text)) {
                     const binding=ctx.scope.get(root.text);
-                    if(binding.kind==='ref') {const parts=normalizeRef([...binding.path,...access(n,ctx).slice(1)]);if(['target','targets'].includes(parts[0]))fail(ctx,n,'target-resolver-outer-target-capture');}
+                    if(binding.kind==='ref') {const parts=normalizeRef([...binding.path,...access(n,ctx).slice(1)]);if(['target','targets'].includes(parts[0]) && !ctx.namedTargets)fail(ctx,n,'target-resolver-outer-target-capture');}
                 }
             }
             if(ts.isIdentifier(n)&&!bound.has(n.text)&&ctx.constants.has(n.text)&&!(ts.isPropertyAccessExpression(n.parent)&&n.parent.name===n)) {
@@ -514,16 +778,109 @@ function constantAbility(input, context, validatedObject = null) {
     check(result.condition); check(result.targetResolver); check(result.effect);
     return result;
 }
+function attachedKeywordAbility(input, context) {
+    const obj = object(input, context);
+    // Unlike general ability objects, every extra field here changes keyword
+    // semantics (notably Bounty's nested ability) and must be rejected.
+    for (const [key, value] of obj.props) if (!['keyword', 'amount', 'gainCondition'].includes(key)) fail(obj.ctx, value, 'unsupported-attached-keyword-field:' + key);
+    if (!obj.props.has('keyword')) fail(obj.ctx, obj.node, 'missing-modifier-keyword');
+    const keywordProps = ts.factory.createObjectLiteralExpression([...obj.props].filter(([key]) => key !== 'gainCondition').map(([key, value]) => ts.factory.createPropertyAssignment(key, value)));
+    const helper = ts.factory.createCallExpression(ts.factory.createPropertyAccessExpression(ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier('AbilityHelper'), 'ongoingEffects'), 'gainKeyword'), undefined, [keywordProps]);
+    // Synthetic helper nodes retain the real source span for fail-closed diagnostics.
+    ts.setTextRange(keywordProps, obj.node);
+    ts.setTextRange(helper, obj.node);
+    const props = new Map([['ongoingEffect', helper]]);
+    if (obj.props.has('gainCondition')) props.set('condition', obj.props.get('gainCondition'));
+    const result = constantAbility(input, obj.ctx, { ...obj, props });
+    result.effect.target = 'parent';
+    const keyword = result.effect.keyword;
+    const amount = result.effect.amount;
+    if (amount.kind !== 'const' || !Number.isSafeInteger(amount.value) || amount.value < 0 || amount.value > 5) fail(obj.ctx, obj.node, 'attached-keyword-amount-bound');
+    result.title = `Give ${keyword[0].toUpperCase() + keyword.slice(1)}${['raid', 'restore'].includes(keyword) ? ' ' + amount.value : ''} to the attached unit`;
+    return result;
+}
+function attachPredicate(input, ctx) {
+    const value = expr(input, { ...ctx, attachPredicate:true });
+    const visit = (v) => {
+        if (!v || typeof v !== 'object') return;
+        if (v.kind === 'ref' && v.path[0] === 'attachTarget') v.path = ['card', ...v.path.slice(1)];
+        Object.values(v).forEach(visit);
+    };
+    visit(value);
+    return value;
+}
+function namedResolvers(input, context) {
+    if(context.namedTargets?.size) fail(context,input,'nested-named-resolver-scope');
+    const obj=object(input,context);
+    if(!obj.props.size||obj.props.size>4) fail(obj.ctx,obj.node,'named-target-slot-bound');
+    const descriptors=[];const slots=new Map();const dependents=new Set();
+    for(const [name,value] of obj.props) {
+        if(!/^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(name)||['__proto__','prototype','constructor'].includes(name)) fail(obj.ctx,value,'invalid-named-target-name');
+        const resolver=object(value,obj.ctx);
+        const allowed=['cardTypeFilter','controller','zoneFilter','cardCondition','optional','mode','numCards','canChooseNoCards','immediateEffect','choosingPlayer','dependsOn','activePromptTitle'];
+        for(const [key,v]of resolver.props)if(!allowed.includes(key))fail(resolver.ctx,v,'unsupported-named-resolver-field:'+key);
+        const mode=resolver.props.has('mode')?literal(resolver.props.get('mode'),resolver.ctx):'single';
+        if(!['single','exactly'].includes(mode))fail(resolver.ctx,value,'named-target-mode');
+        if(mode==='exactly'&&(!resolver.props.has('numCards')||literal(resolver.props.get('numCards'),resolver.ctx)!==1))fail(resolver.ctx,value,'named-target-exactly-one');
+        if(mode==='single'&&resolver.props.has('numCards'))fail(resolver.ctx,value,'named-target-single-count');
+        for(const key of ['optional','canChooseNoCards'])if(resolver.props.has(key)&&typeof literal(resolver.props.get(key),resolver.ctx)!=='boolean')fail(resolver.ctx,value,'named-target-optionality');
+        const chooser=resolver.props.has('choosingPlayer')?literal(resolver.props.get('choosingPlayer'),resolver.ctx):'self';
+        if(!['self','opponent'].includes(chooser))fail(resolver.ctx,value,'named-target-chooser');
+        let dependsOn;
+        if(resolver.props.has('dependsOn')) {
+            dependsOn=literal(resolver.props.get('dependsOn'),resolver.ctx);
+            if(!slots.has(dependsOn))fail(resolver.ctx,value,'named-target-backward-dependency');
+            if(dependents.has(dependsOn))fail(resolver.ctx,value,'named-target-multiple-dependents');
+            dependents.add(dependsOn);
+        }
+        const scope=new Map(slots);scope.set(name,{array:mode==='exactly'});
+        const ctx={...resolver.ctx,namedTargets:scope};
+        const props=new Map(resolver.props);props.delete('choosingPlayer');props.delete('dependsOn');
+        const spec=targetResolverProperties({...resolver,props,ctx});
+        if(!['any','unit','nonLeaderUnit','leaderUnit','tokenUnit','nonTokenUnit','basicUnit','base'].includes(spec.type)||!['arena','anyAttackable','base'].includes(spec.zone))fail(ctx,value,'named-target-card-domain');
+        if(resolver.props.has('activePromptTitle'))spec.promptTitle=displayText(resolver.props.get('activePromptTitle'),ctx);
+        const entry={name,targetResolver:spec,chooser,...(dependsOn?{dependsOn}:{})};
+        if(resolver.props.has('immediateEffect'))entry.effect=effect(resolver.props.get('immediateEffect'),ctx,'chosen');
+        const ancestorNames=new Set();let ancestor=dependsOn;
+        while(ancestor){ancestorNames.add(ancestor);ancestor=descriptors.find(d=>d.name===ancestor)?.dependsOn;}
+        const check=(v)=>{
+            if(!v||typeof v!=='object')return;
+            if(v.kind==='ref'&&v.path[0]==='namedTargets'&&v.path[1]!==name&&!ancestorNames.has(v.path[1]))fail(ctx,value,'named-target-undeclared-dependency');
+            if(v.kind==='ref'&&['event','targets','target'].includes(v.path[0]))fail(ctx,value,'named-target-unsupported-capture');
+            Object.values(v).forEach(check);
+        };
+        check(entry);
+        const checkEffect=e=>{
+            if(!e)return;
+            if(e.kind==='simultaneous'||e.kind==='phaseModifiers') {if(!e.effects.length||e.effects.length>8)fail(ctx,value,'named-effect-bound');e.effects.forEach(checkEffect);return;}
+            if(!['damage','ready','exhaust','defeat','giveShield','giveExperience','modifyStats','gainKeyword','loseKeyword'].includes(e.kind))fail(ctx,value,'unsupported-named-effect:'+e.kind);
+        };
+        checkEffect(entry.effect);
+        descriptors.push(entry);slots.set(name,{array:mode==='exactly'});
+    }
+    return {entries:descriptors,ctx:{...obj.ctx,namedTargets:slots}};
+}
 function ability(input, context, trigger = null, validatedObject = null) {
     const obj = validatedObject || object(input, context);
-    const { props, ctx, node } = obj;
-    knownProperties(obj, ['title', 'optional', 'cost', 'condition', 'immediateEffect', 'targetResolver', 'ifYouDo', 'ifYouDoCondition', 'then', 'thenCondition', 'limit', 'optionalMakesAbilityNonCancelable']);
+    const {props,node}=obj;let ctx=obj.ctx;
+    if(ctx.namedTargets?.size && (props.has('targetResolver')||props.has('targetResolvers')||props.has('cost'))) fail(ctx,node,'named-continuation-targeting-or-cost');
+    knownProperties(obj, ['title', 'optional', 'cost', 'condition', 'immediateEffect', 'targetResolver', 'targetResolvers', 'ifYouDo', 'ifYouDoCondition', 'then', 'thenCondition', 'limit', 'optionalMakesAbilityNonCancelable']);
     const result = { ...(trigger ? { trigger } : {}), title: props.has('title') ? displayText(props.get('title'), ctx) : '', costs: costs(props.get('cost'), ctx) };
     if(props.has('contextTitle'))result.contextTitle=contextTitle(props.get('contextTitle'),ctx);
     if (props.has('optional')) result.optional = literal(props.get('optional'), ctx);
     if (props.has('condition')) result.condition = expr(props.get('condition'), ctx);
     if (props.has('optionalMakesAbilityNonCancelable')) result.optionalMakesAbilityNonCancelable = literal(props.get('optionalMakesAbilityNonCancelable'), ctx);
     if (props.has('limit')) fail(ctx, props.get('limit'), 'activation-limit');
+    if(props.has('targetResolvers')) {
+        if(props.has('targetResolver')||props.has('immediateEffect'))fail(ctx,node,'multiple-target-system-properties');
+        if(props.has('cost')||props.has('limit'))fail(ctx,node,'named-target-cost-or-limit');
+        const named=namedResolvers(props.get('targetResolvers'),ctx);
+        result.targetResolvers=named.entries;ctx=named.ctx;
+        // Sentinel for absence of a direct parent system. An absent child
+        // system remains absent because it controls dependency feasibility.
+        result.effect={kind:'noAction'};
+        if(!named.entries.some(e=>e.effect)&&!props.has('then')&&!props.has('ifYouDo'))fail(ctx,node,'named-ability-without-effect');
+    }
     if (props.has('targetResolver')) {
         if (props.has('immediateEffect')) fail(ctx, node, 'both-targeted-and-direct-effects');
         const resolver = object(props.get('targetResolver'), ctx);
@@ -549,7 +906,7 @@ function ability(input, context, trigger = null, validatedObject = null) {
             if (!value || typeof value !== 'object') return;
             if (value.targetResolver) selection = true;
             if (value.then || value.ifYouDo || (value.effects && value.effects.length > 1)) multipleEffects = true;
-            if (value.kind === 'ref') dynamicReference = true;
+            if (value.kind === 'ref' && !(value.path[0]==='namedTargets'&&value.path.length===2)) dynamicReference = true;
             if (value.kind === 'ref' && ['target', 'targets'].includes(value.path[0])) capturedTarget = true;
             if (value.kind === 'ref' && value.path[0] === 'event') capturedEvent = true;
             Object.values(value).forEach(visit);
@@ -559,16 +916,26 @@ function ability(input, context, trigger = null, validatedObject = null) {
         if (capturedEvent && multipleEffects) fail(ctx, factory, 'continuation-factory-event-lifetime', 'Factory event capture requires a separate value slot before subsequent effects');
         if (dynamicReference && multipleEffects) fail(ctx, factory, 'continuation-factory-value-lifetime', 'Factory values require capture slots before a sequence can change their referenced state');
     }
-    let createsTokens = false, discardsHand = false, capturesTokenEvent = false;
+    let createsTokens = false, discardsHand = false, discardsDeck = false, capturesTokenEvent = false;
     const tokenCapture = (value) => {
         if (!value || typeof value !== 'object') return;
         if (value.kind === 'createTokenUnit') createsTokens = true;
         if (value.kind === 'discardOwnHand') discardsHand = true;
+        if (value.kind === 'discardDeck') discardsDeck = true;
         if (value.kind === 'ref' && value.path[0] === 'event') capturesTokenEvent = true;
         Object.values(value).forEach(tokenCapture);
     };
     tokenCapture(result);
+    if(ctx.namedTargets) {
+        const check=v=> {
+            if(!v||typeof v!=='object')return;
+            if(v.kind==='ref'&&v.path[0]==='event')fail(ctx,node,'named-event-payload-capture');
+            Object.values(v).forEach(check);
+        };
+        check(result);
+    }
     if (createsTokens && capturesTokenEvent) fail(ctx, node, 'token-event-result-capture');
+    if (discardsDeck && capturesTokenEvent) fail(ctx, node, 'deck-discard-event-result-capture');
     if (discardsHand && capturesTokenEvent) fail(ctx, node, 'hand-discard-event-result-capture');
     return result;
 }
@@ -630,7 +997,7 @@ function loadEnums(sourceRoot) {
 }
 function compileSource(text, file, enums = {}) {
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-    const ctx = { source, file, enums, scope: new Map(), constants: new Map(), bindings: [], usedConstants: new Set() };
+    const ctx = { source, file, enums, scope: new Map(), constants: new Map(), constantScopes: new Map(), constantEnvs: new Map(), constantStages: new Map(), bindings: [], usedConstants: new Set() };
     const diagnostics = [];
     const out = { sourcePath: file, sourceHash: hash(text), abilities: { leader: [], unit: [], card: [] }, diagnostics };
     if (source.parseDiagnostics.length) {
@@ -692,9 +1059,16 @@ function compileSource(text, file, enums = {}) {
                 const call = statement.expression;
                 const parts = access(call.expression, local);
                 const registration = parts.at(-1);
-                if (parts.length !== 2 || parts[0] !== member.parameters[0]?.name.getText(source) || (!TRIGGERS[registration] && registration !== 'addConstantAbility' && registration !== 'addTriggeredAbility' && registration !== 'addCoordinateAbility')) fail(local, call, 'registrar:' + registration);
+                if (parts.length !== 2 || parts[0] !== member.parameters[0]?.name.getText(source) || (!TRIGGERS[registration] && registration !== 'addConstantAbility' && registration !== 'addTriggeredAbility' && registration !== 'addCoordinateAbility' && registration !== 'addGainKeywordTargetingAttached' && registration !== 'setAttachCondition')) fail(local, call, 'registrar:' + registration);
                 if (call.arguments.length !== 1) fail(local, call, 'registration-arity');
-                if (registration === 'addCoordinateAbility') {
+                if (['addGainKeywordTargetingAttached', 'setAttachCondition'].includes(registration)) {
+                    if (!['UpgradeCard', 'TokenUpgradeCard'].includes(out.baseClass) || name !== 'setupCardAbilities') fail(local, call, 'attached-source-side');
+                    if (registration === 'setAttachCondition') {
+                        if (out.attachCondition) fail(local, call, 'duplicate-attach-condition');
+                        out.attachCondition = attachPredicate(call.arguments[0], local);
+                    } else out.abilities.card.push(attachedKeywordAbility(call.arguments[0], local));
+                }
+                else if (registration === 'addCoordinateAbility') {
                     if (out.baseClass !== 'NonLeaderUnitCard' || name !== 'setupCardAbilities') fail(local, call, 'coordinate-source-side');
                     if (out.abilities.card.some(a => a.coordinate)) fail(local, call, 'coordinate-multiple-definitions');
                     out.abilities.card.push(coordinateAbility(call.arguments[0], local));

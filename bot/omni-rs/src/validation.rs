@@ -162,6 +162,7 @@ pub fn validate_state_with_catalogue(
             "actor",
             "winner",
             "players",
+            "arenaUnitOrder",
         ],
         "state",
     )?;
@@ -313,7 +314,7 @@ pub fn validate_state_with_catalogue(
                     if (has_type(info, "token") && (!arena || !has_type(info,"unit") || has_type(info,"upgrade")))
                         || has_type(info, "leader")
                         || has_type(info, "base")
-                        || !(has_type(info, "unit") || (!arena && has_type(info, "event")))
+                        || !(has_type(info, "unit") || (!arena && (has_type(info, "event") || has_type(info,"upgrade"))))
                     {
                         return Err(format!(
                             "{at}: expected a nonleader unit{}",
@@ -354,23 +355,25 @@ pub fn validate_state_with_catalogue(
                     if upgrades.len() >= MAX_CARDS {
                         return Err(format!("{at}: upgrade capacity exceeded"));
                     }
+                    let mut upgrade_stats=(0i64,0i64);
                     for u in upgrades {
                         fields(
                             u,
-                            &["id", "setCode", "name", "token"],
+                            &["id", "setCode", "name", "token", "controller", "owner"],
                             &format!("{at}.upgrades"),
                         )?;
                         let (_, info) = refs.card(u, &format!("{at}.upgrades"))?;
-                        if !matches!(
-                            u["setCode"].as_str(),
-                            Some("TOKEN_SHIELD" | "TOKEN_EXPERIENCE")
-                        ) || !has_type(info, "token")
-                            || !has_type(info, "upgrade")
-                            || !boolean(u, "token", "upgrade")?
-                        {
-                            return Err(format!(
-                                "{at}: only Shield and Experience tokens are supported"
-                            ));
+                        if !has_type(info,"upgrade") {return Err(format!("{at}: attachment must be an upgrade"));}
+                        let token=boolean(u,"token","upgrade")?;
+                        if token {
+                            if !matches!(u["setCode"].as_str(),Some("TOKEN_SHIELD"|"TOKEN_EXPERIENCE")) || !has_type(info,"token") {return Err(format!("{at}: only Shield and Experience tokens are supported"));}
+                        }else{
+                            if has_type(info,"token") {return Err(format!("{at}: only Shield and Experience tokens are supported"));}
+                            let controller=u["controller"].as_str().ok_or("ordinary upgrade needs controller")?;
+                            let owner=u["owner"].as_str().ok_or("ordinary upgrade needs owner")?;
+                            if owner!=controller {return Err("foreign-controlled upgrade imports are unsupported".into());}
+                            upgrade_stats.0+=info["upgradePower"].as_i64().unwrap_or(0);upgrade_stats.1+=info["upgradeHp"].as_i64().unwrap_or(0);
+                            if !["p1","p2"].contains(&controller) || u["owner"].as_str().is_some_and(|owner|owner!=controller) {return Err("foreign-controlled upgrade imports are unsupported".into());}
                         }
                     }
                     if let Some(keywords) = c.get("phaseKeywords") {
@@ -415,10 +418,10 @@ pub fn validate_state_with_catalogue(
                         && [info["text"].as_str(), has_type(info, "leader").then(|| info["deployBox"].as_str()).flatten()].into_iter().flatten().any(|text| text.lines().any(|line| line.starts_with("Grit")));
                     let grit = c["phaseKeywords"]["grit"] == 1 || printed_grit;
                     let power = info["power"].as_i64().unwrap_or(0)
-                        + experience as i64
+                        + experience as i64 + upgrade_stats.0
                         + if grit && !c["phaseLostKeywords"].as_array().is_some_and(|ks| ks.iter().any(|k| k == "grit")) { damage as i64 } else { 0 }
                         + phase.0;
-                    let hp = info["hp"].as_i64().unwrap_or(0) + experience as i64 + phase.1;
+                    let hp = info["hp"].as_i64().unwrap_or(0) + experience as i64 + phase.1 + upgrade_stats.1;
                     if power > u16::MAX as i64 {
                         return Err(format!(
                             "{at}: computed power exceeds compact state capacity"
@@ -445,6 +448,30 @@ pub fn validate_state_with_catalogue(
     };
     if !consistent {
         return Err("winner disagrees with base damage".into());
+    }
+    validate_arena_unit_order(v,catalogue)?;
+    Ok(())
+}
+
+fn validate_arena_unit_order(v:&Value,catalogue:&HashMap<String,Value>)->Result<(),String> {
+    fn ordinary(value:&Value,catalogue:&HashMap<String,Value>)->bool {
+        value["setCode"].as_str().and_then(|code|catalogue.get(code)).is_some_and(|info|has_type(info,"upgrade")&&!has_type(info,"token")) || match value {Value::Array(items)=>items.iter().any(|v|ordinary(v,catalogue)),Value::Object(fields)=>fields.values().any(|v|ordinary(v,catalogue)),_=>false}
+    }
+    let Some(order)=v.get("arenaUnitOrder") else {
+        if ordinary(v,catalogue) {return Err("ordinary upgrade imports require explicit arenaUnitOrder, including future upgrades in hidden zones".into());}
+        return Ok(());
+    };
+    let object=order.as_object().ok_or("arenaUnitOrder must be an object")?;
+    if object.len()!=2 || !object.contains_key("ground") || !object.contains_key("space") {return Err("arenaUnitOrder must contain ground and space only".into());}
+    for name in ["ground","space"] {
+        let expected=["p1","p2"].into_iter().flat_map(|seat|v["players"][seat][name].as_array().unwrap()).map(|c|c["id"].as_str().unwrap()).collect::<HashSet<_>>();
+        let actual=order[name].as_array().ok_or("arenaUnitOrder arena must be an array")?.iter().map(|id|id.as_str().ok_or("arenaUnitOrder needs stable card IDs")).collect::<Result<Vec<_>,_>>()?;
+        let seen=actual.iter().copied().collect::<HashSet<_>>();
+        if seen.len()!=actual.len() || seen!=expected {return Err("arenaUnitOrder must contain each arena unit exactly once with no foreign/wrong-arena cards".into());}
+        for seat in ["p1","p2"] {
+            let own=v["players"][seat][name].as_array().unwrap().iter().map(|c|c["id"].as_str().unwrap()).collect::<Vec<_>>();
+            if actual.iter().copied().filter(|id|own.contains(id)).collect::<Vec<_>>()!=own {return Err("arenaUnitOrder conflicts with controller arena subsequence".into());}
+        }
     }
     Ok(())
 }
