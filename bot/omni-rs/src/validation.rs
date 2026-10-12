@@ -164,10 +164,12 @@ pub fn validate_state_with_catalogue(
             "players",
             "arenaUnitOrder",
             "hiddenHistoryVersion",
+            "forceStateVersion",
         ],
         "state",
     )?;
     let history = match v.get("hiddenHistoryVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported hiddenHistoryVersion".into())};
+    let force_exact = match v.get("forceStateVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported forceStateVersion".into())};
     let next = number(v, "nextCardId", (MAX_CARDS - 1) as u64, "state")?;
     if number(v, "round", u16::MAX as u64, "state")? == 0 {
         return Err("state.round must be positive".into());
@@ -218,9 +220,19 @@ pub fn validate_state_with_catalogue(
                 "ground",
                 "space",
                 "out",
+                "forceToken",
             ],
             seat,
         )?;
+        if force_exact {
+            let token=&p["forceToken"];
+            fields(token,&["id","held"],"forceToken")?;
+            let held=boolean(token,"held","forceToken")?;
+            let id=token["id"].as_str().ok_or("Force identity missing")?;
+            id.strip_prefix('c').and_then(|n|n.parse::<u64>().ok()).filter(|n|format!("c{n}")==id && *n<next && *n+1<MAX_CARDS as u64).ok_or("invalid Force stable identity")?;
+            if refs.seen.insert(id.to_owned(),format!("{seat}.forceToken")).is_some(){return Err("duplicate Force identity".into());}
+            if held && !catalogue.contains_key("TOKEN_THE_FORCE"){return Err("held Force requires selected native definition".into());}
+        } else if p.get("forceToken").is_some(){return Err("Force identity requires forceStateVersion".into());}
         let out = boolean(p, "out", seat)?;
         if !terminal && v["actor"] == *seat && out {
             return Err(format!("{seat} cannot act after leaving the phase"));

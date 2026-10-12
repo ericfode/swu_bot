@@ -588,6 +588,8 @@ pub enum Effect {
         amount: Expr,
         target: Target,
     },
+    UseForce {target:Target},
+    GainForce {target:Target},
     GiveWeakness { amount:Expr, target:Target },
     GiveExperience {
         #[serde(default = "one")]
@@ -687,6 +689,9 @@ pub struct Sides {
     pub card: Vec<Ability>,
 }
 
+fn contains_force(effect:&Effect)->bool {
+    match effect {Effect::UseForce{..}|Effect::GainForce{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_force(on_true)||on_false.as_deref().is_some_and(contains_force),Effect::Select{effect,..}=>contains_force(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_force),_=>false}
+}
 fn contains_weakness(effect:&Effect)->bool {
     match effect {Effect::GiveWeakness{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_weakness(on_true)||on_false.as_deref().is_some_and(contains_weakness),Effect::Select{effect,..}=>contains_weakness(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_weakness),_=>false}
 }
@@ -895,6 +900,15 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if contains_force(&ability.effect) {
+            let root=depth==0 && ability.trigger=="whenPlayed" && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
+            let gain=matches!(&ability.effect,Effect::GainForce{target:Target::Name(n)} if n=="ownPlayer") && !ability.optional && ability.if_you_do.is_none();
+            let use_force=matches!(&ability.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && ability.optional && ability.if_you_do.as_ref().is_some_and(|next| {
+                next.trigger.is_empty() && !next.coordinate && next.context_title.is_empty() && next.costs.is_empty() && !next.optional && !next.requires_confirmation && next.target_resolver.is_none() && next.target_resolvers.is_empty() && next.condition.is_none() && next.then.is_none() && next.if_you_do.is_none() && (matches!(&next.effect,Effect::Draw{target:Target::Name(n),amount:Expr::Const{value}} if n=="ownPlayer"&&value.as_u64()==Some(2)) || matches!(&next.effect,Effect::Ready{target:Target::Name(n)} if n=="self"))
+            });
+            if !root || !(gain||use_force) {return Err("Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source".into());}
+        }
+
         if contains_weakness(&ability.effect) {
             fn primitive(e:&Effect)->bool {matches!(e,Effect::GiveWeakness{amount:Expr::Const{value},target:Target::Name(n)} if value.as_u64()==Some(1)&&n=="chosen")}
             let shape=primitive(&ability.effect) || matches!(&ability.effect,Effect::Conditional{condition:Expr::Binary{op,left,right},on_true,on_false} if op==">=" && matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["player","resources","length"]) && matches!(right.as_ref(),Expr::Const{value} if value.as_u64().is_some_and(|n|n<=1000)) && primitive(on_true) && on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)));
@@ -1241,6 +1255,7 @@ impl Program {
                 if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
                 else { self.compile_effect(effect,depth+1)?; }
             }
+            Effect::UseForce {target}|Effect::GainForce{target} => {if !matches!(target,Target::Name(n) if n=="ownPlayer") {return Err("Force requires default own player target".into());}self.instructions.push(Instruction::Apply(effect.clone()));}
             Effect::GiveWeakness {amount,target} => {if !matches!(amount,Expr::Const{value} if value.as_u64()==Some(1)) || !matches!(target,Target::Name(n) if n=="chosen") {return Err("Weakness supports one selected unit token".into());}self.instructions.push(Instruction::Apply(effect.clone()));}
             Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
             Effect::Defeat {target:Target::ArenaList(list)} => {
@@ -1346,6 +1361,7 @@ impl Catalogue {
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Weakness source must be an ordinary unit card-side registration".into());}
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
+                if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Force registration requires ordinary unit card-side metadata".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}

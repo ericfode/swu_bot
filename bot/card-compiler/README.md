@@ -97,6 +97,22 @@ player choose their own cards. Their inherited default target is the opponent;
 the helper's name does not imply a friendly target. Player selectors remain
 rejected until their selected-player context can be preserved.
 
+Force token state records each player's persistent token ID and whether it is
+held. Gain, spend, and regain reuse that identity without allocating a card; the
+two players remain independent across phase changes. Full-state export includes
+`forceStateVersion: 1` and `players.<seat>.forceToken: { id, held }`, including
+tokens outside play. Imports validate canonical, distinct IDs against the full
+card inventory. Markerless legacy snapshots remain valid only for selected pools
+that cannot reach Force abilities; held state and reachable Force abilities
+require the reviewed native token in the selected pool.
+
+The first executable Force registrations are ordinary-unit When Played:
+mandatory gain, or optional use followed by a successful draw-two or self-ready
+continuation. They preserve captured source identity through unique replacement.
+These operations use the validated interpreter fallback in Auto mode. Other
+Force targets, costs, queries, events, groups, hooks, and continuations remain
+explicit rejections. Source conversion and runtime admission remain separate.
+
 Bounded simultaneous groups preserve separate event preparation and resolution.
 The runtime supports selected combinations of damage, healing, tokens, readiness,
 and phase modifiers, with independent nested selections. Up-to selections retain

@@ -709,6 +709,11 @@ function effect(input, context, defaultTarget = 'self') {
         knownProperties(obj, ['cardTypeFilter', 'controller', 'zoneFilter', 'cardCondition', 'optional', 'mode', 'numCards', 'canChooseNoCards', 'immediateEffect', 'choosingPlayer']);
         return { kind: 'select', targetResolver: targetResolverProperties(obj), effect: effect(obj.props.get('immediateEffect'), obj.ctx, 'chosen') };
     }
+    if (kind === 'useTheForce' || kind === 'theForceIsWithYou') {
+        if (defaultTarget !== 'self') fail(ctx, node, 'force-inherited-target');
+        knownProperties(obj, []);
+        return { kind: kind === 'useTheForce' ? 'useForce' : 'gainForce', target: 'ownPlayer' };
+    }
     if (kind === 'giveWeakness') {
         knownProperties(obj, ['amount', 'target']);
         return { kind, target: target(obj.props.get('target'), obj.ctx, defaultTarget), amount: obj.props.has('amount') ? expr(obj.props.get('amount'), obj.ctx) : constant(1) };

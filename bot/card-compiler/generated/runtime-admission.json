@@ -1,13 +1,13 @@
 {
-  "catalogueHash": "174c5ffb99290ad6f86902487b1e5eb8da11cefe4bfaaf15ba3da98aaf4010ec",
+  "catalogueHash": "7f982b685306d049bde7bc972c7dd87556962d4ab52120e8c4762924ec7829b9",
   "dataOnlyConvertedCount": 372,
   "gameConformance": "not assessed by this report",
-  "irConvertedCount": 1053,
+  "irConvertedCount": 1070,
   "knownCards": 2458,
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
-    "nativeAdapters": 3,
-    "sourceIr": 532
+    "nativeAdapters": 4,
+    "sourceIr": 535
   },
   "runtimeAdmittedCards": [
     {
@@ -2347,6 +2347,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "kiadimundi#we-must-push-on",
+      "setCode": "LOF_146"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "knights-saber",
       "setCode": "LOF_151"
     },
@@ -2457,8 +2462,18 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "youngling-padawan",
+      "setCode": "LOF_193"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "jtype-nubian-starship",
       "setCode": "LOF_194"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "vernestra-rwoh#precocious-knight",
+      "setCode": "LOF_195"
     },
     {
       "implementation": "sourceIr",
@@ -3866,6 +3881,11 @@
       "setCode": "TOKEN_SPY"
     },
     {
+      "implementation": "nativeAdapter",
+      "internalName": "the-force",
+      "setCode": "TOKEN_THE_FORCE"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "tie-fighter",
       "setCode": "TOKEN_TIE_FIGHTER"
@@ -4546,7 +4566,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 907,
+  "runtimeAdmittedCount": 911,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5290,7 +5310,7 @@
     },
     {
       "internalName": "qira#master-of-teras-kasi",
-      "reason": "qira#master-of-teras-kasi: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "qira#master-of-teras-kasi: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "ASH_226"
     },
     {
@@ -7640,7 +7660,7 @@
     },
     {
       "internalName": "expendable-mercenary",
-      "reason": "expendable-mercenary: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "expendable-mercenary: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LAW_159"
     },
     {
@@ -7995,7 +8015,7 @@
     },
     {
       "internalName": "avar-kriss#marshal-of-starlight",
-      "reason": "avar-kriss#marshal-of-starlight: compiler rejected \"avar-kriss#marshal-of-starlight\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":10,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:forceUsedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":19,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":23,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:deployActionAbilityProps\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":34,\"message\":\"immediateEffect:theForceIsWithYou\",\"pattern\":\"immediateEffect:theForceIsWithYou\"}]",
+      "reason": "avar-kriss#marshal-of-starlight: compiler rejected \"avar-kriss#marshal-of-starlight\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":10,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:forceUsedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":19,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts\",\"line\":23,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:deployActionAbilityProps\"}]",
       "setCode": "LOF_007"
     },
     {
@@ -8115,7 +8135,7 @@
     },
     {
       "internalName": "karis#we-dont-like-strangers",
-      "reason": "karis#we-dont-like-strangers: compiler rejected \"karis#we-dont-like-strangers\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/KarisWeDontLikeStrangers.ts\",\"line\":18,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "karis#we-dont-like-strangers: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_031"
     },
     {
@@ -8125,7 +8145,7 @@
     },
     {
       "internalName": "talzins-assassin",
-      "reason": "talzins-assassin: compiler rejected \"talzins-assassin\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/TalzinsAssassin.ts\",\"line\":18,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "talzins-assassin: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_035"
     },
     {
@@ -8145,7 +8165,7 @@
     },
     {
       "internalName": "darth-sidious#the-phantom-menace",
-      "reason": "darth-sidious#the-phantom-menace: compiler rejected \"darth-sidious#the-phantom-menace\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/DarthSidiousThePhantomMenace.ts\",\"line\":19,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "darth-sidious#the-phantom-menace: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_039"
     },
     {
@@ -8155,7 +8175,7 @@
     },
     {
       "internalName": "drain-essence",
-      "reason": "drain-essence: compiler rejected \"drain-essence\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/05_LOF/events/DrainEssence.ts\",\"line\":23,\"message\":\"immediateEffect:theForceIsWithYou\",\"pattern\":\"immediateEffect:theForceIsWithYou\"}]",
+      "reason": "drain-essence: Force registration requires ordinary unit card-side metadata",
       "setCode": "LOF_041"
     },
     {
@@ -8180,7 +8200,7 @@
     },
     {
       "internalName": "itinerant-warrior",
-      "reason": "itinerant-warrior: compiler rejected \"itinerant-warrior\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/ItinerantWarrior.ts\",\"line\":18,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "itinerant-warrior: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_048"
     },
     {
@@ -8245,7 +8265,7 @@
     },
     {
       "internalName": "chirrut-imwe#blind-but-not-deaf",
-      "reason": "chirrut-imwe#blind-but-not-deaf: compiler rejected \"chirrut-imwe#blind-but-not-deaf\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/ChirrutImweBlindButNotDeaf.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "chirrut-imwe#blind-but-not-deaf: compiler rejected \"chirrut-imwe#blind-but-not-deaf\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/ChirrutImweBlindButNotDeaf.ts\",\"line\":20,\"message\":\"immediateEffect:forThisAttackCardEffect\",\"pattern\":\"immediateEffect:forThisAttackCardEffect\"}]",
       "setCode": "LOF_067"
     },
     {
@@ -8260,7 +8280,7 @@
     },
     {
       "internalName": "priestesses-of-the-force#eternal",
-      "reason": "priestesses-of-the-force#eternal: compiler rejected \"priestesses-of-the-force#eternal\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/PriestessesOfTheForceEternal.ts\",\"line\":18,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "priestesses-of-the-force#eternal: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_072"
     },
     {
@@ -8270,7 +8290,7 @@
     },
     {
       "internalName": "cure-wounds",
-      "reason": "cure-wounds: compiler rejected \"cure-wounds\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/CureWounds.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "cure-wounds: Force registration requires ordinary unit card-side metadata",
       "setCode": "LOF_075"
     },
     {
@@ -8330,7 +8350,7 @@
     },
     {
       "internalName": "eeth-koth#spiritual-warrior",
-      "reason": "eeth-koth#spiritual-warrior: compiler rejected \"eeth-koth#spiritual-warrior\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/EethKothSpiritualWarrior.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "eeth-koth#spiritual-warrior: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_097"
     },
     {
@@ -8345,12 +8365,12 @@
     },
     {
       "internalName": "yoda#my-ally-is-the-force",
-      "reason": "yoda#my-ally-is-the-force: compiler rejected \"yoda#my-ally-is-the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/YodaMyAllyIsTheForce.ts\",\"line\":15,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:getDamageFromContext\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/YodaMyAllyIsTheForce.ts\",\"line\":25,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/YodaMyAllyIsTheForce.ts\",\"line\":39,\"message\":\"trigger-alias-hook:onForceUsed\",\"pattern\":\"trigger-alias-hook:onForceUsed\"}]",
+      "reason": "yoda#my-ally-is-the-force: compiler rejected \"yoda#my-ally-is-the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/YodaMyAllyIsTheForce.ts\",\"line\":15,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:getDamageFromContext\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/YodaMyAllyIsTheForce.ts\",\"line\":39,\"message\":\"trigger-alias-hook:onForceUsed\",\"pattern\":\"trigger-alias-hook:onForceUsed\"}]",
       "setCode": "LOF_101"
     },
     {
       "internalName": "yodas-lightsaber",
-      "reason": "yodas-lightsaber: compiler rejected \"yodas-lightsaber\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/upgrades/YodasLightsaber.ts\",\"line\":20,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "yodas-lightsaber: Force registration requires ordinary unit card-side metadata",
       "setCode": "LOF_102"
     },
     {
@@ -8380,7 +8400,7 @@
     },
     {
       "internalName": "dagoyan-master",
-      "reason": "dagoyan-master: compiler rejected \"dagoyan-master\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/DagoyanMaster.ts\",\"line\":23,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "dagoyan-master: compiler rejected \"dagoyan-master\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/DagoyanMaster.ts\",\"line\":26,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "LOF_115"
     },
     {
@@ -8400,7 +8420,7 @@
     },
     {
       "internalName": "directed-by-the-force",
-      "reason": "directed-by-the-force: compiler rejected \"directed-by-the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/05_LOF/events/DirectedByTheForce.ts\",\"line\":18,\"message\":\"immediateEffect:theForceIsWithYou\",\"pattern\":\"immediateEffect:theForceIsWithYou\"}]",
+      "reason": "directed-by-the-force: compiler rejected \"directed-by-the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/05_LOF/events/DirectedByTheForce.ts\",\"line\":24,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "LOF_123"
     },
     {
@@ -8420,7 +8440,7 @@
     },
     {
       "internalName": "acolyte-of-the-beyond",
-      "reason": "acolyte-of-the-beyond: compiler rejected \"acolyte-of-the-beyond\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/AcolyteOfTheBeyond.ts\",\"line\":20,\"message\":\"immediateEffect:theForceIsWithYou\",\"pattern\":\"immediateEffect:theForceIsWithYou\"}]",
+      "reason": "acolyte-of-the-beyond: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_129"
     },
     {
@@ -8464,11 +8484,6 @@
       "setCode": "LOF_145"
     },
     {
-      "internalName": "kiadimundi#we-must-push-on",
-      "reason": "kiadimundi#we-must-push-on: compiler rejected \"kiadimundi#we-must-push-on\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/KiAdiMundiWeMustPushOn.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
-      "setCode": "LOF_146"
-    },
-    {
       "internalName": "kit-fistos-aethersprite#good-hunting",
       "reason": "kit-fistos-aethersprite#good-hunting: compiler rejected \"kit-fistos-aethersprite#good-hunting\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/05_LOF/units/KitFistosAetherspriteGoodHunting.ts\",\"line\":23,\"message\":\"named-target-mode\",\"pattern\":\"named-target-mode\"}]",
       "setCode": "LOF_147"
@@ -8480,7 +8495,7 @@
     },
     {
       "internalName": "mace-windu#leaping-into-action",
-      "reason": "mace-windu#leaping-into-action: compiler rejected \"mace-windu#leaping-into-action\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/MaceWinduLeapingIntoAction.ts\",\"line\":18,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "mace-windu#leaping-into-action: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_149"
     },
     {
@@ -8495,17 +8510,17 @@
     },
     {
       "internalName": "infused-brawler",
-      "reason": "infused-brawler: compiler rejected \"infused-brawler\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/InfusedBrawler.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/InfusedBrawler.ts\",\"line\":29,\"message\":\"unsupported-field:attackerMustSurvive\",\"pattern\":\"unsupported-field:attackerMustSurvive\"}]",
+      "reason": "infused-brawler: compiler rejected \"infused-brawler\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/InfusedBrawler.ts\",\"line\":29,\"message\":\"unsupported-field:attackerMustSurvive\",\"pattern\":\"unsupported-field:attackerMustSurvive\"}]",
       "setCode": "LOF_156"
     },
     {
       "internalName": "jedi-in-hiding",
-      "reason": "jedi-in-hiding: compiler rejected \"jedi-in-hiding\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/JediInHiding.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "jedi-in-hiding: Force supports standalone unit WhenPlayed gain or optional use then draw-two/ready-source",
       "setCode": "LOF_159"
     },
     {
       "internalName": "merrin#alone-with-the-dead",
-      "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_160"
     },
     {
@@ -8520,12 +8535,12 @@
     },
     {
       "internalName": "sorcerous-blast",
-      "reason": "sorcerous-blast: compiler rejected \"sorcerous-blast\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/SorcerousBlast.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "sorcerous-blast: Force registration requires ordinary unit card-side metadata",
       "setCode": "LOF_172"
     },
     {
       "internalName": "unleash-rage",
-      "reason": "unleash-rage: compiler rejected \"unleash-rage\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/UnleashRage.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "unleash-rage: Force registration requires ordinary unit card-side metadata",
       "setCode": "LOF_173"
     },
     {
@@ -8535,7 +8550,7 @@
     },
     {
       "internalName": "lightsaber-throw",
-      "reason": "lightsaber-throw: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "lightsaber-throw: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_176"
     },
     {
@@ -8560,7 +8575,7 @@
     },
     {
       "internalName": "baylan-skoll#enigmatic-master",
-      "reason": "baylan-skoll#enigmatic-master: compiler rejected \"baylan-skoll#enigmatic-master\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/BaylanSkollEnigmaticMaster.ts\",\"line\":20,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "baylan-skoll#enigmatic-master: compiler rejected \"baylan-skoll#enigmatic-master\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":39,\"file\":\"game/cards/05_LOF/units/BaylanSkollEnigmaticMaster.ts\",\"line\":31,\"message\":\"unsupported-field:canBeTriggeredBy\",\"pattern\":\"unsupported-field:canBeTriggeredBy\"}]",
       "setCode": "LOF_185"
     },
     {
@@ -8580,23 +8595,13 @@
     },
     {
       "internalName": "liberated-by-darkness",
-      "reason": "liberated-by-darkness: compiler rejected \"liberated-by-darkness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/LiberatedByDarkness.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "liberated-by-darkness: compiler rejected \"liberated-by-darkness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/05_LOF/events/LiberatedByDarkness.ts\",\"line\":23,\"message\":\"immediateEffect:takeControlOfUnit\",\"pattern\":\"immediateEffect:takeControlOfUnit\"}]",
       "setCode": "LOF_189"
     },
     {
       "internalName": "bd1#beep-boo-boo-bweep",
       "reason": "bd1#beep-boo-boo-bweep: compiler rejected \"bd1#beep-boo-boo-bweep\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/BD1BeepBooBooBweep.ts\",\"line\":22,\"message\":\"immediateEffect:whileSourceInPlayCardEffect\",\"pattern\":\"immediateEffect:whileSourceInPlayCardEffect\"}]",
       "setCode": "LOF_191"
-    },
-    {
-      "internalName": "youngling-padawan",
-      "reason": "youngling-padawan: compiler rejected \"youngling-padawan\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/YounglingPadawan.ts\",\"line\":16,\"message\":\"immediateEffect:theForceIsWithYou\",\"pattern\":\"immediateEffect:theForceIsWithYou\"}]",
-      "setCode": "LOF_193"
-    },
-    {
-      "internalName": "vernestra-rwoh#precocious-knight",
-      "reason": "vernestra-rwoh#precocious-knight: compiler rejected \"vernestra-rwoh#precocious-knight\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/VernestraRwohPrecociousKnight.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
-      "setCode": "LOF_195"
     },
     {
       "internalName": "jedi-sentinel",
@@ -8650,7 +8655,7 @@
     },
     {
       "internalName": "the-legacy-run#doomed-debris",
-      "reason": "the-legacy-run#doomed-debris: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "the-legacy-run#doomed-debris: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_213"
     },
     {
@@ -8675,7 +8680,7 @@
     },
     {
       "internalName": "trust-your-instincts",
-      "reason": "trust-your-instincts: compiler rejected \"trust-your-instincts\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/TrustYourInstincts.ts\",\"line\":16,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
+      "reason": "trust-your-instincts: compiler rejected \"trust-your-instincts\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/05_LOF/events/TrustYourInstincts.ts\",\"line\":19,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
       "setCode": "LOF_221"
     },
     {
@@ -9980,7 +9985,7 @@
     },
     {
       "internalName": "enterprising-lackeys",
-      "reason": "enterprising-lackeys: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "enterprising-lackeys: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "SHD_107"
     },
     {
@@ -10920,7 +10925,7 @@
     },
     {
       "internalName": "emperor-palpatine#master-of-the-dark-side",
-      "reason": "emperor-palpatine#master-of-the-dark-side: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "emperor-palpatine#master-of-the-dark-side: invalid ability IR: unknown variant `distributeDamage`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "SOR_135"
     },
     {
@@ -11262,11 +11267,6 @@
       "internalName": "credit",
       "reason": "credit: compiler rejected \"credit\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/tokens/CreditToken.ts\",\"line\":1,\"message\":\"Inherited custom behavior requires conversion\",\"pattern\":\"custom-inheritance:TokenCard\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/tokens/CreditToken.ts\",\"line\":15,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isCreditToken\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/tokens/CreditToken.ts\",\"line\":19,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:takeControl\"}]",
       "setCode": "TOKEN_CREDIT"
-    },
-    {
-      "internalName": "the-force",
-      "reason": "the-force: compiler rejected \"the-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/tokens/ForceToken.ts\",\"line\":1,\"message\":\"Inherited custom behavior requires conversion\",\"pattern\":\"custom-inheritance:TokenCard\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/tokens/ForceToken.ts\",\"line\":11,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isForceToken\"}]",
-      "setCode": "TOKEN_THE_FORCE"
     },
     {
       "internalName": "count-dooku#offering-aid",
@@ -11935,7 +11935,7 @@
     },
     {
       "internalName": "resupply",
-      "reason": "resupply: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
+      "reason": "resupply: invalid ability IR: unknown variant `resourceCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `useForce`, `gainForce`, `giveWeakness`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "TWI_127"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1551,
+  "runtimeRejectedCount": 1547,
   "schema": "omni-rs-catalogue-report-v1",
-  "sourceAstConvertedCount": 681
+  "sourceAstConvertedCount": 698
 }

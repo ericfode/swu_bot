@@ -39,6 +39,7 @@ pub struct Engine {
     shield_def: u16,
     experience_def: Option<u16>,
     weakness_def: Option<u16>,
+    force_def: Option<u16>,
     catalogue: Option<Catalogue>,
     rules_backend: RulesBackend,
     rules_instrumentation: bool,
@@ -219,6 +220,7 @@ impl Engine {
             shield_def: shield_def.ok_or("pool must include TOKEN_SHIELD")?,
             experience_def: None,
             weakness_def: None,
+            force_def: None,
             catalogue: None,
             rules_backend: RulesBackend::Auto,
             rules_instrumentation: false,
@@ -1487,6 +1489,12 @@ impl Engine {
                     .into(),
             );
         }
+        if let Some(version)=v.get("forceStateVersion") {
+            if version.as_u64()!=Some(1) {return Err("unsupported forceStateVersion".into());}
+            s.force_state_exact=true;
+            for seat in [Seat::P1,Seat::P2] {let token=&v["players"][seat.as_str()]["forceToken"];s.player_mut(seat).force_id=cid(token["id"].as_str().ok_or("Force identity missing")?)?;s.player_mut(seat).force_held=token["held"].as_bool().ok_or("Force held must be boolean")?;}
+            if self.force_def.is_none() && s.players.iter().any(|p|p.force_held) {return Err("held Force requires reviewed native definition".into());}
+        }else if self.needs_force_state() {return Err("selected pool requires explicit Force state version".into());}
         self.check_stat_capacity(&s)?;
         for seat in [Seat::P1, Seat::P2] {
             let p = &v["players"][seat.as_str()];
@@ -1593,6 +1601,7 @@ impl Engine {
             s.winner().map(Seat::as_str)
         };
         let mut value=json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":s.action_player.map(Seat::as_str),"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players});
+        if s.force_state_exact {value["forceStateVersion"]=json!(1);for seat in [Seat::P1,Seat::P2] {let p=s.player(seat);value["players"][seat.as_str()]["forceToken"]=json!({"id":format!("c{}",p.force_id-1),"held":p.force_held});}}
         if s.hidden_history_exact {value["hiddenHistoryVersion"]=json!(1);}
         if s.arena_order_exact {value["arenaUnitOrder"]=json!({"ground":s.arena_unit_order[0].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>(),"space":s.arena_unit_order[1].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>()});}
         value

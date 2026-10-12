@@ -1,15 +1,15 @@
 # Card source conversion coverage
 
-Known card definitions: **2458**. IR-converted definitions: **1053** (681 from source AST; 372 metadata-only plain cards). Explicitly blocked definitions: **1405**. Excluded test mocks: 21.
+Known card definitions: **2458**. IR-converted definitions: **1070** (698 from source AST; 372 metadata-only plain cards). Explicitly blocked definitions: **1388**. Excluded test mocks: 21.
 
 These counts measure bounded IR conversion, not runtime acceptance. Metadata-only conversion handles plain bases and fully parsed keyword-only units without a source class. The Rust runtime separately validates its supported operation set. Unsupported definitions retain their source locations and must not be loaded as no-op cards.
 
 | Unsupported source pattern | Affected cards | Occurrences |
 |---|---:|---:|
 | method:setupStateWatchers | 138 | 138 |
-| unsupported-field:initiateAttack | 52 | 53 |
+| unsupported-field:initiateAttack | 53 | 54 |
 | class-state:cardsDefeatedThisPhaseWatcher | 44 | 44 |
-| immediateEffect:deckSearch | 42 | 42 |
+| immediateEffect:deckSearch | 43 | 43 |
 | trigger-alias-hook:onCardPlayed | 38 | 42 |
 | no-source-for-rules-text | 36 | 36 |
 | registrar:addDecreaseCostAbility | 35 | 35 |
@@ -23,13 +23,12 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | trigger-alias-hook:onLeaderDeployed | 23 | 23 |
 | unsupported-field:choices | 22 | 22 |
 | class-state:attacksThisPhaseWatcher | 21 | 21 |
-| immediateEffect:useTheForce | 21 | 21 |
 | registrar:addPilotingAbility | 21 | 21 |
 | unsupported-field:attackerMustSurvive | 21 | 21 |
 | immediateEffect:attack | 20 | 20 |
+| immediateEffect:playCardFromHand | 20 | 20 |
 | invalid-effect-sequence | 20 | 20 |
 | immediateEffect:giveAdvantage | 19 | 20 |
-| immediateEffect:playCardFromHand | 19 | 19 |
 | optional-reference | 19 | 19 |
 | registrar:addConstantAbilityTargetingAttached | 18 | 18 |
 | unsupported-player-target-resolver | 18 | 18 |
@@ -37,17 +36,17 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | immediateEffect:capture | 15 | 15 |
 | immediateEffect:forThisPhasePlayerEffect | 15 | 15 |
 | immediateEffect:payResources | 15 | 16 |
+| immediateEffect:takeControlOfUnit | 15 | 15 |
 | registrar:addGainTriggeredAbilityTargetingAttached | 15 | 15 |
 | unsupported-field:cannotTargetFirst | 15 | 17 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.cardCannot | 15 | 15 |
 | immediateEffect:createCreditToken | 14 | 15 |
-| immediateEffect:takeControlOfUnit | 14 | 14 |
 | registrar:addPilotingGainAbilityTargetingAttached | 14 | 14 |
+| immediateEffect:forThisAttackCardEffect | 13 | 13 |
 | registrar:addDamageModificationAbility | 13 | 14 |
 | registrar:addGainConstantAbilityTargetingAttached | 13 | 13 |
 | trigger-alias-hook:onPhaseStarted | 13 | 13 |
 | immediateEffect:chooseModalEffects | 12 | 12 |
-| immediateEffect:forThisAttackCardEffect | 12 | 12 |
 | immediateEffect:lookAtAndSelectCard | 12 | 12 |
 | unsupported-field:sourceZoneFilter | 12 | 12 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.gainAbility | 12 | 12 |
@@ -82,6 +81,7 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | named-target-cost-or-limit | 7 | 7 |
 | named-target-mode | 7 | 7 |
 | unimplemented-context-field:controllingPlayer | 7 | 7 |
+| unsupported-field:canBeTriggeredBy | 7 | 7 |
 | unsupported-field:multiSelectCardCondition | 7 | 7 |
 | unsupported-modifier:AbilityHelper.ongoingEffects.decreaseCost | 7 | 7 |
 | unsupported-query:controlsLeaderUnitOrUpgradeWithTitle | 7 | 7 |
@@ -90,13 +90,11 @@ These counts measure bounded IR conversion, not runtime acceptance. Metadata-onl
 | method:deployActionAbilityProps | 6 | 6 |
 | method:eventEffect | 6 | 6 |
 | trigger-alias-hook:onCardsDrawn | 6 | 6 |
-| unsupported-field:canBeTriggeredBy | 6 | 6 |
 | callback-statement:IfStatement | 5 | 5 |
 | cost:defeat | 5 | 5 |
 | cost:discardCardFromOwnHand | 5 | 5 |
 | immediateEffect:attachUpgrade | 5 | 5 |
 | immediateEffect:lookAtAndChooseOption | 5 | 5 |
-| immediateEffect:theForceIsWithYou | 5 | 5 |
 | named-target-card-domain | 5 | 5 |
 | registrar:addGainActionAbilityTargetingAttached | 5 | 5 |
 | unimplemented-context-field:events | 5 | 5 |

@@ -164,6 +164,15 @@ followed by defeat at natural phase expiry. Recipient reentry, later trait
 changes, simultaneous expiry deaths, aura/attachment deaths, and matching
 Creature leaders remain explicit gaps.
 
+Force experiments cover gain, use, regain, already-held and absent tokens,
+independent owners, optional decline, phase persistence, exact persistent token
+identity and allocation, captured defeated-source continuations, and empty or
+partial draw piles with fatigue. The first actual sources exercise draw-two,
+self-ready and gain on ordinary-unit entry, including unique replacement. Native
+token definitions are reviewed separately from printed-card play witnesses.
+Other Force queries, hooks, costs, groups and continuations remain uncovered or
+runtime-rejected; passing these experiments does not establish them.
+
 An obligation moves from generated to oracle-exercised only after its construction
 and observation assertions pass, then to matched only when the same trace, pool
 and catalog agree in native Auto, native Interpreter and Wasm Auto. Deliberately

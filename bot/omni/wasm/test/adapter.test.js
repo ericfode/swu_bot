@@ -102,7 +102,17 @@ test('catalogue JSON supports both all-admitted cards and an exact raw subset po
             assert.equal(player.ground.length, 0);
             assert.equal(player.space.length, 0);
         }
-        const versioned = { ...structuredClone(initial), hiddenHistoryVersion: 1 };
+        const hiddenOnly = { ...structuredClone(initial), hiddenHistoryVersion: 1 };
+        assert.throws(() => all.loadState(hiddenOnly), /requires explicit Force state version/);
+        // Persistent Force identities come from an actual engine recording;
+        // they cannot be reconstructed from an older snapshot's arena contents.
+        const referenceFixtures = path.resolve(__dirname, '../../../cards/reference/fixtures');
+        const manifest = JSON.parse(fs.readFileSync(path.join(referenceFixtures, 'manifest.json'), 'utf8'));
+        const forceRecording = manifest.recordings.find((row) => row.caseId === 'auto/LOF_193/force-first-gain');
+        assert.ok(forceRecording, 'The corpus must retain the versioned Force engine witness');
+        const versioned = records(path.join(referenceFixtures, 'traces', forceRecording.traceSha256 + '.jsonl.gz')).find((row) => row.type === 'state').state;
+        assert.equal(versioned.forceStateVersion, 1);
+        assert.equal(versioned.hiddenHistoryVersion, 1);
         for (const [simulator, snapshot] of [[subset, initial], [all, versioned]]) {
             const game = simulator.loadState(snapshot);
             try {

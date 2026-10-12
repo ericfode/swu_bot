@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "79ec549bbbe9101ccd6b66a9c7be71ba3e1c18daf4957847bed817ed44d82f09",
+  "compilerHash": "ee9f45ff14383181d3736018b27525ca214c6022359fa489f4ebde22b6c601c4",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -117483,7 +117483,21 @@
       "sourcePath": "game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts",
       "sourceHash": "e51efd071a18c12227b064b0e4e1f166448b281952a5a832701005d036a80d79",
       "abilities": {
-        "leader": [],
+        "leader": [
+          {
+            "trigger": "action",
+            "title": "The Force is with you",
+            "costs": [
+              {
+                "kind": "exhaustSelf"
+              }
+            ],
+            "effect": {
+              "kind": "gainForce",
+              "target": "ownPlayer"
+            }
+          }
+        ],
         "unit": [
           {
             "trigger": "constant",
@@ -117552,14 +117566,6 @@
           "line": 23,
           "column": 1,
           "message": "Additional class method requires conversion"
-        },
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:theForceIsWithYou",
-          "message": "immediateEffect:theForceIsWithYou",
-          "file": "game/cards/05_LOF/leaders/AvarKrissMarshalOfStarlight.ts",
-          "line": 34,
-          "column": 30
         }
       ],
       "className": "AvarKrissMarshalOfStarlight",
@@ -117614,12 +117620,15 @@
       "requiredCapabilities": [
         "cardType:leader",
         "ir:const",
+        "ir:exhaustSelf",
+        "ir:gainForce",
         "ir:gainKeyword",
         "ir:modifyStats",
         "ir:ref",
         "ir:simultaneous",
         "keyword:overwhelm",
         "ref:player.hasTheForce",
+        "trigger:action",
         "trigger:constant"
       ]
     },
@@ -119460,23 +119469,55 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenDefeated",
+            "title": "Use the Force to give a unit -2/-2 for this phase",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Give a unit -2/-2 for this phase",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "modifyStats",
+                "target": "chosen",
+                "duration": "phase",
+                "power": {
+                  "kind": "unary",
+                  "op": "-",
+                  "value": {
+                    "kind": "const",
+                    "value": 2
+                  }
+                },
+                "hp": {
+                  "kind": "unary",
+                  "op": "-",
+                  "value": {
+                    "kind": "const",
+                    "value": 2
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/KarisWeDontLikeStrangers.ts",
-          "line": 18,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "KarisWeDontLikeStrangers",
       "baseClass": "NonLeaderUnitCard",
       "id": "1991532931",
       "internalName": "karis#we-dont-like-strangers",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Karis",
         "subtitle": "We Don't Like Strangers",
@@ -119519,7 +119560,16 @@
       "dataHash": "a61642c5351524644085cddba1ecdde4488f0934826308b7cf6a994706eefdc0",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:const",
+        "ir:modifyStats",
+        "ir:unary",
+        "ir:useForce",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenDefeated",
+        "unary:-"
       ]
     },
     {
@@ -119765,23 +119815,55 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to give a unit -3/-3 for this phase",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Give a unit -3/-3 for this phase",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "modifyStats",
+                "target": "chosen",
+                "duration": "phase",
+                "power": {
+                  "kind": "unary",
+                  "op": "-",
+                  "value": {
+                    "kind": "const",
+                    "value": 3
+                  }
+                },
+                "hp": {
+                  "kind": "unary",
+                  "op": "-",
+                  "value": {
+                    "kind": "const",
+                    "value": 3
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/TalzinsAssassin.ts",
-          "line": 18,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "TalzinsAssassin",
       "baseClass": "NonLeaderUnitCard",
       "id": "2410965424",
       "internalName": "talzins-assassin",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Talzin's Assassin",
         "subtitle": "",
@@ -119824,7 +119906,16 @@
       "dataHash": "88669bd44b9eed79db8518951145e37ba44df48ba12df9244593f3d889692c80",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:const",
+        "ir:modifyStats",
+        "ir:unary",
+        "ir:useForce",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed",
+        "unary:-"
       ]
     },
     {
@@ -120107,23 +120198,103 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use The Force to defeat each non-Sith unit with 3 or less remaining HP",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Defeat each non-Sith unit with 3 or less remaining HP",
+              "costs": [],
+              "effect": {
+                "kind": "defeat",
+                "target": {
+                  "kind": "arenaList",
+                  "receiver": {
+                    "kind": "ref",
+                    "path": [
+                      "game"
+                    ]
+                  },
+                  "predicate": {
+                    "kind": "binary",
+                    "op": "&&",
+                    "left": {
+                      "kind": "const",
+                      "value": true
+                    },
+                    "right": {
+                      "kind": "binary",
+                      "op": "&&",
+                      "left": {
+                        "kind": "binary",
+                        "op": "&&",
+                        "left": {
+                          "kind": "query",
+                          "name": "isUnit",
+                          "receiver": {
+                            "kind": "ref",
+                            "path": [
+                              "card"
+                            ]
+                          },
+                          "args": []
+                        },
+                        "right": {
+                          "kind": "unary",
+                          "op": "!",
+                          "value": {
+                            "kind": "query",
+                            "name": "hasSomeTrait",
+                            "receiver": {
+                              "kind": "ref",
+                              "path": [
+                                "card"
+                              ]
+                            },
+                            "args": [
+                              {
+                                "kind": "const",
+                                "value": "sith"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "binary",
+                        "op": "<=",
+                        "left": {
+                          "kind": "ref",
+                          "path": [
+                            "card",
+                            "remainingHp"
+                          ]
+                        },
+                        "right": {
+                          "kind": "const",
+                          "value": 3
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/DarthSidiousThePhantomMenace.ts",
-          "line": 19,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "DarthSidiousThePhantomMenace",
       "baseClass": "NonLeaderUnitCard",
       "id": "6797297267",
       "internalName": "darth-sidious#the-phantom-menace",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Darth Sidious",
         "subtitle": "The Phantom Menace",
@@ -120171,8 +120342,26 @@
         "restore": 2
       },
       "requiredCapabilities": [
+        "ability:ifYouDo",
+        "binary:&&",
+        "binary:<=",
         "cardType:unit",
-        "keyword:restore"
+        "ir:arenaList",
+        "ir:binary",
+        "ir:const",
+        "ir:defeat",
+        "ir:query",
+        "ir:ref",
+        "ir:unary",
+        "ir:useForce",
+        "keyword:restore",
+        "query:hasSomeTrait",
+        "query:isUnit",
+        "ref:card",
+        "ref:card.remainingHp",
+        "ref:game",
+        "trigger:whenPlayed",
+        "unary:!"
       ]
     },
     {
@@ -120278,23 +120467,45 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "event",
+            "title": "Deal 2 damage to a unit. The Force is with you.",
+            "costs": [],
+            "effect": {
+              "kind": "simultaneous",
+              "effects": [
+                {
+                  "kind": "select",
+                  "targetResolver": {
+                    "owner": "any",
+                    "type": "unit",
+                    "zone": "anyAttackable"
+                  },
+                  "effect": {
+                    "kind": "damage",
+                    "target": "chosen",
+                    "amount": {
+                      "kind": "const",
+                      "value": 2
+                    }
+                  }
+                },
+                {
+                  "kind": "gainForce",
+                  "target": "ownPlayer"
+                }
+              ]
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:theForceIsWithYou",
-          "message": "immediateEffect:theForceIsWithYou",
-          "file": "game/cards/05_LOF/events/DrainEssence.ts",
-          "line": 23,
-          "column": 17
-        }
-      ],
+      "diagnostics": [],
       "className": "DrainEssence",
       "baseClass": "EventCard",
       "id": "5083905745",
       "internalName": "drain-essence",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Drain Essence",
         "subtitle": "",
@@ -120335,7 +120546,15 @@
       "dataHash": "0b07742e26d2a06186cb8a7cdcabb81c363ea1753cc98afcf88bb0bcd534a685",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:event"
+        "cardType:event",
+        "ir:const",
+        "ir:damage",
+        "ir:gainForce",
+        "ir:select",
+        "ir:simultaneous",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:event"
       ]
     },
     {
@@ -120944,23 +121163,42 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to heal 3 damage from a base",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Heal 3 damage from a base",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "base",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "heal",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 3
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/ItinerantWarrior.ts",
-          "line": 18,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "ItinerantWarrior",
       "baseClass": "NonLeaderUnitCard",
       "id": "7323186775",
       "internalName": "itinerant-warrior",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Itinerant Warrior",
         "subtitle": "",
@@ -121007,8 +121245,15 @@
         "shielded": 1
       },
       "requiredCapabilities": [
+        "ability:ifYouDo",
         "cardType:unit",
-        "keyword:shielded"
+        "ir:const",
+        "ir:heal",
+        "ir:useForce",
+        "keyword:shielded",
+        "targetType:base",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -122599,11 +122844,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
+          "pattern": "immediateEffect:forThisAttackCardEffect",
+          "message": "immediateEffect:forThisAttackCardEffect",
           "file": "game/cards/05_LOF/units/ChirrutImweBlindButNotDeaf.ts",
-          "line": 17,
-          "column": 30
+          "line": 20,
+          "column": 34
         }
       ],
       "className": "ChirrutImweBlindButNotDeaf",
@@ -122990,23 +123235,48 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to give a shield token to each of up to 5 units",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Give a shield token to each of up to 5 units",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "unit",
+                "zone": "anyAttackable",
+                "mode": "upTo",
+                "count": {
+                  "kind": "const",
+                  "value": 5
+                },
+                "optional": true
+              },
+              "effect": {
+                "kind": "giveShield",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 1
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/PriestessesOfTheForceEternal.ts",
-          "line": 18,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "PriestessesOfTheForceEternal",
       "baseClass": "NonLeaderUnitCard",
       "id": "7012013186",
       "internalName": "priestesses-of-the-force#eternal",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Priestesses of the Force",
         "subtitle": "Eternal",
@@ -123047,7 +123317,15 @@
       "dataHash": "794f18571deab1a55749a74eebc074be62719273b6c7c7aa61881074dc79c9dc",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:const",
+        "ir:giveShield",
+        "ir:useForce",
+        "targetMode:upTo",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -123216,23 +123494,41 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "event",
+            "title": "Use the Force to heal 6 damage from a unit",
+            "costs": [],
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Heal 6 damage from a unit",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "heal",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 6
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/events/CureWounds.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "CureWounds",
       "baseClass": "EventCard",
       "id": "3853063436",
       "internalName": "cure-wounds",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Cure Wounds",
         "subtitle": "",
@@ -123272,7 +123568,14 @@
       "dataHash": "97b21dda9d16c110f6c9e720e99a505370db40c0adade871684ffb32b2719d00",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:event"
+        "ability:ifYouDo",
+        "cardType:event",
+        "ir:const",
+        "ir:heal",
+        "ir:useForce",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:event"
       ]
     },
     {
@@ -125265,23 +125568,33 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenDefeated",
+            "title": "Use the Force to put Eeth Koth into play as a resource",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Put Eeth Koth into play as a resource",
+              "costs": [],
+              "effect": {
+                "kind": "resourceCard",
+                "target": "self"
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/EethKothSpiritualWarrior.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "EethKothSpiritualWarrior",
       "baseClass": "NonLeaderUnitCard",
       "id": "1160624693",
       "internalName": "eeth-koth#spiritual-warrior",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Eeth Koth",
         "subtitle": "Spiritual Warrior",
@@ -125325,7 +125638,11 @@
       "dataHash": "99021dea7fd710e233b9c4d36df9a6ac146a32f1f3804b4cad84da1f3f5c5a95",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:resourceCard",
+        "ir:useForce",
+        "trigger:whenDefeated"
       ]
     },
     {
@@ -125606,7 +125923,35 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to heal 5 damage from a base",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Heal 5 damage from a base",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "base",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "heal",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 5
+                }
+              }
+            }
+          }
+        ]
       },
       "diagnostics": [
         {
@@ -125616,14 +125961,6 @@
           "line": 15,
           "column": 1,
           "message": "Additional class method requires conversion"
-        },
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/YodaMyAllyIsTheForce.ts",
-          "line": 25,
-          "column": 30
         },
         {
           "code": "UNSUPPORTED_SOURCE",
@@ -125682,7 +126019,14 @@
       "dataHash": "b36017c5392edc7f58f331f35a06577fd0a4f3d40e0ac6b49bbae41c01c3c244",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:const",
+        "ir:heal",
+        "ir:useForce",
+        "targetType:base",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -125692,18 +126036,37 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "You may use the Force. If you do, heal 3 damage from a base",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Heal 3 damage from a base",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "any",
+                "zone": "base"
+              },
+              "effect": {
+                "kind": "heal",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 3
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/upgrades/YodasLightsaber.ts",
-          "line": 20,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "YodasLightsaber",
       "baseClass": "UpgradeCard",
       "id": "5800386133",
@@ -125728,7 +126091,7 @@
           ]
         }
       },
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Yoda's Lightsaber",
         "subtitle": "",
@@ -125771,13 +126134,19 @@
       "dataHash": "23f98fa53627c1f2b3af0f9baa28cfd4a0b75615d9463880ad3ec46102c36826",
       "keywordValues": {},
       "requiredCapabilities": [
+        "ability:ifYouDo",
         "cardType:upgrade",
         "ir:const",
+        "ir:heal",
         "ir:query",
         "ir:ref",
         "ir:unary",
+        "ir:useForce",
         "query:hasSomeTrait",
         "ref:card",
+        "targetType:any",
+        "targetZone:base",
+        "trigger:whenPlayed",
         "unary:!"
       ]
     },
@@ -126793,11 +127162,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
+          "pattern": "immediateEffect:deckSearch",
+          "message": "immediateEffect:deckSearch",
           "file": "game/cards/05_LOF/units/DagoyanMaster.ts",
-          "line": 23,
-          "column": 30
+          "line": 26,
+          "column": 34
         }
       ],
       "className": "DagoyanMaster",
@@ -127430,11 +127799,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:theForceIsWithYou",
-          "message": "immediateEffect:theForceIsWithYou",
+          "pattern": "immediateEffect:playCardFromHand",
+          "message": "immediateEffect:playCardFromHand",
           "file": "game/cards/05_LOF/events/DirectedByTheForce.ts",
-          "line": 18,
-          "column": 17
+          "line": 24,
+          "column": 38
         }
       ],
       "className": "DirectedByTheForce",
@@ -127914,23 +128283,33 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "onAttack",
+            "title": "The Force is with you",
+            "costs": [],
+            "effect": {
+              "kind": "gainForce",
+              "target": "ownPlayer"
+            }
+          },
+          {
+            "trigger": "whenDefeated",
+            "title": "The Force is with you",
+            "costs": [],
+            "effect": {
+              "kind": "gainForce",
+              "target": "ownPlayer"
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:theForceIsWithYou",
-          "message": "immediateEffect:theForceIsWithYou",
-          "file": "game/cards/05_LOF/units/AcolyteOfTheBeyond.ts",
-          "line": 20,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "AcolyteOfTheBeyond",
       "baseClass": "NonLeaderUnitCard",
       "id": "0958021533",
       "internalName": "acolyte-of-the-beyond",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Acolyte of the Beyond",
         "subtitle": "",
@@ -127972,7 +128351,10 @@
       "dataHash": "48ec3bae0c5eabc1cebb62d39a4d35225b1d537dd4a55e54b98e5d488900d3d7",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "cardType:unit",
+        "ir:gainForce",
+        "trigger:onAttack",
+        "trigger:whenDefeated"
       ]
     },
     {
@@ -129450,23 +129832,37 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to draw 2 cards",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Draw 2 cards",
+              "costs": [],
+              "effect": {
+                "kind": "draw",
+                "target": "ownPlayer",
+                "amount": {
+                  "kind": "const",
+                  "value": 2
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/KiAdiMundiWeMustPushOn.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "KiAdiMundiWeMustPushOn",
       "baseClass": "NonLeaderUnitCard",
       "id": "0531276830",
       "internalName": "kiadimundi#we-must-push-on",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Ki-Adi-Mundi",
         "subtitle": "We Must Push On",
@@ -129510,7 +129906,12 @@
       "dataHash": "f5081814ea870c4cfce0120e4b0d411070dd067215453cd71f981dd355ee635a",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:const",
+        "ir:draw",
+        "ir:useForce",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -129682,23 +130083,42 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use The Force to deal 4 damage to a unit",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Deal 4 damage to a unit",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "damage",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 4
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/MaceWinduLeapingIntoAction.ts",
-          "line": 18,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "MaceWinduLeapingIntoAction",
       "baseClass": "NonLeaderUnitCard",
       "id": "9757688123",
       "internalName": "mace-windu#leaping-into-action",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Mace Windu",
         "subtitle": "Leaping into Action",
@@ -129746,8 +130166,15 @@
         "overwhelm": 1
       },
       "requiredCapabilities": [
+        "ability:ifYouDo",
         "cardType:unit",
-        "keyword:overwhelm"
+        "ir:const",
+        "ir:damage",
+        "ir:useForce",
+        "keyword:overwhelm",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -130357,17 +130784,32 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to give 2 Experience tokens to this unit",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Give 2 Experience tokens to this unit",
+              "costs": [],
+              "effect": {
+                "kind": "giveExperience",
+                "target": "self",
+                "amount": {
+                  "kind": "const",
+                  "value": 2
+                }
+              }
+            }
+          }
+        ]
       },
       "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/InfusedBrawler.ts",
-          "line": 17,
-          "column": 30
-        },
         {
           "code": "UNSUPPORTED_SOURCE",
           "pattern": "unsupported-field:attackerMustSurvive",
@@ -130423,7 +130865,12 @@
       "dataHash": "604bb522a5427e3b7a8a3eff93ab623f8c6cfd9b1bd4badb47e5ca95dafb0c6b",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:const",
+        "ir:giveExperience",
+        "ir:useForce",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -130678,23 +131125,37 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenDefeated",
+            "title": "Use the Force to make your opponent discards a card from their hand",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Your opponent discards a card from their hand",
+              "costs": [],
+              "effect": {
+                "kind": "discardOwnHand",
+                "amount": {
+                  "kind": "const",
+                  "value": 1
+                },
+                "target": "enemyPlayer"
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/JediInHiding.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "JediInHiding",
       "baseClass": "NonLeaderUnitCard",
       "id": "7718974573",
       "internalName": "jedi-in-hiding",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Jedi In Hiding",
         "subtitle": "",
@@ -130740,8 +131201,13 @@
         "hidden": 1
       },
       "requiredCapabilities": [
+        "ability:ifYouDo",
         "cardType:unit",
-        "keyword:hidden"
+        "ir:const",
+        "ir:discardOwnHand",
+        "ir:useForce",
+        "keyword:hidden",
+        "trigger:whenDefeated"
       ]
     },
     {
@@ -132078,23 +132544,41 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "event",
+            "title": "Use the Force to deal 3 damage to a unit",
+            "costs": [],
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Deal 3 damage to a unit",
+              "costs": [],
+              "targetResolver": {
+                "owner": "any",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "damage",
+                "target": "chosen",
+                "amount": {
+                  "kind": "const",
+                  "value": 3
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/events/SorcerousBlast.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "SorcerousBlast",
       "baseClass": "EventCard",
       "id": "6001143439",
       "internalName": "sorcerous-blast",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Sorcerous Blast",
         "subtitle": "",
@@ -132134,7 +132618,14 @@
       "dataHash": "8d766a4085358e1f419d433447adab68856d76ef0323f24d11cf4950f8376f92",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:event"
+        "ability:ifYouDo",
+        "cardType:event",
+        "ir:const",
+        "ir:damage",
+        "ir:useForce",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:event"
       ]
     },
     {
@@ -132144,23 +132635,46 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "event",
+            "title": "Use the Force to give a friendly unit +3/+0",
+            "costs": [],
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "give a friendly unit +3/+0",
+              "costs": [],
+              "targetResolver": {
+                "owner": "self",
+                "type": "unit",
+                "zone": "anyAttackable"
+              },
+              "effect": {
+                "kind": "modifyStats",
+                "target": "chosen",
+                "duration": "phase",
+                "power": {
+                  "kind": "const",
+                  "value": 3
+                },
+                "hp": {
+                  "kind": "const",
+                  "value": 0
+                }
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/events/UnleashRage.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "UnleashRage",
       "baseClass": "EventCard",
       "id": "8421586325",
       "internalName": "unleash-rage",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Unleash Rage",
         "subtitle": "",
@@ -132200,7 +132714,14 @@
       "dataHash": "a439bede74cc2c4b08153c0c503acb9632eb8447e378430f6157e634b17d9223",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:event"
+        "ability:ifYouDo",
+        "cardType:event",
+        "ir:const",
+        "ir:modifyStats",
+        "ir:useForce",
+        "targetType:unit",
+        "targetZone:anyAttackable",
+        "trigger:event"
       ]
     },
     {
@@ -133103,11 +133624,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
+          "pattern": "unsupported-field:canBeTriggeredBy",
+          "message": "unsupported-field:canBeTriggeredBy",
           "file": "game/cards/05_LOF/units/BaylanSkollEnigmaticMaster.ts",
-          "line": 20,
-          "column": 30
+          "line": 31,
+          "column": 39
         }
       ],
       "className": "BaylanSkollEnigmaticMaster",
@@ -133420,11 +133941,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
+          "pattern": "immediateEffect:takeControlOfUnit",
+          "message": "immediateEffect:takeControlOfUnit",
           "file": "game/cards/05_LOF/events/LiberatedByDarkness.ts",
-          "line": 17,
-          "column": 30
+          "line": 23,
+          "column": 25
         }
       ],
       "className": "LiberatedByDarkness",
@@ -133683,23 +134204,24 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "The Force is with you",
+            "costs": [],
+            "effect": {
+              "kind": "gainForce",
+              "target": "ownPlayer"
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:theForceIsWithYou",
-          "message": "immediateEffect:theForceIsWithYou",
-          "file": "game/cards/05_LOF/units/YounglingPadawan.ts",
-          "line": 16,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "YounglingPadawan",
       "baseClass": "NonLeaderUnitCard",
       "id": "0612354523",
       "internalName": "youngling-padawan",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Youngling Padawan",
         "subtitle": "",
@@ -133742,7 +134264,9 @@
       "dataHash": "56c4bf08273eccfa4fc4445ee920eda57f895ed526ed0da8172eb9ed45138104",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "cardType:unit",
+        "ir:gainForce",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -133845,23 +134369,33 @@
       "abilities": {
         "leader": [],
         "unit": [],
-        "card": []
+        "card": [
+          {
+            "trigger": "whenPlayed",
+            "title": "Use the Force to ready this unit",
+            "costs": [],
+            "optional": true,
+            "effect": {
+              "kind": "useForce",
+              "target": "ownPlayer"
+            },
+            "ifYouDo": {
+              "title": "Ready this unit",
+              "costs": [],
+              "effect": {
+                "kind": "ready",
+                "target": "self"
+              }
+            }
+          }
+        ]
       },
-      "diagnostics": [
-        {
-          "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
-          "file": "game/cards/05_LOF/units/VernestraRwohPrecociousKnight.ts",
-          "line": 17,
-          "column": 30
-        }
-      ],
+      "diagnostics": [],
       "className": "VernestraRwohPrecociousKnight",
       "baseClass": "NonLeaderUnitCard",
       "id": "2940037100",
       "internalName": "vernestra-rwoh#precocious-knight",
-      "status": "unsupported",
+      "status": "supported",
       "card": {
         "title": "Vernestra Rwoh",
         "subtitle": "Precocious Knight",
@@ -133904,7 +134438,11 @@
       "dataHash": "043e80a1bafdec393b9a400a4f4dcf2ec9218c3a3720006fc79b1a97b2bd1cd0",
       "keywordValues": {},
       "requiredCapabilities": [
-        "cardType:unit"
+        "ability:ifYouDo",
+        "cardType:unit",
+        "ir:ready",
+        "ir:useForce",
+        "trigger:whenPlayed"
       ]
     },
     {
@@ -135938,11 +136476,11 @@
       "diagnostics": [
         {
           "code": "UNSUPPORTED_SOURCE",
-          "pattern": "immediateEffect:useTheForce",
-          "message": "immediateEffect:useTheForce",
+          "pattern": "unsupported-field:initiateAttack",
+          "message": "unsupported-field:initiateAttack",
           "file": "game/cards/05_LOF/events/TrustYourInstincts.ts",
-          "line": 16,
-          "column": 30
+          "line": 19,
+          "column": 33
         }
       ],
       "className": "TrustYourInstincts",

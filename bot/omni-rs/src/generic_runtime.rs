@@ -98,7 +98,41 @@ fn reviewed_weakness_entry(entry:&Value)->bool {
 }
 fn program_needs_weakness(program:&Program)->bool {program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::GiveWeakness{..})))}
 
+fn reviewed_force_entry(entry:&Value)->bool {
+    if entry["setCode"]!="TOKEN_THE_FORCE" {return false;}
+    let metadata:Value=serde_json::from_str(r#"{
+  "title": "The Force",
+  "subtitle": "",
+  "cost": 0,
+  "hp": null,
+  "power": null,
+  "text": "(The Force is with you. When you use the Force, remove this token from play.)",
+  "deployBox": null,
+  "epicAction": "",
+  "unique": false,
+  "rules": "An individual player may only control one Force token at a time. If a player already controls a Force token when they are instructed to create their Force token, nothing happens.\nEach player may create their own Force token. It is not shared between players.\n",
+  "upgradePower": null,
+  "upgradeHp": null,
+  "id": "4571900905",
+  "aspects": [],
+  "traits": [],
+  "keywords": [],
+  "types": [
+    "token"
+  ],
+  "setId": {
+    "set": "LOF"
+  },
+  "internalName": "the-force"
+}"#).expect("reviewed Force metadata");
+    entry["sourceHash"]=="3ff3888f5186845acdd8d3ef96f396875b2daf4f9b808fa9b4a2ef03a1b954b6" && entry["baseClass"]=="TokenCard" && entry["card"]==metadata && entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]}) && entry["keywordValues"]==serde_json::json!({}) && entry["attachCondition"].is_null()
+}
+fn program_needs_force(program:&Program)->bool {program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::UseForce{..}|Effect::GainForce{..})))}
+
 impl Engine {
+    pub(super) fn needs_force_state(&self)->bool {
+        self.catalogue.as_ref().is_some_and(|catalogue|catalogue.metadata.keys().any(|code|catalogue.cards.get(code).is_some_and(|card|card.card.iter().chain(&card.unit).chain(&card.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))))
+    }
     pub(super) fn needs_hidden_history(&self) -> bool {
         fn grants(v:&Value)->bool {match v {Value::Object(o)=>o.get("keyword").is_some_and(|k| k=="hidden") || o.values().any(grants),Value::Array(a)=>a.iter().any(grants),_=>false}}
         let Some(catalogue)=&self.catalogue else {return self.definitions.iter().any(|d|d.flags & (1<<8)!=0);};
@@ -110,18 +144,20 @@ impl Engine {
     /// Load every fully executable card, retaining explicit reasons for all others.
     pub fn from_catalogue_value(value: &Value) -> Result<Self, String> {
         let mut catalogue = Catalogue::load(value)?;
+        let force_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_force_entry);
         let weakness_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_weakness_entry);
         let mut definitions = Vec::new();
         let mut by_code = HashMap::new();
         let mut shield_def = None;
         let mut experience_def = None;
         let mut weakness_def = None;
+        let mut force_def = None;
         for entry in value["cards"].as_array().ok_or("catalogue missing cards")? {
             let code = entry["setCode"]
                 .as_str()
                 .ok_or("catalogue card missing code")?
                 .to_owned();
-            let native_token = matches!(code.as_str(), "TOKEN_SHIELD" | "TOKEN_EXPERIENCE" | "TOKEN_WEAKNESS");
+            let native_token = matches!(code.as_str(), "TOKEN_SHIELD" | "TOKEN_EXPERIENCE" | "TOKEN_WEAKNESS" | "TOKEN_THE_FORCE");
             if !native_token && !catalogue.cards.contains_key(&code) {
                 continue;
             }
@@ -135,9 +171,13 @@ impl Engine {
                     }
                 }
                 let programs = catalogue.cards.get(&code).cloned().unwrap_or_default();
+                if !force_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])) {return Err("reviewed Force token unavailable; dependent source cannot execute".into());}
                 if !weakness_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])) {return Err("Weakness token unavailable; dependent source cannot execute".into());}
                 if programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|catalogue.programs[*p as usize].trigger=="onDefense") && (!info.is("unit") || info.is("leader") || info.is("token") || entry["baseClass"]!="NonLeaderUnitCard" || !programs.unit.is_empty() || !programs.leader.is_empty()) {return Err("OnDefense currently requires an ordinary nonleader unit source".into());}
                 if native_token {
+                    if code=="TOKEN_THE_FORCE" {
+                        if !reviewed_force_entry(entry) {return Err("native Force source/metadata differs from reviewed adapter".into());}
+                    }else {
                     let expected_hash = if code == "TOKEN_SHIELD" {
                         "39f1c6699c36ba309a8fe8e053f9b94ddbb8877991767b6664fcd88d447be91f"
                     } else if code=="TOKEN_EXPERIENCE" {
@@ -162,6 +202,7 @@ impl Engine {
                     if code=="TOKEN_WEAKNESS" && !reviewed_weakness_entry(entry) {return Err("native Weakness metadata differs from reviewed adapter".into());}
                     if info.internal_name != expected || !info.is("token") || !info.is("upgrade") {
                         return Err("invalid native token metadata".into());
+                    }
                     }
                 } else if info.is("base") {
                     if !info.hp.is_some_and(|n| (1..=1000).contains(&n))
@@ -282,6 +323,7 @@ impl Engine {
                         experience_def = Some(id);
                     }
                     if code=="TOKEN_WEAKNESS" {weakness_def=Some(id);}
+                    if code=="TOKEN_THE_FORCE" {force_def=Some(id);}
                     catalogue.rejected.remove(&code);
                     catalogue
                         .metadata
@@ -307,6 +349,7 @@ impl Engine {
             shield_def: shield_def.ok_or("catalogue must include native Shield token")?,
             experience_def,
             weakness_def,
+            force_def,
             rules_backend: RulesBackend::Auto,
             rules_instrumentation: false,
             rules_hits: Default::default(),
@@ -396,6 +439,7 @@ impl Engine {
             return Err("pool must include TOKEN_SHIELD".into());
         }
         if !included.contains("TOKEN_WEAKNESS") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])))) {return Err("pool containing GiveWeakness cards must include reviewed TOKEN_WEAKNESS".into());}
+        if !included.contains("TOKEN_THE_FORCE") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))) {return Err("pool containing Force gain/use cards must include reviewed TOKEN_THE_FORCE".into());}
         catalogue.metadata.retain(|code, _| included.contains(code));
         engine.pool_hash = format!("{:x}", Sha256::digest(pool_bytes));
         Ok(engine)
@@ -964,7 +1008,7 @@ impl Engine {
                 self.eval(&context, source, context.ability_target, amount)
                     .number(),
             ),
-            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
+            Effect::UseForce{target}|Effect::GainForce{target}|Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -974,7 +1018,9 @@ impl Engine {
             .into_iter()
             .any(|dest| match dest {
                 Eval::Player(player) => {
-                    if matches!(e,Effect::DiscardDeck {..}) {amount>0 && (!require_change || s.player(player).deck.len>0)}
+                    if matches!(e,Effect::UseForce{..}) {s.force_state_exact && s.player(player).force_held}
+                    else if matches!(e,Effect::GainForce{..}) {s.force_state_exact && (!require_change || !s.player(player).force_held)}
+                    else if matches!(e,Effect::DiscardDeck {..}) {amount>0 && (!require_change || s.player(player).deck.len>0)}
                     else if matches!(e,Effect::DiscardOwnHand {..}) {!require_change || (amount>0 && s.player(player).hand.len>0)}
                     else if matches!(e, Effect::ReadyResources { .. }) {
                         !require_change
@@ -1844,7 +1890,7 @@ impl Engine {
             | Effect::GiveExperience { target, amount }
             | Effect::GiveWeakness {target,amount}
             | Effect::GainKeyword { target, amount, .. } => (target, self.effect_amount(s, amount)?),
-            Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
+            Effect::UseForce{target}|Effect::GainForce{target}|Effect::ReturnToHand { target } | Effect::ModifyStats { target, .. } | Effect::LoseKeyword { target, .. } => (target, 1),
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => {
                 (target, 1)
             }
@@ -1865,6 +1911,11 @@ impl Engine {
         let mut resources_fully_resolved = true;
         for target in targets {
             match target {
+                Eval::Player(player) if matches!(e,Effect::UseForce{..}|Effect::GainForce{..})=> {
+                    if !s.force_state_exact || s.player(player).force_id==0 || self.force_def.is_none() {return Err("Force requires exact identity and reviewed native definition".into());}
+                    let desired=matches!(e,Effect::GainForce{..});
+                    if s.player(player).force_held!=desired {s.player_mut(player).force_held=desired;result+=1;}
+                }
                 Eval::Player(seat) if matches!(e, Effect::ReadyResources { .. }) => {
                     let resources = s.player(seat).resources;
                     let mut readied = 0;
@@ -2372,7 +2423,7 @@ impl Engine {
     }
     pub(super) fn process_all_triggers(&self, s: &mut State) -> Result<(), String> {
         if s.is_terminal() && s.trigger_context != 2 {
-            return Ok(());
+            return if s.pending_triggers==0 && s.pending_programs==0 && s.death_pending.len==0 && s.death_depth==0 {self.finish(s)} else {Ok(())};
         }
         let triggers = self.ordered_triggers(s);
         if triggers.len() > 1 {

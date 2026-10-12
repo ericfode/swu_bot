@@ -144,6 +144,8 @@ pub struct Player {
     pub ground: Zone,
     pub space: Zone,
     pub out: bool,
+    pub force_id: CardId,
+    pub force_held: bool,
 }
 
 /// Every engine prompt is retained, including confirmation and cancellation prompts.
@@ -268,6 +270,7 @@ pub struct State {
     /// False only for immutable legacy imports without ordinary upgrades.
     pub arena_order_exact:bool,
     pub hidden_history_exact:bool,
+    pub force_state_exact:bool,
     pub round: u16,
     pub regroup: bool,
     pub initiative: Seat,
@@ -314,7 +317,7 @@ impl Default for State {
             cards: [Card::default(); MAX_CARDS],
             next_id: 1,
             players: [Player::default(); 2],
-            arena_unit_order:[ArenaOrder::default();2],arena_order_exact:true,hidden_history_exact:false,
+            arena_unit_order:[ArenaOrder::default();2],arena_order_exact:true,hidden_history_exact:false,force_state_exact:false,
             round: 1,
             regroup: false,
             initiative: Seat::P1,
@@ -410,6 +413,7 @@ impl State {
         for arena in self.arena_unit_order {put(arena.len as u64);for id in arena.ids {put(id as u64);}}
         put(self.round as u64);
         if self.hidden_history_exact {put(1); }
+        if self.force_state_exact {put(1);}
         put(self.regroup as u64);
         put(self.initiative.index() as u64);
         put(self.initiative_claimed as u64);
@@ -494,6 +498,7 @@ impl State {
             put(p.base as u64);
             put(p.leader as u64);
             put(p.out as u64);
+            if self.force_state_exact {put(p.force_id as u64);put(p.force_held as u64);}
             for zone in [
                 &p.hand,
                 &p.deck,

@@ -18979,6 +18979,47 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "0531276830",
+      "internalName": "kiadimundi#we-must-push-on",
+      "keywords": [],
+      "power": 4,
+      "rules": null,
+      "setCode": "LOF_146",
+      "setCodes": [
+        {
+          "number": 146,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 146,
+        "set": "LOF"
+      },
+      "subtitle": "We Must Push On",
+      "text": "When Played: You may use the Force (lose your Force token). If you do, draw 2 cards.",
+      "title": "Ki-Adi-Mundi",
+      "traits": [
+        "force",
+        "jedi",
+        "republic"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "aggression",
         "heroism"
@@ -19879,6 +19920,46 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "0612354523",
+      "internalName": "youngling-padawan",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "LOF_193",
+      "setCodes": [
+        {
+          "number": 193,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 193,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "When Played: The Force is with you (create your Force token).",
+      "title": "Youngling Padawan",
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "cunning",
@@ -19916,6 +19997,46 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "2940037100",
+      "internalName": "vernestra-rwoh#precocious-knight",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "LOF_195",
+      "setCodes": [
+        {
+          "number": 195,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 195,
+        "set": "LOF"
+      },
+      "subtitle": "Precocious Knight",
+      "text": "When Played: You may use the Force (lose your Force token). If you do, ready this unit.",
+      "title": "Vernestra Rwoh",
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -31156,6 +31277,32 @@
       "types": [
         "token",
         "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [],
+      "cost": 0,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "4571900905",
+      "internalName": "the-force",
+      "keywords": [],
+      "power": null,
+      "rules": "An individual player may only control one Force token at a time. If a player already controls a Force token when they are instructed to create their Force token, nothing happens.\nEach player may create their own Force token. It is not shared between players.\n",
+      "setCode": "TOKEN_THE_FORCE",
+      "setId": {
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "(The Force is with you. When you use the Force, remove this token from play.)",
+      "title": "The Force",
+      "traits": [],
+      "types": [
+        "token"
       ],
       "unique": false,
       "upgradeHp": null,
