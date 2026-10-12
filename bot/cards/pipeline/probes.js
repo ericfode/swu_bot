@@ -4,6 +4,8 @@
 function planCardProbes(entry, options = {}) {
     const hiddenPlan = require('./hidden-probes').planHiddenProbes(entry, options);
     if (hiddenPlan) return hiddenPlan;
+    const hiddenKeywordPlan = require('./hidden-keyword-probes').planHiddenKeywordProbes(entry, options);
+    if (hiddenKeywordPlan) return hiddenKeywordPlan;
     const defensePlan = require('./on-defense-probes').planOnDefenseProbes(entry, options);
     if (defensePlan) return defensePlan;
     const upgradeReturnPlan = require('./upgrade-return-probes').planUpgradeReturnProbes(entry, options);

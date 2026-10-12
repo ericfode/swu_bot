@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "e75a4babb1bf1f788a3f44446fb67b06724a399a03dc9469e12794f8085d67ce",
+  "compilerHash": "bbc6f2b78e3f641cfa74e1b1ac8b6ad8052975e3d37522f54c00c2ab027e40f8",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -35867,22 +35867,13 @@
       "internalName": "ewok-warrior",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/ewok-warrior.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Ewok Warrior",
         "subtitle": "",
@@ -39915,22 +39906,13 @@
       "internalName": "womp-rat",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/womp-rat.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Womp Rat",
         "subtitle": "",
@@ -40805,22 +40787,13 @@
       "internalName": "tatooine-sand-beast",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/tatooine-sand-beast.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Tatooine Sand Beast",
         "subtitle": "",
@@ -42386,22 +42359,13 @@
       "internalName": "remnant-trooper-corps",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/remnant-trooper-corps.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Remnant Trooper Corps",
         "subtitle": "",
@@ -42758,22 +42722,13 @@
       "internalName": "covert-veteran",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/covert-veteran.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Covert Veteran",
         "subtitle": "",
@@ -59557,22 +59512,13 @@
       "internalName": "nightsister-prodigy",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/nightsister-prodigy.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Nightsister Prodigy",
         "subtitle": "",
@@ -59922,22 +59868,13 @@
       "internalName": "dathomiri-rancor",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/dathomiri-rancor.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Dathomiri Rancor",
         "subtitle": "",
@@ -63066,22 +63003,13 @@
       "internalName": "lurking-wampa",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/lurking-wampa.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Lurking Wampa",
         "subtitle": "",
@@ -101791,22 +101719,13 @@
       "internalName": "urrrk#elite-sharpshooter",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/urrrk#elite-sharpshooter.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Urrr'k",
         "subtitle": "Elite Sharpshooter",
@@ -108162,22 +108081,13 @@
       "internalName": "hidden-hunters",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/hidden-hunters.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Hidden Hunters",
         "subtitle": "",
@@ -110395,22 +110305,13 @@
       "internalName": "savareen-survivor",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/savareen-survivor.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Savareen Survivor",
         "subtitle": "",
@@ -112044,22 +111945,13 @@
       "internalName": "nihil-stormsower",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/nihil-stormsower.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Nihil Stormsower",
         "subtitle": "",
@@ -112893,22 +112785,13 @@
       "internalName": "wookiee-guerilla",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/wookiee-guerilla.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Wookiee Guerilla",
         "subtitle": "",
@@ -115974,22 +115857,13 @@
       "internalName": "seasoned-tracker",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/seasoned-tracker.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Seasoned Tracker",
         "subtitle": "",
@@ -124023,22 +123897,13 @@
       "internalName": "eye-of-sion#to-peridea",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/eye-of-sion#to-peridea.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Eye of Sion",
         "subtitle": "To Peridea",
@@ -125830,22 +125695,13 @@
       "internalName": "village-tender",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/village-tender.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Village Tender",
         "subtitle": "",
@@ -128875,22 +128731,13 @@
       "internalName": "attuned-fyrnock",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/attuned-fyrnock.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Attuned Fyrnock",
         "subtitle": "",
@@ -129855,22 +129702,13 @@
       "internalName": "witch-of-the-mist",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/witch-of-the-mist.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Witch of the Mist",
         "subtitle": "",
@@ -130514,22 +130352,13 @@
       "internalName": "tukata",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/tukata.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Tuk'ata",
         "subtitle": "",
@@ -132359,22 +132188,13 @@
       "internalName": "aurra-sing#patient-and-deadly",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/aurra-sing#patient-and-deadly.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Aurra Sing",
         "subtitle": "Patient and Deadly",
@@ -132514,22 +132334,13 @@
       "internalName": "banking-clan-shuttle",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/banking-clan-shuttle.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Banking Clan Shuttle",
         "subtitle": "",
@@ -132651,22 +132462,13 @@
       "internalName": "shin-hati#overeager-apprentice",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/shin-hati#overeager-apprentice.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Shin Hati",
         "subtitle": "Overeager Apprentice",
@@ -133180,22 +132982,13 @@
       "internalName": "anakin-skywalker#force-prodigy",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/anakin-skywalker#force-prodigy.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Anakin Skywalker",
         "subtitle": "Force Prodigy",
@@ -134716,22 +134509,13 @@
       "internalName": "charging-phillak",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/charging-phillak.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Charging Phillak",
         "subtitle": "",
@@ -136163,22 +135947,13 @@
       "internalName": "forged-starfighter",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/forged-starfighter.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Forged Starfighter",
         "subtitle": "",
@@ -137767,22 +137542,13 @@
       "internalName": "vulptex",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/vulptex.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Vulptex",
         "subtitle": "",
@@ -151828,22 +151594,13 @@
       "internalName": "enforcer-squadron",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/enforcer-squadron.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Enforcer Squadron",
         "subtitle": "",
@@ -152597,22 +152354,13 @@
       "internalName": "rebellious-functionary",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/rebellious-functionary.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Rebellious Functionary",
         "subtitle": "",
@@ -158593,22 +158341,13 @@
       "internalName": "zenuas-shadow-fighter",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/zenuas-shadow-fighter.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Zenuas Shadow Fighter",
         "subtitle": "",
@@ -160210,22 +159949,13 @@
       "internalName": "sith-assassin",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/sith-assassin.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Sith Assassin",
         "subtitle": "",
@@ -207014,22 +206744,13 @@
       "internalName": "gar-saxon#sundari-pillager",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/gar-saxon#sundari-pillager.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Gar Saxon",
         "subtitle": "Sundari Pillager",
@@ -211160,22 +210881,13 @@
       "internalName": "bokatan-kryze#the-lawless",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/bokatan-kryze#the-lawless.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Bo-Katan Kryze",
         "subtitle": "The Lawless",
@@ -212117,22 +211829,13 @@
       "internalName": "pre-vizsla#for-mandalore",
       "sourcePath": null,
       "sourceHash": null,
-      "status": "unsupported",
+      "status": "supported",
       "abilities": {
         "leader": [],
         "unit": [],
         "card": []
       },
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/pre-vizsla#for-mandalore.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ],
+      "diagnostics": [],
       "card": {
         "title": "Pre Vizsla",
         "subtitle": "For Mandalore!",

@@ -1,11 +1,11 @@
 {
-  "catalogueHash": "c4586d754a5bed4cad87a7c4f306d9cd4b6b4bc9990d673ed3386bdef753f3a4",
-  "dataOnlyConvertedCount": 339,
+  "catalogueHash": "89d76fe64296ef73b072163937cee2343465b4cbe6c30eeb26ab6365636d17fb",
+  "dataOnlyConvertedCount": 372,
   "gameConformance": "not assessed by this report",
-  "irConvertedCount": 1011,
+  "irConvertedCount": 1044,
   "knownCards": 2458,
   "runtimeAdmittedBreakdown": {
-    "dataOnly": 339,
+    "dataOnly": 372,
     "nativeAdapters": 2,
     "sourceIr": 522
   },
@@ -301,6 +301,11 @@
       "setCode": "ASH_165"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "ewok-warrior",
+      "setCode": "ASH_166"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "desert-sharpshooter",
       "setCode": "ASH_170"
@@ -371,6 +376,16 @@
       "setCode": "ASH_201"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "womp-rat",
+      "setCode": "ASH_213"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "tatooine-sand-beast",
+      "setCode": "ASH_225"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "preparation",
       "setCode": "ASH_228"
@@ -401,9 +416,19 @@
       "setCode": "ASH_243"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "remnant-trooper-corps",
+      "setCode": "ASH_244"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "exploit-advantage",
       "setCode": "ASH_246"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "covert-veteran",
+      "setCode": "ASH_249"
     },
     {
       "implementation": "dataOnly",
@@ -831,9 +856,19 @@
       "setCode": "HMW_181"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "nightsister-prodigy",
+      "setCode": "HMW_183"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "mining-guild-trespasser",
       "setCode": "HMW_186"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "dathomiri-rancor",
+      "setCode": "HMW_187"
     },
     {
       "implementation": "sourceIr",
@@ -914,6 +949,11 @@
       "implementation": "sourceIr",
       "internalName": "lakeside-shaaks",
       "setCode": "HMW_228"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "lurking-wampa",
+      "setCode": "HMW_229"
     },
     {
       "implementation": "sourceIr",
@@ -1696,6 +1736,11 @@
       "setCode": "LAW_081"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "urrrk#elite-sharpshooter",
+      "setCode": "LAW_082"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "jango-fett#wily-mercenary",
       "setCode": "LAW_087"
@@ -1842,6 +1887,11 @@
     },
     {
       "implementation": "dataOnly",
+      "internalName": "hidden-hunters",
+      "setCode": "LAW_160"
+    },
+    {
+      "implementation": "dataOnly",
       "internalName": "beach-patrol-atact",
       "setCode": "LAW_162"
     },
@@ -1896,6 +1946,11 @@
       "setCode": "LAW_187"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "savareen-survivor",
+      "setCode": "LAW_188"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "cavern-angels-xwing",
       "setCode": "LAW_189"
@@ -1922,6 +1977,11 @@
     },
     {
       "implementation": "dataOnly",
+      "internalName": "nihil-stormsower",
+      "setCode": "LAW_209"
+    },
+    {
+      "implementation": "dataOnly",
       "internalName": "black-sun-patroller",
       "setCode": "LAW_211"
     },
@@ -1934,6 +1994,11 @@
       "implementation": "dataOnly",
       "internalName": "artful-pickpocket",
       "setCode": "LAW_218"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "wookiee-guerilla",
+      "setCode": "LAW_220"
     },
     {
       "implementation": "dataOnly",
@@ -2004,6 +2069,11 @@
       "implementation": "dataOnly",
       "internalName": "cartel-heavy-fighter",
       "setCode": "LAW_259"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "seasoned-tracker",
+      "setCode": "LAW_260"
     },
     {
       "implementation": "sourceIr",
@@ -2111,6 +2181,11 @@
       "setCode": "LOF_084"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "eye-of-sion#to-peridea",
+      "setCode": "LOF_088"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "supremacy#of-unimaginable-size",
       "setCode": "LOF_089"
@@ -2139,6 +2214,11 @@
       "implementation": "sourceIr",
       "internalName": "acclamator-assault-ship",
       "setCode": "LOF_106"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "village-tender",
+      "setCode": "LOF_107"
     },
     {
       "implementation": "dataOnly",
@@ -2221,6 +2301,11 @@
       "setCode": "LOF_136"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "attuned-fyrnock",
+      "setCode": "LOF_143"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "jedi-starfighter",
       "setCode": "LOF_144"
@@ -2236,6 +2321,11 @@
       "setCode": "LOF_153"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "witch-of-the-mist",
+      "setCode": "LOF_154"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "drk1-probe-droid",
       "setCode": "LOF_155"
@@ -2249,6 +2339,11 @@
       "implementation": "sourceIr",
       "internalName": "hyena-bomber",
       "setCode": "LOF_158"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "tukata",
+      "setCode": "LOF_161"
     },
     {
       "implementation": "sourceIr",
@@ -2297,8 +2392,28 @@
     },
     {
       "implementation": "dataOnly",
+      "internalName": "aurra-sing#patient-and-deadly",
+      "setCode": "LOF_179"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "banking-clan-shuttle",
+      "setCode": "LOF_181"
+    },
+    {
+      "implementation": "dataOnly",
       "internalName": "nihil-marauder",
       "setCode": "LOF_182"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "shin-hati#overeager-apprentice",
+      "setCode": "LOF_183"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "anakin-skywalker#force-prodigy",
+      "setCode": "LOF_190"
     },
     {
       "implementation": "dataOnly",
@@ -2331,6 +2446,11 @@
       "setCode": "LOF_208"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "charging-phillak",
+      "setCode": "LOF_210"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "life-wind-sage",
       "setCode": "LOF_212"
@@ -2354,6 +2474,11 @@
       "implementation": "sourceIr",
       "internalName": "force-illusion",
       "setCode": "LOF_223"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "forged-starfighter",
+      "setCode": "LOF_228"
     },
     {
       "implementation": "dataOnly",
@@ -2394,6 +2519,11 @@
       "implementation": "sourceIr",
       "internalName": "refugee-of-the-path",
       "setCode": "LOF_242"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "vulptex",
+      "setCode": "LOF_245"
     },
     {
       "implementation": "sourceIr",
@@ -2701,9 +2831,19 @@
       "setCode": "SEC_136"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "enforcer-squadron",
+      "setCode": "SEC_138"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "fulminatrix#fleet-killer",
       "setCode": "SEC_142"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "rebellious-functionary",
+      "setCode": "SEC_146"
     },
     {
       "implementation": "sourceIr",
@@ -2816,6 +2956,11 @@
       "setCode": "SEC_214"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "zenuas-shadow-fighter",
+      "setCode": "SEC_217"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "unruly-astromech",
       "setCode": "SEC_221"
@@ -2844,6 +2989,11 @@
       "implementation": "dataOnly",
       "internalName": "supreme-council-aide",
       "setCode": "SEC_237"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "sith-assassin",
+      "setCode": "SEC_238"
     },
     {
       "implementation": "sourceIr",
@@ -3691,6 +3841,11 @@
       "setCode": "TS26_020"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "gar-saxon#sundari-pillager",
+      "setCode": "TS26_021"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "sundari-gauntlet",
       "setCode": "TS26_024"
@@ -3736,6 +3891,11 @@
       "setCode": "TS26_062"
     },
     {
+      "implementation": "dataOnly",
+      "internalName": "bokatan-kryze#the-lawless",
+      "setCode": "TS26_065"
+    },
+    {
       "implementation": "sourceIr",
       "internalName": "ruping-rider",
       "setCode": "TS26_067"
@@ -3749,6 +3909,11 @@
       "implementation": "sourceIr",
       "internalName": "remove-the-chip",
       "setCode": "TS26_069"
+    },
+    {
+      "implementation": "dataOnly",
+      "internalName": "pre-vizsla#for-mandalore",
+      "setCode": "TS26_074"
     },
     {
       "implementation": "sourceIr",
@@ -4326,7 +4491,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 863,
+  "runtimeAdmittedCount": 896,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -4854,11 +5019,6 @@
       "setCode": "ASH_163"
     },
     {
-      "internalName": "ewok-warrior",
-      "reason": "ewok-warrior: compiler rejected \"ewok-warrior\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/ewok-warrior.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "ASH_166"
-    },
-    {
       "internalName": "flarestar-attack-shuttle",
       "reason": "flarestar-attack-shuttle: compiler rejected \"flarestar-attack-shuttle\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/08_ASH/units/FlarestarAttackShuttle.ts\",\"line\":24,\"message\":\"immediateEffect:giveAdvantage\",\"pattern\":\"immediateEffect:giveAdvantage\"}]",
       "setCode": "ASH_167"
@@ -5019,11 +5179,6 @@
       "setCode": "ASH_212"
     },
     {
-      "internalName": "womp-rat",
-      "reason": "womp-rat: compiler rejected \"womp-rat\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/womp-rat.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "ASH_213"
-    },
-    {
       "internalName": "amnesty-officer",
       "reason": "amnesty-officer: unsupported runtime reference card.keywords.length",
       "setCode": "ASH_214"
@@ -5077,11 +5232,6 @@
       "internalName": "elzar-mann#haunted-by-a-vision",
       "reason": "elzar-mann#haunted-by-a-vision: compiler rejected \"elzar-mann#haunted-by-a-vision\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/08_ASH/units/ElzarMannHauntedByAVision.ts\",\"line\":19,\"message\":\"unsupported-field:sourceZoneFilter\",\"pattern\":\"unsupported-field:sourceZoneFilter\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/08_ASH/units/ElzarMannHauntedByAVision.ts\",\"line\":26,\"message\":\"immediateEffect:distributeAdvantageAmong\",\"pattern\":\"immediateEffect:distributeAdvantageAmong\"}]",
       "setCode": "ASH_224"
-    },
-    {
-      "internalName": "tatooine-sand-beast",
-      "reason": "tatooine-sand-beast: compiler rejected \"tatooine-sand-beast\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/tatooine-sand-beast.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "ASH_225"
     },
     {
       "internalName": "qira#master-of-teras-kasi",
@@ -5144,11 +5294,6 @@
       "setCode": "ASH_241"
     },
     {
-      "internalName": "remnant-trooper-corps",
-      "reason": "remnant-trooper-corps: compiler rejected \"remnant-trooper-corps\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/remnant-trooper-corps.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "ASH_244"
-    },
-    {
       "internalName": "eye-of-sion#delivered-from-exile",
       "reason": "eye-of-sion#delivered-from-exile: compiler rejected \"eye-of-sion#delivered-from-exile\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/08_ASH/units/EyeOfSionDeliveredFromExile.ts\",\"line\":20,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "ASH_245"
@@ -5162,11 +5307,6 @@
       "internalName": "neel#the-cutest-boy",
       "reason": "neel#the-cutest-boy: compiler rejected \"neel#the-cutest-boy\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/08_ASH/units/NeelTheCutestBoy.ts\",\"line\":21,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "ASH_248"
-    },
-    {
-      "internalName": "covert-veteran",
-      "reason": "covert-veteran: compiler rejected \"covert-veteran\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/covert-veteran.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "ASH_249"
     },
     {
       "internalName": "imperial-defector",
@@ -5724,11 +5864,6 @@
       "setCode": "HMW_182"
     },
     {
-      "internalName": "nightsister-prodigy",
-      "reason": "nightsister-prodigy: compiler rejected \"nightsister-prodigy\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/nightsister-prodigy.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "HMW_183"
-    },
-    {
       "internalName": "aggrocrab",
       "reason": "aggrocrab: compiler rejected \"aggrocrab\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/units/Aggrocrab.ts\",\"line\":15,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"}]",
       "setCode": "HMW_184"
@@ -5737,11 +5872,6 @@
       "internalName": "ty-yorrick#monster-hunter",
       "reason": "ty-yorrick#monster-hunter: compiler rejected \"ty-yorrick#monster-hunter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/units/TyYorrickMonsterHunter.ts\",\"line\":27,\"message\":\"registrar:addDamageModificationAbility\",\"pattern\":\"registrar:addDamageModificationAbility\"}]",
       "setCode": "HMW_185"
-    },
-    {
-      "internalName": "dathomiri-rancor",
-      "reason": "dathomiri-rancor: compiler rejected \"dathomiri-rancor\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/dathomiri-rancor.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "HMW_187"
     },
     {
       "internalName": "giant-gorax",
@@ -5867,11 +5997,6 @@
       "internalName": "boba-fett#family-found",
       "reason": "boba-fett#family-found: compiler rejected \"boba-fett#family-found\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/units/BobaFettFamilyFound.ts\",\"line\":20,\"message\":\"trigger-alias-hook:onUnitEntersPlay\",\"pattern\":\"trigger-alias-hook:onUnitEntersPlay\"}]",
       "setCode": "HMW_225"
-    },
-    {
-      "internalName": "lurking-wampa",
-      "reason": "lurking-wampa: compiler rejected \"lurking-wampa\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/lurking-wampa.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "HMW_229"
     },
     {
       "internalName": "dragonboat-freighter",
@@ -7254,11 +7379,6 @@
       "setCode": "LAW_080"
     },
     {
-      "internalName": "urrrk#elite-sharpshooter",
-      "reason": "urrrk#elite-sharpshooter: compiler rejected \"urrrk#elite-sharpshooter\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/urrrk#elite-sharpshooter.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LAW_082"
-    },
-    {
       "internalName": "broken-horn#vizagos-pride",
       "reason": "broken-horn#vizagos-pride: compiler rejected \"broken-horn#vizagos-pride\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/07_LAW/units/BrokenHornVizagosPride.ts\",\"line\":24,\"message\":\"unsupported-query:getTopCardOfDeck\",\"pattern\":\"unsupported-query:getTopCardOfDeck\"}]",
       "setCode": "LAW_083"
@@ -7499,11 +7619,6 @@
       "setCode": "LAW_159"
     },
     {
-      "internalName": "hidden-hunters",
-      "reason": "hidden-hunters: compiler rejected \"hidden-hunters\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/hidden-hunters.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LAW_160"
-    },
-    {
       "internalName": "partisan-uwing",
       "reason": "partisan-uwing: compiler rejected \"partisan-uwing\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/PartisanU-Wing.ts\",\"line\":8,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsDefeatedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/PartisanU-Wing.ts\",\"line\":16,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/07_LAW/units/PartisanU-Wing.ts\",\"line\":24,\"message\":\"unsupported-query:someDefeatedUnitControlledByPlayer\",\"pattern\":\"unsupported-query:someDefeatedUnitControlledByPlayer\"}]",
       "setCode": "LAW_161"
@@ -7584,11 +7699,6 @@
       "setCode": "LAW_186"
     },
     {
-      "internalName": "savareen-survivor",
-      "reason": "savareen-survivor: compiler rejected \"savareen-survivor\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/savareen-survivor.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LAW_188"
-    },
-    {
       "internalName": "arvel-skeen#win-and-walk-away",
       "reason": "arvel-skeen#win-and-walk-away: compiler rejected \"arvel-skeen#win-and-walk-away\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/07_LAW/units/ArvelSkeenWinAndWalkAway.ts\",\"line\":24,\"message\":\"unsupported-query:isCreditToken\",\"pattern\":\"unsupported-query:isCreditToken\"}]",
       "setCode": "LAW_191"
@@ -7664,11 +7774,6 @@
       "setCode": "LAW_208"
     },
     {
-      "internalName": "nihil-stormsower",
-      "reason": "nihil-stormsower: compiler rejected \"nihil-stormsower\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/nihil-stormsower.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LAW_209"
-    },
-    {
       "internalName": "salacious-crumb#cackling-companion",
       "reason": "salacious-crumb#cackling-companion: compiler rejected \"salacious-crumb#cackling-companion\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/07_LAW/units/SalaciousCrumbCacklingCompanion.ts\",\"line\":18,\"message\":\"unsupported-field:sourceZoneFilter\",\"pattern\":\"unsupported-field:sourceZoneFilter\"}]",
       "setCode": "LAW_210"
@@ -7702,11 +7807,6 @@
       "internalName": "anakins-podracer#so-wizard",
       "reason": "anakins-podracer#so-wizard: compiler rejected \"anakins-podracer#so-wizard\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/AnakinsPodracerSoWizard.ts\",\"line\":8,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:attacksThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/07_LAW/units/AnakinsPodracerSoWizard.ts\",\"line\":17,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/07_LAW/units/AnakinsPodracerSoWizard.ts\",\"line\":30,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.dealsCombatDamageFirst\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.dealsCombatDamageFirst\"}]",
       "setCode": "LAW_219"
-    },
-    {
-      "internalName": "wookiee-guerilla",
-      "reason": "wookiee-guerilla: compiler rejected \"wookiee-guerilla\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/wookiee-guerilla.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LAW_220"
     },
     {
       "internalName": "lieutenant-gorn#i-deserve-worse",
@@ -7832,11 +7932,6 @@
       "internalName": "criminal-contact",
       "reason": "criminal-contact: compiler rejected \"criminal-contact\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/07_LAW/units/CriminalContact.ts\",\"line\":18,\"message\":\"immediateEffect:payResources\",\"pattern\":\"immediateEffect:payResources\"}]",
       "setCode": "LAW_258"
-    },
-    {
-      "internalName": "seasoned-tracker",
-      "reason": "seasoned-tracker: compiler rejected \"seasoned-tracker\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/seasoned-tracker.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LAW_260"
     },
     {
       "internalName": "bank-job-fugitives",
@@ -8189,11 +8284,6 @@
       "setCode": "LOF_087"
     },
     {
-      "internalName": "eye-of-sion#to-peridea",
-      "reason": "eye-of-sion#to-peridea: compiler rejected \"eye-of-sion#to-peridea\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/eye-of-sion#to-peridea.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_088"
-    },
-    {
       "internalName": "inquisitors-lightsaber",
       "reason": "inquisitors-lightsaber: compiler rejected \"inquisitors-lightsaber\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/upgrades/InquisitorsLightsaber.ts\",\"line\":18,\"message\":\"registrar:addGainConstantAbilityTargetingAttached\",\"pattern\":\"registrar:addGainConstantAbilityTargetingAttached\"}]",
       "setCode": "LOF_090"
@@ -8252,11 +8342,6 @@
       "internalName": "oppo-rancisis#ancient-councilor",
       "reason": "oppo-rancisis#ancient-councilor: compiler rejected \"oppo-rancisis#ancient-councilor\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":18,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":19,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":20,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":21,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":22,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":23,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":24,\"message\":\"registrar:addKeywordCopyAbility\",\"pattern\":\"registrar:addKeywordCopyAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":26,\"message\":\"constant-stat-dependency\",\"pattern\":\"constant-stat-dependency\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":38,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":32,\"message\":\"constant-stat-dependency\",\"pattern\":\"constant-stat-dependency\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/OppoRancisisAncientCouncilor.ts\",\"line\":39,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:addKeywordCopyAbility\"}]",
       "setCode": "LOF_105"
-    },
-    {
-      "internalName": "village-tender",
-      "reason": "village-tender: compiler rejected \"village-tender\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/village-tender.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_107"
     },
     {
       "internalName": "malakili#loving-rancor-keeper",
@@ -8354,11 +8439,6 @@
       "setCode": "LOF_142"
     },
     {
-      "internalName": "attuned-fyrnock",
-      "reason": "attuned-fyrnock: compiler rejected \"attuned-fyrnock\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/attuned-fyrnock.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_143"
-    },
-    {
       "internalName": "jedi-knight",
       "reason": "jedi-knight: compiler rejected \"jedi-knight\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/05_LOF/units/JediKnight.ts\",\"line\":20,\"message\":\"unsupported-field:condition\",\"pattern\":\"unsupported-field:condition\"}]",
       "setCode": "LOF_145"
@@ -8394,11 +8474,6 @@
       "setCode": "LOF_152"
     },
     {
-      "internalName": "witch-of-the-mist",
-      "reason": "witch-of-the-mist: compiler rejected \"witch-of-the-mist\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/witch-of-the-mist.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_154"
-    },
-    {
       "internalName": "infused-brawler",
       "reason": "infused-brawler: compiler rejected \"infused-brawler\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/InfusedBrawler.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/InfusedBrawler.ts\",\"line\":29,\"message\":\"unsupported-field:attackerMustSurvive\",\"pattern\":\"unsupported-field:attackerMustSurvive\"}]",
       "setCode": "LOF_156"
@@ -8412,11 +8487,6 @@
       "internalName": "merrin#alone-with-the-dead",
       "reason": "merrin#alone-with-the-dead: invalid ability IR: unknown variant `discardSpecificCard`, expected one of `discardOwnHand`, `discardDeck`, `createTokenUnit`, `damage`, `heal`, `draw`, `select`, `readyResources`, `noAction`, `returnToHand`, `modifyStats`, `gainKeyword`, `loseKeyword`, `ready`, `exhaust`, `defeat`, `giveShield`, `giveExperience`, `sequence`, `simultaneous`, `phaseModifiers`, `conditional`, `distributeHealing`",
       "setCode": "LOF_160"
-    },
-    {
-      "internalName": "tukata",
-      "reason": "tukata: compiler rejected \"tukata\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/tukata.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_161"
     },
     {
       "internalName": "blockade-runner",
@@ -8459,24 +8529,9 @@
       "setCode": "LOF_178"
     },
     {
-      "internalName": "aurra-sing#patient-and-deadly",
-      "reason": "aurra-sing#patient-and-deadly: compiler rejected \"aurra-sing#patient-and-deadly\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/aurra-sing#patient-and-deadly.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_179"
-    },
-    {
       "internalName": "deceptive-shade",
       "reason": "deceptive-shade: compiler rejected \"deceptive-shade\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/units/DeceptiveShade.ts\",\"line\":19,\"message\":\"immediateEffect:delayedPlayerEffect\",\"pattern\":\"immediateEffect:delayedPlayerEffect\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/05_LOF/units/DeceptiveShade.ts\",\"line\":35,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isUnitPlayedEvent\"}]",
       "setCode": "LOF_180"
-    },
-    {
-      "internalName": "banking-clan-shuttle",
-      "reason": "banking-clan-shuttle: compiler rejected \"banking-clan-shuttle\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/banking-clan-shuttle.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_181"
-    },
-    {
-      "internalName": "shin-hati#overeager-apprentice",
-      "reason": "shin-hati#overeager-apprentice: compiler rejected \"shin-hati#overeager-apprentice\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/shin-hati#overeager-apprentice.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_183"
     },
     {
       "internalName": "second-sister#seeking-the-holocron",
@@ -8507,11 +8562,6 @@
       "internalName": "liberated-by-darkness",
       "reason": "liberated-by-darkness: compiler rejected \"liberated-by-darkness\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/05_LOF/events/LiberatedByDarkness.ts\",\"line\":17,\"message\":\"immediateEffect:useTheForce\",\"pattern\":\"immediateEffect:useTheForce\"}]",
       "setCode": "LOF_189"
-    },
-    {
-      "internalName": "anakin-skywalker#force-prodigy",
-      "reason": "anakin-skywalker#force-prodigy: compiler rejected \"anakin-skywalker#force-prodigy\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/anakin-skywalker#force-prodigy.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_190"
     },
     {
       "internalName": "bd1#beep-boo-boo-bweep",
@@ -8579,11 +8629,6 @@
       "setCode": "LOF_209"
     },
     {
-      "internalName": "charging-phillak",
-      "reason": "charging-phillak: compiler rejected \"charging-phillak\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/charging-phillak.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_210"
-    },
-    {
       "internalName": "dooku#it-is-too-late",
       "reason": "dooku#it-is-too-late: compiler rejected \"dooku#it-is-too-late\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/05_LOF/units/DookuItIsTooLate.ts\",\"line\":20,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.cardCannot\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.cardCannot\"}]",
       "setCode": "LOF_211"
@@ -8644,11 +8689,6 @@
       "setCode": "LOF_227"
     },
     {
-      "internalName": "forged-starfighter",
-      "reason": "forged-starfighter: compiler rejected \"forged-starfighter\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/forged-starfighter.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_228"
-    },
-    {
       "internalName": "kylo-ren#i-know-your-story",
       "reason": "kylo-ren#i-know-your-story: compiler rejected \"kylo-ren#i-know-your-story\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":31,\"file\":\"game/cards/05_LOF/units/KyloRenIKnowYourStory.ts\",\"line\":18,\"message\":\"trigger-alias-hook:onCardPlayed\",\"pattern\":\"trigger-alias-hook:onCardPlayed\"}]",
       "setCode": "LOF_229"
@@ -8687,11 +8727,6 @@
       "internalName": "jedi-vector",
       "reason": "jedi-vector: compiler rejected \"jedi-vector\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":37,\"file\":\"game/cards/05_LOF/units/JediVector.ts\",\"line\":24,\"message\":\"unsupported-query:hasSomeArenaUpgrade\",\"pattern\":\"unsupported-query:hasSomeArenaUpgrade\"}]",
       "setCode": "LOF_244"
-    },
-    {
-      "internalName": "vulptex",
-      "reason": "vulptex: compiler rejected \"vulptex\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/vulptex.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "LOF_245"
     },
     {
       "internalName": "jocasta-nu#the-gift-of-knowledge",
@@ -9169,11 +9204,6 @@
       "setCode": "SEC_137"
     },
     {
-      "internalName": "enforcer-squadron",
-      "reason": "enforcer-squadron: compiler rejected \"enforcer-squadron\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/enforcer-squadron.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "SEC_138"
-    },
-    {
       "internalName": "miraj-scintel#the-weak-deserve-to-kneel",
       "reason": "miraj-scintel#the-weak-deserve-to-kneel: compiler rejected \"miraj-scintel#the-weak-deserve-to-kneel\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/06_SEC/units/MirajScintelTheWeakDeserveToKneel.ts\",\"line\":31,\"message\":\"unsupported-query:getAllTargets\",\"pattern\":\"unsupported-query:getAllTargets\"}]",
       "setCode": "SEC_139"
@@ -9202,11 +9232,6 @@
       "internalName": "confidence-in-victory",
       "reason": "confidence-in-victory: compiler rejected \"confidence-in-victory\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/events/ConfidenceInVictory.ts\",\"line\":10,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:actionsThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/events/ConfidenceInVictory.ts\",\"line\":19,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/06_SEC/events/ConfidenceInVictory.ts\",\"line\":24,\"message\":\"registrar:addPlayRestrictionAbility\",\"pattern\":\"registrar:addPlayRestrictionAbility\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":26,\"file\":\"game/cards/06_SEC/events/ConfidenceInVictory.ts\",\"line\":36,\"message\":\"unsupported-field:choices\",\"pattern\":\"unsupported-field:choices\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/events/ConfidenceInVictory.ts\",\"line\":44,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:eventEffect\"}]",
       "setCode": "SEC_145"
-    },
-    {
-      "internalName": "rebellious-functionary",
-      "reason": "rebellious-functionary: compiler rejected \"rebellious-functionary\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/rebellious-functionary.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "SEC_146"
     },
     {
       "internalName": "chopper#war-hero",
@@ -9449,11 +9474,6 @@
       "setCode": "SEC_216"
     },
     {
-      "internalName": "zenuas-shadow-fighter",
-      "reason": "zenuas-shadow-fighter: compiler rejected \"zenuas-shadow-fighter\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/zenuas-shadow-fighter.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "SEC_217"
-    },
-    {
       "internalName": "cikatro-vizago#business-is-what-matters",
       "reason": "cikatro-vizago#business-is-what-matters: compiler rejected \"cikatro-vizago#business-is-what-matters\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/CikatroVizagoBusinessIsWhatMatters.ts\",\"line\":21,\"message\":\"immediateEffect:reveal\",\"pattern\":\"immediateEffect:reveal\"}]",
       "setCode": "SEC_218"
@@ -9522,11 +9542,6 @@
       "internalName": "undercover-operation",
       "reason": "undercover-operation: compiler rejected \"undercover-operation\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/events/UndercoverOperation.ts\",\"line\":9,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhase\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/06_SEC/events/UndercoverOperation.ts\",\"line\":18,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":42,\"file\":\"game/cards/06_SEC/events/UndercoverOperation.ts\",\"line\":27,\"message\":\"unsupported-query:someCardPlayed\",\"pattern\":\"unsupported-query:someCardPlayed\"}]",
       "setCode": "SEC_236"
-    },
-    {
-      "internalName": "sith-assassin",
-      "reason": "sith-assassin: compiler rejected \"sith-assassin\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/sith-assassin.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "SEC_238"
     },
     {
       "internalName": "viper-probe-droid",
@@ -11339,11 +11354,6 @@
       "setCode": "TS26_019"
     },
     {
-      "internalName": "gar-saxon#sundari-pillager",
-      "reason": "gar-saxon#sundari-pillager: compiler rejected \"gar-saxon#sundari-pillager\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/gar-saxon#sundari-pillager.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "TS26_021"
-    },
-    {
       "internalName": "the-darksaber#only-the-strongest-shall-rule",
       "reason": "the-darksaber#only-the-strongest-shall-rule: compiler rejected \"the-darksaber#only-the-strongest-shall-rule\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/07_TS26/upgrades/TheDarksaberOnlyTheStrongestShallRule.ts\",\"line\":23,\"message\":\"unsupported-query:countUniqueKeywords\",\"pattern\":\"unsupported-query:countUniqueKeywords\"}]",
       "setCode": "TS26_022"
@@ -11514,11 +11524,6 @@
       "setCode": "TS26_064"
     },
     {
-      "internalName": "bokatan-kryze#the-lawless",
-      "reason": "bokatan-kryze#the-lawless: compiler rejected \"bokatan-kryze#the-lawless\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/bokatan-kryze#the-lawless.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "TS26_065"
-    },
-    {
       "internalName": "wartime-pirate",
       "reason": "wartime-pirate: compiler rejected \"wartime-pirate\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/07_TS26/units/WartimePirate.ts\",\"line\":17,\"message\":\"opponent-choice-resolver\",\"pattern\":\"opponent-choice-resolver\"}]",
       "setCode": "TS26_066"
@@ -11542,11 +11547,6 @@
       "internalName": "moralo-eval#infamous-murderer",
       "reason": "moralo-eval#infamous-murderer: compiler rejected \"moralo-eval#infamous-murderer\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":32,\"file\":\"game/cards/07_TS26/units/MoraloEvalInfamousMurderer.ts\",\"line\":18,\"message\":\"trigger-alias-hook:onDamageDealt\",\"pattern\":\"trigger-alias-hook:onDamageDealt\"}]",
       "setCode": "TS26_073"
-    },
-    {
-      "internalName": "pre-vizsla#for-mandalore",
-      "reason": "pre-vizsla#for-mandalore: compiler rejected \"pre-vizsla#for-mandalore\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/pre-vizsla#for-mandalore.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
-      "setCode": "TS26_074"
     },
     {
       "internalName": "jango-fett#guarding-the-count",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1595,
+  "runtimeRejectedCount": 1562,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 672
 }

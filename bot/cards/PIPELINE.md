@@ -122,7 +122,10 @@ filters, grant-source departure, conditional base traits, intrinsic Raid and
 Saboteur combat, defense returns with Overwhelm, death exhaustion, live resource
 counts, Hidden queries after expiry and their three-target limit, and healing
 continuations based on actual damage healed. Full states carry explicit phase
-history for every arena unit. Synthetic grant/removal, Sentinel, reentry and
+history for every arena unit. Keyword-only Hidden units use their complete printed
+text and metadata as the source, with actual Shielded play and Raid, Grit, Restore,
+Overwhelm, Saboteur and Ambush combat where those keywords are present.
+Synthetic grant/removal, Sentinel, reentry and
 history-import checks remain separate diagnostics; unconstructed leader/token
 history and controller-change interactions stay explicit coverage gaps.
 

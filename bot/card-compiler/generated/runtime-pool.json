@@ -2317,6 +2317,46 @@
       "aspects": [
         "aggression"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "0973431077",
+      "internalName": "ewok-warrior",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_166",
+      "setCodes": [
+        {
+          "number": 166,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 166,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Ewok Warrior",
+      "traits": [
+        "ewok"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
@@ -2878,6 +2918,86 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "3552807753",
+      "internalName": "womp-rat",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_213",
+      "setCodes": [
+        {
+          "number": 213,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 213,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Womp Rat",
+      "traits": [
+        "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "1653829589",
+      "internalName": "tatooine-sand-beast",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 8,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_225",
+      "setCodes": [
+        {
+          "number": 225,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 225,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Tatooine Sand Beast",
+      "traits": [
+        "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "cunning"
       ],
@@ -3111,6 +3231,47 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "7753920715",
+      "internalName": "remnant-trooper-corps",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 6,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_244",
+      "setCodes": [
+        {
+          "number": 244,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 244,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Remnant Trooper Corps",
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "villainy"
       ],
@@ -3142,6 +3303,46 @@
       ],
       "types": [
         "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "4005041069",
+      "internalName": "covert-veteran",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "ASH_249",
+      "setCodes": [
+        {
+          "number": 249,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 249,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Covert Veteran",
+      "traits": [
+        "mandalorian"
+      ],
+      "types": [
+        "unit"
       ],
       "unique": false,
       "upgradeHp": null,
@@ -6548,6 +6749,48 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "8375600168",
+      "internalName": "nightsister-prodigy",
+      "keywords": [
+        "hidden",
+        "overwhelm"
+      ],
+      "power": 5,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\nShields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "setCode": "HMW_183",
+      "setCodes": [
+        {
+          "number": 183,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 183,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nOverwhelm (When attacking an enemy unit, deal excess damage to the opponent's base.)",
+      "title": "Nightsister Prodigy",
+      "traits": [
+        "force",
+        "night"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "aggression"
@@ -6578,6 +6821,46 @@
       "traits": [
         "vehicle",
         "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 7,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "9899705034",
+      "internalName": "dathomiri-rancor",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 9,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "HMW_187",
+      "setCodes": [
+        {
+          "number": 187,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 187,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Dathomiri Rancor",
+      "traits": [
+        "creature"
       ],
       "types": [
         "unit"
@@ -7217,6 +7500,46 @@
       "subtitle": "",
       "text": "When Played: Ready a friendly resource.",
       "title": "Lakeside Shaaks",
+      "traits": [
+        "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "2703311384",
+      "internalName": "lurking-wampa",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 6,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "HMW_229",
+      "setCodes": [
+        {
+          "number": 229,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 229,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Lurking Wampa",
       "traits": [
         "creature"
       ],
@@ -13705,6 +14028,50 @@
     {
       "arena": "ground",
       "aspects": [
+        "aggression",
+        "cunning"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "0692027760",
+      "internalName": "urrrk#elite-sharpshooter",
+      "keywords": [
+        "hidden",
+        "raid"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LAW_082",
+      "setCodes": [
+        {
+          "number": 82,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 82,
+        "set": "LAW"
+      },
+      "subtitle": "Elite Sharpshooter",
+      "text": "Hidden (This unit can't be attacked if she was played this phase.)\nRaid 4 (This unit gets +4/+0 while attacking.)",
+      "title": "Urrr'k",
+      "traits": [
+        "rebel",
+        "tusken",
+        "bounty hunter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
         "cunning",
         "vigilance",
         "villainy"
@@ -14881,6 +15248,46 @@
       "aspects": [
         "command"
       ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "3450378734",
+      "internalName": "hidden-hunters",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 4,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LAW_160",
+      "setCodes": [
+        {
+          "number": 160,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 160,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Hidden Hunters",
+      "traits": [
+        "bounty hunter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command"
+      ],
       "cost": 8,
       "deployBox": null,
       "epicAction": "",
@@ -15330,6 +15737,46 @@
       "upgradePower": 3
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "7110170819",
+      "internalName": "savareen-survivor",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LAW_188",
+      "setCodes": [
+        {
+          "number": 188,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 188,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Savareen Survivor",
+      "traits": [
+        "fringe"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "aggression"
@@ -15529,6 +15976,48 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "8427032332",
+      "internalName": "nihil-stormsower",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LAW_209",
+      "setCodes": [
+        {
+          "number": 209,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 209,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Nihil Stormsower",
+      "traits": [
+        "underworld",
+        "nihil"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "cunning",
@@ -15644,6 +16133,49 @@
       "title": "Artful Pickpocket",
       "traits": [
         "underworld"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "3546778759",
+      "internalName": "wookiee-guerilla",
+      "keywords": [
+        "hidden",
+        "raid"
+      ],
+      "power": 2,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LAW_220",
+      "setCodes": [
+        {
+          "number": 220,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 220,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nRaid 2 (This unit gets +2/+0 while attacking.)",
+      "title": "Wookiee Guerilla",
+      "traits": [
+        "wookiee",
+        "trooper"
       ],
       "types": [
         "unit"
@@ -16213,6 +16745,44 @@
         "underworld",
         "vehicle",
         "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "0246299753",
+      "internalName": "seasoned-tracker",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 4,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LAW_260",
+      "setCodes": [
+        {
+          "number": 260,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 260,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Seasoned Tracker",
+      "traits": [
+        "bounty hunter"
       ],
       "types": [
         "unit"
@@ -17070,6 +17640,52 @@
         "command",
         "villainy"
       ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 7,
+      "id": "6180656125",
+      "internalName": "eye-of-sion#to-peridea",
+      "keywords": [
+        "hidden",
+        "ambush",
+        "overwhelm",
+        "restore"
+      ],
+      "power": 4,
+      "rules": "Ambush is an ability that triggers at the same time as \"When Played\" abilities. If there is no enemy unit that can be attacked, the unit does not ready.\nIf a unit has Hidden and Sentinel at the same time, it can be attacked.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\nShields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\n",
+      "setCode": "LOF_088",
+      "setCodes": [
+        {
+          "number": 88,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 88,
+        "set": "LOF"
+      },
+      "subtitle": "To Peridea",
+      "text": "Hidden\nAmbush\nOverwhelm\nRestore 1",
+      "title": "Eye of Sion",
+      "traits": [
+        "imperial",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
       "cost": 12,
       "deployBox": null,
       "epicAction": "",
@@ -17303,6 +17919,47 @@
         "republic",
         "vehicle",
         "capital ship"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "1978321046",
+      "internalName": "village-tender",
+      "keywords": [
+        "hidden",
+        "restore"
+      ],
+      "power": 1,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_107",
+      "setCodes": [
+        {
+          "number": 107,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 107,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nRestore 1 (When this unit attacks, heal 1 damage from your base.)",
+      "title": "Village Tender",
+      "traits": [
+        "ewok"
       ],
       "types": [
         "unit"
@@ -17968,6 +18625,47 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "1433284352",
+      "internalName": "attuned-fyrnock",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 4,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_143",
+      "setCodes": [
+        {
+          "number": 143,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 143,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Attuned Fyrnock",
+      "traits": [
+        "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "aggression",
@@ -18093,6 +18791,47 @@
       "aspects": [
         "aggression"
       ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "2897264390",
+      "internalName": "witch-of-the-mist",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 1,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_154",
+      "setCodes": [
+        {
+          "number": 154,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 154,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Witch of the Mist",
+      "traits": [
+        "force",
+        "night"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
       "cost": 2,
       "deployBox": null,
       "epicAction": "",
@@ -18201,6 +18940,46 @@
         "droid",
         "vehicle",
         "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "3995900674",
+      "internalName": "tukata",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 4,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_161",
+      "setCodes": [
+        {
+          "number": 161,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 161,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Tuk'ata",
+      "traits": [
+        "creature"
       ],
       "types": [
         "unit"
@@ -18578,6 +19357,92 @@
         "cunning",
         "villainy"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "7877401512",
+      "internalName": "aurra-sing#patient-and-deadly",
+      "keywords": [
+        "hidden",
+        "raid"
+      ],
+      "power": 1,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_179",
+      "setCodes": [
+        {
+          "number": 179,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 179,
+        "set": "LOF"
+      },
+      "subtitle": "Patient and Deadly",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nRaid 2 (This unit gets +2/+0 while attacking.)",
+      "title": "Aurra Sing",
+      "traits": [
+        "underworld",
+        "bounty hunter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "5451377567",
+      "internalName": "banking-clan-shuttle",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_181",
+      "setCodes": [
+        {
+          "number": 181,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 181,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Banking Clan Shuttle",
+      "traits": [
+        "separatist",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
@@ -18612,6 +19477,92 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "5221323929",
+      "internalName": "shin-hati#overeager-apprentice",
+      "keywords": [
+        "hidden",
+        "shielded"
+      ],
+      "power": 4,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_183",
+      "setCodes": [
+        {
+          "number": 183,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 183,
+        "set": "LOF"
+      },
+      "subtitle": "Overeager Apprentice",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nShielded (When you play this unit, give a Shield token to her.)",
+      "title": "Shin Hati",
+      "traits": [
+        "force",
+        "fringe"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "heroism"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "3967581160",
+      "internalName": "anakin-skywalker#force-prodigy",
+      "keywords": [
+        "hidden",
+        "shielded"
+      ],
+      "power": 1,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_190",
+      "setCodes": [
+        {
+          "number": 190,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 190,
+        "set": "LOF"
+      },
+      "subtitle": "Force Prodigy",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nShielded (When you play this unit, give a Shield token to him.)",
+      "title": "Anakin Skywalker",
+      "traits": [
+        "force",
+        "fringe"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -18869,6 +19820,47 @@
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
+      "hp": 4,
+      "id": "5663262393",
+      "internalName": "charging-phillak",
+      "keywords": [
+        "ambush",
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "Ambush is an ability that triggers at the same time as \"When Played\" abilities. If there is no enemy unit that can be attacked, the unit does not ready.\nIf a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_210",
+      "setCodes": [
+        {
+          "number": 210,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 210,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Ambush (When you play this unit, it may attack an enemy unit.)\nHidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Charging Phillak",
+      "traits": [
+        "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
       "hp": 5,
       "id": "5522824465",
       "internalName": "life-wind-sage",
@@ -19053,6 +20045,49 @@
       ],
       "types": [
         "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "6082085272",
+      "internalName": "forged-starfighter",
+      "keywords": [
+        "hidden",
+        "raid"
+      ],
+      "power": 1,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_228",
+      "setCodes": [
+        {
+          "number": 228,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 228,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)\nRaid 1 (This unit gets +1/+0 while attacking.)",
+      "title": "Forged Starfighter",
+      "traits": [
+        "sith",
+        "vehicle",
+        "fighter"
+      ],
+      "types": [
+        "unit"
       ],
       "unique": false,
       "upgradeHp": null,
@@ -19368,6 +20403,46 @@
       "traits": [
         "force",
         "fringe"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "7742118411",
+      "internalName": "vulptex",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "LOF_245",
+      "setCodes": [
+        {
+          "number": 245,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 245,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Vulptex",
+      "traits": [
+        "creature"
       ],
       "types": [
         "unit"
@@ -21811,6 +22886,49 @@
         "aggression",
         "villainy"
       ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "0343591883",
+      "internalName": "enforcer-squadron",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 5,
+      "rules": null,
+      "setCode": "SEC_138",
+      "setCodes": [
+        {
+          "number": 138,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 138,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Enforcer Squadron",
+      "traits": [
+        "republic",
+        "vehicle",
+        "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "aggression",
+        "villainy"
+      ],
       "cost": 8,
       "deployBox": null,
       "epicAction": "",
@@ -21843,6 +22961,48 @@
         "unit"
       ],
       "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 1,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "8185306798",
+      "internalName": "rebellious-functionary",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 2,
+      "rules": null,
+      "setCode": "SEC_146",
+      "setCodes": [
+        {
+          "number": 146,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 146,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Rebellious Functionary",
+      "traits": [
+        "rebel",
+        "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -22740,6 +23900,48 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "4447282259",
+      "internalName": "zenuas-shadow-fighter",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 2,
+      "rules": null,
+      "setCode": "SEC_217",
+      "setCodes": [
+        {
+          "number": 217,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 217,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Zenuas Shadow Fighter",
+      "traits": [
+        "separatist",
+        "vehicle",
+        "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "cunning"
@@ -22968,6 +24170,47 @@
       "traits": [
         "first order",
         "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "0209941618",
+      "internalName": "sith-assassin",
+      "keywords": [
+        "hidden"
+      ],
+      "power": 3,
+      "rules": null,
+      "setCode": "SEC_238",
+      "setCodes": [
+        {
+          "number": 238,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 238,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "Hidden (This unit can't be attacked if it was played this phase.)",
+      "title": "Sith Assassin",
+      "traits": [
+        "force",
+        "sith"
       ],
       "types": [
         "unit"
@@ -29721,6 +30964,52 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "command",
+        "aggression",
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "1102418753",
+      "internalName": "gar-saxon#sundari-pillager",
+      "keywords": [
+        "hidden",
+        "overwhelm",
+        "raid",
+        "restore"
+      ],
+      "power": 1,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\nIf a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "TS26_021",
+      "setCodes": [
+        {
+          "number": 21,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 21,
+        "set": "TS26"
+      },
+      "subtitle": "Sundari Pillager",
+      "text": "Hidden\nOverwhelm\nRaid 2\nRestore 2\n",
+      "title": "Gar Saxon",
+      "traits": [
+        "mandalorian",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "space",
       "aspects": [
         "command",
@@ -30091,6 +31380,48 @@
       "aspects": [
         "aggression"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "6239356125",
+      "internalName": "bokatan-kryze#the-lawless",
+      "keywords": [
+        "hidden",
+        "grit"
+      ],
+      "power": 1,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "TS26_065",
+      "setCodes": [
+        {
+          "number": 65,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 65,
+        "set": "TS26"
+      },
+      "subtitle": "The Lawless",
+      "text": "Hidden (This unit can't be attacked if she was played this phase.)\nGrit (This unit gets +1/+0 for each damage on her.)",
+      "title": "Bo-Katan Kryze",
+      "traits": [
+        "mandalorian",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
@@ -30198,6 +31529,49 @@
         "event"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "9265225215",
+      "internalName": "pre-vizsla#for-mandalore",
+      "keywords": [
+        "hidden",
+        "saboteur"
+      ],
+      "power": 4,
+      "rules": "If a unit has Hidden and Sentinel at the same time, it can be attacked.\n",
+      "setCode": "TS26_074",
+      "setCodes": [
+        {
+          "number": 74,
+          "set": "TS26"
+        }
+      ],
+      "setId": {
+        "number": 74,
+        "set": "TS26"
+      },
+      "subtitle": "For Mandalore!",
+      "text": "Hidden (This unit can't be attacked if he was played this phase.) \nSaboteur (When this unit attacks, ignore Sentinel and defeat the defender's Shields.) ",
+      "title": "Pre Vizsla",
+      "traits": [
+        "mandalorian",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

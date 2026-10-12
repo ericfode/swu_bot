@@ -330,3 +330,33 @@ fn simultaneous_resource_choices_can_be_ordered_for_sound_proof() {
     e.order_regroup(&mut s, Seat::P2);
     assert_eq!(s.active, Seat::P1);
 }
+
+#[test]
+fn hidden_keyword_text_is_boolean_and_consumes_the_whole_rule() {
+    for text in ["Hidden","Hidden.","Hidden (This unit can't be attacked this phase.)","Hidden\nSaboteur","Hidden, Restore 2"] {let (flags,_,_)=keyword_text(text).unwrap();assert!(flags&(1<<8)!=0,"{text}");}
+    for text in [".","Hidden 1","Hidden 2","Hidden -1","Hidden extra","Hidden\nDraw a card.","This unit gains Hidden.","Hidden (unclosed","Hidden)","Restore 2 extra","Raid 65536","Raid","Restore 1.5","Restore -1"] {assert!(keyword_text(text).is_err(),"{text}");}
+    assert_eq!(keyword_text("Hidden\nRaid 2\nRestore 1").unwrap(),(1<<8,2,1));
+}
+
+#[test]
+fn strict_hundred_card_pool_keyword_semantics_remain_exact() {
+    let raw:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/pool.json")).unwrap();assert_eq!(raw["cards"].as_array().unwrap().len(),100);
+    let e=Engine::from_pool_value(&raw).unwrap();
+    for c in raw["cards"].as_array().unwrap() {if !c["types"].as_array().unwrap().iter().any(|t|t=="unit") {continue;}
+        let d=&e.definitions[*e.by_code.get(c["setCode"].as_str().unwrap()).unwrap() as usize];
+        for (index,name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() {let expected=c["keywordValues"][*name].as_u64().unwrap_or(0) as u16;let actual=match crate::ability_ir::numeric_keyword_slot(index) {Some(0)=>d.raid,Some(1)=>d.restore,_=>u16::from(d.flags&(1<<index)!=0)};assert_eq!(actual,expected,"{} {name}",d.code);}
+    }
+}
+
+#[test]
+fn strict_pool_does_not_infer_new_hidden_leader_or_pilot_implementations() {
+    let raw:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/pool.json")).unwrap();
+    for (kind,field,value) in [("leader","text",serde_json::json!("Hidden")),("unit","pilotText",serde_json::json!("Hidden"))] {let mut bad=raw.clone();let card=bad["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["types"].as_array().unwrap().iter().any(|t|t==kind)).unwrap();card[field]=value;assert!(Engine::from_pool_value(&bad).is_err());}
+    let mut bad=raw;bad["cards"][0]["setCode"]=serde_json::json!("ASH_166");assert!(Engine::from_pool_value(&bad).is_err());
+}
+
+#[test]
+fn shared_keyword_grammar_matrix_is_fail_closed() {
+    let cases:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/keyword-parser-cases.json")).unwrap();
+    for case in cases.as_array().unwrap() {let text=case["text"].as_str().unwrap();let result=keyword_text(text);if case["expected"].is_null(){assert!(result.is_err(),"{text}");}else{let (flags,raid,restore)=result.unwrap();let mut actual=serde_json::Map::new();for (index,name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate(){if let Some(slot)=crate::ability_ir::numeric_keyword_slot(index){if case["expected"].get(*name).is_some(){actual.insert((*name).into(),serde_json::json!(if slot==0{raid}else{restore}));}}else if flags&(1<<index)!=0 {actual.insert((*name).into(),serde_json::json!(1));}}assert_eq!(serde_json::Value::Object(actual),case["expected"],"{text}");}}
+}

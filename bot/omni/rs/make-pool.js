@@ -1,24 +1,40 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const ALLOWED = new Set(['sentinel', 'raid', 'overwhelm', 'saboteur', 'restore', 'ambush', 'grit', 'shielded']);
+const ALLOWED = new Set(['sentinel', 'raid', 'overwhelm', 'saboteur', 'restore', 'ambush', 'grit', 'shielded', 'hidden']);
+// The legacy strict pool has an immutable implementation inventory.
+const LEGACY_POOL_ALLOWED = new Set([...ALLOWED].filter(k => k !== 'hidden'));
 const LEADERS = ['SOR_014', 'IBH_053', 'SEC_005'];
 const code = (c) => c.setId.number == null ? 'TOKEN_SHIELD' : `${c.setId.set}_${String(c.setId.number).padStart(3, '0')}`;
 
 /** Whitelist the whole text, not just its first keyword or the data's keyword tags. */
 function parseKeywords(c) {
     if (c.pilotText || (c.keywords ?? []).some((k) => !ALLOWED.has(k))) return null;
+    let reminderDepth=0;
+    for (const char of c.text ?? '') {
+        if (char==='(') {if (reminderDepth!==0) return null;reminderDepth=1;}
+        else if (char===')') {if (reminderDepth!==1) return null;reminderDepth=0;}
+    }
+    if (reminderDepth!==0) return null;
     const text = (c.text ?? '').replace(/\([^)]*\)/g, '').trim();
     if (!text) return {};
     const out = {};
     for (const line of text.split(/\n|,/).map((s) => s.trim()).filter(Boolean)) {
-        const m = /^(Sentinel|Raid|Overwhelm|Saboteur|Restore|Ambush|Grit|Shielded)(?:\s+(\d+))?\.?$/i.exec(line);
+        const m = /^(Sentinel|Raid|Overwhelm|Saboteur|Restore|Ambush|Grit|Shielded|Hidden)(?:\s+(\d+))?\.?$/i.exec(line);
         if (!m) return null;
         const k = m[1].toLowerCase();
         if ((k === 'raid' || k === 'restore') !== (m[2] !== undefined)) return null;
-        out[k] = m[2] ? Number(m[2]) : 1;
+        if (Object.hasOwn(out,k)) return null;
+        const amount=m[2] ? Number(m[2]) : 1;
+        if (!Number.isSafeInteger(amount) || amount > 65535) return null;
+        out[k] = amount;
     }
     return out;
+}
+function legacyPoolKeywords(card) {
+    if ((card.keywords ?? []).some(k => !LEGACY_POOL_ALLOWED.has(k))) return null;
+    const values=parseKeywords(card);
+    return values!==null && Object.keys(values).every(k=>LEGACY_POOL_ALLOWED.has(k)) ? values : null;
 }
 function main() {
     const { Env } = require('../../env');
@@ -34,12 +50,12 @@ function main() {
     for (const aspect of ['vigilance', 'command', 'aggression', 'cunning']) {
         bases.push(...all.filter((c) => c.types.includes('base') && c.hp === 30 && !c.text && !c.epicAction && c.aspects.length === 1 && c.aspects[0] === aspect).sort((a, b) => code(a).localeCompare(code(b))).slice(0, 2));
     }
-    const units = all.filter((c) => c.types.includes('unit') && !c.types.includes('token') && parseKeywords(c) !== null && c.setId.number != null)
+    const units = all.filter((c) => c.types.includes('unit') && !c.types.includes('token') && legacyPoolKeywords(c) !== null && c.setId.number != null)
         .sort((a, b) => code(a).localeCompare(code(b)));
     // Neutral cards guarantee all leader/base combinations can form fifty cards without aspect penalties.
     const selected = units.filter((c) => !c.aspects.length).slice(0, 18);
-    for (const keyword of ALLOWED) {
-        const c = units.find((u) => parseKeywords(u)[keyword] && !selected.includes(u));
+    for (const keyword of LEGACY_POOL_ALLOWED) {
+        const c = units.find((u) => legacyPoolKeywords(u)[keyword] && !selected.includes(u));
         if (c) selected.push(c);
     }
     for (const c of units) {
@@ -49,8 +65,8 @@ function main() {
     const shield = all.find((c) => c.internalName === 'shield');
     if (!shield) throw new Error('Shield token missing');
     const cards = [...bases, ...leaders, ...selected, shield].map((c) => ({
-        ...c, setCode: code(c), keywordValues: c.types.includes('unit') ? parseKeywords(c) : {},
-        reason: c.types.includes('base') ? 'Plain 30 HP base without abilities.' : c.types.includes('leader') ? 'Explicitly implemented leader and deployed side.' : c.internalName === 'shield' ? 'Shield token needed by Shielded.' : Object.keys(parseKeywords(c)).length ? `Keywords only: ${Object.entries(parseKeywords(c)).map(([k, v]) => `${k}${v > 1 ? ` ${v}` : ''}`).join(', ')}.` : 'Unit without rules text.'
+        ...c, setCode: code(c), keywordValues: c.types.includes('unit') ? legacyPoolKeywords(c) : {},
+        reason: c.types.includes('base') ? 'Plain 30 HP base without abilities.' : c.types.includes('leader') ? 'Explicitly implemented leader and deployed side.' : c.internalName === 'shield' ? 'Shield token needed by Shielded.' : Object.keys(legacyPoolKeywords(c)).length ? `Keywords only: ${Object.entries(legacyPoolKeywords(c)).map(([k, v]) => `${k}${v > 1 ? ` ${v}` : ''}`).join(', ')}.` : 'Unit without rules text.'
     }));
     for (const l of leaders) for (const b of bases) {
         const icons = new Set([...l.aspects, ...b.aspects]);

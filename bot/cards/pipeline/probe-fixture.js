@@ -140,6 +140,7 @@ function observe(card, eg) {
 }
 async function fixture(env, pool, scenario, seed) {
     if (scenario.probe?.family === 'hidden') return require('./hidden-probe-fixture').fixture(env, pool, scenario, seed);
+    if (scenario.probe?.family === 'hidden-keyword-only') return require('./hidden-keyword-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'on-defense') return require('./on-defense-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'upgrade-return') return require('./upgrade-return-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'cost-query') return require('./cost-probe-fixture').fixture(env, pool, scenario, seed);
@@ -380,6 +381,8 @@ module.exports = {
         'bot/cards/pipeline/hidden-probes.js',
         'bot/cards/pipeline/hidden-probe-fixture.js',
         'bot/cards/pipeline/hidden-source-fixture.js',
+        'bot/cards/pipeline/hidden-keyword-probes.js',
+        'bot/cards/pipeline/hidden-keyword-probe-fixture.js',
         'bot/cards/pipeline/on-defense-probes.js',
         'bot/cards/pipeline/on-defense-probe-fixture.js',
         'bot/cards/pipeline/cost-probes.js',

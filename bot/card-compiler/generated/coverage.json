@@ -1,16 +1,16 @@
 {
   "schema": "swu-card-compiler-coverage/v1",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "e75a4babb1bf1f788a3f44446fb67b06724a399a03dc9469e12794f8085d67ce",
+  "compilerHash": "bbc6f2b78e3f641cfa74e1b1ac8b6ad8052975e3d37522f54c00c2ab027e40f8",
   "knownCards": 2458,
   "mockCardsExcluded": 21,
   "sourceFiles": 2074,
   "sourceDefinitions": 2071,
   "definitionsWithSource": 2050,
-  "converted": 1011,
+  "converted": 1044,
   "sourceAstConverted": 672,
-  "dataOnlyConverted": 339,
-  "unconverted": 1447,
+  "dataOnlyConverted": 372,
+  "unconverted": 1414,
   "runtimeReady": null,
   "runtimeReadyNote": "Source compilation is independent of runtime capability validation. The Rust importer validates each operation before accepting a card; this report does not claim executable coverage.",
   "convertedCards": [
@@ -84,6 +84,7 @@
     "ASH_153",
     "ASH_164",
     "ASH_165",
+    "ASH_166",
     "ASH_170",
     "ASH_171",
     "ASH_173",
@@ -101,7 +102,9 @@
     "ASH_199",
     "ASH_201",
     "ASH_209",
+    "ASH_213",
     "ASH_214",
+    "ASH_225",
     "ASH_226",
     "ASH_228",
     "ASH_232",
@@ -110,7 +113,9 @@
     "ASH_239",
     "ASH_242",
     "ASH_243",
+    "ASH_244",
     "ASH_246",
+    "ASH_249",
     "ASH_252",
     "ASH_253",
     "ASH_255",
@@ -200,7 +205,9 @@
     "HMW_178",
     "HMW_179",
     "HMW_181",
+    "HMW_183",
     "HMW_186",
+    "HMW_187",
     "HMW_189",
     "HMW_190",
     "HMW_191",
@@ -217,6 +224,7 @@
     "HMW_226",
     "HMW_227",
     "HMW_228",
+    "HMW_229",
     "HMW_230",
     "HMW_233",
     "HMW_235",
@@ -395,6 +403,7 @@
     "LAW_078",
     "LAW_079",
     "LAW_081",
+    "LAW_082",
     "LAW_087",
     "LAW_089",
     "LAW_090",
@@ -427,6 +436,7 @@
     "LAW_153",
     "LAW_154",
     "LAW_159",
+    "LAW_160",
     "LAW_162",
     "LAW_164",
     "LAW_165",
@@ -439,15 +449,18 @@
     "LAW_183",
     "LAW_184",
     "LAW_187",
+    "LAW_188",
     "LAW_189",
     "LAW_190",
     "LAW_192",
     "LAW_195",
     "LAW_196",
     "LAW_199",
+    "LAW_209",
     "LAW_211",
     "LAW_213",
     "LAW_218",
+    "LAW_220",
     "LAW_222",
     "LAW_224",
     "LAW_230",
@@ -463,6 +476,7 @@
     "LAW_254",
     "LAW_255",
     "LAW_259",
+    "LAW_260",
     "LAW_261",
     "LAW_263",
     "LOF_004",
@@ -487,12 +501,14 @@
     "LOF_080",
     "LOF_081",
     "LOF_084",
+    "LOF_088",
     "LOF_089",
     "LOF_092",
     "LOF_093",
     "LOF_095",
     "LOF_099",
     "LOF_106",
+    "LOF_107",
     "LOF_109",
     "LOF_110",
     "LOF_112",
@@ -511,14 +527,17 @@
     "LOF_135",
     "LOF_136",
     "LOF_141",
+    "LOF_143",
     "LOF_144",
     "LOF_151",
     "LOF_152",
     "LOF_153",
+    "LOF_154",
     "LOF_155",
     "LOF_157",
     "LOF_158",
     "LOF_160",
+    "LOF_161",
     "LOF_162",
     "LOF_163",
     "LOF_164",
@@ -530,7 +549,11 @@
     "LOF_171",
     "LOF_174",
     "LOF_176",
+    "LOF_179",
+    "LOF_181",
     "LOF_182",
+    "LOF_183",
+    "LOF_190",
     "LOF_192",
     "LOF_194",
     "LOF_196",
@@ -539,12 +562,14 @@
     "LOF_207",
     "LOF_208",
     "LOF_209",
+    "LOF_210",
     "LOF_212",
     "LOF_213",
     "LOF_214",
     "LOF_215",
     "LOF_217",
     "LOF_223",
+    "LOF_228",
     "LOF_230",
     "LOF_231",
     "LOF_232",
@@ -556,6 +581,7 @@
     "LOF_240",
     "LOF_241",
     "LOF_242",
+    "LOF_245",
     "LOF_246",
     "LOF_247",
     "LOF_250",
@@ -626,8 +652,10 @@
     "SEC_132",
     "SEC_134",
     "SEC_136",
+    "SEC_138",
     "SEC_140",
     "SEC_142",
+    "SEC_146",
     "SEC_149",
     "SEC_151",
     "SEC_152",
@@ -656,12 +684,14 @@
     "SEC_206",
     "SEC_213",
     "SEC_214",
+    "SEC_217",
     "SEC_221",
     "SEC_222",
     "SEC_224",
     "SEC_225",
     "SEC_227",
     "SEC_237",
+    "SEC_238",
     "SEC_240",
     "SEC_241",
     "SEC_243",
@@ -868,6 +898,7 @@
     "TS26_016",
     "TS26_017",
     "TS26_020",
+    "TS26_021",
     "TS26_024",
     "TS26_028",
     "TS26_029",
@@ -881,11 +912,13 @@
     "TS26_053",
     "TS26_062",
     "TS26_064",
+    "TS26_065",
     "TS26_067",
     "TS26_068",
     "TS26_069",
     "TS26_070",
     "TS26_072",
+    "TS26_074",
     "TS26_079",
     "TS26_081",
     "TS26_082",
@@ -1172,81 +1205,6 @@
       ]
     },
     {
-      "pattern": "no-source-for-rules-text",
-      "occurrences": 69,
-      "cards": [
-        "ASH_074",
-        "ASH_095",
-        "ASH_121",
-        "ASH_130",
-        "ASH_154",
-        "ASH_166",
-        "ASH_213",
-        "ASH_215",
-        "ASH_222",
-        "ASH_225",
-        "ASH_244",
-        "ASH_249",
-        "HMW_183",
-        "HMW_187",
-        "HMW_229",
-        "JTL_108",
-        "JTL_159",
-        "JTL_196",
-        "JTL_236",
-        "JTL_246",
-        "JTL_255",
-        "LAW_082",
-        "LAW_160",
-        "LAW_188",
-        "LAW_209",
-        "LAW_220",
-        "LAW_260",
-        "LOF_088",
-        "LOF_107",
-        "LOF_143",
-        "LOF_154",
-        "LOF_161",
-        "LOF_179",
-        "LOF_181",
-        "LOF_183",
-        "LOF_190",
-        "LOF_210",
-        "LOF_228",
-        "LOF_245",
-        "SEC_036",
-        "SEC_070",
-        "SEC_100",
-        "SEC_123",
-        "SEC_138",
-        "SEC_146",
-        "SEC_176",
-        "SEC_217",
-        "SEC_226",
-        "SEC_238",
-        "SHD_036",
-        "SHD_065",
-        "SHD_070",
-        "SHD_089",
-        "SHD_111",
-        "SHD_119",
-        "SHD_149",
-        "SOR_120",
-        "TOKEN_ADVANTAGE",
-        "TS26_021",
-        "TS26_045",
-        "TS26_065",
-        "TS26_074",
-        "TWI_037",
-        "TWI_087",
-        "TWI_117",
-        "TWI_118",
-        "TWI_136",
-        "TWI_182",
-        "TWI_233"
-      ]
-    },
-    {
       "pattern": "unsupported-field:initiateAttack",
       "occurrences": 53,
       "cards": [
@@ -1444,6 +1402,48 @@
         "TWI_184",
         "TWI_210",
         "TWI_216"
+      ]
+    },
+    {
+      "pattern": "no-source-for-rules-text",
+      "occurrences": 36,
+      "cards": [
+        "ASH_074",
+        "ASH_095",
+        "ASH_121",
+        "ASH_130",
+        "ASH_154",
+        "ASH_215",
+        "ASH_222",
+        "JTL_108",
+        "JTL_159",
+        "JTL_196",
+        "JTL_236",
+        "JTL_246",
+        "JTL_255",
+        "SEC_036",
+        "SEC_070",
+        "SEC_100",
+        "SEC_123",
+        "SEC_176",
+        "SEC_226",
+        "SHD_036",
+        "SHD_065",
+        "SHD_070",
+        "SHD_089",
+        "SHD_111",
+        "SHD_119",
+        "SHD_149",
+        "SOR_120",
+        "TOKEN_ADVANTAGE",
+        "TS26_045",
+        "TWI_037",
+        "TWI_087",
+        "TWI_117",
+        "TWI_118",
+        "TWI_136",
+        "TWI_182",
+        "TWI_233"
       ]
     },
     {
@@ -8347,21 +8347,6 @@
       ]
     },
     {
-      "setCode": "ASH_166",
-      "internalName": "ewok-warrior",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/ewok-warrior.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "ASH_167",
       "internalName": "flarestar-attack-shuttle",
       "sourcePath": "game/cards/08_ASH/units/FlarestarAttackShuttle.ts",
@@ -8917,21 +8902,6 @@
       ]
     },
     {
-      "setCode": "ASH_213",
-      "internalName": "womp-rat",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/womp-rat.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "ASH_215",
       "internalName": "flanking-tie-interceptor",
       "sourcePath": null,
@@ -9106,21 +9076,6 @@
       ]
     },
     {
-      "setCode": "ASH_225",
-      "internalName": "tatooine-sand-beast",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/tatooine-sand-beast.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "ASH_227",
       "internalName": "heightened-awareness",
       "sourcePath": "game/cards/08_ASH/upgrades/HeightenedAwareness.ts",
@@ -9279,21 +9234,6 @@
       ]
     },
     {
-      "setCode": "ASH_244",
-      "internalName": "remnant-trooper-corps",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/remnant-trooper-corps.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "ASH_245",
       "internalName": "eye-of-sion#delivered-from-exile",
       "sourcePath": "game/cards/08_ASH/units/EyeOfSionDeliveredFromExile.ts",
@@ -9343,21 +9283,6 @@
           "file": "game/cards/08_ASH/units/NeelTheCutestBoy.ts",
           "line": 21,
           "column": 30
-        }
-      ]
-    },
-    {
-      "setCode": "ASH_249",
-      "internalName": "covert-veteran",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/covert-veteran.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -11431,21 +11356,6 @@
       ]
     },
     {
-      "setCode": "HMW_183",
-      "internalName": "nightsister-prodigy",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/nightsister-prodigy.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "HMW_184",
       "internalName": "aggrocrab",
       "sourcePath": "game/cards/09_HMW/units/Aggrocrab.ts",
@@ -11472,21 +11382,6 @@
           "file": "game/cards/09_HMW/units/TyYorrickMonsterHunter.ts",
           "line": 27,
           "column": 9
-        }
-      ]
-    },
-    {
-      "setCode": "HMW_187",
-      "internalName": "dathomiri-rancor",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/dathomiri-rancor.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -11910,21 +11805,6 @@
           "file": "game/cards/09_HMW/units/BobaFettFamilyFound.ts",
           "line": 20,
           "column": 35
-        }
-      ]
-    },
-    {
-      "setCode": "HMW_229",
-      "internalName": "lurking-wampa",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/lurking-wampa.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -16971,21 +16851,6 @@
       ]
     },
     {
-      "setCode": "LAW_082",
-      "internalName": "urrrk#elite-sharpshooter",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/urrrk#elite-sharpshooter.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LAW_083",
       "internalName": "broken-horn#vizagos-pride",
       "sourcePath": "game/cards/07_LAW/units/BrokenHornVizagosPride.ts",
@@ -17765,21 +17630,6 @@
       ]
     },
     {
-      "setCode": "LAW_160",
-      "internalName": "hidden-hunters",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/hidden-hunters.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LAW_161",
       "internalName": "partisan-uwing",
       "sourcePath": "game/cards/07_LAW/units/PartisanU-Wing.ts",
@@ -18033,21 +17883,6 @@
           "file": "game/cards/07_LAW/upgrades/EnfysNestsHelmet.ts",
           "line": 17,
           "column": 9
-        }
-      ]
-    },
-    {
-      "setCode": "LAW_188",
-      "internalName": "savareen-survivor",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/savareen-survivor.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -18310,21 +18145,6 @@
       ]
     },
     {
-      "setCode": "LAW_209",
-      "internalName": "nihil-stormsower",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/nihil-stormsower.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LAW_210",
       "internalName": "salacious-crumb#cackling-companion",
       "sourcePath": "game/cards/07_LAW/units/SalaciousCrumbCacklingCompanion.ts",
@@ -18466,21 +18286,6 @@
           "file": "game/cards/07_LAW/units/AnakinsPodracerSoWizard.ts",
           "line": 30,
           "column": 28
-        }
-      ]
-    },
-    {
-      "setCode": "LAW_220",
-      "internalName": "wookiee-guerilla",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/wookiee-guerilla.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -18945,21 +18750,6 @@
           "file": "game/cards/07_LAW/units/CriminalContact.ts",
           "line": 18,
           "column": 30
-        }
-      ]
-    },
-    {
-      "setCode": "LAW_260",
-      "internalName": "seasoned-tracker",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/seasoned-tracker.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -20265,21 +20055,6 @@
       ]
     },
     {
-      "setCode": "LOF_088",
-      "internalName": "eye-of-sion#to-peridea",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/eye-of-sion#to-peridea.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LOF_090",
       "internalName": "inquisitors-lightsaber",
       "sourcePath": "game/cards/05_LOF/upgrades/InquisitorsLightsaber.ts",
@@ -20544,21 +20319,6 @@
           "line": 39,
           "column": 1,
           "message": "Additional class method requires conversion"
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_107",
-      "internalName": "village-tender",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/village-tender.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -20898,21 +20658,6 @@
       ]
     },
     {
-      "setCode": "LOF_143",
-      "internalName": "attuned-fyrnock",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/attuned-fyrnock.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LOF_145",
       "internalName": "jedi-knight",
       "sourcePath": "game/cards/05_LOF/units/JediKnight.ts",
@@ -21019,21 +20764,6 @@
       ]
     },
     {
-      "setCode": "LOF_154",
-      "internalName": "witch-of-the-mist",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/witch-of-the-mist.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LOF_156",
       "internalName": "infused-brawler",
       "sourcePath": "game/cards/05_LOF/units/InfusedBrawler.ts",
@@ -21068,21 +20798,6 @@
           "file": "game/cards/05_LOF/units/JediInHiding.ts",
           "line": 17,
           "column": 30
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_161",
-      "internalName": "tukata",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/tukata.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -21177,21 +20892,6 @@
       ]
     },
     {
-      "setCode": "LOF_179",
-      "internalName": "aurra-sing#patient-and-deadly",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/aurra-sing#patient-and-deadly.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LOF_180",
       "internalName": "deceptive-shade",
       "sourcePath": "game/cards/05_LOF/units/DeceptiveShade.ts",
@@ -21211,36 +20911,6 @@
           "line": 35,
           "column": 1,
           "message": "Additional class method requires conversion"
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_181",
-      "internalName": "banking-clan-shuttle",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/banking-clan-shuttle.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_183",
-      "internalName": "shin-hati#overeager-apprentice",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/shin-hati#overeager-apprentice.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -21339,21 +21009,6 @@
           "file": "game/cards/05_LOF/events/LiberatedByDarkness.ts",
           "line": 17,
           "column": 30
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_190",
-      "internalName": "anakin-skywalker#force-prodigy",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/anakin-skywalker#force-prodigy.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -21539,21 +21194,6 @@
       ]
     },
     {
-      "setCode": "LOF_210",
-      "internalName": "charging-phillak",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/charging-phillak.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LOF_211",
       "internalName": "dooku#it-is-too-late",
       "sourcePath": "game/cards/05_LOF/units/DookuItIsTooLate.ts",
@@ -21735,21 +21375,6 @@
       ]
     },
     {
-      "setCode": "LOF_228",
-      "internalName": "forged-starfighter",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/forged-starfighter.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "LOF_229",
       "internalName": "kylo-ren#i-know-your-story",
       "sourcePath": "game/cards/05_LOF/units/KyloRenIKnowYourStory.ts",
@@ -21837,21 +21462,6 @@
           "file": "game/cards/05_LOF/units/JediVector.ts",
           "line": 24,
           "column": 37
-        }
-      ]
-    },
-    {
-      "setCode": "LOF_245",
-      "internalName": "vulptex",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/vulptex.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -23594,21 +23204,6 @@
       ]
     },
     {
-      "setCode": "SEC_138",
-      "internalName": "enforcer-squadron",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/enforcer-squadron.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "SEC_139",
       "internalName": "miraj-scintel#the-weak-deserve-to-kneel",
       "sourcePath": "game/cards/06_SEC/units/MirajScintelTheWeakDeserveToKneel.ts",
@@ -23728,21 +23323,6 @@
           "line": 44,
           "column": 1,
           "message": "Additional class method requires conversion"
-        }
-      ]
-    },
-    {
-      "setCode": "SEC_146",
-      "internalName": "rebellious-functionary",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/rebellious-functionary.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -24505,21 +24085,6 @@
       ]
     },
     {
-      "setCode": "SEC_217",
-      "internalName": "zenuas-shadow-fighter",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/zenuas-shadow-fighter.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "SEC_218",
       "internalName": "cikatro-vizago#business-is-what-matters",
       "sourcePath": "game/cards/06_SEC/units/CikatroVizagoBusinessIsWhatMatters.ts",
@@ -24758,21 +24323,6 @@
           "file": "game/cards/06_SEC/events/UndercoverOperation.ts",
           "line": 27,
           "column": 42
-        }
-      ]
-    },
-    {
-      "setCode": "SEC_238",
-      "internalName": "sith-assassin",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/sith-assassin.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },
@@ -30924,21 +30474,6 @@
       ]
     },
     {
-      "setCode": "TS26_021",
-      "internalName": "gar-saxon#sundari-pillager",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/gar-saxon#sundari-pillager.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "TS26_022",
       "internalName": "the-darksaber#only-the-strongest-shall-rule",
       "sourcePath": "game/cards/07_TS26/upgrades/TheDarksaberOnlyTheStrongestShallRule.ts",
@@ -31501,21 +31036,6 @@
       ]
     },
     {
-      "setCode": "TS26_065",
-      "internalName": "bokatan-kryze#the-lawless",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/bokatan-kryze#the-lawless.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
-        }
-      ]
-    },
-    {
       "setCode": "TS26_066",
       "internalName": "wartime-pirate",
       "sourcePath": "game/cards/07_TS26/units/WartimePirate.ts",
@@ -31557,21 +31077,6 @@
           "file": "game/cards/07_TS26/units/MoraloEvalInfamousMurderer.ts",
           "line": 18,
           "column": 32
-        }
-      ]
-    },
-    {
-      "setCode": "TS26_074",
-      "internalName": "pre-vizsla#for-mandalore",
-      "sourcePath": null,
-      "diagnostics": [
-        {
-          "code": "MISSING_IMPLEMENTATION",
-          "pattern": "no-source-for-rules-text",
-          "file": "data/Card/pre-vizsla#for-mandalore.json",
-          "line": 1,
-          "column": 1,
-          "message": "No source implementation and card is not a plain base or supported keyword-only unit"
         }
       ]
     },

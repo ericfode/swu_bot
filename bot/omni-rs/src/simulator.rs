@@ -72,19 +72,29 @@ fn keyword_text(text: &str) -> Result<(u16, u16, u16), String> {
     let mut nesting = 0;
     for c in text.chars() {
         if c == '(' {
+            if nesting != 0 {return Err("nested keyword reminder is unsupported".into());}
             nesting += 1;
         } else if c == ')' {
+            if nesting == 0 {return Err("unbalanced keyword reminder".into());}
             nesting -= 1;
         } else if nesting == 0 {
             plain.push(c);
         }
     }
+    if nesting != 0 {return Err("unbalanced keyword reminder".into());}
     let mut flags = 0;
-    let mut raid = 0;
-    let mut restore = 0;
-    for line in plain.lines().map(str::trim).filter(|s| !s.is_empty()) {
+    let mut raid:u16 = 0;
+    let mut restore:u16 = 0;
+    let mut seen=std::collections::HashSet::new();
+    for line in plain.split(['\n',',']).map(str::trim).filter(|s| !s.is_empty()) {
+        let line=line.strip_suffix('.').unwrap_or(line);
+        if line.ends_with(char::is_whitespace) {return Err(format!("invalid keyword punctuation {line:?}"));}
         let words: Vec<_> = line.split_whitespace().collect();
+        if words.is_empty() {return Err(format!("invalid keyword token {line:?}"));}
         let kw = words[0].to_ascii_lowercase();
+        if !seen.insert(kw.clone()) {return Err(format!("duplicate keyword {kw}"));}
+        let numeric=kw=="raid"||kw=="restore";
+        if words.len()!=if numeric {2}else{1} {return Err(format!("invalid keyword token {line:?}"));}
         match kw.as_str() {
             "sentinel" => flags |= SENTINEL,
             "overwhelm" => flags |= OVERWHELM,
@@ -92,15 +102,17 @@ fn keyword_text(text: &str) -> Result<(u16, u16, u16), String> {
             "ambush" => flags |= AMBUSH,
             "grit" => flags |= GRIT,
             "shielded" => flags |= SHIELDED,
+            "hidden" => flags |= 1<<8,
             "raid" | "restore" => {
+                if !words[1].bytes().all(|c|c.is_ascii_digit()) {return Err(format!("invalid numeric keyword {line:?}"));}
                 let amount = words
                     .get(1)
                     .and_then(|s| s.parse::<u16>().ok())
                     .ok_or_else(|| format!("invalid keyword {line}"))?;
                 if kw == "raid" {
-                    raid += amount;
+                    raid=raid.checked_add(amount).ok_or("Raid amount overflow")?;
                 } else {
-                    restore += amount;
+                    restore=restore.checked_add(amount).ok_or("Restore amount overflow")?;
                 }
             }
             _ => return Err(format!("unsupported ability text {line:?}")),

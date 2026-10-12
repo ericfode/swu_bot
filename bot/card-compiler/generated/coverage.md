@@ -1,17 +1,17 @@
 # Card source conversion coverage
 
-Known card definitions: **2458**. IR-converted definitions: **1011** (672 from source AST; 339 metadata-only plain cards). Explicitly blocked definitions: **1447**. Excluded test mocks: 21.
+Known card definitions: **2458**. IR-converted definitions: **1044** (672 from source AST; 372 metadata-only plain cards). Explicitly blocked definitions: **1414**. Excluded test mocks: 21.
 
 These counts measure bounded IR conversion, not runtime acceptance. Metadata-only conversion handles plain bases and fully parsed keyword-only units without a source class. The Rust runtime separately validates its supported operation set. Unsupported definitions retain their source locations and must not be loaded as no-op cards.
 
 | Unsupported source pattern | Affected cards | Occurrences |
 |---|---:|---:|
 | method:setupStateWatchers | 138 | 138 |
-| no-source-for-rules-text | 69 | 69 |
 | unsupported-field:initiateAttack | 52 | 53 |
 | class-state:cardsDefeatedThisPhaseWatcher | 44 | 44 |
 | immediateEffect:deckSearch | 42 | 42 |
 | trigger-alias-hook:onCardPlayed | 38 | 42 |
+| no-source-for-rules-text | 36 | 36 |
 | registrar:addDecreaseCostAbility | 35 | 35 |
 | trigger-alias-hook:onDamageDealt | 30 | 34 |
 | unused-source-binding | 29 | 37 |
