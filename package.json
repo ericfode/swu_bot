@@ -36,7 +36,8 @@
     "wasm:pack": "node bot/omni-wasm/pack.js",
     "wasm:pack:check": "node bot/omni-wasm/verify-package.js",
     "cards": "node bot/cards/cli.js",
-    "cards:reference": "node bot/cards/reference/cli.js"
+    "cards:reference": "node bot/cards/reference/cli.js",
+    "cards:pipeline": "node bot/cards/pipeline/cli.js"
   },
   "devDependencies": {
     "@lakeday/perch": "0.4.3",

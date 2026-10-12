@@ -27,18 +27,18 @@ function sourceIdentity() {
     for (const file of ['bot/env.js', 'bot/view.js', 'bot/omni/rs/state.js', 'bot/omni/rs/pool.js', 'bot/cards/reference/generate.js']) sources[file] = sha256(fs.readFileSync(path.join(repo, file)));
     return { engineRevision, expectedEngineRevision, engineSourceSha256: treeHash(path.join(engine, 'server')), engineBuildSha256: treeHash(path.join(engine, 'build/server')),
         cardDataSha256: treeHash(path.join(engine, 'test/json')), scenarioLibrarySha256: treeHash(path.join(__dirname, 'scenarios')),
-        playerCodeSha256: treeHash(path.join(repo, 'bot/players')), sources };
+        playerCodeSha256: treeHash(path.join(repo, 'bot/players')), pipelineCodeSha256: treeHash(path.join(repo, 'bot/cards/pipeline')), sources };
 }
 async function generate(options) {
     assert.ok(options.out, 'generate needs --out NEW_DIRECTORY');
     const out = path.resolve(options.out);
     assert.ok(!fs.existsSync(out), 'Use a fresh output directory');
-    assert.ok(options.case || options.card || options.behavior, 'Select --case, --card, or --behavior');
+    assert.ok(options.entries?.length || options.case || options.card || options.behavior, 'Select --case, --card, or --behavior');
     const index = lib.registry();
     // Reading the index never loads the engine; only generation/indexing require its build.
     for (const [file, expected] of Object.entries(index.sources)) assert.equal(sha256(fs.readFileSync(path.resolve(__dirname, file))), expected, 'Stale reference index; run index first');
-    const entries = lib.selectCases(options, index);
-    const cataloguePath = path.join(repo, 'bot/card-compiler/generated/catalog.json'), catalogue = lib.read(cataloguePath);
+    const entries = options.entries ?? lib.selectCases(options, index);
+    const cataloguePath = options.catalogue ?? path.join(repo, 'bot/card-compiler/generated/catalog.json'), catalogue = lib.read(cataloguePath);
     for (const entry of entries.filter(c => c.kind === 'play')) {
         const card = catalogue.cards.find(c => c.setCode === entry.focusCardIds[0]);
         assert.ok(card, 'Unknown card: ' + entry.focusCardIds[0]);
@@ -68,7 +68,7 @@ async function generate(options) {
     }
     for (const entry of entries) {
         const suite = require(path.resolve(__dirname, entry.source.module));
-        const scenario = entry.kind === 'play' ? suite.create(entry.focusCardIds[0]) : suite.scenarios.find(s => s.name === entry.source.scenario);
+        const scenario = entry.kind === 'probe' ? entry : entry.kind === 'play' ? suite.create(entry.focusCardIds[0]) : suite.scenarios.find(s => s.name === entry.source.scenario);
         assert.ok(scenario, 'Missing scenario ' + entry.id);
         const seed = options.seed === undefined ? parseInt(sha256(entry.id).slice(0, 8), 16) % 1000000 + 1 : Number(options.seed);
         assert.ok(Number.isSafeInteger(seed) && seed >= 0, 'Seed must be a nonnegative integer');
@@ -78,6 +78,7 @@ async function generate(options) {
         assert.equal(records.at(-1).type, 'result', 'Reference must reach a terminal result');
         // Metadata is attached before serialization; content-addressed recordings are never rewritten.
         records[0].referenceCase = { id: entry.id, kind: entry.kind, focusCardIds: entry.focusCardIds, assertionStages: entry.assertionStages };
+        if (entry.kind === 'probe') records[0].referenceCase.definitionSha256 = sha256(Buffer.from(JSON.stringify(entry)));
         if (entry.kind === 'diagnostic') records[0].diagnostic = { evidenceStatus: 'Synthetic engine registration, not a printed-card witness',
             definition: entry.source, setup: entry.setup, sourceSha256: index.sources[entry.source.module],
             registrationCode: scenario.beforeApply?.toString() ?? scenario.beforeWindow?.toString() ?? null };
@@ -85,7 +86,7 @@ async function generate(options) {
         assert.ok(decisions && windows, 'Empty reference recording');
         const bytes = zlib.gzipSync(records.map(r => JSON.stringify(r)).join('\n') + '\n'), traceSha256 = sha256(bytes);
         fs.writeFileSync(lib.artifact(out, 'trace', traceSha256), bytes);
-        recordings.push({ caseId: entry.id, traceSha256, poolSha256, seed, decisions, windows, witness, provenance,
+        recordings.push({ ...(entry.kind === 'probe' ? { caseDefinition: entry } : {}), caseId: entry.id, traceSha256, poolSha256, seed, decisions, windows, witness, provenance,
             runtimeConformance: 'unassessed', engineOnly: !!options.engineOnly });
         console.error(`${entry.id}: ${decisions} decisions, ${windows} windows; engine assertions passed`);
     }

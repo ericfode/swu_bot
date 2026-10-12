@@ -589,7 +589,7 @@ pub struct Sides {
     pub card: Vec<Ability>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Instruction {
     /// All then/sequence subwindows pass registrations to this initiating ability window.
     EndStep,
@@ -602,7 +602,7 @@ pub enum Instruction {
     Group(Effect),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Program {
     pub title: String,
     pub context_title: Vec<Expr>,
@@ -614,6 +614,8 @@ pub struct Program {
     pub condition: Option<Expr>,
     pub instructions: Vec<Instruction>,
     pub event_end: u8,
+    #[serde(skip)]
+    pub executable: Result<usize, &'static str>,
 }
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
@@ -739,6 +741,7 @@ impl Program {
             condition: ability.condition.clone(),
             instructions: vec![],
             event_end:0,
+            executable: Err("program has not been compiled"),
         };
         if let Some(e) = &p.condition {
             e.validate()?;
@@ -774,6 +777,8 @@ impl Program {
         if p.instructions.len() > MAX_PROGRAM_INSTRUCTIONS {
             return Err("ability program exceeds instruction capacity".into());
         }
+        let bytes=serde_json::to_vec(&p).map_err(|e|e.to_string())?;
+        p.executable=crate::program_backend(&bytes);
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {

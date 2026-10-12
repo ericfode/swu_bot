@@ -1737,3 +1737,50 @@ fn confirmed_attack_enables_relationship_hp_aura_before_damage_and_cleans_up_aft
     s=e.apply(&s,&e.card_action(&s,attacker)).unwrap();assert_eq!(s.decision,Decision::AttackTarget);assert!(s.players[1].ground.contains(defender));assert_eq!(s.attack_source,0);
     s=e.apply(&s,&e.card_action(&s,defender)).unwrap();assert!(s.players[1].discard.contains(defender));assert_eq!(s.card(attacker).damage,0);assert_eq!(s.card(base).damage,0);assert_eq!(s.attack_source,0);assert_eq!(s.attack_defender,0);
 }
+
+#[test]
+fn aot_pilot_programs_execute_directly_and_match_forced_interpreter() {
+    for code in ["TWI_124", "TWI_170"] {
+        let mut e=engine();
+        e.set_rules_instrumentation(true);
+        let mut s=board(&e);
+        let target=if code=="TWI_124" {unit(&e,&mut s,Seat::P1,"LOF_254")}else{s.players[1].base};
+        let event=hand(&e,&mut s,code);
+        let index=e.def(&s,event).programs.card[0] as usize;
+        assert!(e.catalogue.as_ref().unwrap().programs[index].executable.is_ok());
+        // This focused pool admits only the pilot execution programs.
+        for d in &mut e.definitions {if d.code!=code {d.programs=Default::default();}}
+        e.set_rules_backend(RulesBackend::Aot).unwrap();
+        let prompt=e.apply(&s,&e.card_action(&s,event)).unwrap();
+        let actual=e.apply(&prompt,&e.card_action(&prompt,target)).unwrap();
+        let hits=e.rules_hits.lock().unwrap()[&index];
+        assert!(hits[0]>0);assert_eq!(hits[1],0);
+        e.rules_hits.lock().unwrap().clear();
+        e.set_rules_backend(RulesBackend::Interpreter).unwrap();
+        let other_prompt=e.apply(&s,&e.card_action(&s,event)).unwrap();
+        assert_eq!(e.snapshot(&prompt),e.snapshot(&other_prompt));
+        assert_eq!(e.legal_actions(&prompt),e.legal_actions(&other_prompt));
+        let expected=e.apply(&other_prompt,&e.card_action(&other_prompt,target)).unwrap();
+        assert_eq!(e.snapshot(&actual),e.snapshot(&expected));
+        let hits=e.rules_hits.lock().unwrap()[&index];assert_eq!(hits[0],0);assert!(hits[1]>0);
+        if code=="TWI_124" {assert_eq!(actual.card(target).phase_power,2);assert_eq!(actual.card(target).phase_hp,2);} else {assert_eq!(actual.card(target).damage,2);}
+    }
+}
+#[test]
+fn aot_identity_is_content_based_and_unknown_programs_have_explicit_fallback() {
+    let e=engine();let c=e.catalogue.as_ref().unwrap();
+    let index=c.cards["TWI_170"].card[0] as usize;
+    let p=&c.programs[index];let bytes=serde_json::to_vec(p).unwrap();
+    let hash=format!("{:x}",Sha256::digest(&bytes));
+    assert_eq!(generated_backend(&hash,&bytes),p.executable);
+    assert!(generated_backend(&hash,b"changed operand").is_err());
+    let mut value:serde_json::Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    let card=value["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="TWI_170").unwrap();
+    card["abilities"]["card"][0]["effect"]["amount"]["value"]=serde_json::json!(3);
+    let mut external=Engine::from_catalogue_value(&value).unwrap();
+    let mut s=board(&external);let target=s.players[1].base;let event=hand(&external,&mut s,"TWI_170");
+    assert!(external.set_rules_backend(RulesBackend::Aot).unwrap_err().contains("AOT backend unavailable"));
+    external.set_rules_backend(RulesBackend::Auto).unwrap();
+    let prompt=external.apply(&s,&external.card_action(&s,event)).unwrap();
+    let actual=external.apply(&prompt,&external.card_action(&prompt,target)).unwrap();assert_eq!(actual.card(target).damage,3);
+}

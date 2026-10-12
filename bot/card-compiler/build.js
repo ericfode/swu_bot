@@ -68,8 +68,9 @@ function compileCatalog({ source = path.join(repository, 'forceteki/server'), ca
     const byId = new Map();
     const unmatchedSources = [];
     // The compiler's defaults depend on engine helper semantics as well as card
-    // registrations. Hash all server TypeScript, including constants and helpers.
-    const inputs = files(source, '.ts').map((relative) => ({ file: `server/${relative.split(path.sep).join('/')}`, sha256: hash(fs.readFileSync(path.join(source, relative))) }));
+    // registrations. Hash server TypeScript and JavaScript, including legacy
+    // prompt/socket helpers that participate in the reference engine runtime.
+    const inputs = [...files(source, '.ts'), ...files(source, '.js')].sort().map((relative) => ({ file: `server/${relative.split(path.sep).join('/')}`, sha256: hash(fs.readFileSync(path.join(source, relative))) }));
     for (const relative of files(sourceDir, '.ts')) {
         const file = path.join(sourceDir, relative);
         const text = fs.readFileSync(file, 'utf8');

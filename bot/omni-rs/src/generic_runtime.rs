@@ -257,6 +257,9 @@ impl Engine {
             by_code,
             shield_def: shield_def.ok_or("catalogue must include native Shield token")?,
             experience_def,
+            rules_backend: RulesBackend::Auto,
+            rules_instrumentation: false,
+            rules_hits: Default::default(),
             catalogue: Some(catalogue),
         })
     }
@@ -1259,6 +1262,14 @@ impl Engine {
         loop {
             if self.open_deaths(s,1)? {return Ok(());}
             let p = self.program(s.ability_program - 1);
+            if self.rules_backend != RulesBackend::Interpreter {
+                match p.executable {
+                    Ok(index)=>{if self.rules_instrumentation {self.rules_hits.lock().expect("rules metrics lock").entry(s.ability_program as usize-1).or_default()[0]+=1;}if self.generated_step(s,p,index)? {return Ok(());} continue;},
+                    Err(reason) if self.rules_backend==RulesBackend::Aot=>return Err(format!("AOT backend unavailable: {reason}")),
+                    Err(_)=>{},
+                }
+            }
+            if self.rules_instrumentation {self.rules_hits.lock().expect("rules metrics lock").entry(s.ability_program as usize-1).or_default()[1]+=1;}
             let Some(instruction) = p.instructions.get(s.ability_pc as usize) else {
                 return self.end_program(s);
             };
@@ -2254,3 +2265,31 @@ impl Engine {
 #[cfg(test)]
 #[path = "generic_runtime_tests.rs"]
 mod tests;
+
+// Generated executable code shares the executor's private event/prompt primitives.
+include!(concat!(env!("OUT_DIR"), "/rules_aot.rs"));
+impl Engine {
+    pub fn set_rules_instrumentation(&mut self, enabled:bool) {self.rules_instrumentation=enabled;}
+    pub fn set_rules_backend(&mut self, backend: RulesBackend)->Result<(),String> {
+        if backend==RulesBackend::Aot {
+            if let Some(c)=&self.catalogue {
+                for d in &self.definitions {
+                    for &index in d.programs.leader.iter().chain(&d.programs.unit).chain(&d.programs.card) {
+                        if let Err(reason)=c.programs[index as usize].executable {return Err(format!("AOT backend unavailable for {} program {}: {reason}",d.code,index));}
+                    }
+                }
+            }
+        }
+        self.rules_backend=backend;Ok(())
+    }
+    pub fn rules_backend_report(&self)->serde_json::Value {
+        let programs=self.catalogue.as_ref().map(|c| c.programs.iter().enumerate().map(|(index,p)| {
+            let bytes=serde_json::to_vec(p).expect("program serialization");
+            let hash=format!("{:x}",Sha256::digest(&bytes));
+            let dispatch=p.executable;
+            serde_json::json!({"index":index,"contentHash":hash,"title":p.title,"trigger":p.trigger,"backend":if self.rules_backend==RulesBackend::Interpreter {"interpreter"} else if dispatch.is_ok() {"aot"} else {"interpreterFallback"},"fallbackReason":dispatch.err(),"canonicalProgram":p,"executedSteps":self.rules_hits.lock().expect("rules metrics lock").get(&index).copied().unwrap_or_default()})
+        }).collect::<Vec<_>>()).unwrap_or_default();
+        let cards=self.catalogue.as_ref().map(|c| c.cards.iter().map(|(code,p)| (code.clone(),serde_json::json!({"leader":p.leader,"unit":p.unit,"card":p.card}))).collect::<std::collections::BTreeMap<_,_>>()).unwrap_or_default();
+        serde_json::json!({"cards":cards,"compiledScope":"instruction dispatch and supported direct primitive operations","sharedRuntime":["target selection and predicates","costs","registration conditions","event boundaries","constant live modifiers"],"instrumentationEnabled":self.rules_instrumentation,"sourceHash":format!("{:x}",Sha256::digest(include_bytes!(concat!(env!("OUT_DIR"),"/rules_aot.rs")))),"generatorAbi":"direct-primitives/v1","executionCounterOrder":["aot","interpreter"],"schema":"swu-rules-aot/v1","mode":format!("{:?}",self.rules_backend).to_lowercase(),"programs":programs,"generatedSource":include_str!(concat!(env!("OUT_DIR"),"/rules_aot.rs"))})
+    }
+}
