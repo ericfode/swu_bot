@@ -17,7 +17,7 @@ function score(state, you) {
     return 3 * (opp.base.d - me.base.d) + sum([...me.ground, ...me.space]) - sum([...opp.ground, ...opp.space]) + me.handCount - opp.handCount;
 }
 
-function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
+function create(name = 'js-search', { width = 16, horizon = 40, simEngine = null } = {}) {
     let rng = null; // seeded at hello
     let tried = new Map(); // situation -> the choices already made in it this game
     const pick = (r, you) => {
@@ -47,7 +47,8 @@ function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
         hello(msg) {
             rng = seededRng(msg.seed);
             tried = new Map();
-            return { t: 'ready', v: 2, name, sim: true };
+            // simEngine 'rust': simulate on the Rust engine when it knows every card in the game (spec/protocol.md#sim)
+            return { t: 'ready', v: 2, name, sim: true, ...(simEngine ? { simEngine } : {}) };
         },
         async decide(msg, sim) {
             const here = createHash('sha1').update(JSON.stringify([msg.state, msg.prompt, msg.actions])).digest('hex');
@@ -64,5 +65,6 @@ function create(name = 'js-search', { width = 16, horizon = 40 } = {}) {
 
 module.exports = { create };
 if (require.main === module) {
-    serve(create(process.argv[2]));
+    const at = process.argv.indexOf('--sim-engine');
+    serve(create(process.argv[2], { simEngine: at > 0 ? process.argv[at + 1] : null }));
 }

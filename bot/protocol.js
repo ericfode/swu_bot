@@ -131,6 +131,7 @@ class ClientSeat {
         this.shadow = null;
         this.v = 1;
         this.wantsSims = false;
+        this.simEngine = null;
         this.seq = 0;
         this.times = [];
         this.revealed = [];
@@ -184,6 +185,8 @@ class ClientSeat {
         }
         this.v = v;
         this.wantsSims = v === 2 && r.sim === true;
+        // simulations on the Rust engine when it knows every card (bot/omni/rs/rust-sims.js); forceteki otherwise
+        this.simEngine = this.wantsSims && r.simEngine === 'rust' ? 'rust' : null;
         // the build that plays this game, recorded with the result (informational, any version)
         this.version = typeof r.version === 'string' && r.version ? r.version.slice(0, 200) : null;
     }
@@ -195,11 +198,16 @@ class ClientSeat {
     async decide(eg, pid, actions) {
         const ms = this.limits.decide;
         const seq = ++this.seq;
-        // the copy catches up with the real game before the clock starts
-        const copy = this.wantsSims && eg.isActionWindow(pid) ? await this.shadow.sync(eg, pid) : null;
-        const sim = copy ? simulator(this.shadow, pid, (deal) => this.setup.deals(`${seq}:${deal}`), ms === null ? null : Date.now() + ms) : null;
+        let sim = null;
+        if (this.wantsSims && eg.isActionWindow(pid)) {
+            const deals = (deal) => this.setup.deals(`${seq}:${deal}`);
+            sim = this.simEngine ? await require('./omni/rs/rust-sims').rustSimulator(eg, pid, deals, ms === null ? null : Date.now() + ms) : null;
+            // the copy catches up with the real game before the clock starts
+            const copy = sim ? null : await this.shadow.sync(eg, pid);
+            sim ??= copy ? simulator(this.shadow, pid, deals, ms === null ? null : Date.now() + ms) : null;
+        }
         const msg = {
-            t: 'decide', seq, you: this.seat, sim: !!sim, ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
+            t: 'decide', seq, you: this.seat, sim: !!sim, ...(sim?.engine ? { simEngine: sim.engine } : {}), ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
             actions: actions.map((a, i) => actionView(eg, a, i, pid)), revealed: this.revealed.splice(0)
         };
         const t = now();
@@ -356,10 +364,14 @@ function simulator(shadow, pid, deals, deadline) {
         actor = null,
         acts = null,
         rng = null,
-        fresh = 0;
+        fresh = 0,
+        mirror = null, // a checker following this simulation (shadow.watch), if any
+        moves = 0;
     const left = () => (deadline === null ? null : Math.max(0, deadline - Date.now()));
 
     const close = () => {
+        mirror?.end(eg);
+        mirror = null;
         if (open) {
             open = false;
             try {
@@ -386,6 +398,7 @@ function simulator(shadow, pid, deals, deadline) {
         if (!acts.length) {
             throw new Error('neither player can act');
         }
+        mirror?.pre(eg, actor, acts, moves);
         return {
             t: 'simulated', op, ms: left(), actor: eg.seatOf(actor), prompt: promptView(eg, actor), state: view(eg, you),
             actions: acts.map((a, i) => actionView(eg, a, i, actor))
@@ -410,6 +423,8 @@ function simulator(shadow, pid, deals, deadline) {
             // a deal without a number is one never used before in this decision
             rng = deals(req.deal ?? `new${fresh++}`);
             determinize(eg, pid, rng);
+            mirror = shadow.watch?.(eg, pid) ?? null;
+            moves = 0;
             return position('begin');
         }
         if (req.op !== 'act') {
@@ -422,7 +437,9 @@ function simulator(shadow, pid, deals, deadline) {
         if (!a) {
             throw new Error(acts ? `no action ${short(req.i)}` : 'the simulated game is over');
         }
-        eg.apply(actor, withSplit(a, toEngine(eg, req.split)), rng);
+        const applied = eg.apply(actor, withSplit(a, toEngine(eg, req.split)), rng);
+        mirror?.post(eg, actor, a, applied);
+        moves++;
         return position('act');
     };
 

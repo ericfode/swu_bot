@@ -82,6 +82,9 @@ Reply `{"t":"ready","v":2,"name":"rust-mcts","sim":true}`. `v` is the version yo
 1, anything not offered is an error. `sim: true` asks for simulations (the referee then keeps a copy of the game to
 run them on). `name` is informational. Reset any per-game state here: one program plays many games.
 
+`simEngine` (optional, with `sim: true`): `"rust"` asks for simulations on the Rust simulator, which is far faster
+(see [Simulations on the Rust engine](#simulations-on-the-rust-engine)). Leave it out for forceteki simulations.
+
 `version` (optional, a string of at most 200 characters, for example a git commit or a bundle id `sha256:...`) names
 the build of the bot that plays this game. The referee records it with the game result (`versions` by seat). It
 matters for a bot that changes between games, such as one an agent updates between rounds on a server it runs
@@ -106,6 +109,7 @@ legal split.
 |---|---|
 | `seq` | Decision number in this game, from 1. |
 | `sim` | `true` when `sim` requests are allowed now: you asked for them and this is an action window. |
+| `simEngine` | `"rust"` when this decision's simulations run on the Rust simulator; absent when they run on forceteki. |
 | `ms` | Your time for the `act`, simulations included. |
 | `prompt` | What is being asked, below. |
 | `state` | The board as your seat sees it, below. |
@@ -194,6 +198,24 @@ not used before.
 
 Simulations run on a second engine that follows the real game's moves, so they never touch the real game: a game plays
 out exactly the same with or without them.
+
+#### Simulations on the Rust engine
+
+A bot that sends `"simEngine": "rust"` in `ready` gets its simulations from the Rust simulator (`bot/omni-rs`, run as
+WebAssembly) for every decision where it knows every card in the game, and forceteki simulations otherwise; `decide`
+says which with `simEngine`. The real game always runs on forceteki. The Rust simulator knows a subset of the cards
+(the pool in `bot/omni/rs/pool.json`, or `$SWU_RUST_POOL`) and is checked move for move against forceteki
+(`bot/omni/rs/stress.js`), but it is a second implementation: treat a disagreement as possible.
+
+Requests, replies, deals and errors are the same, with these differences:
+
+- The hidden cards are dealt again the same way (same zone sizes, same seat-private stream per `deal`), by a shuffle
+  of their own, so a deal number gives other cards than it would on forceteki.
+- `prompt` carries only `actionWindow`; `type`, `signature`, `title`, `promptTitle` and `selectCardMode` are `null`
+  and `selected` is empty.
+- `state` has no `force` or `credits` (no card in the Rust pool uses them).
+- A `distribute` choice is one action per allowed split, each with its `split` (`[{"id","amount"}]`) and no
+  `distribute` field; a `split` you send with `act` is ignored.
 
 ### `over` → `ok`
 
