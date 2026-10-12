@@ -58,6 +58,11 @@ review the new packet before publishing. Model review receipts remain run output
 not chronological repository journals. Import useful passing references through
 the existing `cards:reference import` command so they run in CI.
 
+When adding a construction adapter, wire both planner/fixture dispatch and the
+central fixture dependency inventory so reusable recordings bind the new source
+files. Compare every preceding full plan object, including its obligations and
+construction parameters, after changing dispatch.
+
 ## Establish evidence
 
 Write expected outcomes from the pinned full card source, helper implementation

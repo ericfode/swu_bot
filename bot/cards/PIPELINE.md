@@ -180,6 +180,16 @@ resolves and combat completes. Unique replacement, source departure, token/leade
 recipients, ordinary attachment cleanup, captured defense, gained Overwhelm and
 controller transfer remain explicit gaps.
 
+Opposite-chooser experiments cover normal unit/event play, both source seats,
+missing domains and empty-event cancellation. They assert payment by the source
+controller before the opponent chooses, both mandatory domains, deferred shared
+damage/defeat, and original-actor replacement/death priority. Real cases cover
+paired Shields, captured Force gains, unique-source keep-old/keep-new choices,
+native Clone recipients and deployed-leader inclusion or exclusion. Defeat
+checks ordinary and native attachment identity, detachment and destinations.
+Control transfer/reentry, multiplayer, attack-time opposite choosers and broader
+creation/replacement hooks remain gaps.
+
 Mixed named-event experiments cover ready/damage, exhaust/cheap Shield and
 Shield/negative power pairs. They distinguish truly empty domains from legal
 but ineffective readiness choices, cancellation at either selection, delayed

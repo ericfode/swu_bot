@@ -8504,6 +8504,44 @@
     },
     {
       "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "3294976485",
+      "internalName": "wrecker#wrecking-the-empire",
+      "keywords": [],
+      "power": 6,
+      "rules": null,
+      "setCode": "HMW_263",
+      "setCodes": [
+        {
+          "number": 263,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 263,
+        "set": "HMW"
+      },
+      "subtitle": "Wrecking the Empire",
+      "text": "When Played: Each player chooses a unit they control. Deal 3 damage to each chosen unit.",
+      "title": "Wrecker",
+      "traits": [
+        "clone"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
       "aspects": [],
       "cost": 1,
       "deployBox": null,
@@ -14668,6 +14706,47 @@
       "traits": [
         "imperial",
         "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "2268751344",
+      "internalName": "governors-shuttle",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "LAW_099",
+      "setCodes": [
+        {
+          "number": 99,
+          "set": "LAW"
+        }
+      ],
+      "setId": {
+        "number": 99,
+        "set": "LAW"
+      },
+      "subtitle": "",
+      "text": "When Played: Each player chooses a unit they control. Defeat those units.",
+      "title": "Governor's Shuttle",
+      "traits": [
+        "imperial",
+        "vehicle",
+        "transport"
       ],
       "types": [
         "unit"
@@ -37437,6 +37516,43 @@
       "title": "Droid Deployment",
       "traits": [
         "supply"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "villainy"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "4412828936",
+      "internalName": "merciless-contest",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TWI_238",
+      "setCodes": [
+        {
+          "number": 238,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 238,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "Each player chooses a non-leader unit they control. Defeat those units.",
+      "title": "Merciless Contest",
+      "traits": [
+        "tactic"
       ],
       "types": [
         "event"

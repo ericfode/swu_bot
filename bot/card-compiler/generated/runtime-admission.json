@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 560
+    "sourceIr": 563
   },
   "runtimeAdmittedCards": [
     {
@@ -1076,6 +1076,11 @@
       "setCode": "HMW_262"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "wrecker#wrecking-the-empire",
+      "setCode": "HMW_263"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "offworld-jawa",
       "setCode": "HMW_268"
@@ -1814,6 +1819,11 @@
       "implementation": "dataOnly",
       "internalName": "vandor-range-troopers",
       "setCode": "LAW_098"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "governors-shuttle",
+      "setCode": "LAW_099"
     },
     {
       "implementation": "dataOnly",
@@ -4647,6 +4657,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "merciless-contest",
+      "setCode": "TWI_238"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "332nd-stalwart",
       "setCode": "TWI_240"
     },
@@ -4691,7 +4706,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 936,
+  "runtimeAdmittedCount": 939,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -6239,11 +6254,6 @@
       "setCode": "HMW_260"
     },
     {
-      "internalName": "wrecker#wrecking-the-empire",
-      "reason": "wrecker#wrecking-the-empire: named selectors require distinct ordinary names and own chooser",
-      "setCode": "HMW_263"
-    },
-    {
       "internalName": "heroic-bravery",
       "reason": "heroic-bravery: printed titles support strict equality and logical operators only",
       "setCode": "HMW_264"
@@ -7582,11 +7592,6 @@
       "internalName": "rhydonium-detonation",
       "reason": "rhydonium-detonation: compiler rejected \"rhydonium-detonation\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/07_LAW/events/RhydoniumDetonation.ts\",\"line\":18,\"message\":\"unsupported-named-effect:returnToHand\",\"pattern\":\"unsupported-named-effect:returnToHand\"}]",
       "setCode": "LAW_096"
-    },
-    {
-      "internalName": "governors-shuttle",
-      "reason": "governors-shuttle: named selectors require distinct ordinary names and own chooser",
-      "setCode": "LAW_099"
     },
     {
       "internalName": "lawbringer#shadow-over-lothal",
@@ -12249,11 +12254,6 @@
       "setCode": "TWI_236"
     },
     {
-      "internalName": "merciless-contest",
-      "reason": "merciless-contest: named selectors require distinct ordinary names and own chooser",
-      "setCode": "TWI_238"
-    },
-    {
       "internalName": "execute-order-66",
       "reason": "execute-order-66: compiler rejected \"execute-order-66\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/03_TWI/events/ExecuteOrder66.ts\",\"line\":23,\"message\":\"unsupported-query:getJedisInPlay\",\"pattern\":\"unsupported-query:getJedisInPlay\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/03_TWI/events/ExecuteOrder66.ts\",\"line\":36,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:getJedisInPlay\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/03_TWI/events/ExecuteOrder66.ts\",\"line\":42,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:createCloneTroopers\"}]",
       "setCode": "TWI_239"
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1522,
+  "runtimeRejectedCount": 1519,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

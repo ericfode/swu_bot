@@ -2139,7 +2139,8 @@ fn actual_when_played_lists_include_the_entering_unit_and_skip_empty_enemy_trigg
 #[test]
 fn named_two_admission_preserves_other_descriptor_rejections() {
     let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["HMW_263","LAW_099","LOF_054","TWI_156","TWI_171","TWI_238","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    for code in ["HMW_263","LAW_099","TWI_238"] {assert!(e.by_code.contains_key(code),"{code}");}
+    for code in ["LOF_054","TWI_156","TWI_171","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
     assert_eq!(std::mem::size_of::<State>(),18560);
 }
 #[test]
@@ -2629,4 +2630,28 @@ fn named_unit_base_damage_raw_scope_is_fail_closed() {
         if slot.is_array() { slot[key.parse::<usize>().unwrap()] = value; } else { slot[key] = value; }
         assert!(!Engine::from_catalogue_value(&catalogue).unwrap().by_code.contains_key("LAW_184"), "{path}");
     }
+}
+#[test]
+fn named_chooser_event_pays_original_actor_before_opponent_and_restores() {
+ let e=engine();let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_112");let enemy=unit(&e,&mut s,Seat::P2,"LOF_112");let event=hand(&e,&mut s,"TWI_238");let resources=s.players[0].resources;let first=e.apply(&s,&e.card_action(&s,event)).unwrap();assert_eq!(first.active,Seat::P2);assert_eq!(first.decision,Decision::AbilityTarget);assert!(first.players[0].discard.contains(event));assert!(!first.players[0].hand.contains(event));assert!(resources.as_slice().iter().any(|id|first.card(*id).exhausted));assert!(!e.legal_actions(&first).iter().any(|a|["Cancel","Choose nothing","Pass"].contains(&a.label.as_str())));assert_eq!(e.legal_actions(&first).iter().filter_map(Action::id).collect::<Vec<_>>(),vec![enemy]);
+ let second=e.apply(&first,&e.card_action(&first,enemy)).unwrap();assert_eq!(second.active,Seat::P1);assert!(e.in_arena(&second,enemy));let done=e.apply(&second,&e.card_action(&second,own)).unwrap();assert!(done.players[0].discard.contains(own));assert!(done.players[1].discard.contains(enemy));assert_eq!(done.active,Seat::P2);
+}
+#[test]
+fn named_chooser_unit_missing_opponent_and_entering_self_defeat() {
+ let e=engine();let mut s=board(&e);let source=hand(&e,&mut s,"LAW_099");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(first.active,Seat::P1);assert_eq!(first.decision,Decision::AbilityTarget);assert_eq!(e.legal_actions(&first).iter().filter_map(Action::id).collect::<Vec<_>>(),vec![source]);let done=e.apply(&first,&e.card_action(&first,source)).unwrap();assert!(done.players[0].discard.contains(source));assert_eq!(done.active,Seat::P2);
+ let mut s=board(&e);let enemy=unit(&e,&mut s,Seat::P2,"LOF_112");let source=add(&e,&mut s,Seat::P1,"LAW_099");s.players[0].discard.push(source).unwrap();s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.active,Seat::P2);let done=e.apply(&s,&e.card_action(&s,enemy)).unwrap();assert!(done.players[1].discard.contains(enemy));assert_ne!(done.decision,Decision::AbilityTarget);
+}
+#[test]
+fn named_chooser_wrecker_shield_priority_and_combined_defeat_owners() {
+ let e=engine();for label in ["You","Opponent"] {let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_112");let enemy=unit(&e,&mut s,Seat::P2,"LOF_112");for id in [own,enemy] {e.create_token(&mut s,id,false).unwrap();e.create_token(&mut s,id,false).unwrap();}let source=hand(&e,&mut s,"HMW_263");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();assert_eq!(first.active,Seat::P2);let second=e.apply(&first,&e.card_action(&first,enemy)).unwrap();assert_eq!(second.active,Seat::P1);let priority=e.apply(&second,&e.card_action(&second,own)).unwrap();assert_eq!(priority.decision,Decision::AbilityGroupShield);assert_eq!(priority.active,Seat::P1);let done=named_button(&e,&priority,label);for id in [own,enemy] {assert_eq!(done.card(id).damage,0);assert_eq!(e.token_count(&done,done.card(id).shield),1);}}
+ for label in ["You","Opponent"] {let mut s=board(&e);let own=unit(&e,&mut s,Seat::P1,"LOF_129");let enemy=unit(&e,&mut s,Seat::P2,"LOF_129");let source=hand(&e,&mut s,"LAW_099");let first=e.apply(&s,&e.card_action(&s,source)).unwrap();let second=e.apply(&first,&e.card_action(&first,enemy)).unwrap();let death=e.apply(&second,&e.card_action(&second,own)).unwrap();assert!(death.players[0].discard.contains(own));assert!(death.players[1].discard.contains(enemy));assert_eq!(death.decision,Decision::DeathPlayer);assert_eq!(death.active,Seat::P1);let done=named_button(&e,&death,label);assert!(done.players[0].force_held&&done.players[1].force_held);}
+}
+#[test]
+fn named_chooser_raw_shapes_fail_closed() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for (field,value) in [("chooser",json!("self")),("name",json!(""))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["abilities"]["card"][0]["targetResolvers"][0][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
+ for (field,value) in [("owner",json!("any")),("optional",json!(true)),("type",json!("nonLeaderUnit")),("arena",json!("ground"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["targetResolver"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
+ for (field,value) in [("pilotText",json!("Pilot")),("keywords",json!(["ambush"])),("types",json!(["leader","unit"])),("unique",json!(null))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["card"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
+ for name in ["target","constructor","prototype","__proto__","0choice"] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["name"]=json!(name);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
+ assert_eq!(std::mem::size_of::<State>(),18560);assert_eq!(std::mem::size_of::<Card>(),36);
 }

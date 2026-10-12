@@ -159,6 +159,7 @@ async function fixture(env, pool, scenario, seed) {
     if (scenario.probe?.family === 'force') return require('./force-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-stat-filter') return require('./arena-stat-filter-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'weakness') return require('./weakness-probe-fixture').fixture(env, pool, scenario, seed);
+    if (scenario.probe?.family === 'named-chooser') return require('./named-chooser-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'named-target') return require('./named-target-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-keyword') return require('./arena-keyword-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'hidden') return require('./hidden-probe-fixture').fixture(env, pool, scenario, seed);
@@ -413,6 +414,8 @@ module.exports = {
         'bot/cards/pipeline/arena-stat-filter-probe-fixture.js',
         'bot/cards/pipeline/weakness-probes.js',
         'bot/cards/pipeline/weakness-probe-fixture.js',
+        'bot/cards/pipeline/named-chooser-probes.js',
+        'bot/cards/pipeline/named-chooser-probe-fixture.js',
         'bot/cards/pipeline/named-target-probes.js',
         'bot/cards/pipeline/named-target-probe-fixture.js',
         'bot/cards/pipeline/arena-keyword-probes.js',

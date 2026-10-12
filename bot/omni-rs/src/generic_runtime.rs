@@ -1093,7 +1093,7 @@ impl Engine {
                     );
                 }
                 Instruction::IfResult { .. } => break,
-                Instruction::Apply(effect) | Instruction::Group(effect) | Instruction::NamedGroup(effect) => {
+                Instruction::Apply(effect) | Instruction::Group(effect) | Instruction::NamedGroup(effect) | Instruction::NamedChooserGroup {effect,..} => {
                     if self.effect_can_affect(s, source, target, effect, require_change) {
                         return true;
                     }
@@ -1230,7 +1230,7 @@ impl Engine {
                 let (r,child)=if let Some((r,e))=self.current_group_resolver(s,p) { (r,Some(e)) } else {
                     let Instruction::Select(r)=&p.instructions[s.ability_pc as usize] else { unreachable!() }; (r,None)
                 };
-                let named=matches!(p.instructions[s.ability_pc as usize],Instruction::NamedGroup(_));
+                let named=p.instructions[s.ability_pc as usize].is_named_group();
                 if !named && !s.ability_committed && s.ability_return==0 { out.push(Action::button("Cancel","cancel")); }
                 if child.is_none() && p.optional && s.ability_pc==0 { out.push(Action::button("Pass","passAbility")); }
                 let picks=if child.is_some() { s.event_group.picks } else { s.ability_selection };
@@ -1423,14 +1423,17 @@ impl Engine {
                     s.decision = Decision::AbilityDistribute;
                     return Ok(());
                 }
-                Instruction::Group(effect) | Instruction::NamedGroup(effect) => {
-                    let named=matches!(instruction,Instruction::NamedGroup(_));
+                Instruction::Group(effect) | Instruction::NamedGroup(effect) | Instruction::NamedChooserGroup{effect,..} => {
+                    let named=instruction.is_named_group();
                     if !named { self.commit_program(s)?; }
                     if !s.event_group.active {
                         s.ability_succeeded=false;
                         s.event_group.active=true; s.event_group.initiator=s.active;
                         s.event_group.context=if s.ability_selection.len>0 { s.ability_selection } else { Selection::one(s.ability_target) };
                     }
+                    // Target prompts may temporarily hand active to the opposite chooser.
+                    // Replacement prompts retain their own actor until resolve_group consumes them.
+                    if matches!(instruction,Instruction::NamedChooserGroup{..}) && !s.event_group.replacement_done {s.active=s.event_group.initiator;}
                     if !self.generate_group(s,effect)? { return Ok(()); }
                     if named { self.commit_program(s)?; self.allocate_named_tokens(s,effect)?; }
                     if !self.resolve_group(s,effect)? { return Ok(()); }
@@ -1449,7 +1452,7 @@ impl Engine {
         }
     }
     fn current_group_resolver<'a>(&self, s: &State, p: &'a Program) -> Option<(&'a TargetResolver,&'a Effect)> {
-        let (Instruction::Group(effect)|Instruction::NamedGroup(effect))=&p.instructions[s.ability_pc as usize] else { return None; };
+        let effect=p.instructions[s.ability_pc as usize].group_effect()?;
         match group_ops(effect).get(s.event_group.pc as usize) {
             Some(GroupOp::Select(r,e,_))=>Some((r,e)), _=>None,
         }
@@ -1511,7 +1514,7 @@ impl Engine {
             let tokens=matches!(e,Effect::GiveShield{..}|Effect::GiveExperience{..});
             for _ in 0..if tokens { amount } else { 1 } {
                 let mut record=PreparedEvent{op:op as u16,target,amount,power,hp,token:0};
-                if tokens && !matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedGroup(_)) {
+                if tokens && !self.program(s.ability_program-1).instructions[s.ability_pc as usize].is_named_group() {
                     if s.next_id as usize>=MAX_CARDS { return Err("card capacity exceeded generating token".into()); }
                     record.token=s.next_id; s.next_id+=1;
                     let def=if matches!(e,Effect::GiveExperience{..}) { self.experience_def.ok_or("catalogue needs Experience token")? } else { self.shield_def };
@@ -1543,9 +1546,18 @@ impl Engine {
                 GroupOp::Branch(expr,to)=> { if !self.eval(s,s.source,s.ability_target,expr).truth() { s.event_group.pc=*to as u16; continue; } }
                 GroupOp::Jump(to)=> { s.event_group.pc=*to as u16; continue; }
                 GroupOp::Select(r,child,end)=> {
+                    if let Instruction::NamedChooserGroup{choosers,..}=&self.program(s.ability_program-1).instructions[s.ability_pc as usize] {
+                        let index=ops[..s.event_group.pc as usize].iter().filter(|op|matches!(op,GroupOp::Select(..))).count();
+                        s.active=s.event_group.initiator;
+                        if matches!(choosers[index],crate::ability_ir::NamedChooser::Opponent) {
+                            // Opponent pretarget always delays until original-player costs are paid.
+                            self.commit_program(s)?;s.active=s.event_group.initiator.other();
+                        }
+                    }
                     if self.group_candidates(s,r,child,true).is_empty() {
                         // A missing pretarget delays the remaining named resolver chain until costs.
-                        if !s.ability_committed && matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedGroup(_)) && self.group_candidates(s,r,child,false).is_empty() {self.commit_program(s)?;}
+                        if !s.ability_committed && self.program(s.ability_program-1).instructions[s.ability_pc as usize].is_named_group() && self.group_candidates(s,r,child,false).is_empty() {self.commit_program(s)?;}
+                        if matches!(self.program(s.ability_program-1).instructions[s.ability_pc as usize],Instruction::NamedChooserGroup{..}) {s.active=s.event_group.initiator;}
                         s.event_group.pc=*end as u16; continue;
                     }
                     s.decision=Decision::AbilityTarget; return Ok(false);
@@ -2126,7 +2138,7 @@ impl Engine {
                     let seat=if a.arg.as_ref().and_then(Value::as_u64)==Some(0) { s.active } else { s.active.other() };
                     t.event_group.shield_priority=seat.index() as u8+1;
                 } else {
-                    let Instruction::Group(effect)=&self.program(s.ability_program-1).instructions[s.ability_pc as usize] else { unreachable!() };
+                    let effect=self.program(s.ability_program-1).instructions[s.ability_pc as usize].group_effect().expect("group replacement instruction");
                     let targets=self.group_shield_targets(s,effect,s.active);
                     let count=if a.arg.as_ref().and_then(Value::as_str)==Some("all") { targets.len() } else { 1 };
                     for target in targets.into_iter().take(count) { self.replace_group_damage(&mut t,effect,target); }

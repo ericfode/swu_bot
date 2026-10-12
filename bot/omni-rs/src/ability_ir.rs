@@ -712,6 +712,9 @@ fn contains_weakness(effect:&Effect)->bool {
     match effect {Effect::GiveWeakness{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_weakness(on_true)||on_false.as_deref().is_some_and(contains_weakness),Effect::Select{effect,..}=>contains_weakness(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_weakness),_=>false}
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum NamedChooser { Own, Opponent }
+
 #[derive(Debug, Clone, Serialize)]
 pub enum Instruction {
     /// All then/sequence subwindows pass registrations to this initiating ability window.
@@ -725,6 +728,12 @@ pub enum Instruction {
     Group(Effect),
     /// Independent named selectors prepare before commitment and share one event window.
     NamedGroup(Effect),
+    /// Independent mandatory selectors with separate prompt actors; original actor owns commitment.
+    NamedChooserGroup { effect: Effect, choosers: Vec<NamedChooser> },
+}
+impl Instruction {
+    pub fn group_effect(&self)->Option<&Effect> {match self {Self::Group(e)|Self::NamedGroup(e)|Self::NamedChooserGroup{effect:e,..}=>Some(e),_=>None}}
+    pub fn is_named_group(&self)->bool {matches!(self,Self::NamedGroup(_)|Self::NamedChooserGroup{..})}
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -984,6 +993,21 @@ impl Program {
         if !ability.target_resolvers.is_empty() {
             if depth!=0 || !["event","whenPlayed","onAttack"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
                 return Err("named selectors require two independent standalone event/WhenPlayed/OnAttack stat systems".into());
+            }
+            if ability.target_resolvers.iter().any(|d|d.chooser!="self") {
+                let damage=ability.target_resolvers.iter().all(|d|matches!(&d.effect,Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(3)));
+                let defeat=ability.target_resolvers.iter().all(|d|matches!(&d.effect,Effect::Defeat{target:Target::Name(n)} if n=="chosen"));
+                if !(damage&&ability.trigger=="whenPlayed" || defeat&&["whenPlayed","event"].contains(&ability.trigger.as_str())) {return Err("opponent named chooser requires ordinary play damage3 or play/event defeat pair".into());}
+                let expected_type=if ability.trigger=="event" {"nonLeaderUnit"}else{"unit"};
+                let expected_zone=if damage {"anyAttackable"}else{"arena"};
+                let mut names=std::collections::HashSet::new();let mut effects=Vec::new();
+                for (index,d) in ability.target_resolvers.iter().enumerate() {
+                    let owner=if index==0 {"opponent"}else{"self"};let r=&d.target_resolver;
+                    if d.name.is_empty() || ["target","constructor","prototype","__proto__"].contains(&d.name.as_str()) || !d.name.chars().next().is_some_and(|c|c.is_ascii_alphabetic()||c=='_') || !d.name.chars().all(|c|c.is_ascii_alphanumeric()||c=='_') || !names.insert(d.name.as_str()) || d.chooser!=owner || r.owner!=owner || r.card_type!=expected_type || r.zone.as_deref()!=Some(expected_zone) || r.arena.is_some() || r.optional || r.mode.is_some() || r.count.is_some() || r.predicate.is_some() || r.prompt_title.is_some() {return Err("opponent named chooser requires mandatory opposite/self scalar domains and default prompts".into());}
+                    r.validate()?;effects.push(Effect::Select{target_resolver:r.clone(),effect:Box::new(d.effect.clone())});
+                }
+                let effect=Effect::Simultaneous{effects};self.validate_group(&effect,1)?;
+                self.instructions.push(Instruction::NamedChooserGroup{effect,choosers:vec![NamedChooser::Opponent,NamedChooser::Own]});return Ok(());
             }
             let fervor=matches!(&ability.target_resolvers[0].effect,Effect::Ready{target:Target::Name(n)} if n=="chosen") && matches!(&ability.target_resolvers[1].effect,Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(3));
             let sanctuary=matches!(&ability.target_resolvers[0].effect,Effect::Exhaust{target:Target::Name(n)} if n=="chosen") && matches!(&ability.target_resolvers[1].effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1));
@@ -1457,6 +1481,11 @@ impl Catalogue {
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
+                if sides.card.iter().any(|a|a.target_resolvers.iter().any(|d|d.chooser!="self")) {
+                    let no_keywords=entry["keywordValues"].as_object().is_some_and(|v|v.is_empty())&&entry["card"]["keywords"].as_array().is_some_and(|v|v.is_empty());
+                    let no_pilot=["pilotText","pilotBox","pilotingBox"].iter().all(|k|entry["card"][k].is_null())&&entry["piloting"].is_null();
+                    if sides.card.len()!=1 || !sides.leader.is_empty() || !sides.unit.is_empty() || !no_keywords || !no_pilot || !entry["attachCondition"].is_null() || !entry["card"]["unique"].is_boolean() || !((entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")&&sides.card[0].trigger=="whenPlayed")||(entry["baseClass"]=="EventCard"&&exact_type("event")&&sides.card[0].trigger=="event")) {return Err("opponent named chooser requires a sole ordinary play/event source without side, intrinsic or pilot mechanics".into());}
+                }
                 if sides.card.iter().any(named_unit_base_damage) {
                     let no_keywords = entry["keywordValues"].as_object().is_some_and(|values| values.is_empty()) &&
                         entry["card"]["keywords"].as_array().is_some_and(|values| values.is_empty());

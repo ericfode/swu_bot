@@ -162,7 +162,7 @@ unit first and an enemy unit second, with static arena domains and one or two
 points of preventable ability damage. Both choices finish before either damage
 event resolves. Shared Shield replacement and lethal-trigger handling preserve
 recipient identity and the pending attack; a missing enemy does not suppress
-friendly damage. Opponent choosers and dependent names remain rejected.
+friendly damage. Dependent names remain rejected.
 
 A separate On Attack pair selects an enemy ground unit for two damage, then either
 base for two damage. Both choices belong to the source controller and finish
@@ -170,6 +170,13 @@ before damage resolves. A missing ground recipient skips only that effect. The
 pending attack continues through captured mandatory death effects, including
 automatic effects after a base defeat has latched the winner. Other unit/base
 combinations remain rejected.
+
+A bounded opposite-chooser pair lets the opponent choose their unit, then the
+source controller choose a friendly unit. Ordinary play registrations deal three
+damage to each or defeat each; the event variant defeats nonleader units. The
+opponent selector delays targeting until the original actor has paid, even when
+that domain is empty. Effects wait for both choices, then replacement and death
+priority return to the original actor. Other chooser layouts remain rejected.
 
 Bounded mixed named events combine ready with three damage, exhaust with one
 Shield on a friendly unit of printed cost three or less, or one Shield with a
