@@ -35,9 +35,10 @@ One Fly machine (`fly.games.toml`, `Dockerfile.games`) with a private address on
 `POST /wake` on every submission and every 6 hours. With nothing to do for 10 minutes it stops until the next wake.
 `ops/games-entry.sh` starts one of two programs, picked by `GAMES_COORDINATOR` in `fly.games.toml`:
 
-- `node`, what runs today: `games.js`, a Node loop that calls the intake, the referee and `push.js` itself.
-- `elixir`: the coordinator in `coord/` (`coord/README.md`). It runs `node bot/arena/gamesctl.js <command>` for each
-  step (setup, warm, plan, referee-cmd, intake, push) and keeps the window token in its own process.
+- `elixir`, what runs today: the coordinator in `coord/` (`coord/README.md`). It runs `node bot/arena/gamesctl.js
+  <command>` for each step (setup, warm, plan, referee-cmd, intake, push) and keeps the window token in its own process.
+- `node`: `games.js`, a Node loop that calls the intake, the referee and `push.js` itself (the fallback until it is
+  removed).
 
 Both run the same Node code: `gamesctl.js` takes its setup, round planning and referee command from `games.js`. Each
 cycle has three parts:

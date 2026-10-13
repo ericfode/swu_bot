@@ -195,7 +195,8 @@ The window stores submissions; the games machine plays them. It is the Fly app `
 - Only games.js holds the window token. The referee runs with a minimal environment in its own namespaces with `/.fly`
   hidden, and the ladders and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
 - Helpers: with the Elixir coordinator, a computer of Eric's can play some of a round's seeds through `fly proxy`
-  ([HELPER.md](HELPER.md)). Off until `GAMES_HELPER_PORT` and the `GAMES_HELPER_TOKENS` secret are set.
+  ([HELPER.md](HELPER.md)). The machine runs the Elixir coordinator and listens on `GAMES_HELPER_PORT`; helpers stay
+  off until the `GAMES_HELPER_TOKENS` secret names one.
 
 Deploys: `.github/workflows/deploy-games.yml` on every merge that touches `bot/`, the engine pin or the image, with the
 repository secret `FLY_GAMES_TOKEN` (`fly tokens create deploy -a swu-arena-games`). It checks out forceteki with
