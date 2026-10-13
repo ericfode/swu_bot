@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 564
+    "sourceIr": 569
   },
   "runtimeAdmittedCards": [
     {
@@ -1267,6 +1267,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "avenger#hunting-the-rebels",
+      "setCode": "IBH_072"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "i-want-proof-not-leads",
       "setCode": "IBH_074"
     },
@@ -2507,6 +2512,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "bendu#do-you-fear-the-storm",
+      "setCode": "LOF_170"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "heavy-blaster-cannon",
       "setCode": "LOF_171"
     },
@@ -3212,6 +3222,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "assassin-probe",
+      "setCode": "SEC_263"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "rey#more-than-a-scavenger",
       "setCode": "SHD_004"
     },
@@ -3439,6 +3454,11 @@
       "implementation": "dataOnly",
       "internalName": "desperado-freighter",
       "setCode": "SHD_152"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "wild-rancor",
+      "setCode": "SHD_158"
     },
     {
       "implementation": "sourceIr",
@@ -4522,6 +4542,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "hevy#staunch-martyr",
+      "setCode": "TWI_164"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "kit-fisto#the-smiling-jedi",
       "setCode": "TWI_165"
     },
@@ -4711,7 +4736,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 940,
+  "runtimeAdmittedCount": 945,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5080,7 +5105,7 @@
     },
     {
       "internalName": "luke-skywalker#answering-the-call",
-      "reason": "luke-skywalker#answering-the-call: arena lists require standalone verified phase-stat semantics",
+      "reason": "luke-skywalker#answering-the-call: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
       "setCode": "ASH_112"
     },
     {
@@ -5185,7 +5210,7 @@
     },
     {
       "internalName": "operation-cinder",
-      "reason": "operation-cinder: arena lists require standalone verified phase-stat semantics",
+      "reason": "operation-cinder: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
       "setCode": "ASH_151"
     },
     {
@@ -6322,11 +6347,6 @@
       "internalName": "hoth-lieutenant",
       "reason": "hoth-lieutenant: compiler rejected \"hoth-lieutenant\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/06_IBH/units/HothLieutenant.ts\",\"line\":17,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
       "setCode": "IBH_064"
-    },
-    {
-      "internalName": "avenger#hunting-the-rebels",
-      "reason": "avenger#hunting-the-rebels: arena lists require standalone verified phase-stat semantics",
-      "setCode": "IBH_072"
     },
     {
       "internalName": "asajj-ventress#i-work-alone",
@@ -8540,7 +8560,7 @@
     },
     {
       "internalName": "death-field",
-      "reason": "death-field: arena lists require standalone verified phase-stat semantics",
+      "reason": "death-field: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
       "setCode": "LOF_141"
     },
     {
@@ -8587,11 +8607,6 @@
       "internalName": "blockade-runner",
       "reason": "blockade-runner: compiler rejected \"blockade-runner\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":32,\"file\":\"game/cards/05_LOF/units/BlockadeRunner.ts\",\"line\":19,\"message\":\"trigger-alias-hook:onDamageDealt\",\"pattern\":\"trigger-alias-hook:onDamageDealt\"}]",
       "setCode": "LOF_166"
-    },
-    {
-      "internalName": "bendu#do-you-fear-the-storm",
-      "reason": "bendu#do-you-fear-the-storm: arena lists require standalone verified phase-stat semantics",
-      "setCode": "LOF_170"
     },
     {
       "internalName": "do-or-do-not",
@@ -9410,7 +9425,7 @@
     },
     {
       "internalName": "topple-the-summit",
-      "reason": "topple-the-summit: arena lists require standalone verified phase-stat semantics",
+      "reason": "topple-the-summit: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
       "setCode": "SEC_183"
     },
     {
@@ -9667,11 +9682,6 @@
       "internalName": "inspiring-senator",
       "reason": "inspiring-senator: compiler rejected \"inspiring-senator\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/InspiringSenator.ts\",\"line\":18,\"message\":\"immediateEffect:forThisPhasePlayerEffect\",\"pattern\":\"immediateEffect:forThisPhasePlayerEffect\"}]",
       "setCode": "SEC_261"
-    },
-    {
-      "internalName": "assassin-probe",
-      "reason": "assassin-probe: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SEC_263"
     },
     {
       "internalName": "clandestine-connections",
@@ -10212,11 +10222,6 @@
       "internalName": "bokatan-kryze#fighting-for-mandalore",
       "reason": "bokatan-kryze#fighting-for-mandalore: compiler rejected \"bokatan-kryze#fighting-for-mandalore\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":25,\"file\":\"game/cards/02_SHD/units/BoKatanKryzeFightingForMandalore.ts\",\"line\":21,\"message\":\"context.game.getPlayers()\\n                    .filter((p) => p.base.damage >= 15)\",\"pattern\":\"non-path-reference\"}]",
       "setCode": "SHD_157"
-    },
-    {
-      "internalName": "wild-rancor",
-      "reason": "wild-rancor: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SHD_158"
     },
     {
       "internalName": "reckless-gunslinger",
@@ -11995,7 +12000,7 @@
     },
     {
       "internalName": "saw-gerrera#resistance-is-not-terrorism",
-      "reason": "saw-gerrera#resistance-is-not-terrorism: arena lists require standalone verified phase-stat semantics",
+      "reason": "saw-gerrera#resistance-is-not-terrorism: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
       "setCode": "TWI_150"
     },
     {
@@ -12022,11 +12027,6 @@
       "internalName": "reckless-torrent",
       "reason": "reckless-torrent: compiler rejected \"reckless-torrent\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":40,\"file\":\"game/cards/03_TWI/units/RecklessTorrent.ts\",\"line\":15,\"message\":\"coordinate-trigger\",\"pattern\":\"coordinate-trigger\"}]",
       "setCode": "TWI_162"
-    },
-    {
-      "internalName": "hevy#staunch-martyr",
-      "reason": "hevy#staunch-martyr: arena lists require standalone verified phase-stat semantics",
-      "setCode": "TWI_164"
     },
     {
       "internalName": "aurra-sing#crackshot-sniper",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1518,
+  "runtimeRejectedCount": 1513,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

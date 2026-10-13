@@ -194,6 +194,31 @@ pub struct PreparedEvent {
     pub op: u16, pub target: CardId, pub amount: u16,
     pub power: i32, pub hp: i32, pub token: CardId,
 }
+/// Uniform arena damage retains one ordered recipient and Shield context per event.
+/// Both IDs are checked against the model's 256-card domain before compact storage.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UniformDamageRecord { pub target: u8, pub shield: u8 }
+impl UniformDamageRecord {
+    pub fn new(target:CardId,shield:CardId)->Result<Self,String> {
+        if target==0 {return Err("uniform damage requires a real recipient".into());}
+        Ok(Self {target:u8::try_from(target).map_err(|_|"uniform damage recipient exceeds card domain")?,
+            shield:u8::try_from(shield).map_err(|_|"uniform damage Shield exceeds card domain")?})
+    }
+    pub fn target(self)->CardId {self.target as CardId}
+    pub fn shield(self)->CardId {self.shield as CardId}
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UniformDamageState {
+    pub records:[UniformDamageRecord;MAX_CARDS], pub prevented:[u64;4],
+    pub count:u16, pub active:bool,
+}
+impl Default for UniformDamageState {
+    fn default()->Self {Self {records:[UniformDamageRecord::default();MAX_CARDS],prevented:[0;4],count:0,active:false}}
+}
+impl UniformDamageState {
+    pub fn is_prevented(&self,index:usize)->bool {self.prevented[index/64]&(1u64<<(index%64))!=0}
+    pub fn prevent(&mut self,index:usize) {self.prevented[index/64]|=1u64<<(index%64);}
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EventGroupState {
     pub active: bool, pub resolving: bool, pub replacement_done: bool, pub pc: u16, pub count: u8,
@@ -203,11 +228,12 @@ pub struct EventGroupState {
     pub context: Selection, pub picks: Selection,
     pub stack: [Selection; 8], pub depth: u8,
     pub records: [PreparedEvent; 32],
+    pub uniform_damage: UniformDamageState,
 }
 impl Default for EventGroupState {
     fn default() -> Self { Self { active:false, resolving:false, replacement_done:false, pc:0, count:0, discard_count:0, discard_owner:Seat::P1, shield_mask:0, shield_count:0, shield_priority:0, initiator:Seat::P1, shield_stash:[0;MAX_CARDS], shield_stash_len:0,
         context:Selection::default(), picks:Selection::default(), stack:[Selection::default();8], depth:0,
-        records:[PreparedEvent::default();32] } }
+        records:[PreparedEvent::default();32], uniform_damage:UniformDamageState::default() } }
 }
 pub const MAX_DEATH_TRIGGERS: usize = 64;
 pub const MAX_DEATH_DEPTH: usize = 8;
@@ -447,6 +473,14 @@ impl State {
         }
         for event in g.records { put(event.op as u64); put(event.target as u64); put(event.amount as u64);
             put(event.power as u64); put(event.hp as u64); put(event.token as u64);  }
+
+        // Inactive default storage preserves the historical hash stream.
+        let uniform=&g.uniform_damage;
+        if uniform.active {
+            put(uniform.active as u64);put(uniform.count as u64);
+            for mask in uniform.prevented {put(mask);}
+            for record in uniform.records {put(record.target as u64);put(record.shield as u64);}
+        } else {debug_assert_eq!(*uniform,UniformDamageState::default(),"inactive uniform storage must be cleared");}
 
         put(self.ability_result as u64);
         put(self.ability_succeeded as u64);

@@ -1538,7 +1538,32 @@ impl Engine {
         }
         Ok(())
     }
+    fn uniform_damage_amount(&self,e:&Effect)->Option<u16> {
+        match e { Effect::Damage {target:Target::ArenaList(_),amount:Expr::Const {value:Value::Number(n)}}=>n.as_u64().and_then(|n|u16::try_from(n).ok()),_=>None }
+    }
+    fn generate_uniform_damage(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        if s.event_group.uniform_damage.active {return Ok(true);}
+        let Effect::Damage {target,..}=e else {unreachable!()};
+        let targets=self.effect_targets(s,target);
+        let mut uniform=UniformDamageState::default();let mut stash=vec![];
+        for value in targets {
+            let Eval::Card(target)=value else {return Err("arena damage target is not a card".into());};
+            if uniform.records[..uniform.count as usize].iter().any(|r|r.target()==target) {return Err("duplicate arena damage target".into());}
+            let index=uniform.count as usize;if index==MAX_CARDS {return Err("arena damage capacity exceeded".into());}
+            let mut shields=vec![];let mut shield=s.card(target).shield;
+            while shield!=0 {shields.push(shield);shield=s.card(shield).next_token;}
+            shields.reverse();
+            uniform.records[index]=UniformDamageRecord::new(target,shields.first().copied().unwrap_or(0))?;
+            uniform.count+=1;stash.extend(shields.into_iter().skip(1));
+        }
+        if stash.len()>u8::MAX as usize {return Err("Shield context capacity exceeded".into());}
+        uniform.active=true;s.event_group.uniform_damage=uniform;
+        s.event_group.shield_stash_len=stash.len() as u8;
+        s.event_group.shield_stash[..stash.len()].copy_from_slice(&stash);
+        Ok(true)
+    }
     fn generate_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        if self.uniform_damage_amount(e).is_some() {return self.generate_uniform_damage(s,e);}
         let ops=group_ops(e);
         while let Some(op)=ops.get(s.event_group.pc as usize) {
             s.ability_target=s.event_group.context.ids[0];
@@ -1579,6 +1604,8 @@ impl Engine {
         Ok(true)
     }
     fn group_shield_targets(&self,s:&State,e:&Effect,seat:Seat)->Vec<CardId> {
+        let uniform=&s.event_group.uniform_damage;
+        if uniform.active {return uniform.records[..uniform.count as usize].iter().enumerate().filter(|(i,r)|!uniform.is_prevented(*i)&&r.shield()!=0&&s.card(r.target()).owner==seat).map(|(_,r)|r.target()).collect();}
         let ops=group_ops(e); let mut targets=vec![];
         for r in &s.event_group.records[..s.event_group.count as usize] {
             if matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) && r.amount>0 && s.card(r.target).shield!=0 && s.card(r.target).owner==seat && !targets.contains(&r.target) { targets.push(r.target); }
@@ -1591,6 +1618,19 @@ impl Engine {
         false
     }
     fn consolidate_group_shields(&self,s:&mut State) {
+        if s.event_group.uniform_damage.active {
+            let mut contexts=s.event_group.shield_stash[..s.event_group.shield_stash_len as usize].to_vec();
+            let pending=(0..s.event_group.uniform_damage.count as usize).filter(|i|!s.event_group.uniform_damage.is_prevented(*i)&&s.event_group.uniform_damage.records[*i].shield()!=0).collect::<Vec<_>>();
+            contexts.extend(pending.iter().map(|i|s.event_group.uniform_damage.records[*i].shield()));
+            let mut selected=vec![];
+            for &i in &pending {
+                let target=s.event_group.uniform_damage.records[i].target();
+                if let Some(token)=contexts.iter().find(|id|self.shield_attached(s,target,**id)) {s.event_group.uniform_damage.records[i].shield=*token as u8;selected.push(*token);}
+            }
+            let retained=contexts.into_iter().filter(|id|!selected.contains(id)&&pending.iter().any(|i|self.shield_attached(s,s.event_group.uniform_damage.records[*i].target(),*id))).collect::<Vec<_>>();
+            s.event_group.shield_stash=[0;MAX_CARDS];s.event_group.shield_stash_len=retained.len() as u8;
+            s.event_group.shield_stash[..retained.len()].copy_from_slice(&retained);return;
+        }
         // Mirror ReplacementEffectWindow: stashed alternate contexts precede
         // the currently retained contexts; retain the first valid one per unit.
         let mut contexts=s.event_group.shield_stash[..s.event_group.shield_stash_len as usize].to_vec();
@@ -1610,6 +1650,10 @@ impl Engine {
         s.event_group.shield_stash[..retained.len()].copy_from_slice(&retained);
     }
     fn replace_group_damage(&self,s:&mut State,e:&Effect,target:CardId) {
+        if s.event_group.uniform_damage.active {
+            if let Some(i)=(0..s.event_group.uniform_damage.count as usize).find(|i|s.event_group.uniform_damage.records[*i].target()==target&&!s.event_group.uniform_damage.is_prevented(*i)) {s.event_group.uniform_damage.prevent(i);self.consolidate_group_shields(s);}
+            return;
+        }
         let ops=group_ops(e);
         if let Some(index)=(0..s.event_group.count as usize).find(|i| {
             let r=s.event_group.records[*i]; r.target==target && r.amount>0 && matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..}))
@@ -1645,7 +1689,36 @@ impl Engine {
         else { s.card_mut(previous).next_token=s.card(selected).next_token; }
         self.detach(s,selected);s.card_mut(selected).next_token=0;
     }
+    fn resolve_uniform_damage(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        let amount=self.uniform_damage_amount(e).ok_or("invalid uniform damage effect")?;
+        if !s.event_group.replacement_done {
+            s.event_group.initiator=s.active;s.event_group.replacement_done=true;
+            for r in &s.event_group.uniform_damage.records[..s.event_group.uniform_damage.count as usize] {if r.shield()!=0 {s.event_group.shield_mask|=1<<s.card(r.target()).owner.index();}}
+        }
+        while s.event_group.shield_mask!=0 {
+            if s.event_group.shield_mask==3&&s.event_group.shield_priority==0 {s.active=s.event_group.initiator;s.event_group.shield_count=0;s.decision=Decision::AbilityGroupShield;return Ok(false);}
+            let seat=if s.event_group.shield_priority!=0 {if s.event_group.shield_priority==1 {Seat::P1}else {Seat::P2}}else if s.event_group.shield_mask&1!=0 {Seat::P1}else {Seat::P2};
+            let targets=self.group_shield_targets(s,e,seat);
+            if targets.len()>1 {s.active=seat;s.event_group.shield_count=targets.len() as u8;s.decision=Decision::AbilityGroupShield;return Ok(false);}
+            for target in targets {self.replace_group_damage(s,e,target);}
+            s.event_group.shield_mask&=!(1<<seat.index());s.event_group.shield_priority=0;
+        }
+        s.active=s.event_group.initiator;s.ability_result=0;s.ability_succeeded=false;s.event_group.resolving=true;
+        let mut callbacks=vec![];
+        for i in 0..s.event_group.uniform_damage.count as usize {
+            let record=s.event_group.uniform_damage.records[i];let target=record.target();
+            if !self.in_arena(s,target) {continue;}
+            if s.event_group.uniform_damage.is_prevented(i) {self.remove_group_shield(s,target,record.shield());continue;}
+            s.event_group.context=Selection::one(target);s.ability_target=target;
+            let remaining=self.hp(s,target).saturating_sub(s.card(target).damage);
+            let (applied,resolved)=self.apply_effect(s,&Effect::Damage {target:Target::Name("chosen".into()),amount:Expr::number(amount.min(remaining) as i64)})?;
+            if applied>0 {callbacks.push(target);}
+            s.ability_result=s.ability_result.saturating_add(applied);s.ability_succeeded|=resolved;
+        }
+        s.event_group.resolving=false;self.finish_group_damage(s,callbacks)?;Ok(true)
+    }
     fn resolve_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        if s.event_group.uniform_damage.active {return self.resolve_uniform_damage(s,e);}
         let ops=group_ops(e);
         if !s.event_group.replacement_done {
             s.event_group.initiator=s.active;
@@ -1778,6 +1851,10 @@ impl Engine {
             }
         }
         s.event_group.resolving=false;
+        self.finish_group_damage(s,damage_callbacks)?;
+        Ok(true)
+    }
+    fn finish_group_damage(&self,s:&mut State,damage_callbacks:Vec<CardId>)->Result<(),String> {
         // Damage callbacks capture their lethal set in handler/selection order,
         // before any queued source defeat can change another unit's HP aura.
         let mut damage_defeats=vec![];
@@ -1792,7 +1869,7 @@ impl Engine {
         for id in framework_dead { if !damage_defeats.contains(&id) { damage_defeats.push(id); } }
         self.defeat_many(s,&damage_defeats)?;
         self.sweep_stat_defeats(s)?;
-        Ok(true)
+        Ok(())
     }
     fn effect_targets(&self, s: &State, target: &Target) -> Vec<Eval> {
         let owner = s.card(s.source).owner;

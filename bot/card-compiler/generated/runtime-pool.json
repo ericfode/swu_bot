@@ -10161,6 +10161,47 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "cost": 8,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "4184803715",
+      "internalName": "avenger#hunting-the-rebels",
+      "keywords": [],
+      "power": 8,
+      "rules": null,
+      "setCode": "IBH_072",
+      "setCodes": [
+        {
+          "number": 72,
+          "set": "IBH"
+        }
+      ],
+      "setId": {
+        "number": 72,
+        "set": "IBH"
+      },
+      "subtitle": "Hunting the Rebels",
+      "text": "When Played: Deal 1 damage to each other unit (including friendly units).",
+      "title": "Avenger",
+      "traits": [
+        "imperial",
+        "vehicle",
+        "capital ship"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "aggression",
         "villainy"
@@ -20274,6 +20315,45 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 8,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 10,
+      "id": "6564460785",
+      "internalName": "bendu#do-you-fear-the-storm",
+      "keywords": [],
+      "power": 10,
+      "rules": "All damage dealt by Bendu's \"On Attack\" ability is dealt simultaneously.\n",
+      "setCode": "LOF_170",
+      "setCodes": [
+        {
+          "number": 170,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 170,
+        "set": "LOF"
+      },
+      "subtitle": "Do You Fear the Storm?",
+      "text": "On Attack: Deal 3 damage to each other unit.",
+      "title": "Bendu",
+      "traits": [
+        "force",
+        "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "aggression"
       ],
@@ -25946,6 +26026,43 @@
     },
     {
       "arena": "ground",
+      "aspects": [],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "6916352335",
+      "internalName": "assassin-probe",
+      "keywords": [],
+      "power": 4,
+      "rules": null,
+      "setCode": "SEC_263",
+      "setCodes": [
+        {
+          "number": 263,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 263,
+        "set": "SEC"
+      },
+      "subtitle": "",
+      "text": "When Defeated: Deal 1 damage to each exhausted enemy ground unit.",
+      "title": "Assassin Probe",
+      "traits": [
+        "separatist",
+        "droid"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
       "aspects": [
         "heroism",
         "vigilance"
@@ -27790,6 +27907,47 @@
         "underworld",
         "vehicle",
         "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "aggression"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 8,
+      "id": "9270539174",
+      "internalName": "wild-rancor",
+      "keywords": [
+        "overwhelm"
+      ],
+      "power": 6,
+      "rules": "Shields prevent all damage from a unit with Overwhelm. There is no excess damage since the defender is not defeated.\nIf the defender is defeated during an attack before combat damage is dealt, all combat damage is considered excess damage for Overwhelm.\n",
+      "setCode": "SHD_158",
+      "setCodes": [
+        {
+          "number": 158,
+          "set": "SHD"
+        }
+      ],
+      "setId": {
+        "number": 158,
+        "set": "SHD"
+      },
+      "subtitle": "",
+      "text": "Overwhelm\nWhen Played: Deal 2 damage to each other ground unit.",
+      "title": "Wild Rancor",
+      "traits": [
+        "creature"
       ],
       "types": [
         "unit"
@@ -36422,6 +36580,49 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression"
+      ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 4,
+      "id": "0683052393",
+      "internalName": "hevy#staunch-martyr",
+      "keywords": [
+        "coordinate",
+        "raid"
+      ],
+      "power": 4,
+      "rules": null,
+      "setCode": "TWI_164",
+      "setCodes": [
+        {
+          "number": 164,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 164,
+        "set": "TWI"
+      },
+      "subtitle": "Staunch Martyr",
+      "text": "Coordinate — Raid 2 (Gain this keyword while you control 3 or more units. This unit gets +2/+0 while attacking.)\nWhen Defeated: Deal 1 damage to each enemy ground unit.",
+      "title": "Hevy",
+      "traits": [
+        "republic",
+        "clone",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

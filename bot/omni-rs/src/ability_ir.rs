@@ -375,6 +375,28 @@ impl ArenaListTarget {
         }
         if !predicate(&self.predicate) {return Err("phase-stat filters require static traits, arenas or source exclusion".into());}Ok(())
     }
+    fn validate_damage(&self)->Result<(),String> {
+        if !matches!(&self.receiver,Expr::Ref{path} if path.len()==1&&["game","player","opponent"].contains(&path[0].as_str())) {return Err("arena damage requires an explicit game/player/opponent receiver".into());}
+        self.predicate.validate()?;
+        fn reference(e:&Expr,name:&str)->bool {matches!(e,Expr::Ref{path} if path.len()==1&&path[0]==name)}
+        fn predicate(e:&Expr)->bool {
+            if matches!(e,Expr::Binary{op,left,right} if op=="||" && matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source"))) {return true;}
+            match e {
+                Expr::Const{value}=>value.is_boolean(),
+                Expr::Unary{op,value} if op=="!"=>matches!(value.as_ref(),Expr::Const{value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"))),
+                Expr::Binary{op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left)&&predicate(right),
+                Expr::Binary{op,left,right} if op=="==="=>{
+                    let zone=|e:&Expr|matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
+                    let name=|e:&Expr|matches!(e,Expr::Const{value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
+                    (zone(left)&&name(right))||(name(left)&&name(right))
+                },
+                Expr::Query{name,receiver,args} if name=="isUnit"=>reference(receiver,"card")&&args.is_empty(),
+                Expr::Ref{path}=>path.iter().map(String::as_str).collect::<Vec<_>>()==["card","exhausted"],
+                _=>false,
+            }
+        }
+        if !predicate(&self.predicate) {return Err("arena damage predicates require static arena/source/exhausted unit scope".into());}Ok(())
+    }
     fn validate_scope(&self, global:bool)->Result<(),String> {
         if !(global && matches!(&self.receiver,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["game"])) {self.receiver.validate()?;}
         self.predicate.validate()?;
@@ -751,6 +773,13 @@ pub struct Program {
     #[serde(skip)]
     pub executable: Result<usize, &'static str>,
 }
+fn contains_arena_damage(ability:&Ability)->bool {
+    fn walk(v:&Value)->bool {match v {Value::Object(o)=>o.get("kind").and_then(Value::as_str)==Some("damage")&&o.get("target").is_some_and(|t|t["kind"]=="arenaList")||o.values().any(walk),Value::Array(a)=>a.iter().any(walk),_=>false}}
+    walk(&serde_json::to_value(ability).unwrap())
+}
+fn arena_damage_ability(a:&Ability)->bool {
+    ["whenPlayed","onAttack","whenDefeated"].contains(&a.trigger.as_str())&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()&&matches!(&a.effect,Effect::Damage{target:Target::ArenaList(_),amount:Expr::Const{value}} if value.as_u64().is_some_and(|n|(1..=3).contains(&n)))
+}
 fn named_unit_base_damage(ability: &Ability) -> bool {
     ability.trigger == "onAttack" && ability.target_resolvers.len() == 2 &&
     ability.target_resolvers.iter().enumerate().all(|(index, descriptor)| {
@@ -942,6 +971,7 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if contains_arena_damage(ability) && (depth!=0 || !arena_damage_ability(ability)) {return Err("arena damage requires a mandatory standalone ordinary-unit play/attack/death registration".into());}
         if depth==0 && contains_resource(ability) {
             let header=!ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
             let event=ability.trigger=="event" && !ability.optional && resource_self(&ability.effect) && ability.if_you_do.is_none();
@@ -1371,6 +1401,10 @@ impl Program {
                 if matches!(target,Target::Name(name) if name=="bothPlayers") {return Err("multi-player resource ready requires verified event batching".into());}
                 self.instructions.push(Instruction::Apply(effect.clone()));
             }
+            Effect::Damage{target:Target::ArenaList(list),amount:Expr::Const{value}}=>{
+                if depth!=0 || !["whenPlayed","onAttack","whenDefeated"].contains(&self.trigger.as_str()) || !value.as_u64().is_some_and(|n|(1..=3).contains(&n)) {return Err("arena damage requires literal standalone unit damage1..3".into());}
+                list.validate_damage()?;self.instructions.push(Instruction::Group(effect.clone()));
+            }
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::Select { target_resolver, effect } => {
                 if target_resolver.is_upgrade_domain() && (target_resolver.is_multiple() || !scalar_upgrade_operation(effect,target_resolver.zone.as_deref()==Some("discard"))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
@@ -1508,6 +1542,12 @@ impl Catalogue {
                         matches!(&a.effect,Effect::GiveWeakness{amount:Expr::Const{value},target:Target::Name(n)} if value.as_u64()==Some(1)&&n=="chosen") &&
                         a.target_resolver.as_ref().is_some_and(|r|r.owner=="any"&&r.card_type=="unit"&&r.zone.as_deref()==Some("anyAttackable")&&r.predicate.is_none()));
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && !(entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") || upgrade_weakness)) {return Err("Weakness source requires ordinary unit or bounded ordinary upgrade play metadata".into());}
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(contains_arena_damage) {
+                    let companion=|a:&Ability|a.trigger=="constant"&&a.coordinate&&!a.optional&&!a.requires_confirmation&&a.costs.is_empty()&&a.context_title.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()&&matches!(&a.effect,Effect::GainKeyword{target:Target::Name(n),keyword,amount:Expr::Const{value},duration} if n=="self"&&keyword=="raid"&&duration=="persistent"&&value.as_u64().is_some_and(|n|n<=65535));
+                    if entry.get("baseClass").and_then(Value::as_str)!=Some("NonLeaderUnitCard") || entry["card"]["types"]!=serde_json::json!(["unit"]) || !sides.unit.is_empty() || !sides.leader.is_empty() || sides.card.iter().filter(|a|contains_arena_damage(a)).count()!=1 || !sides.card.iter().all(|a|arena_damage_ability(a)||companion(a)) || entry.get("piloting").is_some_and(|v|!v.is_null()) || ["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {
+                        return Err("arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion".into());
+                    }
+                }
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
                 let upgrade_force=|a:&Ability|entry["baseClass"]=="UpgradeCard" && exact_type("upgrade") && a.trigger=="whenPlayed" && a.optional && matches!(&a.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && a.if_you_do.as_ref().is_some_and(|next|next.target_resolver.as_ref().is_some_and(|r|r.owner=="any" && r.card_type=="any" && r.zone.as_deref()==Some("base")) && matches!(&next.effect,Effect::Heal{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen" && value.as_u64().is_some_and(|n|(1..=65535).contains(&n))));

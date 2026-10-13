@@ -2141,7 +2141,7 @@ fn named_two_admission_preserves_other_descriptor_rejections() {
     let e=engine();for code in ["HMW_255","JTL_253"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
     for code in ["HMW_263","LAW_099","TWI_238"] {assert!(e.by_code.contains_key(code),"{code}");}
     for code in ["LOF_054","TWI_156","TWI_171","TWI_249"] {assert!(!e.by_code.contains_key(code),"{code}");}
-    assert_eq!(std::mem::size_of::<State>(),18560);
+    assert_eq!(std::mem::size_of::<State>(),19112);
 }
 #[test]
 fn actual_named_event_prepares_both_choices_before_costs_and_effects() {
@@ -2207,7 +2207,7 @@ fn weakness_effect()->crate::ability_ir::Effect {serde_json::from_value(json!({"
 fn weakness_admission_is_three_sources_plus_one_reviewed_native_token() {
     let e=engine();for code in ["HMW_059","HMW_087","HMW_242","TOKEN_WEAKNESS"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
     for code in ["HMW_065","HMW_100","HMW_199","HMW_202","HMW_231"] {assert!(!e.by_code.contains_key(code),"{code}");}
-    assert_eq!(std::mem::size_of::<State>(),18560);assert_eq!(std::mem::size_of::<Card>(),36);
+    assert_eq!(std::mem::size_of::<State>(),19112);assert_eq!(std::mem::size_of::<Card>(),36);
     let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
     for (field,value) in [("power",json!(1)),("upgradeHp",json!(0)),("types",json!(["unit","token"])),("traits",json!([])),("aspects",json!(["heroism"])),("text",json!("Draw a card")),("unique",json!(true)),("cost",json!(1))] {let mut catalog=original.clone();let token=catalog["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="TOKEN_WEAKNESS").unwrap();token["card"][field]=value;let altered=Engine::from_catalogue_value(&catalog).unwrap();assert!(!altered.by_code.contains_key("TOKEN_WEAKNESS"),"{field}");}
     for (field,value) in [("keywordValues",json!({"hidden":1})),("abilities",json!({"leader":[],"unit":[],"card":[{"trigger":"whenPlayed","title":"Injected","effect":{"kind":"draw","target":"ownPlayer","amount":{"kind":"const","value":1}}}]}))] {let mut catalog=original.clone();let token=catalog["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="TOKEN_WEAKNESS").unwrap();token[field]=value;assert!(!Engine::from_catalogue_value(&catalog).unwrap().by_code.contains_key("TOKEN_WEAKNESS"));}
@@ -2276,7 +2276,7 @@ fn weakness_static_native_dependency_rejects_missing_invalid_and_unselected_toke
 fn arena_stat_filter_admission_is_exact_two_and_unary_plus_normalizes_only_here() {
     let e=engine();for code in ["HMW_111","LOF_127"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
     let p=e.program(e.definitions[*e.by_code.get("HMW_111").unwrap() as usize].programs.card[0]);assert!(matches!(&p.instructions[0],Instruction::Apply(Effect::ModifyStats{power:Expr::Const{value:p},hp:Expr::Const{value:h},..}) if p==2&&h==2));
-    let plus:Expr=serde_json::from_value(json!({"kind":"unary","op":"+","value":{"kind":"const","value":2}})).unwrap();assert!(plus.validate().is_err());assert_eq!(std::mem::size_of::<State>(),18560);
+    let plus:Expr=serde_json::from_value(json!({"kind":"unary","op":"+","value":{"kind":"const","value":2}})).unwrap();assert!(plus.validate().is_err());assert_eq!(std::mem::size_of::<State>(),19112);
 }
 #[test]
 fn actual_lander_excludes_entering_source_and_keeps_captured_both_arena_recipients() {
@@ -2653,7 +2653,7 @@ fn named_chooser_raw_shapes_fail_closed() {
  for (field,value) in [("owner",json!("any")),("optional",json!(true)),("type",json!("nonLeaderUnit")),("arena",json!("ground"))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["targetResolver"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
  for (field,value) in [("pilotText",json!("Pilot")),("keywords",json!(["ambush"])),("types",json!(["leader","unit"])),("unique",json!(null))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["card"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
  for name in ["target","constructor","prototype","__proto__","0choice"] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["name"]=json!(name);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
- assert_eq!(std::mem::size_of::<State>(),18560);assert_eq!(std::mem::size_of::<Card>(),36);
+ assert_eq!(std::mem::size_of::<State>(),19112);assert_eq!(std::mem::size_of::<Card>(),36);
 }
 
 #[test]
@@ -2696,4 +2696,42 @@ fn weakness_upgrade_enemy_host_preserves_source_actor_and_recipient_owner() {
     assert_eq!(done.card(initial_id).parent,target);
     assert_eq!(e.hp(&done,target),e.hp(&s,target)-1);
     assert_eq!(e.power(&done,target,false),e.power(&s,target,false)-1);
+}
+
+#[test]
+fn arena_uniform_damage_admits_complete_five_and_rejects_raw_scope() {
+    let e=engine();for code in ["IBH_072","LOF_170","SEC_263","SHD_158","TWI_164"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+    let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    for variant in 0..8 {let mut c=original.clone();let entry=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="IBH_072").unwrap();match variant {
+        0=>entry["abilities"]["card"][0]["optional"]=json!(true),
+        1=>entry["abilities"]["card"][0]["effect"]["amount"]["value"]=json!(4),
+        2=>entry["abilities"]["card"][0]["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["unknown"]}),
+        3=>entry["abilities"]["card"][0]["condition"]=json!({"kind":"const","value":true}),
+        4=>entry["abilities"]["card"][0]["then"]=json!({"effect":{"kind":"noAction"}}),
+        5=>entry["card"]["types"]=json!(["unit","token"]),
+        6=>entry["baseClass"]=json!("LeaderCard"),
+        _=>entry["abilities"]["card"][0]["effect"]["target"]["predicate"]=json!({"kind":"ref","path":["card","damage"]}),
+    }assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("IBH_072"),"variant{variant}");}
+}
+#[test]
+fn arena_uniform_damage_over_32_recipients_and_combined_lethal() {
+    let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"IBH_072");let mut targets=vec![];
+    for seat in [Seat::P1,Seat::P2] {for _ in 0..24 {targets.push(unit(&e,&mut s,seat,"LOF_112"));}}
+    s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();
+    for target in targets {assert_eq!(s.card(target).damage,1);}
+    assert_eq!(s.card(source).damage,0);assert_eq!(s.event_group.uniform_damage,UniformDamageState::default());
+    let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"IBH_072");let own=unit(&e,&mut s,Seat::P1,"LOF_129");let enemy=unit(&e,&mut s,Seat::P2,"LOF_129");for id in [own,enemy] {s.card_mut(id).damage=e.hp(&s,id)-1;}s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert!(s.players[0].discard.contains(own));assert!(s.players[1].discard.contains(enemy));assert_eq!(s.decision,Decision::DeathPlayer);
+}
+#[test]
+fn arena_uniform_damage_shield_context_ids_both_owner_orders() {
+    let e=engine();for label in ["You","Opponent"] {let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"IBH_072");let own=unit(&e,&mut s,Seat::P1,"LOF_112");let enemy=unit(&e,&mut s,Seat::P2,"LOF_112");let mut tokens=vec![];for id in [own,enemy] {let oldest=s.next_id;e.create_token(&mut s,id,false).unwrap();let newer=s.next_id;e.create_token(&mut s,id,false).unwrap();tokens.push((oldest,newer));}s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityGroupShield);let copied=s;assert_eq!(s.zobrist(),copied.zobrist());let done=named_button(&e,&s,label);for (i,id) in [own,enemy].into_iter().enumerate() {let first=(label=="You"&&i==0)||(label=="Opponent"&&i==1);let consumed=if first {tokens[i].0}else {tokens[i].1};let survivor=if first {tokens[i].1}else {tokens[i].0};assert_eq!(done.card(id).damage,0);assert_eq!(done.card(consumed).parent,0);assert_eq!(done.card(id).shield,survivor);}assert_eq!(done.event_group.uniform_damage,UniformDamageState::default());}
+}
+#[test]
+fn arena_uniform_damage_storage_hash_and_size_are_explicit() {
+    assert!(UniformDamageRecord::new(0,0).is_err());assert!(UniformDamageRecord::new(256,0).is_err());assert!(UniformDamageRecord::new(1,256).is_err());assert_eq!(UniformDamageRecord::new(255,255).unwrap().target(),255);
+    let s=State::default();let unchanged=s;assert_eq!(s.zobrist(),unchanged.zobrist());let mut pending=s;pending.event_group.uniform_damage.active=true;pending.event_group.uniform_damage.count=1;pending.event_group.uniform_damage.records[0]=UniformDamageRecord::new(1,2).unwrap();assert_ne!(s.zobrist(),pending.zobrist());let before=pending.zobrist();pending.event_group.uniform_damage.prevent(0);assert_ne!(before,pending.zobrist());pending.event_group=EventGroupState::default();assert_eq!(s.zobrist(),pending.zobrist());assert_eq!(std::mem::size_of::<Card>(),36);eprintln!("uniform State bytes={}",std::mem::size_of::<State>());
+}
+#[test]
+fn arena_uniform_damage_same_owner_shields_rotate_alternates() {
+ let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"IBH_072");let first=unit(&e,&mut s,Seat::P1,"LOF_112");let second=unit(&e,&mut s,Seat::P1,"HMW_116");let mut tokens=vec![];for target in [first,second] {let old=s.next_id;e.create_token(&mut s,target,false).unwrap();let newer=s.next_id;e.create_token(&mut s,target,false).unwrap();tokens.push((old,newer));}s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityGroupShield);assert_eq!(s.event_group.shield_count,2);let done=named_button(&e,&s,"Resolve next");assert_eq!(done.card(first).shield,tokens[0].1);assert_eq!(done.card(second).shield,tokens[1].0);assert_eq!(done.card(tokens[0].0).parent,0);assert_eq!(done.card(tokens[1].1).parent,0);assert_eq!(done.event_group.uniform_damage,UniformDamageState::default());
 }
