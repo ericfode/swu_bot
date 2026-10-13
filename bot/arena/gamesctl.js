@@ -92,7 +92,7 @@ const asRoot = () => process.getuid?.() === 0;
 const idsOf = (user) => ['-u', '-g'].map((f) => Number(execFileSync('id', [f, user], { encoding: 'utf8' })));
 
 /** Folders, the round-seed secret and the roster; idempotent, so every start runs it. */
-function setup() {
+function setupData() {
     for (const d of Object.values(DIRS)) {
         fs.mkdirSync(d, { recursive: true });
     }
@@ -128,7 +128,7 @@ function setup() {
  * Compiles the resident bundles into the cache, as the bots' user, so their first game does not pay for it. Returns
  * {warmed: [name], failed: [{name, error}]}.
  */
-function warm() {
+function warmResidents() {
     const out = { warmed: [], failed: [] };
     for (const name of RESIDENTS.filter((n) => n.endsWith('-wasm'))) {
         const dir = path.join(ROOT, 'build', 'compiled', name.slice(0, -5));
@@ -255,12 +255,12 @@ function writeState(file, state) {
 
 const commands = {
     setup() {
-        const { residents } = setup();
+        const { residents } = setupData();
         return { ok: true, residents, toolchain: require('./intake').toolchainMissing() };
     },
 
     warm() {
-        return { ok: true, ...warm() };
+        return { ok: true, ...warmResidents() };
     },
 
     plan(o) {
