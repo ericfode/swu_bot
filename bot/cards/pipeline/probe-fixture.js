@@ -152,6 +152,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'arena-keyword-set') return require('./arena-keyword-set-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-damage') return require('./arena-damage-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'resource-self') return require('./resource-self-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-triggers') return require('./force-trigger-probe-fixture').fixture(env, pool, scenario, seed);
@@ -401,6 +402,9 @@ module.exports = {
     constructProbeFixture,
     buildDeck,
     dependencies: [
+        'bot/omni/rs/make-pool.js',
+        'bot/cards/pipeline/arena-keyword-set-probes.js',
+        'bot/cards/pipeline/arena-keyword-set-probe-fixture.js',
         'bot/cards/pipeline/arena-damage-probes.js',
         'bot/cards/pipeline/arena-damage-probe-fixture.js',
         'bot/cards/pipeline/probes.js',

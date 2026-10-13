@@ -247,6 +247,17 @@ stacking, recipient reentry, capped or ineffective Restore, Sentinel precedence,
 and live Hidden regain remain explicit gaps. Capacity and overflow checks are
 separate runtime tests.
 
+Two-factory arena keyword experiments distinguish one handler per recipient
+from independent child helpers in source order. Actual source cases cover both
+source seats, empty payment/cancellation, trait/controller/arena membership,
+Raid damage, Sentinel attack menus, and Saboteur gain/loss with exact surviving
+Shield identities. On Attack Restore distinguishes the source declaration from
+a later recipient attack, including capped and full-health healing. An actual
+Sentinel-dependent HP aura, later damage and natural expiry witness defeat when
+the keyword bonus ends. Stacking, later arrivals, source departure, reentry,
+controller transfer, token/leader recipients and unavailable printed trait
+overlap remain gaps for these four source programs.
+
 Named-target experiments cover two independent optional unit selectors with
 literal phase stats. They compare both owners, trait and arena filters, voluntary
 declines, cancellation at each prepayment prompt, empty-event confirmation,

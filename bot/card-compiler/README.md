@@ -178,6 +178,14 @@ pending attack continues through captured mandatory death effects, including
 automatic effects after a base defeat has latched the winner. Other unit/base
 combinations remain rejected.
 
+Arena keyword events preserve one lasting-effect helper with two factories as
+a different operation from two simultaneous helpers with independent recipient
+lists. Both capture global arena order before applying phase grants or losses;
+combined keyword and stat capacity is checked before publishing the result.
+Ordinary On Attack may grant Restore to other friendly units of a fixed trait.
+The source retains its separately captured intrinsic Restore trigger. These
+operations use the shared interpreter in native and Wasm Auto mode.
+
 A bounded opposite-chooser pair lets the opponent choose their unit, then the
 source controller choose a friendly unit. Ordinary play registrations deal three
 damage to each or defeat each; the event variant defeats nonleader units. The

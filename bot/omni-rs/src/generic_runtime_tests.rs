@@ -2080,9 +2080,8 @@ fn arena_keyword_ability(trigger:&str,kind:&str,keyword:&str,receiver:&str)->Val
     json!({"trigger":trigger,"title":"SYNTHETIC arena keyword","effect":effect})
 }
 #[test]
-fn arena_keyword_admission_adds_three_complete_sources_and_preserves_group_trait_guards() {
+fn scalar_arena_keyword_predecessors_remain_admitted() {
     let e=engine();for code in ["SOR_154","TS26_016","LOF_209"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["LOF_045","JTL_077","LOF_152","TWI_250"] {assert!(!e.by_code.contains_key(code),"{code}");}
     eprintln!("Arena keyword State bytes={}",std::mem::size_of::<State>());
 }
 #[test]
@@ -2734,4 +2733,37 @@ fn arena_uniform_damage_storage_hash_and_size_are_explicit() {
 #[test]
 fn arena_uniform_damage_same_owner_shields_rotate_alternates() {
  let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"IBH_072");let first=unit(&e,&mut s,Seat::P1,"LOF_112");let second=unit(&e,&mut s,Seat::P1,"HMW_116");let mut tokens=vec![];for target in [first,second] {let old=s.next_id;e.create_token(&mut s,target,false).unwrap();let newer=s.next_id;e.create_token(&mut s,target,false).unwrap();tokens.push((old,newer));}s.source=source;let p=e.def(&s,source).programs.card[0];e.begin_program(&mut s,p,0).unwrap();assert_eq!(s.decision,Decision::AbilityGroupShield);assert_eq!(s.event_group.shield_count,2);let done=named_button(&e,&s,"Resolve next");assert_eq!(done.card(first).shield,tokens[0].1);assert_eq!(done.card(second).shield,tokens[1].0);assert_eq!(done.card(tokens[0].0).parent,0);assert_eq!(done.card(tokens[1].1).parent,0);assert_eq!(done.event_group.uniform_damage,UniformDamageState::default());
+}
+
+fn arena_keyword4_effect(code:&str)->Effect {
+ let catalogue:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let entry=catalogue["cards"].as_array().unwrap().iter().find(|e|e["setCode"]==code).unwrap();serde_json::from_value(entry["abilities"]["card"][0]["effect"].clone()).unwrap()
+}
+#[test]
+fn arena_keyword4_admits_four_and_rejects_nested_mixed_and_metadata() {
+ let e=engine();for code in ["JTL_077","LOF_152","TWI_250","LOF_045"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for variant in 0..9 {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|e|e["setCode"]=="LOF_152").unwrap();match variant {
+ 0=>card["abilities"]["card"][0]["optional"]=json!(true),1=>card["abilities"]["card"][0]["condition"]=json!({"kind":"const","value":true}),2=>card["abilities"]["card"][0]["effect"]["effects"][0]["target"]["receiver"]=json!({"kind":"ref","path":["unknown"]}),3=>card["abilities"]["card"][0]["effect"]["effects"][0]["amount"]["value"]=json!(65536),4=>card["abilities"]["card"][0]["effect"]["effects"][1]=json!({"kind":"ready","target":"self"}),5=>card["card"]["types"]=json!(["event","leader"]),6=>card["card"]["pilotText"]=json!("unmodeled"),7=>{let original=card["abilities"]["card"][0]["effect"].clone();card["abilities"]["card"][0]["effect"]=json!({"kind":"noAction"});card["abilities"]["card"][0]["then"]=json!({"effect":original});},_=>card["abilities"]["card"][0]["effect"]["effects"][0]["target"]["predicate"]=json!({"kind":"ref","path":["card","damage"]})}assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_152"),"variant{variant}");}
+ for trait_name in ["jedi","!=='hasSomeTrait'"] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|e|e["setCode"]=="LOF_045").unwrap();card["abilities"]["card"][0]["effect"]["target"]["predicate"]=json!({"kind":"query","name":"hasSomeTrait","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":trait_name}]});assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_045"));}
+ let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|e|e["setCode"]=="JTL_077").unwrap();card["abilities"]["card"][0]["effect"]["effects"][1]["target"]["receiver"]=json!({"kind":"ref","path":["player"]});assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("JTL_077"));
+}
+#[test]
+fn arena_keyword4_global_over32_and_trait_snapshot_multiplicity() {
+ let e=engine();let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"JTL_077");s.source=source;let mut ids=vec![];for seat in [Seat::P1,Seat::P2] {for _ in 0..24 {ids.push(unit(&e,&mut s,seat,"LOF_112"));}}let effect=arena_keyword4_effect("JTL_077");assert_eq!(e.apply_effect(&mut s,&effect).unwrap(),(96,true));for id in ids {assert_eq!(e.keyword_amount(&s,id,"sentinel"),1);assert_eq!(e.keyword_amount(&s,id,"saboteur"),0);}assert_eq!(s.event_group,EventGroupState::default());
+ let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"LOF_152");s.source=source;let own=unit(&e,&mut s,Seat::P1,"LOF_112");let enemy=unit(&e,&mut s,Seat::P2,"LOF_112");let space=unit(&e,&mut s,Seat::P1,"JTL_251");let effect=arena_keyword4_effect("LOF_152");assert_eq!(e.apply_effect(&mut s,&effect).unwrap(),(2,true));assert_eq!(e.keyword_amount(&s,own,"raid"),1);assert_eq!(e.keyword_amount(&s,own,"saboteur"),1);for id in [enemy,space] {assert_eq!(e.keyword_amount(&s,id,"raid"),0);assert_eq!(e.keyword_amount(&s,id,"saboteur"),0);}let newcomer=unit(&e,&mut s,Seat::P1,"LOF_112");assert_eq!(e.keyword_amount(&s,newcomer,"raid"),0);e.apply_effect(&mut s,&effect).unwrap();assert_eq!(e.keyword_amount(&s,own,"raid"),2);assert_eq!(e.keyword_amount(&s,newcomer,"raid"),1);
+}
+#[test]
+fn arena_keyword4_numeric_preflight_is_atomic_and_overlap_is_synthetic() {
+ let e=engine();let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"LOF_152");s.source=source;let first=unit(&e,&mut s,Seat::P1,"LOF_112");let last=unit(&e,&mut s,Seat::P1,"LOF_112");s.card_mut(last).phase_keyword_values[0]=65535;s.card_mut(last).phase_power=-2;s.card_mut(last).add_phase_keyword(6);e.check_stat_capacity(&s).unwrap();let before=s;assert!(e.apply_effect(&mut s,&arena_keyword4_effect("LOF_152")).unwrap_err().contains("capacity"));assert_eq!(s.zobrist(),before.zobrist());assert_eq!(s.card(first).phase_keyword_values[0],0);
+ s.card_mut(last).phase_keyword_values[0]=65533;s.card_mut(last).phase_power=0;e.check_stat_capacity(&s).unwrap();let before=s;
+ assert!(e.apply_effect(&mut s,&arena_keyword4_effect("LOF_152")).unwrap_err().contains("computed stats"));assert_eq!(s.zobrist(),before.zobrist());assert_eq!(s.card(first).phase_keyword_values[0],0);
+ let mut legacy=s;legacy.arena_order_exact=false;let before=legacy.zobrist();assert!(e.apply_effect(&mut legacy,&arena_keyword4_effect("LOF_152")).unwrap_err().contains("recorded global arena order"));assert_eq!(legacy.zobrist(),before);
+ // Explicit synthetic descriptor overlap: both child systems give Raid to the
+ // same real Force recipients. No invented printed dual-trait card coverage.
+ s.card_mut(last).phase_keyword_values[0]=0;let mut effect=arena_keyword4_effect("LOF_152");let Effect::Simultaneous{effects}=&mut effect else{unreachable!()};effects[1]=effects[0].clone();e.apply_effect(&mut s,&effect).unwrap();assert_eq!(s.card(first).phase_keyword_values[0],2);assert_eq!(s.card(last).phase_keyword_values[0],2);
+}
+#[test]
+fn arena_keyword4_restore_source_exclusion_and_sentinel_hp_expiry() {
+ let e=engine();let mut s=board(&e);let source=unit(&e,&mut s,Seat::P1,"LOF_045");let own=unit(&e,&mut s,Seat::P1,"JTL_251");let enemy=unit(&e,&mut s,Seat::P2,"JTL_251");s.source=source;e.apply_effect(&mut s,&arena_keyword4_effect("LOF_045")).unwrap();assert_eq!(e.keyword_amount(&s,source,"restore"),1);assert_eq!(s.card(source).phase_keyword_mask(),0);assert_eq!(e.keyword_amount(&s,own,"restore"),1);assert_eq!(e.keyword_amount(&s,enemy,"restore"),0);
+ let mut s=board(&e);let source=add(&e,&mut s,Seat::P1,"JTL_077");s.source=source;let shuttle=unit(&e,&mut s,Seat::P1,"SEC_032");let target=unit(&e,&mut s,Seat::P1,"LOF_112");let base_hp=e.hp(&s,target);e.apply_effect(&mut s,&arena_keyword4_effect("JTL_077")).unwrap();assert_eq!(e.hp(&s,target),base_hp+2);s.card_mut(target).damage=base_hp;assert!(e.in_arena(&s,target));s.players[0].out=true;s.players[1].out=true;e.advance(&mut s).unwrap();assert!(s.players[0].discard.contains(target));assert!(e.in_arena(&s,shuttle));assert_eq!(std::mem::size_of::<State>(),19112);
 }

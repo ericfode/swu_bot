@@ -1979,7 +1979,34 @@ impl Engine {
         s.card_mut(id).exhausted=true;
         Ok(1)
     }
+    fn apply_arena_keyword_batch(&self,s:&mut State,e:&Effect)->Result<(u16,bool),String> {
+        if !s.arena_order_exact {return Err("arena keyword batches require recorded global arena order".into());}
+        let (effects,per_recipient)=match e {Effect::PhaseModifiers{effects}=>(effects,true),Effect::Simultaneous{effects}=>(effects,false),_=>unreachable!()};
+        // One phase helper carries multiple factories on each fixed recipient;
+        // simultaneous helpers carry separate ordered recipient snapshots.
+        let snapshots=effects.iter().map(|effect| {
+            let target=match effect {Effect::GainKeyword{target,..}|Effect::LoseKeyword{target,..}=>target,_=>unreachable!()};
+            self.effect_targets(s,target).into_iter().filter_map(|value|if let Eval::Card(id)=value {Some(id)}else {None}).collect::<Vec<_>>()
+        }).collect::<Vec<_>>();
+        let mut numeric=[[0u32;2];MAX_CARDS];
+        for (index,effect) in effects.iter().enumerate() {if let Effect::GainKeyword{keyword,amount,..}=effect {
+            if let Some(slot)=crate::ability_ir::CORE_KEYWORDS.iter().position(|k|k==keyword).and_then(crate::ability_ir::numeric_keyword_slot) {let amount=self.effect_amount(s,amount)? as u32;for &id in &snapshots[index] {numeric[id as usize][slot]+=amount;if s.card(id).phase_keyword_values[slot] as u32+numeric[id as usize][slot]>u16::MAX as u32 {return Err("phase keyword capacity exceeded".into());}}}
+        }}
+        let events=if per_recipient {snapshots[0].iter().flat_map(|id|(0..effects.len()).map(move |index|(index,*id))).collect::<Vec<_>>()}else {snapshots.iter().enumerate().flat_map(|(index,ids)|ids.iter().map(move |id|(index,*id))).collect::<Vec<_>>()};
+        // Validate composed intrinsic/constant keywords and stats before publishing
+        // any mutation, not merely the compact phase slots.
+        let mut prospective=*s;let work=&mut prospective;
+        let previous_group=work.event_group;let previous_target=work.ability_target;work.event_group.active=true;work.event_group.resolving=true;
+        let mut result=0u16;let mut succeeded=false;
+        for (index,id) in events {let mut effect=effects[index].clone();match &mut effect {Effect::GainKeyword{target,..}|Effect::LoseKeyword{target,..}=>*target=Target::Name("chosen".into()),_=>unreachable!()};work.event_group.context=Selection::one(id);work.ability_target=id;let (amount,resolved)=self.apply_effect(work,&effect)?;result=result.saturating_add(amount);succeeded|=resolved;}
+        work.event_group=previous_group;work.ability_target=previous_target;
+        self.check_stat_capacity(work)?;self.check_win(work);self.sweep_stat_defeats(work)?;
+        *s=prospective;
+        Ok((result,succeeded))
+    }
     fn apply_effect(&self, s: &mut State, e: &Effect) -> Result<(u16, bool), String> {
+        if matches!(e,Effect::PhaseModifiers{effects}|Effect::Simultaneous{effects} if effects.len()==2&&effects.iter().all(|e|matches!(e,Effect::GainKeyword{target:Target::ArenaList(_),..}|Effect::LoseKeyword{target:Target::ArenaList(_),..}))) {return self.apply_arena_keyword_batch(s,e);}
+
         if let Effect::Defeat {target:Target::ArenaList(_)}=e {
             if !s.arena_order_exact {return Err("arena-list defeat requires recorded global arena order".into());}
             // One complete event window: snapshot primary event order, capture

@@ -780,6 +780,49 @@ fn contains_arena_damage(ability:&Ability)->bool {
 fn arena_damage_ability(a:&Ability)->bool {
     ["whenPlayed","onAttack","whenDefeated"].contains(&a.trigger.as_str())&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()&&matches!(&a.effect,Effect::Damage{target:Target::ArenaList(_),amount:Expr::Const{value}} if value.as_u64().is_some_and(|n|(1..=3).contains(&n)))
 }
+fn contains_new_arena_keywords(a:&Ability)->bool {
+    fn walk(v:&Value)->bool {(matches!(v["kind"].as_str(),Some("phaseModifiers"|"simultaneous"))&&v["effects"].as_array().is_some_and(|items|items.iter().any(|e|matches!(e["kind"].as_str(),Some("gainKeyword"|"loseKeyword"))&&e["target"]["kind"]=="arenaList"))) || (v["trigger"]=="onAttack"&&v["effect"]["kind"]=="gainKeyword"&&v["effect"]["target"]["kind"]=="arenaList") || match v {Value::Array(a)=>a.iter().any(walk),Value::Object(o)=>o.values().any(walk),_=>false}}
+    walk(&serde_json::to_value(a).expect("Ability serializes"))
+}
+fn validate_keyword_list(list:&ArenaListTarget)->Result<(),String> {
+    fn reference(e:&Expr,n:&str)->bool {matches!(e,Expr::Ref{path} if path==&[n])}
+    fn predicate(e:&Expr)->bool {match e {
+        Expr::Const{value}=>value.as_bool()==Some(true),
+        Expr::Binary{op,left,right} if op=="&&"=>predicate(left)&&predicate(right),
+        Expr::Query{name,receiver,args}=>name=="hasSomeTrait"&&reference(receiver,"card")&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|s|!s.is_empty())),
+        Expr::Binary{op,left,right} if op=="||"=>matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source"))&&matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source")),
+        _=>false}}
+    if !matches!(&list.receiver,Expr::Ref{path} if path.len()==1&&["game","player","opponent"].contains(&path[0].as_str())) || !predicate(&list.predicate) {return Err("arena keyword list requires static receiver/trait/source exclusion".into());}
+    list.predicate.validate()
+}
+fn validate_arena_keyword_group(effect:&Effect)->Result<(),String> {
+    fn leaf(e:&Effect,gain_only:bool)->Result<(),String> {
+        match e {
+            Effect::GainKeyword{target:Target::ArenaList(list),keyword,amount:Expr::Const{value},duration} if duration=="phase"=>{validate_keyword(keyword)?;validate_keyword_list(list)?;if !value.as_u64().is_some_and(|n|if ["raid","restore"].contains(&keyword.as_str()) {(1..=65535).contains(&n)}else {n==1}) {return Err("arena keyword gain requires positive bounded literal".into());}Ok(())},
+            Effect::LoseKeyword{target:Target::ArenaList(list),keyword,duration} if !gain_only&&duration=="phase"=>{validate_keyword(keyword)?;validate_keyword_list(list)},
+            _=>Err("arena keyword group supports only literal phase keyword factories".into())}
+    }
+    match effect {
+        Effect::PhaseModifiers{effects} if effects.len()==2=>{
+            for e in effects {leaf(e,false)?;}
+            let target=|e:&Effect|match e {Effect::GainKeyword{target,..}|Effect::LoseKeyword{target,..}=>serde_json::to_value(target).unwrap(),_=>unreachable!()};
+            if target(&effects[0])!=target(&effects[1]) {return Err("one phase event requires identical target snapshots for all factories".into());}Ok(())
+        },
+        Effect::Simultaneous{effects} if effects.len()==2=>{for e in effects {leaf(e,true)?;}Ok(())},
+        _=>Err("arena keyword group requires exactly two independent factories".into())}
+}
+fn keyword_trait_and_exclusion(e:&Expr)->(bool,bool) {
+    match e {
+        Expr::Binary{op,left,right} if op=="&&"=>{let a=keyword_trait_and_exclusion(left);let b=keyword_trait_and_exclusion(right);(a.0||b.0,a.1||b.1)},
+        Expr::Query{name,..} if name=="hasSomeTrait"=>(true,false),
+        Expr::Binary{op,..} if op=="||"=>(false,true),
+        _=>(false,false),
+    }
+}
+fn arena_keyword_registration(a:&Ability)->bool {
+    let header=!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none();
+    header&&((a.trigger=="event"&&validate_arena_keyword_group(&a.effect).is_ok())||(a.trigger=="onAttack"&&matches!(&a.effect,Effect::GainKeyword{target:Target::ArenaList(list),keyword,amount:Expr::Const{value},duration} if keyword=="restore"&&value.as_u64()==Some(1)&&duration=="phase"&&validate_keyword_list(list).is_ok()&&matches!(&list.receiver,Expr::Ref{path} if path==&["player"])&&keyword_trait_and_exclusion(&list.predicate)==(true,true))))
+}
 fn named_unit_base_damage(ability: &Ability) -> bool {
     ability.trigger == "onAttack" && ability.target_resolvers.len() == 2 &&
     ability.target_resolvers.iter().enumerate().all(|(index, descriptor)| {
@@ -971,6 +1014,11 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        if contains_new_arena_keywords(ability) {
+            if depth!=0||!arena_keyword_registration(ability) {return Err("arena keyword batches require standalone event or ordinary OnAttack Restore grant".into());}
+            self.instructions.push(Instruction::Apply(ability.effect.clone()));return Ok(());
+        }
+
         if contains_arena_damage(ability) && (depth!=0 || !arena_damage_ability(ability)) {return Err("arena damage requires a mandatory standalone ordinary-unit play/attack/death registration".into());}
         if depth==0 && contains_resource(ability) {
             let header=!ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
@@ -1547,6 +1595,10 @@ impl Catalogue {
                     if entry.get("baseClass").and_then(Value::as_str)!=Some("NonLeaderUnitCard") || entry["card"]["types"]!=serde_json::json!(["unit"]) || !sides.unit.is_empty() || !sides.leader.is_empty() || sides.card.iter().filter(|a|contains_arena_damage(a)).count()!=1 || !sides.card.iter().all(|a|arena_damage_ability(a)||companion(a)) || entry.get("piloting").is_some_and(|v|!v.is_null()) || ["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {
                         return Err("arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion".into());
                     }
+                }
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(contains_new_arena_keywords) {
+                    let ordinary=(sides.card.first().is_some_and(|a|a.trigger=="event")&&entry["baseClass"]=="EventCard"&&exact_type("event"))||(sides.card.first().is_some_and(|a|a.trigger=="onAttack")&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit"));
+                    if !ordinary||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||!arena_keyword_registration(&sides.card[0])||!entry["piloting"].is_null()||!entry["attachCondition"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {return Err("arena keyword batch requires sole ordinary event/unit registration without side mechanics".into());}
                 }
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}

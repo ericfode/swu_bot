@@ -11507,6 +11507,46 @@
       "aspects": [
         "vigilance"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "3272995563",
+      "internalName": "in-the-heat-of-battle",
+      "keywords": [
+        "sentinel",
+        "saboteur"
+      ],
+      "power": null,
+      "rules": "Events only affect units that are in play when the event is played, unless specified otherwise.\nAffected units can't gain Saboteur for this phase.\n",
+      "setCode": "JTL_077",
+      "setCodes": [
+        {
+          "number": 77,
+          "set": "JTL"
+        }
+      ],
+      "setId": {
+        "number": 77,
+        "set": "JTL"
+      },
+      "subtitle": "",
+      "text": "Each unit gains Sentinel and loses Saboteur for this phase.",
+      "title": "In the Heat of Battle",
+      "traits": [
+        "disaster"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
@@ -17640,6 +17680,49 @@
         "vigilance",
         "heroism"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "4808722909",
+      "internalName": "yaddle#a-chance-to-make-things-right",
+      "keywords": [
+        "restore"
+      ],
+      "power": 2,
+      "rules": null,
+      "setCode": "LOF_045",
+      "setCodes": [
+        {
+          "number": 45,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 45,
+        "set": "LOF"
+      },
+      "subtitle": "A Chance To Make Things Right",
+      "text": "Restore 1\nOn Attack: Each other friendly Jedi unit gains Restore 1 for this phase.",
+      "title": "Yaddle",
+      "traits": [
+        "force",
+        "jedi",
+        "republic"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
       "cost": 3,
       "deployBox": null,
       "epicAction": "",
@@ -19743,6 +19826,47 @@
       "unique": false,
       "upgradeHp": 2,
       "upgradePower": 3
+    },
+    {
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "8743459187",
+      "internalName": "focus-determines-reality",
+      "keywords": [
+        "raid",
+        "saboteur"
+      ],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_152",
+      "setCodes": [
+        {
+          "number": 152,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 152,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Each friendly Force unit gains Raid 1 and Saboteur for this phase.",
+      "title": "Focus Determines Reality",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
     },
     {
       "arena": "ground",
@@ -38087,6 +38211,48 @@
       ],
       "types": [
         "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": null,
+      "id": "8719468890",
+      "internalName": "sword-and-shield-maneuver",
+      "keywords": [
+        "raid",
+        "sentinel"
+      ],
+      "power": null,
+      "rules": null,
+      "setCode": "TWI_250",
+      "setCodes": [
+        {
+          "number": 250,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 250,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "Give each friendly Trooper unit Raid 1 for this phase.\nGive each friendly Jedi unit Sentinel for this phase.",
+      "title": "Sword and Shield Maneuver",
+      "traits": [
+        "jedi",
+        "republic",
+        "tactic"
+      ],
+      "types": [
+        "event"
       ],
       "unique": false,
       "upgradeHp": null,

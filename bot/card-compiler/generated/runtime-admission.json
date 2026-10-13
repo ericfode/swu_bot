@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 569
+    "sourceIr": 573
   },
   "runtimeAdmittedCards": [
     {
@@ -1432,6 +1432,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "in-the-heat-of-battle",
+      "setCode": "JTL_077"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "direct-hit",
       "setCode": "JTL_078"
     },
@@ -2182,6 +2187,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "yaddle#a-chance-to-make-things-right",
+      "setCode": "LOF_045"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "ezra-bridger#attuned-with-life",
       "setCode": "LOF_046"
     },
@@ -2439,6 +2449,11 @@
       "implementation": "sourceIr",
       "internalName": "knights-saber",
       "setCode": "LOF_151"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "focus-determines-reality",
+      "setCode": "LOF_152"
     },
     {
       "implementation": "sourceIr",
@@ -4727,6 +4742,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "sword-and-shield-maneuver",
+      "setCode": "TWI_250"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "drop-in",
       "setCode": "TWI_251"
     },
@@ -4736,7 +4756,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 945,
+  "runtimeAdmittedCount": 949,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -6599,11 +6619,6 @@
       "setCode": "JTL_076"
     },
     {
-      "internalName": "in-the-heat-of-battle",
-      "reason": "in-the-heat-of-battle: grouped arena lists require separate event-capacity witnesses",
-      "setCode": "JTL_077"
-    },
-    {
       "internalName": "first-order-tie-fighter",
       "reason": "first-order-tie-fighter: compiler rejected \"first-order-tie-fighter\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":92,\"file\":\"game/cards/04_JTL/units/FirstOrderTIEFighter.ts\",\"line\":18,\"message\":\"unsupported-query:isTokenUnit\",\"pattern\":\"unsupported-query:isTokenUnit\"}]",
       "setCode": "JTL_081"
@@ -8314,11 +8329,6 @@
       "setCode": "LOF_044"
     },
     {
-      "internalName": "yaddle#a-chance-to-make-things-right",
-      "reason": "yaddle#a-chance-to-make-things-right: arena-list keywords require a standalone event or WhenPlayed registration",
-      "setCode": "LOF_045"
-    },
-    {
       "internalName": "jedi-holocron",
       "reason": "jedi-holocron: compiler rejected \"jedi-holocron\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/upgrades/JediHolocron.ts\",\"line\":16,\"message\":\"registrar:addGainOnAttackAbilityTargetingAttached\",\"pattern\":\"registrar:addGainOnAttackAbilityTargetingAttached\"}]",
       "setCode": "LOF_051"
@@ -8587,11 +8597,6 @@
       "internalName": "cin-drallig#esteemed-blademaster",
       "reason": "cin-drallig#esteemed-blademaster: compiler rejected \"cin-drallig#esteemed-blademaster\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/05_LOF/units/CinDralligEsteemedBlademaster.ts\",\"line\":23,\"message\":\"immediateEffect:playCardFromHand\",\"pattern\":\"immediateEffect:playCardFromHand\"}]",
       "setCode": "LOF_150"
-    },
-    {
-      "internalName": "focus-determines-reality",
-      "reason": "focus-determines-reality: nested or constant arena-list keywords are unsupported",
-      "setCode": "LOF_152"
     },
     {
       "internalName": "infused-brawler",
@@ -12274,11 +12279,6 @@
       "setCode": "TWI_249"
     },
     {
-      "internalName": "sword-and-shield-maneuver",
-      "reason": "sword-and-shield-maneuver: nested or constant arena-list keywords are unsupported",
-      "setCode": "TWI_250"
-    },
-    {
       "internalName": "aggrieved-parliamentarian",
       "reason": "aggrieved-parliamentarian: compiler rejected \"aggrieved-parliamentarian\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/03_TWI/units/AggrievedParliamentarian.ts\",\"line\":18,\"message\":\"immediateEffect:moveToBottomOfDeck\",\"pattern\":\"immediateEffect:moveToBottomOfDeck\"}]",
       "setCode": "TWI_252"
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1513,
+  "runtimeRejectedCount": 1509,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }
