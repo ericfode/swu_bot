@@ -69,6 +69,11 @@ interface Props {
     /** leader flipped to its deployed (unit) side */
     back?: boolean;
     unit?: UnitRef;
+    controllerSeat?: Seat;
+    /** A staged or playing effect needs one measured chip per physical upgrade. */
+    detailedEffects?: boolean;
+    /** Deployed leader mirrors keep their zone anchor without duplicating a physical card identity. */
+    effectIdentity?: boolean;
     exhausted?: boolean;
     note?: string;
     kind?: Focus['kind'];
@@ -155,24 +160,25 @@ export function LensMarks({ value, size }: { value: CardValue; size: 'sm' | 'md'
  * foot holds a value chip and a search tag, two or more upgrades fold into one "N upgrades" tag.
  */
 function upgradeTags(ups: UpgradeRef[], crowded = false) {
-    const groups: { n: string; t: 0 | 1; count: number; title: string; more?: boolean }[] = [];
+    const groups: { n: string; t: 0 | 1; count: number; title: string; cards: UpgradeRef[]; more?: boolean }[] = [];
     for (const u of ups) {
-        const g = groups.find((x) => x.n === u.n);
+        const g = groups.find((x) => x.n === u.n && x.cards[0].s === u.s && x.cards[0].owner === u.owner && x.cards[0].controller === u.controller);
         if (g) {
             g.count++;
+            g.cards.push(u);
             g.title = `${u.n} ×${g.count}`;
         } else {
-            groups.push({ n: u.n, t: u.t, count: 1, title: u.n });
+            groups.push({ n: u.n, t: u.t, count: 1, title: u.n, cards: [u] });
         }
     }
     if (crowded && groups.length > 1) {
-        return [{ n: `${ups.length} upgrades`, t: 0 as const, count: 1, title: groups.map((g) => g.title).join(', '), more: true }];
+        return [{ n: `${ups.length} upgrades`, t: 0 as const, count: 1, title: groups.map((g) => g.title).join(', '), cards: ups, more: true }];
     }
     if (groups.length <= 3) {
         return groups;
     }
     const rest = groups.slice(2);
-    return [...groups.slice(0, 2), { n: `+${rest.reduce((a, g) => a + g.count, 0)}`, t: 0 as const, count: 1, title: rest.map((g) => g.title).join(', '), more: true }];
+    return [...groups.slice(0, 2), { n: `+${rest.reduce((a, g) => a + g.count, 0)}`, t: 0 as const, count: 1, title: rest.map((g) => g.title).join(', '), cards: rest.flatMap(g => g.cards), more: true }];
 }
 
 /**
@@ -180,7 +186,7 @@ function upgradeTags(ups: UpgradeRef[], crowded = false) {
  * Board-size cards stack their facts from the bottom up so nothing covers anything: name bar, then power/HP, then the
  * lens chip; marks (LEADER, Sentinel) sit top left and upgrades top right.
  */
-export function Card({ card, size = 'md', shape = 'tall', back = false, unit, exhausted = false, note, kind = 'unit', hpLeft, width, value, leader = false, face, onFocus, onLeave }: Props) {
+export function Card({ card, size = 'md', shape = 'tall', back = false, unit, controllerSeat, detailedEffects = false, effectIdentity = true, exhausted = false, note, kind = 'unit', hpLeft, width, value, leader = false, face, onFocus, onLeave }: Props) {
     const art = useSettings((s) => s.art);
     useSettings((s) => s.artVersion);
     const [failed, setFailed] = useState<string | null>(null);
@@ -189,6 +195,8 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     const url = art ? cardImageUrl(card.s, back) : null;
     const showImg = url !== null && failed !== url;
     const look = tileLook(card.n, card.s);
+    const saboteurLost = unit?.status?.some(status => status.lostKeyword === 'Saboteur');
+    const shownStatuses = unit?.status?.filter(status => !(saboteurLost && status.keyword?.name === 'Saboteur') && !(status.keywordWindow && status.keyword?.name === 'Sentinel'));
     const hp = unit ? unit.h - unit.d : null;
     const focusOf = (el: HTMLElement): Focus => {
         const r = el.getBoundingClientRect();
@@ -209,10 +217,13 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     const named = size === 'md';
     const stats = !!unit && size !== 'sm';
     const ups = !!unit?.u?.length && size !== 'sm';
+    const upgrades = detailedEffects
+        ? (unit?.u ?? []).map(u => ({ n: u.n, t: u.t, count: 1, title: u.n, cards: [u], more: false }))
+        : upgradeTags(unit?.u ?? [], value?.v != null && value.regret != null);
     // captured cards (v2): a mark with their names in the title; the inspector lists them
     const cap = size !== 'sm' ? unit?.cap ?? [] : [];
     // tokens (Battle Droid, Shield…) have no set number; a text face that says "Token unit" makes the tag redundant
-    const token = isToken(card) && (showImg || !face);
+    const token = (unit?.t === 1 || isToken(card)) && (showImg || !face);
     const cls = ['card', size !== 'md' ? size : '', shape === 'wide' ? 'wide' : '', exhausted ? 'exh' : '', lensed ? 'lensed' : '', showImg ? 'art' : '', named ? 'named' : ''].filter(Boolean).join(' ');
     const style = {
         ...(width ? { '--w': `${width}px` } : {}),
@@ -224,6 +235,7 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
     } as CSSProperties;
     return (
         <div className={cls} style={style} title={card.n} {...focus}
+            data-effect-card={effectIdentity ? card.n : undefined} data-effect-code={effectIdentity ? card.s ?? undefined : undefined} data-effect-id={effectIdentity ? card.id : undefined} data-effect-base={kind === 'base' ? '' : undefined} data-effect-zone={kind === 'leader' ? 'leader' : undefined}
             aria-label={(leader ? 'Leader ' : '') + card.n + (unit ? `, ${unit.p} power, ${hp} HP left${unit.d > 0 ? ` (${unit.d} damage)` : ''}` : '') + (unit?.sn ? ', Sentinel' : '') + (unit?.cap?.length ? `, holds captured ${unit.cap.map((c) => c.n).join(', ')}` : '') + (exhausted ? ', exhausted' : '') + (value?.v != null ? `, worth ${fmtCardValue(value.v, value.digits)}` : '')}>
             {showImg ? (
                 <>
@@ -248,21 +260,31 @@ export function Card({ card, size = 'md', shape = 'tall', back = false, unit, ex
                         <span className="marks">
                             {leader && <span className="mark leader" title="This player's leader, deployed">Leader</span>}
                             {token && <span className="mark token" title="Token: created during play, not a card from a deck">TOKEN</span>}
-                            {unit?.sn ? <span className="mark sentinel" title="Sentinel">SEN</span> : null}
+                            {unit?.sn ? <span className="mark sentinel" title="Sentinel" data-effect-generated-sentinel-mark-id={unit.status?.find(status => status.generatedSentinel)?.generatedSentinel?.id}>SEN</span> : null}
                             {cap.length > 0 && <span className="mark cap" title={`Holds ${cap.length} captured card${cap.length > 1 ? 's' : ''}: ${cap.map((c) => c.n).join(', ')}`}>CAP{cap.length > 1 ? ` ${cap.length}` : ''}</span>}
                         </span>
                     )}
                     {ups && (
                         <div className="ups">
-                            {upgradeTags(unit!.u!, value?.v != null && value.regret != null).map((g) => (
-                                <span key={g.n} className={`up${g.t ? ' token' : ''}${g.t && g.n === 'Shield' ? ' shield' : ''}${g.more ? ' more' : ''}`} title={g.title}>{g.n}{g.count > 1 ? ` ×${g.count}` : ''}</span>
-                            ))}
+                            {upgrades.map((g, i) => {
+                                // Ordinary boards fold copies; detailed effect presentations retain every physical chip.
+                                const u = g.cards.length === 1 ? g.cards[0] : undefined;
+                                const transferred = !!u?.controller && !!u.owner && u.controller !== u.owner;
+                                return <span key={`${g.n}:${i}`} className={`up${g.t ? ' token' : ''}${g.t && g.n === 'Shield' ? ' shield' : ''}${g.more ? ' more' : ''}${u?.s === 'SOR_054' ? ' lightsaber' : ''}${transferred ? ' transferred' : ''}`}
+                                    title={`${g.title}${u?.owner ? ` · owner ${u.owner.toUpperCase()}` : ''}${u?.controller ? ` · control ${u.controller.toUpperCase()}` : ''}`}
+                                    data-effect-upgrade={u?.n} data-effect-code={u?.s ?? undefined} data-effect-id={u?.id} data-effect-owner={u?.owner} data-effect-controller={u?.controller}>
+                                    {transferred ? <><span className="up-name">{g.n}</span><small>O:{u!.owner!.toUpperCase()} C:{u!.controller!.toUpperCase()}</small></> : <>{g.n}{g.count > 1 ? ` ×${g.count}` : ''}</>}
+                                </span>;
+                            })}
                         </div>
                     )}
                 </div>
             )}
-            {(lensed || stats || named) && (
+            {(lensed || stats || named || !!shownStatuses?.length) && (
                 <div className="foot">
+            {shownStatuses?.length ? <div className="card-statuses" style={{ position: 'static', marginInline: 2 }}>{shownStatuses.map((status, i) =>
+                <span key={`${status.kind}:${i}`} className={`card-status ${status.kind}${status.lostKeyword && status.keywordWindow ? ' keyword-window' : ''}${status.grantedAbility ? ' granted' : ''}${status.generatedRestriction ? ' generated-restriction' : ''}${status.generatedSentinel ? ' generated-sentinel' : ''}${status.keyword?.name === 'Restore' ? ' restore' : ''}${status.keyword?.name === 'Overwhelm' && status.duration === 'phase' ? ' overwhelm' : ''}`} title={status.label} data-effect-constraint={status.actionConstraintId} data-effect-duration={status.duration} data-effect-title-boost-id={status.titleBoost?.id} data-effect-generated-restriction-id={status.generatedRestriction?.id} data-effect-generated-sentinel-id={status.generatedSentinel?.id}>{status.lostKeyword === 'Saboteur' && status.keywordWindow ? unit?.sn ? <>SENTINEL · PHASE<br />NO SABOTEUR</> : <>NO SABOTEUR<br />PHASE</> : status.generatedRestriction && status.restriction === 'cannot-attack-base' ? <>NO BASE<br />PHASE</> : status.generatedSentinel ? <>SENTINEL<br />PHASE</> : status.grantedAbility ? <>WHEN DEFEATED<br />{status.grantedAbility.effect === 'create-clone' ? 'CREATE CLONE' : 'ENEMY UNIT 2'}<br />PHASE</> : status.keyword?.name === 'Restore' ? <>RESTORE {status.keyword.amount}{status.duration === 'phase' ? ' · PHASE' : ''}</> : status.keyword?.name === 'Overwhelm' && status.duration === 'phase' ? <>OVERWHELM<br />PHASE</> : status.restriction === 'must-attack' && status.duration === 'next-action' ? <>NEXT {controllerSeat?.toUpperCase()} ACTION<br />ATTACK IF ABLE</> : status.label}</span>
+            )}</div> : null}
                     {lensed && <LensMarks value={value!} size={size} />}
                     {stats && (
                         <div className="stats">
@@ -286,4 +308,22 @@ export function CardBack({ size = 'md', value }: { size?: 'sm' | 'md'; value?: C
             {value && value.regret != null && <div className="foot"><LensMarks value={{ ...value, v: null }} size={size} /></div>}
         </div>
     );
+}
+
+/** Captives are public references in a separate pocket, with no arena stats or unit identity marker. */
+export function CapturedPocket({ unit, seat }: { unit: UnitRef; seat: Seat }) {
+    const art = useSettings(state => state.art);
+    useSettings(state => state.artVersion);
+    if (unit.cap === undefined) return null;
+    return <div className={`captured-pocket${unit.cap.length > 1 ? ' multi' : ''}`} data-effect-pocket={unit.id ?? ''} data-effect-captor-seat={seat} aria-label={`${unit.n} guards ${unit.cap.length} captured cards`}>
+        <span className="captured-count" data-effect-capture-count><span>CAPTIVE</span><b>{unit.cap.length}</b></span>
+        <div className="captured-slots">{unit.cap.map((card, i) => {
+            const image = art ? cardImageUrl(card.s) : null;
+            return <span key={card.id ?? `${card.s}:${i}`} className="captured-slot" data-effect-captured={card.n} data-effect-id={card.id} data-effect-code={card.s ?? undefined} data-effect-owner={card.owner}
+                title={`${card.n} · captured by ${unit.n}${card.owner ? ` · owner ${card.owner.toUpperCase()}` : ''}`}>
+                {image ? <img src={image} alt={card.n} loading="lazy" draggable={false} /> : <span className="captured-unknown" aria-label={card.n}>◇</span>}
+                {card.owner && <small>{card.owner.toUpperCase()}</small>}
+            </span>;
+        })}</div>
+    </div>;
 }

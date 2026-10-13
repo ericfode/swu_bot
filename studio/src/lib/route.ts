@@ -5,12 +5,16 @@ export type Route =
     | { page: 'home' }
     | { page: 'tournament'; tid: string; g: string | null }
     | { page: 'game'; tid: string; gid: string; step: number }
+    | { page: 'effects' }
     | { page: 'icons'; tid: string | null; gid: string | null };
 
 export function parseRoute(hash: string): Route {
     const [path, query = ''] = hash.replace(/^#\/?/, '').split('?');
     const parts = path.split('/').map(decodeURIComponent);
     const q = new URLSearchParams(query);
+    if (parts[0] === 'effects') {
+        return { page: 'effects' };
+    }
     if (parts[0] === 'icons') {
         return { page: 'icons', tid: q.get('t'), gid: q.get('g') };
     }

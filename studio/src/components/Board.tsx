@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BrainCircuit, Coins, Flag, Layers, Library, Skull, Sparkle } from 'lucide-react';
-import { Card, CardBack, regretTag, type CardValue, type Focus } from './Card';
+import { Card, CardBack, CapturedPocket, regretTag, type CardValue, type Focus } from './Card';
 import { useSettings } from '../lib/settings';
 import { humanize } from '../lib/cards';
 import type { PlayerSnap, Seat, Snapshot, UnitRef } from '../data/types';
@@ -31,6 +31,16 @@ interface BoardProps {
     values?: boolean;
     /** the Strategy Atlas spots each seat is in, as chips by its base (default true) */
     spots?: boolean;
+    /** The effect owns the departure; commit its final board without repeating it. */
+    animateChanges?: boolean;
+    /** Reserve the measured obligation/result rail throughout a supplied effect transition. */
+    reservePlayerEffect?: boolean;
+    /** Keep selected title-return examples at one measured footprint until the cue is replaced. */
+    reserveArenaSlots?: Record<Seat, Record<'ground' | 'space', number>>;
+    /** Stable card-specific discard permission rows for an active or completed presentation. */
+    reserveDiscardPermissions?: Record<Seat, string[]>;
+    /** Keep an explicit base-protection row stable across grant/consumption/expiry. */
+    reserveBaseProtection?: Record<Seat, boolean>;
 }
 
 const spring = { type: 'spring', stiffness: 420, damping: 32 } as const;
@@ -194,7 +204,7 @@ function useSideBox(row: RefObject<HTMLDivElement | null>, hq: RefObject<HTMLDiv
  * The side's layout: ground | base | space when there is room (today's look), else the base on top of the two lanes.
  * A crowded side also moves its base on top when that makes it clearly shorter, so the lanes get the middle's width.
  */
-function sideLayout(box: SideBox, ground: number, space: number): { stack: boolean; weights: [number, number] | null } {
+export function sideLayout(box: SideBox, ground: number, space: number): { stack: boolean; weights: [number, number] | null } {
     const stacked = laneSplit(box.row - GAP, ground, space);
     if (!box.wide) {
         return { stack: true, weights: stacked.weights };
@@ -206,13 +216,13 @@ function sideLayout(box: SideBox, ground: number, space: number): { stack: boole
     return stack ? { stack, weights: stacked.weights } : { stack, weights: three.weights };
 }
 
-function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, hiLeader, step, onFocus, onLeave, sl }: {
+function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, hiLeader, step, onFocus, onLeave, sl, animateChanges, reservedSlots = 0 }: {
     label: string; seat: Seat; arena: 'ground' | 'space'; units: UnitRef[]; ids: string[]; prevUnits: UnitRef[] | null; prevIds: string[] | null;
-    leader: PlayerSnap['leader']; hiLeader: boolean; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null;
+    leader: PlayerSnap['leader']; hiLeader: boolean; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null; animateChanges: boolean; reservedSlots?: number;
 }) {
     const total = sl ? sl.side.rows[arena] ?? 0 : 0;
     return (
-        <div className="lane">
+        <div className="lane" data-effect-zone={arena} data-effect-reserved-slots={reservedSlots || undefined}>
             <span className="lane-label">{label}{sl && additive(sl) && has(sl, arena) && units.length > 0 && (
                 <RowChip sl={sl} id={arena} v={total} what={`This player's ${label} units together`} className="!tracking-normal" />
             )}</span>
@@ -225,18 +235,20 @@ function Lane({ label, seat, arena, units, ids, prevUnits, prevIds, leader, hiLe
                     // a leader deployed as a pilot rides on another unit as an upgrade
                     const carries = !!leader?.dep && !isLeader && !!u.u?.some((x) => x.n === leader.n);
                     return (
-                        <motion.div key={id} layout className={`relative${hiLeader && (isLeader || carries) ? ' lead-hi' : ''}`} transition={spring}
-                            initial={{ opacity: 0, scale: 0.6, y: seat === 'p1' ? 40 : -40 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.4, rotate: seat === 'p1' ? -14 : 14, filter: 'blur(6px)', transition: { duration: 0.35 } }}>
-                            <Card card={u} unit={u} back={isLeader} exhausted={!!u.x} onFocus={onFocus} onLeave={onLeave} leader={isLeader || carries}
+                        <motion.div key={id} layout={animateChanges} className={`relative${hiLeader && (isLeader || carries) ? ' lead-hi' : ''}`} transition={animateChanges ? { ...spring, filter: { type: 'tween', duration: 0.2 } } : { duration: 0 }}
+                            initial={animateChanges ? { opacity: 0, scale: 0.6, y: seat === 'p1' ? 40 : -40 } : false}
+                            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                            exit={animateChanges ? { opacity: 0, scale: 0.4, rotate: seat === 'p1' ? -14 : 14, filter: 'blur(6px)', transition: { type: 'tween', duration: 0.35 } } : { opacity: 0, transition: { duration: 0 } }}>
+                            <Card card={u} unit={u} controllerSeat={seat} detailedEffects={!animateChanges} back={isLeader} exhausted={!!u.x} onFocus={onFocus} onLeave={onLeave} leader={isLeader || carries}
                                 note={isLeader ? 'Deployed leader' : carries ? `Carries the leader ${leader!.n}` : undefined}
                                 value={valueOf(sl, arena, i)} />
+                            <CapturedPocket unit={u} seat={seat} />
                             <Pop k={`${step}`} delta={before ? u.d - before.d : 0} />
                         </motion.div>
                     );
                 })}
             </AnimatePresence>
+            {Array.from({ length: Math.max(0, reservedSlots - units.length) }, (_, i) => <div key={`footprint:${i}`} className="relative arena-footprint" aria-hidden="true"><div className="card" /></div>)}
         </div>
     );
 }
@@ -264,7 +276,7 @@ function LeaderSlot({ p, onFocus, onLeave, onHi, sl }: { p: PlayerSnap; onFocus:
     const note = gone ? 'Leader · deployed, then defeated (its deploy is used)' : !l.dep ? 'Leader' : onBoard ? 'Leader · deployed (on the board, marked LEADER)' : 'Leader · flipped to its other side';
     return (
         <div className={`leader-slot${gone ? ' gone' : ''}`} onMouseEnter={() => onHi(true)} onMouseLeave={() => onHi(false)} onFocus={() => onHi(true)} onBlur={() => onHi(false)}>
-            <Card card={l} shape="wide" kind="leader" width={92} back={!!l.dep} exhausted={!!l.x} onFocus={onFocus} onLeave={onLeave} note={note}
+            <Card card={l} shape="wide" kind="leader" width={92} effectIdentity={!onBoard} back={!!l.dep} exhausted={!!l.x} onFocus={onFocus} onLeave={onLeave} note={note}
                 value={leaderValue(sl, unitTagged)} />
             {onBoard && <span className="leader-out" title="Deployed: hover to find it on the board">on board</span>}
             {gone && <span className="leader-out gone" title="Deployed with its epic action, then defeated: the deploy is used">defeated</span>}
@@ -284,7 +296,7 @@ function totalTitle(view: ScoreView, seat: Seat, bot: string): string {
     return `${bot}'s total in ${source.label}: ${what}.\n${badgeText(source, step)}`;
 }
 
-function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl, spots }: { seat: Seat; p: PlayerSnap; prev: PlayerSnap | null; bot: string; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; onHiLeader: (on: boolean) => void; hqRef: RefObject<HTMLDivElement | null>; sl: SeatLens | null; spots: string[] | null }) {
+function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl, spots, reserveProtection }: { seat: Seat; p: PlayerSnap; prev: PlayerSnap | null; bot: string; step: number; onFocus: (f: Focus | null) => void; onLeave?: () => void; onHiLeader: (on: boolean) => void; hqRef: RefObject<HTMLDivElement | null>; sl: SeatLens | null; spots: string[] | null; reserveProtection?: boolean }) {
     const left = Math.max(0, p.base.hp - p.base.d);
     const frac = left / p.base.hp;
     const R = 34;
@@ -306,9 +318,12 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl,
                 <Pop k={`b${step}`} delta={prev ? p.base.d - prev.base.d : 0} />
                 {!!p.base.epic && <span className="epic-used" title="This base's epic action is used">epic used</span>}
             </div>
+            {(reserveProtection || !!p.base.damageProtection?.length) && <div className="base-protection" data-effect-zone="base-protection" aria-hidden={!p.base.damageProtection?.length ? true : undefined}>
+                {p.base.damageProtection?.map(effect => <span key={effect.id} data-effect-base-protection={effect.id} data-effect-source={effect.sourceId} data-effect-duration="phase" role="status">NEXT DAMAGE<br /><small>ONE USE · PHASE</small></span>)}
+            </div>}
             <div className="flex items-center gap-2.5">
                 {p.leader && <LeaderSlot p={p} onFocus={onFocus} onLeave={onLeave} onHi={onHiLeader} sl={sl} />}
-                <div className="flex flex-col gap-1 min-w-0">
+                <div className={`flex flex-col gap-1 min-w-0${p.resources ? ' resources-explicit' : ''}`}>
                     <span className="flex items-center gap-1.5 min-w-0">
                         <span className="font-display text-[13px] font-semibold truncate max-w-[9rem]" style={{ color: 'var(--seat)' }}>{bot}</span>
                         {p.out ? <span className="seat-tag" title={`Done for this action phase: claimed the initiative, or both players passed${p.passed ? ' (passed its last action)' : ''}`}>out</span>
@@ -317,21 +332,25 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl,
                     </span>
                     <div className="flex items-center gap-1.5">
                         {/* more than 12 resources: two even rows (a pip and its gap are 12px) */}
-                        <div className="pips" style={p.res.total > 12 ? { maxWidth: Math.ceil(p.res.total / 2) * 12 } : undefined} aria-label={`${p.res.ready} of ${p.res.total} resources ready`}>
+                        <div className="pips" data-effect-zone="resources" style={!p.resources && p.res.total > 12 ? { maxWidth: Math.ceil(p.res.total / 2) * 12 } : undefined} aria-label={`${p.res.ready} of ${p.res.total} resources ready`}>
                             {Array.from({ length: p.res.total }, (_, i) => <i key={i} className={i < p.res.ready ? '' : 'spent'} />)}
                         </div>
                         {sl && has(sl, 'side.resources') && <RowChip sl={sl} id="side.resources" v={sl.side.resources} what="All resources together" />}
                     </div>
                     <div className="flex gap-2 text-[11px] text-dim num">
-                        <span title={handN !== p.hand.length ? `Cards in hand (${p.hand.length} listed)` : 'Cards in hand'} className="inline-flex items-center gap-0.5"><Layers size={11} />{handN}</span>
-                        <span title="Cards in deck" className="inline-flex items-center gap-0.5"><Library size={11} />{p.deck}</span>
+                        <span title={handN !== p.hand.length ? `Cards in hand (${p.hand.length} listed)` : 'Cards in hand'} data-effect-zone="hand-count" className="inline-flex items-center gap-0.5"><Layers size={11} />{handN}</span>
+                        <span title="Cards in deck" data-effect-zone="deck" className="inline-flex items-center gap-0.5"><Library size={11} />{p.deck}</span>
                         {sl && has(sl, 'extra.deck') && <RowChip sl={sl} id="extra.deck" v={sl.side.extra.deck ?? 0} what="The deck" />}
-                        <span title="Cards in discard" className="inline-flex items-center gap-0.5"><Skull size={11} />{p.discard.length}</span>
+                        <span title="Cards in discard" data-effect-zone="discard" className="inline-flex items-center gap-0.5"><Skull size={11} />{p.discard.length}</span>
                         {sl && has(sl, 'extra.discard') && <RowChip sl={sl} id="extra.discard" v={sl.side.extra.discard ?? 0} what="The discard pile" />}
                         {p.force ? <span title="Has the Force token" className="inline-flex items-center text-fg"><Sparkle size={11} /></span> : null}
                         {p.credits ? <span title={`${p.credits} credit token${p.credits > 1 ? 's' : ''}`} className="inline-flex items-center gap-0.5 text-fg"><Coins size={11} />{p.credits}</span> : null}
-                        <span className="text-faint">{p.res.ready}/{p.res.total}</span>
+                        <span className="text-faint" data-effect-zone="resource-count">{p.res.ready}/{p.res.total}</span>
                     </div>
+                    {p.resources && <div className="resource-manifest" data-effect-zone="resource-cards" aria-label={`${p.res.ready} ready of ${p.resources.length} identified resource slots`}>
+                        {p.resources.map((resource, i) => <span key={resource.id ?? i} className={`resource-slot${resource.x ? ' spent' : ''}`} data-effect-resource={resource.n} data-effect-id={resource.id} data-effect-code={resource.s ?? undefined} data-effect-owner={resource.owner}
+                            title={`Resource ${i + 1}${resource.s ? ` · ${resource.n}` : ''} · ${resource.x ? 'exhausted' : 'ready'}`} aria-label={`Resource ${i + 1}, ${resource.x ? 'exhausted' : 'ready'}`}><b>{i + 1}</b></span>)}
+                    </div>}
                     {sl && otherExtras(sl).length > 0 && (
                         <div className="flex flex-wrap gap-1">
                             {otherExtras(sl).map((r) => <RowChip key={r.id} sl={sl} id={r.id} v={sl.side.extra[r.key] ?? 0} what={`${r.label} for this player`} />)}
@@ -344,7 +363,7 @@ function Hq({ seat, p, prev, bot, step, onFocus, onLeave, onHiLeader, hqRef, sl,
     );
 }
 
-function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null }) {
+function Hand({ seat, p, onFocus, onLeave, sl, animateChanges }: { seat: Seat; p: PlayerSnap; onFocus: (f: Focus | null) => void; onLeave?: () => void; sl: SeatLens | null; animateChanges: boolean }) {
     const perspective = useSettings((s) => s.perspective);
     const visible = perspective === 'god' || perspective === seat;
     // hand cards all score the same; a per-card number only when they differ
@@ -353,7 +372,7 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
     const handTotal = sl ? sl.side.rows['side.hand'] ?? 0 : 0;
     const count = p.handCount ?? p.hand.length;
     return (
-        <div className="hand" aria-label={`${seat} hand, ${count} cards`}>
+        <div className="hand" data-effect-zone="hand" aria-label={`${seat} hand, ${count} cards`}>
             <span className="hand-label">Hand · {count}{count !== p.hand.length ? ` (${p.hand.length} listed)` : ''}</span>
             <div className="hand-cards">
                 <AnimatePresence initial={false} mode="popLayout">
@@ -361,7 +380,7 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
                         const v = valueOf(sl, 'hand', i);
                         const shown = v && flat ? { ...v, v: null } : v;
                         return (
-                            <motion.div key={c.id ?? `${c.n}-${i}`} layout className="hand-card" initial={{ opacity: 0, y: seat === 'p1' ? 20 : -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.7 }} transition={spring}>
+                            <motion.div key={c.id ?? `${c.n}-${i}`} layout={animateChanges} className="hand-card" initial={animateChanges ? { opacity: 0, y: seat === 'p1' ? 20 : -20 } : false} animate={{ opacity: 1, y: 0 }} exit={animateChanges ? { opacity: 0, scale: 0.7 } : { opacity: 0, transition: { duration: 0 } }} transition={animateChanges ? spring : { duration: 0 }}>
                                 {visible ? <Card card={c} size="sm" kind="hand" onFocus={onFocus} onLeave={onLeave} note="In hand" value={shown} /> : <CardBack size="sm" value={shown} />}
                                 {visible && <span className="hand-name">{c.n}</span>}
                             </motion.div>
@@ -381,7 +400,7 @@ function Hand({ seat, p, onFocus, onLeave, sl }: { seat: Seat; p: PlayerSnap; on
 }
 
 function Side({ seat, props, sl, spots }: { seat: Seat; props: BoardProps; sl: SeatLens | null; spots: string[] | null }) {
-    const { state, prev, ids, prevIds, bots, actor, step, onFocus, onLeave } = props;
+    const { state, prev, ids, prevIds, bots, actor, step, onFocus, onLeave, animateChanges = true } = props;
     const p = state.players[seat];
     const pp = prev?.players[seat] ?? null;
     const hasInit = state.initiative === seat;
@@ -389,13 +408,15 @@ function Side({ seat, props, sl, spots }: { seat: Seat; props: BoardProps; sl: S
     const rowRef = useRef<HTMLDivElement>(null);
     const hqRef = useRef<HTMLDivElement>(null);
     const probeRef = useRef<HTMLSpanElement>(null);
-    const { stack, weights } = sideLayout(useSideBox(rowRef, hqRef, probeRef), p.ground.length, p.space.length);
+    const { stack, weights } = sideLayout(useSideBox(rowRef, hqRef, probeRef),
+        Math.max(p.ground.length, props.reserveArenaSlots?.[seat].ground ?? 0),
+        Math.max(p.space.length, props.reserveArenaSlots?.[seat].space ?? 0));
     const cols = (weights ? { '--gw': `${weights[0]}fr`, '--sw': `${weights[1]}fr` } : {}) as CSSProperties;
     const row = (
         <div ref={rowRef} className={`grid gap-2 grid-cols-[minmax(0,var(--gw,1fr))_minmax(0,var(--sw,1fr))] items-stretch ${stack ? '' : '@2xl:grid-cols-[minmax(0,var(--gw,1fr))_auto_minmax(0,var(--sw,1fr))]'}`} style={cols}>
-            <Lane label="ground" seat={seat} arena="ground" units={p.ground} ids={ids[seat].ground} prevUnits={pp?.ground ?? null} prevIds={prevIds?.[seat].ground ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
+            <Lane label="ground" seat={seat} arena="ground" units={p.ground} ids={ids[seat].ground} prevUnits={pp?.ground ?? null} prevIds={prevIds?.[seat].ground ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} animateChanges={animateChanges} reservedSlots={props.reserveArenaSlots?.[seat].ground} />
             <div className={`relative px-2 py-1 flex flex-col items-center justify-center col-span-2 order-first ${stack ? '' : '@2xl:col-span-1 @2xl:order-none'}`}>
-                <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} onHiLeader={setHiLeader} hqRef={hqRef} sl={sl} spots={spots} />
+                <Hq seat={seat} p={p} prev={pp} bot={bots[seat]} step={step} onFocus={onFocus} onLeave={onLeave} onHiLeader={setHiLeader} hqRef={hqRef} sl={sl} spots={spots} reserveProtection={props.reserveBaseProtection?.[seat]} />
                 {hasInit && (
                     <motion.div layoutId="initiative" transition={spring} title={sl && has(sl, 'side.initiative') ? rowTitle(sl, 'side.initiative', `Initiative: ${fmtOf(sl, sl.side.initiative)} ${sl.view.source.unitText}`) : 'Initiative'}
                         className="absolute -left-1 top-1 flex flex-col items-center gap-0.5">
@@ -404,16 +425,33 @@ function Side({ seat, props, sl, spots }: { seat: Seat; props: BoardProps; sl: S
                     </motion.div>
                 )}
             </div>
-            <Lane label="space" seat={seat} arena="space" units={p.space} ids={ids[seat].space} prevUnits={pp?.space ?? null} prevIds={prevIds?.[seat].space ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} />
+            <Lane label="space" seat={seat} arena="space" units={p.space} ids={ids[seat].space} prevUnits={pp?.space ?? null} prevIds={prevIds?.[seat].space ?? null} leader={p.leader} hiLeader={hiLeader} step={step} onFocus={onFocus} onLeave={onLeave} sl={sl} animateChanges={animateChanges} reservedSlots={props.reserveArenaSlots?.[seat].space} />
         </div>
     );
     return (
-        <section className={`seat-${seat} half flex flex-col gap-1.5${actor === seat ? ' to-act' : ''}`} aria-label={`${bots[seat]} (${seat})`}>
+        <section className={`seat-${seat} half flex flex-col gap-1.5${actor === seat ? ' to-act' : ''}`} data-effect-seat={seat} aria-label={`${bots[seat]} (${seat})`}>
             {/* shown only when the container has room for ground | base | space: tells the layout which one CSS picked */}
             <span ref={probeRef} className="absolute size-0 hidden @2xl:block" aria-hidden="true" />
-            {seat === 'p2' ? <><Hand seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} sl={sl} />{row}</> : <>{row}<Hand seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} sl={sl} /></>}
+            {seat === 'p2' ? <><Hand seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} sl={sl} animateChanges={animateChanges} />{row}</> : <>{row}<Hand seat={seat} p={p} onFocus={onFocus} onLeave={onLeave} sl={sl} animateChanges={animateChanges} /></>}
+            <DiscardPermissions state={state} seat={seat} reserved={props.reserveDiscardPermissions?.[seat]} onFocus={onFocus} onLeave={onLeave} />
         </section>
     );
+}
+
+/** Permission is available now; displaying it does not play or pay for the card. */
+function DiscardPermissions({ state, seat, reserved, onFocus, onLeave }: { state: Snapshot; seat: Seat; reserved?: string[]; onFocus: (f: Focus | null) => void; onLeave?: () => void }) {
+    const permissions = state.discardPlayPermissions?.filter(p => p.player === seat && p.round === state.round && p.phase === state.phase && state.players[seat].discard.some(c => c.id === p.cardId && c.owner === seat)) ?? [];
+    const ids = reserved?.length ? reserved : permissions.map(p => p.id);
+    if (!ids.length) return null;
+    return <div className="discard-permissions" data-effect-zone="discard-permissions" aria-label={`${seat} cards playable from discard this phase`}>
+        {ids.map((id, i) => {
+            const permission = permissions.find(p => p.id === id), card = permission && state.players[seat].discard.find(c => c.id === permission.cardId);
+            return <div key={id} className={`discard-permission${card ? '' : ' empty'}`} aria-hidden={!card || undefined} data-effect-permission={card ? id : undefined} data-effect-permission-card={card?.id} data-effect-permission-source={permission?.sourceId}>
+                <div className="discard-permission-face" data-effect-zone={`discard-permission:${i}`}>{card ? <Card card={card} size="sm" width={28} note="In discard · may play for two less this phase" onFocus={onFocus} onLeave={onLeave} /> : null}</div>
+                <div className="discard-permission-text" data-effect-zone={`discard-permission-label:${i}`}><strong>{card?.n}</strong><span>{card ? 'Play from discard · −2 this phase' : ''}</span></div>
+            </div>;
+        })}
+    </div>;
 }
 
 /** The base's value chip, with its parts for the inspector. */
@@ -547,6 +585,21 @@ function ScoreLine({ view, bots, state, values }: { view: ScoreView; bots: Recor
     );
 }
 
+/** Player obligations and terminal outcomes are snapshot data, so they survive effect removal. */
+function PlayerEffectRail({ state, reserve }: { state: Snapshot; reserve?: boolean }) {
+    const pending = state.pendingPlayers?.filter(effect => effect.kind === 'lose-game' && effect.trigger === 'regroup-start') ?? [];
+    const result = state.matchResult;
+    if (!reserve && !pending.length && !result) return null;
+    return <div className="player-effect-rail" data-effect-zone="player-effect" aria-hidden={!pending.length && !result ? true : undefined}>
+        {result ? <div className="player-effect-message result" role="status" data-effect-result={result.reason} data-effect-winner={result.winner} data-effect-loser={result.loser} data-effect-source={result.sourceId}>
+            <strong>{result.winner === 'draw' ? 'DRAW' : `${result.winner.toUpperCase()} WINS`}{result.loser ? ` · ${result.loser.toUpperCase()} LOSES` : ''}</strong>
+            <span>Card effect resolved</span>
+        </div> : pending.map(effect => <div key={effect.id} className="player-effect-message pending" data-effect-player-pending={effect.player} data-effect-source={effect.sourceId} data-effect-trigger={effect.trigger}>
+            <strong>{effect.player.toUpperCase()} · LOSES AT REGROUP</strong><span>Pending card effect</span>
+        </div>)}
+    </div>;
+}
+
 function BoardImpl(props: BoardProps) {
     const { state, bots } = props;
     const view = props.score ?? null;
@@ -575,6 +628,7 @@ function BoardImpl(props: BoardProps) {
                     <div className="h-px flex-1 bg-gradient-to-r from-transparent via-p1/40 to-transparent" />
                 </div>
             )}
+            <PlayerEffectRail state={state} reserve={props.reservePlayerEffect} />
             <Side seat="p1" props={props} sl={sls?.p1 ?? null} spots={spots?.p1 ?? null} />
         </div>
     );

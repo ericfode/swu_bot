@@ -2,7 +2,7 @@
 
 A second tournament and replay viewer for the bot lab. It reads the **same files** as `viewer/` (`replays/<id>/index.json` and `games/<id>.jsonl`, written by `bot/tournament.js` and `bot/recorder.js`) and uses the same deep links (`#/t/<tournament>/g/<game>?step=300`), so the two viewers are interchangeable on any replays folder.
 
-Stack: Vite + React 19 + TypeScript, Tailwind CSS v4, Motion (animation), Recharts, cmdk (command palette), Zustand, Lucide icons.
+Stack: Vite + React 19 + TypeScript, Tailwind CSS v4, Motion (board transitions), Anime.js (card choreography), Recharts, cmdk (command palette), Zustand, Lucide icons.
 
 ## Run
 
@@ -38,6 +38,11 @@ The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/r
 
 ## What's in it
 
+- **Card effects** (`#/effects`, also in the navigation): a growing catalogue of bespoke animations. Select a card, replay it, or play the collection on a clearly labeled staged board. Modal examples name their choices; shared ability filters and a visual legend explain the mechanics. The [batch ledger](../docs/card-animation-batches.md) distinguishes authored scenes from independently accepted examples and the remaining imported catalogue.
+- **Frame inspection**: the slider and Anticipation / Impact / Outcome / Settle buttons pause the same Anime.js timeline used in playback. **Final board** shows the persistent result with no overlay. Deep-link with `#/effects?card=superlaser-blast&progress=46` (percent). Change of Heart and Sneak Attack also have a separately selectable **Regroup begins** example (`&stage=regroup-start`); playing their immediate scene does not advance to regroup automatically. Examples declare targets, prerequisites, payments, and before/after snapshots independently of recorded games.
+- **Sound effects**: enable Sound in the showcase or replay viewer, then adjust the volume. Twenty original procedural scores combine card signatures with shared ability sounds. Web Audio starts only from the enable gesture; muting, scrubbing, changing cues, leaving the page, and hiding the tab cancel the active sound. Held inspection frames are silent. Sound starts off for each viewer session. See [the sound language](../docs/card-sound-language.md).
+- **Effects in replays**: the same renderer runs when a supported event's recorded action resolves during forward playback or single stepping. The Effects toggle disables it; Replay effect repeats the current supported action. Playback leaves time for the effect to finish. Backward navigation and large timeline jumps do not animate intervening actions. Reduced motion shows a static caption. Exact targets follow recorded card IDs when available; missing or ambiguous targets fall back to the seat region. The rules engine and recorded state are unchanged.
+
 - **Tournaments**: standings with Elo (same K=24 sequential rules as `viewer/`), recent form, the Elo race over the tournament, a head-to-head heat map, first-seat win rate, and a filterable game list. Indexes with running games refresh every 2 s.
 - **Replay**: the table laid out as in SWU (ground arena, base and leader, space arena per seat), units animated in and out, damage and healing pop-ups, base HP rings, the initiative token sliding between seats, exhausted cards turned, hidden hands per perspective.
 - **Momentum timeline**: base HP, board power, hand size and the chosen score (from player 1's side) for every decision, with round bands; position evaluations add four P(p1 wins) curves. A score with a fitted or its own chance is drawn on the 0-100% axis; a rough or uncalibrated one is dashed on its own axis. Click or drag it to seek.
@@ -56,6 +61,15 @@ The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/r
 - `src/data/` — format types (copied from `viewer/src/core/types.ts`), loading (`source.ts`, `staticSource.ts`), derived metrics and unit tracking (`derive.ts`), standings (`stats.ts`), action classes (`actions.ts`), evaluations (`evals.ts`), lens files and scores (`lensFile.ts` reads a file, `score.ts` resolves a score over a game, `calibrate.ts` chance maps, `terms.ts` rows, `omniV1.ts` the built-in Omni v1).
 - `src/components/` — `Board`, `Card`, `CardZoom` (inspector and floating zoom), `Momentum`, `Log`, `Shell` (nav and command palette).
 - `src/kit/` — the embeddable viewer (`GameViewer`) and the `SWUViewer` bundle (`npm run build:kit`).
+- `src/effects/` — verified card catalogue, ability grammar, observed replay outcomes, Anime.js timeline, SVG primitives and card choreography, and staged showcase data. `npm test` checks identity, replay detection, outcomes, and example semantics; the root smoke commands include these tests. See [the animation language](../docs/card-animation-language.md).
 - `src/pages/` — home, tournament and game pages.
 - `vite.atlas.ts` — `virtual:atlas-kit`: the Atlas kit (`meta/atlas-kit.js`, or `ATLAS_KIT`) as a module, without touching `window.AtlasKit`; no file means no spots.
 - `vite.config.ts` — includes a small plugin that serves `/api/tournaments` and `/replays/*` exactly like `viewer/server.cjs`.
+
+## Visual review captures
+
+With the showcase running and Playwright available, `node scripts/capture-effects.mjs` captures four animation frames, an overlay-free final board, natural playback completion, full pages, and contact sheets into gitignored `../results/card-effects-review`. It checks held-frame stability and natural/held final-state equality, and fingerprints source files with the evidence. Use `--help` for browser/module paths, output directory, card selection, viewport, stage, and URL overrides. Capture success is not visual acceptance; inspect the images against the card rules and record independent scores through the [animation skill](../skills/swu-card-animation/SKILL.md).
+
+`node scripts/verify-effect-replays.mjs --cards search-your-feelings,the-emperors-legion` checks existing recorded plays against their authoritative before/after snapshots, then verifies Replay and backward seeking. The served production build must match current source. Use `--help` to select the tournament, recordings directory, output receipt, and installed browser. Cards without a recording are reported separately; the command never starts new games.
+
+`node scripts/render-effect-audio.mjs --help` documents offline WAV export and browser audio checks. Generated audition files and peak/RMS measurements go into gitignored `../results/card-effects-audio`; the product synthesizes its sound locally and needs no audio assets or service credentials.

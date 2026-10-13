@@ -1,0 +1,62 @@
+/* No CSS keyframes: the Anime.js clock owns every animated pose, including inspection frames. */
+.card-effect-overlay { position:absolute; inset:0; z-index:45; pointer-events:none; isolation:isolate; overflow:hidden; border-radius:inherit; color:var(--ce-color); }
+.ce-table-vignette { position:absolute; inset:0; background:radial-gradient(ellipse at 50% 45%, #0509131a 10%, #03060dd1 95%); }
+.ce-canvas { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+.ce-scene { filter:drop-shadow(0 0 4px color-mix(in srgb,var(--ce-color) 50%,transparent)); }
+.ce-scene path,.ce-scene rect,.ce-scene circle,.ce-scene ellipse { vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round; }
+.ce-scene path:not([fill]),.ce-scene rect:not([fill]),.ce-scene circle:not([fill]),.ce-scene ellipse:not([fill]) { fill:none; }
+.ce-scene path:not([stroke]),.ce-scene rect:not([stroke]),.ce-scene circle:not([stroke]),.ce-scene ellipse:not([stroke]) { stroke:currentColor; }
+.ce-scene path:not([stroke-width]),.ce-scene rect:not([stroke-width]),.ce-scene circle:not([stroke-width]),.ce-scene ellipse:not([stroke-width]) { stroke-width:2; }
+.ce-scene .ce-white-core { stroke:#fff6e9; }
+.ce-beam-haze { stroke:currentColor; opacity:.5; filter:blur(3px); }
+.ce-beam-core { stroke:#fff5e3!important; filter:drop-shadow(0 0 7px currentColor); }
+.ce-lightning-line { filter:drop-shadow(0 0 7px #b378ff); }
+.ce-energy-arc { filter:drop-shadow(0 0 5px currentColor); }
+.ce-shock-ring { filter:drop-shadow(0 0 6px currentColor); }
+.ce-card-outline { stroke:currentColor!important; stroke-width:2.5!important; }
+.ce-card-back-inner { fill:#172338!important; opacity:.7; }
+.ce-outcome-frame { stroke-width:3!important; filter:drop-shadow(0 0 7px currentColor); }
+.ce-ability-glyph path,.ce-ability-glyph circle,.ce-ability-glyph rect { stroke-width:3!important; }
+.ce-outcome-labels { position:absolute; inset:0; }
+.ce-outcome-stack { position:absolute; display:flex; flex-direction:column; align-items:stretch; gap:4px; min-width:58px; max-width:160px; }
+.ce-outcome-badge { position:relative; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:4px; width:100%; max-width:160px; min-height:24px; padding:4px 7px 4px 5px; border:1px solid color-mix(in srgb,var(--ce-proof) 80%,transparent); border-radius:5px; background:linear-gradient(110deg,color-mix(in srgb,var(--ce-proof) 15%,#07101b),#050a12f5); box-shadow:0 3px 12px #000c,0 0 19px color-mix(in srgb,var(--ce-proof) 17%,transparent); color:var(--ce-proof); font:700 10px/1.2 var(--font-display,sans-serif); letter-spacing:.035em; text-align:center; white-space:normal; }
+.ce-outcome-badge svg { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; }
+.ce-outcome-badge span { display:block; }
+.ce-badge-damage { font-size:12px; border-width:2px; color:#ffb091; }
+.ce-badge-defeat { font-size:11px; border-style:solid; color:#ff8ca0; }
+.ce-badge-heal { font-size:12px; border-width:2px; }
+.ce-phase-tag { position:absolute; left:14px; top:12px; display:flex; align-items:center; gap:7px; padding:5px 8px; background:#060d19e0; border:1px solid #a6b9dc30; border-radius:4px; font:8px/1 var(--font-mono,monospace); letter-spacing:.13em; color:#d4dfef; }
+.ce-phase-dot { width:4px; height:4px; background:var(--ce-color); border-radius:50%; box-shadow:0 0 8px var(--ce-color); }
+.ce-phase-tag span:last-child { color:#788cab; letter-spacing:0; }
+.ce-caption { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:12px; width:max-content; max-width:calc(100% - 28px); padding:10px 18px 12px; border:1px solid color-mix(in srgb,var(--ce-color) 42%,transparent); border-radius:7px; background:linear-gradient(110deg,color-mix(in srgb,var(--ce-color) 13%,#060a13),#060a13f5 80%); box-shadow:0 10px 50px #000a,0 0 24px color-mix(in srgb,var(--ce-color) 10%,transparent); overflow:hidden; }
+.ce-caption-mark { font-size:27px; text-shadow:0 0 14px currentColor; }
+.ce-caption-label { display:block; font:8px/1.4 var(--font-mono,monospace); letter-spacing:.16em; opacity:.8; }
+.ce-caption strong { display:block; font:700 19px/1.4 var(--font-display,sans-serif); color:#f4f7ff; }
+.ce-caption-description { display:block; max-width:520px; font-size:10px; line-height:1.4; color:#b6c4dc; }
+.ce-caption-bar { position:absolute; bottom:0; left:0; width:100%; height:2px; background:currentColor; transform-origin:left; }
+@media(max-width:600px) {
+ .ce-caption { bottom:7px; padding:7px 11px 9px; gap:7px; }
+ .ce-caption strong { font-size:15px; }
+ .ce-caption-description { max-width:280px; font-size:9px; }
+ .ce-caption-mark { font-size:21px; }
+ .ce-outcome-badge { max-width:110px; padding:3px 5px; font-size:9px; min-height:21px; }
+ .ce-outcome-badge svg { width:14px; height:14px; }
+ .ce-badge-damage,.ce-badge-heal { font-size:11px; }
+ .ce-phase-tag { left:8px; top:8px; font-size:7px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .ce-canvas,.ce-table-vignette,.ce-phase-tag { display:none; }
+ .ce-outcome-badge { transform:translate(-50%,8px)!important; }
+ .ce-caption { opacity:1!important; }
+ .ce-caption-bar { display:none; }
+}
+
+.ce-zone-route-label text { fill:currentColor; stroke:none; font:700 10px var(--font-display,sans-serif); letter-spacing:.06em; }
+.ce-stat-proof { position:absolute; display:flex; justify-content:flex-end; transform:translate(-100%,-100%); z-index:2; pointer-events:none; }
+.ce-stat-proof > span { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:27px; min-height:30px; padding:1px 4px; border:1px solid var(--ce-proof); border-radius:4px; background:#08111e; color:var(--ce-proof); box-shadow:0 0 9px #000; font:800 18px/1 var(--font-display,sans-serif); }
+.ce-stat-proof small { font-size:6px; letter-spacing:.08em; line-height:1.3; }
+.ce-stat-pair { justify-content:space-between; }
+.ce-stat-base { transform:translate(-50%,-50%); align-items:stretch; justify-content:stretch; }
+.ce-stat-base > span { width:100%; height:100%; min-height:0; border:3px solid var(--ce-proof); border-radius:50%; font-size:26px; padding:0; box-sizing:border-box; background:#070e19; }
+.ce-stat-base small { font-size:8px; }
+@media(max-width:600px) { .ce-outcome-stack { min-width:48px; } .ce-outcome-badge { max-width:none; padding:3px; gap:2px; font-size:8px; } .ce-outcome-badge svg { width:12px;height:12px; } .ce-badge-damage,.ce-badge-heal { font-size:10px; } .ce-stat-proof > span { min-width:21px;min-height:25px;font-size:15px; } .ce-stat-base > span { font-size:21px;min-height:0; } }

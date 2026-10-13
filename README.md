@@ -47,7 +47,9 @@ by the npm lockfiles; matching code and dependencies alone cannot guarantee
 identical future card data. Record the source revision and card-data snapshot
 when comparing experiments.
 
-`smoke` runs the existing root and analysis tests and builds both viewers.
+`smoke` runs the root, analysis, and studio animation tests and builds both viewers.
+Animation rules tests read the installed official card JSON, so run the default
+setup (including cards) before the full smoke check.
 It requires a normal Git checkout with history (including commit `5123bc4`), Git
 itself, and local HTTP sockets for the mocked Perch integration tests.
 `gate` runs seeds 1–3 with and without recording and exits 1 unless both runs
@@ -63,7 +65,7 @@ If the official card-data service is unavailable:
 
 ```bash
 npm run setup -- --skip-cards
-npm run smoke
+npm test && npm run analysis:test && npm run viewer:build && npm --prefix studio run build
 npm --prefix studio run fixtures
 REPLAYS_DIR="$PWD/studio/fixtures/replays" npm run studio:dev
 ```
@@ -121,12 +123,12 @@ its accompanying provenance and checksums; it is a snapshot, not a clone with
 Git history or remotes. For that limited environment, use:
 
 ```bash
-NODE_OPTIONS="--max-old-space-size=4096" npm run setup -- --skip-cards
+NODE_OPTIONS="--max-old-space-size=4096" npm run setup
 npm run smoke:source
 ```
 
-`smoke:source` runs bot, importer and app tests, analysis checks, and both viewer
-builds. It explicitly skips the one legacy-evaluation comparison that reads
+`smoke:source` runs bot, importer and app tests, analysis and studio animation checks,
+and both viewer builds. It requires installed official card JSON. It explicitly skips the one legacy-evaluation comparison that reads
 `5123bc4` from Git, and omits the Perch tooling suite (Git snapshots, parser
 cache, and local HTTP mocks). It is narrower than `smoke`; passing it does not
 validate those omitted checks. The original tests remain unchanged. Restore a

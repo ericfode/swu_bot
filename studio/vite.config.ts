@@ -9,6 +9,22 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import { atlasKit } from './vite.atlas.ts';
 
 const DEFAULT_CARD_TEXT = '/mnt/project-files/viewer-kit/card-text.json';
+import { effectSourceManifest } from './scripts/effect-source-manifest.mjs';
+
+/** Capture provenance from the served build, even while the next batch is being authored. */
+function effectReviewManifest(): Plugin {
+    let source: ReturnType<typeof effectSourceManifest>;
+    return {
+        name: 'swu-effect-review-manifest', apply: 'build',
+        buildStart() { source = effectSourceManifest(); },
+        generateBundle() {
+            if (effectSourceManifest().sourceFingerprint !== source.sourceFingerprint) {
+                this.error('Effect sources changed during the build; rerun after writers finish.');
+            }
+            this.emitFile({ type: 'asset', fileName: 'effect-source-manifest.json', source: JSON.stringify(source) });
+        }
+    };
+}
 
 /**
  * Serves the same two routes as viewer/server.cjs (GET /api/tournaments and /replays/*), straight from a replays
@@ -94,7 +110,7 @@ function replays(): Plugin {
 
 // `--mode static` bakes the fixture tournaments into one self-contained HTML file (for sharing a preview).
 export default defineConfig(({ mode }) => ({
-    plugins: [react(), tailwindcss(), atlasKit(), mode === 'static' ? viteSingleFile() : replays()],
+    plugins: [react(), tailwindcss(), atlasKit(), effectReviewManifest(), mode === 'static' ? viteSingleFile() : replays()],
     base: './',
     server: { port: 5190 },
     preview: { port: 5190 },

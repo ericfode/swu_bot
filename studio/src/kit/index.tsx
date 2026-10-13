@@ -7,6 +7,7 @@ import { useMemo, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MotionConfig } from 'motion/react';
 import css from '../styles.css?inline';
+import effectsCss from '../effects/effects.css?inline';
 import { GameViewer, lensInputs, type LensEntry, type ViewerControl } from './GameViewer';
 import { Glyph } from './Glyph';
 import { Spine } from './Spine';
@@ -180,6 +181,7 @@ const FONTS = 'https://fonts.googleapis.com/css2?family=Oxanium:wght@500;600;700
 
 // Registered custom properties (@property) are ignored inside shadow roots, so always apply Tailwind's fallback defaults.
 const shadowCss = css.replace(/@layer properties\s*\{\s*@supports[^{]*\{/, '@layer properties{@supports (display:block){')
+    + effectsCss
     // all:initial stops the host page's inherited text styles (case, italics, nowrap, shadows, colour scheme) leaking in
     + ':host{all:initial;display:block;color-scheme:dark;color:var(--color-fg);font-family:var(--font-sans);font-size:14px;line-height:1.5;text-align:left;-webkit-font-smoothing:antialiased}'
     + '.swuv-root{background:var(--color-bg);border-radius:16px;padding:12px;container-type:inline-size}';
