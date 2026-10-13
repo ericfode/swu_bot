@@ -117,3 +117,20 @@ test('mutable ledger cannot replace immutable initial baseline',()=>{
 test('actual admission object is required; fabricated schema or altered admission rejects',()=>{
     const f=fixture(1);try {const file=path.join(f.pipelineDirectory,'admission.json'), admission=JSON.parse(fs.readFileSync(file));admission.runtimeAdmittedCards.push({setCode:'TST_999'});f.write(file,admission);assert.throws(()=>recordReviewedRun(f.out,f.options),/Committed admission differs/);} finally {fs.rmSync(f.dir,{recursive:true,force:true});}
 });
+
+for (const format of ['manifest.json','manifest.json.gz']) test('cadence copies actual '+format+' bytes, reads back corpus and detects copied tampering',()=>{
+    const f=fixture(1);try {
+        const reference=require('../reference/library'),corpus=path.join(f.pipelineDirectory,'reference'),json=path.join(corpus,'manifest.json');
+        if(format.endsWith('.gz')){fs.writeFileSync(path.join(corpus,format),require('node:zlib').gzipSync(fs.readFileSync(json)));fs.unlinkSync(json);}
+        const source=reference.manifestArtifact(corpus),state=recordReviewedRun(f.out,f.options),evidence=state.runs[0].evidence.find(e=>e.path.endsWith('/reference/'+format));
+        assert.ok(evidence);assert.equal(evidence.sha256,sha(source.bytes));assert.deepEqual(fs.readFileSync(path.join(f.out,evidence.path)),source.bytes);
+        assert.deepEqual(reference.corpus(path.dirname(path.join(f.out,evidence.path))),source.document);assert.equal(state.jobs.length,0);
+        fs.writeFileSync(path.join(f.out,evidence.path),'tampered');assert.throws(()=>status(f.out),/evidence changed/);
+    } finally {fs.rmSync(f.dir,{recursive:true,force:true});}
+});
+test('cadence readback rejects a damaged manifest copy before any admission is counted',()=>{
+    const f=fixture(1),original=fs.writeFileSync;try {
+        fs.writeFileSync=function(file,bytes,...args){if(String(file).includes('/evidence/')&&String(file).endsWith('/reference/manifest.json'))return original(file,'corrupt',...args);return original(file,bytes,...args);};
+        assert.throws(()=>recordReviewedRun(f.out,f.options));assert.equal(status(f.out).completedCardIds.length,0);
+    } finally {fs.writeFileSync=original;fs.rmSync(f.dir,{recursive:true,force:true});}
+});

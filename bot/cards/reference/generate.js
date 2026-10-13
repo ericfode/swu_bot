@@ -92,7 +92,7 @@ async function generate(options) {
     }
     assert.deepEqual(sourceIdentity(), Object.fromEntries(Object.entries(provenance).filter(([key]) => !['sourceCatalogueSha256', 'nodeVersion', 'buildVerification'].includes(key))), 'Reference source changed during generation');
     assert.equal(sha256(fs.readFileSync(cataloguePath)), provenance.sourceCatalogueSha256, 'Catalogue changed during generation');
-    fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ schema: 'swu-reference-corpus/v1', recordings }, null, 2) + '\n');
+    lib.writeManifest(out, { schema: 'swu-reference-corpus/v1', recordings });
     return { directory: out, ...lib.verify(out), runtimeConformance: 'unassessed' };
 }
 

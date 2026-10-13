@@ -153,7 +153,7 @@ function recordReviewedRun(out, { pipelineDirectory, beforeCommit, integrationCo
             else fs.writeFileSync(destination, bytes, { flag: 'wx' });
             evidence.push({ path: path.relative(out, destination), sha256: hash(bytes) });
         }
-        const corpusFiles = ['manifest.json', ...recordings.map(r => 'traces/' + r.traceSha256 + '.jsonl.gz'), ...recordings.map(r => 'pools/' + r.poolSha256 + '.json')];
+        const corpusFiles = [path.basename(reference.manifestArtifact(corpusDirectory).path), ...recordings.map(r => 'traces/' + r.traceSha256 + '.jsonl.gz'), ...recordings.map(r => 'pools/' + r.poolSha256 + '.json')];
         for (const name of new Set(corpusFiles)) {
             const bytes = fs.readFileSync(path.join(corpusDirectory, name));
             const destination = path.join(evidenceDir, 'reference', name);
@@ -162,6 +162,8 @@ function recordReviewedRun(out, { pipelineDirectory, beforeCommit, integrationCo
             else fs.writeFileSync(destination, bytes, { flag: 'wx' });
             evidence.push({ path: path.relative(out, destination), sha256: hash(bytes) });
         }
+        reference.verify(path.join(evidenceDir, 'reference'));
+        check(digest(reference.corpus(path.join(evidenceDir, 'reference'))) === digest(reference.corpus(corpusDirectory)), 'Copied reference corpus differs');
         const time = execFileSync('git', ['-C', repo, 'show', '-s', '--format=%cI', after], { encoding: 'utf8' }).trim(), oldCount = done.size;
         newly.forEach(id => done.add(id));
         state.completedCardIds = [...done].sort();

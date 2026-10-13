@@ -60,9 +60,7 @@ async function adopt(options) {
         }
         current.recordings.push(row); keys.add(row.caseId + ':' + row.traceSha256);
     }
-    current.recordings.sort((a,b) => a.caseId.localeCompare(b.caseId) || a.traceSha256.localeCompare(b.traceSha256));
-    const dest = path.join(lib.defaultCorpus, 'manifest.json');
-    fs.writeFileSync(dest + '.tmp', JSON.stringify(current, null, 2) + '\n'); fs.renameSync(dest + '.tmp', dest);
+    lib.writeManifest(lib.defaultCorpus, current);
     return { ...lib.verify(), verification };
 }
 module.exports = { check, adopt };

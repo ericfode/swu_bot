@@ -107,7 +107,7 @@ test('catalogue JSON supports both all-admitted cards and an exact raw subset po
         // Persistent Force identities come from an actual engine recording;
         // they cannot be reconstructed from an older snapshot's arena contents.
         const referenceFixtures = path.resolve(__dirname, '../../../cards/reference/fixtures');
-        const manifest = JSON.parse(fs.readFileSync(path.join(referenceFixtures, 'manifest.json'), 'utf8'));
+        const manifest = require('../../../cards/reference/library').corpus(referenceFixtures);
         const forceRecording = manifest.recordings.find((row) => row.caseId === 'auto/LOF_193/force-first-gain');
         assert.ok(forceRecording, 'The corpus must retain the versioned Force engine witness');
         const versioned = records(path.join(referenceFixtures, 'traces', forceRecording.traceSha256 + '.jsonl.gz')).find((row) => row.type === 'state').state;

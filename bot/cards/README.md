@@ -121,12 +121,18 @@ or regenerate expected answers to compare the current runtime.
    import. Positive, boundary and interaction cases should distinguish plausible
    wrong implementations. Keep source conversion and runtime admission independent.
 
-`fixtures/manifest.json` maps case IDs to immutable recordings. Pool and compressed
+`fixtures/manifest.json.gz` (or legacy `manifest.json`) maps case IDs to immutable recordings. Pool and compressed
 trace filenames are their SHA-256 values. The verifier checks file inventory,
 bytes, metadata, scenario identity, seed, decision/window counts and completion.
 Absolute paths inside older trace headers are historical; checking always passes
 the content-addressed pool explicitly. A new recording supplements an old one;
 retiring a regression is an explicit manifest change, not an accidental overwrite.
+Readers require exactly one manifest format and reject ambiguity or damaged gzip.
+The v1 document is unchanged; gzip reduces storage, not parsed memory. New corpora
+use gzip, while imports preserve the destination format and append unique rows
+in incoming order after existing rows. Manifest writes use an atomic rename in
+the same directory. Cadence evidence copies and hashes the actual manifest file
+and verifies the copied corpus; the 200-card review cadence is unchanged.
 
 ## Automatic configuration, experiments, and semantic review
 
