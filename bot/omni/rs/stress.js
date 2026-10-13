@@ -7,6 +7,7 @@
 //
 //   node bot/omni/rs/stress.js --bots heuristic,aggro,control,rust-search,node-search --seeds 1-4 \
 //       --pool bot/omni/rs/pool.json --out replays/omni-rs-stress [--sim-every 10] [--workers 3] [--key none]
+// --selection-toggles plays forceteki with env.js's opt-in select-card rule, which a Rust engine built for it follows.
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -97,7 +98,7 @@ async function worker(id, list, opts) {
             } : null
         };
         const bots = job.bots.map((name) => makeBot(name));
-        const res = await playGame(env, { seed: job.seed, bots, decks, key: opts.key, watch, limits: opts.limits });
+        const res = await playGame(env, { seed: job.seed, bots, decks, key: opts.key, watch, limits: opts.limits, engine: opts.engine });
         const s = real?.mirror.stats;
         game.real = s ? { decisions: s.decisions, windows: s.windows, loads: s.loads, skipped: s.skipped } : null;
         Object.assign(game, { outcome: res.outcome, winner: res.winner, steps: res.steps, round: res.round, error: res.error ?? null, by: res.by ?? null, ms: res.ms });
@@ -163,9 +164,10 @@ async function main() {
     const key = arg('key', 'none');
     const opts = {
         out, pool: path.resolve(arg('pool', path.join(__dirname, 'pool.json'))), simEvery: Number(arg('sim-every', 10)),
-        key: key === 'none' ? null : key, limits: {}, jobs: split, views: process.argv.includes('--views')
+        key: key === 'none' ? null : key, limits: {}, jobs: split, views: process.argv.includes('--views'),
+        engine: process.argv.includes('--selection-toggles') ? { selectionToggles: true } : {}
     };
-    fs.writeFileSync(path.join(out, 'run.json'), JSON.stringify({ bots, seeds, workers, simEvery: opts.simEvery, key: opts.key, pool: opts.pool, started: new Date().toISOString() }, null, 2) + '\n');
+    fs.writeFileSync(path.join(out, 'run.json'), JSON.stringify({ bots, seeds, workers, simEvery: opts.simEvery, key: opts.key, pool: opts.pool, engine: opts.engine, started: new Date().toISOString() }, null, 2) + '\n');
     const codes = await Promise.all(split.map((_, id) => new Promise((resolve) => {
         const child = fork(__filename, ['--worker', String(id)], { env: { ...process.env, STRESS_OPTS: JSON.stringify(opts) } });
         child.on('exit', resolve);
