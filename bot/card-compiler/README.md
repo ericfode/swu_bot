@@ -76,6 +76,17 @@ aura bonuses with bounded conditions and target filters. Arena count/existence
 queries preserve their outer target separately from each queried card. Live
 stat calculations and stat-dependent constant conditions remain rejected.
 
+Bounded arena lists, filtering, existence and length queries also support three
+complete source shapes: conditional Ambush from another friendly nonunique unit,
+optional exhaustion conditioned on another friendly space unit, and a leader
+front action counting exhausted units across both players. Query candidates stay
+separate from the chosen target and physical source. The front action retains its
+resource and exhaustion costs, including the engine's no-effect confirmation,
+and requires the exact native Spy definition in the selected pool. Whole-source
+and printed-side guards reject other collection uses. Query programs use the
+shared interpreter or live-modifier path; the leader's separate scalar attack
+ability can use existing generated code.
+
 Ongoing sources include actual bases and undeployed leaders for bounded complete
 families: the 26-HP bases granting friendly leader units +0/+1 or +1/+0, and the
 two-sided leader granting Raid 1 to friendly units costing at least three. A

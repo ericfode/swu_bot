@@ -239,6 +239,19 @@ Synthetic grant/removal, Sentinel, reentry and
 history-import checks remain separate diagnostics; unconstructed leader/token
 history and controller-change interactions stay explicit coverage gaps.
 
+Arena-query experiments cover both source seats, friendly versus opposing units,
+ground/space and offboard membership, physical-source exclusion, native unit
+tokens and genuinely deployed leaders. Normal play distinguishes conditional
+Ambush from late gain/loss/regain without another entry attack, and the exhaustion
+query from its independently chosen target, optional decline and legal ineffective
+choices. Front actions assert exact payment and cancellation, global three/four/
+five-unit thresholds, one exhausted Spy with its real identity, and later Raid
+combat. Real deployment, attack choices, paid defeat and self-lethal attacks retain
+leader identity and stop departed attackers before combat. Shield consumption
+checks exact attachment identity. Captured-source departure before query entry
+resolution, competing trigger priority, controller/pilot interactions, arbitrary
+callbacks and large-board interactions remain explicit gaps.
+
 Base and leader-zone experiments construct genuinely different initial decks
 for both source seats. They cover 26-HP versus ordinary 30-HP base lethality,
 leader deployment, paid damage, a +HP survival boundary, exact attack damage,

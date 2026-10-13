@@ -1440,6 +1440,48 @@
         "command",
         "villainy"
       ],
+      "cost": 4,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "2614961429",
+      "internalName": "atst-raider",
+      "keywords": [
+        "ambush"
+      ],
+      "power": 4,
+      "rules": "Ambush is an ability that triggers at the same time as “When Played” abilities. The unit does not have to be ready in order to attack.\n",
+      "setCode": "ASH_098",
+      "setCodes": [
+        {
+          "number": 98,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 98,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "While you control another non-<uq> unit, this unit gains Ambush. (When you play this unit, it may attack an enemy unit.)",
+      "title": "AT-ST Raider",
+      "traits": [
+        "vehicle",
+        "walker"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
       "cost": 6,
       "deployBox": null,
       "epicAction": "",
@@ -13370,6 +13412,46 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 3,
+      "id": "1303370295",
+      "internalName": "death-space-skirmisher",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "JTL_217",
+      "setCodes": [
+        {
+          "number": 217,
+          "set": "JTL"
+        }
+      ],
+      "setId": {
+        "number": 217,
+        "set": "JTL"
+      },
+      "subtitle": "",
+      "text": "When Played: If you control another space unit, you may exhaust a unit.",
+      "title": "Death Space Skirmisher",
+      "traits": [
+        "underworld",
+        "vehicle",
+        "fighter"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "cunning"
@@ -23062,6 +23144,47 @@
       "text": "Action [1 resource, Exhaust]: Ready a token unit.",
       "title": "Governor Pryce",
       "traits": [
+        "imperial",
+        "official"
+      ],
+      "types": [
+        "leader"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "cost": 5,
+      "deployBox": "On Attack: You may deal 2 damage to an exhausted unit.",
+      "epicAction": "Epic Action: If you control 5 or more resources, deploy this leader.",
+      "hp": 6,
+      "id": "4672831370",
+      "internalName": "sly-moore#cipher-in-the-dark",
+      "keywords": [],
+      "power": 3,
+      "rules": "Sly’s leader ability still can be used as an action even if fewer than 4 exhausted units are in play (but no Spy token is created).\n",
+      "setCode": "SEC_014",
+      "setCodes": [
+        {
+          "number": 14,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 14,
+        "set": "SEC"
+      },
+      "subtitle": "Cipher in the Dark",
+      "text": "Action [1 resource, Exhaust]: If there are 4 or more exhausted units in play, create a Spy token.",
+      "title": "Sly Moore",
+      "traits": [
+        "force",
         "imperial",
         "official"
       ],

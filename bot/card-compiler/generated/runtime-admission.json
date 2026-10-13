@@ -1,5 +1,5 @@
 {
-  "catalogueHash": "1f514966268591f9afe48c97a9c4becda81cdd29d12da8825ff6aaa116565f05",
+  "catalogueHash": "03cd0f8b6b1c41a11a096e15be2a30b9eb319355a98621ba800a395bf2879459",
   "dataOnlyConvertedCount": 372,
   "gameConformance": "not assessed by this report",
   "irConvertedCount": 1070,
@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 593
+    "sourceIr": 596
   },
   "runtimeAdmittedCards": [
     {
@@ -189,6 +189,11 @@
       "implementation": "sourceIr",
       "internalName": "moff-gideon#remnant-commander",
       "setCode": "ASH_097"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "atst-raider",
+      "setCode": "ASH_098"
     },
     {
       "implementation": "sourceIr",
@@ -1662,6 +1667,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "death-space-skirmisher",
+      "setCode": "JTL_217"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "skyway-cloud-car",
       "setCode": "JTL_220"
     },
@@ -2854,6 +2864,11 @@
       "implementation": "sourceIr",
       "internalName": "governor-pryce#tyrant-of-lothal",
       "setCode": "SEC_011"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "sly-moore#cipher-in-the-dark",
+      "setCode": "SEC_014"
     },
     {
       "implementation": "sourceIr",
@@ -4856,7 +4871,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 969,
+  "runtimeAdmittedCount": 972,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5162,11 +5177,6 @@
       "internalName": "remnant-interceptor",
       "reason": "remnant-interceptor: compiler rejected \"remnant-interceptor\": [{\"code\":\"MISSING_IMPLEMENTATION\",\"column\":1,\"file\":\"data/Card/remnant-interceptor.json\",\"line\":1,\"message\":\"No source implementation and card is not a plain base or supported keyword-only unit\",\"pattern\":\"no-source-for-rules-text\"}]",
       "setCode": "ASH_095"
-    },
-    {
-      "internalName": "atst-raider",
-      "reason": "atst-raider: invalid ability IR: unknown variant `arenaSome`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
-      "setCode": "ASH_098"
     },
     {
       "internalName": "gozanti-assault-carrier",
@@ -7184,11 +7194,6 @@
       "setCode": "JTL_216"
     },
     {
-      "internalName": "death-space-skirmisher",
-      "reason": "death-space-skirmisher: invalid ability IR: unknown variant `arenaLength`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
-      "setCode": "JTL_217"
-    },
-    {
       "internalName": "guerilla-soldier",
       "reason": "guerilla-soldier: compiler rejected \"guerilla-soldier\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":23,\"file\":\"game/cards/04_JTL/units/GuerillaSoldier.ts\",\"line\":21,\"message\":\"unsupported-player-target-resolver\",\"pattern\":\"unsupported-player-target-resolver\"}]",
       "setCode": "JTL_218"
@@ -7295,7 +7300,7 @@
     },
     {
       "internalName": "resistance-xwing",
-      "reason": "resistance-xwing: invalid ability IR: unknown variant `collection`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
+      "reason": "resistance-xwing: invalid ability IR: unknown variant `collection`, expected one of `arenaList`, `arenaFilter`, `arenaSome`, `arenaLength`, `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
       "setCode": "JTL_247"
     },
     {
@@ -8922,11 +8927,6 @@
       "internalName": "luthen-rael#dont-you-want-to-fight-for-real",
       "reason": "luthen-rael#dont-you-want-to-fight-for-real: compiler rejected \"luthen-rael#dont-you-want-to-fight-for-real\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/06_SEC/leaders/LuthenRaelDontYouWantToFightForReal.ts\",\"line\":20,\"message\":\"trigger-alias-hook:onCardDefeated\",\"pattern\":\"trigger-alias-hook:onCardDefeated\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/06_SEC/leaders/LuthenRaelDontYouWantToFightForReal.ts\",\"line\":41,\"message\":\"trigger-alias-hook:onCardDefeated\",\"pattern\":\"trigger-alias-hook:onCardDefeated\"}]",
       "setCode": "SEC_013"
-    },
-    {
-      "internalName": "sly-moore#cipher-in-the-dark",
-      "reason": "sly-moore#cipher-in-the-dark: invalid ability IR: unknown variant `arenaLength`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
-      "setCode": "SEC_014"
     },
     {
       "internalName": "padme-amidala#what-do-you-have-to-hide",
@@ -11260,7 +11260,7 @@
     },
     {
       "internalName": "admiral-motti#brazen-and-scornful",
-      "reason": "admiral-motti#brazen-and-scornful: invalid ability IR: unknown variant `collection`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
+      "reason": "admiral-motti#brazen-and-scornful: invalid ability IR: unknown variant `collection`, expected one of `arenaList`, `arenaFilter`, `arenaSome`, `arenaLength`, `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`",
       "setCode": "SOR_226"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1489,
+  "runtimeRejectedCount": 1486,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

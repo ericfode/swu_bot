@@ -24,6 +24,10 @@ pub const MAX_ABILITY_NESTING: usize = 8;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Expr {
+    ArenaList { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaFilter { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaSome { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaLength { receiver: Box<Expr> },
     Array {
         items: Vec<Expr>,
     },
@@ -61,12 +65,14 @@ pub enum Expr {
 impl Expr {
     fn references_title(&self) -> bool {
         match self {
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.references_title() || predicate.references_title(), Self::ArenaLength {receiver} => receiver.references_title(),
             Self::Ref {path}=>path.last().is_some_and(|p|p=="title"),
             Self::Array {items}=>items.iter().any(Self::references_title),Self::Math {args,..}=>args.iter().any(Self::references_title),Self::Unary {value,..}=>value.references_title(),Self::Binary {left,right,..}=>left.references_title()||right.references_title(),Self::Conditional {condition,then,r#else}=>condition.references_title()||then.references_title()||r#else.references_title(),Self::Query {receiver,args,..}=>receiver.references_title()||args.iter().any(Self::references_title),_=>false,
         }
     }
     fn depends_on_stats(&self) -> bool {
         match self {
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.depends_on_stats() || predicate.depends_on_stats(), Self::ArenaLength {receiver} => receiver.depends_on_stats(),
             Self::Const { .. } => false,
             Self::Ref { path } => path.iter().any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
             Self::Array { items } => items.iter().any(Self::depends_on_stats),
@@ -93,6 +99,7 @@ impl Expr {
     }
     fn depends_on_keywords(&self) -> bool {
         match self {
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.depends_on_keywords() || predicate.depends_on_keywords(), Self::ArenaLength {receiver} => receiver.depends_on_keywords(),
             Self::Const { .. } => false,
             Self::Ref { path } => path.iter().map(String::as_str).collect::<Vec<_>>()==["card","keywords","length"] || path.iter().any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
             Self::Array { items } => items.iter().any(Self::depends_on_keywords),
@@ -118,7 +125,8 @@ impl Expr {
         }
     }
     fn live_only(&self)->bool {
-        match self {Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
+        match self {
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.live_only() || predicate.live_only(), Self::ArenaLength {receiver} => receiver.live_only(),Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
     }
     fn live_stat_bounds(&self)->Result<(i64,i64),String> {
         fn root(e:&Expr,paths:&[&[&str]])->bool {matches!(e,Expr::Ref {path} if paths.iter().any(|p|path.iter().map(String::as_str).collect::<Vec<_>>()==*p))}
@@ -176,6 +184,7 @@ impl Expr {
     pub fn validate_number(&self) -> Result<(), String> {
         self.validate()?;
         let numeric = match self {
+            Self::ArenaLength {..} => true, Self::ArenaList {..}|Self::ArenaFilter {..}|Self::ArenaSome {..} => false,
             Self::Array { .. } => false,
             Self::Math { name, args } => {
                 ["min", "max"].contains(&name.as_str())
@@ -222,6 +231,9 @@ impl Expr {
         }
         let sub = |e: &Expr| e.validate_depth(depth + 1);
         match self {
+            Self::ArenaList {receiver,predicate} => {if !matches!(receiver.as_ref(),Self::Ref{path} if path.len()==1 && ["player","opponent","game"].contains(&path[0].as_str())) {return Err("arena list requires exact player/opponent/game receiver".into());}sub(predicate)},
+            Self::ArenaFilter {receiver,predicate}|Self::ArenaSome {receiver,predicate} => {if !matches!(receiver.as_ref(),Self::ArenaList{..}) {return Err("arena filter/some requires direct arena list".into());}sub(receiver)?;sub(predicate)},
+            Self::ArenaLength {receiver} => {if !matches!(receiver.as_ref(),Self::ArenaList{..}|Self::ArenaFilter{..}) {return Err("arena length requires bounded list".into());}sub(receiver)},
             Self::Array { items } => {
                 for item in items {
                     sub(item)?;
@@ -342,8 +354,8 @@ impl Expr {
 #[serde(untagged)]
 pub enum Target {
     Name(String),
-    Expression(Expr),
     ArenaList(ArenaListTarget),
+    Expression(Expr),
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -959,6 +971,7 @@ fn parent_upgrade_registration(a:&Ability)->Option<bool> {
 
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
+        if contains_arena_scalar(&serde_json::to_value(ability).map_err(|e|e.to_string())?) && !arena_query_ability(ability) {return Err("arena scalar queries require exact reviewed registration".into());}
         if parent_upgrade_registration(ability)==Some(false) {
             let mut normalized=ability.clone();
             if let Effect::Conditional{condition:Expr::Binary{left,..},..}=&mut normalized.effect {
@@ -1007,6 +1020,7 @@ impl Program {
         if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
         fn title_literal_bytes(e: &Expr) -> usize {
             match e {
+ Expr::ArenaList{receiver,predicate}|Expr::ArenaFilter{receiver,predicate}|Expr::ArenaSome{receiver,predicate}=>title_literal_bytes(receiver)+title_literal_bytes(predicate),Expr::ArenaLength{receiver}=>title_literal_bytes(receiver),
                 Expr::Const {value} => value.as_str().map_or(0, str::len),
                 Expr::Array {items} => items.iter().map(title_literal_bytes).sum(),
                 Expr::Math {args, ..} => args.iter().map(title_literal_bytes).sum(),
@@ -1391,6 +1405,7 @@ impl Program {
     fn validate_group(&self, effect: &Effect, targets: usize) -> Result<(), String> {
         fn dependent_in_scope(e: &Expr, card_bound: bool) -> bool {
             match e {
+ Expr::ArenaList{receiver,predicate}|Expr::ArenaFilter{receiver,predicate}|Expr::ArenaSome{receiver,predicate}=>dependent_in_scope(receiver,card_bound)||dependent_in_scope(predicate,true),Expr::ArenaLength{receiver}=>dependent_in_scope(receiver,card_bound),
                 Expr::Ref {path} => matches!(path.first().map(String::as_str), Some("target" | "targets")) || (!card_bound && path.first().is_some_and(|p|p=="card")),
                 Expr::Array {items} => items.iter().any(|e|dependent_in_scope(e,card_bound)),
                 Expr::Math {args, ..} => args.iter().any(|e|dependent_in_scope(e,card_bound)),
@@ -1689,6 +1704,21 @@ pub struct CardPrograms {
     pub attach_condition: Option<Expr>,
 }
 
+fn query_shape(value:&Value)->Value {match value {Value::Object(o)=>Value::Object(o.iter().filter(|(k,_)|k.as_str()!="title").map(|(k,v)|(k.clone(),query_shape(v))).collect()),Value::Array(a)=>Value::Array(a.iter().map(query_shape).collect()),_=>value.clone()}}
+pub(crate) fn contains_arena_query(v:&Value)->bool {v["kind"].as_str().is_some_and(|s|["arenaList","arenaFilter","arenaLength","arenaSome"].contains(&s)) && (v.get("receiver").is_some()) || match v {Value::Array(a)=>a.iter().any(contains_arena_query),Value::Object(o)=>o.values().any(contains_arena_query),_=>false}}
+fn contains_arena_scalar(v:&Value)->bool {fn walk(v:&Value,target_container:bool)->bool {if !target_container&&v["kind"].as_str().is_some_and(|s|["arenaList","arenaFilter","arenaLength","arenaSome"].contains(&s)){return true;}match v{Value::Array(a)=>a.iter().any(|v|walk(v,false)),Value::Object(o)=>o.iter().any(|(k,v)|walk(v,k=="target"&&v["kind"]=="arenaList")),_=>false}}walk(v,false)}
+pub(crate) fn arena_query_source_kind(entry:&Value)->Option<usize> {
+ if !entry["card"]["unique"].is_boolean() || !entry["attachCondition"].is_null() || !entry["piloting"].is_null() || ["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null()) {return None;}
+ let shape=query_shape(&entry["abilities"]);let shapes:Vec<Value>=vec![
+serde_json::from_str(r##"{"leader":[],"unit":[],"card":[{"trigger":"constant","costs":[],"effect":{"kind":"gainKeyword","target":"self","duration":"persistent","keyword":"ambush","amount":{"kind":"const","value":1}},"condition":{"kind":"arenaSome","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"ref","path":["source"]}},"right":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}}},"predicate":{"kind":"unary","op":"!","value":{"kind":"ref","path":["card","unique"]}}}}]}"##).ok()?,
+serde_json::from_str(r##"{"leader":[],"unit":[],"card":[{"trigger":"whenPlayed","costs":[],"optional":true,"targetResolver":{"owner":"any","type":"unit","zone":"anyAttackable"},"effect":{"kind":"conditional","condition":{"kind":"binary","op":">","left":{"kind":"arenaLength","receiver":{"kind":"arenaFilter","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"const","value":"spaceArena"}},"right":{"kind":"binary","op":"||","left":{"kind":"binary","op":"===","left":{"kind":"const","value":"spaceArena"},"right":{"kind":"const","value":"anyArena"}},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"spaceArena"}}}}}},"predicate":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}},"right":{"kind":"const","value":0}},"onTrue":{"kind":"exhaust","target":"chosen"},"onFalse":{"kind":"noAction"}}}]}"##).ok()?,
+serde_json::from_str(r##"{"leader":[{"trigger":"action","costs":[{"kind":"exhaustSelf"},{"kind":"resources","amount":{"kind":"const","value":1}}],"effect":{"kind":"conditional","condition":{"kind":"binary","op":">=","left":{"kind":"arenaLength","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["game"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"ref","path":["card","exhausted"]}}}}},"right":{"kind":"const","value":4}},"onTrue":{"kind":"createTokenUnit","tokenType":"spy","amount":{"kind":"const","value":1},"target":"ownPlayer","entersReady":false},"onFalse":{"kind":"noAction"}}}],"unit":[{"trigger":"onAttack","costs":[],"optional":true,"targetResolver":{"owner":"any","type":"unit","zone":"anyAttackable","predicate":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"ref","path":["card","exhausted"]}}},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":2}}}],"card":[]}"##).ok()?];
+ let kind=shapes.iter().position(|s|s==&shape)?;let metadata:Vec<Value>=serde_json::from_str(r##"[{"cost":4,"hp":5,"power":4,"arena":"ground","text":"While you control another non-<uq> unit, this unit gains Ambush. (When you play this unit, it may attack an enemy unit.)","deployBox":null,"epicAction":"","rules":"Ambush is an ability that triggers at the same time as \u201cWhen Played\u201d abilities. The unit does not have to be ready in order to attack.\n","upgradePower":null,"upgradeHp":null,"unique":false,"keywords":["ambush"]},{"cost":3,"hp":3,"power":3,"arena":"space","text":"When Played: If you control another space unit, you may exhaust a unit.","deployBox":null,"epicAction":"","rules":null,"upgradePower":null,"upgradeHp":null,"unique":false,"keywords":[]},{"cost":5,"hp":6,"power":3,"arena":"ground","text":"Action [1 resource, Exhaust]: If there are 4 or more exhausted units in play, create a Spy token.","deployBox":"On Attack: You may deal 2 damage to an exhausted unit.","epicAction":"Epic Action: If you control 5 or more resources, deploy this leader.","rules":"Sly\u2019s leader ability still can be used as an action even if fewer than 4 exhausted units are in play (but no Spy token is created).\n","upgradePower":null,"upgradeHp":null,"unique":true,"keywords":[]}]"##).ok()?;if !metadata[kind].as_object()?.iter().all(|(k,v)|entry["card"][k]==*v)||entry["keywordValues"]!=serde_json::json!({}){return None;}let ty=if kind==2 {"leader"}else{"unit"};if entry["card"]["types"]!=serde_json::json!([ty]) || entry["baseClass"]!=if kind==2 {"LeaderUnitCard"}else{"NonLeaderUnitCard"} {return None;}Some(kind)
+}
+fn arena_query_ability(a:&Ability)->bool {let v=query_shape(&serde_json::to_value(a).unwrap());let templates:Vec<Value>=vec![
+query_shape(&serde_json::to_value(serde_json::from_str::<Ability>(r##"{"trigger":"constant","title":"Gain Ambush while you control another non-unique unit","costs":[],"effect":{"kind":"gainKeyword","target":"self","duration":"persistent","keyword":"ambush","amount":{"kind":"const","value":1}},"condition":{"kind":"arenaSome","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"ref","path":["source"]}},"right":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}}},"predicate":{"kind":"unary","op":"!","value":{"kind":"ref","path":["card","unique"]}}}}"##).unwrap()).unwrap()),
+query_shape(&serde_json::to_value(serde_json::from_str::<Ability>(r##"{"trigger":"whenPlayed","title":"Exhaust a unit.","costs":[],"optional":true,"targetResolver":{"owner":"any","type":"unit","zone":"anyAttackable"},"effect":{"kind":"conditional","condition":{"kind":"binary","op":">","left":{"kind":"arenaLength","receiver":{"kind":"arenaFilter","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"const","value":"spaceArena"}},"right":{"kind":"binary","op":"||","left":{"kind":"binary","op":"===","left":{"kind":"const","value":"spaceArena"},"right":{"kind":"const","value":"anyArena"}},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"spaceArena"}}}}}},"predicate":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}},"right":{"kind":"const","value":0}},"onTrue":{"kind":"exhaust","target":"chosen"},"onFalse":{"kind":"noAction"}}}"##).unwrap()).unwrap()),
+query_shape(&serde_json::to_value(serde_json::from_str::<Ability>(r##"{"trigger":"action","title":"If there are 4 or more exhausted units in play, create a Spy token","costs":[{"kind":"exhaustSelf"},{"kind":"resources","amount":{"kind":"const","value":1}}],"effect":{"kind":"conditional","condition":{"kind":"binary","op":">=","left":{"kind":"arenaLength","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["game"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"ref","path":["card","exhausted"]}}}}},"right":{"kind":"const","value":4}},"onTrue":{"kind":"createTokenUnit","tokenType":"spy","amount":{"kind":"const","value":1},"target":"ownPlayer","entersReady":false},"onFalse":{"kind":"noAction"}}}"##).unwrap()).unwrap())];templates.iter().any(|t|t==&v)}
 #[derive(Debug, Default)]
 pub struct Catalogue {
     pub programs: Vec<Program>,
@@ -1728,6 +1758,7 @@ impl Catalogue {
                 if parent_reference(&entry["abilities"]) && entry["baseClass"]!="UpgradeCard" {return Err("parent references require an ordinary attached upgrade".into());}
                 let basezone_relevant=entry["abilities"]["card"].as_array().is_some_and(|a|(entry["baseClass"]=="BaseCard"||entry["card"]["types"].as_array().is_some_and(|t|t.iter().any(|v|v=="base")))&&!a.is_empty()) || entry["abilities"]["leader"].as_array().is_some_and(|a|a.iter().any(|a|a["trigger"]=="constant"));
                 if basezone_relevant&&basezone_source_kind(entry).is_none(){return Err("base-zone ongoing source requires exact reviewed base or two-side leader shape".into());}
+                if contains_arena_scalar(&entry["abilities"]) && arena_query_source_kind(entry).is_none() {return Err("arena scalar query requires exact reviewed complete source shape".into());}
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);

@@ -4,6 +4,7 @@ use crate::ability_ir::{Cost, Effect, Expr, Instruction, Program, Target, Target
 
 #[derive(Clone, Debug, PartialEq)]
 enum Eval {
+    ArenaCards(Vec<CardId>),
     Array(Vec<Eval>),
     Number(i64),
     Bool(bool),
@@ -22,7 +23,7 @@ impl Eval {
     }
     fn truth(&self) -> bool {
         match self {
-            Self::Null => false,
+            Self::Null | Self::ArenaCards(_) => false,
             Self::Bool(b) => *b,
             Self::Number(n) => *n != 0,
             Self::Text(t) => !t.is_empty(),
@@ -112,6 +113,8 @@ fn reviewed_beast_entry(entry:&Value)->bool {
     let expected:Value=serde_json::from_str(r#"{"title":"Beast","subtitle":"","cost":0,"hp":3,"power":3,"text":"","deployBox":null,"epicAction":"","unique":false,"rules":null,"upgradePower":null,"upgradeHp":null,"id":"6445363199","aspects":[],"traits":["creature"],"arena":"ground","keywords":[],"types":["token","unit"],"setId":{"set":"HMW"},"internalName":"beast"}"#).expect("reviewed Beast metadata");
     entry["setCode"]=="TOKEN_BEAST"&&entry["status"]=="supported"&&entry["attachCondition"].is_null()&&entry["piloting"].is_null()&&entry["sourcePath"]=="game/cards/09_HMW/tokens/Beast.ts"&&entry["sourceHash"]=="e9ce58041d8cb93f9a98e773c016dc56bad9271ee30b7954411a7d63357c2566"&&entry["baseClass"]=="TokenUnitCard"&&entry["card"]==expected&&["card","unit","leader"].iter().all(|side|entry["abilities"][side].as_array().is_some_and(|a|a.is_empty()))&&entry["keywordValues"].as_object().is_some_and(|v|v.is_empty())
 }
+fn reviewed_spy_entry(entry:&Value)->bool {let expected:Value=serde_json::from_str(r##"{"status":"supported","baseClass":"TokenUnitCard","sourcePath":"game/cards/06_SEC/tokens/Spy.ts","sourceHash":"aae6ac20865fac5b7c5eace59f33b781c75a578c07cf494bdc28b337c5d42f1f","card":{"title":"Spy","subtitle":"","cost":0,"hp":2,"power":0,"text":"Raid 2 (This unit gets +2/+0 while attacking.)","deployBox":null,"epicAction":"","unique":false,"rules":null,"upgradePower":null,"upgradeHp":null,"id":"6665455613","aspects":[],"traits":["official"],"arena":"ground","keywords":["raid"],"types":["token","unit"],"setId":{"set":"SEC"},"internalName":"spy"},"abilities":{"leader":[],"unit":[],"card":[]},"keywordValues":{"raid":2}}"##).unwrap();entry["setCode"]=="TOKEN_SPY"&&expected.as_object().unwrap().iter().all(|(k,v)|entry.get(k)==Some(v))&&entry["attachCondition"].is_null()&&entry["piloting"].is_null()}
+fn program_needs_spy(p:&Program)->bool {program_has(p,|e|matches!(e,Effect::CreateTokenUnit{token_type,..} if token_type=="spy"))}
 fn reviewed_force_entry(entry:&Value)->bool {
     if entry["setCode"]!="TOKEN_THE_FORCE" {return false;}
     let metadata:Value=serde_json::from_str(r#"{
@@ -162,6 +165,7 @@ impl Engine {
         let force_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_force_entry);
         let weakness_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_weakness_entry);
         let beast_available=catalogue.cards.contains_key("TOKEN_BEAST")&&value["cards"].as_array().is_some_and(|cards|cards.iter().any(reviewed_beast_entry));
+        let spy_available=catalogue.cards.contains_key("TOKEN_SPY")&&value["cards"].as_array().is_some_and(|cards|cards.iter().any(reviewed_spy_entry));
         let mut definitions = Vec::new();
         let mut by_code = HashMap::new();
         let mut shield_def = None;
@@ -178,6 +182,7 @@ impl Engine {
                 continue;
             }
             let result = (|| -> Result<Definition, String> {
+                if entry["card"]["types"].as_array().is_some_and(|a|a.iter().any(|v|v=="unit"||v=="leader")) && !entry["card"]["unique"].is_boolean(){return Err("arena candidate requires explicit boolean unique metadata".into());}
                 let info: CardInfo =
                     serde_json::from_value(entry["card"].clone()).map_err(|e| e.to_string())?;
                 for field in ["cost", "power", "hp"] {
@@ -190,6 +195,7 @@ impl Engine {
                 if !experience_available&&programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_experience(&catalogue.programs[*p as usize])) {return Err("reviewed Experience token unavailable".into());}
                 if !force_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])) {return Err("reviewed Force token unavailable; dependent source cannot execute".into());}
                 if !weakness_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])) {return Err("Weakness token unavailable; dependent source cannot execute".into());}
+                if !spy_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_spy(&catalogue.programs[*p as usize])) {return Err("reviewed Spy token unavailable".into());}
                 if !beast_available&&programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_beast(&catalogue.programs[*p as usize])) {return Err("reviewed Beast token unavailable; dependent source cannot execute".into());}
                 if programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|catalogue.programs[*p as usize].trigger=="onDefense") && (!info.is("unit") || info.is("leader") || info.is("token") || entry["baseClass"]!="NonLeaderUnitCard" || !programs.unit.is_empty() || !programs.leader.is_empty()) {return Err("OnDefense currently requires an ordinary nonleader unit source".into());}
                 if native_token {
@@ -466,6 +472,7 @@ impl Engine {
         }
         if !included.contains("TOKEN_WEAKNESS") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])))) {return Err("pool containing GiveWeakness cards must include reviewed TOKEN_WEAKNESS".into());}
         if !included.contains("TOKEN_THE_FORCE") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))) {return Err("pool containing Force gain/use/presence cards must include reviewed TOKEN_THE_FORCE".into());}
+        if !included.contains("TOKEN_SPY")&&included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_spy(&catalogue.programs[*p as usize])))) {return Err("pool containing Spy creation must include reviewed TOKEN_SPY".into());}
         if !included.contains("TOKEN_BEAST")&&included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_beast(&catalogue.programs[*p as usize])))) {return Err("pool containing Beast creation must include reviewed TOKEN_BEAST".into());}
         if !included.contains("TOKEN_EXPERIENCE")&&included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_experience(&catalogue.programs[*p as usize])))) {return Err("pool containing Experience creation must include reviewed TOKEN_EXPERIENCE".into());}
         catalogue.metadata.retain(|code, _| included.contains(code));
@@ -707,6 +714,10 @@ impl Engine {
         let player = s.card(source).owner;
         let sub = |e| self.eval_with_binding(s, source, target, card, modifier_target,e);
         match e {
+            Expr::ArenaList {receiver,predicate} => {let seat=match receiver.as_ref(){Expr::Ref{path} if path==&["player"]=>Some(player),Expr::Ref{path} if path==&["opponent"]=>Some(player.other()),_=>None};let ids=self.arena_units(s).into_iter().filter(|id|self.in_arena(s,*id)&&seat.is_none_or(|p|s.card(*id).owner==p)&&self.eval_with_binding(s,source,target,*id,modifier_target,predicate).truth()).collect();Eval::ArenaCards(ids)},
+            Expr::ArenaFilter {receiver,predicate} => {let Eval::ArenaCards(ids)=sub(receiver) else{return Eval::Null;};Eval::ArenaCards(ids.into_iter().filter(|id|self.eval_with_binding(s,source,target,*id,modifier_target,predicate).truth()).collect())},
+            Expr::ArenaSome {receiver,predicate} => {let Eval::ArenaCards(ids)=sub(receiver) else{return Eval::Null;};Eval::Bool(ids.into_iter().any(|id|self.eval_with_binding(s,source,target,id,modifier_target,predicate).truth()))},
+            Expr::ArenaLength {receiver} => {let Eval::ArenaCards(ids)=sub(receiver) else{return Eval::Null;};Eval::Number(ids.len() as i64)},
             Expr::Array { items } => Eval::Array(items.iter().map(sub).collect()),
             Expr::Math { name, args } => {
                 let values: Vec<i64> = args.iter().map(|a| sub(a).number()).collect();

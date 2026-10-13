@@ -1,7 +1,7 @@
 {
   "schema": "swu-card-compiler-coverage/v1",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "5bc1f68a123fca6c3d11888225fb6ab0540db1c428f64c7fff6b417f8f8e13f1",
+  "compilerHash": "a7b832572477862afaadcee2b4b3f8d5141a9b89a718b59d70fbb34165e7a446",
   "knownCards": 2458,
   "mockCardsExcluded": 21,
   "sourceFiles": 2074,
