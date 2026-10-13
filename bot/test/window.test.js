@@ -58,6 +58,7 @@ test('the loaders\' reader finds each collection where the project folder had it
     s.putDoc('ladders', 'arena-t1-r1', JSON.stringify({ status: 'done' }));
     s.putDoc('panels', 'p1', JSON.stringify({ id: 'p1' }));
     s.putDoc('meta', 'ratings', JSON.stringify({ bots: {} }));
+    s.putDoc('arena', 'status', JSON.stringify({ tournament: null, round: 2, phase: 'ladder' }));
     s.putDoc('arena', 'report-2', JSON.stringify({ round: 2, markdown: '# Round 2' }));
     s.putDoc('arena', 'versions-duel_opus', JSON.stringify([{ v: 0, note: 'start' }, { v: 1, note: 'faster' }]));
     s.appendReplay('arena-t1-r1', 'g7', 0, Buffer.from('{"t":"end"}\n'));
@@ -69,6 +70,7 @@ test('the loaders\' reader finds each collection where the project folder had it
     assert.strictEqual(await r.text('results/arena-t1-r1/games/g7.jsonl'), '{"t":"end"}\n');
     assert.deepStrictEqual((await r.list('dashboard/panels')).map((e) => e.name), ['p1.json']);
     assert.ok(await r.text('meta/ratings.json'));
+    assert.strictEqual(JSON.parse(await r.text('arena/status.json')).phase, 'ladder', 'the app reads the hosted arena\'s clock');
     assert.deepStrictEqual((await r.list('arena/rounds')).map((e) => e.name), ['r2.md']);
     assert.strictEqual(await r.text('arena/rounds/r2.md'), '# Round 2');
     assert.deepStrictEqual((await r.list('arena/versions')).map((e) => e.name), ['duel_opus-v0', 'duel_opus-v1']);

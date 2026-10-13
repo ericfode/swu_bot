@@ -332,7 +332,7 @@ function storeReader(store, { staleMs = STALE_MS, now = () => Date.now() } = {})
     const FILES = {
         'dashboard/threads.json': ['threads', 'threads'], 'meta/meta.json': ['meta', 'atlas'], 'meta/ratings.json': ['meta', 'ratings'],
         'research/eval-theory/td-report.json': ['research', 'td-report'], 'arena/roster.json': ['arena', 'roster'],
-        'arena/tournament.json': ['arena', 'tournament'], 'arena/standings.json': ['arena', 'standings'],
+        'arena/tournament.json': ['arena', 'tournament'], 'arena/status.json': ['arena', 'status'], 'arena/standings.json': ['arena', 'standings'],
         'arena/archive/t0/standings.json': ['arena', 'archive-t0-standings']
     };
     const file = (name) => ({ name, path: name, isDirectory: false });

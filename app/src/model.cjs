@@ -35,6 +35,8 @@
         const json = async p => { try { const t = await reader.text(p); return t ? JSON.parse(t) : null; } catch { return null; } };
         const roster = await json('arena/roster.json');
         const tournament = await json('arena/tournament.json');
+        // the arena's own clock (arena_status): on the hosted arena it has no tournament and says which round plays
+        const status = await json('arena/status.json');
         let standings = await json('arena/standings.json'), archived = null;
         const rounds = {};
         const readRounds = async dir => { for (const e of await reader.list(dir)) { const m = /^r(\d+)\.md$/.exec(e.name); if (m && !e.isDirectory) rounds[m[1]] = await reader.text(`${dir}/${e.name}`); } };
@@ -63,7 +65,7 @@
         // ratings are written once, by the meta analyzer, with the Atlas's rules (Eric's pick, 18:21)
         const rj = await json('meta/ratings.json');
         const ratings = rj && rj.bots && typeof rj.bots === 'object' ? { generatedAt: rj.generatedAt || null, rules: rj.rules || null, bots: rj.bots } : null;
-        return { arena: { roster, tournament, standings, archived, rounds, versions }, meta, ratings };
+        return { arena: { roster, tournament, status, standings, archived, rounds, versions }, meta, ratings };
     }
 
     // ---------- ratings ----------
@@ -213,8 +215,12 @@
 
         // arena
         const A = extra?.arena || {};
-        const T = A.tournament, cur = T?.rounds?.at(-1) || null;
-        const phase = !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
+        // the hosted arena plays a round whenever its lineup changes, with no tournament or work windows: its status says
+        // phase 'ladder' and the round while one plays, else 'idle' and the newest round. A tournament.json left from the
+        // old clocked tournaments is then only an archive.
+        const S = A.status, hosted = !!S && S.tournament === null && (S.phase === 'ladder' || S.phase === 'idle');
+        const T = hosted ? null : A.tournament, cur = hosted ? (S.round != null ? { n: S.round } : null) : T?.rounds?.at(-1) || null;
+        const phase = hosted ? S.phase : !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
         // benched builders (arena withdraw) stay listed, marked, with their versions and panels; rejoin brings them back
         const competitors = [...(A.roster?.agents || []), ...(A.roster?.bench || []).map(a => ({ ...a, benched: true }))].map(a => {
             const vs = A.versions?.[a.name] || [];
@@ -222,7 +228,7 @@
             return { name: a.name, title: a.title, harness: a.harness || null, philosophy: a.philosophy || '', start: a.start, registeredAt: a.registeredAt, versions: vs, latest: vs.at(-1)?.name || null, panel, ...(a.benched ? { benched: true } : {}) };
         });
         const arena = {
-            phase, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
+            phase, hosted, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
             current: cur, deadline: phase === 'work' ? cur?.workEnd : null,
             competitors, baselines: A.roster?.baselines || [], thinkCapMs: A.roster?.thinkCapMs ?? null,
             standings: A.standings || null, archived: A.archived || null, reports: A.rounds || {}, runs: runInfo.filter(r => r.kind === 'arena').map(r => r.id),

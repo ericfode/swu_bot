@@ -812,11 +812,19 @@ function heroBox() {
   const where = x.human ? `${humanPill()} on karabast.net · never rated` : `${x.run.kind === 'arena' ? 'arena' : 'ladder'} <a href="${href('runs', x.run.id)}">${esc(x.run.id)}</a>`;
   return `<section class="box hero" aria-label="Now playing"><div class="hero-head">${lg.running ? '<span class="pill live">Live</span>' : '<span class="pill done">Latest game</span>'}${seatLink(x, 'p1')}<span class="vs">vs</span>${seatLink(x, 'p2')}<span class="muted" style="font-size:var(--fs-md)">${where}${x.res < 3 ? ` · ${x.res === 2 ? 'a draw' : `won by ${esc(winnerName(x))}`} in round ${x.rounds}` : ''}</span><a class="more" href="${href('games', x.run.id, x.id)}" style="margin-left:auto">Open game</a></div><div class="kithost compact" data-game="${esc(key)}" data-layout="compact" data-live="${lg.running ? 1 : 0}"></div>${spotBarHtml(key)}</section>`;
 }
+/** The hosted arena plays a round whenever its lineup changes (bot/arena/games.js planRound), with no tournament or work
+ *  windows: it is playing a round, or between rounds. */
+function hostedState() {
+  const A = M.arena, n = A.current?.n;
+  return A.phase === 'ladder' ? { clock: `Round ${n}`, head: `Round ${n} is playing.`, what: 'Every entered bot plays every other, the baselines too. Games appear in the grid as they finish.' }
+    : n != null ? { clock: 'Between rounds', head: `Round ${n} is done.`, what: 'The next round starts when a bot is submitted, changed or withdrawn, or a day after the last one.' }
+    : { clock: 'No rounds yet', head: 'No round has played yet.', what: 'The first round starts once a bot is entered.' };
+}
 function arenaCard() {
   const A = M.arena, st = A.standings, last = st?.rounds?.at(-1), leader = last?.leader;
-  const ph = A.phase === 'idle' ? `<b>Tournament 1 has not started.</b> ${A.competitors.length} builders are registered${A.thinkCapMs ? `, ${A.thinkCapMs / 1000} s think cap per game` : ''}.` :
+  const ph = A.hosted ? `<b>${esc(hostedState().head)}</b> ${esc(hostedState().what)}` : A.phase === 'idle' ? `<b>Tournament 1 has not started.</b> ${A.competitors.length} builders are registered${A.thinkCapMs ? `, ${A.thinkCapMs / 1000} s think cap per game` : ''}.` :
     A.phase === 'work' ? `<b>Round ${A.current.n}: work phase.</b> Builders are improving their bots until ${clock(A.deadline)}.` : A.phase === 'ladder' ? `<b>Round ${A.current.n}: ladder.</b> Every builder's newest bot plays every other.` : `<b>Tournament finished.</b>`;
-  return `<section class="box"><div class="bh"><h3>Builder arena</h3><a class="more" href="${href('arena')}">Open arena</a></div><p style="font-size:var(--fs-base)">${ph}</p>${last ? `<p class="muted" style="font-size:var(--fs-md);margin-top:8px">${A.archived ? `<span class="archived">archived</span> ${esc(A.archived)}: ` : ''}round ${last.round} leader ${botLink(leader)} · ${last.games} games</p>` : ''}</section>`;
+  return `<section class="box"><div class="bh"><h3>${A.hosted ? 'Hosted arena' : 'Builder arena'}</h3><a class="more" href="${href('arena')}">Open arena</a></div><p style="font-size:var(--fs-base)">${ph}</p>${last ? `<p class="muted" style="font-size:var(--fs-md);margin-top:8px">${A.archived ? `<span class="archived">archived</span> ${esc(A.archived)}: ` : ''}round ${last.round} leader ${botLink(leader)} · ${last.games} games</p>` : ''}</section>`;
 }
 function topBots(n = 8) {
   return `<section class="box"><div class="bh"><h3>Top bots</h3><span class="sub">rating, then its nine spots</span><a class="more" href="${href('bots')}">All ${M.order.length}</a></div><div class="toplist">${M.order.slice(0, n).map((id, i) => { const b = M.bots[id]; return `<a class="r" href="${href('bots', id)}"><span class="rank">${i + 1}</span><span class="bot" style="--c:${botColor(id)}"><i></i><span>${esc(id)}</span></span><span class="num">${b.rating}</span>${fingerprint(id)}</a>`; }).join('')}</div><div style="margin-top:8px">${fpKey()}</div></section>`;
@@ -888,6 +896,13 @@ function arenaRun() {
 }
 function phaseBanner() {
   const A = M.arena, T = A.tournament, plan = T?.plannedRounds || 3, mins = T?.roundMinutes || 60;
+  if (A.hosted) {
+    // the newest rounds: struck through once done, lit while one plays, plain if a stop cut one off
+    const h = hostedState(), n = A.current?.n, rs = (A.standings?.rounds || []).slice(-8);
+    const steps = rs.map(r => `<span class="${A.phase === 'ladder' && r.round === n ? 'on' : r.status && r.status !== 'done' ? '' : 'done'}">R${r.round}</span>`);
+    if (A.phase === 'ladder' && !rs.some(r => r.round === n)) steps.push(`<span class="on">R${n}</span>`);
+    return `<section class="phase"><div><div class="eyebrow">Hosted arena</div><div class="clock">${esc(h.clock)}</div></div><p style="font-size:var(--fs-base);color:var(--ink-2)">${esc(A.phase === 'ladder' ? h.what : `${h.head} ${h.what}`)}</p><div class="steps">${steps.join('')}</div></section>`;
+  }
   const rounds = T?.rounds || [], ho = rounds.find(r => r?.kind === 'holdout');
   const steps = []; for (let n = 1; n <= plan; n++) { const r = rounds[n - 1]; const st = !r ? '' : r.ladderEnd ? 'done' : 'on'; steps.push(`<span class="${st}">R${n} work ${mins} min</span><span class="${!r ? '' : r.ladderEnd ? 'done' : r.ladderStart ? 'on' : ''}">R${n} ladder</span>`); }
   // a card-pool holdout tournament ends with one more ladder, on the held-out cards and with no work window
@@ -921,7 +936,7 @@ function pageArenaLive() {
   const ag = run ? (() => { const lg = [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && M.games[i][4] === 3); if (lg != null) return lg; const p = DATA.picks.arena && gameIdx.get(DATA.picks.arena); return p ?? [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && hasReplay(i)); })() : null;
   const x = ag != null ? gameRow(M.games[ag]) : null, key = x ? `${x.run.id}/${x.id}` : '';
   const preview = !live && A.archived;
-  const panels = live ? A.competitors.map(c => c.panel).filter(Boolean) : (DATA.t0panels || []);
+  const panels = live || A.hosted ? A.competitors.map(c => c.panel).filter(Boolean) : (DATA.t0panels || []);
   return `${phaseBanner()}
   ${preview ? `<div class="notice"><b>Preview.</b> Tournament 1 has not started, so this page replays the last real round: <span class="archived">archived</span> ${esc(A.archived)}, round ${st.rounds[ri].round}. The same layout fills live when the referee starts.</div>` : ''}
   <div class="grid">
@@ -929,7 +944,7 @@ function pageArenaLive() {
       ${run ? (() => { const { playing, done } = gridGames({ run, max: 12, finished: 6 }), list = [...playing, ...done].filter(i => i !== ag).slice(0, 6); return list.length ? `<section class="box"><div class="bh"><h3>Round games, board by board</h3><span class="sub">${playing.length} playing</span><a class="more" href="${href('games')}?run=${encodeURIComponent(run.id)}">All boards</a></div><div class="gtiles three">${list.map(i => tileHtml(i, { sm: true })).join('')}</div></section>` : ''; })() : ''}
       ${run ? `<section class="box"><div class="bh"><h3>Round games</h3><span class="sub">${run.decided} of ${run.planned || run.n} played · <a href="${href('runs', run.id)}">${esc(run.id)}</a></span></div>${gameGrid(run)}</section>` : ''}</div>
     <div class="c4 stack"><section class="box"><div class="bh"><h3>Round standings</h3><a class="more" href="${href('arena', 'standings')}">All rounds</a></div>${roundStandings(st, ri)}</section>
-      <section class="box"><div class="bh"><h3>Builders are thinking</h3></div>${thoughtsFeed(panels, 10)}</section></div>
+      ${A.hosted && !panels.length ? '' : `<section class="box"><div class="bh"><h3>Builders are thinking</h3></div>${thoughtsFeed(panels, 10)}</section>`}</div>
   </div>
   <div style="margin-top:var(--gap)">${builderIntro()}</div>`;
 }
@@ -1004,7 +1019,7 @@ function pageCompetitor(r) {
   return `<p><a href="${href('arena', 'builders')}">← Builders</a></p><section class="bothead" style="--c:${col};--on-c:${onColor(col)}"><div class="icon">${esc(c.name.slice(0, 2).toUpperCase())}</div><div><div class="eyebrow">Builder system</div><div class="row"><h1>${esc(c.name)}</h1>${systemChips(c.harness)}</div><p class="line">${esc(c.title)}. Its task: ${esc(c.philosophy)}</p>${v ? atlasLine(v) : ''}</div><div class="stats"><div><div class="v">${c.versions.length}</div><div class="k">bots built</div></div><div><div class="v">${st?.global?.[c.latest] ?? '-'}</div><div class="k">newest bot's rating</div></div></div></section>
   <div class="grid"><div class="c8 stack"><section class="box"><div class="bh"><h3>What the builder is doing</h3>${p ? `<span class="sub">updated ${ago(p.updatedAt)} ago</span>` : ''}</div>${panelBody(p)}</section>
     ${v ? winsBox(v, `Where ${v} wins`) : ''}
-    ${(p?.widgets || []).filter(w => w.type === 'strategy').map(w => `<section class="box">${widgetHtml(w)}</section>`).join('') || `<section class="box flat"><h3>Strategy diagram</h3><p class="muted" style="font-size:var(--fs-md);margin-top:4px">Competitors post an animated diagram of their strategy with <span class="mono">say(diagram)</span>; it appears here (renderer: arena/strategy).</p></section>`}</div>
+    ${(p?.widgets || []).filter(w => w.type === 'strategy').map(w => `<section class="box">${widgetHtml(w)}</section>`).join('')}</div>
     <div class="c4 stack"><section class="box"><div class="bh"><h3>Bots it built</h3><span class="sub">one per round, newest last</span></div><div class="stack" style="gap:6px">${c.versions.map(x => `<div style="font-size:var(--fs-md)"><b class="mono">${esc(x.name)}</b> ${styleTag(atl(x.name)?.summary?.style)} <span class="muted">${esc(x.submittedAt ? ago(x.submittedAt) + ' ago' : '')}</span><br><span style="color:var(--ink-2)">${esc(x.note || '')}</span></div>`).join('') || '<p class="muted">None yet.</p>'}</div></section>
     <section class="box"><div class="bh"><h3>Results</h3></div>${results.length ? results.map(({ rd, b }) => `<p style="font-size:var(--fs-md)">Round ${rd.round}: ${b.wins}-${b.losses}${b.forfeits ? `, <span class="mk clock">⏱ ${b.forfeits}</span> lost by a late or broken reply` : ''}</p>`).join('') : '<p class="muted" style="font-size:var(--fs-md)">Not rated yet. After each round: wins and losses per opponent, and links to every lost game.</p>'}</section></div></div>`;
 }
