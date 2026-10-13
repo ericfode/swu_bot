@@ -45,6 +45,8 @@ const ID = /^[A-Za-z0-9][\w.#@+-]{0,159}$/;
 const MAX_DOC = 16e6;
 const MAX_APPEND = 8e6;
 const MAX_REPLAY = 32e6; // the longest recorded game so far is ~14 MB of text
+// a game still marked running that sent nothing for this long is shown as stopped (settleRun)
+const STALE_MS = 20 * 60000;
 // bots people submit through /mcp (arena_submit): the kinds the arena's intake packs, and how much of them it takes
 const SUBMIT_KINDS = ['js', 'python', 'wasm'];
 const SUBMIT_FILES = 200;
@@ -206,6 +208,18 @@ class Store {
         return ID.test(run ?? '') && ID.test(game ?? '') && fs.existsSync(path.join(this.dir, 'replays', run, `${game}.jsonl.gz`));
     }
 
+    /** When the run's documents (runs, ladders) or, with `game`, that game's replay last changed: ms, 0 for none. */
+    changedAt(run, game = null) {
+        const files = game ? [this.replayFile(run, game)] : [this.docFile('runs', run), this.docFile('ladders', run)];
+        return Math.max(0, ...files.map((f) => {
+            try {
+                return fs.statSync(f).mtimeMs;
+            } catch {
+                return 0;
+            }
+        }));
+    }
+
     /** The replay's text, or null. */
     readReplay(run, game) {
         let gz;
@@ -276,11 +290,44 @@ const parseOr = (text, dflt) => {
 };
 
 /**
+ * A run document as the app reads it. A sender that stops (a ladder killed mid-run, a pusher that died, a feed that went
+ * away) leaves its last games marked running, and the app would show them as playing forever. So a running game that
+ * sent nothing for `staleMs` (its replay, or the run's documents when it has no replay) reads as abandoned, with why; the
+ * stored document stays as it came, and a sender that comes back makes the game live again. Returns the text, how many
+ * games it `settled`, and `until`, when the next game still running goes stale (Infinity for none).
+ */
+function settleRun(store, run, text, { staleMs = STALE_MS, now = Date.now() } = {}) {
+    const doc = text?.includes('"running"') ? parseOr(text, null) : null; // most runs have nothing running: no second parse
+    if (!Array.isArray(doc?.games) || !doc.games.some((g) => g?.outcome === 'running')) {
+        return { text, until: Infinity, settled: 0 };
+    }
+    let until = Infinity;
+    let docAt = null;
+    let changed = 0;
+    const games = doc.games.map((g) => {
+        if (g?.outcome !== 'running') {
+            return g;
+        }
+        const at = (ID.test(String(g.id)) && store.changedAt(run, g.id)) || (docAt ??= store.changedAt(run));
+        if (now - at < staleMs) {
+            until = Math.min(until, at + staleMs);
+            return g;
+        }
+        changed++;
+        return { ...g, outcome: 'abandoned', error: `stopped: its run sent nothing for ${Math.round((now - at) / 60000)} min` };
+    });
+    return { text: changed ? JSON.stringify({ ...doc, games }) : text, until, settled: changed };
+}
+
+/**
  * The app's loaders (dashboard/site/core.cjs loadSources and app/src/model.cjs loadExtra) read through a reader with
  * list(dir) and text(path) in the project folder's layout. This reader answers those questions from the window's
- * collections, so the loaders run here unchanged and nothing outside the window depends on that layout.
+ * collections, so the loaders run here unchanged and nothing outside the window depends on that layout. A run's games
+ * still marked running are settled (settleRun); `staleAt()` says when the next one goes stale, `settled()` how many were.
  */
-function storeReader(store) {
+function storeReader(store, { staleMs = STALE_MS, now = () => Date.now() } = {}) {
+    let staleAt = Infinity;
+    let settled = 0;
     const DIRS = { 'dashboard/league': 'league', 'dashboard/experiments': 'experiments', 'dashboard/evals': 'evals', 'dashboard/panels': 'panels', 'dashboard/bots': 'bots', 'dashboard/lens': 'lens' };
     const FILES = {
         'dashboard/threads.json': ['threads', 'threads'], 'meta/meta.json': ['meta', 'atlas'], 'meta/ratings.json': ['meta', 'ratings'],
@@ -322,7 +369,14 @@ function storeReader(store) {
             }
             let m = /^results\/([^/]+)\/(index|ladder)\.json$/.exec(p);
             if (m && ID.test(m[1])) {
-                return store.getDoc(m[2] === 'index' ? 'runs' : 'ladders', m[1]);
+                const text = store.getDoc(m[2] === 'index' ? 'runs' : 'ladders', m[1]);
+                if (m[2] !== 'index') {
+                    return text;
+                }
+                const out = settleRun(store, m[1], text, { staleMs, now: now() });
+                staleAt = Math.min(staleAt, out.until);
+                settled += out.settled;
+                return out.text;
             }
             m = /^(dashboard\/[a-z]+)\/([^/]+)\.json$/.exec(p);
             if (m && DIRS[m[1]] && ID.test(m[2])) {
@@ -343,7 +397,9 @@ function storeReader(store) {
                 return store.readReplay(m[1], m[2])?.toString('utf8') ?? null;
             }
             return null;
-        }
+        },
+        staleAt: () => staleAt,
+        settled: () => settled
     };
 }
 
@@ -461,10 +517,11 @@ function loadAppParts() {
  * The app's data, built here from the window's collections with the app's own loaders. Rebuilt when something it reads
  * changed, at most every `minMs`; a request meanwhile gets the last build.
  */
-function appBuilder(store, { minMs = 10000, parts = null } = {}) {
+function appBuilder(store, { minMs = 10000, parts = null, staleMs = STALE_MS } = {}) {
     let cache = null;
     let builtVersion = -1;
     let builtAt = 0;
+    let staleAt = Infinity; // when a game the last build showed as running goes stale with no change in the store
     let running = null;
     let p = parts;
     async function build() {
@@ -473,21 +530,24 @@ function appBuilder(store, { minMs = 10000, parts = null } = {}) {
             throw new WindowError('unsupported', `the app's data loader is not in this build (missing ${p.missing.join(', ')})`);
         }
         const v = store.version;
-        const reader = storeReader(store);
+        const reader = storeReader(store, { staleMs });
         const loaded = await p.core.loadSources(reader);
         const extra = await p.model.loadExtra(reader);
         const M = p.model.buildModel(loaded, extra, p.core);
         M.replay = M.games.map((g) => (store.hasReplay(M.runs[g[0]]?.id, g[1]) ? 1 : 0)).join('');
         const t0panels = parseOr(store.getDoc('arena', 'archive-t0-panels'), []) || [];
-        const result = { audience: 'public', model: p.model.publicModel(M), t0panels: t0panels.map(p.model.publicPanel), version: v };
+        // a game going stale changes the model with no write, so the version a browser compares also counts the stopped games
+        const settled = reader.settled();
+        const result = { audience: 'public', model: p.model.publicModel(M), t0panels: t0panels.map(p.model.publicPanel), version: settled ? `${v}.${settled}` : v };
         const text = JSON.stringify({ result });
         cache = { text, gz: zlib.gzipSync(text) };
         builtVersion = v;
         builtAt = Date.now();
+        staleAt = reader.staleAt();
         return cache;
     }
     return async function get() {
-        const stale = !cache || (store.version !== builtVersion && Date.now() - builtAt >= minMs);
+        const stale = !cache || ((store.version !== builtVersion || Date.now() >= staleAt) && Date.now() - builtAt >= minMs);
         if (stale && !running) {
             running = build().catch((e) => {
                 if (!cache) {
@@ -513,7 +573,7 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
 
 /**
  * The window's request handler. opts: home (storage folder), auth (an auth.js instance; default from the environment),
- * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts (for tests).
+ * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts and staleMs (for tests).
  */
 /**
  * Wakes the games machine (games.js POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
@@ -536,7 +596,7 @@ function createWindow(opts = {}) {
     const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
     // the games machine (games.js), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
-    const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null });
+    const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
     const webFile = opts.web ?? path.join(__dirname, 'web', 'index.html');
     const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'studio', 'dist-kit', 'swu-viewer-kit.js');
@@ -1090,4 +1150,4 @@ function createWindow(opts = {}) {
     return { handle, store, auth, wakeGames };
 }
 
-module.exports = { createWindow, wakeGamesAt, Store, storeReader, scrub, appBuilder, NS, FRIEND_NS };
+module.exports = { createWindow, wakeGamesAt, Store, storeReader, settleRun, scrub, appBuilder, NS, FRIEND_NS };

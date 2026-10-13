@@ -117,9 +117,10 @@ function stoppedResult(job, st, { seat, kind, error, ms, key = null }) {
  * each; in-process bots may not start any). A bot stuck in execSync blocks its worker thread until the child ends, so
  * the watchdog (when terminate() did not help) kills that worker's children and the final exit kills the rest.
  * A worker's children are told apart by POOL_WORKER in their environment: each worker gets its own process.env, and
- * child processes inherit it, so stdio bots playing on other workers are left alone.
+ * child processes inherit it, so stdio bots playing on other workers are left alone. `spare` lists child processes
+ * that are not bots and must outlive the run (ladder.js's window pusher, which sends the run's last state after it).
  */
-function killChildren(worker = null) {
+function killChildren(worker = null, { spare = [] } = {}) {
     try {
         // the whole tree: execSync('cmd') runs /bin/sh -c cmd, and the grandchild keeps the call's pipes open
         const ps = spawnSync('ps', ['-e', '-o', 'pid=,ppid='], { encoding: 'utf8', timeout: 5000 }).stdout ?? '';
@@ -137,7 +138,8 @@ function killChildren(worker = null) {
             }
         };
         const tree = [];
-        for (let todo = (kids.get(process.pid) ?? []).filter((pid) => tag === null || ours(pid)); todo.length;) {
+        const kept = new Set(spare);
+        for (let todo = (kids.get(process.pid) ?? []).filter((pid) => !kept.has(pid) && (tag === null || ours(pid))); todo.length;) {
             const pid = todo.pop();
             tree.push(pid);
             todo.push(...(kids.get(pid) ?? []));
