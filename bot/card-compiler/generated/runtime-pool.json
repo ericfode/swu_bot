@@ -5331,6 +5331,43 @@
       "aspects": [
         "vigilance"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "0404309004",
+      "internalName": "torrent",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "HMW_100",
+      "setCodes": [
+        {
+          "number": 100,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 100,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "Give a Weakness token to a unit. If you control a Naboo base, give 2 Weakness tokens to that unit instead.",
+      "title": "Torrent",
+      "traits": [
+        "disaster"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
@@ -7227,6 +7264,45 @@
         "cunning",
         "villainy"
       ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "0790563774",
+      "internalName": "geonosian-picador",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "HMW_199",
+      "setCodes": [
+        {
+          "number": 199,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 199,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: Create a Beast token. Then, give a Weakness token to a friendly unit.",
+      "title": "Geonosian Picador",
+      "traits": [
+        "separatist"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",
@@ -7261,6 +7337,46 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning",
+        "villainy"
+      ],
+      "cost": 5,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 6,
+      "id": "9241047444",
+      "internalName": "inferno-squad#we-can-grieve-later",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "HMW_202",
+      "setCodes": [
+        {
+          "number": 202,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 202,
+        "set": "HMW"
+      },
+      "subtitle": "We Can Grieve Later",
+      "text": "When Played/When Defeated: You may deal 1 damage to a unit and give a Weakness token to it.",
+      "title": "Inferno Squad",
+      "traits": [
+        "imperial",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -7739,6 +7855,46 @@
       "title": "Raiding Party",
       "traits": [
         "tusken"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "space",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "0148750669",
+      "internalName": "dragonboat-freighter",
+      "keywords": [],
+      "power": 5,
+      "rules": null,
+      "setCode": "HMW_231",
+      "setCodes": [
+        {
+          "number": 231,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 231,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: You may give a Weakness token to a unit. If it's a <uq> unit, exhaust it.",
+      "title": "Dragonboat Freighter",
+      "traits": [
+        "underworld",
+        "vehicle",
+        "transport"
       ],
       "types": [
         "unit"

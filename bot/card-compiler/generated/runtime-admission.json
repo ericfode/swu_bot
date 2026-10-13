@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 573
+    "sourceIr": 577
   },
   "runtimeAdmittedCards": [
     {
@@ -682,6 +682,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "torrent",
+      "setCode": "HMW_100"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "dragons-might",
       "setCode": "HMW_102"
     },
@@ -916,9 +921,19 @@
       "setCode": "HMW_198"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "geonosian-picador",
+      "setCode": "HMW_199"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "sandtrooper-squad",
       "setCode": "HMW_201"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "inferno-squad#we-can-grieve-later",
+      "setCode": "HMW_202"
     },
     {
       "implementation": "sourceIr",
@@ -979,6 +994,11 @@
       "implementation": "sourceIr",
       "internalName": "raiding-party",
       "setCode": "HMW_230"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "dragonboat-freighter",
+      "setCode": "HMW_231"
     },
     {
       "implementation": "sourceIr",
@@ -4756,7 +4776,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 949,
+  "runtimeAdmittedCount": 953,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5889,11 +5909,6 @@
       "setCode": "HMW_099"
     },
     {
-      "internalName": "torrent",
-      "reason": "torrent: Weakness source requires ordinary unit or bounded ordinary upgrade play metadata",
-      "setCode": "HMW_100"
-    },
-    {
       "internalName": "trust-yourself",
       "reason": "trust-yourself: compiler rejected \"trust-yourself\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":17,\"file\":\"game/cards/09_HMW/events/TrustYourself.ts\",\"line\":23,\"message\":\"immediateEffect:deckSearch\",\"pattern\":\"immediateEffect:deckSearch\"}]",
       "setCode": "HMW_101"
@@ -6149,19 +6164,9 @@
       "setCode": "HMW_197"
     },
     {
-      "internalName": "geonosian-picador",
-      "reason": "geonosian-picador: Weakness requires an optional standalone scalar unit play/death registration with amount one",
-      "setCode": "HMW_199"
-    },
-    {
       "internalName": "rish-loo#traitorous-minister",
       "reason": "rish-loo#traitorous-minister: compiler rejected \"rish-loo#traitorous-minister\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":59,\"file\":\"game/cards/09_HMW/units/RishLooTraitorousMinister.ts\",\"line\":20,\"message\":\"unsupported-query:hasWeakness\",\"pattern\":\"unsupported-query:hasWeakness\"}]",
       "setCode": "HMW_200"
-    },
-    {
-      "internalName": "inferno-squad#we-can-grieve-later",
-      "reason": "inferno-squad#we-can-grieve-later: Weakness requires an optional standalone scalar unit play/death registration with amount one",
-      "setCode": "HMW_202"
     },
     {
       "internalName": "victor-squadron#in-attack-formation",
@@ -6242,11 +6247,6 @@
       "internalName": "boba-fett#family-found",
       "reason": "boba-fett#family-found: compiler rejected \"boba-fett#family-found\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/09_HMW/units/BobaFettFamilyFound.ts\",\"line\":20,\"message\":\"trigger-alias-hook:onUnitEntersPlay\",\"pattern\":\"trigger-alias-hook:onUnitEntersPlay\"}]",
       "setCode": "HMW_225"
-    },
-    {
-      "internalName": "dragonboat-freighter",
-      "reason": "dragonboat-freighter: Weakness requires an optional standalone scalar unit play/death registration with amount one",
-      "setCode": "HMW_231"
     },
     {
       "internalName": "mon-cal-cruiser",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1509,
+  "runtimeRejectedCount": 1505,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

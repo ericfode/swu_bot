@@ -134,6 +134,17 @@ recipient's controller. Declining creates no token. The selected pool must inclu
 the reviewed native Weakness definition. Other upgrade Weakness registrations
 remain rejected.
 
+Ordinary events may give one or two Weakness tokens according to their controller's
+base trait. A bounded optional play/death pair combines one damage with one
+Weakness on the same chosen unit: Shield prevention affects the damage only, and
+the token attaches before the combined lethal check. Both token identities in a
+two-token window are allocated before attachment. Ordinary play may also create
+an exhausted Beast before a mandatory friendly Weakness choice, or give Weakness
+before exhausting the surviving captured recipient if it is unique. Physical
+death can precede a later step while death triggers wait for the parent ability.
+Beast creation requires the reviewed Beast definition in the selected pool.
+These bounded forms use the shared interpreter in native and Wasm Auto mode.
+
 A bounded self-resource operation moves an existing event or defeated ordinary
 unit into its owner's resources, exhausted, without allocating a new card.
 Supported sources are standalone events, optional death registrations with a

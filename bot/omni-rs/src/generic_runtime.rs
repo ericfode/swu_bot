@@ -96,8 +96,16 @@ fn reviewed_weakness_entry(entry:&Value)->bool {
 }"#).expect("reviewed Weakness metadata");
     entry["setCode"]=="TOKEN_WEAKNESS" && entry["sourceHash"]=="dd546e4886757d77fffeb8be6e7381144fa7378b6493ce444aa87e4ba1202778" && entry["baseClass"]=="TokenUpgradeCard" && entry["card"]==expected && entry["keywordValues"]==serde_json::json!({}) && entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]}) && entry["attachCondition"].is_null()
 }
-fn program_needs_weakness(program:&Program)->bool {program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::GiveWeakness{..})))}
+fn effect_has(e:&Effect,predicate:fn(&Effect)->bool)->bool {predicate(e)||match e {Effect::Simultaneous{effects}|Effect::PhaseModifiers{effects}|Effect::Sequence{effects}=>effects.iter().any(|e|effect_has(e,predicate)),Effect::Conditional{on_true,on_false,..}=>effect_has(on_true,predicate)||on_false.as_deref().is_some_and(|e|effect_has(e,predicate)),Effect::Select{effect,..}=>effect_has(effect,predicate),_=>false}}
+fn program_has(p:&Program,predicate:fn(&Effect)->bool)->bool {p.instructions.iter().any(|i|match i {Instruction::Apply(e)=>effect_has(e,predicate),i=>i.group_effect().is_some_and(|e|effect_has(e,predicate))})}
+fn program_needs_weakness(p:&Program)->bool {program_has(p,|e|matches!(e,Effect::GiveWeakness{..}))}
+fn program_needs_beast(p:&Program)->bool {program_has(p,|e|matches!(e,Effect::CreateTokenUnit{token_type,..} if token_type=="beast"))}
 
+
+fn reviewed_beast_entry(entry:&Value)->bool {
+    let expected:Value=serde_json::from_str(r#"{"title":"Beast","subtitle":"","cost":0,"hp":3,"power":3,"text":"","deployBox":null,"epicAction":"","unique":false,"rules":null,"upgradePower":null,"upgradeHp":null,"id":"6445363199","aspects":[],"traits":["creature"],"arena":"ground","keywords":[],"types":["token","unit"],"setId":{"set":"HMW"},"internalName":"beast"}"#).expect("reviewed Beast metadata");
+    entry["setCode"]=="TOKEN_BEAST"&&entry["status"]=="supported"&&entry["attachCondition"].is_null()&&entry["piloting"].is_null()&&entry["sourcePath"]=="game/cards/09_HMW/tokens/Beast.ts"&&entry["sourceHash"]=="e9ce58041d8cb93f9a98e773c016dc56bad9271ee30b7954411a7d63357c2566"&&entry["baseClass"]=="TokenUnitCard"&&entry["card"]==expected&&["card","unit","leader"].iter().all(|side|entry["abilities"][side].as_array().is_some_and(|a|a.is_empty()))&&entry["keywordValues"].as_object().is_some_and(|v|v.is_empty())
+}
 fn reviewed_force_entry(entry:&Value)->bool {
     if entry["setCode"]!="TOKEN_THE_FORCE" {return false;}
     let metadata:Value=serde_json::from_str(r#"{
@@ -146,6 +154,7 @@ impl Engine {
         let mut catalogue = Catalogue::load(value)?;
         let force_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_force_entry);
         let weakness_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_weakness_entry);
+        let beast_available=catalogue.cards.contains_key("TOKEN_BEAST")&&value["cards"].as_array().is_some_and(|cards|cards.iter().any(reviewed_beast_entry));
         let mut definitions = Vec::new();
         let mut by_code = HashMap::new();
         let mut shield_def = None;
@@ -173,6 +182,7 @@ impl Engine {
                 let programs = catalogue.cards.get(&code).cloned().unwrap_or_default();
                 if !force_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])) {return Err("reviewed Force token unavailable; dependent source cannot execute".into());}
                 if !weakness_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])) {return Err("Weakness token unavailable; dependent source cannot execute".into());}
+                if !beast_available&&programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_beast(&catalogue.programs[*p as usize])) {return Err("reviewed Beast token unavailable; dependent source cannot execute".into());}
                 if programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|catalogue.programs[*p as usize].trigger=="onDefense") && (!info.is("unit") || info.is("leader") || info.is("token") || entry["baseClass"]!="NonLeaderUnitCard" || !programs.unit.is_empty() || !programs.leader.is_empty()) {return Err("OnDefense currently requires an ordinary nonleader unit source".into());}
                 if native_token {
                     if code=="TOKEN_THE_FORCE" {
@@ -440,6 +450,7 @@ impl Engine {
         }
         if !included.contains("TOKEN_WEAKNESS") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])))) {return Err("pool containing GiveWeakness cards must include reviewed TOKEN_WEAKNESS".into());}
         if !included.contains("TOKEN_THE_FORCE") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))) {return Err("pool containing Force gain/use/presence cards must include reviewed TOKEN_THE_FORCE".into());}
+        if !included.contains("TOKEN_BEAST")&&included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_beast(&catalogue.programs[*p as usize])))) {return Err("pool containing Beast creation must include reviewed TOKEN_BEAST".into());}
         catalogue.metadata.retain(|code, _| included.contains(code));
         engine.pool_hash = format!("{:x}", Sha256::digest(pool_bytes));
         Ok(engine)
@@ -1500,7 +1511,7 @@ impl Engine {
             return Ok(());
         }
         let (target,amount)=match e {
-            Effect::Damage{target,amount}|Effect::Heal{target,amount}|Effect::GiveShield{target,amount}|Effect::GiveExperience{target,amount}|Effect::GainKeyword{target,amount,..}=>(target,self.effect_amount(s,amount)?),
+            Effect::Damage{target,amount}|Effect::Heal{target,amount}|Effect::GiveShield{target,amount}|Effect::GiveExperience{target,amount}|Effect::GiveWeakness{target,amount}|Effect::GainKeyword{target,amount,..}=>(target,self.effect_amount(s,amount)?),
             Effect::Ready{target}|Effect::Exhaust{target}|Effect::Defeat{target}|Effect::ModifyStats{target,..}|Effect::LoseKeyword{target,..}=>(target,1),
             _=>return Err("unsupported group primitive".into()),
         };
@@ -1511,13 +1522,13 @@ impl Engine {
             if target==0 || !(self.in_arena(s,target)||self.def(s,target).info.is("base")) { continue; }
             if !self.effect_can_affect(s,s.source,s.ability_target,e,false) { continue; }
             if !self.in_arena(s,target) && !matches!(e,Effect::Damage{..}|Effect::Heal{..}) { continue; }
-            let tokens=matches!(e,Effect::GiveShield{..}|Effect::GiveExperience{..});
+            let tokens=matches!(e,Effect::GiveShield{..}|Effect::GiveExperience{..}|Effect::GiveWeakness{..});
             for _ in 0..if tokens { amount } else { 1 } {
                 let mut record=PreparedEvent{op:op as u16,target,amount,power,hp,token:0};
                 if tokens && !self.program(s.ability_program-1).instructions[s.ability_pc as usize].is_named_group() {
                     if s.next_id as usize>=MAX_CARDS { return Err("card capacity exceeded generating token".into()); }
                     record.token=s.next_id; s.next_id+=1;
-                    let def=if matches!(e,Effect::GiveExperience{..}) { self.experience_def.ok_or("catalogue needs Experience token")? } else { self.shield_def };
+                    let def=if matches!(e,Effect::GiveWeakness{..}) {self.weakness_def.ok_or("catalogue needs Weakness token")?}else if matches!(e,Effect::GiveExperience{..}) { self.experience_def.ok_or("catalogue needs Experience token")? } else { self.shield_def };
                     *s.card_mut(record.token)=Card { present:true,def,owner:s.card(target).owner,..Card::default() };
                 }
                 if s.event_group.count>=32 { return Err("prepared event capacity exceeded".into()); }
@@ -1563,6 +1574,18 @@ impl Engine {
         Ok(true)
     }
     fn generate_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        if s.event_group.pc==0&&effect_has(e,|e|matches!(e,Effect::GiveWeakness{..})) {
+            self.weakness_def.ok_or("catalogue needs Weakness token")?;
+            let mut tokens=0usize;let mut records=0usize;
+            for op in group_ops(e) {let GroupOp::Leaf(effect)=op else{return Err("Weakness window must have scalar primary events".into());};
+                let target=match effect {Effect::GiveWeakness{target,..}|Effect::Damage{target,..}=>target,_=>return Err("unsupported Weakness window primitive".into())};
+                let count=self.effect_targets(s,target).into_iter().filter(|v|matches!(v,Eval::Card(id) if *id!=0&&self.in_arena(s,*id))).count();
+                if let Effect::GiveWeakness{amount,..}=effect {let n=self.effect_amount(s,amount)? as usize;if !(1..=2).contains(&n){return Err("Weakness window amount must be one or two".into());}tokens+=n*count;records+=n*count;}else{records+=count;}
+            }
+            if s.next_id as usize+tokens>MAX_CARDS {return Err("card capacity exceeded generating Weakness".into());}
+            if s.event_group.count as usize+records>32 {return Err("prepared Weakness window capacity exceeded".into());}
+        }
+
         if self.uniform_damage_amount(e).is_some() {return self.generate_uniform_damage(s,e);}
         let ops=group_ops(e);
         while let Some(op)=ops.get(s.event_group.pc as usize) {
@@ -1617,7 +1640,9 @@ impl Engine {
         while token!=0 { if token==shield { return true; } token=s.card(token).next_token; }
         false
     }
-    fn consolidate_group_shields(&self,s:&mut State) {
+    fn consolidate_group_shields(&self,s:&mut State,e:Option<&Effect>) {
+        let ops=e.map(group_ops);
+        let damage=|r:&PreparedEvent|ops.as_ref().is_none_or(|ops|matches!(ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})));
         if s.event_group.uniform_damage.active {
             let mut contexts=s.event_group.shield_stash[..s.event_group.shield_stash_len as usize].to_vec();
             let pending=(0..s.event_group.uniform_damage.count as usize).filter(|i|!s.event_group.uniform_damage.is_prevented(*i)&&s.event_group.uniform_damage.records[*i].shield()!=0).collect::<Vec<_>>();
@@ -1635,9 +1660,9 @@ impl Engine {
         // the currently retained contexts; retain the first valid one per unit.
         let mut contexts=s.event_group.shield_stash[..s.event_group.shield_stash_len as usize].to_vec();
         for r in &s.event_group.records[..s.event_group.count as usize] {
-            if r.amount>0 && r.token!=0 { contexts.push(r.token); }
+            if damage(r)&&r.amount>0 && r.token!=0 { contexts.push(r.token); }
         }
-        let pending=(0..s.event_group.count as usize).filter(|i|s.event_group.records[*i].amount>0 && s.event_group.records[*i].token!=0).collect::<Vec<_>>();
+        let pending=(0..s.event_group.count as usize).filter(|i|damage(&s.event_group.records[*i])&&s.event_group.records[*i].amount>0 && s.event_group.records[*i].token!=0).collect::<Vec<_>>();
         let mut selected=vec![];
         for i in pending {
             let target=s.event_group.records[i].target;
@@ -1645,13 +1670,13 @@ impl Engine {
                 s.event_group.records[i].token=*token; selected.push(*token);
             }
         }
-        let retained=contexts.into_iter().filter(|id|!selected.contains(id) && s.event_group.records[..s.event_group.count as usize].iter().any(|r|r.amount>0 && r.token!=0 && self.shield_attached(s,r.target,*id))).collect::<Vec<_>>();
+        let retained=contexts.into_iter().filter(|id|!selected.contains(id) && s.event_group.records[..s.event_group.count as usize].iter().any(|r|damage(r)&&r.amount>0 && r.token!=0 && self.shield_attached(s,r.target,*id))).collect::<Vec<_>>();
         s.event_group.shield_stash=[0;MAX_CARDS]; s.event_group.shield_stash_len=retained.len() as u8;
         s.event_group.shield_stash[..retained.len()].copy_from_slice(&retained);
     }
     fn replace_group_damage(&self,s:&mut State,e:&Effect,target:CardId) {
         if s.event_group.uniform_damage.active {
-            if let Some(i)=(0..s.event_group.uniform_damage.count as usize).find(|i|s.event_group.uniform_damage.records[*i].target()==target&&!s.event_group.uniform_damage.is_prevented(*i)) {s.event_group.uniform_damage.prevent(i);self.consolidate_group_shields(s);}
+            if let Some(i)=(0..s.event_group.uniform_damage.count as usize).find(|i|s.event_group.uniform_damage.records[*i].target()==target&&!s.event_group.uniform_damage.is_prevented(*i)) {s.event_group.uniform_damage.prevent(i);self.consolidate_group_shields(s,Some(e));}
             return;
         }
         let ops=group_ops(e);
@@ -1659,7 +1684,7 @@ impl Engine {
             let r=s.event_group.records[*i]; r.target==target && r.amount>0 && matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..}))
         }) {
             s.event_group.records[index].amount=0;
-            self.consolidate_group_shields(s);
+            self.consolidate_group_shields(s,Some(e));
         }
     }
     pub(super) fn combat_shield_contexts(&self,s:&State,first:CardId,second:CardId)->(CardId,CardId) {
@@ -1678,7 +1703,7 @@ impl Engine {
         }
         let first_token=contexts.event_group.records[0].token;
         contexts.event_group.records[0].amount=0;
-        self.consolidate_group_shields(&mut contexts);
+        self.consolidate_group_shields(&mut contexts,None);
         (first_token,contexts.event_group.records[1].token)
     }
     pub(super) fn remove_group_shield(&self,s:&mut State,target:CardId,selected:CardId) {
@@ -1729,7 +1754,7 @@ impl Engine {
                 }
             }
         }
-        if s.event_group.shield_mask!=0 && s.event_group.records[..s.event_group.count as usize].iter().all(|r|r.token==0) {
+        if s.event_group.shield_mask!=0 && s.event_group.records[..s.event_group.count as usize].iter().filter(|r|matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..}))).all(|r|r.token==0) {
             for i in 0..s.event_group.count as usize {
                 let r=s.event_group.records[i];
                 if !matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::Damage{..})) || r.amount==0 { continue; }
@@ -1776,7 +1801,7 @@ impl Engine {
         s.event_group.resolving=true;
         // Attachment, unit-entry and draw-fatigue contingents retain record order
         // after every primary handler has finished.
-        let is_attachment=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::GiveShield{..}|Effect::GiveExperience{..}|Effect::CreateTokenUnit{..}));
+        let is_attachment=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::GiveShield{..}|Effect::GiveExperience{..}|Effect::GiveWeakness{..}|Effect::CreateTokenUnit{..}));
         let is_draw=|i:usize|matches!(&ops[s.event_group.records[i].op as usize],GroupOp::Leaf(Effect::Draw{..}));
         let indices=(0..s.event_group.count as usize).filter(|i|!is_attachment(*i)).map(|i|(i,false))
             .chain((0..s.event_group.count as usize).filter(|i|is_attachment(*i)||is_draw(*i)).map(|i|(i,true))).collect::<Vec<_>>();
@@ -1815,6 +1840,7 @@ impl Engine {
                 self.remove_group_shield(s,r.target,r.token);
                 continue;
             }
+            if r.token!=0&&matches!(effect,Effect::GiveWeakness{..}) {self.attach(s,r.token,r.target);continue;}
             if r.token!=0 {
                 let experience=matches!(effect,Effect::GiveExperience{..});
                 let previous=if experience { s.card(r.target).experience } else { s.card(r.target).shield };

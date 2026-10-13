@@ -343,6 +343,18 @@ recipient. Existing Experience and Shield tokens exercise attachment order.
 Mixed ordinary-attachment cleanup, later host combat, source departure, token
 replacement and multiplayer remain explicit gaps.
 
+Weakness continuation experiments cover conditional one/two-token events, mixed
+damage and Weakness on play/death, Beast entry before a friendly selection, and
+Weakness followed by unique-unit exhaustion. Both source seats exercise actual
+empty-event payment/cancellation, Shield prevention, signed stat loss and lethal
+recipients. Captured Inferno play/death registrations retain their physical source
+through unique replacement. Normally played Snoke defeats an entering Picador
+before its captured ability creates a Beast; that Beast remains a later target.
+Actual Hevy death effects and Force-gain death registrations check continuations
+after recipient departure. Recorder assertions retain token IDs, ownership and
+allocation/attachment/death order. Other token replacement, controller changes
+and unconstructed interactions remain explicit coverage gaps.
+
 Friendly arena-list phase-stat experiments cover static trait filters and source
 exclusion, mixed controllers and arenas, native token and deployed-leader
 recipients, source departure, later arrivals, stacking, and empty-event payment
