@@ -11,7 +11,9 @@
  * - duplicate uniques: our own "defeats 1 copy of X due to the uniqueness rule" (we played a unique card we already had);
  * - leader deploys (as a unit or as a Pilot) and our deployed leader's defeats, with the rounds in between;
  * - attacks on bases and on units, the base damage each base attack did, base healing, and the opponent's removal plays
- *   (a card or ability of theirs that defeats, damages, takes control of, returns or captures);
+ *   (a card or ability of theirs that defeats, damages, takes control of, returns or captures). An attack with an On
+ *   Attack prompt resolves over several steps, so a base attack's damage is what its target base took from the attack
+ *   step until the next action (an attack, a play, a deploy, a pass or claim) or the end of the round;
  * - the race at the start of each round: base damage, board power and unit HP, resources and hand size per side.
  * The facts are leads from logs, not proof: a removal play can target our base or miss, and log lines name cards only.
  */
@@ -26,6 +28,8 @@ function arg(name, dflt) {
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const r1 = (x) => Math.round(x * 10) / 10;
 const units = (P) => [...(P.ground ?? []), ...(P.space ?? [])];
+// a log line that starts a new action: the damage after it no longer belongs to the attack before it
+const ACTION = /^(p[12] (attacks|plays|passes|claims)|p[12] uses .+ to deploy|Round: )/;
 
 function gameFacts(row, events) {
     const me = row.ours;
@@ -40,8 +44,18 @@ function gameFacts(row, events) {
     const leader = events[0].players.find((p) => p.id === me)?.deck?.split(' / ')[0] ?? null;
     let deployedAt = null;
     let prev = null;
+    let open = null; // the base attack still resolving: who made it, the base it hit, the damage so far
+    const close = () => {
+        if (open) {
+            f.baseHits[open.who].push(open.d);
+            open = null;
+        }
+    };
     for (const x of steps) {
         const s = x.state;
+        if ((x.log ?? []).some((line) => ACTION.test(line))) {
+            close();
+        }
         for (const line of x.log ?? []) {
             let m;
             if ((m = /^(p[12]) defeats 1 copy of (.+) due to the uniqueness rule/.exec(line)) && m[1] === me) {
@@ -60,13 +74,15 @@ function gameFacts(row, events) {
                 const onBase = /^p[12]'s base$/.test(m[2]);
                 f.attacks[who][onBase ? 'base' : 'unit']++;
                 if (onBase && prev) {
-                    const target = who === 'me' ? opp : me;
-                    f.baseHits[who].push(s.players[target].base.d - prev.players[target].base.d);
+                    open = { who, target: who === 'me' ? opp : me, d: 0 };
                 }
             }
             if (new RegExp(`^${opp} (plays|uses) .+? to (defeat|deal \\d+ damage to|take control of|return|capture)`).test(line)) {
                 f.oppRemoval++;
             }
+        }
+        if (prev && open) {
+            open.d += Math.max(0, s.players[open.target].base.d - prev.players[open.target].base.d);
         }
         if (prev) {
             for (const [who, q] of [['me', me], ['opp', opp]]) {
@@ -78,6 +94,7 @@ function gameFacts(row, events) {
         }
         prev = s;
     }
+    close();
     const seen = new Set();
     for (const x of steps) {
         const s = x.state;
