@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Bots that people submit on the arena window (its /mcp, tool arena_submit) enter the arena here.
+ * Bots that people submit on the arena window (its /mcp, tool arena_submit) enter the arena here. The games machine
+ * runs one pass at a time (intakeOnce): games.js in its own loop, the Elixir coordinator through
+ * `node bot/arena/gamesctl.js intake`.
  *
- *   node bot/arena/intake.js [--every 60] [--once] [--bench-new]
+ *   node bot/arena/intake.js --check <job.json> -      the checker for one submission (checkIsolated starts it)
  *
  * Reads the window's `submissions` collection with the project token (SWU_WINDOW and the token as for push.js). For each
  * pending submission it packs a WebAssembly bundle (bot/compiled/README.md): JavaScript through Javy, Python with the
@@ -16,9 +18,8 @@
  * and no other programs. On top of that, packing and checking run in a child process (--check) that gets no token and,
  * where it can (root, unshare), its own PID and mount namespace (ops/isolate.sh), as the user ARENA_USER when set (no
  * capabilities, so it cannot undo the hiding), like the referee.
- * --bench-new puts a builder's new competitor on the bench (api.js withdraw), so it is rated only once rejoined: for a
- * tournament whose lineup is fixed. A builder's later versions go to wherever the competitor is.
- * The toolchain (Javy, CPython for WASI) must be in build/compiled/.tools: launch.sh setup fetches it, or
+ * A builder's later versions go to wherever the competitor is: on the bench (api.js withdraw), they wait for rejoin.
+ * The toolchain (Javy, CPython for WASI) must be in build/compiled/.tools: Dockerfile.games builds it, or
  * `python3 -c "import sys; sys.path.insert(0, 'bot/compiled'); import build; build.javy(); build.runtime('python-3.14-wasi')"`.
  */
 const fs = require('fs');
@@ -43,7 +44,6 @@ const WORK = process.env.ARENA_INTAKE_WORK || path.join(ROOT, 'build', 'intake')
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 // the packing tools (bundle.py, Javy) read submitted files: they get a plain environment, never the checker's token
 const toolEnv = () => Object.fromEntries(['PATH', 'HOME', 'LANG', 'TZ'].filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class IntakeError extends Error {}
 const need = (cond, msg) => {
@@ -155,7 +155,7 @@ function bundleFiles(folder) {
  * The checker (a child process without the token): packs one submission and enters it. Returns {version, name} or
  * throws. job = {id, owner, name, note, kind, files, base64?, entry?}.
  */
-function check(job, { benchNew = false, work }) {
+function check(job, { work }) {
     const { api } = require('./api');
     const home = require('./home');
     need(LOGIN.test(job.owner ?? ''), 'no owner');
@@ -183,9 +183,6 @@ function check(job, { benchNew = false, work }) {
         startCheck(path.dirname(folder), `${job.name}-v1`, require('./registry').WASM_BOT, job.name);
         api.register({ name: job.name, title: job.name, owner, harness: { kind: 'builder', selfRun: true }, token,
             philosophy: `Submitted on the arena window by @${job.owner}.` });
-        if (benchNew) {
-            api.withdraw({ name: job.name, token });
-        }
     }
     let v;
     try {
@@ -214,7 +211,7 @@ function check(job, { benchNew = false, work }) {
  * The result comes back as the last line the checker prints, so the parent never opens a file the checker could have
  * replaced with a link.
  */
-async function checkIsolated(job, { benchNew }) {
+async function checkIsolated(job) {
     fs.mkdirSync(WORK, { recursive: true });
     const work = fs.mkdtempSync(path.join(WORK, 'job-'));
     try {
@@ -231,10 +228,10 @@ async function checkIsolated(job, { benchNew }) {
         const env = Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
         // compiled code of a bot that may be rejected stays with the job and goes with it; the ladders compile their own
         env.SWU_WASM_CACHE = path.join(jobHome, 'wasm-cache');
-        const node = [process.execPath, __filename, '--check', jobFile, '-', ...(benchNew ? ['--bench-new'] : [])];
+        const node = [process.execPath, __filename, '--check', jobFile, '-'];
         const isolated = process.getuid?.() === 0 && !process.env.ARENA_INTAKE_NO_ISOLATE;
-        // as root, the checker runs as ARENA_USER (launch.sh: arena), which cannot undo isolate.sh's hiding: it gets
-        // the job's home folder, as its HOME
+        // as root, the checker runs as ARENA_USER (the games machine: arena), which cannot undo isolate.sh's hiding: it
+        // gets the job's home folder, as its HOME
         const user = isolated ? process.env.ARENA_USER : null;
         if (user) {
             const [uid, gid] = ['-u', '-g'].map((flag) => Number(require('child_process').execFileSync('id', [flag, user], { encoding: 'utf8' })));
@@ -255,8 +252,8 @@ async function checkIsolated(job, { benchNew }) {
                 process.kill(-child.pid, signal);
             } catch {} // gone already
         };
-        // the group a stopped intake must take down with it: in memory for its own signal handler, and in a file for
-        // launch.sh, should the intake be killed before it can
+        // the group a stopped intake must take down with it: in memory for its own signal handler, and in a file, the
+        // only trace of an orphaned check should the intake be killed before it can
         checkers.add(child.pid);
         fs.writeFileSync(CHECKER_PID, String(child.pid));
         let err = '';
@@ -323,7 +320,7 @@ function stopCheckers() {
     fs.rmSync(CHECKER_PID, { force: true });
 }
 
-/** What the checker must not see: launch.sh's list of the session's credential files, when there is one. */
+/** What the checker must not see: ARENA_HIDE's list (the games machine sets it), else a session's credential files. */
 function hidden() {
     const list = (process.env.ARENA_HIDE ?? '').split(':').filter(Boolean);
     return list.length ? list : ['/root/.claude', '/root/.claude.json', '/root/.config', '/root/.fly', '/root/.aws', '/root/.boto', '/root/.ssh',
@@ -343,7 +340,7 @@ function toolchainMissing() {
         spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore', env: toolEnv() }).status !== 0 && 'wasmtime for Python'
     ].filter(Boolean);
     toolsReady = !missing.length;
-    return missing.length ? `no ${missing.join(', ')} (launch.sh setup fetches them)` : null;
+    return missing.length ? `no ${missing.join(', ')} (the games image builds them; elsewhere see bot/compiled/README.md)` : null;
 }
 
 /**
@@ -352,7 +349,7 @@ function toolchainMissing() {
  * the window did not take (it was down), sent again first. Nothing is checked while the toolchain is missing. A check
  * that ends with no result (the arena's fault) leaves the submission pending, tried again later, RETRIES times at most.
  */
-async function intakeOnce({ benchNew = false, window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {}, current = {} } = {}) {
+async function intakeOnce({ window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {}, current = {} } = {}) {
     // for the games machine (games.js): how many submissions are still open after this pass, and how many it accepted
     stats.open = 0;
     stats.accepted = 0;
@@ -420,7 +417,7 @@ async function intakeOnce({ benchNew = false, window = require('./push'), finish
                 break; // stopped while claiming: release() puts it back
             }
             log(`${id}: checking ${doc.kind} bot "${doc.name}" from @${doc.owner}`);
-            res = await checker({ ...doc, id }, { benchNew });
+            res = await checker({ ...doc, id });
         } finally {
             delete current.id;
             delete current.doc;
@@ -472,93 +469,30 @@ async function release(current, window = require('./push')) {
     return true;
 }
 
-/** One intake at a time (a second would check the same submission twice): its pid in WORK/intake.pid. */
-function onlyIntake() {
-    const file = path.join(WORK, 'intake.pid');
-    fs.mkdirSync(WORK, { recursive: true });
-    for (let i = 0; i < 2; i++) {
-        try {
-            fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
-            process.on('exit', () => fs.rmSync(file, { force: true }));
-            return true;
-        } catch (e) {
-            if (e.code !== 'EEXIST') {
-                throw e;
-            }
-        }
-        const pid = Number(fs.readFileSync(file, 'utf8'));
-        let cmd = '';
-        try {
-            cmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8');
-        } catch {}
-        if (pid && cmd.includes('intake.js')) {
-            return false;
-        }
-        fs.rmSync(file, { force: true }); // left by an intake that is gone
-    }
-    return false;
-}
-
 async function main(argv) {
-    const flag = (n) => argv.includes(`--${n}`);
-    const opt = (n, d) => {
-        const i = argv.indexOf(`--${n}`);
-        return i >= 0 ? argv[i + 1] : d;
-    };
-    if (flag('check')) {
-        // the result is the last line on stdout (checkIsolated reads it); everything else goes to stderr
-        console.log = console.error;
-        const [jobFile] = argv.slice(argv.indexOf('--check') + 1);
-        const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
-        let res;
-        try {
-            res = { ok: true, ...check(job, { benchNew: flag('bench-new'), work: path.dirname(jobFile) }) };
-        } catch (e) {
-            if (!(e instanceof IntakeError) && !e.code) {
-                throw e; // a bug of ours: no result, so the main loop says to try later and logs this
-            }
-            // capped as intakeOnce caps it, so the line always fits what checkIsolated keeps (OUT_CHARS)
-            res = { ok: false, error: String(e.message).slice(0, ERROR_CHARS) };
-        }
-        process.stdout.write(`${JSON.stringify(res)}\n`);
+    if (!argv.includes('--check')) {
+        console.error('usage: node bot/arena/intake.js --check <job.json> -  (the games machine runs the intake passes)');
+        process.exitCode = 2;
         return;
     }
-    if (!onlyIntake()) {
-        log('intake: another intake is running for this arena; this one stops');
-        return;
-    }
-    // a stopped intake takes its running check with it (the check is a process group of its own), and puts that
-    // submission back (at most 5 s: a window that does not answer leaves it to the stuck rule)
-    const current = {};
-    for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
-        process.on(sig, () => {
-            stopCheckers();
-            const code = 128 + require('os').constants.signals[sig];
-            setTimeout(() => process.exit(code), 5000).unref();
-            release(current).catch((e) => log(`intake: ${e.message}`)).finally(() => process.exit(code));
-        });
-    }
-    const benchNew = flag('bench-new');
-    const everyMs = Number(opt('every', 60)) * 1000;
-    const finished = new Set();
-    const unsent = new Map();
-    for (;;) {
-        try {
-            await intakeOnce({ benchNew, finished, unsent, current });
-        } catch (e) {
-            log(`intake: ${e.message}`);
-            if (flag('once')) {
-                process.exitCode = 1;
-            }
+    // the result is the last line on stdout (checkIsolated reads it); everything else goes to stderr
+    console.log = console.error;
+    const [jobFile] = argv.slice(argv.indexOf('--check') + 1);
+    const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
+    let res;
+    try {
+        res = { ok: true, ...check(job, { work: path.dirname(jobFile) }) };
+    } catch (e) {
+        if (!(e instanceof IntakeError) && !e.code) {
+            throw e; // a bug of ours: no result, so checkIsolated says to try later and logs this
         }
-        if (flag('once')) {
-            return;
-        }
-        await sleep(everyMs);
+        // capped as intakeOnce caps it, so the line always fits what checkIsolated keeps (OUT_CHARS)
+        res = { ok: false, error: String(e.message).slice(0, ERROR_CHARS) };
     }
+    process.stdout.write(`${JSON.stringify(res)}\n`);
 }
 
-module.exports = { pack, check, checkIsolated, intakeOnce, release, onlyIntake, stopCheckers, toolchainMissing, lastResult, bundleFiles, writeFiles, RETRIES };
+module.exports = { pack, check, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, lastResult, bundleFiles, writeFiles, RETRIES };
 if (require.main === module) {
     main(process.argv.slice(2)).catch((e) => {
         console.error(e.stack ?? e.message);

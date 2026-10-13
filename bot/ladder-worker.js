@@ -1,7 +1,7 @@
 'use strict';
 /**
- * Worker thread for ladder.js and arena/pool.js (both through game-pool.js): loads the engine once, then plays the
- * games it is sent. workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool }.
+ * Worker thread for ladder.js (through game-pool.js): loads the engine once, then plays the games it is sent.
+ * workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool }.
  *
  * Both bots are built here and guarded (players/guard.js) with the same capMs. While a bot loads or runs (its calls,
  * and the timers and promise callbacks its code left behind) the worker writes its seat and start time into the

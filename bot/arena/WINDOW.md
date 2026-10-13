@@ -1,8 +1,8 @@
 # The arena window (swu-arena on Fly)
 
-The window is the arena and its research as invited friends see them, at https://swu-arena.fly.dev. It is phase A of
-the hosting plan (https://claude.ai/artifact/XsnHdQbtsxYTymkuTaDcCy): tournaments still play in the project, and the
-window shows them live. In phase B the whole arena moves into the same image.
+The window is the arena and its research as invited friends see them, at https://swu-arena.fly.dev. Builders submit
+bots here, the games machine (swu-arena-games, below) plays them and sends the results back, and the project's threads
+send their ladders and research the same way. The window itself never runs a bot.
 
 ## One API, and every part talks to it
 
@@ -12,8 +12,8 @@ asks the same API.
 
 | Part | Sends | Through |
 |---|---|---|
-| Arena (referee + api.js) | status, standings, tournament, roster (no tokens), round reports, versions, panels | `node bot/arena/push.js arena` (a loop, every 20 s), which `ops/launch.sh` starts and `ops/keeper.sh` keeps alive when `SWU_WINDOW` is set at start; never the referee itself, whose bots must not get the proxy |
-| Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set |
+| Arena (referee + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
+| Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
 | Browsers, the app | the invite list, from Eric's Share page only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` (an admin) |
@@ -23,8 +23,12 @@ asks the same API.
 Reads (a signed-in friend, or the project token):
 
 - `GET /api/app`: the app's model, built in the window by the app's own loaders, with builder and thread names removed.
+  A game still marked running whose replay (or, with no replay, whose run's documents) sent nothing for 20 minutes
+  shows as stopped, with no result (`outcome: "abandoned"` in the model; the stored document is unchanged), so a run
+  that was killed or lost its pusher stops showing as live. A sender that comes back makes the game live again.
+  `push.js` sends a running run's index again every 5 minutes, changed or not, so a long game with no replay stays live.
 - `GET /api/status`, `standings`, `report?round=K`, `games?round=K`, `versions?name=X`, `panel?name=X`: the arena's own
-  read methods, same shapes as `api.js`, answered from what the arena sent. Other methods answer 501 until phase B.
+  read methods, same shapes as `api.js`, answered from what the arena sent. Other methods answer 501.
 - `GET /api/replays/<run>` lists a run's games (`?sizes=1` adds sizes); `GET /api/replays/<run>/<game>?from=<byte>`
   returns the replay from that byte, with its full size in `x-size`, so a viewer can follow a game being played.
 - `GET /api/docs/<collection>[/<id>]`: raw documents. Friends may read `arena`, `runs`, `evals`, `lens` and `meta`;
@@ -40,7 +44,7 @@ except an admin changing the invite list from the app's Share page (below):
 
 - `PUT /api/docs/<collection>/<id>` with a JSON body; `DELETE` removes one. Collections: arena, runs, ladders, league,
   experiments, evals, panels, bots, threads, lens, meta, research, admin. The `admin` collection needs the admin token
-  to read or write: the proxy adds the project token to every process in the project, competitor bots included.
+  to read or write: the proxy adds the project token to every process in the project, bots included.
 - `POST /api/replays/<run>/<game>?at=<bytes>` appends lines at that offset, which must be the replay's current size;
   otherwise 409 with the size to resend from, so a retry never doubles a line. `PUT` replaces a whole replay.
 - `PUT /api/docs/admin/invites` with `{"logins": [...]}` changes who may sign in, without a deploy
@@ -59,13 +63,14 @@ except an admin changing the invite list from the app's Share page (below):
 
 ## Through MCP
 
-`node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]` is the same API as MCP tools, for a Claude (or
-any MCP client) that loads data the way a user would. It offers the arena reads the window answers (`arena_status`,
-`arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`) and the window's own tools:
+`node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]` is the same API as MCP tools, for the project's
+threads (or any MCP client) that load data the way a user would. It offers the arena reads the window answers
+(`arena_status`, `arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`) and the window's
+own tools:
 `window_docs` and `window_replays` read, `window_put_run` uploads a local results run (index, ladder, replays; only
 what the window lacks, and it reports how many replays the window has), `window_put_doc` one JSON document (a local
 .json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
-proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR) gets the reads only.
+proxy adds it; elsewhere `--token`). Its `arena_*` tools only read; builders submit bots through `/mcp` below.
 
 ### Each person's own app: `/mcp` with GitHub sign-in (oauth.js)
 
@@ -111,14 +116,13 @@ answers and again when the token is made, with the rules `arena_submit` uses. Co
 the old token; the agent shows on the person's Build a bot page, where Disconnect ends it. Use it as a header:
 `claude mcp add --transport http swu-arena https://swu-arena.fly.dev/mcp --header "Authorization: Bearer $(cat ~/.swu-arena-token)"`.
 
-The arena's intake (`intake.js`, started by `launch.sh` next to the uplink) reads `submissions` with the project
+The arena's intake (`intake.js`, which the games machine runs every minute) reads `submissions` with a project
 token. It packs each bot into a WebAssembly bundle, enters it, and writes the outcome back. Each version records the
 submission it came from, so a submission checked again (an intake that stopped, or a window that missed the result)
-gets the version it already has. Only one intake runs per arena (`intake.pid` in its work folder). Friends never read the
-collection raw. The project token does not open `/mcp`: pushing stays with `mcp.js` above. Tokens are kept
-only as SHA-256 hashes, in `auth/oauth.json` on the volume. A person's connected apps are listed on the app's Build a
-bot page (Arena, Build a bot), through `GET /api/apps`, and `POST /api/apps {"disconnect": "<id>"}` ends one (from
-this site's own pages: Origin and JSON).
+gets the version it already has. Friends never read the collection raw. The project token does not open `/mcp`:
+pushing stays with `mcp.js` above. Tokens are kept only as SHA-256 hashes, in `auth/oauth.json` on the volume. A
+person's connected apps are listed on the app's Build a bot page (Arena, Build a bot), through `GET /api/apps`, and
+`POST /api/apps {"disconnect": "<id>"}` ends one (from this site's own pages: Origin and JSON).
 
 ## Who may do what (auth.js)
 
@@ -128,8 +132,8 @@ this site's own pages: Origin and JSON).
   days or until the link is removed.
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). Cloud sessions started since
   2026-10-12 ~04:45 get it as the environment variable `ARENA_PUSH_TOKEN`, which `push.js` reads (after
-  `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. The arena's
-  uplink (`ops/launch.sh`) does not pass it on: competitors run as the same user and could read it from `/proc`. Elsewhere set `SWU_WINDOW_TOKEN`.
+  `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. Elsewhere set
+  `SWU_WINDOW_TOKEN`.
 - `ARENA_GAMES_TOKEN` is role project too: the games machine's own token (its secret `SWU_WINDOW_TOKEN`), so it can be
   replaced without touching the threads' token.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.

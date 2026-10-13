@@ -1,10 +1,10 @@
 'use strict';
 /**
- * Card pools for arena tournaments with custom rules (Eric, 2026-10-11: "holding out a set of cards, and then letting
- * them compete with a new set"). A holdout tournament splits the cards in two:
+ * Card pools for holdout experiments (Eric, 2026-10-11: "holding out a set of cards, and then letting them compete
+ * with a new set"). The cards are split in two, and ladder.js --pool deals decks from one of them:
  *
- *   train.json    the cards of every work round: rated ladders and evals deal decks only from these
- *   holdout.json  the cards held out: after the last round, one extra ladder of the same bot versions deals only these
+ *   train.json    the cards bots are built and practised with
+ *   holdout.json  the cards held out, for a ladder of the same bot versions on cards they never saw
  *
  * Every base is in both pools. Leaders and main-deck cards (units, events, upgrades) are split per stratum (type plus
  * aspect set), holding out round(fraction x size) of each stratum, so both pools keep every colour combination and can

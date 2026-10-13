@@ -29,6 +29,9 @@
 
 * { box-sizing: border-box; }
 html, body { background: var(--bg); color: var(--ink); }
+/* the app keeps the reader's place itself (app.js keepReader); the browser's own scroll anchoring missed a live viewer
+   growing above the reader on the two-column pages, and would add to the app's correction where it does work */
+html, body { overflow-anchor: none; }
 body { font-family: var(--body); font-size: var(--fs-base); line-height: 1.45; margin: 0; }
 h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: .01em; }
 h1 { font-size: var(--fs-2xl); } h2 { font-size: var(--fs-xl); } h3 { font-size: var(--fs-lg); } h4 { font-size: var(--fs-base); }

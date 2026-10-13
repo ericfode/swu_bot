@@ -7,7 +7,6 @@
  *   versions/<agent>-v<N>/      frozen submissions; the referee only rates these
  *   versions/.staging-*         submissions being copied and checked (invisible to versionsOf and the registry)
  *   standings.json, rounds/     referee output
- *   inbox/<agent>.jsonl         messages, one JSON object per line
  * Default: /mnt/project-files/arena when the project folder exists, else arena-home/ in the repo (gitignored).
  * Keep file access to ARENA_HOME behind the helpers here.
  */
@@ -20,7 +19,7 @@ const AGENTS = path.join(HOME, 'agents');
 const VERSIONS = path.join(HOME, 'versions');
 const ROSTER = path.join(HOME, 'roster.json');
 const RESULTS = path.resolve(process.env.ARENA_RESULTS ?? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', '..', 'results')));
-// where competitors read RESULTS: the same folder, or a mirror of it when the referee writes to local disk (launch.sh)
+// where competitors read RESULTS: the same folder, or a mirror of it when the referee writes to local disk
 const PUBLIC_RESULTS = path.resolve(process.env.ARENA_PUBLIC_RESULTS ?? RESULTS);
 
 /**

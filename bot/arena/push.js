@@ -8,7 +8,6 @@
  *   node bot/arena/push.js run <run folder> [--follow] [--parent PID]
  *                                                              a ladder run: its index, report and replays; --follow keeps
  *                                                              sending new games and lines until the run (or PID) ends
- *   node bot/arena/push.js arena [--every 20] [--once]          the arena's state from its own API, and its round ladders
  *   node bot/arena/push.js invites <login>[,<login>...]         who may sign in, besides ARENA_ADMINS (replaces the list;
  *                                                              needs SWU_WINDOW_TOKEN set to the admin token)
  *
@@ -28,6 +27,9 @@ const TOKEN = process.env.SWU_WINDOW_TOKEN || process.env.ARENA_PUSH_TOKEN || 'a
 const STATE = path.join(require('os').tmpdir(), 'swu-window-push');
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// while games are running, the run's index goes again this often even unchanged, so the window can tell a live run whose
+// games are long from one that stopped (window.js shows a game as stopped after 20 minutes with nothing new)
+const HEARTBEAT_MS = 5 * 60000;
 
 class PushError extends Error {
     constructor(status, body) {
@@ -140,18 +142,26 @@ const readJson = (f) => {
     }
 };
 
-/** One pass over a ladder run folder: index, ladder report and replays. Returns whether the run is still going. */
-async function pushRunOnce(dir, mem) {
+/**
+ * One pass over a ladder run folder: index, ladder report and replays. Returns whether the run is still going. While
+ * games are running, the index is sent at least every `heartbeatMs`, changed or not.
+ */
+async function pushRunOnce(dir, mem, { heartbeatMs = HEARTBEAT_MS } = {}) {
     const id = path.basename(path.resolve(dir));
     const idx = readJson(path.join(dir, 'index.json'));
     const lad = readJson(path.join(dir, 'ladder.json'));
+    const running = new Set((idx?.games ?? []).filter((g) => g.outcome === 'running' || g.running).map((g) => g.id));
     if (idx) {
-        await putChanged(mem.docs, 'runs', id, idx);
+        if (await putChanged(mem.docs, 'runs', id, idx)) {
+            mem.beat = Date.now();
+        } else if (running.size && Date.now() - (mem.beat ?? 0) >= heartbeatMs) {
+            await putDoc('runs', id, idx);
+            mem.beat = Date.now();
+        }
     }
     if (lad) {
         await putChanged(mem.docs, 'ladders', id, lad);
     }
-    const running = new Set((idx?.games ?? []).filter((g) => g.outcome === 'running' || g.running).map((g) => g.id));
     const gamesDir = path.join(dir, 'games');
     const files = fs.existsSync(gamesDir) ? fs.readdirSync(gamesDir).filter((f) => f.endsWith('.jsonl')) : [];
     if (!mem.known && files.length) {
@@ -240,24 +250,10 @@ async function pushDir(ns, dir) {
 }
 
 /**
- * The arena's uplink, run by the arena: its state as its own API answers it (status, versions, panels), the files the
- * app's loader reads (tournament, roster without tokens, standings, round reports, the archived test tournament), and
- * the replays of its newest round ladders.
- */
-async function pushArena({ everyMs = 20000, once = false } = {}) {
-    const pusher = arenaPusher();
-    for (;;) {
-        const ok = await pusher.once();
-        if (once) {
-            return ok;
-        }
-        await sleep(everyMs);
-    }
-}
-
-/**
- * pushArena's state between passes: `once()` sends what changed since its last pass; false when it failed (logged).
- * `docs` (hashes of the documents sent) and `runs` (per round ladder) can come from an earlier process (gamesctl push).
+ * The arena's uplink (gamesctl push on the games machine): its state as its own API answers it (status, versions,
+ * panels), the files the app's loader reads (roster without tokens, standings, round reports), and the replays of its
+ * newest round ladders. `once()` sends what changed since its last pass; false when it failed (logged). `docs` (hashes
+ * of the documents sent) and `runs` (per round ladder) can come from an earlier process (gamesctl push).
  */
 function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
     const { call } = require('./api');
@@ -269,24 +265,20 @@ function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
     const once = async () => {
         try {
             const roster = home.roster();
-            const t = readJson(path.join(home.HOME, 'tournament.json'));
             const standings = readJson(path.join(home.HOME, 'standings.json'));
             const put = (id, doc) => (doc == null ? null : putChanged(docs, 'arena', id, doc));
             await put('status', await result('status'));
             await put('standings', standings);
-            await put('tournament', t);
-            // no token hashes, wherever the roster keeps competitors (agents, and the bench between tournaments)
+            // no token hashes, wherever the roster keeps competitors (agents, and the bench)
             await put('roster', JSON.parse(JSON.stringify(roster, (k, v) => (k === 'tokenHash' ? undefined : v))));
-            const reports = async (dir, prefix) => {
-                for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
-                    const m = /^r(\d+)\.md$/.exec(f);
-                    const read = m && readRegular(path.join(dir, f));
-                    if (read) {
-                        await put(`${prefix}${m[1]}`, { round: Number(m[1]), markdown: read.buf.toString('utf8') });
-                    }
+            const rounds = path.join(home.HOME, 'rounds');
+            for (const f of fs.existsSync(rounds) ? fs.readdirSync(rounds) : []) {
+                const m = /^r(\d+)\.md$/.exec(f);
+                const read = m && readRegular(path.join(rounds, f));
+                if (read) {
+                    await put(`report-${m[1]}`, { round: Number(m[1]), markdown: read.buf.toString('utf8') });
                 }
-            };
-            await reports(path.join(home.HOME, 'rounds'), 'report-');
+            }
             for (const a of [...roster.agents, ...(roster.bench ?? [])]) {
                 const vs = home.versionsOf(a.name);
                 const list = (await result('versions', { name: a.name })) ?? [];
@@ -302,18 +294,10 @@ function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
             if (boards?.experiment) {
                 await putChanged(docs, 'experiments', 'arena', boards.experiment);
             }
-            const t0 = path.join(home.HOME, 'archive', 't0');
-            if (fs.existsSync(t0)) {
-                await put('archive-t0-standings', readJson(path.join(t0, 'standings.json')));
-                await reports(path.join(t0, 'rounds'), 'archive-t0-report-');
-                const pd = path.join(t0, 'panels');
-                const panels = fs.existsSync(pd) ? fs.readdirSync(pd).filter((f) => /^arena-.*\.json$/.test(f) && f !== 'arena-leaderboard.json').map((f) => readJson(path.join(pd, f))).filter(Boolean) : [];
-                await put('archive-t0-panels', panels);
-            }
-            // the newest two round ladders (the one playing and the one before), from the arena's results folder: a
-            // tournament names them; a referee without one names finished rounds in standings and plays arena-r<K+1> next
+            // the newest two round ladders (the one playing and the one before), from the arena's results folder:
+            // standings name the finished rounds, and the referee plays arena-r<K+1> next
             const done = [...(standings?.rounds ?? [])].sort((a, b) => a.round - b.round);
-            const named = t ? (t.rounds ?? []).map((r) => r?.ladder) : [...done.map((r) => r?.ladderId), `arena-r${(done.at(-1)?.round ?? 0) + 1}`];
+            const named = [...done.map((r) => r?.ladderId), `arena-r${(done.at(-1)?.round ?? 0) + 1}`];
             const ids = [...new Set(named)].filter((x) => typeof x === 'string' && /^arena-[\w-]+$/.test(x) && fs.existsSync(path.join(home.PUBLIC_RESULTS, x))).slice(-2);
             for (const id of ids) {
                 const dir = path.join(home.PUBLIC_RESULTS, id);
@@ -360,7 +344,7 @@ async function main(argv) {
         const i = rest.indexOf(`--${n}`);
         return i >= 0 ? rest[i + 1] : d;
     };
-    const pos = rest.filter((x, i) => !x.startsWith('--') && !(i > 0 && ['--every', '--parent'].includes(rest[i - 1])));
+    const pos = rest.filter((x, i) => !x.startsWith('--') && !(i > 0 && rest[i - 1] === '--parent'));
     if (cmd === 'doc' && pos.length === 3) {
         await putDoc(pos[0], pos[1], fs.readFileSync(pos[2], 'utf8'));
         return `pushed ${pos[0]}/${pos[1]}`;
@@ -372,18 +356,12 @@ async function main(argv) {
         const r = await pushRun(pos[0], { follow: flag('follow'), parent: opt('parent') ? Number(opt('parent')) : null });
         return `run ${path.basename(path.resolve(pos[0]))}: ${r.sent} replays sent${r.going ? ', still playing' : ''}`;
     }
-    if (cmd === 'arena') {
-        if ((await pushArena({ everyMs: Number(opt('every', 20)) * 1000, once: flag('once') })) === false) {
-            throw new Error('arena: the push failed (see above)');
-        }
-        return 'arena pushed';
-    }
     if (cmd === 'invites' && pos.length === 1) {
         const logins = pos[0].split(',').map((x) => x.trim()).filter(Boolean);
         await putDoc('admin', 'invites', { logins, updatedAt: new Date().toISOString() });
         return `${logins.length} invited`;
     }
-    throw new Error(fs.readFileSync(__filename, 'utf8').split('\n').slice(3, 15).map((l) => l.replace(/^ \* ?/, '')).join('\n'));
+    throw new Error(fs.readFileSync(__filename, 'utf8').split('\n').slice(3, 16).map((l) => l.replace(/^ \* ?/, '')).join('\n'));
 }
 
 if (require.main === module) {
@@ -399,4 +377,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { putDoc, putChanged, syncReplay, pushRun, pushRunOnce, pushDir, pushArena, arenaPusher, followRun, request };
+module.exports = { putDoc, putChanged, syncReplay, pushRun, pushRunOnce, pushDir, arenaPusher, followRun, request };

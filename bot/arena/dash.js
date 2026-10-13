@@ -8,8 +8,9 @@
  * ARENA_DASH overrides the dashboard folder (default /mnt/project-files/dashboard, skipped when it does not exist).
  * Panel thread names come from roster.json `owner` (the project thread that runs that competitor).
  *
- * A competitor panel has two writers, the competitor (say: now, idea, plan, thoughts, strategy diagram) and the referee
- * (publishStandings: versions, standings widgets, status). Each keeps its half in its own file in ARENA_HOME,
+ * A competitor panel has two halves: the competitor's (updatePanel: now, idea, plan, thoughts, strategy diagram; today
+ * only api.register writes it) and the referee's (publishStandings: versions, standings widgets, status). Each half has
+ * its own file in ARENA_HOME,
  *   panels/<agent>.say.json   panels/<agent>.rated.json
  * and every write of either half recomposes the dashboard panel from both, so neither overwrites the other's fields.
  * The leaderboard and the experiment are kept in ARENA_HOME too (panels/leaderboard.json, panels/experiment.json), so

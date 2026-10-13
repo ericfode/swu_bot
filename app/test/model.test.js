@@ -184,3 +184,18 @@ test('buildModel: a tournament keeps its round ladders and its rules (from tourn
     assert.deepEqual(cs.map((c) => [c.name, !!c.benched]), [['act', false], ['off', true]], 'a benched builder stays listed, marked');
     assert.equal(plain.arena.tournament.rules, null);
 });
+
+test('buildModel: the hosted arena takes its phase and round from arena status, and an old tournament is only an archive', () => {
+    const old = { id: 'arena-t0', state: 'done', rounds: [{ n: 1, ladder: 'arena-t0-r1', ladderStart: 'a', ladderEnd: 'b' }] };
+    const playing = model.buildModel(tinySources(), { arena: { tournament: old, status: { tournament: null, round: 2, phase: 'ladder' } } }, null).arena;
+    assert.deepEqual([playing.hosted, playing.phase, playing.current, playing.tournament, playing.deadline], [true, 'ladder', { n: 2 }, null, null]);
+    const between = model.buildModel(tinySources(), { arena: { tournament: old, status: { tournament: null, round: 2, phase: 'idle' } } }, null).arena;
+    assert.deepEqual([between.hosted, between.phase, between.current], [true, 'idle', { n: 2 }]);
+    const none = model.buildModel(tinySources(), { arena: { status: { tournament: null, round: null, phase: 'idle' } } }, null).arena;
+    assert.deepEqual([none.hosted, none.phase, none.current], [true, 'idle', null]);
+    // a clocked tournament (its status names it) and a project folder with no status keep tournament.json's clock
+    const clocked = model.buildModel(tinySources(), { arena: { tournament: old, status: { tournament: 'arena-t0', round: 1, phase: 'done' } } }, null).arena;
+    assert.deepEqual([clocked.hosted, clocked.phase, clocked.tournament.id], [false, 'done', 'arena-t0']);
+    const folder = model.buildModel(tinySources(), { arena: { tournament: old } }, null).arena;
+    assert.deepEqual([folder.hosted, folder.phase], [false, 'done']);
+});

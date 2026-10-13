@@ -34,7 +34,6 @@ module.exports = {
     ],
     exclude: [
       'bot/arena/starters/**', // starter bots copied into new arena players
-      'bot/arena/optimizer.js', // an arena player: tunes the heuristic bot's weights
       'bot/eval/bot.js', // the h@<evaluator> bots
       'bot/determinism-check.js', // checks the heuristic bot's playouts
       'bot/determinize-check.js', // checks the ISMCTS bot's belief model

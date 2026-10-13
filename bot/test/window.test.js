@@ -8,7 +8,7 @@ const http = require('http');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'window-test-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
-// a scratch arena for anything that loads home.js (server.js, which window.js uses, loads api.js): never the project's
+// a scratch arena for anything that loads home.js (window.js loads api.js): never the project's
 Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RESULTS: path.join(tmp, 'arena-results'), ARENA_DASH: path.join(tmp, 'no-dash') });
 
 const { createWindow, wakeGamesAt, Store, storeReader, scrub } = require('../arena/window');
@@ -27,13 +27,13 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -58,6 +58,7 @@ test('the loaders\' reader finds each collection where the project folder had it
     s.putDoc('ladders', 'arena-t1-r1', JSON.stringify({ status: 'done' }));
     s.putDoc('panels', 'p1', JSON.stringify({ id: 'p1' }));
     s.putDoc('meta', 'ratings', JSON.stringify({ bots: {} }));
+    s.putDoc('arena', 'status', JSON.stringify({ tournament: null, round: 2, phase: 'ladder' }));
     s.putDoc('arena', 'report-2', JSON.stringify({ round: 2, markdown: '# Round 2' }));
     s.putDoc('arena', 'versions-duel_opus', JSON.stringify([{ v: 0, note: 'start' }, { v: 1, note: 'faster' }]));
     s.appendReplay('arena-t1-r1', 'g7', 0, Buffer.from('{"t":"end"}\n'));
@@ -69,11 +70,37 @@ test('the loaders\' reader finds each collection where the project folder had it
     assert.strictEqual(await r.text('results/arena-t1-r1/games/g7.jsonl'), '{"t":"end"}\n');
     assert.deepStrictEqual((await r.list('dashboard/panels')).map((e) => e.name), ['p1.json']);
     assert.ok(await r.text('meta/ratings.json'));
+    assert.strictEqual(JSON.parse(await r.text('arena/status.json')).phase, 'ladder', 'the app reads the hosted arena\'s clock');
     assert.deepStrictEqual((await r.list('arena/rounds')).map((e) => e.name), ['r2.md']);
     assert.strictEqual(await r.text('arena/rounds/r2.md'), '# Round 2');
     assert.deepStrictEqual((await r.list('arena/versions')).map((e) => e.name), ['duel_opus-v0', 'duel_opus-v1']);
     assert.strictEqual(JSON.parse(await r.text('arena/versions/duel_opus-v1/SUBMISSION.json')).note, 'faster');
     assert.strictEqual(await r.text('arena/nothing.json'), null);
+});
+
+test('a run that stopped sending shows its unfinished games as stopped, not playing, and comes back when it sends again', async () => {
+    const s = new Store(path.join(tmp, 'stale'));
+    const row = (id, outcome) => ({ id, p1: 'rush', p2: 'random', outcome, winner: null, winnerSeat: null });
+    s.putDoc('runs', 'killed', JSON.stringify({ id: 'killed', games: [row('done', 'won'), row('plain', 'running'), row('taped', 'running'), row('fresh', 'running')] }));
+    s.putDoc('ladders', 'killed', JSON.stringify({ status: 'running' }));
+    s.appendReplay('killed', 'taped', 0, Buffer.from('{"t":"header"}\n'));
+    s.appendReplay('killed', 'fresh', 0, Buffer.from('{"t":"header"}\n'));
+    const hour = Date.now() / 1000 - 3600;
+    for (const f of ['docs/runs/killed.json', 'docs/ladders/killed.json', 'replays/killed/taped.jsonl.gz']) {
+        fs.utimesSync(path.join(s.dir, f), hour, hour);
+    }
+    const r = storeReader(s, { staleMs: 20 * 60000 });
+    const games = JSON.parse(await r.text('results/killed/index.json')).games;
+    // a game with a replay goes by its replay; one without, by the run's documents
+    assert.deepStrictEqual(games.map((g) => g.outcome), ['won', 'abandoned', 'abandoned', 'running']);
+    assert.match(games[1].error, /^stopped: its run sent nothing for 60 min$/);
+    const fresh = s.changedAt('killed', 'fresh');
+    assert.ok(Math.abs(r.staleAt() - (fresh + 20 * 60000)) < 5, 'the reader says when the game still running goes stale');
+    assert.strictEqual(JSON.parse(s.getDoc('runs', 'killed')).games[1].outcome, 'running', 'the stored document is left as it came');
+    s.putDoc('runs', 'killed', s.getDoc('runs', 'killed')); // the sender is back
+    assert.strictEqual(JSON.parse(await storeReader(s).text('results/killed/index.json')).games[1].outcome, 'running');
+    s.putDoc('runs', 'quiet', JSON.stringify({ id: 'quiet', games: [row('g', 'won')] }));
+    assert.strictEqual(await storeReader(s).text('results/quiet/index.json'), s.getDoc('runs', 'quiet'), 'a run with nothing running reads as stored');
 });
 
 test('scrub drops builder and thread names at any depth', () => {
@@ -482,6 +509,32 @@ test('the app data is built from the collections with the app\'s own loaders', {
     }
 });
 
+test('the app data stops showing a game as playing once its run goes quiet, with nothing new pushed', { skip: !fs.existsSync(path.join(__dirname, '..', '..', 'dashboard', 'site', 'core.cjs')) }, async () => {
+    const w = makeWindow('w5b', { staleMs: 300 });
+    const { go, close } = await serve(w);
+    try {
+        const idx = { id: 'test-quiet', createdAt: '2026-10-13T14:00:00Z', bots: ['rush', 'random'], gamesPerPairing: 2, games: [{ id: 'g1', p1: 'rush', p2: 'random', seed: 1, outcome: 'running', winner: null, winnerSeat: null, rounds: 0 }] };
+        await go('/api/docs/runs/test-quiet', { method: 'PUT', token: 'push-secret', body: JSON.stringify(idx) });
+        const app = async () => (await (await go('/api/app', { token: 'push-secret' })).json()).result;
+        const res = async () => (await app()).model.games.find((g) => g[1] === 'g1')[4];
+        assert.strictEqual(await res(), 3, 'playing while its run sends');
+        const before = (await app()).version;
+        await new Promise((r) => setTimeout(r, 400));
+        // a request that finds the build out of date starts a rebuild and gets the last build meanwhile
+        let now = await res();
+        for (let i = 0; i < 20 && now !== 5; i++) {
+            await new Promise((r) => setTimeout(r, 50));
+            now = await res();
+        }
+        assert.strictEqual(now, 5, 'stopped: the run sent nothing for longer than staleMs');
+        assert.notStrictEqual((await app()).version, before, 'a new version, or open browsers (syncApi) would keep the old model');
+        const run = (await (await go('/api/app', { token: 'push-secret' })).json()).result.model.runs.find((r) => r.id === 'test-quiet');
+        assert.deepStrictEqual([run.running, run.abandoned, run.errors], [0, 1, 0]);
+    } finally {
+        await close();
+    }
+});
+
 test('push: a ladder run reaches the window as it plays: whole lines while running, the whole file once finished', async () => {
     const w = makeWindow('w6');
     const { srv, go, close } = await serve(w);
@@ -501,6 +554,14 @@ test('push: a ladder run reaches the window as it plays: whole lines while runni
         assert.strictEqual((await pushRunOnce(dir, mem)).going, true);
         assert.strictEqual(await replay(), '{"t":"header"}\n', 'only whole lines');
         assert.strictEqual(JSON.parse(w.store.getDoc('runs', 'live-ladder')).games[0].outcome, 'running');
+        // nothing changed, but a game is running: the index goes again once the heartbeat is due, so the window sees the run alive
+        const docFile = path.join(w.store.dir, 'docs', 'runs', 'live-ladder.json');
+        const old = Date.now() / 1000 - 3600;
+        fs.utimesSync(docFile, old, old);
+        await pushRunOnce(dir, mem);
+        assert.ok(fs.statSync(docFile).mtimeMs < Date.now() - 1800000, 'not before the heartbeat is due');
+        await pushRunOnce(dir, mem, { heartbeatMs: 0 });
+        assert.ok(fs.statSync(docFile).mtimeMs > Date.now() - 60000, 'sent again as a heartbeat');
         fs.appendFileSync(file, 'ep"}\n');
         await pushRunOnce(dir, { docs: new Map(), replays: new Map() }); // a restarted pusher sends only what the window lacks
         assert.strictEqual(await replay(), '{"t":"header"}\n{"t":"step"}\n');
@@ -508,6 +569,9 @@ test('push: a ladder run reaches the window as it plays: whole lines while runni
         index('won');
         assert.strictEqual((await pushRunOnce(dir, mem)).going, false);
         assert.strictEqual(await replay(), '{"t":"header"}\n{"t":"step"}\n{"t":"end"}\n');
+        fs.utimesSync(docFile, old, old);
+        await pushRunOnce(dir, mem, { heartbeatMs: 0 });
+        assert.ok(fs.statSync(docFile).mtimeMs < Date.now() - 1800000, 'a finished run sends no heartbeat');
         fs.writeFileSync(file, '{"t":"header","key":"k"}\n{"t":"step"}\n{"t":"end"}\n'); // ladder.js adds the key in place
         await pushRunOnce(dir, mem);
         assert.match(await replay(), /"key":"k"/);
@@ -530,7 +594,7 @@ test('push: the arena uplink sends the roster without token hashes, the bench in
         process.env.SWU_WINDOW = `http://127.0.0.1:${srv.address().port}`;
         process.env.ARENA_PUSH_TOKEN = 'push-secret'; // how newer cloud sessions get the token
         delete require.cache[require.resolve('../arena/push')];
-        await require('../arena/push').pushArena({ once: true });
+        assert.strictEqual(await require('../arena/push').arenaPusher().once(), true);
         const roster = JSON.parse(w.store.getDoc('arena', 'roster'));
         assert.deepStrictEqual([roster.agents[0].name, roster.bench[0].name], ['aa', 'bb']);
         assert.doesNotMatch(JSON.stringify(roster), /tokenHash/);
@@ -583,7 +647,6 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
     w.store.putDoc('arena', 'status', JSON.stringify({ tournament: null, round: 3, phase: 'work', competitors: [] }));
     const project = await mcpSession(['--remote', base, '--token', 'push-secret']);
     const friendless = await mcpSession(['--remote', base]);
-    const competitor = await mcpSession(['--remote', base, '--token', 'push-secret'], { ARENA_COMPETITOR: 'aa' });
     try {
         await project.ask('initialize');
         const names = (await project.ask('tools/list')).result.tools.map((t) => t.name);
@@ -600,76 +663,57 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
         assert.strictEqual((await project.tool('window_put_doc', { collection: 'panels', id: 'y', path: '/etc/hostname' })).error, true, 'only .json files');
         assert.strictEqual((await project.tool('window_put_doc', { collection: 'admin', id: 'invites', doc: { logins: ['z'] } })).error, true, 'the invite list needs the admin token');
 
-        // no token: still the window's tools (it answers /healthz), and every call is refused by the window itself
+        // no token: the usual reads and the window's own tools, and the window itself refuses every call
         const plain = (await friendless.ask('tools/list')).result.tools.map((t) => t.name);
         assert.ok(plain.includes('window_put_run') && plain.includes('arena_status') && !plain.includes('arena_register'));
         assert.strictEqual((await friendless.tool('arena_status')).error, true);
-        // a competitor's server reads, and never changes the window
-        const mine = (await competitor.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(mine.includes('arena_status') && !mine.some((x) => x.startsWith('window_')));
-        assert.strictEqual((await competitor.tool('window_put_doc', { collection: 'panels', id: 'p', doc: {} })).error, true);
     } finally {
         project.close();
         friendless.close();
-        competitor.close();
         await close();
     }
 });
 
-test('mcp: a competitor the runner starts can neither see nor call withdraw and rejoin', async () => {
-    const competitor = await mcpSession([], { ARENA_COMPETITOR: 'aa' });
-    const owner = await mcpSession([]);
-    try {
-        await competitor.ask('initialize');
-        const names = (await competitor.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(names.includes('arena_submit') && !names.includes('arena_withdraw') && !names.includes('arena_rejoin'));
-        const r = await competitor.tool('arena_withdraw', {});
-        assert.strictEqual(r.error, true);
-        assert.match(JSON.stringify(r.value), /it alone benches/);
-        await owner.ask('initialize');
-        const all = (await owner.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(all.includes('arena_withdraw') && all.includes('arena_rejoin'));
-    } finally {
-        competitor.close();
-        owner.close();
-    }
-});
-
-test('mcp: a competitor token never goes into a URL, and a remote that never answers does not hold up tools/list', async () => {
+test('mcp: a token argument never goes into a URL, nothing but reads goes to the window, and a remote that never answers does not hold up tools/list', async () => {
     const http = require('http');
     const seen = [];
-    const arena = http.createServer((req, res) => {
+    // a stand-in for the window: it lists its arena reads at /api and answers every read
+    const win = http.createServer((req, res) => {
         let body = '';
         req.on('data', (d) => (body += d));
         req.on('end', () => {
             seen.push({ method: req.method, url: req.url, body });
             res.setHeader('content-type', 'application/json');
-            res.end(JSON.stringify({ result: req.url === '/api' ? { methods: [] } : { ok: true } }));
+            res.end(JSON.stringify({ result: req.url === '/api' ? { arena: ['status', 'versions'], collections: ['arena'] } : { ok: true } }));
         });
     });
     const silent = http.createServer(() => undefined); // accepts, never answers
-    await Promise.all([arena, silent].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
+    await Promise.all([win, silent].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
     const url = (s) => `http://127.0.0.1:${s.address().port}`;
-    const remote = await mcpSession(['--remote', url(arena)], { ARENA_COMPETITOR: 'aa', ARENA_COMPETITOR_TOKEN: 'secret-token' });
+    const remote = await mcpSession(['--remote', url(win)]);
     const stuck = await mcpSession(['--remote', url(silent)], { ARENA_PROBE_MS: '1000' });
     try {
         await remote.ask('initialize');
+        const names = (await remote.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.deepStrictEqual(names.filter((x) => x.startsWith('arena_')), ['arena_status', 'arena_versions'], 'the reads the window lists');
         await remote.tool('arena_status');
-        await remote.tool('arena_inbox', {});
+        await remote.tool('arena_versions', { name: 'aa', token: 'secret-token' });
         const status = seen.find((r) => r.url.startsWith('/api/status'));
-        const inbox = seen.find((r) => r.url.startsWith('/api/inbox'));
-        assert.deepStrictEqual([status.method, status.url], ['GET', '/api/status'], 'a read without a token is a GET, and status takes none');
-        assert.strictEqual(inbox.method, 'POST');
-        assert.ok(!inbox.url.includes('secret-token') && JSON.parse(inbox.body).token === 'secret-token');
+        const versions = seen.find((r) => r.url.startsWith('/api/versions'));
+        assert.deepStrictEqual([status.method, status.url], ['GET', '/api/status'], 'a read is a GET, and status takes no arguments');
+        assert.deepStrictEqual([versions.method, versions.url], ['GET', '/api/versions?name=aa'], 'the token argument is left out');
+        const submit = await remote.tool('arena_submit', { name: 'aa', note: 'n' });
+        assert.deepStrictEqual([submit.error, submit.value.code], [true, 'unsupported']);
+        assert.ok(seen.every((r) => r.method === 'GET' && !r.url.includes('secret-token')), 'only GETs, and no token in a URL');
         await stuck.ask('initialize');
         const t0 = Date.now();
-        const names = (await stuck.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(names.includes('arena_submit'), 'falls back to the arena tools');
-        assert.ok(Date.now() - t0 < 1800, `one probe deadline for both requests (took ${Date.now() - t0} ms)`);
+        const fallback = (await stuck.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(fallback.includes('arena_status') && fallback.includes('window_put_run') && !fallback.includes('arena_submit'), "falls back to the window's usual reads and its tools");
+        assert.ok(Date.now() - t0 < 1800, `one probe deadline (took ${Date.now() - t0} ms)`);
     } finally {
         remote.close();
         stuck.close();
-        arena.close();
+        win.close();
         silent.closeAllConnections?.();
         silent.close();
     }

@@ -35,6 +35,8 @@
         const json = async p => { try { const t = await reader.text(p); return t ? JSON.parse(t) : null; } catch { return null; } };
         const roster = await json('arena/roster.json');
         const tournament = await json('arena/tournament.json');
+        // the arena's own clock (arena_status): on the hosted arena it has no tournament and says which round plays
+        const status = await json('arena/status.json');
         let standings = await json('arena/standings.json'), archived = null;
         const rounds = {};
         const readRounds = async dir => { for (const e of await reader.list(dir)) { const m = /^r(\d+)\.md$/.exec(e.name); if (m && !e.isDirectory) rounds[m[1]] = await reader.text(`${dir}/${e.name}`); } };
@@ -63,7 +65,7 @@
         // ratings are written once, by the meta analyzer, with the Atlas's rules (Eric's pick, 18:21)
         const rj = await json('meta/ratings.json');
         const ratings = rj && rj.bots && typeof rj.bots === 'object' ? { generatedAt: rj.generatedAt || null, rules: rj.rules || null, bots: rj.bots } : null;
-        return { arena: { roster, tournament, standings, archived, rounds, versions }, meta, ratings };
+        return { arena: { roster, tournament, status, standings, archived, rounds, versions }, meta, ratings };
     }
 
     // ---------- ratings ----------
@@ -129,15 +131,16 @@
             const seat = n => people && !ours.includes(canonical(n, fixed)) ? 'opponent' : can(n);
             for (const g of r.games) {
                 const p1 = seat(g.p1), p2 = seat(g.p2);
-                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned (people only)
+                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned
                 if (g.outcome === 'running') { res = 3; running++; }
                 else if (g.outcome === 'won' && (g.winnerSeat === 'p1' || g.winnerSeat === 'p2')) res = g.winnerSeat === 'p1' ? 0 : 1;
                 else if (g.outcome === 'ERROR' && /^TIME_FORFEIT (\S+)/.test(g.error || '')) { forfeit = seat(RegExp.$1) === p1 ? 'p1' : 'p2'; res = forfeit === 'p1' ? 1 : 0; }
                 else if (g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2')) { forfeit = g.by; res = g.by === 'p1' ? 1 : 0; }
                 else if (g.winnerSeat === 'draw') { res = 2; errors++; }
                 else { res = 4; errors++; }
-                // a game against people that never started or went silent is abandoned, not an engine error
-                if (people && res === 4 && g.outcome === 'abandoned') { res = 5; errors--; abandoned++; }
+                // abandoned, not an engine error: a game against people that never started or went silent, or a game
+                // whose run stopped sending before it ended (the arena window settles those, bot/arena/window.js)
+                if (res === 4 && g.outcome === 'abandoned') { res = 5; errors--; abandoned++; }
                 games.push([ri, g.id, bi(p1), bi(p2), res, g.rounds ?? null, g.steps ?? null, forfeit ? 1 : 0]);
                 if (people) {
                     // a finished game against a person, a draw included, counts in the run's own table only
@@ -165,7 +168,7 @@
             // before any game ends; `ours` keeps the run's own bots list, which names our bots and never the people
             const bots = [...new Set([...(r.bots || []).map(can), ...(people ? r.games.flatMap(g => [seat(g.p1), seat(g.p2)]) : []), ...table.map(t => t.id)])];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
-            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned, ours } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
+            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, abandoned, ...(people ? { ours } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
 
         // the Atlas's ratings when the meta analyzer wrote them; the app's own fit (same rules) for bots it does not list
@@ -212,8 +215,12 @@
 
         // arena
         const A = extra?.arena || {};
-        const T = A.tournament, cur = T?.rounds?.at(-1) || null;
-        const phase = !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
+        // the hosted arena plays a round whenever its lineup changes, with no tournament or work windows: its status says
+        // phase 'ladder' and the round while one plays, else 'idle' and the newest round. A tournament.json left from the
+        // old clocked tournaments is then only an archive.
+        const S = A.status, hosted = !!S && S.tournament === null && (S.phase === 'ladder' || S.phase === 'idle');
+        const T = hosted ? null : A.tournament, cur = hosted ? (S.round != null ? { n: S.round } : null) : T?.rounds?.at(-1) || null;
+        const phase = hosted ? S.phase : !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
         // benched builders (arena withdraw) stay listed, marked, with their versions and panels; rejoin brings them back
         const competitors = [...(A.roster?.agents || []), ...(A.roster?.bench || []).map(a => ({ ...a, benched: true }))].map(a => {
             const vs = A.versions?.[a.name] || [];
@@ -221,7 +228,7 @@
             return { name: a.name, title: a.title, harness: a.harness || null, philosophy: a.philosophy || '', start: a.start, registeredAt: a.registeredAt, versions: vs, latest: vs.at(-1)?.name || null, panel, ...(a.benched ? { benched: true } : {}) };
         });
         const arena = {
-            phase, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
+            phase, hosted, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
             current: cur, deadline: phase === 'work' ? cur?.workEnd : null,
             competitors, baselines: A.roster?.baselines || [], thinkCapMs: A.roster?.thinkCapMs ?? null,
             standings: A.standings || null, archived: A.archived || null, reports: A.rounds || {}, runs: runInfo.filter(r => r.kind === 'arena').map(r => r.id),

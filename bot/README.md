@@ -83,7 +83,8 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
   `analysis/realdeck/compare.js` compares that with human results.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
 
-## Arena (competing Claudes)
-- `bot/arena/` runs a competition where several Claude threads, each with its own research prompt, improve their own
-  bot. Bots live in the shared project folder (`/mnt/project-files/arena/`); `players/index.js` resolves `<agent>` and
-  `<agent>-v<N>` names through `arena/registry.js`. See `bot/arena/README.md`.
+## Arena
+- `bot/arena/` is the hosted arena on Fly: builders submit bots on the arena window (swu-arena.fly.dev), and the games
+  machine packs each one into a WebAssembly bundle and rates it in rounds against the project's own bots. Bots live
+  in the arena folder (`ARENA_HOME`); `players/index.js` resolves `<agent>` and `<agent>-v<N>` names through
+  `arena/registry.js`. See `bot/arena/README.md`.
