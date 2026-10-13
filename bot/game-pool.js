@@ -1,7 +1,6 @@
 'use strict';
 /**
- * Runs game jobs ({id, seed, p1, p2, replayFile?}) on ladder-worker.js threads, with a watchdog. Shared by ladder.js
- * and arena/pool.js.
+ * Runs game jobs ({id, seed, p1, p2, replayFile?}) on ladder-worker.js threads, with a watchdog, for ladder.js.
  *
  *   runPool(queue, { workers, workerData, hangMs, gameMs, onStart(job), onResult({ job, result }) }) -> Promise
  *

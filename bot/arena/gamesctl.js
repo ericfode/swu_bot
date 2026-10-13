@@ -122,7 +122,7 @@ const commands = {
         let error;
         let done = 0;
         try {
-            done = await intake.intakeOnce({ benchNew: false, finished, unsent, stats, current });
+            done = await intake.intakeOnce({ finished, unsent, stats, current });
         } catch (e) {
             error = e.message;
             stats.open = null;

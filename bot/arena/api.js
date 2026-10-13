@@ -1,11 +1,10 @@
 'use strict';
 /**
- * Arena API: the tournament layer every competitor uses, whatever its harness. One implementation, exposed three
- * ways with the same method names and JSON shapes:
- *   server.js  HTTP:  POST /api/<method> with a JSON body  (scripts, optimizers, a hosted arena later)
- *   mcp.js     MCP:   tool arena_<method>                  (Claude Code, Codex and other LLM harnesses)
- *   cli.js     CLI:   node bot/arena/cli.js <method> '{json}'
- * Storage is ARENA_HOME (see home.js): the project's shared folder, so every thread's container sees the same arena.
+ * Arena API: the arena's competitors, versions and results. The games machine calls it in-process: the intake
+ * registers and submits builders' bots (intake.js), and the window's uplink reads status, versions and panels (push.js
+ * arenaPusher). The window (window.js) answers the read methods with the same shapes and uses METHODS for the
+ * descriptions of its /mcp read tools. mcp.js serves every method as an MCP tool, arena_<method>, on a local arena.
+ * Storage is ARENA_HOME (see home.js).
  * How a bot plays a game (observations, actions, timing) is not defined here: a submitted bot is a JS folder whose
  * createBot returns a native bot or a protocol client (spec/bot-interface.md), or a bot program (spec/protocol.md).
  *
@@ -23,19 +22,11 @@
  *   versions {name}                             submitted versions with notes
  *   standings {}                                every rated round so far, all-round Elo
  *   report {round?}                             a round's markdown report (default: latest)
- *   say {name, text?, now?, idea?, plan?, diagram?}  post thoughts (and a strategy diagram, strategy.js) to the live panel
- *   send {to, text, from?}                      leave a message in a competitor's inbox ("all" = everyone)
- *   inbox {name, since?}                        messages for a competitor, oldest first
- *   eval {name, vs?, seeds?, version?}          queue test games on the server (for clients without the engine)
- *   eval_result {id}                            queued / running / done with results
- *   wait {timeoutSec?, round?}                  long-poll until a round's work window is open (status started /
- *                                               waiting / done)
  *   panel {name} / panels {}                    one competitor's live panel / all of them + leaderboard + experiment
  *   games {round?} / ladder {round?}            a round's game list (replays at /replays/...) / its full ladder results
- *   archive {id?}                               archived tournaments, or one archived tournament's standings and panels
  * Readers (the app, the dashboard, ratings) use these calls instead of reading the arena's files.
- * A remote client submits its code with submit {bot: {kind:'js', files: {"bot.js": "...", ...}}}.
- * Server-side callers (the referee) message competitors with notify(), which is not a method: no client can call it.
+ * Code may also come as files: submit {bot: {kind:'js', files: {"bot.js": "...", ...}}}. The intake sends each builder's
+ * bundle that way, as {kind:'wasm', files}.
  */
 const fs = require('fs');
 const path = require('path');
@@ -44,15 +35,14 @@ const { spawnSync } = require('child_process');
 const home = require('./home');
 const dash = require('./dash');
 const { botSource, STARTS } = require('./starters');
-const { validateDiagram } = require('./strategy');
 
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
-// Hosted arenas set ARENA_AUTH=1: then changing a competitor (submit, say, eval, inbox) needs the token register
-// returned, and messaging everyone needs ARENA_ADMIN_TOKEN. In the project's shared folder it is off.
+// Hosted arenas set ARENA_AUTH=1: then changing a competitor (submit, withdraw, rejoin) needs the token register
+// returned, or ARENA_ADMIN_TOKEN. In the project's shared folder it is off.
 const AUTH = process.env.ARENA_AUTH === '1';
 const hash = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+// written by the old clocked tournaments; clock() reads it, and is idle without it
 const TOURNAMENT = () => path.join(home.HOME, 'tournament.json');
-const INBOX = (n) => path.join(home.HOME, 'inbox', `${n}.jsonl`);
 // error codes a client may see; anything else is reported as 'internal'
 const CODES = new Set(['bad_request', 'unauthorized', 'not_found', 'conflict', 'bad_bot', 'unsupported']);
 const LOAD_CHECK_MS = 30000;
@@ -60,7 +50,6 @@ const LOAD_CHECK_MS = 30000;
 const START_CHECK_MS = 30000;
 // a WebAssembly bundle's files, in all (a JS bot compiled by Javy is about 1.3 MB)
 const WASM_MAX_BYTES = 16e6;
-const ARCHIVE_ID = /^[\w-]{1,64}$/;
 
 class ArenaError extends Error {
     constructor(code, message) {
@@ -119,21 +108,6 @@ function clock(now = Date.now()) {
     return { tournament: { id: t.id, title: t.title, rounds: t.plannedRounds, roundMinutes: t.roundMinutes, task: t.task ?? null, rules }, round: cur?.n ?? null,
              roundIndex: cur ? t.rounds.filter((r) => r.kind !== 'holdout').length : null, plannedRounds: t.plannedRounds ?? null, ...(holdout ? { holdout } : {}), phase, deadline,
              minutesLeft: deadline ? Math.max(0, Math.round((Date.parse(deadline) - now) / 60000)) : null };
-}
-
-/**
- * Inbox messages from server-side callers (the referee): to = a competitor, a list of them or "all". No auth check, and
- * deliberately not an api method (nor in METHODS), so no HTTP, MCP or CLI client can call it.
- */
-function notify({ to, from = 'referee', text } = {}) {
-    need(typeof text === 'string' && text.trim(), 'bad_request', 'text is required');
-    // "all" is the competitors playing; a benched one named directly still gets the message, to read once it rejoins
-    const targets = to === 'all' ? home.roster().agents.map((a) => a.name) : (Array.isArray(to) ? to : [to]).map((n) => competitor(n, { benched: true }).name);
-    const msg = { t: new Date().toISOString(), from: String(from), text: text.trim() };
-    for (const n of targets) {
-        home.appendJsonl(INBOX(n), msg);
-    }
-    return { delivered: targets };
 }
 
 // submitted code must not see the arena's secrets, nor the egress proxy (in a cloud session it adds credentials)
@@ -197,24 +171,6 @@ function startCheck(dir, version, bot, shownAs) {
     throw new ArenaError('bad_bot', `${version} failed the start check (start ${bot.label ?? bot.cmd}, send hello, expect ready): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}${hint}`);
 }
 
-/** Whether `o` may be an eval opponent: a built-in bot, a baseline, or an existing <agent>-v<N> of any competitor. */
-function opponentOk(o) {
-    if (typeof o !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(o)) {
-        return false;
-    }
-    const r = home.roster();
-    if (r.baselines.includes(o)) {
-        return true;
-    }
-    const v = /^([a-z][a-z0-9_]*)-v(\d+)$/.exec(o);
-    // a benched competitor's frozen versions stay fair opponents
-    if (v && [...r.agents, ...(r.bench ?? [])].some((a) => a.name === v[1])) {
-        return home.versionsOf(v[1]).includes(Number(v[2]));
-    }
-    const info = describeBot(o);
-    return !!info && info.kind !== 'arena';
-}
-
 const api = {
     status() {
         const r = home.roster();
@@ -237,9 +193,9 @@ const api = {
     register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, token: adminToken } = {}) {
         need(NAME.test(name ?? ''), 'bad_request', 'name: 1-32 chars, lowercase letters, digits, _; starts with a letter');
         need(harness === null || (typeof harness === 'object' && !Array.isArray(harness)), 'bad_request', 'harness: an object such as {"kind": "codex"}');
-        // On a hosted arena only the admin registers a competitor the runner starts (runner.js runs its harness: a
-        // command line, or a Claude Code agent on the arena's account). Anyone else's harness only says how they run
-        // themselves: its kind and model are kept, any command is dropped, and selfRun keeps the runner away from it.
+        // On a hosted arena only the admin registers a competitor with a full harness (a command line, or a Claude Code
+        // agent on the arena's account). Anyone else's harness only says how they run themselves: its kind and model
+        // are kept, any command is dropped, and selfRun marks it as run by its builder.
         if (harness && AUTH && !(process.env.ARENA_ADMIN_TOKEN && adminToken === process.env.ARENA_ADMIN_TOKEN)) {
             harness = { kind: String(harness.kind ?? 'other').slice(0, 32), ...(harness.model ? { model: String(harness.model).slice(0, 64) } : {}), selfRun: true };
         }
@@ -267,7 +223,7 @@ const api = {
             throw e;
         }
         dash.updatePanel(name, { now: 'Registered', status: 'running' });
-        return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, say, eval and inbox on a hosted arena.' };
+        return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, withdraw and rejoin on a hosted arena.' };
     },
 
     submit({ name, note, bot = { kind: 'js' }, token, ref } = {}) {
@@ -355,10 +311,10 @@ const api = {
                 check();
             }
             if (upload && bot.kind !== 'wasm') {
-                // the live folder follows what was uploaded, so eval of the live bot plays it; only the newest version
-                // may write it, so a slower concurrent submit cannot overwrite a newer one. It becomes a copy of that
-                // version, not the live folder plus this upload: a concurrent submit may have written the live folder
-                // after this one copied it.
+                // the live folder follows what was uploaded, so a later submit without files starts from it; only the
+                // newest version may write it, so a slower concurrent submit cannot overwrite a newer one. It becomes a
+                // copy of that version, not the live folder plus this upload: a concurrent submit may have written the
+                // live folder after this one copied it.
                 home.withLock(path.join(home.HOME, 'locks', `live-${name}.lock`), () => {
                     if ((home.versionsOf(name).pop() ?? -1) === n) {
                         home.mirror(path.join(home.VERSIONS, `${name}-v${n}`), live);
@@ -373,9 +329,8 @@ const api = {
 
     withdraw({ name, version, token } = {}) {
         // a competitor leaves every ladder that starts from now on (this round's too, if its ladder has not started:
-        // lineup() reads the roster when the ladder starts) and the runner from the next round, or one broken version
-        // stops being rated the same way; a ladder already running keeps its lineup. Versions, games and ratings stay,
-        // and rejoin undoes either
+        // lineup() reads the roster when the ladder starts), or one broken version stops being rated the same way; a
+        // ladder already running keeps its lineup. Versions, games and ratings stay, and rejoin undoes either
         owned(name, token, { benched: true });
         version = int(version);
         const at = new Date().toISOString();
@@ -384,7 +339,7 @@ const api = {
                 const a = r.agents.find((x) => x.name === name);
                 return a ? { ...r, agents: r.agents.filter((x) => x !== a), bench: [...(r.bench ?? []).filter((x) => x.name !== name), { ...a, benchedAt: at }] } : r;
             });
-            return { name, benched: true, note: `${name} plays no ladder that starts from now on (this round's too, if it has not started) and gets no work window from the next round, until rejoin` };
+            return { name, benched: true, note: `${name} plays no ladder that starts from now on (this round's too, if it has not started), until rejoin` };
         }
         need(Number.isInteger(version) && home.versionsOf(name).includes(version), 'not_found', `${name} has no version ${version} (see versions)`);
         // benched or not: the list applies whenever the competitor plays
@@ -407,7 +362,7 @@ const api = {
                 const { benchedAt, ...back } = a;
                 return { ...r, bench: r.bench.filter((x) => x !== a), agents: [...r.agents.filter((x) => x.name !== name), back] };
             });
-            return { name, benched: false, note: `${name} is rated in the next ladder to start (this round's, if it has not started) and gets a work window from the next round` };
+            return { name, benched: false, note: `${name} is rated in the next ladder to start (this round's, if it has not started)` };
         }
         need(Number.isInteger(version) && home.versionsOf(name).includes(version), 'not_found', `${name} has no version ${version} (see versions)`);
         // a benched competitor keeps its list too: it applies once it rejoins
@@ -418,7 +373,7 @@ const api = {
     },
 
     versions({ name } = {}) {
-        competitor(name, { benched: true }); // a benched competitor's versions stay, and stay eval opponents
+        competitor(name, { benched: true }); // a benched competitor's versions stay readable
         return home.versionsOf(name).map((n) => home.readJson(path.join(home.VERSIONS, `${name}-v${n}`, 'SUBMISSION.json'), { name: `${name}-v${n}` }));
     },
 
@@ -432,65 +387,6 @@ const api = {
         const k = Number(int(round ?? all[all.length - 1]));
         need(Number.isInteger(k) && all.includes(k), 'not_found', 'no round report yet');
         return { round: k, markdown: fs.readFileSync(path.join(dir, `r${k}.md`), 'utf8') };
-    },
-
-    say({ name, text, now, idea, plan, diagram, token } = {}) {
-        owned(name, token);
-        const p = Array.isArray(plan) ? plan.map((x) => (typeof x === 'string' ? { text: x, state: 'todo' } : x)) : undefined;
-        dash.updatePanel(name, { thought: text, now, idea, plan: p, diagram: diagram ? validateDiagram(diagram) : undefined });
-        return { ok: true };
-    },
-
-    send({ to, text, from, token } = {}) {
-        need(typeof text === 'string' && text.trim(), 'bad_request', 'text is required');
-        need(typeof to === 'string' && to, 'bad_request', 'to: a competitor name or "all"');
-        if (AUTH && !(process.env.ARENA_ADMIN_TOKEN && token === process.env.ARENA_ADMIN_TOKEN)) {
-            // a competitor's token sends as that competitor (from may be left out), to one competitor
-            from ??= home.roster().agents.find((a) => a.tokenHash && token && hash(token) === a.tokenHash)?.name;
-            need(from && from !== 'eric' && to !== 'all', 'unauthorized', 'messages need the admin token, or your own token (they are sent as you, to one competitor)');
-            owned(from, token);
-        }
-        return notify({ to, from: from ?? 'eric', text });
-    },
-
-    eval({ name, vs = ['rush', 'heuristic'], seeds = 2, version, token } = {}) {
-        owned(name, token);
-        const opps = typeof vs === 'string' ? vs.split(',').map((s) => s.trim()).filter(Boolean) : vs;
-        need(Array.isArray(opps) && opps.length >= 1 && opps.length <= 6, 'bad_request', 'vs: 1-6 opponent names');
-        for (const o of opps) {
-            need(opponentOk(o), 'bad_request', `vs: "${o}" is not a built-in bot (rush, heuristic, aggro, tempo, control, random), a baseline or an existing <agent>-v<N>`);
-        }
-        const k = int(seeds);
-        need(Number.isInteger(k) && k >= 1 && k <= 10, 'bad_request', 'seeds: an integer 1-10 (each played from both seats)');
-        let bot = name;
-        if (version !== undefined && version !== null) {
-            const v = int(version);
-            need(Number.isInteger(v) && v >= 0, 'bad_request', 'version: your version number N (an integer >= 0), to test <name>-v<N> instead of your live bot');
-            need(home.versionsOf(name).includes(v), 'not_found', `no version ${v} of "${name}" (see versions)`);
-            bot = `${name}-v${v}`;
-        }
-        // one eval at a time per competitor, so nobody can fill the queue the referee plays in order
-        const qdir = path.join(home.HOME, 'queue');
-        const mine = fs.existsSync(qdir) ? fs.readdirSync(qdir).filter((f) => f.endsWith('.json')).map((f) => home.readJson(path.join(qdir, f), null))
-            .filter((j) => j && (j.state === 'queued' || j.state === 'running') && (j.bot === name || j.bot.startsWith(`${name}-v`))) : [];
-        need(!mine.length, 'conflict', `eval ${mine[0]?.id} is still ${mine[0]?.state}: one eval at a time per competitor (poll eval_result)`);
-        const id = `${bot}-${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`.replace(/[^a-z0-9_-]/g, '');
-        home.writeJson(path.join(home.HOME, 'queue', `${id}.json`), { id, bot, vs: opps, seeds: k, state: 'queued', queuedAt: new Date().toISOString() });
-        return { id, state: 'queued', note: `the referee plays queued evals between ladders; poll eval_result${bot === name ? '. It plays your live folder as it is then, so keep it unchanged until the eval is done, or pass version to test a frozen copy' : ''}` };
-    },
-
-    eval_result({ id } = {}) {
-        const safe = String(id ?? '').replace(/[^a-z0-9_-]/g, '');
-        need(safe, 'bad_request', 'id: the id eval returned');
-        const j = home.readJson(path.join(home.HOME, 'queue', `${safe}.json`), null);
-        need(j, 'not_found', `no eval "${safe}"`);
-        // each lost game's replay also as the path the HTTP server serves it under (GET /<replayUrl>), for clients on
-        // another machine: `replay` is a path on the referee's disk
-        const url = (p) => /(arena-evals\/[\w-]+\/[\w.#@-]+\.jsonl)$/.exec(String(p ?? ''))?.[1];
-        if (Array.isArray(j.summary?.losses)) {
-            j.summary.losses = j.summary.losses.map((l) => (url(l.replay) ? { ...l, replayUrl: `replays/${url(l.replay)}` } : l));
-        }
-        return j;
     },
 
     panel({ name } = {}) {
@@ -516,130 +412,28 @@ const api = {
         const doc = home.readJson(path.join(home.RESULTS, id, 'ladder.json'), null);
         need(doc, 'not_found', `no ladder for round ${k}`);
         return { round: k, ladderId: id, ladder: doc };
-    },
-
-    archive({ id } = {}) {
-        const dir = path.join(home.HOME, 'archive');
-        if (id === undefined || id === null || id === '') {
-            const ids = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && ARCHIVE_ID.test(d.name)).map((d) => d.name).sort() : [];
-            return { tournaments: ids.map((x) => ({ id: x, note: home.readJson(path.join(dir, x, 'README.json'), null)?.note ?? null,
-                                                    rounds: home.readJson(path.join(dir, x, 'standings.json'), null)?.rounds?.length ?? 0 })) };
-        }
-        need(typeof id === 'string' && ARCHIVE_ID.test(id), 'bad_request', 'id: an archived tournament id (archive {} lists them)');
-        const base = path.join(dir, id);
-        need(fs.existsSync(base), 'not_found', `no archived tournament ${id}`);
-        // archives are copies of the dashboard files: panels/ or dash/ hold arena-<agent>.json and arena-leaderboard.json
-        const panels = [];
-        let leaderboard = null;
-        for (const sub of ['panels', 'dash']) {
-            const d = path.join(base, sub);
-            for (const f of fs.existsSync(d) ? fs.readdirSync(d).filter((x) => /^arena-[\w-]+\.json$/.test(x)).sort() : []) {
-                const p = home.readJson(path.join(d, f), null);
-                if (f === 'arena-leaderboard.json') {
-                    leaderboard ??= p;
-                } else if (p && !panels.some((q) => q.id === p.id)) {
-                    panels.push(p);
-                }
-            }
-        }
-        const experiment = home.readJson(path.join(base, 'dash', 'arena.json'), null) ?? home.readJson(path.join(base, 'experiment-arena.json'), null);
-        return { id, note: home.readJson(path.join(base, 'README.json'), null)?.note ?? null, standings: home.readJson(path.join(base, 'standings.json'), null),
-                 leaderboard, experiment, panels };
-    },
-
-    async wait({ timeoutSec = 45, round } = {}) {
-        // Long-poll for a work window. Without `round` it returns at once when a window is open now; with it, when the
-        // window of a round after `round` opens. Otherwise after timeoutSec (max 200, so MCP and HTTP clients do not time
-        // out first) with status 'waiting', or at once with 'done' when the tournament is over.
-        const secs = Math.min(200, Math.max(1, Number.isFinite(Number(timeoutSec)) ? Number(timeoutSec) : 45));
-        const r = int(round);
-        need(r === undefined || r === null || Number.isInteger(r), 'bad_request', 'round: an integer');
-        const start = clock();
-        const after = r ?? (start.phase === 'work' ? start.round - 1 : start.round ?? -1);
-        const until = Date.now() + secs * 1000;
-        for (;;) {
-            const c = clock();
-            if (c.phase === 'work' && c.round > after) {
-                return { status: 'started', started: true, ...api.status() };
-            }
-            if (c.phase === 'done') {
-                return { status: 'done', started: false, ...api.status() };
-            }
-            if (Date.now() >= until) {
-                return { status: 'waiting', started: false, ...api.status() };
-            }
-            await new Promise((res) => setTimeout(res, Math.min(2000, Math.max(10, until - Date.now()))));
-        }
-    },
-
-    inbox({ name, since, token } = {}) {
-        owned(name, token);
-        const all = home.readJsonl(INBOX(name));
-        return { messages: since ? all.filter((m) => typeof m?.t === 'string' && m.t > since) : all };
     }
 };
 
 /** A round number (default: the latest rated round) and its ladder id. Standings name the ladder once the round is
- *  published, tournament.json as soon as it opens (tournament rounds are <tournament id>-r<K>, referee.js ladderIdOf);
- *  anything else falls back to arena-r<K>. */
+ *  published (the old clocked tournaments' rounds are <tournament id>-r<K>); anything else is arena-r<K>
+ *  (referee.js ladderIdOf). */
 function roundLadder(round) {
     const st = api.standings();
     const k = int(round ?? st.rounds[st.rounds.length - 1]?.round);
     need(k !== undefined, 'not_found', 'no rounds yet');
     need(Number.isInteger(k) && k >= 0, 'bad_request', 'round: an integer');
-    const t = home.readJson(TOURNAMENT(), null);
-    const named = st.rounds.find((x) => x.round === k)?.ladderId ?? (Array.isArray(t?.rounds) ? t.rounds.find((r) => r?.n === k)?.ladder : undefined);
+    const named = st.rounds.find((x) => x.round === k)?.ladderId;
     return { k, id: typeof named === 'string' && /^arena-[\w-]+$/.test(named) ? named : `arena-r${k}` };
 }
 
 /** Calls a method by name with an args object; resolves {result} or {error: {code, message}}. */
-// what only the arena does to a competitor that runner.js runs: it runs it for the whole tournament
-const BENCH = ['withdraw', 'rejoin'];
-
-/**
- * A call made for one competitor (runner.js sets ARENA_COMPETITOR for the harnesses it starts and their MCP server):
- * that name is the default and the only one allowed, it registers and benches nobody, and it sends as itself, to one
- * competitor. Returns {args} to go on with, or {error}. call() applies it, so the CLI, scripts and mcp.js get the same
- * rules; mcp.js applies it too before it forwards to a remote arena. On a local arena, whose competitors share the arena
- * folder, this keeps honest agents on their own name; a hosted arena's tokens (ARENA_AUTH) are the boundary.
- */
-function asCompetitor(me, method, args) {
-    const no = (message) => ({ error: { code: 'unauthorized', message } });
-    if (method === 'register') {
-        return no('a competitor cannot register other competitors');
-    }
-    if (BENCH.includes(method)) {
-        return no('the arena runs you for the whole tournament; it alone benches competitors');
-    }
-    let a = args ?? {};
-    if (METHODS[method]?.required?.includes('name')) {
-        if (a.name !== undefined && a.name !== me) {
-            return no(`you are "${me}": this call acts for you only`);
-        }
-        a = { ...a, name: me };
-    }
-    if (method === 'send') {
-        if (a.to === 'all') {
-            return no('a competitor sends to one competitor at a time');
-        }
-        a = { ...a, from: me };
-    }
-    return { args: a };
-}
-
 async function call(method, args = {}) {
     if (!Object.prototype.hasOwnProperty.call(METHODS, method) || typeof api[method] !== 'function') {
         return { error: { code: 'not_found', message: `unknown method "${method}" (known: ${Object.keys(METHODS).join(', ')})` } };
     }
     if (args !== undefined && args !== null && (typeof args !== 'object' || Array.isArray(args))) {
         return { error: { code: 'bad_request', message: 'arguments must be a JSON object' } };
-    }
-    if (process.env.ARENA_COMPETITOR) {
-        const s = asCompetitor(process.env.ARENA_COMPETITOR, method, args);
-        if (s.error) {
-            return s;
-        }
-        args = s.args;
     }
     try {
         return { result: await api[method](args ?? {}) };
@@ -653,22 +447,15 @@ const METHODS = {
     status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
     submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
-    withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started, and get no work window from the next round. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },
-    rejoin: { token: true, desc: "Undo withdraw: rated again from the next ladder to start (this round's, if it has not started), with a work window from the next round; or with version, rate that version again.", props: { name: 'string', version: 'integer' }, required: ['name'] },
+    withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },
+    rejoin: { token: true, desc: "Undo withdraw: rated again from the next ladder to start (this round's, if it has not started); or with version, rate that version again.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
     standings: { readOnly: true, desc: 'Every rated round so far with per-bot results and the all-round Elo.', props: {} },
     report: { readOnly: true, desc: 'A round report in markdown: standings, results per opponent, lost games with replay paths. Default: latest round.', props: { round: 'integer' } },
-    say: { token: true, desc: 'Post your current thinking to your live dashboard panel. text = one thought, now = what you are doing, idea = current idea, plan = list of steps, diagram = a strategy diagram (schema swu-strategy/1: {title, caption, nodes:[{id,label,kind:input|memory|feature|decision|action,value,note}], edges:[{from,to,weight,label}], highlight:[ids], steps:[{caption,highlight}]}) that the arena animates to show the essence of your current strategy.', props: { name: 'string', text: 'string', now: 'string', idea: 'string', plan: 'array', diagram: 'object' }, required: ['name'] },
-    send: { token: true, desc: 'Leave a message in a competitor inbox (to = name or "all").', props: { to: 'string', text: 'string', from: 'string' }, required: ['to', 'text'] },
-    eval: { token: true, desc: 'Queue test games on the arena server: your live bot (or your submitted version N) vs each name in `vs` (1-6 of: built-in bots rush, heuristic, aggro, tempo, control, random; baselines; your own or another competitor\'s existing <agent>-v<N>), `seeds` seeds (1-10) from both seats. Returns an id for eval_result. A live-bot eval plays your folder as it is when the referee runs the queued eval, so keep it unchanged until eval_result says done, or pass `version` to test a frozen copy. Use this when you cannot run the engine yourself.', props: { name: 'string', vs: 'array', seeds: 'integer', version: 'integer' }, required: ['name'] },
-    eval_result: { readOnly: true, desc: 'State and results of a queued eval: queued, running, done (W-L per opponent, ms per decision, lost games with replay paths).', props: { id: 'string' }, required: ['id'] },
-    wait: { readOnly: true, desc: 'Wait for a work window. Call it in a loop: it returns at once if a work window is already open (unless round is given: then it waits for the window of a round after that one), else when one opens or after timeoutSec (default 45, max 200). Result: status started / waiting / done, started, and the status (round, phase, deadline).', props: { timeoutSec: 'integer', round: 'integer' } },
     panel: { readOnly: true, desc: "A competitor's live dashboard panel: now, idea, plan, thoughts, Elo and speed widgets.", props: { name: 'string' }, required: ['name'] },
     panels: { readOnly: true, desc: 'Every competitor panel, plus the leaderboard and the experiment (Elo over rounds) the research dashboard shows.', props: {} },
     games: { readOnly: true, desc: 'Games of a round (default latest) with outcome, winner and timing; replays at replayBase + id + .jsonl.', props: { round: 'integer' } },
-    ladder: { readOnly: true, desc: "A round's full ladder results (default latest), schema swu-ladder/1: config, bots with Elo and win rates, pairs, every game.", props: { round: 'integer' } },
-    archive: { readOnly: true, desc: 'Archived tournaments. Without id: the list. With id: its standings, leaderboard, experiment and competitor panels.', props: { id: 'string' } },
-    inbox: { token: true, readOnly: true, desc: 'Messages for you (from Eric, the referee or others), oldest first. Read it at the start of every round.', props: { name: 'string', since: 'string' }, required: ['name'] }
+    ladder: { readOnly: true, desc: "A round's full ladder results (default latest), schema swu-ladder/1: config, bots with Elo and win rates, pairs, every game.", props: { round: 'integer' } }
 };
 
 /** A person's builder name: their GitHub login as an arena name (lowercase, _ for -, a letter first). */
@@ -682,4 +469,4 @@ function ownsName(login, name) {
     return name === b || String(name).startsWith(`${b}_`);
 }
 
-module.exports = { api, call, startCheck, asCompetitor, builderName, ownsName, BENCH, clock, notify, METHODS, ArenaError, TOURNAMENT };
+module.exports = { api, call, startCheck, builderName, ownsName, clock, METHODS, ArenaError, TOURNAMENT };

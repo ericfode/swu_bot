@@ -34,8 +34,8 @@
  * whole number of passes (--games a multiple of 2P) or some deck pairs play more than others (a warning says so).
  * Each index entry then carries decks {p1, p2} (the deck names). With a mirror (--bots c-clock#a,c-clock#b) the bots
  * cancel out and the ratings that matter are the decks'.
- * --pool <file> deals the random decks from an arena card pool only (cardpool.js: a holdout tournament's training
- * or held-out cards); config.pool records its file name, kind and sha256. Not with --decks.
+ * --pool <file> deals the random decks from an arena card pool only (cardpool.js: the training or held-out cards of a
+ * holdout split); config.pool records its file name, kind and sha256. Not with --decks.
  */
 const fs = require('fs');
 const os = require('os');
