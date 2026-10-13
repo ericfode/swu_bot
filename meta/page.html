@@ -178,6 +178,9 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
 .gpick.on { border-color: var(--ink); color: var(--ink); font-weight: 600; }
 .gpick .gp { width: 100%; max-width: 72px; height: auto; }
 .gpick .gbest { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; max-width: 100%; }
+.gpick .gedge { font-weight: 600; color: var(--good, var(--ink-2)); white-space: nowrap; }
+.ladder-key { margin: 4px 0 0; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.ladder-key b { color: var(--ink-2); font-weight: 600; }
 .ghost { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--panel); cursor: pointer; font-size: 13px; }
 /* Face-off */
 .fo-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
@@ -243,6 +246,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
         <div class="small">Top half is the opponent, bottom half is you. Tower = base HP left, cards on the table = units with their power, fanned cards = hand, R tag = round.</div></div>
     </div>
     <div class="gpicks" id="guide-picks"></div>
+    <p class="ladder-key">best = the bot that wins most often from that spot · +pts = points of win chance above an average bot there</p>
   </section>
 
   <section class="section" id="hero">
@@ -252,6 +256,7 @@ details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
     </div>
     <div class="ladder-head"><span class="eyebrow">overall strength (rating), strongest first · <span class="clock">⏱</span> = games lost by timing out or a broken reply</span><span class="legend" id="fam-legend"></span></div>
     <div class="ladder" id="ladder"></div>
+    <p class="ladder-key" id="ladder-key"></p>
     <p class="verdict" id="verdict"></p>
     <div class="spots" id="spots"></div>
     <div class="moments panel" id="moments" hidden></div>
@@ -359,7 +364,7 @@ const GUIDE = { i: 0, t0: 0, auto: true, raf: 0 };
 const GUIDE_MS = K.TIMING;
 function renderGuideShell() {
   const ids = Object.keys(SPOTS);
-  $('guide-picks').innerHTML = META.situations.filter((s) => SPOTS[s.id]).map((s) => `<button class="gpick" type="button" data-s="${s.id}" title="${esc(s.label)}">${miniBoard(s.id, 'gp')}<span>${esc(s.label)}</span>${((b) => b ? `<b class="gbest">best: ${esc(b.id)}</b>` : '')(rankIn(s.id)[0])}</button>`).join('');
+  $('guide-picks').innerHTML = META.situations.filter((s) => SPOTS[s.id]).map((s) => `<button class="gpick" type="button" data-s="${s.id}" title="${esc(s.label)}">${miniBoard(s.id, 'gp')}<span>${esc(s.label)}</span>${((b) => b ? `<b class="gbest">best: ${esc(b.id)} <span class="gedge">${pp(b.situations[s.id].edge)} pts</span></b>` : '')(rankIn(s.id)[0])}</button>`).join('');
   for (const el of $('guide-picks').querySelectorAll('.gpick')) el.addEventListener('click', () => { GUIDE.i = ids.indexOf(el.dataset.s); GUIDE.t0 = performance.now(); GUIDE.auto = false; $('guide-play').textContent = 'Play all'; frame(performance.now()); });
   $('guide-play').onclick = () => { GUIDE.auto = !GUIDE.auto; $('guide-play').textContent = GUIDE.auto ? 'Pause' : 'Play all'; GUIDE.t0 = performance.now(); };
 }
@@ -448,6 +453,7 @@ function renderSpots(M) {
 function renderLadder() {
   const fams = [...new Set(mapped.map(famKey))];
   $('fam-legend').innerHTML = fams.map((f) => `<span class="key"><span class="dot" style="background:var(--f-${f})"></span>${FAMLABEL[f]}</span>`).join('');
+  $('ladder-key').innerHTML = K.STYLES.filter((x) => x.quadrant && mapped.some((b) => b.summary.style === x.id)).map((x) => `<span><b>${x.id}</b> ${esc(x.quadrant.split(' · ')[1] || x.text)}</span>`).join('') + (mapped.some((b) => b.forfeits) ? '<span><b>⏱n</b> games lost on the clock</span>' : '');
   $('ladder').innerHTML = mapped.map((b, i) => `<span class="rung${i < 3 ? ' top' : ''}" title="${b.wins}–${b.games - b.wins} in ${b.games} games"><b>${i + 1}</b><span class="dot" style="background:${famVar(b)}"></span>${esc(b.id)}<span class="r">${b.rating}</span>${b.summary.style && b.summary.style !== 'Balanced' && b.summary.style !== 'Random' ? `<span class="st">${esc(b.summary.style)}</span>` : ''}${b.forfeits ? `<span class="clock">⏱${b.forfeits}</span>` : ''}</span>`).join('');
 }
 
@@ -655,7 +661,7 @@ function renderFaceoff(M) {
   rows += `<div class="fo-row"><span></span><span class="fo-lab"></span><div style="display:grid;grid-template-columns:1fr auto 1fr;font-size:11px;color:var(--muted)"><span>← worse than an average bot</span><span>average</span><span style="text-align:right">better →</span></div><span></span></div>`;
   $('fo-grid').innerHTML = rows;
   $('fo-sum').innerHTML = `<span class="a">${esc(A.id)}</span> is better in ${aw} spot${aw === 1 ? '' : 's'}, <span class="b">${esc(B.id)}</span> in ${bw}`
-    + `<div class="small" style="font-family:var(--body);font-weight:400">${A.rating == null || B.rating == null ? `humans: ${HUM.games} real games${humNote()}, scored like an average bot facing an equal opponent` : `rating ${A.rating} vs ${B.rating}${h ? ` · head to head ${h.w}–${h.n - h.w}` : ' · they have not played each other'}`}</div>`
+    + `<div class="small" style="font-family:var(--body);font-weight:400">${A.rating == null || B.rating == null ? `humans: ${HUM.games} real games${humNote()}, scored like an average bot facing an equal opponent` : `rating ${A.rating} vs ${B.rating}${h ? ` · head to head ${h.w}–${h.n - h.w}` : ' · they have not played each other'}${' · each spot compares a bot with an average bot there, so a lower-rated bot can win more spots'}`}</div>`
     + `<div class="fo-key"><span><i style="border-color:var(--fa);background:var(--fa)"></i>${esc(A.id)}</span><span><i style="border-color:var(--fb);background:var(--fb)"></i>${esc(B.id)}</span><span><i style="border-color:var(--muted)"></i>hollow dot = fewer than 5 games in that spot</span></div>`;
   const st = [['baseShare', 'Attacks aimed at the base', pct], ['baseDmg', 'Base damage per round', (v) => v.toFixed(1)], ['kills', 'Enemy units removed per round', (v) => v.toFixed(2)], ['rounds', 'Rounds per game', (v) => v.toFixed(1)]];
   $('fo-style').innerHTML = st.map(([k, label, f]) => {
