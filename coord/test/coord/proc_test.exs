@@ -164,19 +164,79 @@ defmodule Coord.ProcTest do
       isolate_sh = Path.join(Coord.Config.app(), "bot/arena/ops/isolate.sh")
 
       assert Proc.command_line(:plan, ["node", "x.js"], as: :arena) ==
-               ["/usr/bin/choom", "-n", "300", "--", "bash", isolate_sh, "--user", "arena"] ++
-                 ["--tmp", Path.join(data, "tmp/plan"), "--hide", "/.fly", "--hide", Path.join(data, "secret")] ++
-                 ["--hide", Path.join(data, "coord"), "--", "node", "x.js"]
+               {:ok,
+                ["/usr/bin/choom", "-n", "300", "--", "bash", isolate_sh, "--user", "arena"] ++
+                  ["--tmp", Path.join(data, "tmp/plan"), "--hide", "/.fly", "--hide", Path.join(data, "secret")] ++
+                  ["--hide", Path.join(data, "coord"), "--", "node", "x.js"]}
 
       # root children are never wrapped (the referee's own argv already holds isolate.sh)
       assert Proc.command_line(:setup, ["node", "x.js"], as: :root) ==
-               ["/usr/bin/choom", "-n", "300", "--", "node", "x.js"]
+               {:ok, ["/usr/bin/choom", "-n", "300", "--", "node", "x.js"]}
     end
 
     test "without isolation or choom the argv runs as it is" do
       put_setting(:isolate, false)
       put_setting(:choom, false)
-      assert Proc.command_line(:plan, ["node", "x.js"], as: :arena) == ["node", "x.js"]
+      assert Proc.command_line(:plan, ["node", "x.js"], as: :arena) == {:ok, ["node", "x.js"]}
+    end
+
+    test "a helper's arena children run under setpriv as the bots' user when the BEAM is root, without namespaces" do
+      put_setting(:isolate, :user)
+      put_setting(:choom, "/usr/bin/choom")
+      put_setting(:arena_user, "nobody")
+      setpriv = ["--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--"]
+
+      assert Proc.setpriv_argv(996, 995) == ["setpriv", "--reuid=996", "--regid=995"] ++ setpriv
+
+      if Proc.root?() do
+        assert {:ok, {uid, gid}} = Proc.user_ids("nobody")
+        assert Proc.isolation() == :setpriv
+        refute Proc.isolate?()
+
+        assert Proc.command_line(:play, ["node", "x.js"], as: :arena) ==
+                 {:ok, ["/usr/bin/choom", "-n", "300", "--"] ++ Proc.setpriv_argv(uid, gid) ++ ["node", "x.js"]}
+      else
+        # not root: no wrapper, as games.js
+        assert Proc.isolation() == :none
+
+        assert Proc.command_line(:play, ["node", "x.js"], as: :arena) ==
+                 {:ok, ["/usr/bin/choom", "-n", "300", "--", "node", "x.js"]}
+      end
+
+      # root children are never wrapped
+      assert Proc.command_line(:x, ["node", "x.js"], as: :root) ==
+               {:ok, ["/usr/bin/choom", "-n", "300", "--", "node", "x.js"]}
+    end
+
+    test "under setpriv the child really runs as the bots' user, with no capabilities" do
+      if Proc.root?() do
+        put_setting(:isolate, :user)
+        put_setting(:choom, false)
+        put_setting(:arena_user, "nobody")
+        {:ok, {uid, _gid}} = Proc.user_ids("nobody")
+        env = %{"PATH" => "/usr/bin:/bin"}
+
+        assert {:exit, 0, out} =
+                 Proc.run(:t, ["/bin/sh", "-c", "id -u; grep CapEff /proc/self/status"], as: :arena, env: env)
+
+        assert [^uid, "CapEff:\t0000000000000000"] =
+                 out |> String.split("\n", trim: true) |> then(fn [u, c] -> [String.to_integer(u), c] end)
+
+        assert {:exit, 0, "0\n"} = Proc.run(:t, ["/usr/bin/id", "-u"], as: :root, env: env)
+      end
+    end
+
+    test "a user that does not exist is refused: nothing runs as root in its place" do
+      put_setting(:isolate, :user)
+      put_setting(:arena_user, "no-such-user-here")
+
+      if Proc.root?() do
+        assert Proc.command_line(:play, ["node"], as: :arena) == {:error, {:no_user, "no-such-user-here"}}
+        assert {:stopped, {:spawn_failed, {:no_user, _}}} = Proc.run(:t, ["/bin/true"], as: :arena)
+      end
+
+      # a name that could pass for an option is never looked up
+      assert Proc.user_ids("-x") == {:error, {:no_user, "-x"}}
     end
   end
 

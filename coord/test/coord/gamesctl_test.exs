@@ -57,7 +57,7 @@ defmodule Coord.GamesctlTest do
       env =
         Map.new(
           ~w(PATH HOME LANG TZ ARENA_HOME ARENA_RESULTS ARENA_PUBLIC_RESULTS ARENA_DASH SWU_WASM_CACHE
-                       SWU_CARD_JSON ARENA_SECRET_FILE ARENA_BOT_USER),
+                       SWU_CARD_JSON ARENA_SECRET_FILE ARENA_BOT_USER ARENA_REMOTE),
           &{&1, "x"}
         )
 
@@ -166,6 +166,29 @@ defmodule Coord.GamesctlTest do
       assert "start referee-cmd --arena open --round 9 --games 3 --workers 1" in fake_events()
       assert %Coord.Round.Spec{arena: "open", round: 9, cap_ms: 21_600_000} = spec
       assert ["--round", "9"] in Enum.chunk_every(spec.cmd, 2, 1)
+    end
+
+    test "referee-cmd puts ARENA_REMOTE, the relay's URL, in the referee's environment only when the helper node is on" do
+      assert {:ok, spec} = Gamesctl.referee_cmd("open", 9)
+      refute Map.has_key?(spec.env, "ARENA_REMOTE")
+
+      start_helper_node()
+      put_setting(:relay_port, 8082)
+      assert {:ok, spec} = Gamesctl.referee_cmd("open", 9)
+      assert spec.env["ARENA_REMOTE"] == "http://127.0.0.1:8082/r/" <> Coord.Secrets.nonce(:remote)
+      refute Coord.ChildEnv.forbidden?("ARENA_REMOTE")
+      assert :ok = Gamesctl.check_referee_cmd(%{"cmd" => spec.cmd, "env" => spec.env}, 9, false)
+    end
+
+    test "an ARENA_REMOTE from referee-cmd itself is dropped, on or off" do
+      cmd = ~s(["/bin/true","--round","4"])
+      fake("referee-cmd", :json, ~s({"cmd":#{cmd},"env":{"PATH":"/usr/bin","ARENA_REMOTE":"http://elsewhere"}}))
+      assert {:ok, spec} = Gamesctl.referee_cmd("open", 4)
+      refute Map.has_key?(spec.env, "ARENA_REMOTE")
+
+      start_helper_node()
+      assert {:ok, spec} = Gamesctl.referee_cmd("open", 4)
+      assert spec.env["ARENA_REMOTE"] == Coord.Remote.relay_url()
     end
 
     test "warm names what it warmed and what failed" do

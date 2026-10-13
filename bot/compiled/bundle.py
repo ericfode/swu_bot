@@ -1,20 +1,32 @@
 """
 Bot bundles (schema swu-arena-bot/1, research/bot-packaging/design.md section 3): read and check a manifest, and
-pack a bundle folder as a canonical tar whose sha256 is the bundle id (the bot's version).
+pack a bundle folder as a canonical tar whose sha256 is the bundle id (the bot's version), and unpack one.
 
     python3 bot/compiled/bundle.py build/compiled/rust-search      # prints the id and sizes
+    python3 bot/compiled/bundle.py tar <folder> > x.tar            # the canonical tar, on stdout
+    python3 bot/compiled/bundle.py unpack <tar> <dest> <hex>       # checks it, then makes <dest> from it
+
+The games machine sends a version's bundle to a helper as its canonical tar (bot/arena/play-seed.js). unpack trusts
+nothing in the tar: it refuses one whose sha256 is not <hex>, anything but plain files and folders, names that leave
+<dest>, and more than MAX_UNPACK_BYTES or MAX_UNPACK_ENTRIES; it never follows a link, and the folder it made must pack
+to the same canonical tar again. Exit 0 ok, 2 refused (the reason on stderr).
 """
 import gzip
 import hashlib
 import io
 import json
 import os
+import shutil
+import stat
 import sys
 import tarfile
 
 SCHEMA = "swu-arena-bot/1"
 KINDS = {"wasm": "wasm32-wasip1"}  # "native" (linux/amd64) is not built here yet
 FORBIDDEN_ENV = ("LD_", "PYTHONHASHSEED", "SWU_ARENA_", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY")
+MAX_UNPACK_BYTES = 64 << 20  # the tar, and the files in it together
+MAX_UNPACK_ENTRIES = 2000
+USTAR_MAGIC = b"ustar\x0000"  # POSIX ustar (GNU tars say "ustar  \0")
 
 
 class BundleError(Exception):
@@ -128,12 +140,144 @@ def safe_rel(p):
     return p
 
 
-if __name__ == "__main__":
-    for folder in sys.argv[1:]:
+def tar_names(data):
+    """The members of a canonical tar, checked before anything is written: [(TarInfo, rel)] in tar order."""
+    try:
+        tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:")
+        members = tar.getmembers()
+    except (tarfile.TarError, EOFError, ValueError) as e:
+        raise BundleError("not a tar (%s)" % e)
+    if tar.pax_headers:
+        raise BundleError("pax headers are not allowed")
+    if len(members) > MAX_UNPACK_ENTRIES:
+        raise BundleError("%d entries, more than %d" % (len(members), MAX_UNPACK_ENTRIES))
+    out = []
+    seen = set()
+    folders = {""}
+    total = 0
+    for info in members:
+        name = info.name
+        # every header in POSIX ustar form: no GNU long names, no pax records
+        if data[info.offset + 257:info.offset + 265] != USTAR_MAGIC or info.pax_headers:
+            raise BundleError("%r: only ustar entries are allowed" % name)
+        if info.type not in (tarfile.REGTYPE, tarfile.DIRTYPE):
+            raise BundleError("%r: only regular files and folders are allowed" % name)
+        if len(name.encode()) > 255 or "\0" in name:
+            raise BundleError("%r: bad name" % name)
+        parts = name.split("/")
+        if any(p in ("", ".", "..") for p in parts):
+            raise BundleError("%r: empty, '.' or '..' path segment" % name)
+        rel = safe_rel(name)
+        if rel in seen:
+            raise BundleError("%r: appears twice" % name)
+        seen.add(rel)
+        # a canonical tar lists every folder before what is in it, so nothing is made implicitly
+        if "/".join(parts[:-1]) not in folders:
+            raise BundleError("%r: its folder is not in the tar before it" % name)
+        if info.isdir():
+            if info.mode != 0o755:
+                raise BundleError("%r: folder mode %o, not 755" % (name, info.mode))
+            folders.add(rel)
+        else:
+            if info.mode not in (0o644, 0o755):
+                raise BundleError("%r: file mode %o, not 644 or 755" % (name, info.mode))
+            total += info.size
+            if total > MAX_UNPACK_BYTES:
+                raise BundleError("more than %d bytes of files" % MAX_UNPACK_BYTES)
+        out.append((info, rel))
+    return tar, out
+
+
+def unpack(tar_path, dest, hexid):
+    """Makes dest (which must not exist) from the canonical tar at tar_path whose sha256 must be hexid."""
+    # the files plus their headers and padding (at most 1 KB an entry, and the end blocks)
+    if os.path.getsize(tar_path) > MAX_UNPACK_BYTES + (4 << 20):
+        raise BundleError("%s: too large" % tar_path)
+    with open(tar_path, "rb") as f:
+        data = f.read()
+    if sha256_bytes(data) != hexid:
+        raise BundleError("%s: sha256 is not %s" % (tar_path, hexid))
+    tar, members = tar_names(data)
+    if os.path.lexists(dest):
+        raise BundleError("%s already exists" % dest)
+    os.mkdir(dest, 0o755)
+    try:
+        os.chmod(dest, 0o755)
+        root = os.open(dest, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            m = load(folder)
-            bid, size, gz = bundle_id(folder)
-            print("%-16s %s  tar %d B, gzip %d B" % (m.get("name", folder), bid, size, gz))
-        except BundleError as e:
-            print("error: %s" % e, file=sys.stderr)
-            sys.exit(2)
+            for info, rel in members:
+                write_member(root, tar, info, rel)
+        finally:
+            os.close(root)
+        # the folder must say exactly what the tar said
+        if sha256_bytes(canonical_tar(dest)) != hexid:
+            raise BundleError("%s does not pack back to %s" % (dest, hexid))
+    except BaseException:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+
+
+def write_member(root, tar, info, rel):
+    """One file or folder under the folder open as root; no link is followed on the way (O_NOFOLLOW, dir_fd)."""
+    parts = rel.split("/")
+    fd = root
+    try:
+        for p in parts[:-1]:
+            nxt = os.open(p, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            if fd != root:
+                os.close(fd)
+            fd = nxt
+        if info.isdir():
+            os.mkdir(parts[-1], 0o755, dir_fd=fd)
+            os.chmod(parts[-1], 0o755, dir_fd=fd, follow_symlinks=False)
+            return
+        out = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, info.mode, dir_fd=fd)
+        try:
+            src = tar.extractfile(info)
+            left = info.size
+            while left > 0:
+                chunk = src.read(min(left, 1 << 20))
+                if not chunk:
+                    raise BundleError("%r: the tar ends inside it" % rel)
+                left -= len(chunk)
+                while chunk:
+                    chunk = chunk[os.write(out, chunk):]
+            os.fchmod(out, info.mode)
+            if not stat.S_ISREG(os.fstat(out).st_mode):
+                raise BundleError("%r: not a regular file" % rel)
+        finally:
+            os.close(out)
+    finally:
+        if fd != root:
+            os.close(fd)
+
+
+def main(argv):
+    if argv[:1] == ["tar"]:
+        if len(argv) != 2:
+            print("usage: bundle.py tar <folder>", file=sys.stderr)
+            return 2
+        if os.path.islink(argv[1]) or not os.path.isdir(argv[1]):
+            raise BundleError("%s is not a folder" % argv[1])
+        sys.stdout.buffer.write(canonical_tar(argv[1]))
+        sys.stdout.buffer.flush()
+        return 0
+    if argv[:1] == ["unpack"]:
+        if len(argv) != 4:
+            print("usage: bundle.py unpack <tar> <dest> <hex>", file=sys.stderr)
+            return 2
+        unpack(argv[1], argv[2], argv[3])
+        return 0
+    for folder in argv:
+        m = load(folder)
+        bid, size, gz = bundle_id(folder)
+        print("%-16s %s  tar %d B, gzip %d B" % (m.get("name", folder), bid, size, gz))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except (BundleError, OSError) as e:
+        print("error: %s" % e, file=sys.stderr)
+        sys.exit(2)

@@ -27,6 +27,9 @@ kill_timeout = "30s"
   GAMES_COORDINATOR = "node"
   # the coordinator refuses to start when /data is not the volume (its jobs and state would not survive a restart)
   GAMES_REQUIRE_MOUNT = "1"
+  # Helpers (bot/arena/HELPER.md) stay off until GAMES_HELPER_PORT = "8090" is set here, with the GAMES_HELPER_TOKENS
+  # secret and the Elixir coordinator. The port is reached through `fly proxy` over the private network only; it needs
+  # no [[services]] entry.
 
 [[mounts]]
   source = "games_data"

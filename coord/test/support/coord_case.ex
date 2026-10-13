@@ -68,6 +68,58 @@ defmodule Coord.Case do
     end)
   end
 
+  @helper_tokens %{
+    "eric" => "eric-helper-token-0123456789abcdef0123",
+    "bob" => "bob-helper-token-4567456789abcdef01234"
+  }
+
+  @doc "The token of a test helper (eric or bob)."
+  def helper_token(name), do: Map.fetch!(@helper_tokens, name)
+
+  def sha256_hex(data), do: :sha256 |> :crypto.hash(data) |> Base.encode16(case: :lower)
+
+  @doc """
+  The helper node on, as the games machine has it for the rest of the test: GAMES_HELPER_TOKENS naming eric and
+  bob, a helper port, build build-1 with cards cards-1, and Coord.Remote running.
+  """
+  def start_helper_node do
+    tokens = Enum.map_join(@helper_tokens, ",", fn {name, token} -> "#{name}:#{sha256_hex(token)}" end)
+    System.put_env("GAMES_HELPER_TOKENS", tokens)
+    Coord.Secrets.forget()
+    Coord.Secrets.take!()
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Coord.Secrets.forget()
+      Coord.Secrets.take!()
+    end)
+
+    put_setting(:helper_port, 0)
+    put_setting(:build, "build-1")
+    put_setting(:cards, "cards-1")
+    ExUnit.Callbacks.start_supervised!(Coord.Remote)
+  end
+
+  @doc "A job as the ladder offers it (bot/remote-lane.js): one seed, its two seat-swapped games."
+  def remote_job(seed \\ 1234, extra \\ %{}) do
+    Map.merge(
+      %{
+        "v" => 1,
+        "seed" => seed,
+        "key" => "k-#{seed}",
+        "maxSteps" => 6000,
+        "capMs" => 60_000,
+        "hangMs" => 150_000,
+        "gameMs" => 840_000,
+        "games" => [
+          %{"id" => "a", "p1" => "a-v2", "p2" => "heuristic"},
+          %{"id" => "b", "p1" => "heuristic", "p2" => "a-v2"}
+        ],
+        "bots" => %{"a-v2" => %{"kind" => "wasm"}, "heuristic" => %{"kind" => "resident"}}
+      },
+      extra
+    )
+  end
+
   @doc "Changes one Coord.Config setting for the rest of the test."
   def put_setting(key, value) do
     old = Application.fetch_env!(:coord, Coord.Config)

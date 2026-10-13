@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Runs game jobs ({id, seed, p1, p2, replayFile?}) on ladder-worker.js threads, with a watchdog, for ladder.js.
+ * Runs game jobs ({id, seed, p1, p2, replayFile?, key?}) on ladder-worker.js threads, with a watchdog, for ladder.js.
  *
  *   runPool(queue, { workers, workerData, hangMs, gameMs, onStart(job), onResult({ job, result }) }) -> Promise
  *
@@ -22,6 +22,8 @@
  * games, or of work left from an earlier game, has not finished a game of the bots it was playing, so its job goes
  * back to the front of the queue (twice at most) instead of getting a result. Only a worker that dies before it has
  * loaded the engine fails the whole run. Results carry each game's key (rng.js gameKey) when workerData.key is set.
+ * A job may carry its own `key` instead (the game key itself, or null for none): a helper that plays one seed for the
+ * games machine gets that seed's game key, never the run key (arena/play-seed.js).
  */
 const fs = require('fs');
 const path = require('path');
@@ -187,7 +189,7 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             }
             s.w.postMessage(job);
         };
-        const keyOf = (job) => (workerData.key ? gameKey(workerData.key, job.seed) : null);
+        const keyOf = (job) => (job.key !== undefined ? job.key : workerData.key ? gameKey(workerData.key, job.seed) : null);
         // puts the worker's job back at the front of the queue (twice at most per job): it was not the bots' doing
         const retry = (s, why) => {
             if (!s.job || (requeued.get(s.job) ?? 0) >= MAX_REQUEUE) {
@@ -328,4 +330,4 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
     });
 }
 
-module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT };
+module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT, DEFAULT_GAME_MS };

@@ -22,6 +22,14 @@ on:
       - 'bot/test/games.test.js'
       - 'bot/test/gamesctl.test.js'
       - 'bot/test/arena-hardening.test.js'
+      - 'bot/test/remote-lane.test.js'
+      - 'bot/test/play-seed.test.js'
+      - 'bot/test/bundle.test.js'
+      - 'bot/remote-lane.js'
+      - 'bot/ladder.js'
+      - 'bot/ladder-worker.js'
+      - 'bot/game-pool.js'
+      - 'bot/compiled/bundle.py'
       - 'coord/**'
       - 'Dockerfile.games'
       - 'fly.games.toml'
@@ -40,7 +48,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test bot/test/games.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js
+      # play-seed's games need the engine, which this job does not build: those tests skip, the job checks stay
+      - run: node --test bot/test/games.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js
 
   # the Elixir coordinator (coord/): the versions Dockerfile.games builds with; the :node tests call the real gamesctl.js
   test-coord:
@@ -94,5 +103,6 @@ jobs:
           git -C forceteki log -1 --format='forceteki %h %s'
       - if: env.FLY_API_TOKEN != ''
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      # the image is tagged with the commit, so a helper pulls exactly what the machine runs (bot/arena/HELPER.md)
       - if: env.FLY_API_TOKEN != ''
-        run: flyctl deploy --remote-only -c fly.games.toml
+        run: flyctl deploy --remote-only -c fly.games.toml --build-arg GIT_SHA=${{ github.sha }} --image-label ${{ github.sha }}
