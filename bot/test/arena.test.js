@@ -287,30 +287,6 @@ test('withdraw benches a competitor or stops rating one version; rejoin undoes e
     assert.ok(lineup().includes(sub.version));
 });
 
-test('a call made for one competitor (ARENA_COMPETITOR) acts for it only, whatever the front end', async () => {
-    setRoster([]);
-    const { api, call } = require('../arena/api');
-    api.register({ name: 'me1', start: 'rush' });
-    api.register({ name: 'you1', start: 'rush' });
-    process.env.ARENA_COMPETITOR = 'me1';
-    try {
-        const refused = async (m, a, re) => {
-            const r = await call(m, a);
-            assert.strictEqual(r.error?.code, 'unauthorized', `${m} ${JSON.stringify(a)}`);
-            assert.match(r.error.message, re);
-        };
-        await refused('withdraw', { name: 'you1' }, /it alone benches/);
-        await refused('rejoin', { name: 'me1' }, /it alone benches/);
-        await refused('register', { name: 'new1', start: 'rush' }, /cannot register/);
-        await refused('say', { name: 'you1', text: 'hi' }, /you are "me1"/);
-        assert.ok((await call('say', { text: 'my name is filled in' })).result.ok);
-        assert.ok((await call('status')).result);
-    } finally {
-        delete process.env.ARENA_COMPETITOR;
-    }
-    assert.strictEqual(readJson(path.join(HOME, 'roster.json'), {}).agents.length, 2, 'nobody was benched');
-});
-
 test('an in-process protocol client passes the load check and plays as one', () => {
     setRoster([]);
     const { api } = require('../arena/api');
@@ -406,8 +382,8 @@ test('a registration whose first submit fails is undone, so the name can be regi
 test('panel is composed from the arena\'s own halves, with or without the dashboard folder', () => {
     setRoster([]);
     const { api } = require('../arena/api');
-    const { token } = api.register({ name: 'pan', start: 'rush' });
-    api.say({ name: 'pan', now: 'Tuning', token });
+    api.register({ name: 'pan', start: 'rush' });
+    dash.updatePanel('pan', { now: 'Tuning' });
     const dashPanel = path.join(process.env.ARENA_DASH, 'panels', 'arena-pan.json');
     fs.rmSync(dashPanel, { force: true });
     assert.strictEqual(api.panel({ name: 'pan' }).now, 'Tuning');
@@ -521,35 +497,6 @@ test('register on a hosted arena: only the admin token keeps a harness\'s comman
     const pub = agents.find((a) => a.name === 'pub').harness;
     assert.deepStrictEqual(pub, { kind: 'command', model: 'x', selfRun: true }, 'the command is dropped');
     assert.deepStrictEqual(agents.find((a) => a.name === 'adm').harness, { kind: 'script', cmd: 'node x.js' }, 'the admin\'s harness is kept as given');
-});
-
-test('server: / is the app when its build exists, /arena is always the arena UI', async () => {
-    const http = require('http');
-    const { handler } = require('../arena/server');
-    const app = path.join(HOME, 'public.html');
-    fs.writeFileSync(app, '<!doctype html><title>SWU Arena app</title>');
-    const before = process.env.ARENA_APP;
-    const srv = http.createServer(handler).listen(0, '127.0.0.1');
-    await new Promise((r) => srv.once('listening', r));
-    const base = `http://127.0.0.1:${srv.address().port}`;
-    const ui = fs.readFileSync(path.join(__dirname, '..', 'arena', 'web', 'index.html'), 'utf8');
-    try {
-        process.env.ARENA_APP = app;
-        assert.match(await (await fetch(`${base}/`)).text(), /SWU Arena app/);
-        assert.strictEqual(await (await fetch(`${base}/arena`)).text(), ui);
-        assert.ok((await (await fetch(`${base}/api/status`)).json()).result, '/api is unchanged');
-        process.env.ARENA_APP = '';
-        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui, 'no app build: / stays the arena UI');
-        process.env.ARENA_APP = path.join(HOME, 'missing.html');
-        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui);
-    } finally {
-        srv.close();
-        if (before === undefined) {
-            delete process.env.ARENA_APP;
-        } else {
-            process.env.ARENA_APP = before;
-        }
-    }
 });
 
 test('server: gzip only when Accept-Encoding allows it', () => {

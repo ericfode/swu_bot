@@ -8,7 +8,7 @@ const http = require('http');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'window-test-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
-// a scratch arena for anything that loads home.js (server.js, which window.js uses, loads api.js): never the project's
+// a scratch arena for anything that loads home.js (window.js loads api.js): never the project's
 Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RESULTS: path.join(tmp, 'arena-results'), ARENA_DASH: path.join(tmp, 'no-dash') });
 
 const { createWindow, wakeGamesAt, Store, storeReader, scrub } = require('../arena/window');
@@ -645,7 +645,6 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
     w.store.putDoc('arena', 'status', JSON.stringify({ tournament: null, round: 3, phase: 'work', competitors: [] }));
     const project = await mcpSession(['--remote', base, '--token', 'push-secret']);
     const friendless = await mcpSession(['--remote', base]);
-    const competitor = await mcpSession(['--remote', base, '--token', 'push-secret'], { ARENA_COMPETITOR: 'aa' });
     try {
         await project.ask('initialize');
         const names = (await project.ask('tools/list')).result.tools.map((t) => t.name);
@@ -662,77 +661,57 @@ test('mcp: pointed at the window, it reads with GET and uploads a run and docume
         assert.strictEqual((await project.tool('window_put_doc', { collection: 'panels', id: 'y', path: '/etc/hostname' })).error, true, 'only .json files');
         assert.strictEqual((await project.tool('window_put_doc', { collection: 'admin', id: 'invites', doc: { logins: ['z'] } })).error, true, 'the invite list needs the admin token');
 
-        // no token: still the window's tools (it answers /healthz), and every call is refused by the window itself
+        // no token: the usual reads and the window's own tools, and the window itself refuses every call
         const plain = (await friendless.ask('tools/list')).result.tools.map((t) => t.name);
         assert.ok(plain.includes('window_put_run') && plain.includes('arena_status') && !plain.includes('arena_register'));
         assert.strictEqual((await friendless.tool('arena_status')).error, true);
-        // a competitor's server reads, and never changes the window
-        const mine = (await competitor.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(mine.includes('arena_status') && !mine.some((x) => x.startsWith('window_')));
-        assert.strictEqual((await competitor.tool('window_put_doc', { collection: 'panels', id: 'p', doc: {} })).error, true);
     } finally {
         project.close();
         friendless.close();
-        competitor.close();
         await close();
     }
 });
 
-test('mcp: a competitor the runner starts can neither see nor call withdraw and rejoin', async () => {
-    const competitor = await mcpSession([], { ARENA_COMPETITOR: 'aa' });
-    const owner = await mcpSession([]);
-    try {
-        await competitor.ask('initialize');
-        const names = (await competitor.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(names.includes('arena_submit') && !names.includes('arena_withdraw') && !names.includes('arena_rejoin'));
-        const r = await competitor.tool('arena_withdraw', {});
-        assert.strictEqual(r.error, true);
-        assert.match(JSON.stringify(r.value), /it alone benches/);
-        await owner.ask('initialize');
-        const all = (await owner.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(all.includes('arena_withdraw') && all.includes('arena_rejoin'));
-    } finally {
-        competitor.close();
-        owner.close();
-    }
-});
-
-test('mcp: a token never goes into a URL, and a remote that never answers does not hold up tools/list', async () => {
+test('mcp: a token argument never goes into a URL, nothing but reads goes to the window, and a remote that never answers does not hold up tools/list', async () => {
     const http = require('http');
     const seen = [];
-    const arena = http.createServer((req, res) => {
+    // a stand-in for the window: it lists its arena reads at /api and answers every read
+    const win = http.createServer((req, res) => {
         let body = '';
         req.on('data', (d) => (body += d));
         req.on('end', () => {
             seen.push({ method: req.method, url: req.url, body });
             res.setHeader('content-type', 'application/json');
-            res.end(JSON.stringify({ result: req.url === '/api' ? { methods: [] } : { ok: true } }));
+            res.end(JSON.stringify({ result: req.url === '/api' ? { arena: ['status', 'versions'], collections: ['arena'] } : { ok: true } }));
         });
     });
     const silent = http.createServer(() => undefined); // accepts, never answers
-    await Promise.all([arena, silent].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
+    await Promise.all([win, silent].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
     const url = (s) => `http://127.0.0.1:${s.address().port}`;
-    const remote = await mcpSession(['--remote', url(arena)], { ARENA_COMPETITOR: 'aa' });
+    const remote = await mcpSession(['--remote', url(win)]);
     const stuck = await mcpSession(['--remote', url(silent)], { ARENA_PROBE_MS: '1000' });
     try {
         await remote.ask('initialize');
+        const names = (await remote.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.deepStrictEqual(names.filter((x) => x.startsWith('arena_')), ['arena_status', 'arena_versions'], 'the reads the window lists');
         await remote.tool('arena_status');
-        await remote.tool('arena_versions', { token: 'secret-token' });
+        await remote.tool('arena_versions', { name: 'aa', token: 'secret-token' });
         const status = seen.find((r) => r.url.startsWith('/api/status'));
         const versions = seen.find((r) => r.url.startsWith('/api/versions'));
-        assert.deepStrictEqual([status.method, status.url], ['GET', '/api/status'], 'a read without a token is a GET, and status takes none');
-        assert.strictEqual(versions.method, 'POST', 'a read that carries a token is a POST');
-        assert.ok(!versions.url.includes('secret-token') && JSON.parse(versions.body).token === 'secret-token');
-        assert.strictEqual(JSON.parse(versions.body).name, 'aa', 'scoped to the competitor');
+        assert.deepStrictEqual([status.method, status.url], ['GET', '/api/status'], 'a read is a GET, and status takes no arguments');
+        assert.deepStrictEqual([versions.method, versions.url], ['GET', '/api/versions?name=aa'], 'the token argument is left out');
+        const submit = await remote.tool('arena_submit', { name: 'aa', note: 'n' });
+        assert.deepStrictEqual([submit.error, submit.value.code], [true, 'unsupported']);
+        assert.ok(seen.every((r) => r.method === 'GET' && !r.url.includes('secret-token')), 'only GETs, and no token in a URL');
         await stuck.ask('initialize');
         const t0 = Date.now();
-        const names = (await stuck.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.ok(names.includes('arena_submit'), 'falls back to the arena tools');
-        assert.ok(Date.now() - t0 < 1800, `one probe deadline for both requests (took ${Date.now() - t0} ms)`);
+        const fallback = (await stuck.ask('tools/list')).result.tools.map((t) => t.name);
+        assert.ok(fallback.includes('arena_status') && fallback.includes('window_put_run') && !fallback.includes('arena_submit'), "falls back to the window's usual reads and its tools");
+        assert.ok(Date.now() - t0 < 1800, `one probe deadline (took ${Date.now() - t0} ms)`);
     } finally {
         remote.close();
         stuck.close();
-        arena.close();
+        win.close();
         silent.closeAllConnections?.();
         silent.close();
     }

@@ -1,12 +1,9 @@
 'use strict';
 /**
- * Arena API: the arena's competitors, versions and results. One implementation, exposed two ways with the same method
- * names and JSON shapes:
- *   server.js  HTTP:  POST /api/<method> with a JSON body  (scripts)
- *   mcp.js     MCP:   tool arena_<method>                  (MCP clients)
- * The games machine calls it in-process: the intake registers and submits builders' bots (intake.js), and the
- * window's uplink reads status, versions and panels (push.js arenaPusher). The window (window.js) uses METHODS for
- * the descriptions of its /mcp read tools.
+ * Arena API: the arena's competitors, versions and results. The games machine calls it in-process: the intake
+ * registers and submits builders' bots (intake.js), and the window's uplink reads status, versions and panels (push.js
+ * arenaPusher). The window (window.js) answers the read methods with the same shapes and uses METHODS for the
+ * descriptions of its /mcp read tools. mcp.js serves every method as an MCP tool, arena_<method>, on a local arena.
  * Storage is ARENA_HOME (see home.js).
  * How a bot plays a game (observations, actions, timing) is not defined here: a submitted bot is a JS folder whose
  * createBot returns a native bot or a protocol client (spec/bot-interface.md), or a bot program (spec/protocol.md).
@@ -25,11 +22,11 @@
  *   versions {name}                             submitted versions with notes
  *   standings {}                                every rated round so far, all-round Elo
  *   report {round?}                             a round's markdown report (default: latest)
- *   say {name, text?, now?, idea?, plan?, diagram?}  post thoughts (and a strategy diagram, strategy.js) to the live panel
  *   panel {name} / panels {}                    one competitor's live panel / all of them + leaderboard + experiment
  *   games {round?} / ladder {round?}            a round's game list (replays at /replays/...) / its full ladder results
  * Readers (the app, the dashboard, ratings) use these calls instead of reading the arena's files.
- * A remote client submits its code with submit {bot: {kind:'js', files: {"bot.js": "...", ...}}}.
+ * Code may also come as files: submit {bot: {kind:'js', files: {"bot.js": "...", ...}}}. The intake sends each builder's
+ * bundle that way, as {kind:'wasm', files}.
  */
 const fs = require('fs');
 const path = require('path');
@@ -38,10 +35,9 @@ const { spawnSync } = require('child_process');
 const home = require('./home');
 const dash = require('./dash');
 const { botSource, STARTS } = require('./starters');
-const { validateDiagram } = require('./strategy');
 
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
-// Hosted arenas set ARENA_AUTH=1: then changing a competitor (submit, say, withdraw, rejoin) needs the token register
+// Hosted arenas set ARENA_AUTH=1: then changing a competitor (submit, withdraw, rejoin) needs the token register
 // returned, or ARENA_ADMIN_TOKEN. In the project's shared folder it is off.
 const AUTH = process.env.ARENA_AUTH === '1';
 const hash = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
@@ -227,7 +223,7 @@ const api = {
             throw e;
         }
         dash.updatePanel(name, { now: 'Registered', status: 'running' });
-        return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, say, withdraw and rejoin on a hosted arena.' };
+        return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, withdraw and rejoin on a hosted arena.' };
     },
 
     submit({ name, note, bot = { kind: 'js' }, token, ref } = {}) {
@@ -393,13 +389,6 @@ const api = {
         return { round: k, markdown: fs.readFileSync(path.join(dir, `r${k}.md`), 'utf8') };
     },
 
-    say({ name, text, now, idea, plan, diagram, token } = {}) {
-        owned(name, token);
-        const p = Array.isArray(plan) ? plan.map((x) => (typeof x === 'string' ? { text: x, state: 'todo' } : x)) : undefined;
-        dash.updatePanel(name, { thought: text, now, idea, plan: p, diagram: diagram ? validateDiagram(diagram) : undefined });
-        return { ok: true };
-    },
-
     panel({ name } = {}) {
         competitor(name, { benched: true });
         // composed from the halves kept in ARENA_HOME, so it works without the research dashboard folder
@@ -439,47 +428,12 @@ function roundLadder(round) {
 }
 
 /** Calls a method by name with an args object; resolves {result} or {error: {code, message}}. */
-// what only the arena may do to a competitor that calls as itself (ARENA_COMPETITOR)
-const BENCH = ['withdraw', 'rejoin'];
-
-/**
- * A call made for one competitor (ARENA_COMPETITOR set in the caller's environment, as for mcp.js): that name is the
- * default and the only one allowed, and it registers and benches nobody.
- * Returns {args} to go on with, or {error}. call() applies it, so scripts and mcp.js get the same rules; mcp.js applies
- * it too before it forwards to a remote arena. On a local arena, whose competitors share the arena folder, this keeps
- * honest agents on their own name; a hosted arena's tokens (ARENA_AUTH) are the boundary.
- */
-function asCompetitor(me, method, args) {
-    const no = (message) => ({ error: { code: 'unauthorized', message } });
-    if (method === 'register') {
-        return no('a competitor cannot register other competitors');
-    }
-    if (BENCH.includes(method)) {
-        return no('the arena runs you for the whole tournament; it alone benches competitors');
-    }
-    let a = args ?? {};
-    if (METHODS[method]?.required?.includes('name')) {
-        if (a.name !== undefined && a.name !== me) {
-            return no(`you are "${me}": this call acts for you only`);
-        }
-        a = { ...a, name: me };
-    }
-    return { args: a };
-}
-
 async function call(method, args = {}) {
     if (!Object.prototype.hasOwnProperty.call(METHODS, method) || typeof api[method] !== 'function') {
         return { error: { code: 'not_found', message: `unknown method "${method}" (known: ${Object.keys(METHODS).join(', ')})` } };
     }
     if (args !== undefined && args !== null && (typeof args !== 'object' || Array.isArray(args))) {
         return { error: { code: 'bad_request', message: 'arguments must be a JSON object' } };
-    }
-    if (process.env.ARENA_COMPETITOR) {
-        const s = asCompetitor(process.env.ARENA_COMPETITOR, method, args);
-        if (s.error) {
-            return s;
-        }
-        args = s.args;
     }
     try {
         return { result: await api[method](args ?? {}) };
@@ -498,7 +452,6 @@ const METHODS = {
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
     standings: { readOnly: true, desc: 'Every rated round so far with per-bot results and the all-round Elo.', props: {} },
     report: { readOnly: true, desc: 'A round report in markdown: standings, results per opponent, lost games with replay paths. Default: latest round.', props: { round: 'integer' } },
-    say: { token: true, desc: 'Post your current thinking to your live dashboard panel. text = one thought, now = what you are doing, idea = current idea, plan = list of steps, diagram = a strategy diagram (schema swu-strategy/1: {title, caption, nodes:[{id,label,kind:input|memory|feature|decision|action,value,note}], edges:[{from,to,weight,label}], highlight:[ids], steps:[{caption,highlight}]}) that the arena animates to show the essence of your current strategy.', props: { name: 'string', text: 'string', now: 'string', idea: 'string', plan: 'array', diagram: 'object' }, required: ['name'] },
     panel: { readOnly: true, desc: "A competitor's live dashboard panel: now, idea, plan, thoughts, Elo and speed widgets.", props: { name: 'string' }, required: ['name'] },
     panels: { readOnly: true, desc: 'Every competitor panel, plus the leaderboard and the experiment (Elo over rounds) the research dashboard shows.', props: {} },
     games: { readOnly: true, desc: 'Games of a round (default latest) with outcome, winner and timing; replays at replayBase + id + .jsonl.', props: { round: 'integer' } },
@@ -516,4 +469,4 @@ function ownsName(login, name) {
     return name === b || String(name).startsWith(`${b}_`);
 }
 
-module.exports = { api, call, startCheck, asCompetitor, builderName, ownsName, BENCH, clock, METHODS, ArenaError, TOURNAMENT };
+module.exports = { api, call, startCheck, builderName, ownsName, clock, METHODS, ArenaError, TOURNAMENT };

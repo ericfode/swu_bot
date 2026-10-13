@@ -69,7 +69,7 @@ any MCP client) that loads data the way a user would. It offers the arena reads 
 `window_docs` and `window_replays` read, `window_put_run` uploads a local results run (index, ladder, replays; only
 what the window lacks, and it reports how many replays the window has), `window_put_doc` one JSON document (a local
 .json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
-proxy adds it; elsewhere `--token`), and a competitor's server (ARENA_COMPETITOR) gets the reads only.
+proxy adds it; elsewhere `--token`). Its `arena_*` tools only read; builders submit bots through `/mcp` below.
 
 ### Each person's own app: `/mcp` with GitHub sign-in (oauth.js)
 

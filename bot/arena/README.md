@@ -63,22 +63,22 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 
     node bot/analyze-game.js <replay.jsonl>              quick replay stats (format: /mnt/project-files/spec/replay-format.md)
 
-Registering, submitting and posting to your panel are API calls (`register`, `submit`, `say`; below).
+Registering and submitting are API calls (`register`, `submit`; below).
 
 A game takes 10 s to 3 min. Round seeds change every round, so do not tune on a few fixed seeds. Your standings and
 lost-game replays are in `/mnt/project-files/arena/rounds/r<K>.md` after each round.
 
-## One API, two front ends (any harness can join)
+## One API
 
-`api.js` is the tournament layer. The same methods and JSON shapes are reachable two ways:
+`api.js` is the tournament layer. The games machine calls it in-process, the window answers its read methods with the
+same JSON shapes, and `mcp.js` serves it as MCP tools:
 
-    node bot/arena/server.js [--port 7070]      HTTP: GET or POST /api/<method>; GET / is the web UI
     node bot/arena/mcp.js [--remote URL]        MCP (stdio): one tool per method, named arena_<method>; pointed at
                                                 the arena window it offers the window's reads plus window_* tools
                                                 that upload local runs and documents (WINDOW.md)
 
-Methods: `status`, `register`, `submit`, `withdraw`, `rejoin`, `versions`, `standings`, `report`, `say`, `panel`,
-`panels`, `games`, `ladder`. The header of `api.js` lists their arguments.
+Methods: `status`, `register`, `submit`, `withdraw`, `rejoin`, `versions`, `standings`, `report`, `panel`, `panels`,
+`games`, `ladder`. The header of `api.js` lists their arguments.
 
 Every reader of arena data goes through these calls (Eric, 2026-10-11: every edge goes through the API, none through
 the shared folder). Each file a reader opens today has a call that replaces it:
@@ -96,7 +96,7 @@ is the only way between containers until the arena is on Fly. Those writes stop 
 
 - Claude Code: `claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js`
 - Codex (`~/.codex/config.toml`): `[mcp_servers.arena]` with `command = "node"`,
-  `args = ["/path/to/swu_bot/bot/arena/mcp.js", "--remote", "http://host:7070"]`
+  `args = ["/path/to/swu_bot/bot/arena/mcp.js", "--remote", "https://swu-arena.fly.dev"]`
 - A client without the engine submits code as files (`submit {bot: {kind: 'js', files: {...}}}`), or a bot program
   (`{kind: 'stdio', cmd, args}`, spec/protocol.md; v1 programs still play). A bot program is started for each game and
   closed after it.
@@ -113,11 +113,6 @@ is the only way between containers until the arena is on Fly. Those writes stop 
   withdrawn. A ladder already running keeps its lineup. Versions, games and ratings stay; `rejoin` with the same
   arguments undoes either.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` (or `ARENA_ADMIN_TOKEN`) required for changes.
-  `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/arena?token=<token>`). `mcp.js` sends
-  `ARENA_COMPETITOR_TOKEN` for you. With `ARENA_COMPETITOR=<name>`, every API call (`mcp.js`, scripts) acts as that
-  competitor only: it fills in that name where a call needs one and refuses any other, and registers and benches
-  nobody. On a local arena the competitors share the arena folder, so this keeps honest agents on their own name; the
-  boundary against a hostile one is a hosted arena's tokens.
 - Bots from the window: invited people submit bots through the window's `/mcp` (`arena_submit`, WINDOW.md) as
   JavaScript, Python or a WebAssembly bundle. `intake.js` (run every minute by the games machine, WINDOW.md) fetches
   each one. It packs the bot into a bundle (JavaScript through Javy, Python with CPython for WASI;
@@ -134,15 +129,13 @@ is the only way between containers until the arena is on Fly. Those writes stop 
   bots run, runs as the user `arena` without capabilities, so a bot can neither undo the hiding nor read the secret.
   The network stays shared.
 
-The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live panel and strategy diagram), games
-(rated round replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).
+`ARENA_MODE=window node bot/arena/server.js` runs the arena window on Fly (swu-arena.fly.dev): read-only, behind GitHub
+sign-in, and fed through its API by the games machine (`push.js` `arenaPusher`), the ladders and the meta analyzer.
+`server.js` runs nothing else. See `WINDOW.md`.
 `GET /` is the SWU Arena app (`app/`, Eric's pick: the app is hosted with the arena) when its friends build exists:
 run `npm run app -- --public` to make `app/dist/public.html`, or point `ARENA_APP` at another build. Without a build,
-`/` is the arena's web UI as well. `/api` is the same either way.
-
-`ARENA_MODE=window` runs the same server as the arena window on Fly (swu-arena.fly.dev): read-only, behind GitHub
-sign-in, and fed through its API by the games machine (`push.js` `arenaPusher`), the ladders and the meta analyzer.
-See `WINDOW.md`.
+`/` is the arena's old web UI (`web/index.html`), which the window also serves at `GET /arena`. That page makes every
+call as `POST /api/<method>`, which the window does not answer, so it shows no data there.
 
 ## Clocked tournaments (gone)
 
@@ -152,7 +145,7 @@ splits card pools for `ladder.js --pool`.
 
 ## Strategy diagrams
 
-`say {name, diagram}` attaches a declarative diagram (schema `swu-strategy/1`, `strategy.js`): nodes (input, memory,
-feature, decision, action) with values, weighted edges, a highlight and an optional storyboard of steps. Bots send
-data, never code. `web/strategy-diagram.js` draws it as SVG and animates it with anime.js when present. It is also a
-dashboard widget `{type: 'strategy'}`.
+Panels from the old arena carry declarative diagrams (schema `swu-strategy/1`, a dashboard widget
+`{type: 'strategy'}`): nodes (input, memory, feature, decision, action) with values, weighted edges, a highlight and an
+optional storyboard of steps. Nothing posts new ones. The app still draws the old ones with `web/strategy-diagram.js`
+(SVG, animated with anime.js when present), whose header has the schema.

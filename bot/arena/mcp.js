@@ -1,18 +1,16 @@
 'use strict';
 /**
- * Arena API as an MCP server (stdio, JSON-RPC 2.0), so any MCP-capable harness can join the arena.
- * Each API method (api.js) is one tool, arena_<method>, with the same arguments and a JSON text result.
+ * Arena API as an MCP server (stdio, JSON-RPC 2.0). Each API method (api.js) is one tool, arena_<method>, with the
+ * same arguments and a JSON text result.
  *
  *   node bot/arena/mcp.js                         talk to the arena folder directly (ARENA_HOME, default the project's)
- *   node bot/arena/mcp.js --remote http://host:7070 [--token T]   proxy to an HTTP arena (server.js) instead
  *   node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]   the arena window (window.js): its arena read
  *                                                 tools, plus window_* tools that read its collections and upload local
  *                                                 files to it (a results run, one document, a folder of documents)
  *
- * Remote reads go as GET with query parameters (the window answers reads only on GET); changes go as POST with JSON.
- * Which kind of server --remote is comes from its GET /api. Window uploads use push.js with the same address and token
- * (no token: the cloud proxy adds the project's for swu-arena.fly.dev). A competitor's server (ARENA_COMPETITOR) never
- * gets the window_* tools.
+ * Remote reads go as GET with query parameters (the window answers reads only on GET), and the window's GET /api says
+ * which reads it answers. Window uploads use push.js with the same address and token (no token: the cloud proxy adds
+ * the project's for swu-arena.fly.dev).
  *
  * Claude Code:  claude mcp add arena -- node /path/to/swu_bot/bot/arena/mcp.js
  * Codex:        [mcp_servers.arena] command = "node", args = ["/path/to/swu_bot/bot/arena/mcp.js"]  (~/.codex/config.toml)
@@ -20,7 +18,7 @@
  * (messages without an id) and responses are never answered. Tools carry MCP annotations (readOnlyHint etc.) from METHODS.
  */
 const readline = require('readline');
-const { call, asCompetitor, BENCH, METHODS } = require('./api');
+const { call, METHODS } = require('./api');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -43,7 +41,7 @@ const arenaTool = ([m, d]) => ({
     name: `arena_${m}`,
     description: d.desc,
     annotations: annotations(d),
-    inputSchema: { type: 'object', properties: { ...Object.fromEntries(Object.entries(d.props).map(([k, t]) => [k, TYPES[t]])), ...(d.token ? { token: { type: 'string', description: 'your competitor token (hosted arenas only; ARENA_COMPETITOR_TOKEN is sent automatically if set)' } } : {}) }, required: d.required ?? [] }
+    inputSchema: { type: 'object', properties: { ...Object.fromEntries(Object.entries(d.props).map(([k, t]) => [k, TYPES[t]])), ...(d.token ? { token: { type: 'string', description: 'your competitor token (arenas that require tokens only, ARENA_AUTH=1)' } } : {}) }, required: d.required ?? [] }
 });
 
 // the arena window's own tools: reading its collections, and uploading local files the way push.js does
@@ -62,53 +60,39 @@ const WINDOW_READS = ['status', 'standings', 'report', 'versions', 'panel', 'gam
 // a remote that accepts the connection and then never answers must not hold up tools/list
 const PROBE_MS = Number(process.env.ARENA_PROBE_MS) || 5000;
 
-/** What --remote is: {kind: 'window', reads: [...]} for the arena window, else {kind: 'arena'}. Asked once. */
-let target = null;
-async function remoteKind() {
-    target ??= (async () => {
-        // one deadline for both requests, so a silent remote costs PROBE_MS in all
-        const signal = AbortSignal.timeout(PROBE_MS);
-        const j = await fetch(`${REMOTE}/api`, { headers: auth(), signal }).then((r) => r.json()).catch(() => null);
-        if (Array.isArray(j?.result?.collections)) {
-            return { kind: 'window', reads: (j.result.arena ?? []).filter((m) => METHODS[m]) };
+/** The arena reads the window answers, from its GET /api (WINDOW_READS when it will not say). Asked until it answers. */
+let reads = null;
+async function windowReads() {
+    reads ??= (async () => {
+        const j = await fetch(`${REMOTE}/api`, { headers: auth(), signal: AbortSignal.timeout(PROBE_MS) }).then((r) => r.json().catch(() => ({}))).catch(() => null);
+        if (j === null) {
+            reads = null; // unreachable or silent: ask again next time
         }
-        if (j?.result && typeof j.result === 'object') {
-            return { kind: 'arena' };
-        }
-        // refused or unreachable: only the window answers /healthz without a token
-        const health = signal.aborted ? false : await fetch(`${REMOTE}/healthz`, { signal }).then(async (r) => r.ok && (await r.text()).trim() === 'ok').catch(() => false);
-        if (!health) {
-            target = null; // ask again next time
-        }
-        return health ? { kind: 'window', reads: WINDOW_READS } : { kind: 'arena' };
+        return Array.isArray(j?.result?.collections) ? (j.result.arena ?? []).filter((m) => METHODS[m]) : WINDOW_READS;
     })();
-    return target;
+    return reads;
 }
 
 async function toolList() {
-    const kind = REMOTE ? await remoteKind() : { kind: 'arena' };
-    if (kind.kind !== 'window') {
-        return Object.entries(METHODS).filter(([m]) => !(process.env.ARENA_COMPETITOR && BENCH.includes(m))).map(arenaTool);
+    if (!REMOTE) {
+        return Object.entries(METHODS).map(arenaTool);
     }
-    const arena = Object.entries(METHODS).filter(([m]) => kind.reads.includes(m)).map(arenaTool);
-    return process.env.ARENA_COMPETITOR ? arena : [...arena, ...Object.entries(WINDOW_TOOLS).map(windowTool)];
+    const answered = await windowReads();
+    return [...Object.entries(METHODS).filter(([m]) => answered.includes(m)).map(arenaTool), ...Object.entries(WINDOW_TOOLS).map(windowTool)];
 }
 
 const auth = () => (TOKEN ? { authorization: `Bearer ${TOKEN}` } : {});
 
 /**
- * A remote call: reads as GET with query parameters (scalars only), the rest as POST with a JSON body. A read that
- * carries a token goes as POST too, so the token never lands in a URL or an access log.
+ * One of the window's arena reads, as GET with query parameters (scalars only). A token argument never goes into the
+ * URL: the window reads the caller from the authorization header (--token).
  */
 async function remote(method, args) {
-    if (METHODS[method]?.readOnly && args?.token === undefined) {
-        const q = new URLSearchParams(Object.entries(args ?? {}).filter(([, v]) => v !== undefined && v !== null && typeof v !== 'object').map(([k, v]) => [k, String(v)]));
-        const res = await fetch(`${REMOTE}/api/${method}${q.size ? `?${q}` : ''}`, { headers: auth() });
-        return res.json();
+    if (!METHODS[method]?.readOnly) {
+        return fail('unsupported', `the window answers the arena's reads only; builders submit bots through its /mcp (bot/arena/BUILD.md)`);
     }
-    const res = await fetch(`${REMOTE}/api/${method}`, {
-        method: 'POST', headers: { 'content-type': 'application/json', ...auth() }, body: JSON.stringify(args ?? {})
-    });
+    const q = new URLSearchParams(Object.entries(args ?? {}).filter(([k, v]) => k !== 'token' && v !== undefined && v !== null && typeof v !== 'object').map(([k, v]) => [k, String(v)]));
+    const res = await fetch(`${REMOTE}/api/${method}${q.size ? `?${q}` : ''}`, { headers: auth() });
     return res.json();
 }
 
@@ -125,11 +109,8 @@ const fail = (code, message) => ({ error: { code, message } });
 const ok = (result) => ({ result });
 
 async function windowCall(method, a = {}) {
-    if (!REMOTE || (await remoteKind()).kind !== 'window') {
+    if (!REMOTE) {
         return fail('unsupported', 'window_* tools need --remote pointing at the arena window');
-    }
-    if (process.env.ARENA_COMPETITOR) {
-        return fail('unauthorized', 'a competitor cannot change the window');
     }
     const seg = encodeURIComponent;
     const get = async (p) => {
@@ -186,23 +167,7 @@ async function windowCall(method, a = {}) {
 }
 
 async function invoke(method, args) {
-    // only the calls that take a token get it
-    if (process.env.ARENA_COMPETITOR_TOKEN && METHODS[method]?.token && args && args.token === undefined) {
-        args = { ...args, token: process.env.ARENA_COMPETITOR_TOKEN };
-    }
-    // a server started for one competitor (ARENA_COMPETITOR set) acts as that competitor only (api.js
-    // asCompetitor); call() applies the same rules, and a remote arena gets the call already scoped
-    if (process.env.ARENA_COMPETITOR) {
-        const s = asCompetitor(process.env.ARENA_COMPETITOR, method, args);
-        if (s.error) {
-            return s;
-        }
-        args = s.args;
-    }
-    if (!REMOTE) {
-        return call(method, args);
-    }
-    return remote(method, args);
+    return REMOTE ? remote(method, args) : call(method, args);
 }
 
 const write = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
@@ -215,7 +180,7 @@ async function handle(msg) {
             protocolVersion: params?.protocolVersion ?? '2025-06-18',
             capabilities: { tools: {} },
             serverInfo: { name: 'swu-arena', version: '1.0.0' },
-            instructions: 'SWU bot arena. Start with arena_status, read rules in bot/arena/README.md of the swu_bot repo, post progress with arena_say, and submit with arena_submit.'
+            instructions: 'SWU bot arena. Start with arena_status, and read the rules in bot/arena/README.md of the swu_bot repo.'
         } });
     }
     if (method === 'ping') {
