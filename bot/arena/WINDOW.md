@@ -1,8 +1,8 @@
 # The arena window (swu-arena on Fly)
 
-The window is the arena and its research as invited friends see them, at https://swu-arena.fly.dev. It is phase A of
-the hosting plan (https://claude.ai/artifact/XsnHdQbtsxYTymkuTaDcCy): tournaments still play in the project, and the
-window shows them live. In phase B the whole arena moves into the same image.
+The window is the arena and its research as invited friends see them, at https://swu-arena.fly.dev. Builders submit
+bots here, the games machine (swu-arena-games, below) plays them and sends the results back, and the project's threads
+send their ladders and research the same way. The window itself never runs a bot.
 
 ## One API, and every part talks to it
 
@@ -28,7 +28,7 @@ Reads (a signed-in friend, or the project token):
   that was killed or lost its pusher stops showing as live. A sender that comes back makes the game live again.
   `push.js` sends a running run's index again every 5 minutes, changed or not, so a long game with no replay stays live.
 - `GET /api/status`, `standings`, `report?round=K`, `games?round=K`, `versions?name=X`, `panel?name=X`: the arena's own
-  read methods, same shapes as `api.js`, answered from what the arena sent. Other methods answer 501 until phase B.
+  read methods, same shapes as `api.js`, answered from what the arena sent. Other methods answer 501.
 - `GET /api/replays/<run>` lists a run's games (`?sizes=1` adds sizes); `GET /api/replays/<run>/<game>?from=<byte>`
   returns the replay from that byte, with its full size in `x-size`, so a viewer can follow a game being played.
 - `GET /api/docs/<collection>[/<id>]`: raw documents. Friends may read `arena`, `runs`, `evals`, `lens` and `meta`;
@@ -44,7 +44,7 @@ except an admin changing the invite list from the app's Share page (below):
 
 - `PUT /api/docs/<collection>/<id>` with a JSON body; `DELETE` removes one. Collections: arena, runs, ladders, league,
   experiments, evals, panels, bots, threads, lens, meta, research, admin. The `admin` collection needs the admin token
-  to read or write: the proxy adds the project token to every process in the project, competitor bots included.
+  to read or write: the proxy adds the project token to every process in the project, bots included.
 - `POST /api/replays/<run>/<game>?at=<bytes>` appends lines at that offset, which must be the replay's current size;
   otherwise 409 with the size to resend from, so a retry never doubles a line. `PUT` replaces a whole replay.
 - `PUT /api/docs/admin/invites` with `{"logins": [...]}` changes who may sign in, without a deploy
@@ -63,9 +63,10 @@ except an admin changing the invite list from the app's Share page (below):
 
 ## Through MCP
 
-`node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]` is the same API as MCP tools, for a Claude (or
-any MCP client) that loads data the way a user would. It offers the arena reads the window answers (`arena_status`,
-`arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`) and the window's own tools:
+`node bot/arena/mcp.js --remote https://swu-arena.fly.dev [--token T]` is the same API as MCP tools, for the project's
+threads (or any MCP client) that load data the way a user would. It offers the arena reads the window answers
+(`arena_status`, `arena_standings`, `arena_report`, `arena_games`, `arena_versions`, `arena_panel`) and the window's
+own tools:
 `window_docs` and `window_replays` read, `window_put_run` uploads a local results run (index, ladder, replays; only
 what the window lacks, and it reports how many replays the window has), `window_put_doc` one JSON document (a local
 .json file or inline) and `window_put_dir` a folder of them. Uploads need the project token (in cloud sessions the
