@@ -115,15 +115,21 @@ run() {
     else
         net="--network host -e GAMES_HELPER_URL=http://127.0.0.1:$PORT"
         awake=
-        command -v systemd-inhibit >/dev/null 2>&1 && awake="systemd-inhibit --what=sleep --why=swu-helper"
+        # only where it can reach logind (not in a container or WSL without systemd)
+        systemd-inhibit --what=sleep --why=swu-helper true >/dev/null 2>&1 && awake="systemd-inhibit --what=sleep --why=swu-helper"
     fi
     forward &
     fwd=$!
     trap 'kill "$fwd" 2>/dev/null' EXIT
     trap 'exit 130' INT TERM
     fly auth docker >/dev/null
+    last=
     while :; do
         img=$(image) || die "could not read the games machine's image (fly machine list -a $APP)"
+        # code 3 means "another build": when the machine still runs the image that just stopped, pulling cannot fix it
+        # (an image built without GIT_SHA has the build "unknown", which never matches)
+        [ "$img" != "$last" ] || die "the games machine still runs $img, which this helper just ran: its build or card data differ for another reason (see the lines above)"
+        last=$img
         echo "pulling $img"
         docker pull --quiet --platform linux/amd64 "$img"
         echo "playing with $slots slots; Ctrl-C stops (games held go back to the machine within 90 s)"
@@ -134,14 +140,14 @@ run() {
             -v swu-helper-data:/data --security-opt no-new-privileges --cap-drop NET_RAW --cap-drop MKNOD \
             "$img" /app/coord/bin/coord start || code=$?
         [ "$code" = 3 ] || exit "$code"
-        echo "the games machine runs a new build: pulling it"
+        echo "the games machine runs another build: reading its image"
     done
 }
 
 case ${1:-run} in
 init) init ;;
 revoke) revoke ;;
-run) shift 2>/dev/null || true; run "$@" ;;
+run) [ $# -eq 0 ] || shift; run "$@" ;;
 --slots) run "$@" ;;
 *) die "unknown command $1 (init, run, revoke)" ;;
 esac

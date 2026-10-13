@@ -52,7 +52,9 @@ Needs Docker (Docker Desktop on a Mac) and flyctl logged in as you (`fly auth lo
    (`fly machine list`), pulls it (`fly auth docker`), keeps `fly proxy 18090:8090` running, and starts the container.
    Slots: one seed (two games at once) each, `--slots N` to choose; by default (Docker CPUs - 1) / 2. On a Mac it runs
    under `caffeinate -i`, so the computer stays awake while it plays.
-3. When the games machine moves to a new build, the helper stops with code 3 and the script pulls the new image.
+3. When the games machine moves to a new build, the helper stops with code 3 and the script pulls the new image. If the
+   machine still runs the image the helper just ran (its build or card data differ for another reason, such as an image
+   built without `GIT_SHA`), the script stops and says so.
 
 The image is built for Intel CPUs (`linux/amd64`). On an Apple chip Docker runs it under emulation: turn on "Use
 Rosetta for x86_64/amd64 emulation" in Docker Desktop's settings, or the coordinator may crash at start.
