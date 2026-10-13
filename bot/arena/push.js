@@ -28,6 +28,9 @@ const TOKEN = process.env.SWU_WINDOW_TOKEN || process.env.ARENA_PUSH_TOKEN || 'a
 const STATE = path.join(require('os').tmpdir(), 'swu-window-push');
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// while games are running, the run's index goes again this often even unchanged, so the window can tell a live run whose
+// games are long from one that stopped (window.js shows a game as stopped after 20 minutes with nothing new)
+const HEARTBEAT_MS = 5 * 60000;
 
 class PushError extends Error {
     constructor(status, body) {
@@ -140,18 +143,26 @@ const readJson = (f) => {
     }
 };
 
-/** One pass over a ladder run folder: index, ladder report and replays. Returns whether the run is still going. */
-async function pushRunOnce(dir, mem) {
+/**
+ * One pass over a ladder run folder: index, ladder report and replays. Returns whether the run is still going. While
+ * games are running, the index is sent at least every `heartbeatMs`, changed or not.
+ */
+async function pushRunOnce(dir, mem, { heartbeatMs = HEARTBEAT_MS } = {}) {
     const id = path.basename(path.resolve(dir));
     const idx = readJson(path.join(dir, 'index.json'));
     const lad = readJson(path.join(dir, 'ladder.json'));
+    const running = new Set((idx?.games ?? []).filter((g) => g.outcome === 'running' || g.running).map((g) => g.id));
     if (idx) {
-        await putChanged(mem.docs, 'runs', id, idx);
+        if (await putChanged(mem.docs, 'runs', id, idx)) {
+            mem.beat = Date.now();
+        } else if (running.size && Date.now() - (mem.beat ?? 0) >= heartbeatMs) {
+            await putDoc('runs', id, idx);
+            mem.beat = Date.now();
+        }
     }
     if (lad) {
         await putChanged(mem.docs, 'ladders', id, lad);
     }
-    const running = new Set((idx?.games ?? []).filter((g) => g.outcome === 'running' || g.running).map((g) => g.id));
     const gamesDir = path.join(dir, 'games');
     const files = fs.existsSync(gamesDir) ? fs.readdirSync(gamesDir).filter((f) => f.endsWith('.jsonl')) : [];
     if (!mem.known && files.length) {

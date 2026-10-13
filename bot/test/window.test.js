@@ -549,6 +549,14 @@ test('push: a ladder run reaches the window as it plays: whole lines while runni
         assert.strictEqual((await pushRunOnce(dir, mem)).going, true);
         assert.strictEqual(await replay(), '{"t":"header"}\n', 'only whole lines');
         assert.strictEqual(JSON.parse(w.store.getDoc('runs', 'live-ladder')).games[0].outcome, 'running');
+        // nothing changed, but a game is running: the index goes again once the heartbeat is due, so the window sees the run alive
+        const docFile = path.join(w.store.dir, 'docs', 'runs', 'live-ladder.json');
+        const old = Date.now() / 1000 - 3600;
+        fs.utimesSync(docFile, old, old);
+        await pushRunOnce(dir, mem);
+        assert.ok(fs.statSync(docFile).mtimeMs < Date.now() - 1800000, 'not before the heartbeat is due');
+        await pushRunOnce(dir, mem, { heartbeatMs: 0 });
+        assert.ok(fs.statSync(docFile).mtimeMs > Date.now() - 60000, 'sent again as a heartbeat');
         fs.appendFileSync(file, 'ep"}\n');
         await pushRunOnce(dir, { docs: new Map(), replays: new Map() }); // a restarted pusher sends only what the window lacks
         assert.strictEqual(await replay(), '{"t":"header"}\n{"t":"step"}\n');
@@ -556,6 +564,9 @@ test('push: a ladder run reaches the window as it plays: whole lines while runni
         index('won');
         assert.strictEqual((await pushRunOnce(dir, mem)).going, false);
         assert.strictEqual(await replay(), '{"t":"header"}\n{"t":"step"}\n{"t":"end"}\n');
+        fs.utimesSync(docFile, old, old);
+        await pushRunOnce(dir, mem, { heartbeatMs: 0 });
+        assert.ok(fs.statSync(docFile).mtimeMs < Date.now() - 1800000, 'a finished run sends no heartbeat');
         fs.writeFileSync(file, '{"t":"header","key":"k"}\n{"t":"step"}\n{"t":"end"}\n'); // ladder.js adds the key in place
         await pushRunOnce(dir, mem);
         assert.match(await replay(), /"key":"k"/);

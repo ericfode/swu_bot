@@ -26,6 +26,7 @@ Reads (a signed-in friend, or the project token):
   A game still marked running whose replay (or, with no replay, whose run's documents) sent nothing for 20 minutes
   shows as stopped, with no result (`outcome: "abandoned"` in the model; the stored document is unchanged), so a run
   that was killed or lost its pusher stops showing as live. A sender that comes back makes the game live again.
+  `push.js` sends a running run's index again every 5 minutes, changed or not, so a long game with no replay stays live.
 - `GET /api/status`, `standings`, `report?round=K`, `games?round=K`, `versions?name=X`, `panel?name=X`: the arena's own
   read methods, same shapes as `api.js`, answered from what the arena sent. Other methods answer 501 until phase B.
 - `GET /api/replays/<run>` lists a run's games (`?sizes=1` adds sizes); `GET /api/replays/<run>/<game>?from=<byte>`
