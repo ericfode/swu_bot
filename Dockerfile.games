@@ -12,7 +12,9 @@ WORKDIR /src/forceteki
 COPY forceteki/package.json forceteki/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY forceteki/ ./
-RUN npm run get-cards && npm run build && npm prune --omit=dev --no-audit --no-fund
+# tsc needs more than Node's default heap: it ran out at about 2 GB on Fly's builder (README.md, "memory")
+RUN export NODE_OPTIONS=--max-old-space-size=4096 && npm run get-cards && npm run build \
+ && npm prune --omit=dev --no-audit --no-fund
 
 # the Python packages bot/compiled pins (toolchain.json): wasmtime runs the bundles, ziglang compiles the C resident
 FROM python:3.12-slim-bookworm AS pydeps
