@@ -96,10 +96,27 @@ test('catalogue JSON supports both all-admitted cards and an exact raw subset po
     const initial = rows.find((row) => row.type === 'state').state;
     try {
         assert.equal(subset.poolHash, rows[0].pool.sha256);
-        for (const simulator of [subset, all]) {
-            const game = simulator.loadState(initial);
+        assert.throws(() => all.loadState(initial), /requires explicit Hidden phase history/);
+        // This fixture starts before any arena entry, so no per-unit history is inferred.
+        for (const player of Object.values(initial.players)) {
+            assert.equal(player.ground.length, 0);
+            assert.equal(player.space.length, 0);
+        }
+        const hiddenOnly = { ...structuredClone(initial), hiddenHistoryVersion: 1 };
+        assert.throws(() => all.loadState(hiddenOnly), /requires explicit Force state version/);
+        // Persistent Force identities come from an actual engine recording;
+        // they cannot be reconstructed from an older snapshot's arena contents.
+        const referenceFixtures = path.resolve(__dirname, '../../../cards/reference/fixtures');
+        const manifest = require('../../../cards/reference/library').corpus(referenceFixtures);
+        const forceRecording = manifest.recordings.find((row) => row.caseId === 'auto/LOF_193/force-first-gain');
+        assert.ok(forceRecording, 'The corpus must retain the versioned Force engine witness');
+        const versioned = records(path.join(referenceFixtures, 'traces', forceRecording.traceSha256 + '.jsonl.gz')).find((row) => row.type === 'state').state;
+        assert.equal(versioned.forceStateVersion, 1);
+        assert.equal(versioned.hiddenHistoryVersion, 1);
+        for (const [simulator, snapshot] of [[subset, initial], [all, versioned]]) {
+            const game = simulator.loadState(snapshot);
             try {
-                assert.deepEqual(game.snapshot(), initial);
+                assert.deepEqual(game.snapshot(), snapshot);
                 assert.equal(game.prove({ nodes: 0 }).complete, false);
             } finally { game.free(); }
         }

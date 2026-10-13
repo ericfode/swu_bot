@@ -184,7 +184,7 @@ const actualSources = [
         "LOF_209",
         "game/cards/05_LOF/units/TuskenTracker.ts",
         "d44731ae9bb14217cdd780bd9703f79ad9f9c016c0e5a3a47a42960180ca26fd",
-        "unsupported-modifier-keyword"
+        null
     ],
     [
         "LOF_211",
@@ -353,7 +353,7 @@ test('all 45 full pinned sources match hashes and retain complete card support o
         if(blocker) assert.ok(c.diagnostics.some(d=>d.pattern===blocker),setCode+JSON.stringify(c.diagnostics));
         else {supportedCount++;assert.ok(Object.values(c.abilities).some(side=>side.length),setCode+' missing complete ability');}
     }
-    assert.equal(supportedCount,35);
+    assert.equal(supportedCount,36);
 });
 
 test("four additional generic source-only gains retain full source identities",()=>{

@@ -1,0 +1,104 @@
+[
+  {
+    "text": "Hidden",
+    "expected": {
+      "hidden": 1
+    }
+  },
+  {
+    "text": "Hidden.",
+    "expected": {
+      "hidden": 1
+    }
+  },
+  {
+    "text": "Hidden (Reminder.)\nRaid 2\nRestore 1",
+    "expected": {
+      "hidden": 1,
+      "raid": 2,
+      "restore": 1
+    }
+  },
+  {
+    "text": "Hidden, Saboteur",
+    "expected": {
+      "hidden": 1,
+      "saboteur": 1
+    }
+  },
+  {
+    "text": "Raid 0\nRestore 65535",
+    "expected": {
+      "raid": 0,
+      "restore": 65535
+    }
+  },
+  {
+    "text": "Hidden 1",
+    "expected": null
+  },
+  {
+    "text": "Hidden .",
+    "expected": null
+  },
+  {
+    "text": "Hidden extra",
+    "expected": null
+  },
+  {
+    "text": "Hidden\nDraw a card.",
+    "expected": null
+  },
+  {
+    "text": "Raid 1\nRaid 2",
+    "expected": null
+  },
+  {
+    "text": "Hidden\nHidden",
+    "expected": null
+  },
+  {
+    "text": "Raid 65536",
+    "expected": null
+  },
+  {
+    "text": "Raid +1",
+    "expected": null
+  },
+  {
+    "text": "Raid -1",
+    "expected": null
+  },
+  {
+    "text": "Raid 1.5",
+    "expected": null
+  },
+  {
+    "text": "Raid",
+    "expected": null
+  },
+  {
+    "text": "Restore 2 .",
+    "expected": null
+  },
+  {
+    "text": "Hidden (nested (reminder))",
+    "expected": null
+  },
+  {
+    "text": "Hidden (unclosed",
+    "expected": null
+  },
+  {
+    "text": "Hidden)",
+    "expected": null
+  },
+  {
+    "text": "Hidden ((reminder)",
+    "expected": null
+  },
+  {
+    "text": "Hidden (a(b)",
+    "expected": null
+  }
+]

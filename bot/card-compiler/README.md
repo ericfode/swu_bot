@@ -54,7 +54,7 @@ compile. Unmatched sources and shared base files remain in the source inventory;
 test mocks are counted separately. A compiler exception fails the build rather
 than being relabeled as a normal unsupported pattern.
 
-Provenance covers all engine server TypeScript, every card JSON file, the mock
+Provenance covers all engine server TypeScript and JavaScript, every card JSON file, the mock
 list, compiler JavaScript, and its keyword-parser dependency. Outputs have no
 timestamps or absolute machine paths, so identical inputs produce identical
 bytes. The catalog also records the TypeScript parser version.
@@ -75,6 +75,26 @@ expire together at phase end. Constant stat modifiers support static self and
 aura bonuses with bounded conditions and target filters. Arena count/existence
 queries preserve their outer target separately from each queried card. Live
 stat calculations and stat-dependent constant conditions remain rejected.
+
+Bounded arena lists, filtering, existence and length queries also support three
+complete source shapes: conditional Ambush from another friendly nonunique unit,
+optional exhaustion conditioned on another friendly space unit, and a leader
+front action counting exhausted units across both players. Query candidates stay
+separate from the chosen target and physical source. The front action retains its
+resource and exhaustion costs, including the engine's no-effect confirmation,
+and requires the exact native Spy definition in the selected pool. Whole-source
+and printed-side guards reject other collection uses. Query programs use the
+shared interpreter or live-modifier path; the leader's separate scalar attack
+ability can use existing generated code.
+
+Ongoing sources include actual bases and undeployed leaders for bounded complete
+families: the 26-HP bases granting friendly leader units +0/+1 or +1/+0, and the
+two-sided leader granting Raid 1 to friendly units costing at least three. A
+leader uses its current side once; the deployed source retains its printed Raid
+without granting itself another copy. Whole-source and printed side metadata
+must match these supported shapes. Other base abilities and leader-front
+constants remain rejected. These constant programs use the shared live-modifier
+path in native and Wasm; runtime admission does not establish every interaction.
 
 Constant and phase effects can grant or remove the supported core keywords.
 Numeric Raid and Restore stack, while boolean keywords track presence. Live
@@ -97,6 +117,64 @@ player choose their own cards. Their inherited default target is the opponent;
 the helper's name does not imply a friendly target. Player selectors remain
 rejected until their selected-player context can be preserved.
 
+Force token state records each player's persistent token ID and whether it is
+held. Gain, spend, and regain reuse that identity without allocating a card; the
+two players remain independent across phase changes. Full-state export includes
+`forceStateVersion: 1` and `players.<seat>.forceToken: { id, held }`, including
+tokens outside play. Imports validate canonical, distinct IDs against the full
+card inventory. Markerless legacy snapshots remain valid only for selected pools
+that cannot reach Force abilities; held state and reachable Force abilities
+require the reviewed native token in the selected pool.
+
+Ordinary units support mandatory Force gain on play, attack and defeat, or
+optional use on play and defeat. Multiple gain registrations retain separate
+captured triggers and reuse the same token identity. Ordinary upgrades may use
+their controller's Force on play before a bounded base-healing continuation;
+attachment restrictions, printed stats and uniqueness still apply. Event use preserves prepayment
+confirmation and cancellation when no Force is held. Supported continuations
+include draw-two, self-ready, scalar unit damage, unit/base healing, unit phase
+stats, and the opponent choosing one card to discard. Force is spent before the
+continuation and remains spent even when it has no eligible or beneficial target.
+Captured source identity survives departure and unique replacement. These
+operations use the validated interpreter fallback in Auto mode.
+
+Ordinary-unit constants may read their controller's current Force presence to
+grant self Grit, Sentinel or Ambush, or a friendly power-only aura. Grit, Sentinel
+and power update live when Force changes; Ambush registration is captured on
+entry, so gaining Force later does not create an attack. Presence reads require
+the same native-token and versioned-state evidence even when Force is absent.
+Force-dependent HP changes, other query receivers, costs, groups, hooks and
+continuations remain explicit rejections. Source conversion and runtime admission
+remain separate.
+
+An ordinary upgrade may optionally give one Weakness token to any unit on play.
+The upgrade attaches and its printed stats apply before that choice. Its
+controller chooses even on an enemy host; the new token belongs to the chosen
+recipient's controller. Declining creates no token. The selected pool must include
+the reviewed native Weakness definition. Other upgrade Weakness registrations
+remain rejected.
+
+Ordinary events may give one or two Weakness tokens according to their controller's
+base trait. A bounded optional play/death pair combines one damage with one
+Weakness on the same chosen unit: Shield prevention affects the damage only, and
+the token attaches before the combined lethal check. Both token identities in a
+two-token window are allocated before attachment. Ordinary play may also create
+an exhausted Beast before a mandatory friendly Weakness choice, or give Weakness
+before exhausting the surviving captured recipient if it is unique. Physical
+death can precede a later step while death triggers wait for the parent ability.
+Beast creation requires the reviewed Beast definition in the selected pool.
+These bounded forms use the shared interpreter in native and Wasm Auto mode.
+
+A bounded self-resource operation moves an existing event or defeated ordinary
+unit into its owner's resources, exhausted, without allocating a new card.
+Supported sources are standalone events, optional death registrations with a
+live discard-zone guard, and optional death-time Force use followed by self
+movement. The Force continuation preserves the source's current legal nonarena
+zone; it does not acquire an implicit discard condition. Already-owned resources
+keep their readiness, and destination capacity is checked before removal.
+Other targets, ready entry, resource defeat and controller changes remain rejected.
+This operation uses the validated interpreter fallback in Auto mode.
+
 Bounded simultaneous groups preserve separate event preparation and resolution.
 The runtime supports selected combinations of damage, healing, tokens, readiness,
 and phase modifiers, with independent nested selections. Up-to selections retain
@@ -107,6 +185,62 @@ ambiguous repeated damage, and reference scopes the runtime cannot preserve.
 Supported draw/discard groups prepare choices before resolving their effects.
 Mixed damage with hand effects or newly created unit tokens remains rejected.
 The runtime checks its bounded storage and fails explicitly on overflow.
+
+Two independent named phase-stat selectors also support ordinary-unit On Attack
+registrations. The first selector may be mandatory; the second remains optional.
+Each uses a static unit domain in either arena or one named arena, with either
+controller eligible. Both choices are captured before applying the modifiers,
+and the pending attack resumes after resulting defeat triggers. Bounded literal
+negative stats, including negative zero, retain their source meaning. Dependent
+names and additional attack predicates remain rejected. Named groups use the validated interpreter fallback in Auto mode.
+
+Two independent named damage selectors support ordinary-unit When Played and
+On Attack registrations. The source controller chooses a mandatory friendly
+unit first and an enemy unit second, with static arena domains and one or two
+points of preventable ability damage. Both choices finish before either damage
+event resolves. Shared Shield replacement and lethal-trigger handling preserve
+recipient identity and the pending attack; a missing enemy does not suppress
+friendly damage. Dependent names remain rejected.
+
+A separate On Attack pair selects an enemy ground unit for two damage, then either
+base for two damage. Both choices belong to the source controller and finish
+before damage resolves. A missing ground recipient skips only that effect. The
+pending attack continues through captured mandatory death effects, including
+automatic effects after a base defeat has latched the winner. Other unit/base
+combinations remain rejected.
+
+Arena keyword events preserve one lasting-effect helper with two factories as
+a different operation from two simultaneous helpers with independent recipient
+lists. Both capture global arena order before applying phase grants or losses;
+combined keyword and stat capacity is checked before publishing the result.
+Ordinary On Attack may grant Restore to other friendly units of a fixed trait.
+The source retains its separately captured intrinsic Restore trigger. These
+operations use the shared interpreter in native and Wasm Auto mode.
+
+A bounded opposite-chooser pair lets the opponent choose their unit, then the
+source controller choose a friendly unit. Ordinary play registrations deal three
+damage to each or defeat each; the event variant defeats nonleader units. The
+opponent selector delays targeting until the original actor has paid, even when
+that domain is empty. Effects wait for both choices, then replacement and death
+priority return to the original actor. Other chooser layouts remain rejected.
+
+Bounded mixed named events combine ready with three damage, exhaust with one
+Shield on a friendly unit of printed cost three or less, or one Shield with a
+-3/-0 phase modifier. Both recipients are selected before effects and token
+allocation. A missing first target delays later selection until after payment;
+a legal but already ready/exhausted first domain keeps later selection before
+payment. Cancellation preserves card identities and resource state. Unsupported
+mixed pairs remain rejected rather than running a partial effect.
+
+Bounded ordinary-unit play and defeat registrations can give one Shield or
+Experience to each matching friendly arena unit. Supported live filters cover
+Shielded keyword presence, physical source exclusion, the Rebel trait, and
+already-damaged units. Each registration allocates its entire token batch before
+attachment, preserving ground-then-space recipient order and recipient controller
+ownership. Captured play and defeat registrations remain distinct through unique
+replacement. Intrinsic Shielded appends to the existing token chain, preserving
+older Shields for damage replacement. These forms use the shared interpreter in
+native and Wasm Auto mode; other token-list shapes remain rejected.
 
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or

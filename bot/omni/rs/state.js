@@ -3,7 +3,7 @@
 function phaseStats(card) {
     let power = 0, hp = 0;
     const phaseKeywords = {}, phaseLostKeywords = new Set();
-    const keywordOrder = ['sentinel', 'overwhelm', 'saboteur', 'ambush', 'grit', 'shielded', 'raid', 'restore'];
+    const keywordOrder = ['sentinel', 'overwhelm', 'saboteur', 'ambush', 'grit', 'shielded', 'raid', 'restore', 'hidden'];
     const supported = new Set(keywordOrder);
     for (const effect of card.getOngoingEffects()) {
         // Constant stat programs are derived from arena sources by Rust; they are
@@ -75,13 +75,17 @@ function fullState(eg, actor = null) {
         const bs = p.base.getSummary(p, true);
         const unit = (c) => {
             const s = c.getSummary(p, true);
-            return { ...ref(eg, c), ...phaseStats(c), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => {
+            return { ...ref(eg, c), ...phaseStats(c), hiddenQualified: c.wasPlayedDeployedOrCreatedThisPhase(), damage: s.damage ?? 0, exhausted: !!s.exhausted, power: s.power ?? c.cardData.power, hp: s.hp ?? c.cardData.hp, upgrades: (c.upgrades ?? []).map((u) => {
                 const token = !!u.isToken?.();
                 // An enemy unit's attached upgrade keeps its own controller and
                 // physical owner. Tokens retain the original compact trace shape.
                 return { ...ref(eg, u), token, ...(!token ? { controller: eg.seatOf(u.controller.id), owner: eg.seatOf(u.owner.id) } : {}) };
             }) };
         };
+        const forceTokens = eg.game.allCards.filter(c => c.owner === p && c.isForceToken?.());
+        if (forceTokens.length !== 1) throw new Error('Expected one stable Force token for ' + eg.seatOf(pid));
+        const forceToken = forceTokens[0], held = p.hasTheForce;
+        if (typeof held !== 'boolean' || (held ? p.baseZone.forceToken !== forceToken : forceToken.zoneName !== 'outsideTheGame')) throw new Error('Force token identity/zone mismatch');
         players[eg.seatOf(pid)] = {
             base: { ...ref(eg, p.base), damage: bs.damage ?? 0, hp: p.base.cardData.hp, epicUsed: !!bs.epicActionSpent },
             leader: { ...ref(eg, leader), deployed: !!leader.deployed || ls.onStartingSide === false, exhausted: !!ls.exhausted, epicUsed: !!ls.epicDeployActionSpent },
@@ -91,10 +95,11 @@ function fullState(eg, actor = null) {
             discard: cards('discard').map((c) => ref(eg, c)),
             ground: cards('groundArena').filter((c) => c.isUnit()).map(unit),
             space: cards('spaceArena').filter((c) => c.isUnit()).map(unit),
+            forceToken: { id: eg.cardId(forceToken.uuid), held },
             out: !!p.passedActionPhase
         };
     }
-    return { arenaUnitOrder: arenaUnitOrder(eg), nextCardId: eg.game.state.allCards.length, round: eg.round, phase: eg.phase, initiative: eg.game.initiativePlayer ? eg.seatOf(eg.game.initiativePlayer.id) : null, initiativeClaimed: !!eg.game.isInitiativeClaimed, prevPassed: !!eg.game.prevActionPhasePlayerPassed, activePlayer: eg.game.actionPhaseActivePlayer ? eg.seatOf(eg.game.actionPhaseActivePlayer.id) : null, actor: actor ? eg.seatOf(actor) : null, winner: eg.winner, players };
+    return { forceStateVersion: 1, hiddenHistoryVersion: 1, arenaUnitOrder: arenaUnitOrder(eg), nextCardId: eg.game.state.allCards.length, round: eg.round, phase: eg.phase, initiative: eg.game.initiativePlayer ? eg.seatOf(eg.game.initiativePlayer.id) : null, initiativeClaimed: !!eg.game.isInitiativeClaimed, prevPassed: !!eg.game.prevActionPhasePlayerPassed, activePlayer: eg.game.actionPhaseActivePlayer ? eg.seatOf(eg.game.actionPhaseActivePlayer.id) : null, actor: actor ? eg.seatOf(actor) : null, winner: eg.winner, players };
 }
 function normalizeArg(eg, value) {
     if (typeof value === 'string' && eg.game.state.allCards.includes(value)) return eg.cardId(value);

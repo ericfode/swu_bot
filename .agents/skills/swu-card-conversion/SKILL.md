@@ -23,6 +23,10 @@ Use temporary files for implementation accounting and reviews.
 Implement reusable semantics, not card-ID exceptions or no-op fallbacks. Inspect
 full source, helper defaults, costs, timing, optionality, zones, controller identity,
 continuations and dynamic values. Reject unsupported fields and partial cards.
+Check source class and card-type metadata together: a trusted class name must not
+admit a raw definition with incompatible leader, token, upgrade or mixed types.
+A primitive that requires a native token must reject dependent cards when the
+reviewed token definition is absent or malformed, including selected-pool loads.
 New compiler lowering does not imply executable runtime support.
 
 ## Automatic pipeline first
@@ -54,6 +58,29 @@ review the new packet before publishing. Model review receipts remain run output
 not chronological repository journals. Import useful passing references through
 the existing `cards:reference import` command so they run in CI.
 
+For concurrent work, use the `work` queue and `prepare`/`fanout` commands in
+`bot/cards/PIPELINE.md`. Fan out up to 20 card subprocesses against one prepared
+build, with isolated author work directories and one integrator for shared runtime
+changes. Follow the user's model/effort choices within available model slots;
+subprocess concurrency is not model concurrency. Preserve explicit path ownership
+and do not edit canonical execution inputs during validation. Queue submission
+and successful comparisons never substitute for independent semantic review.
+
+Use incremental builds and targeted checks for ordinary card increments. Run a
+full clean rebuild and the full accepted corpus only at each 200 newly reviewed,
+runtime-admitted cards. Count unique new admissions with concrete review and
+integration evidence; existing cards and repeated recordings do not count. Dispatch
+the full check to a background subagent on the exact immutable checkpoint revision,
+so ongoing author work can continue. The background agent owns an isolated checkout
+and target directory, reports failures, and develops fixes there for integration.
+Do not let later canonical changes invalidate or relabel an older checkpoint's
+results. Necessary targeted checks still follow each affected semantic change.
+
+When adding a construction adapter, wire both planner/fixture dispatch and the
+central fixture dependency inventory so reusable recordings bind the new source
+files. Compare every preceding full plan object, including its obligations and
+construction parameters, after changing dispatch.
+
 ## Establish evidence
 
 Write expected outcomes from the pinned full card source, helper implementation
@@ -77,12 +104,14 @@ additional recordings. Cases without reference evidence remain unassessed.
 - Arena-query callback `card` is the iterated unit; `context.target` stays the outer chosen target. Test with differing powers and mixed ground/space arenas.
 - Preserve query evaluation time as well as value and scope. A list, count, or predicate result saved during setup or an earlier callback is a snapshot; lowering it to a later live query changes the program. Reject unsupported cross-callback captures, including transitive aliases and captured controller receivers, while preserving locals evaluated inside the executing callback. Test rejection boundaries and compare every previously converted complete card entry after adding the guard.
 - Phase expiry must select the complete lethal set before defeating any member; removing an aura source during incremental selection can incorrectly save another unit. Assert both deaths when phase HP bonuses expire under Snoke.
-- Nested `selectCard` optionality, cancellation and no-target behavior have their own engine prompt protocol. Compare complete canonical action sets, including button arguments and labels. Selector feasibility and event resolution can use different must-change-state modes: an exhausted unit may remain selectable even though its exhaustion event will fail and its `ifYouDo` continuation will not run. Witness the selected-but-ineffective branch as well as no eligible targets.
-- Source registrations and keyword triggers can share a prompt. Preserve engine ordering, and test new leader deployment keywords as well as ordinary unit play.
+- Nested `selectCard` optionality, cancellation and no-target behavior have their own engine prompt protocol. Compare complete canonical action sets, including button arguments and labels. Selector feasibility and event resolution can use different must-change-state modes: an exhausted unit may remain selectable even though its exhaustion event will fail and its `ifYouDo` continuation will not run. Witness the selected-but-ineffective branch as well as no eligible targets. Named resolvers have a separate payment boundary: available descriptors can select before event costs, while the first missing descriptor can delay later targeting until after payment. Voluntarily declining available targets need not produce the same confirmation as having no targets initially. Include the entering unit when constructing When Played target domains; filtering staged units alone cannot establish that a resolver is empty.
+- Source registrations and keyword triggers can share a prompt. Preserve engine ordering, and test new leader deployment keywords as well as ordinary unit play. On Attack and On Defense share the declaration event: capture both owners before state-based deaths remove sources, and let the active action player choose the owner order. Skip the entire window only when all registered triggers are ineffective; retain an ineffective owner when the other owner still has a legal effect. Distinguish initial attack stat deaths whose child window passes triggers to the declaration parent from deaths caused while resolving a selected ability.
 - For units, unique replacement precedes incoming aura activation and incoming stat-death checks. Offer both copies before resolving the choice; keep-old/keep-new can differ. Capture eligible When Played triggers before the defeat subwindow: a defeated source can still draw, while a self-only upgrade cannot rescue a source already defeated. Use explicit engine witnesses for each distinction. Ordinary upgrades add two exceptions: unique copies on the same parent automatically defeat the oldest, while different parents require a choice; printed attachment stats can already apply while incoming constant abilities remain disabled during uniqueness. Keep upgrade controller separate from host controller, and preserve attachment order through parent cleanup events.
 - Event order comes from executable engine code, including its sort comparator, not nominal event names or comments. In the pinned engine, negative-order attachment contingents reverse their insertion order across the complete event window and resolve before parents; combat queues the defender defeat before the attacker defeat. Capture trigger registrations before any handler, preserve duplicate parent events when deriving contingent order, and apply event conditions again when duplicates become invalid. Witness mixed tokens and ordinary upgrades on both opposing combatants and reversed multi-target selections.
 - Per-player arena lists cannot reconstruct global entry order across controllers. Capture ground and space unit IDs directly from the engine, validate membership and each controller subsequence on import, preserve order through departure and re-entry, and include it in state hashes. Same-owner upgrades on enemy hosts make this observable even before implementing global-list abilities. Legacy snapshots missing order must not acquire invented order; refuse reachable order-sensitive mechanics or keep an explicitly bounded compatibility path.
 - Card-data keyword lists include mentions and grants to other cards. Derive intrinsic keywords with the pinned engine's printed-text parser, including leader sides and numeric presence at zero. Read each new token type's pinned metadata; names and familiar card-game conventions do not establish traits, aspects or keywords. Test a card that mentions a keyword without having it, and a stat condition that depends on that absence.
+- Persistent player tokens can retain an existing identity outside play. Export both identity and presence; test actual gain/use/regain, independent owners, phase persistence, no new allocation, captured defeated-source continuations, and full-state copy/hash behavior. Legacy compatibility and native-token dependencies must use the selected pool, not unused definitions in a retained catalog. A resolver can override a player-target helper's default; reject lowering that loses that context.
+- Hidden needs phase history independent of keyword presence. Record qualification for all units so a later grant behaves correctly. Ordinary play qualifies the current in-play incarnation; placement alone does not. Deployment and token creation use identity-based watchers, and all three histories reset at phase end. Preserve live Sentinel precedence and test Saboteur separately. Version exported history, reject missing evidence for reachable Hidden, and keep legacy compatibility scoped to the selected pool. Do not infer watcher history from arena membership, exhaustion or the round number.
 - Export lasting effects from their actual engine value shape. A gained keyword may be an object; boolean presence and numeric totals have different aggregation rules. Witness stacking, removal, phase expiry, and a live numeric condition changing after resource exhaustion or damage.
 - Trigger-menu text is part of the legal-action protocol. Preserve supported live `contextTitle` expressions and `TextHelper` formatting, including multiword traits; do not erase labels from comparisons to hide a mismatch. Apply the same expression and aggregate-size bounds to compiler output and raw-IR runtime admission.
 - Keyword and stat dependencies need separate validation. Reject unsupported keyword cycles without rejecting a supported stat aura whose predicate reads a keyword. Test gain/loss changing a damaged unit's HP and resulting defeat, plus an expiry survivor.
