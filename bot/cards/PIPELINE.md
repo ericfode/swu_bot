@@ -410,6 +410,17 @@ Beast wave membership, repeated Drain copies, natural Shield phase persistence,
 nonlethal Sentinel-dependent HP refresh, controller transfer, reentry and broader
 token replacement remain explicit gaps.
 
+Parent-upgrade experiments cover normal attachment and prepayment cancellation,
+printed stats, Creature/Force and Heroism predicates, both source seats and host
+controllers, and both arenas. Positive unselected units distinguish the actual
+parent from any matching unit. Beast creation uses the caster; Shield ownership
+uses the host controller, including additive Shields, native unit-token hosts and
+a deployed leader. Actual Torrent followed by an ordinary upgrade return exercises
+HP-loss defeat and attachment cleanup. Parent title evaluation is observed through
+the actual ability context; competing title menus, detached captured play,
+reattachment, controller transfer, host uniqueness reactions, natural phase
+persistence and further token replacements remain explicit gaps.
+
 Self-resource experiments cover real event play and ordinary-unit defeat, both
 controllers, optional decline, own/absent/enemy Force, exact paid cost, exhausted
 entry, persistent card identity, repeated copies and natural phase readiness.

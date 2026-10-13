@@ -4187,6 +4187,44 @@
       "upgradePower": null
     },
     {
+      "aspects": [
+        "vigilance",
+        "command"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "3533153742",
+      "internalName": "bestial-bond",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "HMW_038",
+      "setCodes": [
+        {
+          "number": 38,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 38,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: If attached unit is a Creature or a Force unit, create a Beast token.",
+      "title": "Bestial Bond",
+      "traits": [
+        "innate"
+      ],
+      "types": [
+        "upgrade"
+      ],
+      "unique": false,
+      "upgradeHp": 2,
+      "upgradePower": 2
+    },
+    {
       "arena": "ground",
       "aspects": [
         "vigilance",
@@ -8732,6 +8770,43 @@
       "unique": true,
       "upgradeHp": null,
       "upgradePower": null
+    },
+    {
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "8162797914",
+      "internalName": "heroic-bravery",
+      "keywords": [],
+      "power": 0,
+      "rules": null,
+      "setCode": "HMW_264",
+      "setCodes": [
+        {
+          "number": 264,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 264,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: If attached unit is a Heroism unit, give a Shield token to it.",
+      "title": "Heroic Bravery",
+      "traits": [
+        "innate"
+      ],
+      "types": [
+        "upgrade"
+      ],
+      "unique": false,
+      "upgradeHp": 2,
+      "upgradePower": 0
     },
     {
       "arena": "ground",

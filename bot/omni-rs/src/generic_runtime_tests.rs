@@ -2868,3 +2868,40 @@ fn force3_recursive_selected_dependencies_and_source_domains_fail_closed() {
 fn force3_wave_predicate_retains_expression_depth_validation() {
  let mut c:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|e|e["setCode"]=="LOF_039").unwrap();let p=&mut card["abilities"]["card"][0]["ifYouDo"]["effect"]["target"]["predicate"];for _ in 0..25 {*p=json!({"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":p.clone()});}assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LOF_039"));
 }
+
+#[test]
+fn parent_upgrade2_normal_attachment_uses_caster_and_host_identity() {
+ let e=engine();for owner in [Seat::P1,Seat::P2] {for (code,host,positive) in [("HMW_038","LOF_254",true),("HMW_038","LOF_112",true),("HMW_264","JTL_251",true),("HMW_264","LOF_254",false)] {
+  let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);let parent=unit(&e,&mut s,owner,host);let hp=e.hp(&s,parent);let power=e.power(&s,parent,false);let source=hand(&e,&mut s,code);let next=s.next_id;s=play_upgrade(&e,&s,source,parent);assert_eq!(s.card(source).parent,parent);assert_eq!(s.card(source).owner,Seat::P1);assert_eq!(e.hp(&s,parent),hp+2);assert_eq!(e.power(&s,parent,false),power+if code=="HMW_038"{2}else{0});
+  assert_eq!(s.next_id,next+if positive{1}else{0});if positive {if code=="HMW_038" {assert!(e.in_arena(&s,next));assert_eq!(s.card(next).owner,Seat::P1);assert!(s.card(next).exhausted);assert_eq!(e.hp(&s,next),3);}else{assert_eq!(s.card(next).parent,parent);assert_eq!(s.card(next).owner,owner);}}
+  let copy=s;assert_eq!(copy.zobrist(),s.zobrist());
+ }}
+}
+#[test]
+fn parent_upgrade2_exact_title_and_getter_lifetime() {
+ let e=engine();let mut s=board(&e);let parent=unit(&e,&mut s,Seat::P2,"JTL_251");let source=add(&e,&mut s,Seat::P1,"HMW_264");e.attach(&mut s,source,parent);let p=e.program(e.card_programs(&s,source)[0]).clone();assert_eq!(e.eval(&s,source,0,&p.context_title[1]),Eval::Text(e.def(&s,parent).info.title.clone()));
+ let mut e=e;e.definitions[s.card(parent).def as usize].info.title.clear();assert_eq!(e.eval(&s,source,0,&p.context_title[1].clone()),Eval::Text(String::new()));
+ e.defeat(&mut s,source).unwrap();assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||e.eval(&s,source,0,&p.context_title[1]))).is_err());
+}
+#[test]
+fn parent_upgrade2_headers_metadata_and_selected_dependencies_reject() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();let e=engine();for code in ["HMW_038","HMW_264"] {assert!(e.by_code.contains_key(code));for field in ["optional","coordinate","requiresConfirmation"] {let mut c=original.clone();c["cards"].as_array_mut().unwrap().iter_mut().find(|x|x["setCode"]==code).unwrap()["abilities"]["card"][0][field]=json!(true);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key(code),"{code}:{field}");}for (field,value) in [("baseClass",json!("NonLeaderUnitCard")),("attachCondition",json!({"kind":"const","value":true})),("piloting",json!({"unknown":true}))] {let mut c=original.clone();c["cards"].as_array_mut().unwrap().iter_mut().find(|x|x["setCode"]==code).unwrap()[field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key(code));}}
+ let mut p=e.compiled_pool().unwrap();p["cards"].as_array_mut().unwrap().retain(|x|x["setCode"]!="TOKEN_BEAST");assert!(Engine::from_compiled_pool_bytes(&serde_json::to_vec(&p).unwrap(),&serde_json::to_vec(&original).unwrap()).is_err());for field in ["status","attachCondition","piloting"] {let mut c=original.clone();let token=c["cards"].as_array_mut().unwrap().iter_mut().find(|x|x["setCode"]=="TOKEN_BEAST").unwrap();token[field]=if field=="status" {json!("unsupported")}else{json!({"unknown":true})};assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("HMW_038"));}
+}
+
+#[test]
+fn parent_upgrade2_raw_parent_and_title_forms_stay_bounded() {
+ let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+ for (code,path,value) in [
+ ("HMW_038",vec!["effect","condition","left","left"],json!({"kind":"ref","path":["target"]})),
+ ("HMW_038",vec!["effect","onTrue","amount"],json!({"kind":"const","value":2})),
+ ("HMW_264",vec!["effect","onTrue","target"],json!({"kind":"ref","path":["source"]})),
+ ("HMW_264",vec!["contextTitle"],json!([{"kind":"ref","path":["source","parentUnit","title"]}])),
+ ("HMW_264",vec!["contextTitle"],json!([{"kind":"const","value":"Give "},{"kind":"binary","op":"??","left":{"kind":"ref","path":["source","parentUnit","subtitle"]},"right":{"kind":"const","value":"fallback"}},{"kind":"const","value":""}]))
+ ] {let mut c=original.clone();let mut a=&mut c["cards"].as_array_mut().unwrap().iter_mut().find(|e|e["setCode"]==code).unwrap()["abilities"]["card"][0];for p in path {a=&mut a[p];}*a=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key(code));}
+}
+#[test]
+fn parent_upgrade2_additive_shield_and_public_capacity_error_preserve_input() {
+ let e=engine();let mut s=board(&e);upgrade_resources(&e,&mut s,Seat::P1);let parent=unit(&e,&mut s,Seat::P2,"JTL_251");let old=s.next_id;e.create_token(&mut s,parent,false).unwrap();let source=hand(&e,&mut s,"HMW_264");let new=s.next_id;let out=play_upgrade(&e,&s,source,parent);assert!(e.upgrades(&out,parent).contains(&old));assert!(e.upgrades(&out,parent).contains(&new));assert_eq!(out.card(old).parent,parent);assert_eq!(out.card(new).owner,Seat::P2);
+ let mut capacity=s;capacity.next_id=MAX_CARDS as u16;let before=capacity;let first=e.apply(&capacity,&e.card_action(&capacity,source)).unwrap();assert!(e.apply(&first,&e.card_action(&first,parent)).is_err());assert_eq!(capacity,before);assert_eq!(capacity.zobrist(),before.zobrist());
+}

@@ -888,8 +888,29 @@ fn named_unit_base_damage(ability: &Ability) -> bool {
     })
 }
 
+// Complete ordinary upgrade registrations only; parent getters remain asserting.
+fn parent_upgrade_registration(a:&Ability)->Option<bool> {
+    if a.trigger!="whenPlayed"||a.optional||a.requires_confirmation||a.coordinate||!a.costs.is_empty()||a.target_resolver.is_some()||!a.target_resolvers.is_empty()||a.condition.is_some()||a.then.is_some()||a.if_you_do.is_some(){return None;}
+    let Effect::Conditional{condition,on_true,on_false}=&a.effect else{return None;};
+    if !on_false.as_ref().is_some_and(|e|matches!(e.as_ref(),Effect::NoAction)){return None;}
+    let parent=|e:&Expr,name:&str|matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["source",name]);
+    if a.context_title.is_empty() && matches!(on_true.as_ref(),Effect::CreateTokenUnit{token_type,amount:Expr::Const{value},target:Target::Name(n),enters_ready} if token_type=="beast"&&value.as_u64()==Some(1)&&n=="ownPlayer"&&!*enters_ready) {
+        if let Expr::Binary{op,left,right}=condition {
+            if op=="&&" && matches!(left.as_ref(),Expr::Binary{op,left,right} if ["!=","!=="].contains(&op.as_str())&&parent(left,"parentCard")&&matches!(right.as_ref(),Expr::Const{value} if value.is_null())) && matches!(right.as_ref(),Expr::Query{name,receiver,args} if name=="hasSomeTrait"&&parent(receiver,"parentCard")&&args.len()==1&&matches!(&args[0],Expr::Array{items} if !items.is_empty()&&items.iter().all(|e|matches!(e,Expr::Const{value} if value.as_str().is_some_and(|s|!s.is_empty()))))) {return Some(false);}
+        }
+    }
+    if matches!(condition,Expr::Query{name,receiver,args} if name=="hasSomeAspect"&&parent(receiver,"parentUnit")&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|s|!s.is_empty()))) && matches!(on_true.as_ref(),Effect::GiveShield{target:Target::Expression(e),amount:Expr::Const{value}} if parent(e,"parentUnit")&&value.as_u64()==Some(1)) && a.context_title.len()==3 && matches!(&a.context_title[0],Expr::Const{value} if value.is_string())&&matches!(&a.context_title[2],Expr::Const{value} if value.is_string())&&matches!(&a.context_title[1],Expr::Binary{op,left,right} if op=="??"&&matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["source","parentUnit","title"])&&matches!(right.as_ref(),Expr::Const{value} if value.is_string())) {return Some(true);}
+    None
+}
+
 impl Program {
     pub fn compile(ability: &Ability) -> Result<Self, String> {
+        if parent_upgrade_registration(ability)==Some(false) {
+            let mut normalized=ability.clone();
+            if let Effect::Conditional{condition:Expr::Binary{left,..},..}=&mut normalized.effect {
+                if let Expr::Binary{op,..}=left.as_mut(){if op=="!="{*op="!==".into();return Self::compile(&normalized);}}
+            }
+        }
         // Deck discard has per-card events plus an aggregate event. The scalar
         // result is not a modeled engine event payload; reject payload captures.
         fn contains(value:&Value, predicate:fn(&Value)->bool)->bool {
@@ -943,7 +964,9 @@ impl Program {
         }
         let mut literal_bytes = 0;
         for fragment in &ability.context_title {
-            validate_title(fragment)?;
+            if parent_upgrade_registration(ability)==Some(true) && matches!(fragment,Expr::Binary{op,..} if op=="??") {
+                // This exact title-only form never broadens general Expr validation.
+            } else { validate_title(fragment)?; }
             literal_bytes += title_literal_bytes(fragment);
             if literal_bytes > 1024 { return Err("context title aggregate literal bytes exceed capacity".into()); }
         }
@@ -1637,6 +1660,9 @@ impl Catalogue {
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(|a|parent_upgrade_registration(a).is_some()) {
+                    if entry["baseClass"]!="UpgradeCard"||!exact_type("upgrade")||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||entry["card"]["unique"]!=false||!entry["card"]["title"].is_string()||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null())||entry["keywordValues"]!=serde_json::json!({})||entry["card"]["keywords"]!=serde_json::json!([]) {return Err("parent token play requires sole ordinary nonunique attached upgrade metadata".into());}
+                }
                 if sides.card.iter().any(|a|a.target_resolvers.iter().any(|d|d.chooser!="self")) {
                     let no_keywords=entry["keywordValues"].as_object().is_some_and(|v|v.is_empty())&&entry["card"]["keywords"].as_array().is_some_and(|v|v.is_empty());
                     let no_pilot=["pilotText","pilotBox","pilotingBox"].iter().all(|k|entry["card"][k].is_null())&&entry["piloting"].is_null();

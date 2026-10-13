@@ -797,6 +797,10 @@ impl Engine {
             }
             Expr::Binary { op, left, right } => {
                 let a = sub(left);
+                if op == "??" {
+                    // Only the exact parent-upgrade operational title admits this.
+                    return if matches!(a,Eval::Null) {sub(right)} else {a};
+                }
                 if op == "&&" && !a.truth() {
                     return a;
                 }

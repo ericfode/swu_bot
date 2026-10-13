@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 580
+    "sourceIr": 582
   },
   "runtimeAdmittedCards": [
     {
@@ -539,6 +539,11 @@
       "implementation": "dataOnly",
       "internalName": "research-station-9",
       "setCode": "HMW_034"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "bestial-bond",
+      "setCode": "HMW_038"
     },
     {
       "implementation": "sourceIr",
@@ -1104,6 +1109,11 @@
       "implementation": "sourceIr",
       "internalName": "wrecker#wrecking-the-empire",
       "setCode": "HMW_263"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "heroic-bravery",
+      "setCode": "HMW_264"
     },
     {
       "implementation": "dataOnly",
@@ -4791,7 +4801,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 956,
+  "runtimeAdmittedCount": 958,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5754,11 +5764,6 @@
       "setCode": "HMW_037"
     },
     {
-      "internalName": "bestial-bond",
-      "reason": "bestial-bond: unsupported expression operator !=",
-      "setCode": "HMW_038"
-    },
-    {
       "internalName": "talzins-shuttle#mysterious-arrival",
       "reason": "talzins-shuttle#mysterious-arrival: compiler rejected \"talzins-shuttle#mysterious-arrival\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/TalzinsShuttleMysteriousArrival.ts\",\"line\":9,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/09_HMW/units/TalzinsShuttleMysteriousArrival.ts\",\"line\":18,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":45,\"file\":\"game/cards/09_HMW/units/TalzinsShuttleMysteriousArrival.ts\",\"line\":29,\"message\":\"this.cardsPlayedThisPhaseWatcher.getCardsPlayed((entry) =>\\n                        entry.playedBy === context.player.opponent\\n                    )\",\"pattern\":\"non-path-reference\"}]",
       "setCode": "HMW_040"
@@ -6312,11 +6317,6 @@
       "internalName": "queen-amidala#retaking-theed",
       "reason": "queen-amidala#retaking-theed: compiler rejected \"queen-amidala#retaking-theed\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/09_HMW/units/QueenAmidalaRetakingTheed.ts\",\"line\":15,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"}]",
       "setCode": "HMW_260"
-    },
-    {
-      "internalName": "heroic-bravery",
-      "reason": "heroic-bravery: printed titles support strict equality and logical operators only",
-      "setCode": "HMW_264"
     },
     {
       "internalName": "twilek-kalikori",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1502,
+  "runtimeRejectedCount": 1500,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }
