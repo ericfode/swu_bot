@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 586
+    "sourceIr": 590
   },
   "runtimeAdmittedCards": [
     {
@@ -109,6 +109,11 @@
       "implementation": "dataOnly",
       "internalName": "strike-team-vanguard",
       "setCode": "ASH_061"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "the-armorer#secrecy-is-our-survival",
+      "setCode": "ASH_064"
     },
     {
       "implementation": "sourceIr",
@@ -3056,6 +3061,11 @@
       "setCode": "SEC_118"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "crucible#centuries-of-wisdom",
+      "setCode": "SEC_119"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "shadow-crawler",
       "setCode": "SEC_121"
@@ -3274,6 +3284,11 @@
       "implementation": "dataOnly",
       "internalName": "crait-veteran",
       "setCode": "SEC_251"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "maarva-andor#weve-been-sleeping",
+      "setCode": "SEC_252"
     },
     {
       "implementation": "sourceIr",
@@ -3719,6 +3734,11 @@
       "implementation": "dataOnly",
       "internalName": "scout-bike-pursuer",
       "setCode": "SOR_032"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "academy-defense-walker",
+      "setCode": "SOR_037"
     },
     {
       "implementation": "sourceIr",
@@ -4821,7 +4841,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 962,
+  "runtimeAdmittedCount": 966,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5037,11 +5057,6 @@
       "internalName": "bokatans-gauntlet#reinforce-from-above",
       "reason": "bokatans-gauntlet#reinforce-from-above: compiler rejected \"bokatans-gauntlet#reinforce-from-above\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/08_ASH/units/BoKatansGauntletReinforceFromAbove.ts\",\"line\":19,\"message\":\"unsupported-modifier:abilityHelper.ongoingEffects.gainAbility\",\"pattern\":\"unsupported-modifier:abilityHelper.ongoingEffects.gainAbility\"}]",
       "setCode": "ASH_063"
-    },
-    {
-      "internalName": "the-armorer#secrecy-is-our-survival",
-      "reason": "the-armorer#secrecy-is-our-survival: arena lists require standalone verified phase-stat semantics",
-      "setCode": "ASH_064"
     },
     {
       "internalName": "home-one#heart-of-the-fleet",
@@ -9214,11 +9229,6 @@
       "setCode": "SEC_112"
     },
     {
-      "internalName": "crucible#centuries-of-wisdom",
-      "reason": "crucible#centuries-of-wisdom: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SEC_119"
-    },
-    {
       "internalName": "naboo-security-force",
       "reason": "naboo-security-force: compiler rejected \"naboo-security-force\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/NabooSecurityForce.ts\",\"line\":23,\"message\":\"immediateEffect:disclose\",\"pattern\":\"immediateEffect:disclose\"}]",
       "setCode": "SEC_120"
@@ -9657,11 +9667,6 @@
       "internalName": "b2emo#thats-two-lies",
       "reason": "b2emo#thats-two-lies: compiler rejected \"b2emo#thats-two-lies\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":30,\"file\":\"game/cards/06_SEC/units/B2EMOThatsTwoLies.ts\",\"line\":20,\"message\":\"immediateEffect:disclose\",\"pattern\":\"immediateEffect:disclose\"}]",
       "setCode": "SEC_248"
-    },
-    {
-      "internalName": "maarva-andor#weve-been-sleeping",
-      "reason": "maarva-andor#weve-been-sleeping: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SEC_252"
     },
     {
       "internalName": "covert-operative",
@@ -10722,11 +10727,6 @@
       "internalName": "gideon-hask#ruthless-loyalist",
       "reason": "gideon-hask#ruthless-loyalist: compiler rejected \"gideon-hask#ruthless-loyalist\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":33,\"file\":\"game/cards/01_SOR/units/GideonHaskRuthlessLoyalist.ts\",\"line\":19,\"message\":\"trigger-alias-hook:onCardDefeated\",\"pattern\":\"trigger-alias-hook:onCardDefeated\"}]",
       "setCode": "SOR_036"
-    },
-    {
-      "internalName": "academy-defense-walker",
-      "reason": "academy-defense-walker: arena lists require standalone verified phase-stat semantics",
-      "setCode": "SOR_037"
     },
     {
       "internalName": "atat-suppressor",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1496,
+  "runtimeRejectedCount": 1492,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

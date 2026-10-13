@@ -239,6 +239,17 @@ Synthetic grant/removal, Sentinel, reentry and
 history-import checks remain separate diagnostics; unconstructed leader/token
 history and controller-change interactions stay explicit coverage gaps.
 
+Arena token experiments cover both source seats, independent Shielded and play
+trigger ordering, consumed Shields versus Shielded keyword presence, physical
+source exclusion, unique replacement, paid source defeat, empty eligible lists,
+later entrants, Rebel and damage filters, and selected native/deployed recipients.
+Exact token identities, allocation-before-attachment, Experience stats and combat,
+Sentinel attack menus, Shield consumption and native-token host cleanup are
+asserted. Engine event hooks establish source-side batch topology separately from
+native/Wasm action, state and result comparisons. Framework stat deaths, arbitrary
+competing registrations, controller changes, ordinary-upgrade host cleanup and
+unconstructed native/leader combinations remain explicit gaps.
+
 Standalone arena-list phase keyword experiments cover Raid and Restore grants,
 Hidden loss, controller/arena membership, entering sources, actual combat, later
 arrivals, source departure, expiry, stacking two events, empty-event confirmation

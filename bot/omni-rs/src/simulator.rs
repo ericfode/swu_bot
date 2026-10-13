@@ -1043,6 +1043,7 @@ impl Engine {
                     present: true,
                     def: self.shield_def,
                     owner: s.active,
+                    next_token: s.card(s.source).shield,
                     ..Card::default()
                 };
                 s.card_mut(s.source).shield = id;

@@ -98,6 +98,12 @@ fn reviewed_weakness_entry(entry:&Value)->bool {
 }
 fn effect_has(e:&Effect,predicate:fn(&Effect)->bool)->bool {predicate(e)||match e {Effect::Simultaneous{effects}|Effect::PhaseModifiers{effects}|Effect::Sequence{effects}=>effects.iter().any(|e|effect_has(e,predicate)),Effect::Conditional{on_true,on_false,..}=>effect_has(on_true,predicate)||on_false.as_deref().is_some_and(|e|effect_has(e,predicate)),Effect::Select{effect,..}=>effect_has(effect,predicate),_=>false}}
 fn program_has(p:&Program,predicate:fn(&Effect)->bool)->bool {p.instructions.iter().any(|i|match i {Instruction::Apply(e)=>effect_has(e,predicate),i=>i.group_effect().is_some_and(|e|effect_has(e,predicate))})}
+fn reviewed_shield_entry(entry:&Value)->bool {let expected:Value=serde_json::from_str(r#"{"title":"Shield","subtitle":null,"cost":0,"hp":0,"power":0,"text":"If damage would be dealt to attached unit, prevent that damage. If you do, defeat a Shield token on it.","deployBox":null,"epicAction":null,"unique":false,"rules":null,"upgradePower":0,"upgradeHp":0,"id":"8752877738","aspects":[],"traits":["armor"],"keywords":[],"types":["token","upgrade"],"setId":{"set":"SOR"},"internalName":"shield"}"#).expect("reviewed Shield metadata");entry["setCode"]=="TOKEN_SHIELD"&&entry["status"]=="unsupported"&&entry["baseClass"]=="TokenUpgradeCard"&&entry["sourcePath"]=="game/cards/01_SOR/tokens/Shield.ts"&&entry["sourceHash"]=="39f1c6699c36ba309a8fe8e053f9b94ddbb8877991767b6664fcd88d447be91f"&&entry["card"]==expected&&entry["attachCondition"].is_null()&&entry["piloting"].is_null()&&entry["keywordValues"]==serde_json::json!({})&&entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]})}
+fn reviewed_experience_entry(entry:&Value)->bool {
+ let expected:Value=serde_json::from_str(r#"{"title":"Experience","subtitle":null,"cost":0,"hp":1,"power":1,"text":null,"deployBox":null,"epicAction":null,"unique":false,"rules":null,"upgradePower":1,"upgradeHp":1,"id":"2007868442","aspects":[],"traits":["learned"],"keywords":[],"types":["token","upgrade"],"setId":{"set":"SOR"},"internalName":"experience"}"#).expect("reviewed Experience metadata");
+ entry["setCode"]=="TOKEN_EXPERIENCE"&&entry["sourcePath"]=="game/cards/01_SOR/tokens/Experience.ts"&&entry["status"]=="unsupported"&&entry["baseClass"]=="TokenUpgradeCard"&&entry["sourceHash"]=="fccf00d13061bfc15447101a0dc82fc360f9b5d2e28a9da678684e8c93bc9d67"&&entry["card"]==expected&&entry["attachCondition"].is_null()&&entry["piloting"].is_null()&&entry["keywordValues"]==serde_json::json!({})&&entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]})
+}
+fn program_needs_experience(p:&Program)->bool {program_has(p,|e|matches!(e,Effect::GiveExperience{..}))}
 fn program_needs_weakness(p:&Program)->bool {program_has(p,|e|matches!(e,Effect::GiveWeakness{..}))}
 fn program_needs_beast(p:&Program)->bool {program_has(p,|e|matches!(e,Effect::CreateTokenUnit{token_type,..} if token_type=="beast"))}
 
@@ -152,6 +158,7 @@ impl Engine {
     /// Load every fully executable card, retaining explicit reasons for all others.
     pub fn from_catalogue_value(value: &Value) -> Result<Self, String> {
         let mut catalogue = Catalogue::load(value)?;
+        let experience_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_experience_entry);
         let force_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_force_entry);
         let weakness_available=value["cards"].as_array().ok_or("catalogue missing cards")?.iter().any(reviewed_weakness_entry);
         let beast_available=catalogue.cards.contains_key("TOKEN_BEAST")&&value["cards"].as_array().is_some_and(|cards|cards.iter().any(reviewed_beast_entry));
@@ -180,6 +187,7 @@ impl Engine {
                     }
                 }
                 let programs = catalogue.cards.get(&code).cloned().unwrap_or_default();
+                if !experience_available&&programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_experience(&catalogue.programs[*p as usize])) {return Err("reviewed Experience token unavailable".into());}
                 if !force_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])) {return Err("reviewed Force token unavailable; dependent source cannot execute".into());}
                 if !weakness_available && programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])) {return Err("Weakness token unavailable; dependent source cannot execute".into());}
                 if !beast_available&&programs.card.iter().chain(&programs.unit).chain(&programs.leader).any(|p|program_needs_beast(&catalogue.programs[*p as usize])) {return Err("reviewed Beast token unavailable; dependent source cannot execute".into());}
@@ -209,6 +217,8 @@ impl Engine {
                     } else if code=="TOKEN_EXPERIENCE" {
                         "experience"
                     } else {"weakness"};
+                    if code=="TOKEN_SHIELD"&&!reviewed_shield_entry(entry) {return Err("native Shield metadata differs from reviewed adapter".into());}
+                    if code=="TOKEN_EXPERIENCE"&&!reviewed_experience_entry(entry) {return Err("native Experience metadata differs from reviewed adapter".into());}
                     if code=="TOKEN_WEAKNESS" && !reviewed_weakness_entry(entry) {return Err("native Weakness metadata differs from reviewed adapter".into());}
                     if info.internal_name != expected || !info.is("token") || !info.is("upgrade") {
                         return Err("invalid native token metadata".into());
@@ -458,6 +468,7 @@ impl Engine {
         if !included.contains("TOKEN_WEAKNESS") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_weakness(&catalogue.programs[*p as usize])))) {return Err("pool containing GiveWeakness cards must include reviewed TOKEN_WEAKNESS".into());}
         if !included.contains("TOKEN_THE_FORCE") && included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_force(&catalogue.programs[*p as usize])))) {return Err("pool containing Force gain/use/presence cards must include reviewed TOKEN_THE_FORCE".into());}
         if !included.contains("TOKEN_BEAST")&&included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_beast(&catalogue.programs[*p as usize])))) {return Err("pool containing Beast creation must include reviewed TOKEN_BEAST".into());}
+        if !included.contains("TOKEN_EXPERIENCE")&&included.iter().any(|code|catalogue.cards.get(code).is_some_and(|c|c.card.iter().chain(&c.unit).chain(&c.leader).any(|p|program_needs_experience(&catalogue.programs[*p as usize])))) {return Err("pool containing Experience creation must include reviewed TOKEN_EXPERIENCE".into());}
         catalogue.metadata.retain(|code, _| included.contains(code));
         engine.pool_hash = format!("{:x}", Sha256::digest(pool_bytes));
         Ok(engine)
@@ -2083,7 +2094,22 @@ impl Engine {
         *s=prospective;
         Ok((result,succeeded))
     }
+    fn apply_arena_tokens(&self,s:&mut State,e:&Effect)->Result<(u16,bool),String> {
+        if !s.arena_order_exact {return Err("arena token creation requires recorded arena order".into());}
+        let (target,xp)=match e {Effect::GiveShield{target,..}=>(target,false),Effect::GiveExperience{target,..}=>(target,true),_=>unreachable!()};
+        let targets=self.effect_targets(s,target).into_iter().filter_map(|v|if let Eval::Card(id)=v {Some(id)}else{None}).filter(|id|self.in_arena(s,*id)).collect::<Vec<_>>();
+        if targets.is_empty(){return Ok((0,false));}
+        if s.next_id as usize+targets.len()>MAX_CARDS{return Err("card capacity exceeded creating arena tokens".into());}
+        let def=if xp {self.experience_def.ok_or("catalogue needs Experience token")?}else{self.shield_def};
+        let mut work=*s;let mut tokens=Vec::with_capacity(targets.len());
+        // Aggregate creation precedes every contingent attachment. No prepared
+        // event buffer or Shield replacement stash is borrowed by this window.
+        for target in &targets {let id=work.next_id;work.next_id+=1;*work.card_mut(id)=Card{present:true,def,owner:work.card(*target).owner,..Card::default()};tokens.push(id);}
+        for (target,id) in targets.iter().zip(tokens) {let previous=if xp{work.card(*target).experience}else{work.card(*target).shield};work.card_mut(id).next_token=previous;if xp{work.card_mut(*target).experience=id;}else{work.card_mut(*target).shield=id;}self.attach(&mut work,id,*target);}
+        self.check_stat_capacity(&work)?;self.sweep_stat_defeats(&mut work)?;self.check_win(&mut work);*s=work;Ok((targets.len() as u16,true))
+    }
     fn apply_effect(&self, s: &mut State, e: &Effect) -> Result<(u16, bool), String> {
+        if matches!(e,Effect::GiveShield{target:Target::ArenaList(_),..}|Effect::GiveExperience{target:Target::ArenaList(_),..}) {return self.apply_arena_tokens(s,e);}
         if matches!(e,Effect::PhaseModifiers{effects}|Effect::Simultaneous{effects} if effects.len()==2&&effects.iter().all(|e|matches!(e,Effect::GainKeyword{target:Target::ArenaList(_),..}|Effect::LoseKeyword{target:Target::ArenaList(_),..}))) {return self.apply_arena_keyword_batch(s,e);}
 
         if let Effect::Defeat {target:Target::ArenaList(_)}=e {

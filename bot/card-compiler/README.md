@@ -212,6 +212,16 @@ a legal but already ready/exhausted first domain keeps later selection before
 payment. Cancellation preserves card identities and resource state. Unsupported
 mixed pairs remain rejected rather than running a partial effect.
 
+Bounded ordinary-unit play and defeat registrations can give one Shield or
+Experience to each matching friendly arena unit. Supported live filters cover
+Shielded keyword presence, physical source exclusion, the Rebel trait, and
+already-damaged units. Each registration allocates its entire token batch before
+attachment, preserving ground-then-space recipient order and recipient controller
+ownership. Captured play and defeat registrations remain distinct through unique
+replacement. Intrinsic Shielded appends to the existing token chain, preserving
+older Shields for damage replacement. These forms use the shared interpreter in
+native and Wasm Auto mode; other token-list shapes remain rejected.
+
 It rejects unknown fields, custom class state/methods, constructors, accessors,
 module execution, activation limits, unsupported effect helpers, and mutable or
 side-effecting callbacks. Other constant abilities, arbitrary event watchers,

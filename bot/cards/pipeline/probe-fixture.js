@@ -152,6 +152,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'arena-token') return require('./arena-token-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'keyword-inventory') return require('./keyword-inventory-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'parent-upgrade') return require('./parent-upgrade-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-continuation') return require('./force-continuation-probe-fixture').fixture(env, pool, scenario, seed);
@@ -418,6 +419,8 @@ module.exports = {
         'bot/omni/rs/make-pool.js',
         'bot/cards/pipeline/arena-keyword-set-probes.js',
         'bot/cards/pipeline/arena-keyword-set-probe-fixture.js',
+        'bot/cards/pipeline/arena-token-probes.js',
+        'bot/cards/pipeline/arena-token-probe-fixture.js',
         'bot/cards/pipeline/arena-damage-probes.js',
         'bot/cards/pipeline/arena-damage-probe-fixture.js',
         'bot/cards/pipeline/probes.js',

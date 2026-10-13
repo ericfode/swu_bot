@@ -800,6 +800,47 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "4809843947",
+      "internalName": "the-armorer#secrecy-is-our-survival",
+      "keywords": [
+        "shielded"
+      ],
+      "power": 5,
+      "rules": null,
+      "setCode": "ASH_064",
+      "setCodes": [
+        {
+          "number": 64,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 64,
+        "set": "ASH"
+      },
+      "subtitle": "Secrecy is Our Survival",
+      "text": "Shielded (When you play this unit, give a Shield token to her.)\nWhen Played: Give a Shield token to each friendly unit with Shielded (including this one).",
+      "title": "The Armorer",
+      "traits": [
+        "mandalorian"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "vigilance",
         "heroism"
@@ -24681,6 +24722,46 @@
       "upgradePower": null
     },
     {
+      "arena": "space",
+      "aspects": [
+        "command"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "9372674583",
+      "internalName": "crucible#centuries-of-wisdom",
+      "keywords": [],
+      "power": 5,
+      "rules": null,
+      "setCode": "SEC_119",
+      "setCodes": [
+        {
+          "number": 119,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 119,
+        "set": "SEC"
+      },
+      "subtitle": "Centuries of Wisdom",
+      "text": "When Played/When Defeated: Give an Experience token to each other friendly unit.",
+      "title": "Crucible",
+      "traits": [
+        "jedi",
+        "vehicle",
+        "transport"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "arena": "ground",
       "aspects": [
         "command"
@@ -26458,6 +26539,44 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "heroism"
+      ],
+      "cost": 3,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 4,
+      "id": "0390492118",
+      "internalName": "maarva-andor#weve-been-sleeping",
+      "keywords": [],
+      "power": 3,
+      "rules": null,
+      "setCode": "SEC_252",
+      "setCodes": [
+        {
+          "number": 252,
+          "set": "SEC"
+        }
+      ],
+      "setId": {
+        "number": 252,
+        "set": "SEC"
+      },
+      "subtitle": "We've Been Sleeping",
+      "text": "When Defeated: Give an Experience token to each friendly Rebel unit.",
+      "title": "Maarva Andor",
+      "traits": [
+        "rebel"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },
@@ -30011,6 +30130,49 @@
       "traits": [
         "imperial",
         "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "villainy",
+        "vigilance"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 5,
+      "id": "7596515127",
+      "internalName": "academy-defense-walker",
+      "keywords": [
+        "sentinel"
+      ],
+      "power": 5,
+      "rules": null,
+      "setCode": "SOR_037",
+      "setCodes": [
+        {
+          "number": 37,
+          "set": "SOR"
+        }
+      ],
+      "setId": {
+        "number": 37,
+        "set": "SOR"
+      },
+      "subtitle": null,
+      "text": "Sentinel (Units in this arena can't attack your non-Sentinel units or your base.)\n\nWhen Played: Give an Experience token to each friendly damaged unit.",
+      "title": "Academy Defense Walker",
+      "traits": [
+        "imperial",
+        "vehicle",
+        "walker"
       ],
       "types": [
         "unit"
