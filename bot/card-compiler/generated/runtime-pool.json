@@ -3745,6 +3745,49 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "command",
+        "villainy"
+      ],
+      "cost": 6,
+      "deployBox": "Raid 1\nOther friendly units that cost 3 or more gain Raid 1.",
+      "epicAction": "Epic Action: If you control 6 or more resources, deploy this leader.",
+      "hp": 5,
+      "id": "0645623807",
+      "internalName": "darth-vader#might-of-the-empire",
+      "keywords": [
+        "raid"
+      ],
+      "power": 5,
+      "rules": "Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\n",
+      "setCode": "HMW_007",
+      "setCodes": [
+        {
+          "number": 7,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 7,
+        "set": "HMW"
+      },
+      "subtitle": "Might of the Empire",
+      "text": "Friendly units that cost 3 or more gain Raid 1.",
+      "title": "Darth Vader",
+      "traits": [
+        "force",
+        "imperial",
+        "sith"
+      ],
+      "types": [
+        "leader"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "vigilance"
       ],
@@ -34228,6 +34271,43 @@
       "cost": null,
       "deployBox": null,
       "epicAction": null,
+      "hp": 26,
+      "id": "6594935791",
+      "internalName": "pau-city",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TWI_019",
+      "setCodes": [
+        {
+          "number": 19,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 19,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "Each leader unit you control gets +0/+1.",
+      "title": "Pau City",
+      "traits": [
+        "utapau"
+      ],
+      "types": [
+        "base"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": null,
+      "deployBox": null,
+      "epicAction": null,
       "hp": 30,
       "id": "6672139274",
       "internalName": "sundari",
@@ -34435,6 +34515,43 @@
       "title": "The Nest",
       "traits": [
         "onderon"
+      ],
+      "types": [
+        "base"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "cunning"
+      ],
+      "cost": null,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 26,
+      "id": "9652861741",
+      "internalName": "petranaki-arena",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "TWI_028",
+      "setCodes": [
+        {
+          "number": 28,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 28,
+        "set": "TWI"
+      },
+      "subtitle": "",
+      "text": "Each leader unit you control gets +1/+0.",
+      "title": "Petranaki Arena",
+      "traits": [
+        "geonosis"
       ],
       "types": [
         "base"

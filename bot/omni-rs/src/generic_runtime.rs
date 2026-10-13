@@ -226,8 +226,7 @@ impl Engine {
                     }
                 } else if info.is("base") {
                     if !info.hp.is_some_and(|n| (1..=1000).contains(&n))
-                        || !info.text.as_deref().unwrap_or("").trim().is_empty()
-                        || !programs.card.is_empty()
+                        || ((!info.text.as_deref().unwrap_or("").trim().is_empty()||!programs.card.is_empty())&&crate::ability_ir::basezone_source_kind(entry)!=Some(false))
                     {
                         return Err("only plain bases with bounded positive HP execute".into());
                     }
@@ -302,7 +301,7 @@ impl Engine {
                         return Err("card has more than 16 abilities on one side".into());
                     }
                 }
-                if info.is("leader") && programs.leader.iter().any(|p| catalogue.programs[*p as usize].trigger == "constant") {
+                if info.is("leader") && programs.leader.iter().any(|p| catalogue.programs[*p as usize].trigger == "constant")&&crate::ability_ir::basezone_source_kind(entry)!=Some(true) {
                     return Err("leader-front constants require verified base-zone ongoing sources".into());
                 }
                 // A leader's deployment trigger requires a separate registration; never silently drop it.
@@ -536,7 +535,8 @@ impl Engine {
         for source in 1..s.next_id {
             // Incoming unique copies have not activated their ongoing abilities:
             // the engine resolves uniqueness before resolveGameState.
-            if !(self.in_arena(s, source)||self.attached_in_play(s,source))
+            let basezone=s.players.iter().any(|p|p.base==source||(p.leader==source&&!s.card(source).deployed));
+            if !(self.in_arena(s, source)||self.attached_in_play(s,source)||basezone)
                 || source == s.disabled_ongoing_source
                 || (s.decision == Decision::Unique && source == s.source)
             {

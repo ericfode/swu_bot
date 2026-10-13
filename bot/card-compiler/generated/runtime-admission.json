@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 590
+    "sourceIr": 593
   },
   "runtimeAdmittedCards": [
     {
@@ -479,6 +479,11 @@
       "implementation": "dataOnly",
       "internalName": "noti-mobile-pod",
       "setCode": "ASH_261"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "darth-vader#might-of-the-empire",
+      "setCode": "HMW_007"
     },
     {
       "implementation": "dataOnly",
@@ -4251,6 +4256,11 @@
       "setCode": "TWI_015"
     },
     {
+      "implementation": "sourceIr",
+      "internalName": "pau-city",
+      "setCode": "TWI_019"
+    },
+    {
       "implementation": "dataOnly",
       "internalName": "sundari",
       "setCode": "TWI_020"
@@ -4279,6 +4289,11 @@
       "implementation": "dataOnly",
       "internalName": "the-nest",
       "setCode": "TWI_027"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "petranaki-arena",
+      "setCode": "TWI_028"
     },
     {
       "implementation": "dataOnly",
@@ -4841,7 +4856,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 966,
+  "runtimeAdmittedCount": 969,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5707,11 +5722,6 @@
       "internalName": "omega#close-your-eyes-and-focus",
       "reason": "omega#close-your-eyes-and-focus: compiler rejected \"omega#close-your-eyes-and-focus\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":29,\"file\":\"game/cards/09_HMW/leaders/OmegaCloseYourEyesAndFocus.ts\",\"line\":19,\"message\":\"unsupported-field:initiateAttack\",\"pattern\":\"unsupported-field:initiateAttack\"}]",
       "setCode": "HMW_006"
-    },
-    {
-      "internalName": "darth-vader#might-of-the-empire",
-      "reason": "leader-front constants require verified base-zone ongoing sources",
-      "setCode": "HMW_007"
     },
     {
       "internalName": "general-grievous#separatist-warlord",
@@ -10690,7 +10700,7 @@
     },
     {
       "internalName": "security-complex",
-      "reason": "security-complex: unsupported runtime trigger epicAction",
+      "reason": "security-complex: base-zone ongoing source requires exact reviewed base or two-side leader shape",
       "setCode": "SOR_019"
     },
     {
@@ -10700,12 +10710,12 @@
     },
     {
       "internalName": "tarkintown",
-      "reason": "tarkintown: unsupported runtime trigger epicAction",
+      "reason": "tarkintown: base-zone ongoing source requires exact reviewed base or two-side leader shape",
       "setCode": "SOR_025"
     },
     {
       "internalName": "jedha-city",
-      "reason": "jedha-city: unsupported runtime trigger epicAction",
+      "reason": "jedha-city: base-zone ongoing source requires exact reviewed base or two-side leader shape",
       "setCode": "SOR_028"
     },
     {
@@ -11704,11 +11714,6 @@
       "setCode": "TWI_018"
     },
     {
-      "internalName": "pau-city",
-      "reason": "only plain bases with bounded positive HP execute",
-      "setCode": "TWI_019"
-    },
-    {
       "internalName": "droid-manufactory",
       "reason": "droid-manufactory: compiler rejected \"droid-manufactory\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/03_TWI/bases/DroidManufactory.ts\",\"line\":17,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"}]",
       "setCode": "TWI_022"
@@ -11717,11 +11722,6 @@
       "internalName": "shadow-collective-camp",
       "reason": "shadow-collective-camp: compiler rejected \"shadow-collective-camp\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":35,\"file\":\"game/cards/03_TWI/bases/ShadowCollectiveCamp.ts\",\"line\":17,\"message\":\"trigger-alias-hook:onLeaderDeployed\",\"pattern\":\"trigger-alias-hook:onLeaderDeployed\"}]",
       "setCode": "TWI_025"
-    },
-    {
-      "internalName": "petranaki-arena",
-      "reason": "only plain bases with bounded positive HP execute",
-      "setCode": "TWI_028"
     },
     {
       "internalName": "rune-haako#scheming-second",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1492,
+  "runtimeRejectedCount": 1489,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

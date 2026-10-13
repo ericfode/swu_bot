@@ -55,7 +55,9 @@ async function constructProbeFixture(env, pool, scenario, seed) {
     const p = scenario.probe;
     assert.ok(p, 'Missing pure probe construction');
     const deck = buildDeck(pool, p),
-        eg = env.newGame({ seed, deck1: deck, deck2: {...deck,base:{id:p.enemyBaseCode ?? deck.base.id,count:1}} });
+        enemyDeck = {...deck, base:{id:p.enemyBaseCode ?? deck.base.id,count:1},
+            leader:{id:p.enemyLeaderCode ?? deck.leader.id,count:1}},
+        eg = env.newGame({ seed, deck1: deck, deck2: enemyDeck });
     const rng = seededRng('automatic-probe-' + seed),
         bot = makeBot('random');
     await eg.start();
@@ -139,7 +141,7 @@ async function constructProbeFixture(env, pool, scenario, seed) {
         assert.equal(source.zoneName, p.sourceArena + 'Arena');
         assert.equal(source.damage, p.sourceDamage ?? 0);
     }
-    return { eg, rng, bot, deck, own, enemy, source, activation, targets };
+    return { eg, rng, bot, deck, decks:[deck,enemyDeck], own, enemy, source, activation, targets };
 }
 function observe(card, eg) {
     const active = ['groundArena', 'spaceArena'].includes(card.zoneName) || (card.zoneName === 'base' && card.isBase?.());
@@ -152,6 +154,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'base-zone') return require('./base-zone-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-token') return require('./arena-token-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'keyword-inventory') return require('./keyword-inventory-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'parent-upgrade') return require('./parent-upgrade-probe-fixture').fixture(env, pool, scenario, seed);
@@ -419,6 +422,8 @@ module.exports = {
         'bot/omni/rs/make-pool.js',
         'bot/cards/pipeline/arena-keyword-set-probes.js',
         'bot/cards/pipeline/arena-keyword-set-probe-fixture.js',
+        'bot/cards/pipeline/base-zone-probes.js',
+        'bot/cards/pipeline/base-zone-probe-fixture.js',
         'bot/cards/pipeline/arena-token-probes.js',
         'bot/cards/pipeline/arena-token-probe-fixture.js',
         'bot/cards/pipeline/arena-damage-probes.js',

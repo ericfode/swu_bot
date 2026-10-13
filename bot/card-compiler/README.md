@@ -76,6 +76,15 @@ aura bonuses with bounded conditions and target filters. Arena count/existence
 queries preserve their outer target separately from each queried card. Live
 stat calculations and stat-dependent constant conditions remain rejected.
 
+Ongoing sources include actual bases and undeployed leaders for bounded complete
+families: the 26-HP bases granting friendly leader units +0/+1 or +1/+0, and the
+two-sided leader granting Raid 1 to friendly units costing at least three. A
+leader uses its current side once; the deployed source retains its printed Raid
+without granting itself another copy. Whole-source and printed side metadata
+must match these supported shapes. Other base abilities and leader-front
+constants remain rejected. These constant programs use the shared live-modifier
+path in native and Wasm; runtime admission does not establish every interaction.
+
 Constant and phase effects can grant or remove the supported core keywords.
 Numeric Raid and Restore stack, while boolean keywords track presence. Live
 numeric conditions are restricted to supported queries; keyword dependency

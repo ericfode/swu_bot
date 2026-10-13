@@ -239,6 +239,16 @@ Synthetic grant/removal, Sentinel, reentry and
 history-import checks remain separate diagnostics; unconstructed leader/token
 history and controller-change interactions stay explicit coverage gaps.
 
+Base and leader-zone experiments construct genuinely different initial decks
+for both source seats. They cover 26-HP versus ordinary 30-HP base lethality,
+leader deployment, paid damage, a +HP survival boundary, exact attack damage,
+and real undeployment preserving the leader identity. The two-sided Raid source
+covers printed cost thresholds in both arenas, controller and physical source
+exclusion, intrinsic stacking, later entrants, natural phase persistence, and
+ordinary upgrade/native-token negatives. Different special bases together,
+front exhaustion, blanking, control changes, piloting, general aura deaths and
+unique-entry membership remain explicit gaps.
+
 Arena token experiments cover both source seats, independent Shielded and play
 trigger ordering, consumed Shields versus Shielded keyword presence, physical
 source exclusion, unique replacement, paid source defeat, empty eligible lists,
