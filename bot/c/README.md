@@ -49,6 +49,17 @@ copy (a unit or an upgrade such as a pilot); such copies, then spare copies in h
 `--unique` turn on one fix each. Without a flag the bot plays exactly as before, so c-clock stays the reference of the
 standard test.
 
+## c-clock3 (`--v3`)
+
+`bot/c/swu-c --v3`, registered as `c-clock3`, is c-clock2 plus one more fix from the Karabast games: it plays its events.
+c-clock2 resourced almost every event it drew (Hotshot Maneuver: 0 plays in 264 games, Aggressive Negotiations: 1 in
+209), because the resource choice ranked events below every unit and an event that attacks lost to the plain attack it
+replaces. Now an event is kept like a small unit; an event that attacks ("Attack with a unit", Hotshot Maneuver's
+"Then, attack with that unit") is played before the plain attack when a ready unit would attack anyway; Hotshot
+Maneuver picks the unit with the most On Attack abilities; and an event whose condition fails now (System Shock with no
+upgrade or token on an enemy unit, Air Superiority without more space units) is not played. `--events` turns on only
+this fix.
+
 ## Files
 
 - `bot.c`: protocol loop, observation parsing, the strategy.
