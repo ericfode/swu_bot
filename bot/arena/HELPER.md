@@ -84,4 +84,5 @@ run key never does.
 
 All of it is off until the games machine has both `GAMES_HELPER_PORT = "8090"` in fly.games.toml and a
 `GAMES_HELPER_TOKENS` secret, and it runs the Elixir coordinator (`GAMES_COORDINATOR = "elixir"`). Off, the machine
-plays exactly as before: no listener, no relay, and the ladder plays every game itself.
+plays exactly as before: no listener, no relay, and the ladder plays every game itself. Since 2026-10-13 the machine
+runs the Elixir coordinator with the port set, so the secret is the one step left.

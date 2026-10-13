@@ -24,12 +24,13 @@ kill_timeout = "30s"
   SWU_WINDOW = "https://swu-arena.fly.dev"
   GAMES_DATA = "/data"
   PORT = "8080"
-  GAMES_COORDINATOR = "node"
+  GAMES_COORDINATOR = "elixir"
   # the coordinator refuses to start when /data is not the volume (its jobs and state would not survive a restart)
   GAMES_REQUIRE_MOUNT = "1"
-  # Helpers (bot/arena/HELPER.md) stay off until GAMES_HELPER_PORT = "8090" is set here, with the GAMES_HELPER_TOKENS
-  # secret and the Elixir coordinator. The port is reached through `fly proxy` over the private network only; it needs
-  # no [[services]] entry.
+  # the helper API (bot/arena/HELPER.md), on the machine's private address; it stays off until the GAMES_HELPER_TOKENS
+  # secret names a helper (`sh bot/arena/ops/helper.sh init`). Helpers reach it through `fly proxy` over the private
+  # network only, so it needs no [[services]] entry.
+  GAMES_HELPER_PORT = "8090"
 
 [[mounts]]
   source = "games_data"
