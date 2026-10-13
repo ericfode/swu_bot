@@ -9,7 +9,8 @@
 # path (the round-seed secret, credential files) is covered by an empty mount. --user <name> runs the command as that
 # user, with no capabilities and no way to gain any (no setuid programs): it cannot undo those mounts, and it reads
 # only what that user may. Without --user the command keeps root's privileges, and root could unmount them, so the
-# arena always passes --user.
+# intake's checker passes --user; the referee runs as root here and starts its bot code as that user itself
+# (referee.js spawnBots).
 # Everything else, the network included, is shared. The command's exit code is this script's. SIGTERM, SIGINT or
 # SIGHUP to this script (or to the command) stops the command with SIGTERM, and when the command ends every process left
 # in the namespace ends with it.
