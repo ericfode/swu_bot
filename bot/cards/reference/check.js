@@ -20,7 +20,7 @@ async function check(options = {}) {
     if (runtime !== 'wasm') identities.nativeSha256 = sha256(fs.readFileSync(native));
     // Node loader resolves the exact Wasm package; its files are hashed below when present.
     if (runtime !== 'native') {
-        const pkg = path.join(repo, 'bot/omni-wasm/pkg/node');
+        const pkg = path.resolve(options.wasmPackage ?? path.join(repo, 'bot/omni-wasm/pkg/node'));
         identities.wasmPackage = Object.fromEntries(fs.readdirSync(pkg).filter(f => /\.(wasm|js)$/.test(f)).sort().map(f => [f, sha256(fs.readFileSync(path.join(pkg, f)))]));
     }
     for (const poolSha256 of new Set(rows.map(r => r.poolSha256))) {
@@ -35,14 +35,14 @@ async function check(options = {}) {
         }
         if (runtime !== 'native') {
             const { createSimulator } = require('../../omni/wasm/node'), { records, checkRecords } = require('../../omni/wasm/check');
-            const simulator = await createSimulator({ cataloguePath, poolPath, backend: options.backend, instrumentation: !!options.dispatchDir });
+            const simulator = await createSimulator({ cataloguePath, poolPath, packagePath: options.wasmPackage ? path.join(path.resolve(options.wasmPackage), 'omni_wasm.js') : undefined, backend: options.backend, instrumentation: !!options.dispatchDir });
             try { files.forEach((file, i) => { const r = checkRecords(simulator, records(file), file); assert.equal(r.decisions, group[i].decisions); assert.equal(r.windows, group[i].windows); results.push({ caseId: group[i].caseId, traceSha256: group[i].traceSha256, ...r }); }); }
             finally { if (options.dispatchDir) fs.writeFileSync(path.join(options.dispatchDir, poolSha256 + '-wasm-' + (options.backend ?? 'auto') + '.json'), JSON.stringify(simulator.rulesBackendReport(), null, 2) + '\n', {flag:'wx'}); simulator.free(); }
         }
     }
     assert.equal(sha256(fs.readFileSync(cataloguePath)), identities.catalogueSha256, 'Catalogue changed during checks');
     if (identities.nativeSha256) assert.equal(sha256(fs.readFileSync(native)), identities.nativeSha256, 'Native binary changed during checks');
-    if (identities.wasmPackage) for (const [file, hash] of Object.entries(identities.wasmPackage)) assert.equal(sha256(fs.readFileSync(path.join(repo, 'bot/omni-wasm/pkg/node', file))), hash, 'Wasm package changed during checks');
+    if (identities.wasmPackage) for (const [file, hash] of Object.entries(identities.wasmPackage)) assert.equal(sha256(fs.readFileSync(path.join(path.resolve(options.wasmPackage ?? path.join(repo, 'bot/omni-wasm/pkg/node')), file))), hash, 'Wasm package changed during checks');
     const receipt = { schema: 'swu-reference-check/v1', identities, recordings: rows.length, results };
     if (options.receipt) fs.writeFileSync(options.receipt, JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx' });
     return { recordings: rows.length, comparisons: results.length, decisions: results.reduce((n, r) => n + r.decisions, 0), runtime, matched: true, identities };

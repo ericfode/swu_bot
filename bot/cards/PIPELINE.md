@@ -42,6 +42,116 @@ source artifacts. A failed run keeps a partial report with uncovered work. The
 coverage, and explicit assessments of uncovered obligations before writing
 `reviewed-report.json`. It does not authenticate an external model provider.
 
+## Twenty-card work and validation
+
+Keep card authoring and executable validation separate. `work init` creates up to
+20 card jobs with full source, current plans and baseline file hashes. Each job
+has its own temporary work directory. Workers claim the paths they will change;
+overlapping file or directory claims are rejected. Shared runtime extensions
+need one owner. Submit patches and evidence from the job directory, then integrate
+reviewable changes before preparing a validation build. Submitting a job marks it
+ready for validation; it does not mark a card correct or admitted.
+
+```sh
+npm run cards:pipeline -- work init --remaining --limit 20 --out /tmp/card-work
+npm run cards:pipeline -- work status --run /tmp/card-work
+npm run cards:pipeline -- work claim --run /tmp/card-work --job CARD_ID --worker author-a --paths bot/card-compiler/FILE.js
+```
+
+The claim response provides `workDir`, `token`, `bundlePath` and `handoffPath`.
+Read the bundle and handoff, write a factual result JSON inside `workDir`, and put
+any patch and test receipts there too. For example, a source-only result can state
+`{"status":"source-inspected","cardId":"SET_NNN","findings":[],"remaining":["implementation","engine witnesses","independent review"]}`.
+Omit `--paths` when claiming source-only work. Submit using the exact returned token:
+
+```sh
+npm run cards:pipeline -- work submit --run /tmp/card-work --job CARD_ID --worker author-a --token CLAIM_TOKEN --result result.json --patch change.patch --evidence checks.json
+```
+
+If a dependency blocks the job, release it instead of submitting:
+
+```sh
+npm run cards:pipeline -- work release --run /tmp/card-work --job CARD_ID --worker author-a --token CLAIM_TOKEN --reason "Dependency needs another owner" --blocked
+```
+
+Paths to submission files resolve within the claimed `workDir`; omit `--patch`
+and `--evidence` for source-only work. Resume a blocked job with `work claim
+--resume-blocked` after resolving its dependency. Retain source-only results as
+unimplemented work even though their queue submission is ready for validation.
+
+Use actual job IDs and paths from the queue. Claims have explicit ownership tokens;
+release or submission requires the current token. Do not edit the shared checkout
+from concurrent author jobs. Keep implementations in isolated work directories and
+transfer their reviewed patches through the integrator. Queue state, worker
+handoffs, patches and review receipts stay outside the repository.
+
+Prepare native and Wasm once, then run up to 20 independent card processes:
+
+```sh
+npm run cards:pipeline -- prepare --out /tmp/card-build
+npm run cards:pipeline -- fanout --prepared /tmp/card-build --cards CARD_IDS --jobs 20 --out /tmp/card-validation
+npm run cards:pipeline -- fanout-status --run /tmp/card-validation
+npm run cards:pipeline -- fanout --run /tmp/card-validation --jobs 20
+```
+
+Replace `CARD_IDS` with comma-separated printed IDs. Without `--prepared`, fanout
+prepares one shared build itself. Normal preparation uses incremental Cargo caches
+and copies binaries into an immutable bundle. Reuse that bundle while its inputs
+remain unchanged. Freeze the canonical engine, compiler, runtime and pipeline
+sources during preparation and validation; author patches can proceed elsewhere.
+There must be one canonical build owner while preparation copies the warm native
+and Wasm outputs. Each child runs the engine experiments, all three backend checks,
+and mutation checks for one card. A prepared child never invokes Cargo or rebuilds
+the engine. Each child's three backend checks run sequentially, so 20 card jobs do
+not launch 60 runtime checks at once.
+
+Failed cards retain their evidence and do not cancel successful siblings. Resume
+rechecks completed artifacts and starts failed or interrupted jobs in fresh attempt
+directories. `--timeout-ms` bounds each child, including its subprocesses. Only use
+`--recover` after the previous coordinator has stopped; live owners cannot be
+replaced. An interrupted lock acquisition or build-cache lock requires inspection
+and manual cleanup after confirming no owner remains.
+
+Passing comparisons stay `review-pending`; cards lacking a construction adapter
+stay `needs-work`. The independent semantic review and ordinary reference import
+steps still apply to every accepted card. Report elapsed validation time, peak
+child count, reviewed cards and newly admitted cards separately. Existing-card
+smoke tests and replays do not count as newly completed conversions. The number of
+simultaneous model authors is bounded by the current session's available agent
+slots; the subprocess limit does not create extra model sessions.
+
+## Full rebuilds every 200 new cards
+
+Use incremental builds and targeted engine comparisons between full checkpoints.
+Initialize the counter once at the current reviewed admission baseline:
+
+```sh
+npm run cards:pipeline -- checkpoints init --out /tmp/card-progress --baseline-commit FULL_COMMIT_SHA
+npm run cards:pipeline -- checkpoints record --run /tmp/card-progress --pipeline /tmp/card-run --before-commit BEFORE_SHA --integration-commit AFTER_SHA
+npm run cards:pipeline -- checkpoints status --run /tmp/card-progress
+```
+
+Recording requires the actual packet-bound independent GPT-6.1 Sol review at high
+or higher effort, completed three-backend comparisons, and committed implementation
+and admission files matching the evidence. It counts unique admissions added by
+the integrated change and absent from the initial baseline. Re-recording the same
+card or replaying existing cards cannot advance the counter.
+
+Each crossed 200-card boundary creates a pending full-check job bound to its exact
+integration commit. The coordinator dispatches that job to a background subagent
+with an isolated checkout, complete pinned engine setup and separate build target.
+Use `prepare({out, full: true})` from that checkout for a fresh target, then run the
+full accepted native/Wasm corpus and required full checks. This full preparation
+uses its own output-directory lease and does not lock the ordinary warm cache.
+Keep immutable logs and the tested revision with the result. Later integration
+must not relabel that result as testing a newer revision.
+
+The background agent investigates failures and prepares isolated fixes while card
+authors continue. Integrate fixes through ordinary targeted checks and independent
+review. The counter emits work; it does not launch model sessions or assert that a
+pending full check passed. Checkpoint receipts and temporary progress state remain
+outside the repository.
+
 ## The rules language and its extension boundary
 
 `swu-card-ir/v1` is a domain language: typed expressions, explicit receiver and

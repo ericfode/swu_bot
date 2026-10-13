@@ -53,7 +53,7 @@ async function generate(options) {
         }
         pool.cards.sort((a, b) => a.setCode.localeCompare(b.setCode)); poolBytes = Buffer.from(JSON.stringify(pool, null, 2) + '\n');
     }
-    const engineBuild = prepareEngine();
+    const engineBuild = options.preparedEngine ? verifyPreparedEngine(options.preparedEngine) : prepareEngine();
     const poolSha256 = sha256(poolBytes), provenance = sourceIdentity();
     provenance.buildVerification = engineBuild;
     provenance.sourceCatalogueSha256 = sha256(fs.readFileSync(cataloguePath));
@@ -96,6 +96,14 @@ async function generate(options) {
     return { directory: out, ...lib.verify(out), runtimeConformance: 'unassessed' };
 }
 
+function verifyPreparedEngine(receipt) {
+    const engine = path.dirname(fs.realpathSync(path.join(repo, 'forceteki/server'))), buildRoot = fs.realpathSync(path.join(repo, 'forceteki/build'));
+    assert.equal(path.dirname(buildRoot), engine, 'Engine source and build must share one checkout');
+    const inputs = { sourceSha256: treeHash(path.join(engine, 'server')), scriptsSha256: treeHash(path.join(engine, 'scripts')), config: Object.fromEntries(fs.readdirSync(engine).filter(f => /^(?:tsconfig.*\.json|package(?:-lock)?\.json)$/.test(f)).sort().map(f => [f, sha256(fs.readFileSync(path.join(engine, f)))])) };
+    assert.deepEqual(inputs, receipt.inputs, 'Prepared engine source changed');
+    assert.equal(treeHash(path.join(buildRoot, 'server')), receipt.buildSha256, 'Prepared engine build changed');
+    return receipt;
+}
 function prepareEngine() {
     const engine = path.dirname(fs.realpathSync(path.join(repo, 'forceteki/server')));
     const buildRoot = fs.realpathSync(path.join(repo, 'forceteki/build'));
@@ -116,4 +124,4 @@ function prepareEngine() {
     fs.writeFileSync(receiptFile, JSON.stringify(receipt, null, 2) + '\n');
     return receipt;
 }
-module.exports = { generate, sourceIdentity, treeHash, prepareEngine };
+module.exports = { generate, sourceIdentity, treeHash, prepareEngine, verifyPreparedEngine };

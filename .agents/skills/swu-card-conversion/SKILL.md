@@ -58,6 +58,24 @@ review the new packet before publishing. Model review receipts remain run output
 not chronological repository journals. Import useful passing references through
 the existing `cards:reference import` command so they run in CI.
 
+For concurrent work, use the `work` queue and `prepare`/`fanout` commands in
+`bot/cards/PIPELINE.md`. Fan out up to 20 card subprocesses against one prepared
+build, with isolated author work directories and one integrator for shared runtime
+changes. Follow the user's model/effort choices within available model slots;
+subprocess concurrency is not model concurrency. Preserve explicit path ownership
+and do not edit canonical execution inputs during validation. Queue submission
+and successful comparisons never substitute for independent semantic review.
+
+Use incremental builds and targeted checks for ordinary card increments. Run a
+full clean rebuild and the full accepted corpus only at each 200 newly reviewed,
+runtime-admitted cards. Count unique new admissions with concrete review and
+integration evidence; existing cards and repeated recordings do not count. Dispatch
+the full check to a background subagent on the exact immutable checkpoint revision,
+so ongoing author work can continue. The background agent owns an isolated checkout
+and target directory, reports failures, and develops fixes there for integration.
+Do not let later canonical changes invalidate or relabel an older checkpoint's
+results. Necessary targeted checks still follow each affected semantic change.
+
 When adding a construction adapter, wire both planner/fixture dispatch and the
 central fixture dependency inventory so reusable recordings bind the new source
 files. Compare every preceding full plan object, including its obligations and

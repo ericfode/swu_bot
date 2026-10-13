@@ -77,6 +77,11 @@ function implementationSnapshot() {
     const paths = [
         'Cargo.toml',
         'Cargo.lock',
+        'package.json',
+        'package-lock.json',
+        'bot/env.js',
+        'bot/view.js',
+        'bot/omni-wasm/build.js',
         'bot/omni-rs/Cargo.toml',
         'bot/omni-rs/build.rs',
         'bot/omni-wasm/Cargo.toml',
@@ -85,10 +90,12 @@ function implementationSnapshot() {
         'bot/omni/rs/state.js',
         'bot/omni/rs/make-pool.js',
     ];
-    for (const dir of ['bot/omni-rs/src', 'bot/omni-wasm/src', 'bot/cards/pipeline']) {
+    for (const file of fs.readdirSync(path.join(repo, 'bot')).filter(f => /\.(js|mjs)$/.test(f))) paths.push('bot/' + file);
+    for (const file of fs.readdirSync(path.join(repo, 'bot/omni')).filter(f => /\.(js|mjs)$/.test(f))) paths.push('bot/omni/' + file);
+    for (const dir of ['bot/omni-rs/src', 'bot/omni-wasm/src', 'bot/cards/pipeline', 'bot/cards/reference', 'bot/omni/wasm', 'bot/omni/rs', 'bot/card-compiler', 'bot/players', 'bot/examples', 'bot/eval', 'bot/learned']) {
         for (const file of fs
             .readdirSync(path.join(repo, dir), { recursive: true })
-            .filter((f) => /\.(rs|js)$/.test(f)))
+            .filter((f) => /\.(rs|js|mjs|json)$/.test(f) && !f.startsWith('generated' + path.sep) && !(dir === 'bot/cards/reference' && f.startsWith('fixtures' + path.sep))))
             paths.push(dir + '/' + file);
     }
     return [...new Set(paths)]
@@ -99,6 +106,7 @@ function createPacket({
     catalogue,
     catalogueSha256,
     implementationBefore,
+    preparedManifestSha256,
     plans,
     coverage,
     comparisons,
@@ -143,6 +151,7 @@ function createPacket({
         schema: 'swu-card-review-packet/v1',
         catalogueSha256,
         canonicalCatalogueSha256: digest(catalogue),
+        ...(preparedManifestSha256 ? { preparedManifestSha256 } : {}),
         engine,
         implementation: sources,
         rules,

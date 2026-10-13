@@ -102,8 +102,9 @@ async function run(options) {
     assert.ok(options.out, 'run needs --out NEW_DIRECTORY');
     const out = path.resolve(options.out);
     assert.ok(!fs.existsSync(out), 'Use a fresh output directory');
-    const implementationBefore = implementationSnapshot(),
-        catalogue = compileCatalog(),
+    const prepared = options.prepared ? require('./prepared').loadPrepared(options.prepared) : null;
+    const implementationBefore = prepared?.implementationBefore ?? implementationSnapshot(),
+        catalogue = prepared?.catalogue ?? compileCatalog(),
         plans = planCards(catalogue, options.cards);
     fs.mkdirSync(out, { recursive: true });
     const catalogFile = path.join(out, 'catalog.json'),
@@ -115,15 +116,16 @@ async function run(options) {
         rules = null,
         mutationResults = [],
         failure = null;
-    const native = path.join(repo, 'target/release/omni-rs');
+    const native = prepared?.native ?? path.join(repo, 'target/release/omni-rs');
     try {
-        {
+        if (!prepared) {
             const env = { ...process.env, SWU_RULES_CATALOGUE: catalogFile };
             console.error('Compiling generated card programs for native and Wasm…');
             command('cargo', ['build', '--locked', '--release', '-p', 'omni-rs'], env);
             command(process.execPath, ['bot/omni-wasm/build.js', '--target', 'node'], env);
         }
-        const admission = JSON.parse(command(native, ['catalogue', catalogFile, '--out-pool', poolFile]));
+        if (prepared) write(poolFile, prepared.pool);
+        const admission = prepared?.admission ?? JSON.parse(command(native, ['catalogue', catalogFile, '--out-pool', poolFile]));
         write(path.join(out, 'admission.json'), admission);
         const allowed = new Set(admission.runtimeAdmittedCards.map((c) => c.setCode));
         for (const p of plans)
@@ -138,7 +140,7 @@ async function run(options) {
             }
         // The authoritative run plan includes runtime rejections, not only source conversion.
         write(path.join(out, 'executable-plan.json'), plans);
-        rules = JSON.parse(command(native, ['rules', '--catalogue', catalogFile, '--pool', poolFile]));
+        rules = prepared?.rules ?? JSON.parse(command(native, ['rules', '--catalogue', catalogFile, '--pool', poolFile]));
         for (const p of plans)
             for (const [side, ids] of Object.entries(rules.cards[p.cardId] ?? {})) {
                 for (const [i, index] of ids.entries()) {
@@ -157,6 +159,7 @@ async function run(options) {
                 entries,
                 pool: poolFile,
                 catalogue: catalogFile,
+                preparedEngine: prepared?.engineBuild,
             });
             const rows = reference.corpus(corpus).recordings;
             observations = rows.map((r) => ({ ...r, coverageObligationIds: r.witness.coverageObligationIds ?? [] }));
@@ -168,6 +171,7 @@ async function run(options) {
                     corpus,
                     catalogue: catalogFile,
                     native,
+                    wasmPackage: prepared?.wasmPackage,
                     backend,
                     runtime: backend === 'auto' ? 'both' : 'native',
                     receipt,
@@ -227,6 +231,11 @@ async function run(options) {
         mutations: mutationResults,
         review: { status: 'pending' },
     };
+    if (prepared) {
+        try { assert.equal(require('./prepared').loadPrepared(options.prepared).manifestSha256, prepared.manifestSha256, 'Prepared manifest changed during run'); }
+        catch (error) { failure = { message: error.message, stack: error.stack }; report.stage = 'failed'; report.failure = failure; }
+        report.preparedManifestSha256 = prepared.manifestSha256;
+    }
     const reviewDir = path.join(out, 'review');
     fs.mkdirSync(reviewDir);
     let packet;
@@ -235,6 +244,7 @@ async function run(options) {
             catalogue,
             catalogueSha256: report.catalogueSha256,
             implementationBefore,
+            preparedManifestSha256: prepared?.manifestSha256,
             plans,
             coverage: report.coverage,
             comparisons,
@@ -292,4 +302,4 @@ function recordReview(options) {
     });
     return { directory: run, stage: status, reviewedCards: review.cards.length };
 }
-module.exports = { planCards, run, recordReview, mutationChecks };
+module.exports = { planCards, run, recordReview, mutationChecks, prepare: (options) => require('./prepared').prepare(options), loadPrepared: (file) => require('./prepared').loadPrepared(file) };
