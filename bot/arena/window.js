@@ -293,17 +293,17 @@ const parseOr = (text, dflt) => {
  * A run document as the app reads it. A sender that stops (a ladder killed mid-run, a pusher that died, a feed that went
  * away) leaves its last games marked running, and the app would show them as playing forever. So a running game that
  * sent nothing for `staleMs` (its replay, or the run's documents when it has no replay) reads as abandoned, with why; the
- * stored document stays as it came, and a sender that comes back makes the game live again. Returns the text and
- * `until`, when the next game still running goes stale (Infinity for none).
+ * stored document stays as it came, and a sender that comes back makes the game live again. Returns the text, how many
+ * games it `settled`, and `until`, when the next game still running goes stale (Infinity for none).
  */
 function settleRun(store, run, text, { staleMs = STALE_MS, now = Date.now() } = {}) {
     const doc = text?.includes('"running"') ? parseOr(text, null) : null; // most runs have nothing running: no second parse
     if (!Array.isArray(doc?.games) || !doc.games.some((g) => g?.outcome === 'running')) {
-        return { text, until: Infinity };
+        return { text, until: Infinity, settled: 0 };
     }
     let until = Infinity;
     let docAt = null;
-    let changed = false;
+    let changed = 0;
     const games = doc.games.map((g) => {
         if (g?.outcome !== 'running') {
             return g;
@@ -313,20 +313,21 @@ function settleRun(store, run, text, { staleMs = STALE_MS, now = Date.now() } = 
             until = Math.min(until, at + staleMs);
             return g;
         }
-        changed = true;
+        changed++;
         return { ...g, outcome: 'abandoned', error: `stopped: its run sent nothing for ${Math.round((now - at) / 60000)} min` };
     });
-    return { text: changed ? JSON.stringify({ ...doc, games }) : text, until };
+    return { text: changed ? JSON.stringify({ ...doc, games }) : text, until, settled: changed };
 }
 
 /**
  * The app's loaders (dashboard/site/core.cjs loadSources and app/src/model.cjs loadExtra) read through a reader with
  * list(dir) and text(path) in the project folder's layout. This reader answers those questions from the window's
  * collections, so the loaders run here unchanged and nothing outside the window depends on that layout. A run's games
- * still marked running are settled (settleRun); `staleAt()` says when the next one goes stale.
+ * still marked running are settled (settleRun); `staleAt()` says when the next one goes stale, `settled()` how many were.
  */
 function storeReader(store, { staleMs = STALE_MS, now = () => Date.now() } = {}) {
     let staleAt = Infinity;
+    let settled = 0;
     const DIRS = { 'dashboard/league': 'league', 'dashboard/experiments': 'experiments', 'dashboard/evals': 'evals', 'dashboard/panels': 'panels', 'dashboard/bots': 'bots', 'dashboard/lens': 'lens' };
     const FILES = {
         'dashboard/threads.json': ['threads', 'threads'], 'meta/meta.json': ['meta', 'atlas'], 'meta/ratings.json': ['meta', 'ratings'],
@@ -372,9 +373,10 @@ function storeReader(store, { staleMs = STALE_MS, now = () => Date.now() } = {})
                 if (m[2] !== 'index') {
                     return text;
                 }
-                const settled = settleRun(store, m[1], text, { staleMs, now: now() });
-                staleAt = Math.min(staleAt, settled.until);
-                return settled.text;
+                const out = settleRun(store, m[1], text, { staleMs, now: now() });
+                staleAt = Math.min(staleAt, out.until);
+                settled += out.settled;
+                return out.text;
             }
             m = /^(dashboard\/[a-z]+)\/([^/]+)\.json$/.exec(p);
             if (m && DIRS[m[1]] && ID.test(m[2])) {
@@ -396,7 +398,8 @@ function storeReader(store, { staleMs = STALE_MS, now = () => Date.now() } = {})
             }
             return null;
         },
-        staleAt: () => staleAt
+        staleAt: () => staleAt,
+        settled: () => settled
     };
 }
 
@@ -533,7 +536,9 @@ function appBuilder(store, { minMs = 10000, parts = null, staleMs = STALE_MS } =
         const M = p.model.buildModel(loaded, extra, p.core);
         M.replay = M.games.map((g) => (store.hasReplay(M.runs[g[0]]?.id, g[1]) ? 1 : 0)).join('');
         const t0panels = parseOr(store.getDoc('arena', 'archive-t0-panels'), []) || [];
-        const result = { audience: 'public', model: p.model.publicModel(M), t0panels: t0panels.map(p.model.publicPanel), version: v };
+        // a game going stale changes the model with no write, so the version a browser compares also counts the stopped games
+        const settled = reader.settled();
+        const result = { audience: 'public', model: p.model.publicModel(M), t0panels: t0panels.map(p.model.publicPanel), version: settled ? `${v}.${settled}` : v };
         const text = JSON.stringify({ result });
         cache = { text, gz: zlib.gzipSync(text) };
         builtVersion = v;

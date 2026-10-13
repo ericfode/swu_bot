@@ -513,8 +513,10 @@ test('the app data stops showing a game as playing once its run goes quiet, with
     try {
         const idx = { id: 'test-quiet', createdAt: '2026-10-13T14:00:00Z', bots: ['rush', 'random'], gamesPerPairing: 2, games: [{ id: 'g1', p1: 'rush', p2: 'random', seed: 1, outcome: 'running', winner: null, winnerSeat: null, rounds: 0 }] };
         await go('/api/docs/runs/test-quiet', { method: 'PUT', token: 'push-secret', body: JSON.stringify(idx) });
-        const res = async () => (await (await go('/api/app', { token: 'push-secret' })).json()).result.model.games.find((g) => g[1] === 'g1')[4];
+        const app = async () => (await (await go('/api/app', { token: 'push-secret' })).json()).result;
+        const res = async () => (await app()).model.games.find((g) => g[1] === 'g1')[4];
         assert.strictEqual(await res(), 3, 'playing while its run sends');
+        const before = (await app()).version;
         await new Promise((r) => setTimeout(r, 400));
         // a request that finds the build out of date starts a rebuild and gets the last build meanwhile
         let now = await res();
@@ -523,6 +525,7 @@ test('the app data stops showing a game as playing once its run goes quiet, with
             now = await res();
         }
         assert.strictEqual(now, 5, 'stopped: the run sent nothing for longer than staleMs');
+        assert.notStrictEqual((await app()).version, before, 'a new version, or open browsers (syncApi) would keep the old model');
         const run = (await (await go('/api/app', { token: 'push-secret' })).json()).result.model.runs.find((r) => r.id === 'test-quiet');
         assert.deepStrictEqual([run.running, run.abandoned, run.errors], [0, 1, 0]);
     } finally {
