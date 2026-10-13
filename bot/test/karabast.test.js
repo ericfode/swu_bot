@@ -530,6 +530,36 @@ test('the queue loop counts a game with no result as a failure and says why it s
     assert.deepStrictEqual([ok.ok, ok.reason], [true, 'played the 2 game(s) asked for']);
 });
 
+test('the queue loop takes turns between bots game by game, and every row and status names the bot of its game', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const asked = [];
+    const shown = [];
+    // game 1 waits once with no match: the retry keeps its bot; game 3 fails, and the next game still takes the next bot
+    const play = async (g, hooks) => {
+        asked.push(hooks.bot);
+        hooks.onQueued();
+        shown.push(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).bot);
+        if (g === 1) {
+            throw new Error('no match within 10 minutes');
+        }
+        if (g === 4) {
+            throw new Error('socket closed while queued: transport error');
+        }
+        return { bot: hooks.bot, result: 'win' };
+    };
+    const end = await runLoop({ games: 5, gapS: 25, out, bot: ['a', 'b'], deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual(asked, ['a', 'b', 'b', 'a', 'b', 'a']);
+    assert.deepStrictEqual(shown, asked);
+    const rows = fs.readFileSync(path.join(out, 'games.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual(rows.map((r) => [r.bot, r.result]), [['a', 'win'], ['b', 'no match'], ['b', 'win'], ['a', 'win'], ['b', 'error'], ['a', 'win']]);
+    assert.deepStrictEqual([end.played, end.errors, end.ok], [4, 1, true]);
+    // one name plays every game, as before
+    const one = [];
+    await runLoop({ games: 2, gapS: 25, out, bot: 'c-clock', deck: 'd', play: async (g, hooks) => (one.push(hooks.bot), { result: 'loss' }), log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual(one, ['c-clock', 'c-clock']);
+});
+
 test('the queue loop retries a wait with no match without using up a game, up to maxWaits in a row', async () => {
     const { runLoop } = require('../karabast/queue');
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
