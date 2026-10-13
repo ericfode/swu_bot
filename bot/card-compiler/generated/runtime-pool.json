@@ -5294,6 +5294,43 @@
       "aspects": [
         "vigilance"
       ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 1,
+      "id": "3828978526",
+      "internalName": "dire-prowess",
+      "keywords": [],
+      "power": 1,
+      "rules": null,
+      "setCode": "HMW_097",
+      "setCodes": [
+        {
+          "number": 97,
+          "set": "HMW"
+        }
+      ],
+      "setId": {
+        "number": 97,
+        "set": "HMW"
+      },
+      "subtitle": "",
+      "text": "When Played: You may give a Weakness token to a unit.",
+      "title": "Dire Prowess",
+      "traits": [
+        "learned"
+      ],
+      "types": [
+        "upgrade"
+      ],
+      "unique": false,
+      "upgradeHp": 1,
+      "upgradePower": 1
+    },
+    {
+      "aspects": [
+        "vigilance"
+      ],
       "cost": 4,
       "deployBox": null,
       "epicAction": "",

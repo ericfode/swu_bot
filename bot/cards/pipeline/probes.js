@@ -14,6 +14,8 @@ function planCardProbes(entry, options = {}) {
     if (forcePlan) return forcePlan;
     const arenaStatFilterPlan = require('./arena-stat-filter-probes').planArenaStatFilterProbes(entry, options);
     if (arenaStatFilterPlan) return arenaStatFilterPlan;
+    const weaknessUpgradePlan = require('./weakness-upgrade-probes').planWeaknessUpgrade(entry, options);
+    if (weaknessUpgradePlan) return weaknessUpgradePlan;
     const weaknessPlan = require('./weakness-probes').planWeaknessProbes(entry, options);
     if (weaknessPlan) return weaknessPlan;
     const namedChooserPlan = require('./named-chooser-probes').planNamedChooserProbes(entry, options);

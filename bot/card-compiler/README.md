@@ -127,6 +127,13 @@ Force-dependent HP changes, other query receivers, costs, groups, hooks and
 continuations remain explicit rejections. Source conversion and runtime admission
 remain separate.
 
+An ordinary upgrade may optionally give one Weakness token to any unit on play.
+The upgrade attaches and its printed stats apply before that choice. Its
+controller chooses even on an enemy host; the new token belongs to the chosen
+recipient's controller. Declining creates no token. The selected pool must include
+the reviewed native Weakness definition. Other upgrade Weakness registrations
+remain rejected.
+
 A bounded self-resource operation moves an existing event or defeated ordinary
 unit into its owner's resources, exhausted, without allocating a new card.
 Supported sources are standalone events, optional death registrations with a

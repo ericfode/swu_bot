@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 563
+    "sourceIr": 564
   },
   "runtimeAdmittedCards": [
     {
@@ -674,6 +674,11 @@
       "implementation": "sourceIr",
       "internalName": "devotion",
       "setCode": "HMW_096"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "dire-prowess",
+      "setCode": "HMW_097"
     },
     {
       "implementation": "sourceIr",
@@ -4706,7 +4711,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 939,
+  "runtimeAdmittedCount": 940,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5829,11 +5834,6 @@
       "setCode": "HMW_095"
     },
     {
-      "internalName": "dire-prowess",
-      "reason": "dire-prowess: Weakness source must be an ordinary unit card-side registration",
-      "setCode": "HMW_097"
-    },
-    {
       "internalName": "resonate",
       "reason": "resonate: compiler rejected \"resonate\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":41,\"file\":\"game/cards/09_HMW/events/Resonate.ts\",\"line\":18,\"message\":\"unsupported-query:hasSomeArenaCard\",\"pattern\":\"unsupported-query:hasSomeArenaCard\"}]",
       "setCode": "HMW_098"
@@ -5845,7 +5845,7 @@
     },
     {
       "internalName": "torrent",
-      "reason": "torrent: Weakness source must be an ordinary unit card-side registration",
+      "reason": "torrent: Weakness source requires ordinary unit or bounded ordinary upgrade play metadata",
       "setCode": "HMW_100"
     },
     {
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1519,
+  "runtimeRejectedCount": 1518,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

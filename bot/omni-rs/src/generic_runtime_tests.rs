@@ -2206,7 +2206,7 @@ fn weakness_effect()->crate::ability_ir::Effect {serde_json::from_value(json!({"
 #[test]
 fn weakness_admission_is_three_sources_plus_one_reviewed_native_token() {
     let e=engine();for code in ["HMW_059","HMW_087","HMW_242","TOKEN_WEAKNESS"] {assert!(e.by_code.contains_key(code),"{code}: {:?}",e.rejected_cards().unwrap().get(code));}
-    for code in ["HMW_065","HMW_097","HMW_100","HMW_199","HMW_202","HMW_231"] {assert!(!e.by_code.contains_key(code),"{code}");}
+    for code in ["HMW_065","HMW_100","HMW_199","HMW_202","HMW_231"] {assert!(!e.by_code.contains_key(code),"{code}");}
     assert_eq!(std::mem::size_of::<State>(),18560);assert_eq!(std::mem::size_of::<Card>(),36);
     let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
     for (field,value) in [("power",json!(1)),("upgradeHp",json!(0)),("types",json!(["unit","token"])),("traits",json!([])),("aspects",json!(["heroism"])),("text",json!("Draw a card")),("unique",json!(true)),("cost",json!(1))] {let mut catalog=original.clone();let token=catalog["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="TOKEN_WEAKNESS").unwrap();token["card"][field]=value;let altered=Engine::from_catalogue_value(&catalog).unwrap();assert!(!altered.by_code.contains_key("TOKEN_WEAKNESS"),"{field}");}
@@ -2270,7 +2270,7 @@ fn weakness_static_native_dependency_rejects_missing_invalid_and_unselected_toke
     let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
     for remove in [true,false] {let mut v=original.clone();if remove {v["cards"].as_array_mut().unwrap().retain(|c|c["setCode"]!="TOKEN_WEAKNESS");}else{v["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="TOKEN_WEAKNESS").unwrap()["card"]["title"]=json!("Unreviewed token");}let e=Engine::from_catalogue_value(&v).unwrap();for code in ["HMW_059","HMW_087","HMW_242"] {assert!(!e.by_code.contains_key(code));assert!(e.rejected_cards().unwrap()[code].contains("Weakness token unavailable"));}}
     let e=engine();let mut pool=e.compiled_pool().unwrap();pool["cards"].as_array_mut().unwrap().retain(|c|c["setCode"]!="TOKEN_WEAKNESS");assert!(Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),include_bytes!("../../card-compiler/generated/catalog.json")).err().unwrap().contains("GiveWeakness cards must include"));
-    pool["cards"].as_array_mut().unwrap().retain(|c|!["HMW_059","HMW_087","HMW_242"].contains(&c["setCode"].as_str().unwrap()));Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    pool["cards"].as_array_mut().unwrap().retain(|c|!["HMW_059","HMW_087","HMW_242","HMW_097"].contains(&c["setCode"].as_str().unwrap()));Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
 }
 #[test]
 fn arena_stat_filter_admission_is_exact_two_and_unary_plus_normalizes_only_here() {
@@ -2654,4 +2654,46 @@ fn named_chooser_raw_shapes_fail_closed() {
  for (field,value) in [("pilotText",json!("Pilot")),("keywords",json!(["ambush"])),("types",json!(["leader","unit"])),("unique",json!(null))] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["card"][field]=value;assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
  for name in ["target","constructor","prototype","__proto__","0choice"] {let mut c=original.clone();let card=c["cards"].as_array_mut().unwrap().iter_mut().find(|v|v["setCode"]=="LAW_099").unwrap();card["abilities"]["card"][0]["targetResolvers"][0]["name"]=json!(name);assert!(!Engine::from_catalogue_value(&c).unwrap().by_code.contains_key("LAW_099"));}
  assert_eq!(std::mem::size_of::<State>(),18560);assert_eq!(std::mem::size_of::<Card>(),36);
+}
+
+#[test]
+fn weakness_upgrade_raw_scope_requires_sole_optional_play_and_native() {
+    let original:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    assert!(Engine::from_catalogue_value(&original).unwrap().by_code.contains_key("HMW_097"));
+    for kind in 0..8 {
+        let mut catalogue=original.clone();
+        let card=catalogue["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="HMW_097").unwrap();
+        match kind {
+            0=>card["abilities"]["card"][0]["optional"]=json!(false),
+            1=>card["abilities"]["card"][0]["trigger"]=json!("whenDefeated"),
+            2=>card["abilities"]["card"][0]["effect"]["amount"]["value"]=json!(2),
+            3=>card["card"]["pilotText"]=json!("unmodeled"),
+            4=>card["card"]["keywords"]=json!(["raid"]),
+            5=>card["attachCondition"]=json!({"kind":"const","value":true}),
+            6=>card["abilities"]["card"][0]["targetResolver"]["owner"]=json!("self"),
+            _=>card["abilities"]["card"][0]["then"]=json!({"effect":{"kind":"noAction"}}),
+        }
+        assert!(!Engine::from_catalogue_value(&catalogue).unwrap().by_code.contains_key("HMW_097"),"variant{kind}");
+    }
+    let mut missing=original.clone();missing["cards"].as_array_mut().unwrap().retain(|c|c["setCode"]!="TOKEN_WEAKNESS");
+    assert!(!Engine::from_catalogue_value(&missing).unwrap().by_code.contains_key("HMW_097"));
+}
+
+#[test]
+fn weakness_upgrade_enemy_host_preserves_source_actor_and_recipient_owner() {
+    let e=engine();let mut s=board(&e);
+    let host=unit(&e,&mut s,Seat::P2,"HMW_116");
+    let target=unit(&e,&mut s,Seat::P1,"HMW_116");
+    let upgrade=hand(&e,&mut s,"HMW_097");
+    let initial_id=s.next_id;let host_hp=e.hp(&s,host);let host_power=e.power(&s,host,false);
+    let attach=e.apply(&s,&e.card_action(&s,upgrade)).unwrap();
+    let choice=e.apply(&attach,&e.card_action(&attach,host)).unwrap();
+    assert_eq!(choice.active,Seat::P1);
+    assert_eq!(e.hp(&choice,host),host_hp+1);assert_eq!(e.power(&choice,host,false),host_power+1);
+    let done=e.apply(&choice,&e.card_action(&choice,target)).unwrap();
+    assert_eq!(done.next_id,initial_id+1);
+    assert_eq!(done.card(initial_id).owner,Seat::P1);
+    assert_eq!(done.card(initial_id).parent,target);
+    assert_eq!(e.hp(&done,target),e.hp(&s,target)-1);
+    assert_eq!(e.power(&done,target,false),e.power(&s,target,false)-1);
 }

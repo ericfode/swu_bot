@@ -158,6 +158,7 @@ async function fixture(env, pool, scenario, seed) {
     if (scenario.probe?.family === 'force-followon') return require('./force-followon-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force') return require('./force-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-stat-filter') return require('./arena-stat-filter-probe-fixture').fixture(env, pool, scenario, seed);
+    if (scenario.probe?.family === 'weakness-upgrade') return require('./weakness-upgrade-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'weakness') return require('./weakness-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'named-chooser') return require('./named-chooser-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'named-target') return require('./named-target-probe-fixture').fixture(env, pool, scenario, seed);
@@ -412,6 +413,8 @@ module.exports = {
         'bot/cards/pipeline/force-probe-fixture.js',
         'bot/cards/pipeline/arena-stat-filter-probes.js',
         'bot/cards/pipeline/arena-stat-filter-probe-fixture.js',
+        'bot/cards/pipeline/weakness-upgrade-probes.js',
+        'bot/cards/pipeline/weakness-upgrade-probe-fixture.js',
         'bot/cards/pipeline/weakness-probes.js',
         'bot/cards/pipeline/weakness-probe-fixture.js',
         'bot/cards/pipeline/named-chooser-probes.js',

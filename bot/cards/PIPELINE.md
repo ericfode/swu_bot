@@ -212,6 +212,16 @@ reviewed separately from the three printed source cards; its setup appearance
 is not an ordinary token-play witness. Mixed attachment cleanup, removal/return,
 replacement, and multiple-recipient or mixed-effect groups remain explicit gaps.
 
+Ordinary-upgrade Weakness experiments use actual attachment and optional play
+triggers. They cover hosts in both arenas and under both controllers, reversed
+source seats, attachment cancellation, decline, own-host net stats, stacked
+negative tokens and zero-power clamping. Exact payment, token identity, ownership
+and append order are checked. A wounded ordinary unit and an HP-one native token
+remain defeated after negative-attachment cleanup; a deployed leader is a valid
+recipient. Existing Experience and Shield tokens exercise attachment order.
+Mixed ordinary-attachment cleanup, later host combat, source departure, token
+replacement and multiplayer remain explicit gaps.
+
 Friendly arena-list phase-stat experiments cover static trait filters and source
 exclusion, mixed controllers and arenas, native token and deployed-leader
 recipients, source departure, later arrivals, stacking, and empty-event payment
