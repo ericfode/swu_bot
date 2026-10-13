@@ -1,5 +1,5 @@
 defmodule CoordWeb.Router do
-  @moduledoc "The two routes games.js answered, and a JSON 404 for everything else."
+  @moduledoc "The window's wake-up call and Fly's health check, and a JSON 404 for everything else."
 
   use Phoenix.Router, helpers: false
 

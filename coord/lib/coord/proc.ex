@@ -124,8 +124,7 @@ defmodule Coord.Proc do
 
   @doc false
   # The argv the Port starts: choom first when there is one (the kernel's OOM killer then picks a ladder or a check
-  # before the BEAM), and for an arena child when the BEAM is root, isolate.sh or setpriv (no wrapper without root,
-  # as games.js). {:error, {:no_user, name}} when setpriv's user does not exist: nothing may run as root instead.
+  # before the BEAM), and for an arena child when the BEAM is root, isolate.sh or setpriv (no wrapper without root). {:error, {:no_user, name}} when setpriv's user does not exist: nothing may run as root instead.
   def command_line(kind, argv, opts) do
     wrapped =
       case {Keyword.get(opts, :as, :root), isolation()} do

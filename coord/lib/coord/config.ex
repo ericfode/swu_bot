@@ -81,7 +81,7 @@ defmodule Coord.Config do
   defp parse_ip(name, listen, ipv4) do
     case :inet.parse_address(String.to_charlist(listen)) do
       {:ok, ip} when tuple_size(ip) == 8 ->
-        # as games.js: Fly's private network is IPv6, a machine without IPv6 listens on IPv4
+        # Fly's private network is IPv6; a machine without IPv6 listens on IPv4
         if ipv6_available?(ip) do
           ip
         else

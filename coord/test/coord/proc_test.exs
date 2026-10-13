@@ -196,7 +196,7 @@ defmodule Coord.ProcTest do
         assert Proc.command_line(:play, ["node", "x.js"], as: :arena) ==
                  {:ok, ["/usr/bin/choom", "-n", "300", "--"] ++ Proc.setpriv_argv(uid, gid) ++ ["node", "x.js"]}
       else
-        # not root: no wrapper, as games.js
+        # not root: no wrapper
         assert Proc.isolation() == :none
 
         assert Proc.command_line(:play, ["node", "x.js"], as: :arena) ==

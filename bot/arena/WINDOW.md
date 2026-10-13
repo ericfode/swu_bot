@@ -175,12 +175,13 @@ run the tests and deploy nothing). Threads send data when `SWU_WINDOW=https://sw
 ## The games machine (swu-arena-games)
 
 The window stores submissions; the games machine plays them. It is the Fly app `swu-arena-games` (`fly.games.toml`,
-`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running `bot/arena/games.js`:
+`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running the Elixir coordinator (`coord/`,
+[coord/README.md](../../coord/README.md)), which calls `node bot/arena/gamesctl.js` for the game work:
 
 ```
- window ──POST /wake──▶ games.js ──intake.js──▶ versions/ ──referee.js──▶ ladder (bots as user arena, WebAssembly)
-   ▲      (flycast)        │
-   └── submissions, standings, round replays (its own token) ──┘
+ window ──POST /wake──▶ coord ──gamesctl intake──▶ versions/ ──gamesctl referee-cmd──▶ referee ──▶ ladder (bots as arena)
+   ▲      (flycast)       │
+   └── submissions, standings, round replays: gamesctl push through coord's loopback proxy (its token) ──┘
 ```
 
 - It has a private address only (flycast). The window calls `http://swu-arena-games.flycast/wake` (`ARENA_GAMES_WAKE`)
@@ -191,18 +192,18 @@ The window stores submissions; the games machine plays them. It is the Fly app `
   node-search and py-clock built to WebAssembly in the image; `ARENA_RESIDENTS` overrides), 2 games a pair.
 - It pushes the arena's state and the round replays to the window every 20 s, like the old uplink, into the same
   `arena`, `runs` and `ladders` collections the app reads.
-- With nothing to do for 10 minutes it exits, and the machine stays stopped until the next wake-up.
-- Only games.js holds the window token. The referee runs with a minimal environment in its own namespaces with `/.fly`
-  hidden, and the ladders and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
-- Helpers: with the Elixir coordinator, a computer of Eric's can play some of a round's seeds through `fly proxy`
-  ([HELPER.md](HELPER.md)). The machine runs the Elixir coordinator and listens on `GAMES_HELPER_PORT`; helpers stay
-  off until the `GAMES_HELPER_TOKENS` secret names one.
+- With nothing to do for 10 minutes (`GAMES_IDLE_MIN`) it exits, and the machine stays stopped until the next wake-up.
+  A round runs at most 6 hours (`GAMES_ROUND_HOURS`).
+- Only the coordinator (the BEAM) holds the window token; its Node children reach the window through a loopback proxy
+  with a nonce. The referee runs with a minimal environment in its own namespaces with `/.fly` hidden, and the ladders
+  and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
+- Helpers: a computer of Eric's can play some of a round's seeds through `fly proxy` ([HELPER.md](HELPER.md)). The
+  machine listens on `GAMES_HELPER_PORT`; helpers stay off until the `GAMES_HELPER_TOKENS` secret names one.
 
 Deploys: `.github/workflows/deploy-games.yml` on every merge that touches `bot/`, the engine pin or the image, with the
 repository secret `FLY_GAMES_TOKEN` (`fly tokens create deploy -a swu-arena-games`). It checks out forceteki with
-`FORCETEKI_TOKEN` when that secret exists. Locally, `GAMES_DATA=/srv/x SWU_WINDOW=http://localhost:8080
-SWU_WINDOW_TOKEN=t node bot/arena/games.js --idle-min 1` plays against a local window (outside /tmp: isolate.sh gives
-the referee its own /tmp).
+`FORCETEKI_TOKEN` when that secret exists. Locally, the coordinator's release plays against a local window ("Building
+and running the release" in coord/README.md; GAMES_DATA outside /tmp, since isolate.sh gives the referee its own /tmp).
 
 ## Run it locally
 

@@ -22,7 +22,7 @@
  * stdout gets exactly one JSON line, {ok: true, results: [{id, result}], replays: {<id>: <path>}} (a game whose bot
  * failed to load has no replay); everything else, the engine's and the bots' logging included, goes to stderr.
  * Exit 0 ok, 1 failed (the reason is the last line on stderr), 2 usage or a refused job.
- * --warm compiles the residents' bundles into $SWU_WASM_CACHE (run.py --warm, as games.js warm does) and prints
+ * --warm compiles the residents' bundles into $SWU_WASM_CACHE (run.py --warm, as gamesctl.js warm does) and prints
  * {ok: true, warmed: [name], failed: [{name, error}]}.
  */
 const fs = require('fs');
@@ -31,7 +31,7 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
 const COMPILED = path.join(ROOT, 'bot', 'compiled');
-// the WebAssembly bots among games.js's default residents (its RESIDENTS when ARENA_RESIDENTS is not set); heuristic
+// the WebAssembly bots among gamesctl.js's default residents (its RESIDENTS when ARENA_RESIDENTS is not set); heuristic
 // and rush, the other two, run in-process
 const RESIDENTS = ['c-clock-wasm', 'rust-greedy2-wasm', 'rust-search-wasm', 'node-search-wasm', 'py-clock-wasm'];
 const IN_PROCESS = ['heuristic', 'rush'];

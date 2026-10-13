@@ -14,7 +14,7 @@ defmodule Coord.Gamesctl do
 
   alias Coord.{ChildEnv, Config}
 
-  # the referee's whole environment may hold these and nothing else (games.js botEnv), and ARENA_REMOTE, the helper
+  # the referee's whole environment may hold these and nothing else (gamesctl.js botEnv), and ARENA_REMOTE, the helper
   # relay's URL, which only this module puts there
   @referee_env ~w(PATH HOME LANG TZ ARENA_HOME ARENA_RESULTS ARENA_PUBLIC_RESULTS ARENA_DASH SWU_WASM_CACHE
                   SWU_CARD_JSON ARENA_SECRET_FILE ARENA_BOT_USER ARENA_REMOTE)

@@ -3,8 +3,8 @@
 // everything this file and what it loads logs goes to stderr: stdout carries only the one result line
 console.log = console.error;
 /**
- * What the games machine's Elixir coordinator (coord/, coord/README.md) asks Node to do. Elixir decides when; this
- * decides what, with the same code games.js uses:
+ * The games machine's Node side (the Fly app swu-arena-games: fly.games.toml, Dockerfile.games). The Elixir
+ * coordinator (coord/, coord/README.md) runs the machine and decides when; this decides what:
  *
  *   node bot/arena/gamesctl.js setup                                                   (root)
  *   node bot/arena/gamesctl.js warm                                                    (as arena)
@@ -19,7 +19,7 @@ console.log = console.error;
  *
  *     setup        folders, the round-seed secret, the residents in the roster: {"ok":true,"residents":[..],"toolchain":null|"no .."}
  *     warm         the resident bundles compiled into the cache: {"ok":true,"warmed":[..],"failed":[{"name","error"}]}
- *     plan         games.js planRound: {"round":K,"resume":bool,"why":".."} or {"round":null,"why":".."}
+ *     plan         planRound: {"round":K,"resume":bool,"why":".."} or {"round":null,"why":".."}
  *     referee-cmd  the command that plays round K, run by the coordinator: {"cmd":[..],"env":{..},"cwd":".."}
  *     intake       one pass over the window's submissions: {"open":N|null,"accepted":N,"done":N[,"error":".."]}
  *     push         the arena's state and round replays to the window: {"ok":bool}
@@ -27,10 +27,191 @@ console.log = console.error;
  * --state files keep what one pass learned for the next (intake: submissions finished and results the window did not
  * take; push: what was sent). They hold the --boot they were written in: a new boot pushes everything again and reads
  * every submission again, but keeps the results still to send.
+ *
+ * Who holds what: the coordinator alone has the window token. The referee runs as root in its own PID and mount
+ * namespace (isolate.sh) with a minimal environment, /.fly hidden, and alone reads the round-seed secret; the ladders
+ * it starts, where bot code runs, run as the user arena with no capabilities (referee.js spawnBots), and the intake's
+ * checker likewise (intake.js). Submitted bots run only as WebAssembly (no network, no files but their own and the
+ * card data). The residents are the project's own bots, entered as the roster's baselines (ARENA_RESIDENTS overrides
+ * the list).
+ *
+ * Everything lives on the volume (GAMES_DATA, default /data): arena/ (ARENA_HOME: roster, versions, standings),
+ * results/ (round ladders and replays), intake/, wasm-cache/, home/ (the bots' HOME), secret/ (root's), coord/ (the
+ * coordinator's).
  */
 const fs = require('fs');
-// first: games.js points the arena's folders (ARENA_HOME and the rest) at GAMES_DATA before anything reads them
-const games = require('./games');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const ROOT = path.join(__dirname, '..', '..');
+const DATA = process.env.GAMES_DATA || '/data';
+const BOT_USER = process.env.ARENA_USER || 'arena';
+const DIRS = {
+    home: path.join(DATA, 'arena'),
+    results: path.join(DATA, 'results'),
+    intake: path.join(DATA, 'intake'),
+    cache: path.join(DATA, 'wasm-cache'),
+    botHome: path.join(DATA, 'home'),
+    dash: path.join(DATA, 'dash'),
+    tmp: path.join(DATA, 'tmp', 'referee'),
+    secret: path.join(DATA, 'secret')
+};
+const SECRET = path.join(DIRS.secret, 'arena-secret');
+// what nothing started here may see (isolate.sh --hide): Fly's API socket and config, the Elixir coordinator's folder
+// (its job database and state), or GAMES_HIDE's paths
+const HIDE = (process.env.GAMES_HIDE || ['/.fly', path.join(DATA, 'coord')].join(':')).split(':').filter(Boolean);
+// the project's own bots, rated with everyone (their mean is pinned to 1500): two in-process anchors and five
+// WebAssembly bundles built into the image (bot/compiled)
+const RESIDENTS = (process.env.ARENA_RESIDENTS || 'heuristic,rush,c-clock-wasm,rust-greedy2-wasm,rust-search-wasm,node-search-wasm,py-clock-wasm')
+    .split(',').map((x) => x.trim()).filter(Boolean);
+const THINK_CAP_MS = 60000; // per game, the local arena's rule (roster.thinkCapMs)
+const SETTLE_MS = 90000; // a round waits this long after a version comes in, so a quick fix joins the same round
+
+// the arena's folders, before home.js reads them
+Object.assign(process.env, {
+    ARENA_HOME: process.env.ARENA_HOME || DIRS.home,
+    ARENA_RESULTS: process.env.ARENA_RESULTS || DIRS.results,
+    ARENA_PUBLIC_RESULTS: process.env.ARENA_PUBLIC_RESULTS || process.env.ARENA_RESULTS || DIRS.results,
+    ARENA_DASH: process.env.ARENA_DASH || DIRS.dash,
+    ARENA_INTAKE_WORK: process.env.ARENA_INTAKE_WORK || DIRS.intake,
+    SWU_WASM_CACHE: process.env.SWU_WASM_CACHE || DIRS.cache,
+    ARENA_USER: BOT_USER,
+    // what the intake's checker must not see (intake.js hidden()): the same, and the round-seed secret
+    ARENA_HIDE: [...HIDE, DIRS.secret].join(':')
+});
+// no window token here: intake and push reach the window through the coordinator's proxy, and nothing started from
+// here may inherit one
+for (const k of ['SWU_WINDOW_TOKEN', 'ARENA_PUSH_TOKEN', 'ARENA_ADMIN_TOKEN']) {
+    delete process.env[k];
+}
+const home = require('./home');
+
+const log = (msg) => console.log(`[gamesctl ${new Date().toISOString().slice(11, 19)}] ${msg}`);
+
+const asRoot = () => process.getuid?.() === 0;
+const idsOf = (user) => ['-u', '-g'].map((f) => Number(execFileSync('id', [f, user], { encoding: 'utf8' })));
+
+/** Folders, the round-seed secret and the roster; idempotent, so every start runs it. */
+function setup() {
+    for (const d of Object.values(DIRS)) {
+        fs.mkdirSync(d, { recursive: true });
+    }
+    // the intake's folder stays root's: each check gets a folder in it whose layout the checker cannot change
+    // (intake.js checkIsolated); checks left by a stop are gone with the process that made them
+    for (const f of fs.readdirSync(DIRS.intake).filter((x) => x.startsWith('job-'))) {
+        home.removeTree(path.join(DIRS.intake, f));
+    }
+    fs.chmodSync(DIRS.intake, 0o755);
+    fs.chmodSync(DIRS.secret, 0o700);
+    if (!fs.existsSync(SECRET) || !fs.statSync(SECRET).size) {
+        fs.writeFileSync(SECRET, require('crypto').randomBytes(32).toString('hex'), { mode: 0o600 });
+        log('made the round-seed secret');
+    }
+    fs.chmodSync(SECRET, 0o600);
+    // the residents are the baselines; the competitors stay as they are
+    home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: RESIDENTS, agents: r.agents ?? [] }));
+    if (asRoot()) {
+        // what bot code writes is the bots' user's; the secret, the intake's folder and the referee's /tmp stay root's
+        const [uid, gid] = idsOf(BOT_USER);
+        for (const k of ['home', 'results', 'cache', 'botHome', 'dash']) {
+            execFileSync('chown', ['-R', `${uid}:${gid}`, DIRS[k]]);
+        }
+        for (const k of ['intake', 'secret', 'tmp']) {
+            fs.chownSync(DIRS[k], 0, 0);
+        }
+        fs.chownSync(SECRET, 0, 0);
+    }
+    return { residents: RESIDENTS };
+}
+
+/**
+ * Compiles the resident bundles into the cache, as the bots' user, so their first game does not pay for it. Returns
+ * {warmed: [name], failed: [{name, error}]}.
+ */
+function warm() {
+    const out = { warmed: [], failed: [] };
+    for (const name of RESIDENTS.filter((n) => n.endsWith('-wasm'))) {
+        const dir = path.join(ROOT, 'build', 'compiled', name.slice(0, -5));
+        if (!fs.existsSync(path.join(dir, 'arena.json'))) {
+            log(`resident ${name}: no bundle at ${dir}`);
+            out.failed.push({ name, error: 'no bundle' });
+            continue;
+        }
+        const cmd = ['python3', path.join(ROOT, 'bot', 'compiled', 'run.py'), '--warm', dir];
+        const run = asRoot() ? ['setpriv', `--reuid=${idsOf(BOT_USER)[0]}`, `--regid=${idsOf(BOT_USER)[1]}`, '--clear-groups', '--', ...cmd] : cmd;
+        try {
+            const { ARENA_SECRET_FILE, ARENA_BOT_USER, ...env } = botEnv();
+            execFileSync(run[0], run.slice(1), { stdio: ['ignore', 'ignore', 'pipe'], env, timeout: 120000 });
+            out.warmed.push(name);
+        } catch (e) {
+            const error = String(e.stderr ?? e.message).trim().split('\n').pop();
+            log(`resident ${name}: could not compile (${error})`);
+            out.failed.push({ name, error });
+        }
+    }
+    return out;
+}
+
+/** The referee's environment: the arena's folders and nothing else (no token, no Fly variables). */
+function botEnv() {
+    const keep = ['ARENA_HOME', 'ARENA_RESULTS', 'ARENA_PUBLIC_RESULTS', 'ARENA_DASH', 'SWU_WASM_CACHE', 'SWU_CARD_JSON'];
+    return {
+        PATH: process.env.PATH, HOME: DIRS.botHome, LANG: 'C.UTF-8', TZ: 'UTC',
+        ...Object.fromEntries(keep.filter((k) => process.env[k]).map((k) => [k, process.env[k]])),
+        ARENA_SECRET_FILE: SECRET, ARENA_BOT_USER: BOT_USER
+    };
+}
+
+/**
+ * The round to play now: {round: K, resume, why}, or {round: null, why}. resume: round K is the last one and a stop cut
+ * it short. Otherwise K is the next round, played when the lineup changed (a new or withdrawn version) or the last
+ * round is older than replayMs, and only once settledSince (when the last version came in) is SETTLE_MS old. A round
+ * needs at least one competitor.
+ */
+function planRound({ replayMs, settledSince }) {
+    const { lineup } = require('./referee');
+    const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] });
+    const last = st.rounds.at(-1);
+    if (last && last.status !== 'done') {
+        return { round: last.round, resume: true, why: 'resume' };
+    }
+    const bots = lineup();
+    const baselines = home.roster().baselines ?? [];
+    if (!bots.some((b) => !baselines.includes(b))) {
+        return { round: null, why: 'no-competitor' };
+    }
+    const before = (last?.bots ?? []).map((b) => b.name);
+    const changed = bots.some((b) => !before.includes(b)) || before.some((b) => !bots.includes(b));
+    const stale = last && Date.now() - Date.parse(st.updatedAt ?? 0) > replayMs;
+    if (!changed && !stale) {
+        return { round: null, why: 'same' };
+    }
+    // a version that just came in may be followed by a quick fix: let it settle
+    if (Date.now() - settledSince < SETTLE_MS) {
+        return { round: null, why: 'settling' };
+    }
+    // the referee numbers rounds the same way (referee.js nextRound)
+    return { round: (last?.round ?? -1) + 1, resume: false, why: changed ? 'changed' : 'stale' };
+}
+
+/**
+ * The command that plays round K: root in its own namespaces (isolate.sh) with HIDE hidden, and the minimal
+ * environment. Only one referee runs here at a time, so a lock the last one left (a stop, a crash) is stale: removing
+ * it spares the next one the wait for it to go stale.
+ */
+function refereeCommand(k, { games, workers }) {
+    const { ladderIdOf } = require('./referee');
+    // only in a real folder: the results folder is the bots' user's, who could put a link in its place
+    const dir = path.join(home.RESULTS, ladderIdOf(k));
+    if (fs.lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
+        fs.rmSync(path.join(dir, 'referee.lock'), { force: true });
+    }
+    const isolate = asRoot()
+        ? ['bash', path.join(__dirname, 'ops', 'isolate.sh'), '--tmp', DIRS.tmp, ...HIDE.flatMap((p) => ['--hide', p]), '--']
+        : [];
+    const cmd = [...isolate, process.execPath, path.join(__dirname, 'referee.js'), '--round', String(k), '--games', String(games), '--workers', String(workers)];
+    return { cmd, env: botEnv(), cwd: ROOT };
+}
 
 const ARENAS = ['open']; // the No-sims arena comes later (coord/README.md)
 
@@ -74,19 +255,19 @@ function writeState(file, state) {
 
 const commands = {
     setup() {
-        const { residents } = games.setup();
+        const { residents } = setup();
         return { ok: true, residents, toolchain: require('./intake').toolchainMissing() };
     },
 
     warm() {
-        return { ok: true, ...games.warm() };
+        return { ok: true, ...warm() };
     },
 
     plan(o) {
         arena(o);
         const settledSince = Number(need(o, 'settled-since', int));
         const replayMs = Number(o['replay-hours'] ?? 24) * 3600000;
-        const p = games.planRound({ replayMs, settledSince });
+        const p = planRound({ replayMs, settledSince });
         return p.round === null ? { round: null, why: p.why } : { round: p.round, resume: p.resume, why: p.why };
     },
 
@@ -95,7 +276,7 @@ const commands = {
         const k = Number(need(o, 'round', int));
         const n = Number(o.games ?? 2);
         const workers = Number(o.workers ?? 2);
-        return games.refereeCommand(k, { games: n, workers });
+        return refereeCommand(k, { games: n, workers });
     },
 
     async intake(o) {
@@ -177,4 +358,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { commands, readState };
+module.exports = { commands, readState, planRound, botEnv, RESIDENTS };

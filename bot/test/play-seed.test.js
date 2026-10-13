@@ -55,8 +55,8 @@ function bundleTar(folder, dir) {
     return hex;
 }
 
-test('the residents are the WebAssembly bots of games.js\'s default resident list', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'bot', 'arena', 'games.js'), 'utf8');
+test('the residents are the WebAssembly bots of gamesctl.js\'s default resident list', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'bot', 'arena', 'gamesctl.js'), 'utf8');
     const dflt = /process\.env\.ARENA_RESIDENTS \|\| '([^']+)'/.exec(src)[1].split(',');
     assert.deepStrictEqual(RESIDENTS, dflt.filter((n) => n.endsWith('-wasm')));
     assert.deepStrictEqual(dflt.filter((n) => !n.endsWith('-wasm')), ['heuristic', 'rush']);

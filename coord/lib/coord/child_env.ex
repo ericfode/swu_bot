@@ -43,7 +43,7 @@ defmodule Coord.ChildEnv do
 
   @doc """
   The environment of a helper's play-seed.js (a seed, or --warm): exactly PATH, HOME, LANG, TZ and SWU_WASM_CACHE.
-  Never the helper's token or the games machine's address. No NODE_ENV, as the machine's ladders have none (games.js
+  Never the helper's token or the games machine's address. No NODE_ENV, as the machine's ladders have none (gamesctl.js
   botEnv): with NODE_ENV=production the engine logs every rollback a searching bot makes.
   """
   def play(ctx) do
