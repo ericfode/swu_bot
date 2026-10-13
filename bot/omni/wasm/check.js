@@ -71,13 +71,30 @@ function checkRecords(simulator, rows, file = '<trace>') {
     } finally { game?.free(); }
 }
 
-async function main(files) {
-    if (!files.length) throw new Error('Usage: node bot/omni/wasm/check.js trace.jsonl[.gz]...');
-    const simulator = await createSimulator();
+function options(args) {
+    const opts = { files: [] };
+    for (let i = 0; i < args.length; i++) {
+        const flag = args[i];
+        if (flag === '--pool' || flag === '--catalogue') {
+            const key = flag === '--pool' ? 'poolPath' : 'cataloguePath';
+            if (opts[key] !== undefined) throw new Error(`Duplicate option ${flag}`);
+            const value = args[++i];
+            if (!value || value.startsWith('--')) throw new Error(`${flag} requires a file`);
+            opts[key] = value;
+        } else if (flag.startsWith('--')) throw new Error(`Unknown option ${flag}`);
+        else opts.files.push(flag);
+    }
+    if (!opts.files.length) throw new Error('Usage: node bot/omni/wasm/check.js trace.jsonl[.gz]... [--pool FILE] [--catalogue FILE]');
+    return opts;
+}
+
+async function main(args) {
+    const opts = options(args);
+    const simulator = await createSimulator(opts);
     try {
-        for (const file of files) console.log(JSON.stringify(checkRecords(simulator, records(file), file)));
+        for (const file of opts.files) console.log(JSON.stringify(checkRecords(simulator, records(file), file)));
     } finally { simulator.free(); }
 }
 
 if (require.main === module) main(process.argv.slice(2)).catch((error) => { console.error(error); process.exitCode = 1; });
-module.exports = { records, checkRecords };
+module.exports = { records, checkRecords, options };

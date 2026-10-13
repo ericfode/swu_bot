@@ -33,7 +33,15 @@
     "lint": "node tools/bin/perch scan --since origin/main",
     "lint:full": "node tools/bin/perch scan --full",
     "lint:shared": "node tools/bin/perch shared scan --full",
-    "perch": "node tools/bin/perch"
+    "perch": "node tools/bin/perch",
+    "cards:compile": "node bot/card-compiler/build.js && node tools/card-runtime-report.js",
+    "cards:check": "node bot/card-compiler/build.js --check && node tools/card-runtime-report.js --check",
+    "cards:test": "node --test bot/card-compiler/test/*.test.js bot/cards/test/*.test.js bot/test/phase-stats-export.test.js bot/test/env-selection-actions.test.js",
+    "wasm:pack": "node bot/omni-wasm/pack.js",
+    "wasm:pack:check": "node bot/omni-wasm/verify-package.js",
+    "cards": "node bot/cards/cli.js",
+    "cards:reference": "node bot/cards/reference/cli.js",
+    "cards:pipeline": "node bot/cards/pipeline/cli.js"
   },
   "devDependencies": {
     "@lakeday/perch": "0.4.3",
