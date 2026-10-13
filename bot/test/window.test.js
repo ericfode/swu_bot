@@ -27,13 +27,13 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -74,6 +74,31 @@ test('the loaders\' reader finds each collection where the project folder had it
     assert.deepStrictEqual((await r.list('arena/versions')).map((e) => e.name), ['duel_opus-v0', 'duel_opus-v1']);
     assert.strictEqual(JSON.parse(await r.text('arena/versions/duel_opus-v1/SUBMISSION.json')).note, 'faster');
     assert.strictEqual(await r.text('arena/nothing.json'), null);
+});
+
+test('a run that stopped sending shows its unfinished games as stopped, not playing, and comes back when it sends again', async () => {
+    const s = new Store(path.join(tmp, 'stale'));
+    const row = (id, outcome) => ({ id, p1: 'rush', p2: 'random', outcome, winner: null, winnerSeat: null });
+    s.putDoc('runs', 'killed', JSON.stringify({ id: 'killed', games: [row('done', 'won'), row('plain', 'running'), row('taped', 'running'), row('fresh', 'running')] }));
+    s.putDoc('ladders', 'killed', JSON.stringify({ status: 'running' }));
+    s.appendReplay('killed', 'taped', 0, Buffer.from('{"t":"header"}\n'));
+    s.appendReplay('killed', 'fresh', 0, Buffer.from('{"t":"header"}\n'));
+    const hour = Date.now() / 1000 - 3600;
+    for (const f of ['docs/runs/killed.json', 'docs/ladders/killed.json', 'replays/killed/taped.jsonl.gz']) {
+        fs.utimesSync(path.join(s.dir, f), hour, hour);
+    }
+    const r = storeReader(s, { staleMs: 20 * 60000 });
+    const games = JSON.parse(await r.text('results/killed/index.json')).games;
+    // a game with a replay goes by its replay; one without, by the run's documents
+    assert.deepStrictEqual(games.map((g) => g.outcome), ['won', 'abandoned', 'abandoned', 'running']);
+    assert.match(games[1].error, /^stopped: its run sent nothing for 60 min$/);
+    const fresh = s.changedAt('killed', 'fresh');
+    assert.ok(Math.abs(r.staleAt() - (fresh + 20 * 60000)) < 5, 'the reader says when the game still running goes stale');
+    assert.strictEqual(JSON.parse(s.getDoc('runs', 'killed')).games[1].outcome, 'running', 'the stored document is left as it came');
+    s.putDoc('runs', 'killed', s.getDoc('runs', 'killed')); // the sender is back
+    assert.strictEqual(JSON.parse(await storeReader(s).text('results/killed/index.json')).games[1].outcome, 'running');
+    s.putDoc('runs', 'quiet', JSON.stringify({ id: 'quiet', games: [row('g', 'won')] }));
+    assert.strictEqual(await storeReader(s).text('results/quiet/index.json'), s.getDoc('runs', 'quiet'), 'a run with nothing running reads as stored');
 });
 
 test('scrub drops builder and thread names at any depth', () => {
@@ -477,6 +502,29 @@ test('the app data is built from the collections with the app\'s own loaders', {
         assert.ok(d.model.runs.some((r) => r.id === 'test-ladder'));
         assert.strictEqual(d.model.games.length, 2);
         assert.ok(!JSON.stringify(d).includes('secret thread name'), 'friends never get thread names');
+    } finally {
+        await close();
+    }
+});
+
+test('the app data stops showing a game as playing once its run goes quiet, with nothing new pushed', { skip: !fs.existsSync(path.join(__dirname, '..', '..', 'dashboard', 'site', 'core.cjs')) }, async () => {
+    const w = makeWindow('w5b', { staleMs: 300 });
+    const { go, close } = await serve(w);
+    try {
+        const idx = { id: 'test-quiet', createdAt: '2026-10-13T14:00:00Z', bots: ['rush', 'random'], gamesPerPairing: 2, games: [{ id: 'g1', p1: 'rush', p2: 'random', seed: 1, outcome: 'running', winner: null, winnerSeat: null, rounds: 0 }] };
+        await go('/api/docs/runs/test-quiet', { method: 'PUT', token: 'push-secret', body: JSON.stringify(idx) });
+        const res = async () => (await (await go('/api/app', { token: 'push-secret' })).json()).result.model.games.find((g) => g[1] === 'g1')[4];
+        assert.strictEqual(await res(), 3, 'playing while its run sends');
+        await new Promise((r) => setTimeout(r, 400));
+        // a request that finds the build out of date starts a rebuild and gets the last build meanwhile
+        let now = await res();
+        for (let i = 0; i < 20 && now !== 5; i++) {
+            await new Promise((r) => setTimeout(r, 50));
+            now = await res();
+        }
+        assert.strictEqual(now, 5, 'stopped: the run sent nothing for longer than staleMs');
+        const run = (await (await go('/api/app', { token: 'push-secret' })).json()).result.model.runs.find((r) => r.id === 'test-quiet');
+        assert.deepStrictEqual([run.running, run.abandoned, run.errors], [0, 1, 0]);
     } finally {
         await close();
     }

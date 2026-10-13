@@ -242,3 +242,21 @@ test('guard: a protocol client is timed on hello and decide, told the time it ha
     await pending;
     assert.strictEqual(slow.fault.kind, 'time');
 });
+
+test('killChildren kills every child process but the ones it is told to spare (the ladder\'s window pusher)', async () => {
+    const { spawn } = require('child_process');
+    const { killChildren } = require('../game-pool');
+    const sleeper = () => spawn('sleep', ['30'], { stdio: 'ignore' });
+    const [bot, pusher] = [sleeper(), sleeper()];
+    const exited = (c) => new Promise((r) => c.once('exit', (code, signal) => r(signal)));
+    const botGone = exited(bot);
+    try {
+        killChildren(null, { spare: [pusher.pid] });
+        assert.strictEqual(await botGone, 'SIGKILL');
+        assert.strictEqual(pusher.exitCode, null);
+        assert.strictEqual(pusher.signalCode, null, 'the spared process is still running');
+    } finally {
+        pusher.kill('SIGKILL');
+        bot.kill('SIGKILL');
+    }
+});

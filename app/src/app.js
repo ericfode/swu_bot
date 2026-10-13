@@ -164,7 +164,7 @@ function resText(g) {
   const x = gameRow(g);
   if (x.res === 3) return '<span class="pill live">playing</span>';
   if (x.res === 4) return '<span class="res faint">not rated</span>';
-  if (x.res === 5) return '<span class="res faint" title="the game never started or went silent">abandoned</span>';
+  if (x.res === 5) return x.run?.kind === 'people' ? '<span class="res faint" title="the game never started or went silent">abandoned</span>' : '<span class="res faint" title="its run stopped sending before this game ended">stopped</span>';
   if (x.res === 2) return '<span class="res">draw</span>';
   return `${seatLink(x, x.res === 0 ? 'p1' : 'p2')}${x.forfeit ? ' <span class="res warn" title="the other bot failed (late, illegal or broken reply)">by forfeit</span>' : ''}`;
 }
@@ -186,7 +186,7 @@ function gameGrid(run, { maxBots = 14 } = {}) {
     for (const b of bots) {
       if (a === b) { h += '<td><div class="cell self"></div></td>'; continue; }
       const gs = by[`${a}|${b}`] || [];
-      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${name(x.p1)} vs ${name(x.p2)}: ${k === 'w' ? name(a) + ' won' : k === 'l' ? name(b) + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'abandoned' : 'not rated'}`)}"></a>`; });
+      const sq = gs.map(i => { const x = gameRow(M.games[i]); const k = x.res === 3 ? 'p' : x.res === 2 ? 'd' : x.res >= 4 ? '' : (x.res === 0 ? x.p1 : x.p2) === a ? 'w' : 'l'; return `<a class="${k}" href="${href('games', run.id, x.id)}" title="${esc(`${name(x.p1)} vs ${name(x.p2)}: ${k === 'w' ? name(a) + ' won' : k === 'l' ? name(b) + ' won' : k === 'p' ? 'playing' : k === 'd' ? 'draw' : x.res === 5 ? 'stopped before it ended' : 'not rated'}`)}"></a>`; });
       for (let k = gs.length; k < per; k++) sq.push('<span title="not played yet"></span>');
       h += `<td><div class="cell">${sq.join('')}</div></td>`;
     }
@@ -432,9 +432,15 @@ async function sideFile(kind, id) {
 async function mountViewer(v, host) {
   const [run, id] = v.game.split('/');
   if (!KIT) { host.innerHTML = '<div class="notice">The viewer kit did not load.</div>'; return; }
-  let text = null;
-  try { text = await replayText(v.game); } catch {}
-  if (!text) { host.innerHTML = `<div class="notice"><b>Replay not in this snapshot.</b> ${S.live ? 'This run kept no replay file for this game.' : CAN_LIVE ? 'Open the app with live data (allow project files) and every recorded game loads on demand.' : 'This build carries a few replays; the rest are not included.'} ${S.live || !CAN_LIVE ? '' : '<button type="button" class="searchbtn" data-act="golive" style="margin-left:6px">Go live</button>'}</div>`; host.querySelector('[data-act]')?.addEventListener('click', () => startLive(true)); return; }
+  let text = null, failed = null;
+  try { text = await replayText(v.game); } catch (e) { failed = e?.message || e?.code || 'error'; }
+  if (!text) {
+    const i = gameIdx.get(v.game), playing = i != null && M.games[i][4] === 3;
+    host.innerHTML = `<div class="notice">${failed ? `<b>The replay did not load</b> (${esc(failed)}). Reload the page to try again.`
+      : S.live ? (playing ? '<b>No board for this game.</b> It is playing, but its run does not record replays, so only its result will show here.' : '<b>No replay for this game.</b> Its run did not record one, so only the result shows.')
+      : `<b>Replay not in this snapshot.</b> ${CAN_LIVE ? 'Open the app with live data (allow project files) and every recorded game loads on demand.' : 'This build carries a few replays; the rest are not included.'}`} ${failed || S.live || !CAN_LIVE ? '' : '<button type="button" class="searchbtn" data-act="golive" style="margin-left:6px">Go live</button>'}</div>`;
+    host.querySelector('[data-act]')?.addEventListener('click', () => startLive(true)); return;
+  }
   if (!host.isConnected && !VIEWERS.has(v.key)) return;
   const [evals, lens] = await Promise.all([sideFile('evals', id), sideFile('lens', id)]);
   host.innerHTML = '';
@@ -645,7 +651,8 @@ function apiReader() {
     async list(d) { const m = /^(?:results|games)\/([^/]+)\/games$/.exec(d); return m ? ((await json(`/api/replays/${enc(m[1])}`)) || []).map(id => ({ name: `${id}.jsonl`, path: `${d}/${id}.jsonl`, isDirectory: false })) : []; },
     async text(p) {
       const m = REPLAY_PATH.exec(p);
-      if (m) { const r = await fetch(`/api/replays/${enc(m[1])}/${enc(m[2])}`, { credentials: 'same-origin' }); return r.ok ? r.text() : null; }
+      // no replay is null; any other failure throws, so a game is never called unrecorded because one request failed
+      if (m) { const r = await fetch(`/api/replays/${enc(m[1])}/${enc(m[2])}`, { credentials: 'same-origin' }); if (r.ok) return r.text(); if (r.status === 404) return null; throw new Error(`HTTP ${r.status}`); }
       const d = /^dashboard\/(evals|lens)\/([^/]+)\.json$/.exec(p);
       if (d) { const j = await json(`/api/docs/${d[1]}/${enc(d[2])}`); return j ? JSON.stringify(j) : null; }
       return null;
@@ -1123,7 +1130,7 @@ function pageRun(r) {
   const run = runById(r.parts[1]); if (!run) return `<div class="notice">No run named ${esc(r.parts[1])}.</div>`;
   const ri = M.runs.indexOf(run), rows = []; for (let i = M.games.length - 1; i >= 0; i--) if (M.games[i][0] === ri) rows.push(i);
   const exps = M.experiments.filter(e => runsIn(e).includes(run)), people = run.kind === 'people', wide = people || (run.gamesPerPairing || 2) * run.bots.length > 24, half = wide ? 'c12' : 'c6';
-  return `<div class="phead"><div><div class="eyebrow">${KIND[run.kind][0]} · ${new Date(run.createdAt).toLocaleString()}</div><h1 class="mono">${esc(run.id)}</h1></div><p class="lede">${run.kind === 'people' ? `Our bots against people: ${run.decided} finished games${run.abandoned ? `, ${run.abandoned} abandoned` : ''}${run.errors ? `, ${run.errors} with no result` : ''}` : `${run.bots.length} bots, ${run.decided} rated games${run.planned ? ` of ${run.planned}` : ''}${run.errors ? `, ${run.errors} not rated (engine errors or caps)` : ''}`}${run.running ? `, ${run.running} playing now` : ''}.</p></div>
+  return `<div class="phead"><div><div class="eyebrow">${KIND[run.kind][0]} · ${new Date(run.createdAt).toLocaleString()}</div><h1 class="mono">${esc(run.id)}</h1></div><p class="lede">${run.kind === 'people' ? `Our bots against people: ${run.decided} finished games${run.abandoned ? `, ${run.abandoned} abandoned` : ''}${run.errors ? `, ${run.errors} with no result` : ''}` : `${run.bots.length} bots, ${run.decided} rated games${run.planned ? ` of ${run.planned}` : ''}${run.errors ? `, ${run.errors} not rated (engine errors or caps)` : ''}${run.abandoned ? `, ${run.abandoned} with no result (the run stopped before they ended)` : ''}`}${run.running ? `, ${run.running} playing now` : ''}.</p></div>
   ${exps.map(e => `<div class="notice" style="border-style:solid;margin-bottom:12px"><b>Why this run:</b> <a href="${href('research', 'experiments', e.id)}">${esc(e.title)}</a>. ${esc(e.hypothesis || '')}${e.conclusion ? ` <b>Found:</b> ${esc(e.conclusion)}` : ''}</div>`).join('')}
   <div class="grid"><div class="${half} box"><div class="bh"><h3>Standings in this run</h3><span class="sub">score bar: line = 50%</span></div><div class="scroll"><table><thead><tr><th>#</th><th>Bot</th><th class="hide-sm">Style</th><th class="hide-sm">Nine spots</th><th class="n">W-L</th><th>Score</th></tr></thead><tbody>${run.table.map((t, i) => `<tr><td class="rank">${i + 1}</td><td>${botLink(t.id)}</td><td class="hide-sm">${styleTag(atl(t.id)?.summary?.style)}</td><td class="hide-sm">${fingerprint(t.id)}</td><td class="n">${t.w}-${t.l}${t.d ? `-${t.d}` : ''}</td><td><span class="sc-cell"><span class="sc"><i style="width:${(t.pct || 0) * 100}%;--c:${t.pct >= .5 ? 'var(--pos-4)' : 'var(--neg-4)'}"></i><b></b></span><em>${pct(t.pct)}</em></span></td></tr>`).join('')}</tbody></table></div></div>
   ${people ? `<div class="c12 notice people-note">Every game here is one of our bots against a real person on karabast.net. <a href="${href('people')}">Vs people</a> has the record over time and the games playing now.</div>` : `<div class="${half} box"><div class="bh"><h3>Who beat whom</h3><span class="sub">every game; click a square to watch</span></div>${run.bots.length <= 14 ? gameGrid(run) : `<p class="muted">${run.bots.length} bots: too many for the grid; see the games below.</p>`}</div>`}
@@ -1139,7 +1146,7 @@ function pageGame(r) {
   const side = s => `${seatLink(x, s)}${x.human === s ? '' : styleTag(atl(x[s])?.summary?.style)}`;
   const lede = x.human
     ? `${x.res === 3 ? `${esc(ours)} is playing a real person on karabast.net right now.` : x.res === 5 ? `${esc(ours)} against a real person on karabast.net: abandoned, the game never started or went silent.` : x.res === 2 ? `${esc(ours)} drew with a real person on karabast.net.` : x.res === 4 ? `${esc(ours)} against a real person on karabast.net: no result.` : `${esc(ours)} ${winnerName(x) === ours ? 'beat' : 'lost to'} a real person on karabast.net in round ${x.rounds}.`} Never rated: games against people stay out of every bot's rating.`
-    : x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 2 ? 'Draw.' : `${esc(winnerName(x))} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`;
+    : x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 5 ? 'No result: its run stopped sending before this game ended.' : x.res === 2 ? 'Draw.' : `${esc(winnerName(x))} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`;
   return `<div class="phead"><div><div class="eyebrow">${x.human ? `${humanPill()} <a href="${href('people')}">karabast.net</a>` : `<a href="${href('runs', run.id)}">${esc(run.id)}</a>`} · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${side('p1')}<span class="faint" style="font-size:var(--fs-base)">vs</span>${side('p2')}</h1></div><p class="lede">${lede} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}</span></div>
   ${spotBarHtml(key)}
   <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" style="margin-top:8px"></div>

@@ -13,7 +13,7 @@ asks the same API.
 | Part | Sends | Through |
 |---|---|---|
 | Arena (referee + api.js) | status, standings, tournament, roster (no tokens), round reports, versions, panels | `node bot/arena/push.js arena` (a loop, every 20 s), which `ops/launch.sh` starts and `ops/keeper.sh` keeps alive when `SWU_WINDOW` is set at start; never the referee itself, whose bots must not get the proxy |
-| Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set |
+| Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
 | Browsers, the app | the invite list, from Eric's Share page only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` (an admin) |
@@ -23,6 +23,9 @@ asks the same API.
 Reads (a signed-in friend, or the project token):
 
 - `GET /api/app`: the app's model, built in the window by the app's own loaders, with builder and thread names removed.
+  A game still marked running whose replay (or, with no replay, whose run's documents) sent nothing for 20 minutes
+  shows as stopped, with no result (`outcome: "abandoned"` in the model; the stored document is unchanged), so a run
+  that was killed or lost its pusher stops showing as live. A sender that comes back makes the game live again.
 - `GET /api/status`, `standings`, `report?round=K`, `games?round=K`, `versions?name=X`, `panel?name=X`: the arena's own
   read methods, same shapes as `api.js`, answered from what the arena sent. Other methods answer 501 until phase B.
 - `GET /api/replays/<run>` lists a run's games (`?sizes=1` adds sizes); `GET /api/replays/<run>/<game>?from=<byte>`

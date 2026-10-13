@@ -50,6 +50,9 @@ const { runPool, killChildren } = require('./game-pool');
 const { loadDecks, dealDecks, deckPairs } = require('./decklists');
 const { loadPool, checkPool } = require('./cardpool');
 
+// the process that sends this run to the arena window (arena/push.js followRun), or null without SWU_WINDOW
+let follower = null;
+
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     if (i < 0) {
@@ -374,7 +377,7 @@ async function main() {
     }
     save();
     // with SWU_WINDOW set, a helper process sends this run to the arena window's API as it plays (arena/push.js)
-    require('./arena/push').followRun(out);
+    follower = require('./arena/push').followRun(out);
     console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${pool ? `${pool.kind} pool of ${pool.cards.length} cards, ` : ''}${workers} workers -> ${out}`);
 
     const t0 = Date.now();
@@ -429,12 +432,15 @@ async function main() {
     }
 }
 
-// exit explicitly: a worker retired by the watchdog may still be stuck in a bot's synchronous call
+// exit explicitly: a worker retired by the watchdog may still be stuck in a bot's synchronous call. The window pusher
+// is spared: it sees this process end and sends the run's last state, without which the window shows its last games
+// as playing forever.
+const spare = () => ({ spare: follower ? [follower.pid] : [] });
 main().then(() => {
-    killChildren();
+    killChildren(null, spare());
     process.exit(0);
 }, (e) => {
-    killChildren();
+    killChildren(null, spare());
     console.error(e);
     process.exit(1);
 });

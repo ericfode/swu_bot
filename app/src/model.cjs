@@ -129,15 +129,16 @@
             const seat = n => people && !ours.includes(canonical(n, fixed)) ? 'opponent' : can(n);
             for (const g of r.games) {
                 const p1 = seat(g.p1), p2 = seat(g.p2);
-                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned (people only)
+                let res, forfeit = null; // res: 0 p1 won, 1 p2 won, 2 draw, 3 running, 4 not rated, 5 abandoned
                 if (g.outcome === 'running') { res = 3; running++; }
                 else if (g.outcome === 'won' && (g.winnerSeat === 'p1' || g.winnerSeat === 'p2')) res = g.winnerSeat === 'p1' ? 0 : 1;
                 else if (g.outcome === 'ERROR' && /^TIME_FORFEIT (\S+)/.test(g.error || '')) { forfeit = seat(RegExp.$1) === p1 ? 'p1' : 'p2'; res = forfeit === 'p1' ? 1 : 0; }
                 else if (g.outcome === 'ERROR' && (g.by === 'p1' || g.by === 'p2')) { forfeit = g.by; res = g.by === 'p1' ? 1 : 0; }
                 else if (g.winnerSeat === 'draw') { res = 2; errors++; }
                 else { res = 4; errors++; }
-                // a game against people that never started or went silent is abandoned, not an engine error
-                if (people && res === 4 && g.outcome === 'abandoned') { res = 5; errors--; abandoned++; }
+                // abandoned, not an engine error: a game against people that never started or went silent, or a game
+                // whose run stopped sending before it ended (the arena window settles those, bot/arena/window.js)
+                if (res === 4 && g.outcome === 'abandoned') { res = 5; errors--; abandoned++; }
                 games.push([ri, g.id, bi(p1), bi(p2), res, g.rounds ?? null, g.steps ?? null, forfeit ? 1 : 0]);
                 if (people) {
                     // a finished game against a person, a draw included, counts in the run's own table only
@@ -165,7 +166,7 @@
             // before any game ends; `ours` keeps the run's own bots list, which names our bots and never the people
             const bots = [...new Set([...(r.bots || []).map(can), ...(people ? r.games.flatMap(g => [seat(g.p1), seat(g.p2)]) : []), ...table.map(t => t.id)])];
             const planned = r.gamesPerPairing && r.bots ? r.gamesPerPairing * r.bots.length * (r.bots.length - 1) / 2 : null;
-            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, ...(people ? { abandoned, ours } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
+            return { id: r.id, createdAt: r.createdAt, kind, fixedEra: fixed, bots, n: r.games.length, planned, decided, running, errors, abandoned, ...(people ? { ours } : {}), table, dir: r._dir, gamesPerPairing: r.gamesPerPairing ?? null };
         });
 
         // the Atlas's ratings when the meta analyzer wrote them; the app's own fit (same rules) for bots it does not list
