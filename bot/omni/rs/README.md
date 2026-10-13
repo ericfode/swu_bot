@@ -101,8 +101,10 @@ view difference either.
 
 Second run (`/mnt/project-files/omni/stress/r2-pool830/`, `FINDINGS.md`), the same bots and seeds on the 830-card pool of
 PR #121 before it merged: 12,687 real moves and 5,813 moves inside 610 simulations, no engine error, and 3 findings from
-2 Rust bugs. Force Illusion (LOF_223) offers already-exhausted enemy units to exhaust, where forceteki skips that step.
-The deployed C-3PO leader (SEC_015) loses its On Attack trigger.
+2 Rust bugs. Force Illusion (LOF_223) offered already-exhausted enemy units to exhaust, where forceteki skips that step.
+The deployed C-3PO leader (SEC_015) lost its On Attack trigger. Both are fixed, and a third run
+(`/mnt/project-files/omni/stress/r3-pool830/`, same bots, seeds and pool) found nothing in 12,693 real moves and 5,813
+simulation moves.
 
 ## Simulations on the Rust engine (opt-in)
 
