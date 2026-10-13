@@ -319,8 +319,56 @@ const PAGES = {
   lab: r => S.aud === 'public' ? `<div class="notice">Lab is only in the project build.</div>` : ({ '': pageLab, waiting: pageWaiting, health: pageHealth }[r.parts[1] || ''] || pageLab)(r),
 };
 let lastRouteKey = '';
+/** Where the reader is: one heading, viewer, spot strip or board (readerAnchor picks it by where it is drawn), and where
+ *  it sits on the page. When something above it changes size (a sync redraws the page, a live game's viewer grows), the
+ *  page scrolls by as much as it moved, so nothing moves under the reader. */
+const ANCHORS = '#main h1, #main h2, #main h3, #main .kithost, #main .spotbar, #main [data-tile]';
+const anchorKey = el => { const sec = el.closest('[data-sec]')?.dataset.sec; return `${el.tagName}|${el.dataset.key || el.dataset.spotbar || el.dataset.tile || el.textContent.trim().slice(0, 80)}${sec ? `@${sec}` : ''}`; };
+// a section that repeats a heading (each round's "Who beat whom") names itself with data-sec, so each copy has its own key
+// whatever comes and goes around it; a key that still repeats is told apart by its count
+function anchorList() {
+  const seen = new Map();
+  return [...document.querySelectorAll(ANCHORS)].map(el => { const k = anchorKey(el), n = seen.get(k) || 0; seen.set(k, n + 1); return { el, key: `${k}#${n}` }; });
+}
+function readerAnchor() {
+  if (scrollY < 1) return null;
+  // the reader's place, by where things are drawn (on a two-column page every anchor of the left column comes before the
+  // right column's in the page): a viewer cut by the top edge that still fills a third of the screen, since they are
+  // reading inside it; else the anchor nearest the top of the screen; else one cut by the top edge, then the nearest
+  // above, then the nearest below
+  let best = null, rank = [9, 0];
+  for (const { el, key } of anchorList()) {
+    if (!el.getClientRects().length) continue; // not drawn, like a phone-only part on a wide screen
+    const b = el.getBoundingClientRect(), cut = b.top < 0 && b.bottom > 0;
+    const r = cut && Math.min(b.bottom, innerHeight) >= innerHeight / 3 ? [0, 0] : b.top >= 0 && b.top < innerHeight ? [1, b.top]
+      : cut ? [2, -b.top] : b.bottom <= 0 ? [3, -b.bottom] : [4, b.top];
+    if (r[0] < rank[0] || (r[0] === rank[0] && r[1] < rank[1])) { best = { key, y: b.top + scrollY, sy: scrollY }; rank = r; }
+  }
+  return best;
+}
+function keepReader(a) {
+  if (!a) return;
+  const el = anchorList().find(x => x.key === a.key)?.el; if (!el) return;
+  // a page that got shorter under a reader near its end has already pulled them up as far as it ends (scroll clamping):
+  // that much of the move is made up for
+  const maxY = document.documentElement.scrollHeight - innerHeight, clamped = scrollY < a.sy && scrollY >= maxY - 1 ? a.sy - scrollY : 0;
+  const d = el.getBoundingClientRect().top + scrollY - a.y + clamped; if (Math.abs(d) >= 1) window.scrollBy(0, d);
+}
+// The browser's own scroll anchoring is off (style.css): iOS Safari has none, and Chrome's missed a live viewer growing
+// above the reader on the two-column pages. The observer watches the page and every viewer and spot strip itself, since
+// one that grows in the shorter column leaves the page's height as it was. readAt follows the reader as they scroll, but
+// only while nothing watched has changed size since the observer last saw it: measuring then would take a change not
+// made up for yet as their place.
+const WATCHED = '#main, #main .kithost, #main .spotbar';
+const sizesNow = () => [...document.querySelectorAll(WATCHED)].map(e => e.offsetHeight).join();
+let readAt = null, readRaf = 0, sizes = '';
+addEventListener('scroll', () => { if (!readRaf) readRaf = requestAnimationFrame(() => { readRaf = 0; if (sizesNow() === sizes) readAt = readerAnchor(); }); }, { passive: true });
+const sizeWatch = window.ResizeObserver ? new ResizeObserver(() => { keepReader(readAt); readAt = readerAnchor(); sizes = sizesNow(); }) : null;
+function watchSizes() { if (!sizeWatch) return; sizeWatch.disconnect(); for (const el of document.querySelectorAll(WATCHED)) sizeWatch.observe(el); }
+watchSizes();
 function render(keepScroll) {
   const r = route();
+  const anchor = keepScroll ? readerAnchor() : null;
   renderNav(r);
   const key = location.hash.split('?')[0];
   const same = key === lastRouteKey; lastRouteKey = key;
@@ -330,9 +378,12 @@ function render(keepScroll) {
   try { html = fn(r); } catch (e) { console.error(e); html = `<div class="notice"><b>This page failed to draw.</b> ${esc(e.message)}</div>`; }
   $('main').innerHTML = html;
   attachViewers(keep);
+  watchSizes();
   afterRender(r);
   document.title = `SWU Arena · ${pageTitle(r)}`;
   if (!same && !keepScroll) window.scrollTo(0, 0);
+  else if (same) keepReader(anchor);
+  readAt = readerAnchor(); sizes = sizesNow();
 }
 function pageTitle(r) { const s = SECTIONS.find(x => x.id === r.sec); return r.parts[1] && r.parts[0] !== 'research' && r.parts[0] !== 'arena' ? r.parts.slice(-1)[0] : s?.label || (r.parts[0] === 'share' ? 'Share' : 'Home'); }
 function afterRender() {
@@ -389,7 +440,7 @@ function attachViewers(keep) {
   for (const ph of document.querySelectorAll('[data-game]')) {
     const key = `${ph.dataset.game}|${ph.dataset.layout || 'full'}`; seen.add(key);
     const old = keep.get(key);
-    if (old) { ph.replaceWith(old.host); setTimeout(() => fillSpotBar(old)); continue; }
+    if (old) { ph.replaceWith(old.host); fillSpotBar(old); continue; } // at once: an empty strip for one frame moves the page
     ph.dataset.key = key; ph.innerHTML = '<p class="muted" style="padding:16px">Loading replay…</p>';
     const v = { host: ph, v: null, key, game: ph.dataset.game, offset: 0, live: ph.dataset.live === '1' };
     VIEWERS.set(key, v); mountViewer(v, ph);
@@ -610,17 +661,27 @@ async function gridTick() {
 setInterval(gridTick, 650);
 /** Games for the grid: every running game (boards first), then finished games with a board, at most 3 per run; bot
  *  games only, or (people: true) only games against people. */
-// live: which games have a replay file, listed once per run per sync (some runs keep none)
-const GFILES = new Map();
+// live from project files: which games have a replay file, listed once per run per sync (some runs keep none). A sync
+// keeps the last list until the new one arrives, and redraws only if it changed: dropping the lists made every board
+// vanish until they came back, and the page jumped under the reader.
+const GFILES = new Map(); let gfGen = 0;
 function gameFilesOf(r) {
-  if (GFILES.has(r.id)) return GFILES.get(r.id);
-  GFILES.set(r.id, null);
-  S.reader?.list(`${r.dir}/games`).then(es => { GFILES.set(r.id, new Set(es.map(e => e.name.replace(/\.jsonl$/, '')))); render(true); }).catch(() => {});
-  return null;
+  const e = GFILES.get(r.id);
+  if (e && (e.gen === gfGen || e.busy)) return e.set;
+  const gen = gfGen; // the sync this list is for: a sync while it loads asks again
+  GFILES.set(r.id, { set: e?.set ?? null, gen: e?.gen ?? -1, busy: true });
+  // landed or failed, a sync that came while this loaded lists again for itself (a no-op if the redraw already did)
+  const done = (set, changed) => { GFILES.set(r.id, { set, gen, busy: false }); if (changed) render(true); if (gen !== gfGen) gameFilesOf(r); };
+  S.reader?.list(`${r.dir}/games`).then(es => {
+    const set = new Set(es.map(x => x.name.replace(/\.jsonl$/, ''))), old = e?.set;
+    done(set, !old || old.size !== set.size || [...set].some(id => !old.has(id)));
+  }, () => done(e?.set ?? null, false));
+  return e?.set ?? null;
 }
 const hasBoard = i => {
   const r = M.runs[M.games[i][0]], id = M.games[i][1];
   if (!S.live) return !!DATA.traces?.[`${r.id}/${id}`];
+  if (S.api) return hasReplay(i); // the window's model already marks every game with a replay file
   if (!r?.dir || !S.reader) return false;
   const set = gameFilesOf(r); return set ? set.has(id) : false;
 };
@@ -665,7 +726,7 @@ async function syncApi() {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const d = (await r.json()).result;
   if (S.api && d.version === S.apiVersion) return true;
-  if (!S.live) TILES.clear(); GFILES.clear();
+  if (!S.live) TILES.clear();
   M = d.model; DATA.t0panels = d.t0panels || []; S.api = true; S.apiVersion = d.version; S.live = true; S.syncedAt = new Date().toISOString();
   indexGames(); buildColors(); buildSearch(); setChip();
   if (!document.querySelector('dialog[open]') && !document.activeElement?.matches('input,select')) render(true);
@@ -723,7 +784,7 @@ async function sync() {
   try {
     const src = await SWU.loadSources(S.reader), extra = await SWUApp.loadExtra(S.reader);
     const next = SWUApp.buildModel(src, extra, SWU);
-    next.replay = ''; if (!S.live) TILES.clear(); GFILES.clear(); M = next; S.live = true; S.syncedAt = new Date().toISOString();
+    next.replay = ''; if (!S.live) TILES.clear(); gfGen++; M = next; S.live = true; S.syncedAt = new Date().toISOString();
     indexGames(); buildColors(); buildSearch(); setChip();
     if (!document.querySelector('dialog[open]') && !document.activeElement?.matches('input,select')) render(true);
   } catch (e) { $('livetext').textContent = `Offline (${e?.code || e?.message || 'error'}) · showing snapshot`; }
@@ -755,7 +816,7 @@ function arenaCard() {
   const A = M.arena, st = A.standings, last = st?.rounds?.at(-1), leader = last?.leader;
   const ph = A.phase === 'idle' ? `<b>Tournament 1 has not started.</b> ${A.competitors.length} builders are registered${A.thinkCapMs ? `, ${A.thinkCapMs / 1000} s think cap per game` : ''}.` :
     A.phase === 'work' ? `<b>Round ${A.current.n}: work phase.</b> Builders are improving their bots until ${clock(A.deadline)}.` : A.phase === 'ladder' ? `<b>Round ${A.current.n}: ladder.</b> Every builder's newest bot plays every other.` : `<b>Tournament finished.</b>`;
-  return `<section class="box"><div class="bh"><h3>Builder arena</h3><a class="more" href="${href('arena')}">Open arena</a></div>${builderIntro({ compact: true })}<p style="font-size:var(--fs-base);margin-top:6px">${ph}</p>${last ? `<p class="muted" style="font-size:var(--fs-md);margin-top:8px">${A.archived ? `<span class="archived">archived</span> ${esc(A.archived)}: ` : ''}round ${last.round} leader ${botLink(leader)} · ${last.games} games</p>` : ''}</section>`;
+  return `<section class="box"><div class="bh"><h3>Builder arena</h3><a class="more" href="${href('arena')}">Open arena</a></div><p style="font-size:var(--fs-base)">${ph}</p>${last ? `<p class="muted" style="font-size:var(--fs-md);margin-top:8px">${A.archived ? `<span class="archived">archived</span> ${esc(A.archived)}: ` : ''}round ${last.round} leader ${botLink(leader)} · ${last.games} games</p>` : ''}</section>`;
 }
 function topBots(n = 8) {
   return `<section class="box"><div class="bh"><h3>Top bots</h3><span class="sub">rating, then its nine spots</span><a class="more" href="${href('bots')}">All ${M.order.length}</a></div><div class="toplist">${M.order.slice(0, n).map((id, i) => { const b = M.bots[id]; return `<a class="r" href="${href('bots', id)}"><span class="rank">${i + 1}</span><span class="bot" style="--c:${botColor(id)}"><i></i><span>${esc(id)}</span></span><span class="num">${b.rating}</span>${fingerprint(id)}</a>`; }).join('')}</div><div style="margin-top:8px">${fpKey()}</div></section>`;
@@ -783,24 +844,29 @@ function waitingBox() {
 function pageHome() {
   const k = M.totals;
   const kpis = `<div class="kpis"><div><div class="v">${int(k.rated)}</div><div class="k">games rated</div></div><div><div class="v">${k.runs}</div><div class="k">ladders and rounds</div></div><div><div class="v">${k.bots}</div><div class="k">rated bots</div></div><div><div class="v">${ATL()?.mapped.length ?? '-'}</div><div class="k">bots with a spot map</div></div><div><div class="v">${M.arena.competitors.length}</div><div class="k">arena competitors</div></div><div><div class="v">${M.research.findings.filter(f => f.v !== 'open').length}/${M.research.findings.length}</div><div class="k">findings with evidence</div></div></div>`;
-  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${joinCard()}${waitingBox()}${arenaCard()}${peopleCard()}${topBots(8)}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c7">${learnedBox(true)}</div><div class="c5">${feedBox(12)}</div><div class="c12">${glanceBox()}</div></div>${kpis}`;
+  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${waitingBox()}${arenaCard()}${peopleCard()}${topBots(8)}${joinCard()}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c7">${learnedBox(true)}</div><div class="c5">${feedBox(12)}</div><div class="c12">${glanceBox()}</div></div>${kpis}`;
 }
 
 // ---------- the builder arena: systems that build bots compete ----------
 const HARNESS = { 'claude-code': 'Claude Code', script: 'Script', codex: 'Codex', human: 'Person' };
 const capw = s => String(s || '').replace(/^./, c => c.toUpperCase());
-const sysParts = (h = {}) => ({ harness: HARNESS[h.kind] || h.kind || '?', model: h.kind === 'script' ? 'no model' : capw(h.model) || '?', effort: h.kind === 'script' ? '-' : h.effort || 'default', memory: h.memory || 'none' });
-function systemChips(h = {}) { const p = sysParts(h); return [p.harness, h.kind === 'script' ? 'no LLM' : p.model, h.kind !== 'script' && h.effort ? `${h.effort} effort` : '', h.memory ? `memory: ${h.memory}` : ''].filter(Boolean).map(t => `<span class="harness">${esc(t)}</span>`).join(''); }
+// a roster entry with no harness (a bot entered as it is, with no builder in the arena) has harness null
+const sysParts = (h) => !h ? { harness: 'none', model: '-', effort: '-', memory: '-' } : ({ harness: HARNESS[h.kind] || h.kind || '?', model: h.kind === 'script' ? 'no model' : capw(h.model) || '?', effort: h.kind === 'script' ? '-' : h.effort || 'default', memory: h.memory || 'none' });
+function systemChips(h) { if (!h) return '<span class="harness">no builder</span>'; const p = sysParts(h); return [p.harness, h.kind === 'script' ? 'no LLM' : p.model, h.kind !== 'script' && h.effort ? `${h.effort} effort` : '', h.memory ? `memory: ${h.memory}` : ''].filter(Boolean).map(t => `<span class="harness">${esc(t)}</span>`).join(''); }
 const builderOf = name => M.arena.competitors.find(c => c.name === name || c.versions.some(v => v.name === name)) || null;
-function builderIntro({ compact = false } = {}) {
+/** How the builder arena works: the diagram and what the tournament compares. It goes at the bottom of a page, under the
+ *  arena itself (Eric, 2026-10-13: how-it-works pages do not belong at the top). */
+function builderIntro() {
   const cs = M.arena.competitors;
-  if (compact) return `${arenaDiagram({ compact: true })}<p style="font-size:var(--fs-md);color:var(--ink-2)">Builders compete: each one writes its own bot and improves it between rounds. A builder's rating is its bot's.</p>`;
-  const vals = f => [...new Set(cs.filter(c => c.harness?.kind !== 'script').map(c => sysParts(c.harness)[f]))];
-  const sig = c => JSON.stringify(c.harness || {}), same = {}; for (const c of cs) (same[sig(c)] ||= []).push(c.name);
-  const reps = Object.values(same).filter(g => g.length > 1), scripts = cs.filter(c => c.harness?.kind === 'script');
+  const built = cs.filter(c => c.harness), bare = cs.filter(c => !c.harness);
+  const vals = f => [...new Set(built.filter(c => c.harness.kind !== 'script').map(c => sysParts(c.harness)[f]))];
+  const sig = c => JSON.stringify(c.harness), same = {}; for (const c of built) (same[sig(c)] ||= []).push(c.name);
+  const reps = Object.values(same).filter(g => g.length > 1), scripts = built.filter(c => c.harness.kind === 'script');
   const tests = [vals('model').length > 1 && `<li><b>Model:</b> ${vals('model').map(esc).join(', ')}</li>`, vals('effort').length > 1 && `<li><b>Effort:</b> ${vals('effort').map(esc).join(', ')}</li>`, vals('memory').length > 1 && `<li><b>Memory:</b> ${vals('memory').map(esc).join(' vs ')}</li>`,
-    ...reps.map(g => `<li><b>Same setup ×${g.length}:</b> ${g.map(esc).join(', ')} <span class="muted">(shows how much of a result is luck)</span></li>`), scripts.length && `<li><b>No LLM:</b> ${scripts.map(c => esc(c.name)).join(', ')} <span class="muted">(a script that tunes the same bot)</span></li>`].filter(Boolean);
-  return `<section class="box builder-intro"><div class="bh"><h3>How the builder arena works</h3></div><div class="grid"><div class="c8"><div class="wide-only">${arenaDiagram()}</div><div class="phone-only">${arenaDiagram({ compact: true })}</div></div>${tests.length ? `<div class="c4 tests"><div class="eyebrow">What this tournament compares</div><ul class="plain">${tests.join('')}</ul><p class="muted" style="font-size:var(--fs-sm)">Every builder gets the same task${cs[0]?.philosophy ? `: "${esc(cs[0].philosophy.slice(0, 140))}${cs[0].philosophy.length > 140 ? '…' : ''}"` : ''}, and starts from ${[...new Set(cs.map(c => c.start).filter(Boolean))].map(b => botLink(b)).join(', ') || 'a baseline'}.</p></div>` : ''}</div></section>`;
+    ...reps.map(g => `<li><b>Same setup ×${g.length}:</b> ${g.map(esc).join(', ')} <span class="muted">(shows how much of a result is luck)</span></li>`), scripts.length && `<li><b>No LLM:</b> ${scripts.map(c => esc(c.name)).join(', ')} <span class="muted">(a script that tunes the same bot)</span></li>`,
+    bare.length && `<li><b>No builder:</b> ${bare.map(c => esc(c.name)).join(', ')} <span class="muted">(bots entered as they are)</span></li>`].filter(Boolean);
+  const T = M.arena.tournament, mins = T?.roundMinutes || 60;
+  return `<section class="box builder-intro"><div class="bh"><h3>How the builder arena works</h3></div><p style="font-size:var(--fs-md);color:var(--ink-2);margin-bottom:8px">Each builder is a system that builds a bot: a model in its harness, with its effort and memory settings, or a script. Every round opens a ${mins}-minute work window where each builder improves its own bot; then every builder's newest bot plays every other, the baselines too. A builder's rating is its bot's.</p><div class="grid"><div class="c8"><div class="wide-only">${arenaDiagram()}</div><div class="phone-only">${arenaDiagram({ compact: true })}</div></div>${tests.length ? `<div class="c4 tests"><div class="eyebrow">What this tournament compares</div><ul class="plain">${tests.join('')}</ul><p class="muted" style="font-size:var(--fs-sm)">Every builder gets the same task${cs[0]?.philosophy ? `: "${esc(cs[0].philosophy.slice(0, 140))}${cs[0].philosophy.length > 140 ? '…' : ''}"` : ''}, and starts from ${[...new Set(cs.map(c => c.start).filter(Boolean))].map(b => botLink(b)).join(', ') || 'a baseline'}.</p></div>` : ''}</div></section>`;
 }
 function setupTable() {
   const cs = M.arena.competitors, st = M.arena.standings, F = ['harness', 'model', 'effort', 'memory'];
@@ -827,7 +893,7 @@ function phaseBanner() {
   // a card-pool holdout tournament ends with one more ladder, on the held-out cards and with no work window
   if (ho || T?.rules?.holdout) steps.push(`<span class="${!ho ? '' : ho.ladderEnd ? 'done' : 'on'}">Held-out cards ladder</span>`);
   const clockTxt = A.phase === 'work' ? `${Math.max(0, Math.round((Date.parse(A.deadline) - NOW()) / 60000))} min` : A.phase === 'ladder' ? 'Ladder' : A.phase === 'done' ? 'Finished' : 'Not started';
-  const what = A.phase === 'idle' ? `${A.competitors.length} builders registered, ${A.baselines.join(' and ')} as baselines. When the referee starts tournament 1, every round opens a ${mins}-minute work window where each builder improves its bot, then every builder's newest bot plays every other.` :
+  const what = A.phase === 'idle' ? `${A.competitors.length} builders registered, ${A.baselines.join(' and ')} as baselines. Waiting for the referee to start ${T?.title || 'tournament 1'}.` :
     A.phase === 'work' ? `Builders are improving their bots. Submissions close at ${clock(A.deadline)}.` : A.phase === 'ladder' ? 'The newest versions are playing each other now. Games appear in the grid as they finish.' : 'All rounds are rated.';
   return `<section class="phase"><div><div class="eyebrow">Builder arena · ${esc(T?.title || 'tournament 1')}</div><div class="clock">${clockTxt}</div></div><p style="font-size:var(--fs-base);color:var(--ink-2)">${esc(what)}</p><div class="steps">${steps.join('')}</div></section>`;
 }
@@ -858,14 +924,14 @@ function pageArenaLive() {
   const panels = live ? A.competitors.map(c => c.panel).filter(Boolean) : (DATA.t0panels || []);
   return `${phaseBanner()}
   ${preview ? `<div class="notice"><b>Preview.</b> Tournament 1 has not started, so this page replays the last real round: <span class="archived">archived</span> ${esc(A.archived)}, round ${st.rounds[ri].round}. The same layout fills live when the referee starts.</div>` : ''}
-  ${builderIntro()}
   <div class="grid">
     <div class="c8 stack">${x ? `<section class="box hero"><div class="hero-head">${x.res === 3 ? '<span class="pill live">Live</span>' : '<span class="pill done">Round game</span>'}${botLink(x.p1)}<span class="vs">vs</span>${botLink(x.p2)}<a class="more" href="${href('games', x.run.id, x.id)}" style="margin-left:auto">Open game</a></div><div class="kithost compact" data-game="${esc(key)}" data-layout="compact" data-live="${x.res === 3 ? 1 : 0}"></div>${spotBarHtml(key)}</section>` : ''}
       ${run ? (() => { const { playing, done } = gridGames({ run, max: 12, finished: 6 }), list = [...playing, ...done].filter(i => i !== ag).slice(0, 6); return list.length ? `<section class="box"><div class="bh"><h3>Round games, board by board</h3><span class="sub">${playing.length} playing</span><a class="more" href="${href('games')}?run=${encodeURIComponent(run.id)}">All boards</a></div><div class="gtiles three">${list.map(i => tileHtml(i, { sm: true })).join('')}</div></section>` : ''; })() : ''}
       ${run ? `<section class="box"><div class="bh"><h3>Round games</h3><span class="sub">${run.decided} of ${run.planned || run.n} played · <a href="${href('runs', run.id)}">${esc(run.id)}</a></span></div>${gameGrid(run)}</section>` : ''}</div>
     <div class="c4 stack"><section class="box"><div class="bh"><h3>Round standings</h3><a class="more" href="${href('arena', 'standings')}">All rounds</a></div>${roundStandings(st, ri)}</section>
       <section class="box"><div class="bh"><h3>Builders are thinking</h3></div>${thoughtsFeed(panels, 10)}</section></div>
-  </div>`;
+  </div>
+  <div style="margin-top:var(--gap)">${builderIntro()}</div>`;
 }
 function pageArenaStandings() {
   const st = M.arena.standings;
@@ -875,15 +941,15 @@ function pageArenaStandings() {
   const runOf = (r, i) => roundRun(r.round) || (i === st.rounds.length - 1 ? arenaRun() : null);
   return `<div class="phead"><h1>Arena standings</h1><p class="lede">Bradley-Terry ratings with the baselines' mean pinned at 1500. Each round: its standings with every bot's Atlas style and nine spots, and the grid of every game it played. ${M.arena.archived ? `<span class="archived">archived</span> ${esc(M.arena.archived)}` : ''}</p></div>
   ${st.rounds.filter(r => r.pool !== 'holdout').length > 1 ? `<section class="box"><div class="bh"><h3>Rating by round</h3></div>${lineChart(series, { xLabel: 'round', xFmt: v => `R${v}` })}</section>` : ''}
-  ${st.rounds.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => { const run = runOf(r, i); return `<div class="grid" style="margin-top:12px"><div class="c7 box"><div class="bh"><h3>Round ${r.round}${r.pool === 'holdout' ? ' · held-out cards' : ''}</h3><span class="sub">${r.games} games · leader ${esc(r.leader)}</span></div>${roundStandings(st, i, { fp: true })}</div><div class="c5 box"><div class="bh"><h3>Who beat whom</h3><span class="sub">${run ? `<a class="mono" href="${href('runs', run.id)}">${esc(run.id)}</a>` : `round ${r.round}`}</span></div>${run ? gameGrid(run) : '<p class="muted">No game list kept for this round.</p>'}</div></div>`; }).join('')}`;
+  ${st.rounds.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => { const run = runOf(r, i); return `<div class="grid" data-sec="round-${i}" style="margin-top:12px"><div class="c7 box"><div class="bh"><h3>Round ${r.round}${r.pool === 'holdout' ? ' · held-out cards' : ''}</h3><span class="sub">${r.games} games · leader ${esc(r.leader)}</span></div>${roundStandings(st, i, { fp: true })}</div><div class="c5 box"><div class="bh"><h3>Who beat whom</h3><span class="sub">${run ? `<a class="mono" href="${href('runs', run.id)}">${esc(run.id)}</a>` : `round ${r.round}`}</span></div>${run ? gameGrid(run) : '<p class="muted">No game list kept for this round.</p>'}</div></div>`; }).join('')}`;
 }
 function compCard(c) {
   const p = c.panel, st = M.arena.standings, h = c.harness || {}, v = compVersion(c);
-  return `<a class="box comp" href="${href('arena', 'builders', c.name)}" style="--c:${famColor(h.kind === 'script' ? 'search' : 'llm')};color:inherit;text-decoration:none"><span class="eyebrow">Builder system</span><div class="row" style="justify-content:space-between"><span class="nm">${esc(c.name)}</span><span class="muted" style="font-size:var(--fs-sm)">${esc(c.title)}${c.benched ? ' · benched' : ''}</span></div><span class="row" style="gap:4px">${systemChips(h)}</span><span class="now">${esc(p?.now || 'No status posted yet')}</span><span class="eyebrow" style="margin-top:4px">Bots it built</span><span class="lineage">${c.versions.map(x => `<span title="${esc(x.note || '')}"><b class="mono">${esc(x.name.replace(c.name + '-', ''))}</b>${st?.global?.[x.name] != null ? ` ${st.global[x.name]}` : ''}</span>`).join('<i>→</i>') || '<span class="faint">none yet</span>'}</span>${v && atl(v) ? `<span class="row" style="gap:8px">${fingerprint(v, 'md')}${styleTag(atl(v).summary?.style)}${atl(v).forfeits ? `<span class="mk clock">⏱ ${atl(v).forfeits}</span>` : ''}</span>` : `<span class="row" style="gap:8px;font-size:var(--fs-sm);color:var(--muted)">${fingerprint(v || c.name, 'md')} spot map after its first round${c.start && atl(c.start) ? `; starts from ${esc(c.start)} ${styleTag(atl(c.start).summary?.style)}` : ''}</span>`}</a>`;
+  return `<a class="box comp" href="${href('arena', 'builders', c.name)}" style="--c:${famColor(h.kind === 'script' ? 'search' : 'llm')};color:inherit;text-decoration:none"><span class="eyebrow">Builder system</span><div class="row" style="justify-content:space-between"><span class="nm">${esc(c.name)}</span><span class="muted" style="font-size:var(--fs-sm)">${esc(c.title)}${c.benched ? ' · benched' : ''}</span></div><span class="row" style="gap:4px">${systemChips(c.harness)}</span><span class="now">${esc(p?.now || 'No status posted yet')}</span><span class="eyebrow" style="margin-top:4px">Bots it built</span><span class="lineage">${c.versions.map(x => `<span title="${esc(x.note || '')}"><b class="mono">${esc(x.name.replace(c.name + '-', ''))}</b>${st?.global?.[x.name] != null ? ` ${st.global[x.name]}` : ''}</span>`).join('<i>→</i>') || '<span class="faint">none yet</span>'}</span>${v && atl(v) ? `<span class="row" style="gap:8px">${fingerprint(v, 'md')}${styleTag(atl(v).summary?.style)}${atl(v).forfeits ? `<span class="mk clock">⏱ ${atl(v).forfeits}</span>` : ''}</span>` : `<span class="row" style="gap:8px;font-size:var(--fs-sm);color:var(--muted)">${fingerprint(v || c.name, 'md')} spot map after its first round${c.start && atl(c.start) ? `; starts from ${esc(c.start)} ${styleTag(atl(c.start).summary?.style)}` : ''}</span>`}</a>`;
 }
 function pageCompetitors() {
   const A = M.arena;
-  return `<div class="phead"><h1>Builders</h1><p class="lede">Each builder is a system that builds a bot: a model with its harness, effort and memory, or a script. Builders improve their own bot between rounds and are rated by how it plays. Baselines (fixed bots, no builder): ${A.baselines.map(b => botLink(b)).join(' and ')}.</p></div>${builderIntro()}<section class="box" style="margin:12px 0"><div class="bh"><h3>The systems</h3></div>${setupTable()}</section><div class="comps">${A.competitors.map(compCard).join('')}</div>`;
+  return `<div class="phead"><h1>Builders</h1><p class="lede">The systems that build bots, and the bots each one built. Baselines (fixed bots, no builder): ${A.baselines.map(b => botLink(b)).join(' and ')}.</p></div><section class="box" style="margin-bottom:12px"><div class="bh"><h3>The systems</h3></div>${setupTable()}</section><div class="comps">${A.competitors.map(compCard).join('')}</div><div style="margin-top:var(--gap)">${builderIntro()}</div>`;
 }
 function panelBody(p, { compact = false } = {}) {
   if (!p) return '<p class="muted">No panel posted.</p>';
@@ -935,7 +1001,7 @@ function pageCompetitor(r) {
   if (!c) return `<div class="notice">No builder named ${esc(r.parts[2])}.</div>`;
   const h = c.harness || {}, st = M.arena.standings, p = c.panel, col = famColor(h.kind === 'script' ? 'search' : 'llm'), v = compVersion(c);
   const results = (st?.rounds || []).flatMap(rd => rd.bots.filter(b => b.agent === c.name).map(b => ({ rd, b })));
-  return `<p><a href="${href('arena', 'builders')}">← Builders</a></p><section class="bothead" style="--c:${col};--on-c:${onColor(col)}"><div class="icon">${esc(c.name.slice(0, 2).toUpperCase())}</div><div><div class="eyebrow">Builder system</div><div class="row"><h1>${esc(c.name)}</h1>${systemChips(h)}</div><p class="line">${esc(c.title)}. Its task: ${esc(c.philosophy)}</p>${v ? atlasLine(v) : ''}</div><div class="stats"><div><div class="v">${c.versions.length}</div><div class="k">bots built</div></div><div><div class="v">${st?.global?.[c.latest] ?? '-'}</div><div class="k">newest bot's rating</div></div></div></section>
+  return `<p><a href="${href('arena', 'builders')}">← Builders</a></p><section class="bothead" style="--c:${col};--on-c:${onColor(col)}"><div class="icon">${esc(c.name.slice(0, 2).toUpperCase())}</div><div><div class="eyebrow">Builder system</div><div class="row"><h1>${esc(c.name)}</h1>${systemChips(c.harness)}</div><p class="line">${esc(c.title)}. Its task: ${esc(c.philosophy)}</p>${v ? atlasLine(v) : ''}</div><div class="stats"><div><div class="v">${c.versions.length}</div><div class="k">bots built</div></div><div><div class="v">${st?.global?.[c.latest] ?? '-'}</div><div class="k">newest bot's rating</div></div></div></section>
   <div class="grid"><div class="c8 stack"><section class="box"><div class="bh"><h3>What the builder is doing</h3>${p ? `<span class="sub">updated ${ago(p.updatedAt)} ago</span>` : ''}</div>${panelBody(p)}</section>
     ${v ? winsBox(v, `Where ${v} wins`) : ''}
     ${(p?.widgets || []).filter(w => w.type === 'strategy').map(w => `<section class="box">${widgetHtml(w)}</section>`).join('') || `<section class="box flat"><h3>Strategy diagram</h3><p class="muted" style="font-size:var(--fs-md);margin-top:4px">Competitors post an animated diagram of their strategy with <span class="mono">say(diagram)</span>; it appears here (renderer: arena/strategy).</p></section>`}</div>
@@ -1189,7 +1255,8 @@ const PEOPLE_F = [['all', 'All'], ['playing', 'Playing'], ['won', 'Our bot won']
 function pagePeople() {
   const P = peopleStats();
   const head = `<div class="phead"><h1>Bots vs people</h1><p class="lede">Our bots play real people on karabast.net, the public Star Wars Unlimited site. These games never change a bot's rating; ratings come from bot-vs-bot games only. People are never named here: each one shows as "a person".${HOSTED ? ` <a href="#/share?from=${encodeURIComponent('#/people')}">Share this tab</a>` : ''}</p></div>`;
-  if (!P.games.length) return `${head}<div class="grid"><div class="c6 box">${peopleDiagram()}</div><div class="c6 box"><p class="muted">No games against people yet.</p></div></div>`;
+  const how = `<section class="box" style="margin-top:18px"><div class="bh"><h3>How these games are kept apart</h3></div>${peopleDiagram()}</section>`;
+  if (!P.games.length) return `${head}<div class="box"><p class="muted">No games against people yet.</p></div>${how}`;
   const all = P.bots.reduce((a, B) => ({ w: a.w + B.w, l: a.l + B.l, d: a.d + B.d, n: a.n + B.n, ab: a.ab + B.ab, live: a.live + B.live }), { w: 0, l: 0, d: 0, n: 0, ab: 0, live: 0 });
   const { playing, done } = gridGames({ people: true, max: 12, finished: 6 });
   const won = i => { const x = gameRow(M.games[i]); return x.res < 2 && winnerName(x) !== 'the person'; };
@@ -1200,13 +1267,13 @@ function pagePeople() {
   const kpis = `<div class="kpis"><div><div class="v">${int(all.n)}</div><div class="k">finished games</div></div><div><div class="v">${all.w}-${all.l}${all.d ? `-${all.d}` : ''}</div><div class="k">our bots' record</div></div><div><div class="v">${pct(all.n ? (all.w + all.d / 2) / all.n : null)}</div><div class="k">won</div></div><div><div class="v">${all.ab}</div><div class="k">abandoned</div></div><div><div class="v">${all.live}</div><div class="k">playing now</div></div></div>`;
   const record = `<div class="scroll"><table><thead><tr><th>Bot</th><th class="n">W-L</th><th>Won</th><th class="n hide-sm">Abandoned</th><th class="n hide-sm">Its rating</th></tr></thead><tbody>${P.bots.map(B => `<tr><td>${botLink(B.id)}${B.live ? ' <span class="pill live">playing</span>' : ''}</td><td class="n">${B.w}-${B.l}${B.d ? `-${B.d}` : ''}</td><td><span class="sc-cell"><span class="sc"><i style="width:${(B.pct || 0) * 100}%;--c:${B.pct >= .5 ? 'var(--pos-4)' : 'var(--neg-4)'}"></i><b></b></span><em>${pct(B.pct)}</em></span></td><td class="n hide-sm">${B.ab}</td><td class="n hide-sm">${M.bots[B.id]?.rating ?? '<span class="faint">-</span>'}${M.bots[B.id]?.rank ? ` <span class="faint">#${M.bots[B.id].rank}</span>` : ''}</td></tr>`).join('')}</tbody></table></div><p class="muted" style="font-size:var(--fs-sm);margin-top:6px">Its rating: from bot-vs-bot games only, for comparison. Score bar: line = 50%.</p>`;
   return `${head}
-  <div class="grid"><div class="c5 box">${peopleDiagram()}</div><div class="c7 box"><div class="bh"><h3>Our bots against people</h3><span class="sub">finished games</span></div>${record}</div></div>
+  <section class="box"><div class="bh"><h3>Our bots against people</h3><span class="sub">finished games</span></div>${record}</section>
   <div style="margin-top:var(--gap)">${kpis}</div>
   <section style="margin-top:18px"><div class="bh" style="margin:6px 0 8px"><h2>${playing.length ? `Playing${S.live ? ' now' : ' at snapshot time'}` : 'Nothing is playing'}</h2><span class="sub">${playing.length} game${playing.length === 1 ? '' : 's'} against people</span></div>${playing.length ? `<div class="gtiles">${playing.map(i => tileHtml(i)).join('')}</div>` : `<p class="muted">No game against a person is playing ${S.live ? 'right now' : 'in this snapshot'}.</p>`}</section>
   ${done.length ? `<section style="margin-top:18px"><div class="bh" style="margin-bottom:8px"><h2>Just finished</h2><span class="sub">newest first</span></div><div class="gtiles">${done.map(i => tileHtml(i)).join('')}</div></section>` : ''}
   ${series.length ? `<section class="box" style="margin-top:18px"><div class="bh"><h3>Win rate over time</h3><span class="sub">share of its last ${W} finished games won, by game number</span></div>${lineChart(series, { yLo: 0, yHi: 1, yFmt: pct, xLabel: 'finished games', h: 220, label: `Each bot's win rate against people over its last ${W} games` })}</section>` : ''}
   <section class="box" style="margin-top:18px"><div class="bh"><h3>Every game against people</h3><span class="sub">newest first</span></div><div class="fchips" style="margin-bottom:8px">${PEOPLE_F.map(([k, l]) => `<button type="button" class="fchip" data-act="peopleF" data-f="${k}" aria-pressed="${S.peopleF === k}">${esc(l)}</button>`).join('')}<span class="muted" style="font-size:var(--fs-md);align-self:center">${int(rows.length)} games</span></div>${gamesTable(rows.slice(p * per, p * per + per), { showRun: false })}<div class="pager" style="margin-top:8px"><button type="button" data-act="peoplePage" data-d="-1" ${p === 0 ? 'disabled' : ''}>Newer</button><span class="mono">${p + 1} / ${pages}</span><button type="button" data-act="peoplePage" data-d="1" ${p >= pages - 1 ? 'disabled' : ''}>Older</button></div></section>
-  ${tileKey()}`;
+  ${tileKey()}${how}`;
 }
 
 // ---------- share: a link to any page, and (an admin) who may sign in ----------
@@ -1486,7 +1553,7 @@ function arenaDiagram({ compact = false } = {}) {
   const W = compact ? 440 : 720, cardW = compact ? 150 : 250, cardH = compact ? 24 : 36, gap = compact ? 6 : 8, top = 22;
   const H = Math.max(top + cs.length * (cardH + gap) + (compact ? 44 : 54), compact ? 236 : 306);
   const r = compact ? 62 : 100, cx = W - r - (compact ? 64 : 110), cy = top + (H - top - (compact ? 44 : 54)) / 2;
-  const id = compact ? 'adc' : 'adf', sys = c => c.harness?.kind === 'script' ? 'script, no LLM' : [capw(c.harness?.model), c.harness?.effort && `${c.harness.effort} effort`, c.harness?.memory && `memory: ${c.harness.memory}`].filter(Boolean).join(' · ');
+  const id = compact ? 'adc' : 'adf', sys = c => !c.harness ? 'no builder' : c.harness.kind === 'script' ? 'script, no LLM' : [capw(c.harness?.model), c.harness?.effort && `${c.harness.effort} effort`, c.harness?.memory && `memory: ${c.harness.memory}`].filter(Boolean).join(' · ');
   const nodes = [];
   cs.forEach((c, i) => { const th = (cs.length === 1 ? 180 : 235 - i * 110 / (cs.length - 1)) * Math.PI / 180; nodes.push({ kind: 'b', c, name: c.latest || c.name, x: cx + r * Math.cos(th), y: cy + r * Math.sin(th) }); });
   base.forEach((b, i) => { const th = (base.length === 1 ? 0 : -35 + i * 70 / (base.length - 1)) * Math.PI / 180; nodes.push({ kind: 'base', name: b, x: cx + r * Math.cos(th), y: cy + r * Math.sin(th) }); });
