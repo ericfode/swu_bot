@@ -84,6 +84,11 @@ differ, with the keys only one side has), `state` (full states differ, with the 
 refused the chosen move), `terminal`, `rust-error` and `mirror-error`. `cards` and `lastCard` (the card of the move
 before the disagreement) name the cards involved; `summary.json` counts findings per card.
 
+For the compiled card pool (PR #121, 830 cards), add `--catalogue bot/card-compiler/generated/catalog.json --pool
+bot/card-compiler/generated/runtime-pool.json --selection-toggles`: the compiled card programs, and forceteki with the
+opt-in select-card rule that this Rust engine follows (`env.newGame({ selectionToggles: true })`). `omni-rs check` then
+needs the same `--catalogue` and `--pool`.
+
 `--views` also builds, from the Rust state, the protocol views a bot would get from Rust simulations (`rust-view.js`)
 and compares them with `bot/view.js` on forceteki: the action list at every checked decision and the board at every
 action window. The first difference in a line is a `view` finding.
@@ -93,6 +98,11 @@ First run (`/mnt/project-files/omni/stress/r1-pool100/`, `summary-short.json` fo
 every pair on seeds 21-22, 110 games on the 100-card pool: 13,647 real moves and 6,703 action windows, plus 13,441
 moves and 6,066 windows inside 1,631 bot simulations, with no disagreement and no engine error. A `--views` run had no
 view difference either.
+
+Second run (`/mnt/project-files/omni/stress/r2-pool830/`, `FINDINGS.md`), the same bots and seeds on the 830-card pool of
+PR #121 before it merged: 12,687 real moves and 5,813 moves inside 610 simulations, no engine error, and 3 findings from
+2 Rust bugs. Force Illusion (LOF_223) offers already-exhausted enemy units to exhaust, where forceteki skips that step.
+The deployed C-3PO leader (SEC_015) loses its On Attack trigger.
 
 ## Simulations on the Rust engine (opt-in)
 
