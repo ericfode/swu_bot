@@ -169,7 +169,7 @@ test('the repo scope reads the shared core and leaves the bots out', () => {
     assert.ok(inScope(file, scopes.repo), file);
   }
   for (const file of ['bot/players/heuristic.js', 'bot/players/rush.js', 'bot/rust/src/main.rs', 'bot/haskell/src/Main.hs', 'bot/examples/random_bot.py', 'bot/test/bots.test.js', 'bot/test/ratings.test.js', 'analysis/test/units.test.js', 'forceteki/server/game/Game.ts', 'README.md',
-    'bot/arena/starters/rush.js', 'bot/arena/optimizer.js', 'bot/eval/bot.js', 'bot/omni/search.js', 'bot/learn/panel.js', 'bot/learned/arena.js', 'bot/jev/look.js', 'bot/ismcts-panel.js', 'bot/determinism-check.js', 'bot/rollback-test.js', 'bot/python/test_policy.py']) {
+    'bot/arena/starters/rush.js', 'bot/eval/bot.js', 'bot/omni/search.js', 'bot/learn/panel.js', 'bot/learned/arena.js', 'bot/jev/look.js', 'bot/ismcts-panel.js', 'bot/determinism-check.js', 'bot/rollback-test.js', 'bot/python/test_policy.py']) {
     assert.ok(!inScope(file, scopes.repo), file);
   }
 });

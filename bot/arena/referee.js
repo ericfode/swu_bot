@@ -51,8 +51,8 @@ const EVAL_JS = path.join(__dirname, 'eval.js');
 const EVAL_MIN_LEFT_MS = 120000; // no queued eval starts with less of the work window left
 const EVAL_TRIES = 2; // an eval stopped by the end of a window this often fails with reason 'deadline'
 const LOCK_STALE_MS = 120000; // a lock from another host counts as abandoned once its heartbeat is this old
-// from another PID namespace on this host (a referee restarted by launch.sh): two and a half 30 s heartbeats, so the
-// keeper's restart after a crash does not wait out the full two minutes
+// from another PID namespace on this host (isolate.sh gives each referee run its own): two and a half 30 s heartbeats,
+// so a restart after a crash does not wait out the full two minutes
 const LOCK_STALE_NS_MS = 75000;
 
 function arg(name, dflt) {
@@ -268,7 +268,7 @@ function ladderIdOf(round, t = null) {
 const tourInfo = (t) => (t ? { id: t.id, title: t.title, plannedRounds: t.plannedRounds, rounds: t.rounds.filter((r) => r.kind !== 'holdout').map((r) => r.n),
                                 ...(t.rules ? { rules: rulesInfo(t.rules) } : {}), ...(t.rounds.some((r) => r.kind === 'holdout') ? { holdoutRound: t.rounds.find((r) => r.kind === 'holdout').n } : {}) } : null);
 
-/** The public summary of a tournament's rules (standings, the API clock and the brief show it). */
+/** The public summary of a tournament's rules (standings and the API clock show it). */
 function rulesInfo(rules) {
     const h = rules?.holdout;
     return h ? { holdout: { fraction: h.fraction, train: h.train, trainCards: h.counts?.train ?? null, holdoutCards: h.counts?.holdout ?? null } } : {};
@@ -391,8 +391,8 @@ function pidAlive(pid) {
     }
 }
 
-// which PID namespace this process is in (launch.sh starts the referee in its own, isolate.sh): pids mean something
-// only inside one
+// which PID namespace this process is in (the games machine starts the referee in its own, isolate.sh): pids mean
+// something only inside one
 const PIDNS = (() => {
     try {
         return fs.readlinkSync('/proc/self/ns/pid');
@@ -401,10 +401,10 @@ const PIDNS = (() => {
     }
 })();
 
-// Bot code runs in the ladders and evals the referee starts. When the referee runs as root (launch.sh, in its own
-// namespace), they run as ARENA_BOT_USER with no capabilities: a bot then cannot undo the namespace's hiding, and cannot
-// read the round-seed secret, which stays root's (a bot running as the referee's own user could read its file, its
-// environment or its memory). Neither ever gets the secret's path.
+// Bot code runs in the ladders and evals the referee starts. When the referee runs as root (the games machine, in its
+// own namespace), they run as ARENA_BOT_USER with no capabilities: a bot then cannot undo the namespace's hiding, and
+// cannot read the round-seed secret, which stays root's (a bot running as the referee's own user could read its file,
+// its environment or its memory). Neither ever gets the secret's path.
 /** [uid, gid] of ARENA_BOT_USER when the referee runs as root, else null. */
 function botUser() {
     const name = process.getuid?.() === 0 ? process.env.ARENA_BOT_USER : null;

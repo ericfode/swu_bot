@@ -190,7 +190,7 @@ async function invoke(method, args) {
     if (process.env.ARENA_COMPETITOR_TOKEN && METHODS[method]?.token && args && args.token === undefined) {
         args = { ...args, token: process.env.ARENA_COMPETITOR_TOKEN };
     }
-    // a server started for one competitor (runner.js sets ARENA_COMPETITOR) acts as that competitor only (api.js
+    // a server started for one competitor (ARENA_COMPETITOR set) acts as that competitor only (api.js
     // asCompetitor); call() applies the same rules, and a remote arena gets the call already scoped
     if (process.env.ARENA_COMPETITOR) {
         const s = asCompetitor(process.env.ARENA_COMPETITOR, method, args);

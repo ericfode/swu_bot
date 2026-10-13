@@ -1,10 +1,9 @@
 'use strict';
 /**
- * Arena API: the tournament layer every competitor uses, whatever its harness. One implementation, exposed three
- * ways with the same method names and JSON shapes:
- *   server.js  HTTP:  POST /api/<method> with a JSON body  (scripts, optimizers, a hosted arena later)
+ * Arena API: the tournament layer every competitor uses, whatever its harness. One implementation, exposed two ways
+ * with the same method names and JSON shapes:
+ *   server.js  HTTP:  POST /api/<method> with a JSON body  (scripts, a hosted arena later)
  *   mcp.js     MCP:   tool arena_<method>                  (Claude Code, Codex and other LLM harnesses)
- *   cli.js     CLI:   node bot/arena/cli.js <method> '{json}'
  * Storage is ARENA_HOME (see home.js): the project's shared folder, so every thread's container sees the same arena.
  * How a bot plays a game (observations, actions, timing) is not defined here: a submitted bot is a JS folder whose
  * createBot returns a native bot or a protocol client (spec/bot-interface.md), or a bot program (spec/protocol.md).
@@ -237,9 +236,9 @@ const api = {
     register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, token: adminToken } = {}) {
         need(NAME.test(name ?? ''), 'bad_request', 'name: 1-32 chars, lowercase letters, digits, _; starts with a letter');
         need(harness === null || (typeof harness === 'object' && !Array.isArray(harness)), 'bad_request', 'harness: an object such as {"kind": "codex"}');
-        // On a hosted arena only the admin registers a competitor the runner starts (runner.js runs its harness: a
-        // command line, or a Claude Code agent on the arena's account). Anyone else's harness only says how they run
-        // themselves: its kind and model are kept, any command is dropped, and selfRun keeps the runner away from it.
+        // On a hosted arena only the admin registers a competitor with a full harness (a command line, or a Claude Code
+        // agent on the arena's account). Anyone else's harness only says how they run themselves: its kind and model
+        // are kept, any command is dropped, and selfRun marks it as run by its builder.
         if (harness && AUTH && !(process.env.ARENA_ADMIN_TOKEN && adminToken === process.env.ARENA_ADMIN_TOKEN)) {
             harness = { kind: String(harness.kind ?? 'other').slice(0, 32), ...(harness.model ? { model: String(harness.model).slice(0, 64) } : {}), selfRun: true };
         }
@@ -373,9 +372,8 @@ const api = {
 
     withdraw({ name, version, token } = {}) {
         // a competitor leaves every ladder that starts from now on (this round's too, if its ladder has not started:
-        // lineup() reads the roster when the ladder starts) and the runner from the next round, or one broken version
-        // stops being rated the same way; a ladder already running keeps its lineup. Versions, games and ratings stay,
-        // and rejoin undoes either
+        // lineup() reads the roster when the ladder starts), or one broken version stops being rated the same way; a
+        // ladder already running keeps its lineup. Versions, games and ratings stay, and rejoin undoes either
         owned(name, token, { benched: true });
         version = int(version);
         const at = new Date().toISOString();
@@ -593,15 +591,15 @@ function roundLadder(round) {
 }
 
 /** Calls a method by name with an args object; resolves {result} or {error: {code, message}}. */
-// what only the arena does to a competitor that runner.js runs: it runs it for the whole tournament
+// what only the arena may do to a competitor that calls as itself (ARENA_COMPETITOR)
 const BENCH = ['withdraw', 'rejoin'];
 
 /**
- * A call made for one competitor (runner.js sets ARENA_COMPETITOR for the harnesses it starts and their MCP server):
- * that name is the default and the only one allowed, it registers and benches nobody, and it sends as itself, to one
- * competitor. Returns {args} to go on with, or {error}. call() applies it, so the CLI, scripts and mcp.js get the same
- * rules; mcp.js applies it too before it forwards to a remote arena. On a local arena, whose competitors share the arena
- * folder, this keeps honest agents on their own name; a hosted arena's tokens (ARENA_AUTH) are the boundary.
+ * A call made for one competitor (ARENA_COMPETITOR set in the caller's environment, as for mcp.js): that name is the
+ * default and the only one allowed, it registers and benches nobody, and it sends as itself, to one competitor.
+ * Returns {args} to go on with, or {error}. call() applies it, so scripts and mcp.js get the same rules; mcp.js applies
+ * it too before it forwards to a remote arena. On a local arena, whose competitors share the arena folder, this keeps
+ * honest agents on their own name; a hosted arena's tokens (ARENA_AUTH) are the boundary.
  */
 function asCompetitor(me, method, args) {
     const no = (message) => ({ error: { code: 'unauthorized', message } });

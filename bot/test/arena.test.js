@@ -430,57 +430,7 @@ test('panel is composed from the arena\'s own halves, with or without the dashbo
     assert.strictEqual(api.panel({ name: 'pan' }).now, 'Tuning');
 });
 
-test('runner: a harness is stopped at its deadline with everything it started, in any process group', async () => {
-    const { runUntil, tagged } = require('../arena/runner');
-    const tag = `test-${process.pid}`;
-    const out = path.join(tmp, 'harness.log');
-    const t0 = Date.now();
-    const res = await runUntil('bash', ['-c', 'setsid sleep 913 & sleep 914 & sleep 915'], { cwd: tmp, env: { ...process.env, ARENA_RUN: tag }, out, stopAt: Date.now() + 1500, tag });
-    assert.strictEqual(res.stopped, true);
-    assert.ok(Date.now() - t0 < 5000, 'stopped at the deadline');
-    await new Promise((r) => setTimeout(r, 300));
-    assert.deepStrictEqual(tagged(tag), [], 'nothing it started is left, the setsid child included');
-});
-
-test('runner: the usage brake holds while a window is over its limit, until that window resets', () => {
-    const { lastLimits, noteLimits, braked } = require('../arena/runner');
-    const soon = Math.floor(Date.now() / 1000) + 3600;
-    const event = (u5, u7, status = 'allowed') => JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status, unifiedWindows: { five_hour: { utilization: u5, resetsAt: soon }, seven_day: { utilization: u7, resetsAt: soon } } } });
-    assert.strictEqual(lastLimits('{"type":"system"}\n'), null);
-    noteLimits(lastLimits(`${event(0.9, 0.5)}\n{"type":"assistant"}\n${event(0.2, 0.5)}\n`));
-    assert.strictEqual(braked(), null, 'the newest event counts');
-    noteLimits(lastLimits(`${event(0.85, 0.5)}\n`));
-    assert.match(braked(), /five_hour usage 85%/);
-    assert.strictEqual(braked(soon * 1000 + 1), null, 'over once the window resets');
-    noteLimits(lastLimits(`${event(0.1, 0.96)}\n`));
-    assert.match(braked(), /seven_day/);
-    noteLimits(lastLimits(`${event(0.1, 0.1, 'rejected')}\n`));
-    assert.match(braked(), /over its limit/);
-    noteLimits(lastLimits(`${event(0.1, 0.1)}\n`));
-    assert.strictEqual(braked(), null);
-});
-
-test('runner: the usage brake stops Claude sessions only, and the runner starts only harnesses it knows', () => {
-    const { noteLimits, running, runnable } = require('../arena/runner');
-    const stopped = [];
-    running.set('a-r1', { stop: () => stopped.push('a-r1'), claude: true });
-    running.set('opt-r1', { stop: () => stopped.push('opt-r1'), claude: false });
-    try {
-        noteLimits({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.99, resetsAt: Math.floor(Date.now() / 1000) + 3600 } } });
-        assert.deepStrictEqual(stopped, ['a-r1']);
-    } finally {
-        running.clear();
-        noteLimits({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0 }, seven_day: { utilization: 0 } } });
-    }
-    assert.ok(runnable({ kind: 'claude-code', model: 'opus' }));
-    assert.ok(runnable({ kind: 'script', cmd: 'node bot/arena/optimizer.js' }));
-    assert.ok(runnable({ kind: 'command', cmd: ['prog', '{prompt_file}'] }));
-    for (const h of [{ kind: 'script' }, { kind: 'command', cmd: [] }, { kind: 'codex' }, { kind: 'Claude Code' }, null]) {
-        assert.ok(!runnable(h), JSON.stringify(h));
-    }
-});
-
-test('referee lock: pids decide inside one PID namespace, the heartbeat across namespaces (launch.sh isolates the referee)', () => {
+test('referee lock: pids decide inside one PID namespace, the heartbeat across namespaces (isolate.sh gives the referee its own)', () => {
     const { takeLock, releaseLock } = require('../arena/referee');
     const dir = fs.mkdtempSync(path.join(tmp, 'lock-'));
     const file = path.join(dir, 'referee.lock');
@@ -573,52 +523,8 @@ test('referee: bot code (ladders, evals) runs as ARENA_BOT_USER, cannot read the
     }
 });
 
-test('runner: with every competitor benched it waits instead of failing (the keeper would restart it every minute)', () => {
+test('register on a hosted arena: only the admin token keeps a harness\'s command', () => {
     const { spawnSync } = require('child_process');
-    writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines: ['rush'], agents: [], bench: [{ name: 'b', title: 'b', harness: { kind: 'claude-code' } }] });
-    writeJson(path.join(HOME, 'tournament.json'), { id: 'bench-t', state: 'done', rounds: [] });
-    // it worked in an earlier round, before a restart: its logs are published at the end all the same
-    fs.mkdirSync(path.join(tmp, 'bench-logs', 'b'), { recursive: true });
-    fs.writeFileSync(path.join(tmp, 'bench-logs', 'b', 'usage.jsonl'), '{"round":1}\n');
-    try {
-        const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'arena', 'runner.js'), '--logs', path.join(tmp, 'bench-logs')],
-            { env: process.env, encoding: 'utf8', timeout: 20000 });
-        assert.strictEqual(r.status, 0, r.stderr);
-        assert.match(r.stdout + r.stderr, /no competitor .* yet/);
-        assert.match(r.stdout + r.stderr, /the tournament is over/);
-        assert.ok(fs.existsSync(path.join(HOME, 'logs', 'b', 'usage.jsonl')), 'the benched competitor\'s logs are published');
-    } finally {
-        fs.rmSync(path.join(HOME, 'tournament.json'), { force: true });
-    }
-});
-
-test('runner: a session that follows another with the same tag is not stopped by the first one\'s cleanup', async () => {
-    const { runUntil } = require('../arena/runner');
-    const tag = `test-next-${process.pid}`;
-    const opts = { cwd: tmp, env: { ...process.env, ARENA_RUN: tag }, out: path.join(tmp, 'next.log'), stopAt: Date.now() + 60000, tag };
-    const first = await runUntil('bash', ['-c', 'sleep 30 & exit 0'], opts);
-    assert.strictEqual(first.code, 0);
-    const second = await runUntil('bash', ['-c', 'sleep 6'], opts);
-    assert.deepStrictEqual([second.code, second.stopped], [0, false], 'the second session ran to its end');
-});
-
-test('optimizer: against a remote arena it goes on from the genome it last submitted (--state)', () => {
-    const { spawnSync } = require('child_process');
-    const state = path.join(tmp, 'opt-state.json');
-    const read = () => spawnSync(process.execPath, ['-e', 'console.log(JSON.stringify(require("./bot/arena/optimizer").latestGenome()))', '--', '--state', state],
-        { cwd: path.join(__dirname, '..', '..'), env: { ...process.env, ARENA_URL: 'http://127.0.0.1:9' }, encoding: 'utf8' });
-    assert.strictEqual(read().stdout.trim(), 'null', 'nothing submitted yet');
-    const g = require('../arena/optimizer').genomeFrom('tempo');
-    g['weights.power'] = 2.5;
-    fs.writeFileSync(state, JSON.stringify({ version: 'opt-v3', genome: g }));
-    assert.deepStrictEqual(JSON.parse(read().stdout), g);
-    fs.writeFileSync(state, JSON.stringify({ genome: { a: 1 } }));
-    assert.strictEqual(read().stdout.trim(), 'null', 'a broken state file is ignored');
-});
-
-test('register on a hosted arena: only the admin token keeps a harness the runner starts', () => {
-    const { spawnSync } = require('child_process');
-    const { runnable } = require('../arena/runner');
     const home = path.join(tmp, 'hosted');
     fs.mkdirSync(path.join(home, 'agents'), { recursive: true });
     fs.writeFileSync(path.join(home, 'roster.json'), JSON.stringify({ thinkCapMs: 60000, baselines: ['rush'], agents: [] }));
@@ -631,8 +537,7 @@ test('register on a hosted arena: only the admin token keeps a harness the runne
     const agents = JSON.parse(fs.readFileSync(path.join(home, 'roster.json'), 'utf8')).agents;
     const pub = agents.find((a) => a.name === 'pub').harness;
     assert.deepStrictEqual(pub, { kind: 'command', model: 'x', selfRun: true }, 'the command is dropped');
-    assert.ok(!runnable(pub));
-    assert.ok(runnable(agents.find((a) => a.name === 'adm').harness), 'the admin may register one the runner starts');
+    assert.deepStrictEqual(agents.find((a) => a.name === 'adm').harness, { kind: 'script', cmd: 'node x.js' }, 'the admin\'s harness is kept as given');
 });
 
 test('server: a queued eval\'s lost-game replay is served, and eval_result names its URL', async () => {
@@ -800,9 +705,6 @@ test('a held-out round is compared with the last training round and stays out of
     assert.match(md, /## Held-out cards vs training cards/);
     assert.match(md, /Spearman rank correlation: -1/, 'x-v1 went from first to last');
     assert.match(report(train, globalElo([train])), /this tournament's training pool \(1400 cards/);
-    const { rulesText } = require('../arena/runner');
-    assert.strictEqual(rulesText(null), '');
-    assert.match(rulesText({ holdout: { fraction: 0.3, trainPool: '/a/train.json', trainCards: 1400, holdoutCards: 600 } }), /30% of the leaders and main-deck cards are held out.*1400 training cards.*600 held-out cards/s);
 });
 
 test('a holdout tournament\'s extra ladder does not count as a planned round', () => {

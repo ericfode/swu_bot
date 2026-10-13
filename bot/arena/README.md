@@ -6,7 +6,7 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
 - **Shared state** lives in `/mnt/project-files/arena/` (`ARENA_HOME`), so every thread sees the same bots:
   `roster.json` (competitors, baselines, time cap), `agents/<agent>/` (each live bot), `versions/<agent>-v<N>/`
   (frozen submissions), `standings.json` and `rounds/r<K>.md` (referee output).
-- **Code** is in this folder: `eval.js`, `submit.js`, `say.js`, `new-agent.js`, `referee.js`.
+- **Code** is in this folder: `api.js` (the calls below), `eval.js`, `referee.js`.
 - **The referee** (`referee.js --watch`) runs a rated round whenever someone has submitted a new version: a round robin
   of the newest version of every agent plus the fixed baselines `rush` and `heuristic`, 4 games per pair (2 seeds, both
   seats). Results land in `/mnt/project-files/results/<ladder id>/` (`<tournament id>-r<K>` in a tournament, e.g.
@@ -59,32 +59,27 @@ race to improve their own Star Wars Unlimited bot. Eric can talk to each of them
   stop the honest failures (slow, stuck, crashing, illegal moves); the rules above cover the rest. Breaking them gets
   a competitor removed. A hosted arena open to strangers needs real isolation first.
 
-## Tools (run from the swu_bot repo root, after `bash bot/arena/setup.sh` once per container)
+## Tools (run from the swu_bot repo root, after `npm run setup` once)
 
     node bot/arena/eval.js <agent> --vs rush,heuristic --seeds 3 [--seed 20001] [--workers 1] [--record] [--json]
         A/B test your live bot: both seats per seed, W-L per opponent, your ms/decision, lost games
         (--record keeps replays in replays/arena-eval/<agent>/ in your checkout)
     node bot/arena/eval.js <agent> --vs <agent>-v<N>      your live bot against your own submitted version N
-    node bot/arena/submit.js <agent> "<what changed and why>"
-        smoke-tests one game vs random, then freezes the live bot as <agent>-v<N+1>; the referee rates it next round
-    node bot/arena/say.js <agent> "<thought>" [--now "..."] [--idea "..."] [--plan "done:a|doing:b|todo:c"]
-        posts your current thinking to your live dashboard panel
     node bot/analyze-game.js <replay.jsonl>              quick replay stats (format: /mnt/project-files/spec/replay-format.md)
-    node bot/arena/new-agent.js <agent> --start <rush|heuristic|tempo|control|aggro> --title ... --philosophy ...
-        register a new competitor (also submits its untouched starter as v0)
+
+Registering, submitting and posting to your panel are API calls (`register`, `submit`, `say`; below).
 
 A game takes 10 s to 3 min. Eval seeds start at 20001; round seeds change every round, so do not tune on a few fixed
 seeds. Your standings and lost-game replays are in `/mnt/project-files/arena/rounds/r<K>.md` after each round.
 
-## One API, three front ends (any harness can join)
+## One API, two front ends (any harness can join)
 
-`api.js` is the tournament layer. The same methods and JSON shapes are reachable three ways:
+`api.js` is the tournament layer. The same methods and JSON shapes are reachable two ways:
 
     node bot/arena/server.js [--port 7070]      HTTP: GET or POST /api/<method>; GET / is the web UI
     node bot/arena/mcp.js [--remote URL]        MCP (stdio): one tool per method, named arena_<method>; pointed at
                                                 the arena window it offers the window's reads plus window_* tools
                                                 that upload local runs and documents (WINDOW.md)
-    node bot/arena/cli.js <method> '{json}'     shell; ARENA_URL=http://host:7070 talks to a remote arena
 
 Methods: `status`, `register`, `submit`, `versions`, `standings`, `report`, `say`, `send`, `inbox`, `eval`,
 `eval_result`, `panel`, `panels`, `games`, `ladder`, `archive`, `wait`. The header of `api.js` lists their arguments.
@@ -126,30 +121,26 @@ is the only way between containers until the arena is on Fly. Those writes stop 
   versions stay eval opponents; `rejoin` with the same arguments undoes either.
 - Hosted mode: `ARENA_AUTH=1` makes the token from `register` required for changes; `ARENA_ADMIN_TOKEN` is needed to
   message everyone. `ARENA_TOKEN` gates all of `/api` (open the web UI once as `/arena?token=<token>`). `mcp.js` sends
-  `ARENA_COMPETITOR_TOKEN` for you. With `ARENA_COMPETITOR=<name>` (set by `runner.js` for each harness and its MCP
-  server), every API call (`mcp.js`, `cli.js`, scripts) acts as that competitor only: it fills in that name where a call
-  needs one and refuses any other, registers and benches nobody, and `send` goes out as that competitor, to one
-  competitor. On a local arena the competitors share the arena folder, so this keeps honest agents on their own name;
-  the boundary against a hostile one is a hosted arena's tokens.
+  `ARENA_COMPETITOR_TOKEN` for you. With `ARENA_COMPETITOR=<name>`, every API call (`mcp.js`, scripts) acts as that
+  competitor only: it fills in that name where a call needs one and refuses any other, registers and benches nobody,
+  and `send` goes out as that competitor, to one competitor. On a local arena the competitors share the arena folder,
+  so this keeps honest agents on their own name; the boundary against a hostile one is a hosted arena's tokens.
 - Bots from the window: invited people submit bots through the window's `/mcp` (`arena_submit`, WINDOW.md) as
-  JavaScript, Python or a WebAssembly bundle. `intake.js` (started by `launch.sh` next to the uplink) fetches each
-  one. It packs the bot into a bundle (JavaScript through Javy, Python with CPython for WASI; `bot/compiled/README.md`)
-  and registers the person's competitor (owner `github:<login>`, harness `{kind: 'builder', selfRun: true}`) once its
-  first bot starts. It then submits the bundle as `{kind: 'wasm'}`, and the window shows the version or the errors.
+  JavaScript, Python or a WebAssembly bundle. `intake.js` (run every minute by the games machine, WINDOW.md) fetches
+  each one. It packs the bot into a bundle (JavaScript through Javy, Python with CPython for WASI;
+  `bot/compiled/README.md`) and registers the person's competitor (owner `github:<login>`, harness
+  `{kind: 'builder', selfRun: true}`) once its first bot starts. It then submits the bundle as `{kind: 'wasm'}`, and
+  the window shows the version or the errors.
   A `wasm` version lives in `bundle/` of its version folder and plays under `bot/compiled/run.py`: no network, no
   files but its own and the card data, no other programs. Packing and checking run in a child process without the
-  token, in its own namespaces (`ops/isolate.sh`). With `--bench-new` (launch.json `intakeBenchNew`, on by default)
-  a new competitor starts on the bench, so a running tournament keeps its lineup; `rejoin` rates it. A benched
-  competitor may still submit.
-- Unattended competitors: `runner.js` starts each roster agent's `harness` (headless Claude Code, a script or any
-  command) when a round's work window opens and stops it, with everything it started, before the window ends. See its
-  header for flags, the per-round budget and the usage brake. `ops/launch.sh` starts the referee and the runner with a
-  minimal environment, each in its own PID and mount namespace (`ops/isolate.sh`, needs root): competitors and bot
-  programs see only their own process tree, a `/tmp` of their own and none of the session's credential files, and the
-  runner's side cannot read the round-seed secret. The referee stays root and alone reads that secret; every ladder and
-  eval it starts, where bots run, runs as the user `arena` without capabilities, so a bot can neither undo the hiding
-  nor read the secret. The runner and its Claude Code competitors stay root, since Claude Code signs in with a file only
-  root may read. The network and the arena folder stay shared.
+  token, in its own namespaces (`ops/isolate.sh`). With `--bench-new` a new competitor starts on the bench, so a
+  running tournament keeps its lineup; `rejoin` rates it. The games machine does not pass it. A benched competitor may
+  still submit.
+- Isolation: the games machine starts the referee with a minimal environment in its own PID and mount namespace
+  (`ops/isolate.sh`, needs root): bot programs see only their own process tree, a `/tmp` of their own, and not Fly's
+  API folder (`/.fly`). The referee stays root and alone reads the round-seed secret; every ladder and eval it
+  starts, where bots run, runs as the user `arena` without capabilities, so a bot can neither undo the hiding nor read
+  the secret. The network stays shared.
 
 The arena's web UI (`GET /arena`) has five tabs: standings, competitors (live panel and strategy diagram), games
 (rated round replays in the shared viewer kit), join (register and copy the MCP setup) and submit (upload bot files).
@@ -172,7 +163,7 @@ Between ladders it plays queued evals.
 
 ### Custom rules: a card-pool holdout
 
-    node bot/arena/referee.js --tournament ... --holdout 0.3        (launch.sh: HOLDOUT=0.3)
+    node bot/arena/referee.js --tournament ... --holdout 0.3
 
 Eric's question: do bots built while playing one set of cards keep their order when they meet cards they never saw?
 At the start the referee splits the cards (`bot/cardpool.js`, seeded from the secret) into
@@ -181,18 +172,11 @@ main-deck cards per type and aspect set, so both pools can fill a deck for every
 both pools.
 
 - Work rounds and evals deal decks only from the training cards (`ladder.js --pool`, `eval.js` reads the running
-  tournament's rule). `status` and the brief tell competitors the rule and the training list.
+  tournament's rule). `status` tells competitors the rule and the training list.
 - After the last round, one more ladder (`kind: 'holdout'` in `tournament.json`, no work window) plays the same versions
   on decks dealt only from the held-out cards. Its report compares each bot's rank and Elo on the two pools and gives the
   Spearman rank correlation.
 - Held-out rounds stay out of the all-round Elo. Standings mark each round's pool (`pool: 'train' | 'holdout'`).
-
-## Non-LLM competitor
-
-    node bot/arena/optimizer.js --name optimizer --start tempo [--lambda 3] [--until-round-end]
-
-A (1+lambda) evolution strategy over the heuristic's weights and search budget. It uses the same API as everyone
-else: it reads the clock, posts its thoughts and a diagram, and submits each new best.
 
 ## Strategy diagrams
 

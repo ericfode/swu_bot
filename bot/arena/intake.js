@@ -18,7 +18,7 @@
  * capabilities, so it cannot undo the hiding), like the referee.
  * --bench-new puts a builder's new competitor on the bench (api.js withdraw), so it is rated only once rejoined: for a
  * tournament whose lineup is fixed. A builder's later versions go to wherever the competitor is.
- * The toolchain (Javy, CPython for WASI) must be in build/compiled/.tools: launch.sh setup fetches it, or
+ * The toolchain (Javy, CPython for WASI) must be in build/compiled/.tools: Dockerfile.games builds it, or
  * `python3 -c "import sys; sys.path.insert(0, 'bot/compiled'); import build; build.javy(); build.runtime('python-3.14-wasi')"`.
  */
 const fs = require('fs');
@@ -233,8 +233,8 @@ async function checkIsolated(job, { benchNew }) {
         env.SWU_WASM_CACHE = path.join(jobHome, 'wasm-cache');
         const node = [process.execPath, __filename, '--check', jobFile, '-', ...(benchNew ? ['--bench-new'] : [])];
         const isolated = process.getuid?.() === 0 && !process.env.ARENA_INTAKE_NO_ISOLATE;
-        // as root, the checker runs as ARENA_USER (launch.sh: arena), which cannot undo isolate.sh's hiding: it gets
-        // the job's home folder, as its HOME
+        // as root, the checker runs as ARENA_USER (the games machine: arena), which cannot undo isolate.sh's hiding: it
+        // gets the job's home folder, as its HOME
         const user = isolated ? process.env.ARENA_USER : null;
         if (user) {
             const [uid, gid] = ['-u', '-g'].map((flag) => Number(require('child_process').execFileSync('id', [flag, user], { encoding: 'utf8' })));
@@ -255,8 +255,8 @@ async function checkIsolated(job, { benchNew }) {
                 process.kill(-child.pid, signal);
             } catch {} // gone already
         };
-        // the group a stopped intake must take down with it: in memory for its own signal handler, and in a file for
-        // launch.sh, should the intake be killed before it can
+        // the group a stopped intake must take down with it: in memory for its own signal handler, and in a file, the
+        // only trace of an orphaned check should the intake be killed before it can
         checkers.add(child.pid);
         fs.writeFileSync(CHECKER_PID, String(child.pid));
         let err = '';
@@ -323,7 +323,7 @@ function stopCheckers() {
     fs.rmSync(CHECKER_PID, { force: true });
 }
 
-/** What the checker must not see: launch.sh's list of the session's credential files, when there is one. */
+/** What the checker must not see: ARENA_HIDE's list (the games machine sets it), else a session's credential files. */
 function hidden() {
     const list = (process.env.ARENA_HIDE ?? '').split(':').filter(Boolean);
     return list.length ? list : ['/root/.claude', '/root/.claude.json', '/root/.config', '/root/.fly', '/root/.aws', '/root/.boto', '/root/.ssh',
@@ -343,7 +343,7 @@ function toolchainMissing() {
         spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore', env: toolEnv() }).status !== 0 && 'wasmtime for Python'
     ].filter(Boolean);
     toolsReady = !missing.length;
-    return missing.length ? `no ${missing.join(', ')} (launch.sh setup fetches them)` : null;
+    return missing.length ? `no ${missing.join(', ')} (the games image builds them; elsewhere see bot/compiled/README.md)` : null;
 }
 
 /**

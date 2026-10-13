@@ -12,7 +12,7 @@ asks the same API.
 
 | Part | Sends | Through |
 |---|---|---|
-| Arena (referee + api.js) | status, standings, tournament, roster (no tokens), round reports, versions, panels | `node bot/arena/push.js arena` (a loop, every 20 s), which `ops/launch.sh` starts and `ops/keeper.sh` keeps alive when `SWU_WINDOW` is set at start; never the referee itself, whose bots must not get the proxy |
+| Arena (referee + api.js) | status, standings, tournament, roster (no tokens), round reports, versions, panels | the games machine, every 20 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
@@ -115,7 +115,7 @@ answers and again when the token is made, with the rules `arena_submit` uses. Co
 the old token; the agent shows on the person's Build a bot page, where Disconnect ends it. Use it as a header:
 `claude mcp add --transport http swu-arena https://swu-arena.fly.dev/mcp --header "Authorization: Bearer $(cat ~/.swu-arena-token)"`.
 
-The arena's intake (`intake.js`, started by `launch.sh` next to the uplink) reads `submissions` with the project
+The arena's intake (`intake.js`, which the games machine runs every minute) reads `submissions` with a project
 token. It packs each bot into a WebAssembly bundle, enters it, and writes the outcome back. Each version records the
 submission it came from, so a submission checked again (an intake that stopped, or a window that missed the result)
 gets the version it already has. Only one intake runs per arena (`intake.pid` in its work folder). Friends never read the
@@ -132,8 +132,8 @@ this site's own pages: Origin and JSON).
   days or until the link is removed.
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). Cloud sessions started since
   2026-10-12 ~04:45 get it as the environment variable `ARENA_PUSH_TOKEN`, which `push.js` reads (after
-  `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. The arena's
-  uplink (`ops/launch.sh`) does not pass it on: competitors run as the same user and could read it from `/proc`. Elsewhere set `SWU_WINDOW_TOKEN`.
+  `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. Elsewhere set
+  `SWU_WINDOW_TOKEN`.
 - `ARENA_GAMES_TOKEN` is role project too: the games machine's own token (its secret `SWU_WINDOW_TOKEN`), so it can be
   replaced without touching the threads' token.
 - `ARENA_ADMIN_TOKEN` (a Fly secret only Eric holds) is role admin: the only bearer that may change the invite list.
