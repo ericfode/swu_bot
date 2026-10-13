@@ -20,7 +20,7 @@
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
  * Start it with ARENA_MODE=window node bot/arena/server.js --host 0.0.0.0 --port 8080. With ARENA_GAMES_WAKE set (the
  * games machine's private address, http://swu-arena-games.flycast/wake), every submission wakes the games machine
- * (games.js), and server.js wakes it every 6 hours.
+ * (coord/), and server.js wakes it every 6 hours.
  */
 const fs = require('fs');
 const path = require('path');
@@ -576,7 +576,7 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
  * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts and staleMs (for tests).
  */
 /**
- * Wakes the games machine (games.js POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
+ * Wakes the games machine (its coordinator's POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
  * a stopped machine on the request. Never waits on it and never fails: the machine also wakes every 6 hours.
  */
 function wakeGamesAt(url, { fetchImpl = fetch } = {}) {
@@ -594,7 +594,7 @@ function createWindow(opts = {}) {
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
     const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
-    // the games machine (games.js), woken when a bot comes in; a stopped machine starts on the request
+    // the games machine (coord/), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');

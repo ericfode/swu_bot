@@ -27,7 +27,7 @@ defmodule Coord.Scheduler.Policy do
 
   @doc """
   What an intake pass changes: busy when submissions are still open, settled when one was accepted. An unknown
-  open count (nil: the window is down or the toolchain missing) does not keep the machine up, as in games.js.
+  open count (nil: the window is down or the toolchain missing) does not keep the machine up.
   """
   def after_intake(open, accepted) do
     %{busy: is_integer(open) and open > 0, settled: is_integer(accepted) and accepted > 0}

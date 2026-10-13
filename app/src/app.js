@@ -812,7 +812,7 @@ function heroBox() {
   const where = x.human ? `${humanPill()} on karabast.net · never rated` : `${x.run.kind === 'arena' ? 'arena' : 'ladder'} <a href="${href('runs', x.run.id)}">${esc(x.run.id)}</a>`;
   return `<section class="box hero" aria-label="Now playing"><div class="hero-head">${lg.running ? '<span class="pill live">Live</span>' : '<span class="pill done">Latest game</span>'}${seatLink(x, 'p1')}<span class="vs">vs</span>${seatLink(x, 'p2')}<span class="muted" style="font-size:var(--fs-md)">${where}${x.res < 3 ? ` · ${x.res === 2 ? 'a draw' : `won by ${esc(winnerName(x))}`} in round ${x.rounds}` : ''}</span><a class="more" href="${href('games', x.run.id, x.id)}" style="margin-left:auto">Open game</a></div><div class="kithost compact" data-game="${esc(key)}" data-layout="compact" data-live="${lg.running ? 1 : 0}"></div>${spotBarHtml(key)}</section>`;
 }
-/** The hosted arena plays a round whenever its lineup changes (bot/arena/games.js planRound), with no tournament or work
+/** The hosted arena plays a round whenever its lineup changes (bot/arena/gamesctl.js planRound), with no tournament or work
  *  windows: it is playing a round, or between rounds. */
 function hostedState() {
   const A = M.arena, n = A.current?.n;

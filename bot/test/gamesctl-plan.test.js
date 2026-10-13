@@ -1,17 +1,17 @@
 'use strict';
-// The games machine's decisions (bot/arena/games.js): when to play a round. No engine or card data needed.
+// The games machine's decisions (bot/arena/gamesctl.js planRound): when to play a round. No engine or card data needed.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'games-test-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gamesctl-plan-test-'));
 process.env.ARENA_HOME = path.join(tmp, 'arena');
 process.env.ARENA_RESULTS = path.join(tmp, 'results');
 process.env.GAMES_DATA = tmp;
 const home = require('../arena/home');
-const { roundToPlay, botEnv } = require('../arena/games');
+const { planRound, botEnv } = require('../arena/gamesctl');
 
 const HOUR = 3600000;
 const writeJson = (file, doc) => {
@@ -22,38 +22,38 @@ const version = (name, v) => writeJson(path.join(home.VERSIONS, `${name}-v${v}`,
 const standings = (rounds, updatedAt = new Date().toISOString()) => writeJson(path.join(home.HOME, 'standings.json'), { rounds, updatedAt });
 const played = (round, names, status = 'done') => ({ round, status, bots: names.map((name) => ({ name })) });
 
-test('games: a round when a version comes in, after it settles; again when the lineup changes or the last round is a day old', () => {
+test('gamesctl plan: a round when a version comes in, after it settles; again when the lineup changes or the last round is a day old', () => {
     writeJson(path.join(home.HOME, 'roster.json'), { thinkCapMs: 60000, baselines: ['heuristic', 'rush'], agents: [] });
     const now = Date.now();
     const opts = { replayMs: 24 * HOUR, settledSince: 0 };
-    assert.strictEqual(roundToPlay(opts), null, 'no competitor: no round');
+    assert.deepStrictEqual(planRound(opts), { round: null, why: 'no-competitor' }, 'no competitor: no round');
 
     home.updateRoster((r) => ({ ...r, agents: [{ name: 'kim_b', owner: 'github:kim-b' }] }));
     version('kim_b', 1);
-    assert.strictEqual(roundToPlay({ ...opts, settledSince: now }), null, 'a version that just came in settles first');
-    assert.deepStrictEqual(roundToPlay(opts), [], 'then the next round');
+    assert.deepStrictEqual(planRound({ ...opts, settledSince: now }), { round: null, why: 'settling' }, 'a version that just came in settles first');
+    assert.deepStrictEqual(planRound(opts), { round: 0, resume: false, why: 'changed' }, 'then the next round');
 
     standings([played(0, ['kim_b-v1', 'heuristic', 'rush'], 'running')]);
-    assert.deepStrictEqual(roundToPlay(opts), ['--round', '0'], 'a round a stop cut short is finished');
+    assert.deepStrictEqual(planRound(opts), { round: 0, resume: true, why: 'resume' }, 'a round a stop cut short is finished');
 
     standings([played(0, ['kim_b-v1', 'heuristic', 'rush'])]);
-    assert.strictEqual(roundToPlay(opts), null, 'same lineup, rated recently: nothing to do');
+    assert.deepStrictEqual(planRound(opts), { round: null, why: 'same' }, 'same lineup, rated recently: nothing to do');
     standings([played(0, ['kim_b-v1', 'heuristic', 'rush'])], new Date(now - 25 * HOUR).toISOString());
-    assert.deepStrictEqual(roundToPlay(opts), [], 'a day later the lineup plays again');
+    assert.deepStrictEqual(planRound(opts), { round: 1, resume: false, why: 'stale' }, 'a day later the lineup plays again');
 
     standings([played(0, ['kim_b-v1', 'heuristic', 'rush'])]);
     version('kim_b', 2);
-    assert.deepStrictEqual(roundToPlay(opts), [], 'a new version');
+    assert.deepStrictEqual(planRound(opts), { round: 1, resume: false, why: 'changed' }, 'a new version');
     standings([played(1, ['kim_b-v2', 'heuristic', 'rush'])]);
     home.updateRoster((r) => ({ ...r, agents: [...r.agents, { name: 'lee', owner: 'github:lee' }] }));
     version('lee', 1);
-    assert.deepStrictEqual(roundToPlay(opts), [], 'a new competitor');
+    assert.deepStrictEqual(planRound(opts), { round: 2, resume: false, why: 'changed' }, 'a new competitor');
     standings([played(2, ['kim_b-v2', 'lee-v1', 'heuristic', 'rush'])]);
     home.updateRoster((r) => ({ ...r, agents: r.agents.map((a) => (a.name === 'lee' ? { ...a, withdrawn: [1] } : a)) }));
-    assert.deepStrictEqual(roundToPlay(opts), [], 'a withdrawn version leaves the lineup');
+    assert.deepStrictEqual(planRound(opts), { round: 3, resume: false, why: 'changed' }, 'a withdrawn version leaves the lineup');
 });
 
-test('games: the referee gets the arena folders and the secret path, and no token', () => {
+test('gamesctl: the referee gets the arena folders and the secret path, and no token', () => {
     process.env.SWU_WINDOW_TOKEN = 'leak';
     const env = botEnv();
     assert.deepStrictEqual(Object.keys(env).filter((k) => /TOKEN|PROXY|FLY/i.test(k)), []);

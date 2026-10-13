@@ -19,7 +19,7 @@ on:
   pull_request:
     paths:
       - 'bot/arena/**'
-      - 'bot/test/games.test.js'
+      - 'bot/test/gamesctl-plan.test.js'
       - 'bot/test/gamesctl.test.js'
       - 'bot/test/arena-hardening.test.js'
       - 'bot/test/remote-lane.test.js'
@@ -49,7 +49,7 @@ jobs:
         with:
           node-version: 22
       # play-seed's games need the engine, which this job does not build: those tests skip, the job checks stay
-      - run: node --test bot/test/games.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js
+      - run: node --test bot/test/gamesctl-plan.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js
 
   # the Elixir coordinator (coord/): the versions Dockerfile.games builds with; the :node tests call the real gamesctl.js
   test-coord:

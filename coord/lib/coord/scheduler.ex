@@ -59,8 +59,8 @@ defmodule Coord.Scheduler do
       phase: if(set_up?, do: :ready, else: :setup),
       ticks: 0,
       woken: false,
-      # the idle clock starts at boot; settled_at is when the last version came in (nil: none this boot, as
-      # games.js's 0). After a restart (not a boot) both start now, which can only delay a round or the stop.
+      # the idle clock starts at boot; settled_at is when the last version came in (nil: none this
+      # boot). After a restart (not a boot) both start now, which can only delay a round or the stop.
       busy_at: now,
       settled_at: if(restart?, do: now),
       settled_wall: if(restart?, do: System.os_time(:millisecond), else: 0),

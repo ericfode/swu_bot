@@ -11,7 +11,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 - `forceteki/` — **git submodule** of `ericfode/forceteki`, pinned to `2ebed8ca2` (upstream `SWU-Karabast/forceteki` plus the search-engine optimizations). It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
-- `coord/` — the games machine's Elixir coordinator (Phoenix, Oban on SQLite, FLAME): it decides when the hosted arena takes submissions, plays rounds and pushes results; `bot/arena/gamesctl.js` does that work in Node. `GAMES_COORDINATOR` in `fly.games.toml` picks it or `bot/arena/games.js`; see `coord/README.md`.
+- `coord/` — the games machine's Elixir coordinator (Phoenix, Oban on SQLite, FLAME): it decides when the hosted arena takes submissions, plays rounds and pushes results; `bot/arena/gamesctl.js` does that work in Node. It is the only program the games machine runs (`Dockerfile.games`, `fly.games.toml`); see `coord/README.md`.
 - `app/` — the SWU Arena app (watch the arena, read the research): one HTML file built from the shared project folder by `app/build.mjs`; see `app/README.md` and `app/DESIGN.md`.
 - `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
 - `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.

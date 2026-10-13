@@ -2,8 +2,7 @@
 'use strict';
 /**
  * Bots that people submit on the arena window (its /mcp, tool arena_submit) enter the arena here. The games machine
- * runs one pass at a time (intakeOnce): games.js in its own loop, the Elixir coordinator through
- * `node bot/arena/gamesctl.js intake`.
+ * runs one pass at a time (intakeOnce): its Elixir coordinator through `node bot/arena/gamesctl.js intake`.
  *
  *   node bot/arena/intake.js --check <job.json> -      the checker for one submission (checkIsolated starts it)
  *
@@ -350,7 +349,7 @@ function toolchainMissing() {
  * that ends with no result (the arena's fault) leaves the submission pending, tried again later, RETRIES times at most.
  */
 async function intakeOnce({ window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {}, current = {} } = {}) {
-    // for the games machine (games.js): how many submissions are still open after this pass, and how many it accepted
+    // for the games machine (gamesctl intake): how many submissions are still open after this pass, and how many it accepted
     stats.open = 0;
     stats.accepted = 0;
     if (stopping) {

@@ -1,9 +1,9 @@
 # coord: the games machine's coordinator
 
-An Elixir release that takes over from `bot/arena/games.js` on the Fly app `swu-arena-games`. Elixir decides *when*
-things happen (wake-ups, the intake cadence, rounds, idle stop, shutdown); Node still decides *what* happens, through
-`node bot/arena/gamesctl.js <command>` (intake, round planning, the window protocol, the referee). The window token
-never leaves the BEAM: children reach the window through a signing proxy on loopback.
+An Elixir release that runs the games machine, the Fly app `swu-arena-games` (`Dockerfile.games` starts it). Elixir
+decides *when* things happen (wake-ups, the intake cadence, rounds, idle stop, shutdown); Node still decides *what*
+happens, through `node bot/arena/gamesctl.js <command>` (intake, round planning, the window protocol, the referee). The
+window token never leaves the BEAM: children reach the window through a signing proxy on loopback.
 
 ```
 POST /wake ──▶ Endpoint ──▶ Scheduler ──(Oban: intake, rounds)──▶ gamesctl intake / referee-cmd ──▶ referee (FLAME)

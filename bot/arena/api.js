@@ -114,7 +114,7 @@ function clock(now = Date.now()) {
 }
 
 /**
- * The hosted arena's clock: the games machine plays a round whenever it plans one (games.js planRound), with no work
+ * The hosted arena's clock: the games machine plays a round whenever it plans one (gamesctl.js planRound), with no work
  * windows. phase is 'ladder' while a round's ladder holds a live referee lock, else 'idle'; round is that round, else
  * the newest round in standings (null before the first). A round cut off by a stop stays in standings unfinished and
  * shows as idle until the next boot resumes it.

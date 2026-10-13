@@ -3,7 +3,7 @@ defmodule Coord.Workers.Round do
   Plays round k of an arena: referee-cmd gives the checked command, which runs through the FLAME pool.
 
   The unique key is (arena, round, boot) over every state: a round whose referee failed twice (max_attempts 2)
-  waits for the next boot, as in games.js, and so does a round that completed while standings still say it runs
+  waits for the next boot, and so does a round that completed while standings still say it runs
   (that would be a bug, and rerunning it every 20 s would hide it). An explicit round number means a retry
   replays the same round, never the next one.
   """
