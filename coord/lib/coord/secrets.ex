@@ -59,7 +59,9 @@ defmodule Coord.Secrets do
     {helpers, bad} = parse_helpers(text)
 
     for n <- bad do
-      Logger.warning("GAMES_HELPER_TOKENS: entry #{n} is not name:sha256-hex; it is ignored")
+      Logger.warning(
+        "GAMES_HELPER_TOKENS: entry #{n} is not name:sha256-hex (a lowercase name other than machine); it is ignored"
+      )
     end
 
     :persistent_term.put({__MODULE__, :helpers}, fn -> helpers end)
@@ -76,7 +78,8 @@ defmodule Coord.Secrets do
 
       {entry, n}, {good, bad} ->
         with [name, hash] <- String.split(entry, ":"),
-             true <- Regex.match?(@helper_name, name) and Regex.match?(@sha256_hex, hash) do
+             # "machine" is what the round report calls the games machine's own games (bot/arena/referee.js)
+             true <- Regex.match?(@helper_name, name) and name != "machine" and Regex.match?(@sha256_hex, hash) do
           {good ++ [{name, hash}], bad}
         else
           _ -> {good, bad ++ [n]}

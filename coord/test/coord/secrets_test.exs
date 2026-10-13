@@ -95,7 +95,8 @@ defmodule Coord.SecretsTest do
         "Eric:#{sha(tok("b"))}",
         "carl:#{String.upcase(sha(tok("c")))}",
         "dan:#{sha(tok("d"))}:extra",
-        "x" <> String.duplicate("y", 32) <> ":#{sha(tok("e"))}"
+        "x" <> String.duplicate("y", 32) <> ":#{sha(tok("e"))}",
+        "machine:#{sha(tok("f"))}"
       ]
 
       System.put_env("GAMES_HELPER_TOKENS", Enum.join(entries, ","))
@@ -104,7 +105,7 @@ defmodule Coord.SecretsTest do
       log = ExUnit.CaptureLog.capture_log(fn -> Secrets.take!() end)
 
       assert Secrets.helpers() == [{"eric", sha(tok("a"))}]
-      for n <- 2..6, do: assert(log =~ "GAMES_HELPER_TOKENS: entry #{n} is not name:sha256-hex", "entry #{n}")
+      for n <- 2..7, do: assert(log =~ "GAMES_HELPER_TOKENS: entry #{n} is not name:sha256-hex", "entry #{n}")
       refute log =~ pasted
       refute log =~ "token-"
       refute log =~ sha(tok("b"))

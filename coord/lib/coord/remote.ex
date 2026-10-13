@@ -7,7 +7,9 @@ defmodule Coord.Remote do
   A claim is a long poll: the API's request process waits (monitored) until an offer comes or claim_ms passes. An
   offer goes to the claim that has waited longest and becomes a lease, which is
     * offered while the claim's answer is being sent: lost ("claim dropped") when that fails or its process dies;
-    * running once it is sent: lost after lease_lost_ms without a heartbeat ("no heartbeat"), or past its deadline
+    * running once it is sent: lost ("claim dropped") when its first heartbeat, which the helper sends as soon as the
+      lease arrives, is not in within lease_ack_ms (an answer written to a helper that already went away still
+      looks sent); after that, lost after lease_lost_ms without a heartbeat ("no heartbeat"), or past its deadline
       (the job's gameMs, 30 min when it has none, plus 5 min: "deadline");
     * done or lost: kept until the ladder reads it (once), at most lease_keep_ms.
   A revoked lease is forgotten at once, and so is every lease when a round ends (reset/0): the helper's next
@@ -150,7 +152,8 @@ defmodule Coord.Remote do
     end
   end
 
-  # an offer that came between the last look and this call is already in the mailbox: it is taken, not lost
+  # An offer that came between the last look and this call is already in the mailbox: it is taken, not lost. A server
+  # that restarted meanwhile does not know the ref and answers :offered too, so the wait for it is bounded.
   defp give_up(ref, why) do
     case GenServer.call(__MODULE__, {:cancel, ref}) do
       :cancelled ->
@@ -159,6 +162,8 @@ defmodule Coord.Remote do
       :offered ->
         receive do
           {__MODULE__, ^ref, lease} -> {:ok, lease}
+        after
+          5_000 -> why
         end
     end
   end
@@ -285,7 +290,7 @@ defmodule Coord.Remote do
 
   def handle_call({:heartbeat, id, name}, _from, state) do
     if holds?(state.leases[id], name) do
-      {:reply, :ok, update_lease(state, id, &%{&1 | beat_at: now()})}
+      {:reply, :ok, update_lease(state, id, &%{&1 | beat_at: now(), acked: true})}
     else
       {:reply, :gone, state}
     end
@@ -373,6 +378,7 @@ defmodule Coord.Remote do
       claim_mon: claim.mon,
       offered_at: now,
       beat_at: now,
+      acked: false,
       deadline_ms: deadline_ms,
       deadline_at: now + deadline_ms,
       ended_at: nil,
@@ -418,14 +424,19 @@ defmodule Coord.Remote do
   end
 
   @doc false
-  # the sweep: running leases without a heartbeat or past their deadline are lost; read-never leases are forgotten
+  # the sweep: running leases never acknowledged, without a heartbeat or past their deadline are lost; read-never
+  # leases are forgotten
   def sweep(state, now) do
+    ack_ms = Config.get(:lease_ack_ms)
     lost_ms = Config.get(:lease_lost_ms)
     keep_ms = Config.get(:lease_keep_ms)
 
     leases =
       Enum.reduce(state.leases, %{}, fn {id, lease}, acc ->
         cond do
+          lease.state == :running and not lease.acked and now - lease.beat_at > ack_ms ->
+            Map.put(acc, id, lose(lease, "claim dropped"))
+
           lease.state in [:offered, :running] and now - lease.beat_at > lost_ms ->
             Map.put(acc, id, lose(lease, "no heartbeat"))
 

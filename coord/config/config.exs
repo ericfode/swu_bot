@@ -38,6 +38,8 @@ config :coord, Coord.Config,
   cards: nil,
   heartbeat_ms: 30_000,
   lease_lost_ms: 90_000,
+  # a lease's first heartbeat comes as soon as the helper has it; none by then, the claim's answer went nowhere
+  lease_ack_ms: 15_000,
   claim_ms: 25_000,
   sweep_ms: 5_000,
   lease_keep_ms: 30 * 60_000,

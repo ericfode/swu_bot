@@ -37,6 +37,9 @@ token_hash() {
 init() {
     need fly "https://fly.io/docs/flyctl/install/"
     need openssl "it comes with macOS; on Linux, your package manager"
+    # the names GAMES_HELPER_TOKENS takes; "machine" is the games machine's own row in the round report
+    { printf '%s' "$NAME" | grep -Eqx '[a-z][a-z0-9_-]{0,31}' && [ "$NAME" != machine ]; } ||
+        die "SWU_HELPER_NAME must be a lowercase name (a-z, 0-9, _ or -, at most 32) other than machine"
     if [ ! -s "$ENVFILE" ]; then
         token=$(openssl rand -hex 32) || die "openssl could not make a token"
         (umask 077 && mkdir -p "$DIR" && printf 'GAMES_HELPER_TOKEN=%s\n' "$token" >"$ENVFILE")

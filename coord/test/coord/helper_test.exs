@@ -190,6 +190,18 @@ defmodule Coord.HelperTest do
       eventually(fn -> not File.exists?(work_dir(id)) end)
     end
 
+    test "the first heartbeat goes as soon as the lease arrives; a sleep found only when the play ends fails it" do
+      fake("play-seed", :sleep, 2)
+      slot = start_slot(%{heartbeat_ms: 60_000})
+      id = offer()
+      eventually(fn -> :sys.get_state(Remote).leases[id].acked end)
+
+      # the wall clock jumped a minute past the monotonic one after that heartbeat, as after a sleep
+      :sys.replace_state(slot, fn %{tick: {wall, mono}} = state -> %{state | tick: {wall - 60_000, mono}} end)
+
+      assert ended(id) == {:lost, "eric", "the computer slept"}
+    end
+
     test "a slot that stops gives its seed back at once" do
       fake("play-seed", :sleep, 30)
       start_slot()

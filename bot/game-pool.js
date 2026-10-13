@@ -158,7 +158,8 @@ function killChildren(worker = null, { spare = [] } = {}) {
 }
 
 function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs = DEFAULT_GAME_MS(workerData.capMs), onStart = () => {}, onResult = () => {} } = {}) {
-    return new Promise((resolve, reject) => {
+    let grow = () => {};
+    const pool = new Promise((resolve, reject) => {
         const base = Date.now();
         const slots = new Set();
         let timer = null;
@@ -320,6 +321,13 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 setTimeout(() => killChildren(s.id), KILL_AFTER_MS).unref();
             }
         }, CHECK_MS);
+        // games put back into the queue while the pool runs (remote-lane.js takes them back from a helper): the
+        // workers that left when the queue ran dry come back, up to `workers`
+        grow = () => {
+            for (let i = Math.min(workers - slots.size, queue.length); i > 0 && !ended; i--) {
+                spawn();
+            }
+        };
         const n = Math.max(0, Math.min(workers, queue.length));
         for (let i = 0; i < n; i++) {
             spawn();
@@ -328,6 +336,8 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             finish();
         }
     });
+    pool.grow = () => grow();
+    return pool;
 }
 
 module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT, DEFAULT_GAME_MS };

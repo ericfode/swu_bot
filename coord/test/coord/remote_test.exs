@@ -61,6 +61,27 @@ defmodule Coord.RemoteTest do
     assert %{state: :lost, reason: "deadline"} = swept.leases[beating]
   end
 
+  test "a running lease whose first heartbeat does not come within lease_ack_ms is lost as claim dropped" do
+    put_setting(:lease_ack_ms, 200)
+    put_setting(:sweep_ms, 50)
+    send(Remote, :sweep)
+    silent = running_lease()
+    acked = running_lease(remote_job(2))
+    :ok = Remote.heartbeat(acked, "eric")
+    Process.sleep(400)
+
+    assert Remote.lease(silent) == {:lost, "eric", "claim dropped"}
+    assert {:running, "eric", _} = Remote.lease(acked)
+  end
+
+  test "a claim waiting when the server restarted gives up instead of waiting forever" do
+    waiting = Task.async(fn -> Remote.await_claim("eric", "1", 500) end)
+    eventually(fn -> Remote.status().waiting == 1 end)
+    stop_supervised!(Remote)
+    start_supervised!(Remote)
+    assert Task.await(waiting, 8_000) == :none
+  end
+
   test "done and lost leases nobody reads are forgotten after lease_keep_ms" do
     put_setting(:lease_keep_ms, 1_000)
     id = running_lease()

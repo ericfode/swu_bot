@@ -67,7 +67,7 @@ Helper to machine, HTTP on the machine's port 8090 (`GAMES_HELPER_PORT`), every 
 | `POST /v1/hello` `{build, cards, slots}` | 200 `{ok, name, heartbeatMs, leaseLostMs, claimMs}`; 409 when the build or card data differ, with the image to pull |
 | `POST /v1/claim` `{slot}` | waits up to 25 s: 200 `{lease, job, bundles, deadlineMs}` or 204 |
 | `GET /v1/bundle/<sha256>` | a bundle of a seed this helper holds (canonical tar, `bot/compiled/bundle.py`) |
-| `POST /v1/lease/<id>/heartbeat` | every 30 s: 200 `{continue: true}`, or 410 when the seed was taken back |
+| `POST /v1/lease/<id>/heartbeat` | at once, then every 30 s: 200 `{continue: true}`, or 410 when the seed was taken back; without the first one within 15 s the seed goes back |
 | `POST /v1/lease/<id>/result` | `{results, replays}` or `{failed}`; 410 when taken back |
 
 Ladder to coordinator, loopback only (`ARENA_REMOTE` = `http://127.0.0.1:8082/r/<nonce>`, a new nonce each boot):

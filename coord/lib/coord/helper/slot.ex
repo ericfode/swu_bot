@@ -6,9 +6,12 @@ defmodule Coord.Helper.Slot do
 
     * claim: 204 claims again at once; no answer (the machine may be stopped) backs off 5, 10, 20, 40, then 60 s
       until one comes; 409 (the machine runs another build) stops the VM with 3, 401 with 1
-    * heartbeat: 410 stops the play and drops the lease; no answer keeps playing (the machine decides)
+    * heartbeat: the first as soon as the lease arrives (the machine's sign that the claim's answer got here), then
+      every heartbeatMs; 410 stops the play and drops the lease; no answer keeps playing (the machine decides)
     * suspend: when the wall clock and the monotonic clock moved apart by more than 20 s since the last heartbeat
-      (the computer slept), the play stops and the lease fails with "the computer slept"
+      (the computer slept), the play stops and the lease fails with "the computer slept"; a play that ends after
+      such a sleep, before the next heartbeat looked, fails the same way instead of sending its result (a game's
+      watchdog counts wall-clock time, so the sleep may have forfeited a bot)
   """
 
   use GenServer, restart: :temporary
@@ -117,7 +120,7 @@ defmodule Coord.Helper.Slot do
     timeout = max(lease.deadline_ms - 60_000, 60_000)
     task = Task.async(fn -> Play.run(lease, dir, kind, timeout) end)
     lease = Map.merge(lease, %{dir: dir, started: now()})
-    beat = Process.send_after(self(), :beat, state.timing.heartbeat_ms)
+    beat = Process.send_after(self(), :beat, 0)
     %{state | task: {:play, task}, lease: lease, beat: beat, tick: ticks()}
   end
 
@@ -173,10 +176,18 @@ defmodule Coord.Helper.Slot do
   end
 
   defp played({:ok, json, results}, state) do
-    lease = state.lease
-    answer = post(lease, json, @post_tries, 120_000)
-    Logger.info("lease #{lease.id} (seed #{seed(lease)}): #{outcomes(results)}; #{seconds(lease)} s#{answer}")
-    drop_lease(state)
+    if slept?(state.tick, ticks()) do
+      Logger.warning(
+        "lease #{state.lease.id}: the computer slept during the play; the seed goes back to the games machine"
+      )
+
+      finish_lease(state, {:failed, "the computer slept"})
+    else
+      lease = state.lease
+      answer = post(lease, json, @post_tries, 120_000)
+      Logger.info("lease #{lease.id} (seed #{seed(lease)}): #{outcomes(results)}; #{seconds(lease)} s#{answer}")
+      drop_lease(state)
+    end
   end
 
   defp played({:failed, why}, state), do: finish_lease(state, {:failed, why})

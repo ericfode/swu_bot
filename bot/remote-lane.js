@@ -291,6 +291,7 @@ function remoteLane({
     let on = true;
     let pool = null;
     let poolError = null;
+    let growPool = () => {};
     let played = 0;
 
     const call = async (method, suffix, body = null, contentType) => {
@@ -378,19 +379,22 @@ function remoteLane({
             bundles.get(name).put = true;
             return true;
         }
-        if (res.status === 400 || res.status === 507) {
-            answered();
-            log(`${name}: the relay refused its bundle (${res.status === 507 ? 'the round\'s bundles are at their limit' : 'its hash'}); its games play here`);
-            capable.set(name, false);
-            return false;
-        }
-        failed(`HTTP ${res.status}`);
+        // any other answer (400 its hash, 507 the round's bundles at their limit, 500 the store failed): put again, it
+        // would fail again every tick and hold up every other offer, so this version's games play here
+        answered();
+        const why = { 400: 'its hash', 507: 'the round\'s bundles are at their limit' }[res.status] ?? `HTTP ${res.status}`;
+        log(`${name}: the relay refused its bundle (${why}); its games play here`);
+        capable.set(name, false);
         return false;
     }
 
     const putBack = (games) => {
-        // at the front, in their order: the next free worker here takes them
+        // at the front, in their order: the next free worker here takes them, and the pool here gets back the workers
+        // that left when the queue ran dry (game-pool.js grow), so a round's tail does not play them one at a time
         queue.unshift(...games.filter((g) => !queue.includes(g)));
+        if (pool) {
+            growPool();
+        }
     };
     const countHelper = (games, d) => {
         for (const g of games) {
@@ -600,16 +604,20 @@ function remoteLane({
     }
 
     function startPool() {
-        const p = runPool(queue, {
+        const started = runPool(queue, {
             onStart,
             onResult: (x) => {
                 localMs.push(x.result.ms);
                 onResult({ ...x, host: null });
             }
-        }).then(() => {
+        });
+        growPool = typeof started.grow === 'function' ? () => started.grow() : () => {};
+        const p = started.then(() => {
             pool = null;
+            growPool = () => {};
         }, (e) => {
             pool = null;
+            growPool = () => {};
             poolError = e;
         });
         pool = p;

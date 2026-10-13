@@ -81,8 +81,8 @@ function fakeRelay() {
             if (sha(body) !== m[1]) {
                 return json(400, { error: { code: 'hash' } });
             }
-            if (r.full) {
-                return json(507, { error: { code: 'full' } });
+            if (r.putStatus) {
+                return json(r.putStatus, { error: { code: 'refused' } });
             }
             r.bundles.set(m[1], body);
             return { status: 204, body: Buffer.alloc(0) };
@@ -136,7 +136,7 @@ function fakeRelay() {
  */
 function setup(queue, relay, { each = () => {}, residents = ['heuristic', 'rush'], versionsDir = path.join(tmp, 'none'), tarOf, localMs = 1000, hold = false } = {}) {
     const dir = fs.mkdtempSync(path.join(tmp, 'games-'));
-    const ladder = { started: [], results: [], logs: [], pools: 0, poolOrder: null, callTimes: [] };
+    const ladder = { started: [], results: [], logs: [], pools: 0, grows: 0, poolOrder: null, callTimes: [] };
     let clock = 0;
     let ticks = 0;
     const lane = remoteLane({
@@ -146,7 +146,7 @@ function setup(queue, relay, { each = () => {}, residents = ['heuristic', 'rush'
             return relay.request(...a);
         },
         // `hold`: the games here wait for ladder.release(), so the lane keeps a queue over several ticks
-        runPool: (q, { onStart, onResult }) => new Promise((resolve) => {
+        runPool: (q, { onStart, onResult }) => Object.assign(new Promise((resolve) => {
             ladder.pools++;
             ladder.poolOrder ??= q.map((x) => x.id);
             const playAll = async () => {
@@ -163,7 +163,7 @@ function setup(queue, relay, { each = () => {}, residents = ['heuristic', 'rush'
             } else {
                 playAll();
             }
-        }),
+        }), { grow: () => ladder.grows++ }),
         onStart: (job) => {
             ladder.started.push(job.id);
             job.replayFile = path.join(dir, `${job.id}.jsonl`);
@@ -251,6 +251,29 @@ test('a lost lease plays here, and its seed is not offered again', async () => {
     // started for the helper, then again here: ladder.js's onStart resets the entry
     assert.deepStrictEqual(ladder.started, ['heuristic-vs-rush-1', 'rush-vs-heuristic-1', 'heuristic-vs-rush-1', 'rush-vs-heuristic-1']);
     assert.ok(ladder.logs.some((l) => /lease L1 .* lost: no heartbeat/.test(l)));
+});
+
+test('games that come back while the pool here runs get its workers back (grow), not just the busy ones', async () => {
+    const queue = schedule([['heuristic', 'rush'], ['rush', 'heuristic']]);
+    const relay = fakeRelay();
+    relay.waiting = 1;
+    const { lane, ladder } = setup(queue, relay, {
+        hold: true,
+        each: (t) => {
+            if (t === 1) {
+                relay.lose('L1', 'no heartbeat');
+            }
+            if (t === 3) {
+                ladder.release();
+            }
+        }
+    });
+    await lane.run();
+    assert.deepStrictEqual(relay.offers.map((o) => o.job.seed), [1]);
+    assert.strictEqual(ladder.pools, 1, 'one pool here, started with seed 2');
+    assert.strictEqual(ladder.grows, 1, 'seed 1 came back while it ran');
+    assert.strictEqual(ladder.results.length, 4);
+    assert.ok(ladder.results.every((r) => r.host === null));
 });
 
 test('a lease the relay no longer knows (404) plays here', async () => {
@@ -490,26 +513,28 @@ test('a bundle that cannot be packed is tried once, and that version\'s games st
     assert.ok(ladder.results.every((r) => r.host === null));
 });
 
-test('a full bundle store (507) keeps that version\'s games here, and the other seeds still go out', async () => {
-    const versions = path.join(tmp, 'full-versions');
-    fs.mkdirSync(path.join(versions, 'big-v1', 'bundle'), { recursive: true });
-    fs.writeFileSync(path.join(versions, 'big-v1', 'SUBMISSION.json'), JSON.stringify({ bot: { kind: 'wasm' } }));
-    const queue = schedule([['big-v1', 'rush'], ['heuristic', 'rush']]);
-    const relay = fakeRelay();
-    relay.waiting = 2;
-    relay.full = true;
-    const { lane, ladder } = setup(queue, relay, {
-        versionsDir: versions,
-        tarOf: async () => Buffer.from('a big tar'),
-        each: () => relay.leases.get('L1')?.state === 'running' && relay.finish('L1')
+for (const [status, why] of [[507, 'the round\'s bundles are at their limit'], [500, 'HTTP 500']]) {
+    test(`a bundle the relay refuses (${status}) is put once; that version's games stay here and other seeds still go out`, async () => {
+        const versions = path.join(tmp, `refused-versions-${status}`);
+        fs.mkdirSync(path.join(versions, 'big-v1', 'bundle'), { recursive: true });
+        fs.writeFileSync(path.join(versions, 'big-v1', 'SUBMISSION.json'), JSON.stringify({ bot: { kind: 'wasm' } }));
+        const queue = schedule([['big-v1', 'rush'], ['heuristic', 'rush']]);
+        const relay = fakeRelay();
+        relay.waiting = 2;
+        relay.putStatus = status;
+        const { lane, ladder } = setup(queue, relay, {
+            versionsDir: versions,
+            tarOf: async () => Buffer.from('a big tar'),
+            each: () => relay.leases.get('L1')?.state === 'running' && relay.finish('L1')
+        });
+        await lane.run();
+        assert.deepStrictEqual(relay.offers.map((o) => o.job.seed), [2], 'only the seed without the version');
+        assert.strictEqual(relay.calls.filter((c) => c.startsWith('PUT /bundle/')).length, 1, 'put once');
+        assert.ok(ladder.logs.includes(`big-v1: the relay refused its bundle (${why}); its games play here`), ladder.logs.join('\n'));
+        assert.strictEqual(ladder.results.filter((r) => r.host === 'eric').length, 2);
+        assert.strictEqual(ladder.results.length, 4);
     });
-    await lane.run();
-    assert.deepStrictEqual(relay.offers.map((o) => o.job.seed), [2], 'only the seed without the version');
-    assert.strictEqual(relay.calls.filter((c) => c.startsWith('PUT /bundle/')).length, 1, 'put once');
-    assert.ok(ladder.logs.some((l) => /big-v1: the relay refused its bundle \(the round's bundles are at their limit\)/.test(l)), ladder.logs.join('\n'));
-    assert.strictEqual(ladder.results.filter((r) => r.host === 'eric').length, 2);
-    assert.strictEqual(ladder.results.length, 4);
-});
+}
 
 test('a long error is cut to 500 characters before it is recorded', async () => {
     const queue = schedule([['heuristic', 'rush']]);
