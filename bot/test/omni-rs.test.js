@@ -47,12 +47,21 @@ test('canonical keys distinguish cards, labels, methods and normalize engine car
     assert.throws(() => expandActions(eg, [card, card]), /collision/);
 });
 
-test('Satine distribution records all concrete choices including zero and refuses other effects', () => {
-    const heal = { kind: 'distribute', label: 'distribute 2', spec: { type: 'distributeHealing', amount: 2, canDistributeLess: true, maxTargets: 1 }, targets: ['uuid-one', 'uuid-two'], caps: [Infinity, Infinity] };
+test('Satine distribution records all concrete choices including zero', () => {
+    const heal = { kind: 'distribute', label: 'distribute 2', spec: { type: 'distributeHealing', amount: 2, canDistributeLess: true, canChooseNoTargets: true, maxTargets: 1 }, targets: ['uuid-one', 'uuid-two'], caps: [Infinity, Infinity] };
     const actions = expandActions(eg, [heal]);
     assert.equal(actions.length, 5);
     assert.deepEqual(actions.map((a) => canonicalAction(eg, a).arg), [[], [['c0', 1]], [['c0', 2]], [['c1', 1]], [['c1', 2]]]);
-    assert.throws(() => expandActions(eg, [{ ...heal, spec: { ...heal.spec, type: 'distributeDamage' } }]), /unsupported distribution/);
+    assert.equal(expandActions(eg, [{ ...heal, spec: { ...heal.spec, canChooseNoTargets: false } }]).length, 4);
+    assert.throws(() => expandActions(eg, [{ ...heal, spec: { ...heal.spec, type: 'unsupported' } }]), /Unsupported distribution/);
+});
+
+test('bounded distribution expansion exhausts every capped allocation and rejects pruning', () => {
+    const damage = {kind:'distribute',label:'distribute 3',spec:{type:'distributeIndirectDamage',amount:3,maxTargets:2},targets:['uuid-one','uuid-two'],caps:[1,3]};
+    assert.deepEqual(expandActions(eg,[damage]).map(a=>canonicalAction(eg,a).arg),[[['c0',1],['c1',2]],[['c1',3]]]);
+    const partial={...damage,spec:{...damage.spec,canDistributeLess:true}};
+    assert.deepEqual(expandActions(eg,[partial]).map(a=>canonicalAction(eg,a).arg),[[['c0',1]],[['c0',1],['c1',1]],[['c0',1],['c1',2]],[['c1',1]],[['c1',2]],[['c1',3]]]);
+    assert.throws(()=>expandActions(eg,[partial],3),/without pruning/);
 });
 
 test('committed pool has exactly the reviewed cards and covers each supported keyword', () => {

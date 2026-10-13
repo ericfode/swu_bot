@@ -157,14 +157,21 @@ class Env {
         };
     }
 
-    newGame({ seed = 'seed', deck1, deck2, undo = false, names = ['p1', 'p2'] } = {}) {
-        return new EnvGame(this, { seed, deck1, deck2, undo, names });
+    /**
+     * selectionToggles (default off): in a SelectCardPrompt, list selected cards as unselect toggles and drop
+     * unselected cards once the limit is reached, as the prompt's click handler does. The Rust/Wasm reference
+     * traces (bot/omni/rs, bot/cards/reference) turn it on; everything else keeps the original action list, so
+     * the gate and old replays are unchanged.
+     */
+    newGame({ seed = 'seed', deck1, deck2, undo = false, names = ['p1', 'p2'], selectionToggles = false } = {}) {
+        return new EnvGame(this, { seed, deck1, deck2, undo, names, selectionToggles });
     }
 }
 
 class EnvGame {
-    constructor(env, { seed, deck1, deck2, undo, names }) {
+    constructor(env, { seed, deck1, deck2, undo, names, selectionToggles = false }) {
         this.sink = { error: null };
+        this.selectionToggles = selectionToggles;
         this.ids = ['111', '222'];
         this.names = names;
         const players = this.ids.map((id, i) => getUserWithDefaultsSet({
@@ -280,9 +287,28 @@ class EnvGame {
             const caps = legal.map((c) => (capped && c.isUnit() ? Math.max(0, c.remainingHp) : Infinity));
             out.push({ kind: 'distribute', label: `distribute ${p.distributeAmongTargets.amount}`, spec: p.distributeAmongTargets, targets: legal.map((c) => c.uuid), caps, uuid: p.promptUuid });
         } else {
+            // SelectCardPrompt highlights candidates more broadly than its click
+            // handler at the selection limit. With selectionToggles, inspect the
+            // active nested prompt; selected cards are valid toggles, except
+            // protected must-selects.
+            let selectionPrompt = null;
+            let step = this.selectionToggles ? this.game.pipeline?.currentStep : null;
+            const visited = new Set();
+            while (step && !visited.has(step)) {
+                visited.add(step);
+                if (step.constructor?.name === 'SelectCardPrompt' && step.choosingPlayer === pl) {
+                    selectionPrompt = step;
+                    break;
+                }
+                step = step.pipeline?.currentStep;
+            }
             const selected = new Set((ps.selectedCards ?? []).map((c) => c.uuid));
             for (const c of ps.selectableCards ?? []) {
-                if (selected.has(c.uuid)) {
+                if (selectionPrompt) {
+                    const isSelected = selectionPrompt.selectedCards.includes(c);
+                    if (isSelected && selectionPrompt.cannotUnselectMustSelect && selectionPrompt.properties.mustSelect.includes(c)) continue;
+                    if (!isSelected && selectionPrompt.selector.hasReachedLimit(selectionPrompt.selectedCards, selectionPrompt.context)) continue;
+                } else if (selected.has(c.uuid)) {
                     continue;
                 }
                 out.push({ kind: 'card', label: c.internalName ?? c.name, cardUuid: c.uuid, card: c });

@@ -10,17 +10,44 @@ pool requires implementing and checking the new rules; unsupported cards are err
 
 The same core is now available as a [WebAssembly package and JavaScript adapter](../omni/wasm/README.md).
 It keeps persistent state, checkpoints, and complete searches inside Wasm, with Node and browser loaders.
+The [card compiler](../card-compiler/README.md) lowers supported forceteki TypeScript definitions into data-only
+card programs consumed by the same Rust core. Source conversion and executable support are reported separately;
+the generated catalog includes explicit rejection reasons for rules that are not implemented.
 
 ```mermaid
 flowchart LR
-  C[Engine card data] --> P[Explicit pool]
-  P --> J[Forceteki reference games]
-  J --> T[Full states and decision traces]
-  T --> K[Rust differential checker]
-  T --> R[Rust rules library]
-  R --> S[AND/OR endgame prover]
-  R -. future integration .-> B[Rust match backend]
+  C[Forceteki card definitions] --> I[Build-time compiler and card IR]
+  I --> R[One Rust simulator and search core]
+  R --> N[Native Rust API for bots]
+  R --> W[WebAssembly package]
+  W --> A[JavaScript adapter]
+  A --> H[Node or browser host]
+  C --> J[Forceteki reference games]
+  J --> T[Full state and decision traces]
+  T --> K[Differential checker]
+  R --> K
 ```
+
+Native bots can link the library directly; they do not need a WebAssembly boundary. A prospective upstream
+Karabast integration can use the Wasm package from Node or a browser while retaining its existing UI. This is
+an integration path, not a claim of upstream compatibility: setup, mulligans, hidden-information views,
+the complete card catalog and forceteki's object API are not all supplied here. The adapter uses explicit
+snapshots and stable action keys. Keep browser searches in a Worker so a synchronous proof does not block UI input.
+
+## Generated card programs
+
+```sh
+npm run cards:compile
+npm run cards:test
+npm run cards:check
+target/release/omni-rs catalogue bot/card-compiler/generated/catalog.json
+target/release/omni-rs check trace.jsonl.gz --catalogue bot/card-compiler/generated/catalog.json --pool bot/card-compiler/generated/runtime-pool.json
+```
+
+The generated pool is an admission manifest, not evidence that every admitted card has been played. The compiler
+coverage report separates complete source-AST conversion from metadata-only plain and keyword cards. The runtime
+report validates all executable operations and separately labels reviewed native token adapters. Both native and
+Wasm execute the same accepted programs; no TypeScript callback runs inside search.
 
 ## Build and reference data
 
@@ -38,9 +65,17 @@ Darth Vader (`IBH_053`), Satine Kryze (`SEC_005`), keyword-only or textless unit
 keywords are Sentinel, Raid, Overwhelm, Saboteur, Restore, Ambush, Grit, and Shielded. Numeric keyword values come
 from the rules text. Every leader/base pair must have enough eligible cards for a 50-card deck.
 
-Events, ordinary upgrades, other leader abilities, Piloting, Bounty, Smuggle, Exploit, Coordinate, random effects,
-shuffle effects, capture, control changes, and lasting effects are outside this version's rules. Satine's
-single-target healing distribution is explicit: choosing the amount is part of the game tree.
+The default 100-card pool excludes events, ordinary upgrades and other leader abilities. The generated-IR path
+adds admitted action, event and triggered programs; its exact supported set is in the generated runtime report.
+The generated path also supports bounded phase stat modifiers, static conditional stat auras, arena queries,
+return-to-hand effects, resource readiness, self-defeat triggers, supported printed Coordinate registrations,
+bounded unit-token creation and scalar hand discard. Trigger capture, card movement and parent ability
+resolution remain separate stages. Capacity limits fail explicitly rather than dropping pending effects.
+Other lasting effects, Piloting, Bounty, Smuggle, Exploit, random effects, shuffle effects, capture and control
+changes still require additional rules. Coordinate registrations outside the supported constant/on-attack
+forms also remain rejected.
+Satine's single-target healing distribution is explicit:
+choosing the amount is part of the game tree.
 
 ## Proof meaning
 
@@ -104,7 +139,11 @@ done
 state, and terminal state. It validates pool hashes and sequence receipts and stops at the first difference with
 both sides and a field-level diagnostic. [Trace schema and canonical action identity](../omni/rs/README.md).
 
-## Results, 2026-10-11
+## Original 100-card results, 2026-10-11
+
+These historical measurements precede the generic card-program interpreter. The separate
+[fresh Wasm comparison](../../results/omni-wasm-1/README.md) records its exact measured commit as well.
+Neither report measures the expanded catalog.
 
 Measured on one Apple M5 Max, macOS 26.5.2 arm64, Node 22.22.3, Rust/Cargo 1.98.0, release profile, one thread.
 Reference engine: `2be4fcdb4325346bb4a1ba14b29d4f66a1093e2a`. The exact 100-card pool hash and all counts are in
@@ -183,3 +222,10 @@ The current match runner, setup/mulligans, and full card engine remain in JavaSc
 independent Rust transition/search core for the subset; wiring it into `rust-search`, broader card rules,
 hidden information, and parallel search remain separate work. The Wasm adapter is available for this same subset;
 it does not expose the full forceteki object graph.
+
+## Card and behavior references
+
+See [the card catalog](../cards/README.md) for named semantic cases, immutable
+Karabast recordings and the common generator/checker. `reference_conformance.rs`
+checks every accepted recording against current compiled programs; its corpus is
+shared with the Wasm test suite.

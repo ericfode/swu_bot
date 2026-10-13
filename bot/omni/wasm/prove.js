@@ -9,17 +9,23 @@ const { createSimulator } = require('./node');
 
 function options(args) {
     const opts = { depth: 12 };
+    const supplied = new Set();
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
-        if (a === '--pool') opts.poolPath = args[++i];
-        else if (a === '--depth') opts.depth = Number(args[++i]);
-        else if (a === '--nodes') opts.nodes = Number(args[++i]);
-        else if (a === '--ms') opts.ms = Number(args[++i]);
-        else if (a === '--ms-field') opts.msField = args[++i];
-        else if (!a.startsWith('--') && !opts.file) opts.file = a;
+        const key = { '--pool': 'poolPath', '--catalogue': 'cataloguePath', '--depth': 'depth', '--nodes': 'nodes', '--ms': 'ms', '--ms-field': 'msField' }[a];
+        if (key) {
+            if (supplied.has(a)) throw new Error(`Duplicate option ${a}`);
+            supplied.add(a);
+            const value = args[++i];
+            if (!value || value.startsWith('--')) throw new Error(`${a} requires a value`);
+            opts[key] = ['depth', 'nodes', 'ms'].includes(key) ? Number(value) : value;
+        } else if (!a.startsWith('--') && !opts.file) opts.file = a;
         else throw new Error(`Unknown argument ${a}`);
     }
-    if (!opts.file) throw new Error('Usage: node bot/omni/wasm/prove.js positions.jsonl[.gz] [--pool file] [--depth 12] [--nodes N | --ms N | --ms-field jsMs]');
+    if (!opts.file) throw new Error('Usage: node bot/omni/wasm/prove.js positions.jsonl[.gz] [--pool FILE] [--catalogue FILE] [--depth 12] [--nodes N | --ms N | --ms-field jsMs]');
+    if (!Number.isInteger(opts.depth) || opts.depth < 0 || opts.depth > 65535) throw new Error('--depth must be an integer in 0..65535');
+    if (opts.nodes !== undefined && (!Number.isSafeInteger(opts.nodes) || opts.nodes < 0)) throw new Error('--nodes must be a nonnegative safe integer');
+    if (opts.ms !== undefined && (!Number.isFinite(opts.ms) || opts.ms < 0)) throw new Error('--ms must be a nonnegative finite number');
     if (['nodes', 'ms', 'msField'].filter((k) => opts[k] !== undefined).length > 1) throw new Error('Choose one of --nodes, --ms, --ms-field');
     return opts;
 }

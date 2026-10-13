@@ -45,6 +45,7 @@ TypeScript declarations describe the low-level interface; JSON strings are used 
 | Method | Meaning |
 | --- | --- |
 | `new WasmEngine(poolJson)` | Validates supported rules and hashes the exact UTF-8 pool bytes. |
+| `WasmEngine.fromCatalogue(catalogueJson, poolJson?)` | Loads admitted compiled card programs. Optional exact pool JSON restricts the card set and preserves its SHA-256. |
 | `engine.poolHash()` | SHA-256 provenance shared with trace/export tools. |
 | `engine.loadState(stateJson)` | Imports a complete action-window snapshot and checks its round trip. |
 | `game.clone()` | Independent checkpoint, sharing only the immutable catalogue. |

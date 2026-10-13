@@ -1,0 +1,912 @@
+{
+  "schema": "swu-card-behaviors/v1",
+  "note": "Reference-test families and semantic subfamilies. Compiler requiredCapabilities are indexed separately from the emitted IR.",
+  "behaviors": [
+    {
+      "id": "SYNTHETIC-coordinate-trigger-capture-diagnostic",
+      "label": "SYNTHETIC coordinate trigger capture diagnostic",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "SYNTHETIC-explicit-defeat-eventwindow-diagnostic",
+      "label": "SYNTHETIC explicit defeat eventwindow diagnostic",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "SYNTHETIC-owner-hand-amount-two-diagnostic",
+      "label": "SYNTHETIC owner hand amount two diagnostic",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "SYNTHETIC-token-entry-played-event-diagnostic",
+      "label": "SYNTHETIC token entry played event diagnostic",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "active-attack-during-different-source-nested-death",
+      "label": "active attack during different source nested death",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "actual-death-selector-live-attacker-Raid",
+      "label": "actual death selector live attacker Raid",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-controller-trait-phase-groups",
+      "label": "arena controller trait phase groups",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-count-alias",
+      "label": "arena count alias",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-count-unit-kinds",
+      "label": "arena count unit kinds",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-death-controller-exhaustion",
+      "label": "arena death controller exhaustion",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-empty-query-confirmation",
+      "label": "arena empty query confirmation",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-empty-sibling-group",
+      "label": "arena empty sibling group",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-global-defeat",
+      "label": "arena global defeat",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-global-phase-keywords",
+      "label": "arena global phase keywords",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-global-phase-snapshot",
+      "label": "arena global phase snapshot",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-lists",
+      "label": "arena lists",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-queries",
+      "label": "arena queries",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "arena-target-multiplicity",
+      "label": "arena target multiplicity",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attach-condition",
+      "label": "attach condition",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attached-keyword",
+      "label": "attached keyword",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attached-numeric-keyword",
+      "label": "attached numeric keyword",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attachment-order",
+      "label": "attachment order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attack-context",
+      "label": "attack context",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attack-interactions",
+      "label": "attack interactions",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "attack-terminal",
+      "label": "attack terminal",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "aura-candidate-attacking-controller-arena",
+      "label": "aura candidate attacking controller arena",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "aura-defender-exhaustion-controller",
+      "label": "aura defender exhaustion controller",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "card-play",
+      "label": "card play",
+      "kind": "play",
+      "scope": "onCardPlayed event only"
+    },
+    {
+      "id": "conditional-create-mandalorian",
+      "label": "conditional create mandalorian",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-ambush-entry",
+      "label": "constant ambush entry",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-ambush-mixed-stats",
+      "label": "constant ambush mixed stats",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-grit",
+      "label": "constant grit",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-keyword-loss",
+      "label": "constant keyword loss",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-live-numeric-raid",
+      "label": "constant live numeric raid",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-raid",
+      "label": "constant raid",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-restore-trigger-capture",
+      "label": "constant restore trigger capture",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-saboteur-overwhelm",
+      "label": "constant saboteur overwhelm",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-shielded-entry",
+      "label": "constant shielded entry",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-source-unique",
+      "label": "constant source unique",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "constant-stats",
+      "label": "constant stats",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate",
+      "label": "coordinate",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-aura-hp-loss",
+      "label": "coordinate aura hp loss",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-constant-hp-loss",
+      "label": "coordinate constant hp loss",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-constant-keyword-targeting",
+      "label": "coordinate constant keyword targeting",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-constant-stats",
+      "label": "coordinate constant stats",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-incoming-keyword",
+      "label": "coordinate incoming keyword",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-optional-trigger",
+      "label": "coordinate optional trigger",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "coordinate-trigger",
+      "label": "coordinate trigger",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "create-mandalorian",
+      "label": "create mandalorian",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "create-mandalorian-death",
+      "label": "create mandalorian death",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "create-mandalorian-shielded-stat-death",
+      "label": "create mandalorian shielded stat death",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "create-token-unit",
+      "label": "create token unit",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "created-token-combat",
+      "label": "created token combat",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "creation-order",
+      "label": "creation order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "death-targeted-group-tokens-conditional-draw",
+      "label": "death targeted group tokens conditional draw",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "death-triggers",
+      "label": "death triggers",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "draw-partial-or-empty-then-discard",
+      "label": "draw partial or empty then discard",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "entry-effects",
+      "label": "entry effects",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "event-groups",
+      "label": "event groups",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "fatigue-continuations",
+      "label": "fatigue continuations",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "friendly-token-unit-aura-plus-on-attack-create",
+      "label": "friendly token unit aura plus on attack create",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-aura-defeat",
+      "label": "group aura defeat",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-base-damage",
+      "label": "group base damage",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-completion-damage-ready",
+      "label": "group completion damage ready",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-completion-damage-ready-conditional",
+      "label": "group completion damage ready conditional",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-completion-phase-keyword-stats",
+      "label": "group completion phase keyword stats",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-completion-ready-shield",
+      "label": "group completion ready shield",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-completion-up-to-defeat",
+      "label": "group completion up to defeat",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-damage-defeat-order",
+      "label": "group damage defeat order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-damage-live-keyword",
+      "label": "group damage live keyword",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-heal-draw-fatigue-order",
+      "label": "group heal draw fatigue order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-heal-tokens",
+      "label": "group heal tokens",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-leader-conditional",
+      "label": "group leader conditional",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-leader-keywords",
+      "label": "group leader keywords",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-nested-selection",
+      "label": "group nested selection",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-no-target-sibling",
+      "label": "group no target sibling",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-phase-stats-draw",
+      "label": "group phase stats draw",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-shield-aura-preselected-defeat",
+      "label": "group shield aura preselected defeat",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-shield-hp-defeat-order",
+      "label": "group shield hp defeat order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-shield-identity",
+      "label": "group shield identity",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-shield-replacement",
+      "label": "group shield replacement",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-token-heal-draw",
+      "label": "group token heal draw",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "group-token-identities",
+      "label": "group token identities",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "guarded-associated-attacker-coordinate",
+      "label": "guarded associated attacker coordinate",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "guarded-associated-attacker-hp-aura",
+      "label": "guarded associated attacker hp aura",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "guarded-associated-attacker-power-aura",
+      "label": "guarded associated attacker power aura",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "hand-effects",
+      "label": "hand effects",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "keyword-predicate-stat-aura",
+      "label": "keyword predicate stat aura",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "keywords",
+      "label": "keywords",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "leaders",
+      "label": "leaders",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-affected-exclusion-nested-trait-count",
+      "label": "live affected exclusion nested trait count",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-controller-resource-floor-half",
+      "label": "live controller resource floor half",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-damage-signed-stat-expression",
+      "label": "live damage signed stat expression",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-ready-token-count",
+      "label": "live ready token count",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-resource-hp-power",
+      "label": "live resource hp power",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-resource-stats-keyword-interaction",
+      "label": "live resource stats keyword interaction",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-source-exclusion-exhausted-count",
+      "label": "live source exclusion exhausted count",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-space-count-hp-dependency",
+      "label": "live space count hp dependency",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "live-stats",
+      "label": "live stats",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "named-if-you-do-cancelled-exhaustion",
+      "label": "named if you do cancelled exhaustion",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "named-independent-exactly-one-array",
+      "label": "named independent exactly one array",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "named-opponent-chooser",
+      "label": "named opponent chooser",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "named-optional-dependent-arena",
+      "label": "named optional dependent arena",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "named-parent-if-you-do-capture",
+      "label": "named parent if you do capture",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "named-targets",
+      "label": "named targets",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "optional-defeat-simultaneous-shielded-creation",
+      "label": "optional defeat simultaneous shielded creation",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordered-four-named-damage",
+      "label": "ordered four named damage",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-attach-predicate",
+      "label": "ordinary upgrade attach predicate",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-attach-trait",
+      "label": "ordinary upgrade attach trait",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-attachment-matrix",
+      "label": "ordinary upgrade attachment matrix",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-cancel",
+      "label": "ordinary upgrade cancel",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-combat-global-cleanup",
+      "label": "ordinary upgrade combat global cleanup",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-framework-cleanup",
+      "label": "ordinary upgrade framework cleanup",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-global-arena-expiry-order",
+      "label": "ordinary upgrade global arena expiry order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-global-contingent-cleanup",
+      "label": "ordinary upgrade global contingent cleanup",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-leader-cleanup",
+      "label": "ordinary upgrade leader cleanup",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-negative-hp-onplay",
+      "label": "ordinary upgrade negative hp onplay",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-numeric-controller",
+      "label": "ordinary upgrade numeric controller",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-play-legality",
+      "label": "ordinary upgrade play legality",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-removal-stat-death",
+      "label": "ordinary upgrade removal stat death",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-token-parent",
+      "label": "ordinary upgrade token parent",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "ordinary-upgrade-uniqueness",
+      "label": "ordinary upgrade uniqueness",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-grit",
+      "label": "phase grit",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-keyword-loss",
+      "label": "phase keyword loss",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-raid",
+      "label": "phase raid",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-restore",
+      "label": "phase restore",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-sentinel",
+      "label": "phase sentinel",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-sentinel-target-set",
+      "label": "phase sentinel target set",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "phase-stats",
+      "label": "phase stats",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "printed-cost-target-filter",
+      "label": "printed cost target filter",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "printed-keyword-metadata",
+      "label": "printed keyword metadata",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "scalar-discard-deck",
+      "label": "scalar discard deck",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "scalar-owner-hand-discard",
+      "label": "scalar owner hand discard",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "self-defending-power",
+      "label": "self defending power",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "self-when-defeated",
+      "label": "self when defeated",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "shield-cancelled-combat-framework-stat-death",
+      "label": "shield cancelled combat framework stat death",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "shield-stat-deaths",
+      "label": "shield stat deaths",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "standard-when-alias",
+      "label": "standard when alias",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "title-ambush-entry",
+      "label": "title ambush entry",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "title-constant-keywords",
+      "label": "title constant keywords",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "title-saboteur-combat",
+      "label": "title saboteur combat",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "title-source-leave",
+      "label": "title source leave",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "token-entry-primary-damage-order",
+      "label": "token entry primary damage order",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "token-unit-leave-play",
+      "label": "token unit leave play",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "trigger-aliases",
+      "label": "trigger aliases",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "uniqueness",
+      "label": "uniqueness",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "unit-lifecycle",
+      "label": "unit lifecycle",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "unit-tokens",
+      "label": "unit tokens",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "unlimited-base-selection",
+      "label": "unlimited base selection",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "up-to-selection",
+      "label": "up to selection",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "upgrades",
+      "label": "upgrades",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    }
+  ]
+}

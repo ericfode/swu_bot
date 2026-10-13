@@ -36,7 +36,7 @@ async function dualLethal(env, pool, deck) {
     const seed = 2001;
     const rng = seededRng('bot' + seed);
     const bots = [makeBot('random'), makeBot('random')];
-    const eg = env.newGame({ seed, deck1: deck, deck2: deck });
+    const eg = env.newGame({ selectionToggles: true, seed, deck1: deck, deck2: deck });
     await eg.start();
     let step = 0;
     try {

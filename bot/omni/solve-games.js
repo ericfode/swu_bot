@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { Env, seededRng } = require('../env');
 const { OmniSearch } = require('./search');
 const { evaluate } = require('./evaluate');
@@ -100,7 +101,7 @@ async function playAndSolve(env, seed, names, opts, bots, simulator, wasmGames) 
         steps++;
     }
     const winner = eg.over ? (eg.winners.length === 1 ? (eg.winners[0] === eg.names[0] ? 'p1' : 'p2') : 'draw') : null;
-    const game = { seed, bots: names, ...(pool ? { pool: pool.provenance } : {}), decks: [deck1.metadata.name, deck2.metadata.name], winner, rounds: eg.round, steps, windows: windows.length, playMs: Date.now() - t0 };
+    const game = { seed, bots: names, ...(pool ? { pool: pool.provenance } : {}), ...(opts.catalogue ? { catalogue: opts.catalogue } : {}), decks: [deck1.metadata.name, deck2.metadata.name], winner, rounds: eg.round, steps, windows: windows.length, playMs: Date.now() - t0 };
 
     // walk backwards from the last window
     const solves = [];
@@ -137,11 +138,22 @@ async function main() {
     if (arg('pool', null)) opts.pool = loadPool(arg('pool')).provenance;
     const backend = arg('engine', 'js');
     if (!['js', 'wasm'].includes(backend)) throw new Error('--engine must be js or wasm');
+    const hasCatalogue = process.argv.includes('--catalogue');
+    if (hasCatalogue && backend !== 'wasm') throw new Error('--catalogue requires --engine wasm');
+    const catalogueFile = arg('catalogue', null);
+    if (hasCatalogue && (!catalogueFile || catalogueFile.startsWith('--'))) throw new Error('--catalogue requires a file');
     if (backend === 'wasm' && !opts.pool) throw new Error('--engine wasm requires --pool; unsupported cards are not silently simulated');
     let simulator;
     if (backend === 'wasm') {
         opts.engine = 'wasm';
-        simulator = await require('./wasm/node').createSimulator({ poolPath: opts.pool.path });
+        let catalogueJson;
+        if (hasCatalogue) {
+            const cataloguePath = path.resolve(catalogueFile);
+            const bytes = fs.readFileSync(cataloguePath);
+            opts.catalogue = { path: cataloguePath, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+            catalogueJson = bytes.toString('utf8');
+        }
+        simulator = await require('./wasm/node').createSimulator({ poolPath: opts.pool.path, catalogueJson });
     }
     fs.mkdirSync(out, { recursive: true });
     const env = new Env();
@@ -150,7 +162,7 @@ async function main() {
         try {
             res = await solveGame(env, seed, names, opts, simulator);
         } catch (e) {
-            res = { seed, bots: names, ...(opts.pool ? { pool: opts.pool } : {}), error: String(e?.message ?? e).split('\n')[0] };
+            res = { seed, bots: names, ...(opts.pool ? { pool: opts.pool } : {}), ...(opts.catalogue ? { catalogue: opts.catalogue } : {}), error: String(e?.message ?? e).split('\n')[0] };
             console.log(`seed ${seed}: ERROR ${res.error}`);
         }
         const file = path.join(out, `${names.join('-vs-')}-${seed}.json`);

@@ -1,0 +1,305 @@
+{
+  "schema": "omni-rs-compiled-conformance-v1",
+  "poolCards": 450,
+  "poolSha256": "aaa86f650888a9e3039c522a64c9a1c3b04c184694afe2f976c5f06d2843a428",
+  "matchedGames": 16,
+  "matchedDecisions": 3748,
+  "matchedActionWindows": 1274,
+  "playedCardCount": 110,
+  "playedCardsWithIrAbilities": 40,
+  "playedCardIds": [
+    "ASH_141",
+    "ASH_175",
+    "ASH_239",
+    "ASH_252",
+    "ASH_256",
+    "ASH_259",
+    "HMW_072",
+    "HMW_076",
+    "HMW_082",
+    "HMW_093",
+    "HMW_157",
+    "HMW_158",
+    "HMW_163",
+    "HMW_165",
+    "HMW_167",
+    "HMW_175",
+    "HMW_178",
+    "HMW_227",
+    "HMW_254",
+    "HMW_261",
+    "HMW_268",
+    "HMW_269",
+    "IBH_006",
+    "IBH_013",
+    "IBH_016",
+    "IBH_059",
+    "IBH_061",
+    "IBH_062",
+    "IBH_076",
+    "JTL_051",
+    "JTL_061",
+    "JTL_064",
+    "JTL_067",
+    "JTL_078",
+    "JTL_167",
+    "JTL_224",
+    "JTL_225",
+    "JTL_262",
+    "LAW_107",
+    "LAW_120",
+    "LAW_165",
+    "LAW_196",
+    "LAW_234",
+    "LAW_239",
+    "LAW_250",
+    "LAW_251",
+    "LAW_254",
+    "LOF_061",
+    "LOF_077",
+    "LOF_144",
+    "LOF_157",
+    "LOF_168",
+    "LOF_192",
+    "LOF_214",
+    "LOF_230",
+    "LOF_239",
+    "LOF_247",
+    "LOF_250",
+    "LOF_251",
+    "LOF_253",
+    "LOF_256",
+    "LOF_259",
+    "SEC_049",
+    "SEC_058",
+    "SEC_160",
+    "SEC_161",
+    "SEC_166",
+    "SEC_204",
+    "SEC_222",
+    "SEC_240",
+    "SEC_251",
+    "SEC_259",
+    "SEC_262",
+    "SHD_040",
+    "SHD_063",
+    "SHD_079",
+    "SHD_152",
+    "SHD_162",
+    "SHD_196",
+    "SHD_200",
+    "SHD_240",
+    "SOR_044",
+    "SOR_046",
+    "SOR_059",
+    "SOR_064",
+    "SOR_073",
+    "SOR_077",
+    "SOR_128",
+    "SOR_157",
+    "SOR_169",
+    "SOR_194",
+    "SOR_195",
+    "SOR_207",
+    "SOR_210",
+    "SOR_241",
+    "SOR_244",
+    "TS26_043",
+    "TS26_044",
+    "TS26_068",
+    "TWI_056",
+    "TWI_065",
+    "TWI_107",
+    "TWI_140",
+    "TWI_170",
+    "TWI_174",
+    "TWI_214",
+    "TWI_228",
+    "TWI_230",
+    "TWI_241",
+    "TWI_253"
+  ],
+  "maxShieldsOnUnit": 2,
+  "maxExperienceOnUnit": 6,
+  "primitiveWitnesses": {
+    "damage": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 71,
+      "sourceSetCode": "IBH_059",
+      "event": "onDamageDealt",
+      "target": "Command Center",
+      "amount": 2
+    },
+    "heal": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 65,
+      "sourceSetCode": "IBH_013",
+      "event": "onDamageHealed",
+      "target": "Compassionate Senator",
+      "amount": 5
+    },
+    "draw": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 66,
+      "sourceSetCode": "TS26_068",
+      "event": "onCardsDrawn",
+      "target": "p1",
+      "amount": 2
+    },
+    "ready": {
+      "file": "random-vs-heuristic-3001.jsonl.gz",
+      "step": 93,
+      "sourceSetCode": "SOR_169",
+      "event": "onCardReadied",
+      "target": "Champions of Endor"
+    },
+    "exhaust": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 123,
+      "sourceSetCode": "LAW_165",
+      "event": "onCardExhausted",
+      "target": "Grogu"
+    },
+    "defeat": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 126,
+      "sourceSetCode": "SOR_077",
+      "event": "onCardDefeated",
+      "target": "Compassionate Senator"
+    },
+    "giveShield": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 232,
+      "sourceSetCode": "SOR_073",
+      "event": "onUpgradeAttached",
+      "target": "Compassionate Senator"
+    },
+    "giveExperience": {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "step": 48,
+      "sourceSetCode": "LOF_239",
+      "event": "onUpgradeAttached",
+      "target": "Compassionate Senator"
+    }
+  },
+  "continuationWitnesses": {
+    "exhaustThenExperience": [
+      {
+        "file": "effect-interactions-4001.jsonl.gz",
+        "step": 123,
+        "sourceSetCode": "LAW_165",
+        "event": "onCardExhausted",
+        "target": "Grogu"
+      },
+      {
+        "file": "effect-interactions-4001.jsonl.gz",
+        "step": 123,
+        "sourceSetCode": "LAW_165",
+        "event": "onUpgradeAttached",
+        "target": "Grogu"
+      }
+    ],
+    "experienceThenDamage": [
+      {
+        "file": "effect-interactions-4001.jsonl.gz",
+        "step": 48,
+        "sourceSetCode": "LOF_239",
+        "event": "onUpgradeAttached",
+        "target": "Compassionate Senator"
+      },
+      {
+        "file": "effect-interactions-4001.jsonl.gz",
+        "step": 48,
+        "sourceSetCode": "LOF_239",
+        "event": "onDamageDealt",
+        "target": "Compassionate Senator",
+        "amount": 2
+      }
+    ],
+    "defeatThenNewTarget": [
+      {
+        "file": "effect-interactions-4001.jsonl.gz",
+        "step": 190,
+        "sourceSetCode": "TWI_140",
+        "event": "onCardDefeated",
+        "target": "Blue Ace"
+      },
+      {
+        "file": "effect-interactions-4001.jsonl.gz",
+        "step": 191,
+        "sourceSetCode": "TWI_140",
+        "event": "onDamageDealt",
+        "target": "LEP Ratcatcher",
+        "amount": 4
+      }
+    ]
+  },
+  "checkedWith": "target/debug/omni-rs check bot/omni-rs/tests/compiled-fixtures/*.jsonl.gz --catalogue bot/card-compiler/generated/catalog.json --pool bot/omni-rs/tests/compiled-fixtures/pool.json",
+  "limits": "Complete legal-action sets, action-window snapshots and terminal winners match for these seeded games. The 450-card admission list is not a claim of all-card or all-interaction conformance.",
+  "traceHashes": [
+    {
+      "file": "effect-interactions-4001.jsonl.gz",
+      "sha256": "a03838ed7a300716431759bdf419ba89fa5caa7664795f0ae357194deee5a03f"
+    },
+    {
+      "file": "effect-interactions-4002.jsonl.gz",
+      "sha256": "f80b0946c4a28a883d36d92f1f0128eae3e210374dca51962093f6d7815e991c"
+    },
+    {
+      "file": "effect-interactions-4003.jsonl.gz",
+      "sha256": "d3c03972d1eea63081c227526fc8e0a50bfa7652869c6eb01bf09c5cd48ca777"
+    },
+    {
+      "file": "effect-interactions-4004.jsonl.gz",
+      "sha256": "a34fc63ee3450d5c6a99a6a2bb9eecbed4609a9e3be2cc628d43d36b84097b5a"
+    },
+    {
+      "file": "heuristic-vs-heuristic-3001.jsonl.gz",
+      "sha256": "85738c37b06d60e2cf45df7597e710ba785e43e8386a73a645edcb6673960174"
+    },
+    {
+      "file": "heuristic-vs-heuristic-3002.jsonl.gz",
+      "sha256": "ef302d621b70984d9d87f13565d8eb0d86b9daa2a84a35c184ee889f9bf5f053"
+    },
+    {
+      "file": "heuristic-vs-heuristic-3003.jsonl.gz",
+      "sha256": "b15f6c6e29cff5fdc427682423429975c815e857d9651821f30b430443a5e850"
+    },
+    {
+      "file": "heuristic-vs-random-3001.jsonl.gz",
+      "sha256": "1b1049c53fb23f1f86ad5422b3b31b0c58957490ee193be8d56cbd696a64e288"
+    },
+    {
+      "file": "heuristic-vs-random-3002.jsonl.gz",
+      "sha256": "67c1e377f7145f94a9611adf72fcbba6f06ab7a856292e2454a44759d6ebddee"
+    },
+    {
+      "file": "heuristic-vs-random-3003.jsonl.gz",
+      "sha256": "195179547138188bd0c0281f33d3f02e9d3df8580fc0d229c88dfea862787def"
+    },
+    {
+      "file": "random-vs-heuristic-3001.jsonl.gz",
+      "sha256": "96425bdeaca341621f6b0c4b1631600217fd9815d740d2873ef9cfe5f2cfae82"
+    },
+    {
+      "file": "random-vs-heuristic-3002.jsonl.gz",
+      "sha256": "a76efc346e78e1a8c2a374193ea79d564ec01b2ccbe05ab8237b1a787845ddcf"
+    },
+    {
+      "file": "random-vs-heuristic-3003.jsonl.gz",
+      "sha256": "a214654cd1ba84e77ed1b0a3ec1383e77e67c74777e7fa216ac7db1c5ee019b5"
+    },
+    {
+      "file": "random-vs-random-3001.jsonl.gz",
+      "sha256": "e87425e8b202b08a74715d3630fc94ad14d4306e42fb6708ab83793c1eba510f"
+    },
+    {
+      "file": "random-vs-random-3002.jsonl.gz",
+      "sha256": "cf6517f8b475e6cb4de47ea190015fa5277586e530607e8693bedd0d21a3987c"
+    },
+    {
+      "file": "random-vs-random-3003.jsonl.gz",
+      "sha256": "f23caebf4e102f08db3a9218656581a57c3c5a92376beb71db21c989f6f64f24"
+    }
+  ]
+}
