@@ -41,8 +41,10 @@ const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 // returned, or ARENA_ADMIN_TOKEN. In the project's shared folder it is off.
 const AUTH = process.env.ARENA_AUTH === '1';
 const hash = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
-// written by the old clocked tournaments; clock() reads it, and is idle without it
+// written by the old clocked tournaments; clock() reads it, and follows the hosted arena's rounds without it
 const TOURNAMENT = () => path.join(home.HOME, 'tournament.json');
+// the referee touches its ladder's lock every 30 s (referee.js runRound); older than this, no referee holds it
+const ROUND_LOCK_FRESH_MS = 75000;
 // error codes a client may see; anything else is reported as 'internal'
 const CODES = new Set(['bad_request', 'unauthorized', 'not_found', 'conflict', 'bad_bot', 'unsupported']);
 const LOAD_CHECK_MS = 30000;
@@ -91,11 +93,12 @@ function owned(name, token, opts) {
 /**
  * Where the tournament clock stands: phase is 'work', 'ladder', 'done' or 'idle' (no tournament running). round is the
  * current round's number (they continue across tournaments), roundIndex its 1-based position in this tournament.
+ * Without tournament.json (the hosted arena) see hostedClock.
  */
 function clock(now = Date.now()) {
     const t = home.readJson(TOURNAMENT(), null);
     if (!t) {
-        return { tournament: null, round: null, roundIndex: null, plannedRounds: null, phase: 'idle', deadline: null, minutesLeft: null };
+        return hostedClock(now);
     }
     const cur = t.rounds?.[t.rounds.length - 1] ?? null;
     const phase = t.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
@@ -108,6 +111,25 @@ function clock(now = Date.now()) {
     return { tournament: { id: t.id, title: t.title, rounds: t.plannedRounds, roundMinutes: t.roundMinutes, task: t.task ?? null, rules }, round: cur?.n ?? null,
              roundIndex: cur ? t.rounds.filter((r) => r.kind !== 'holdout').length : null, plannedRounds: t.plannedRounds ?? null, ...(holdout ? { holdout } : {}), phase, deadline,
              minutesLeft: deadline ? Math.max(0, Math.round((Date.parse(deadline) - now) / 60000)) : null };
+}
+
+/**
+ * The hosted arena's clock: the games machine plays a round whenever it plans one (games.js planRound), with no work
+ * windows. phase is 'ladder' while a round's ladder holds a live referee lock, else 'idle'; round is that round, else
+ * the newest round in standings (null before the first). A round cut off by a stop stays in standings unfinished and
+ * shows as idle until the next boot resumes it.
+ */
+function hostedClock(now) {
+    const last = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] }).rounds?.at(-1) ?? null;
+    // the round that may be playing: the newest one while it is unfinished, else the one the referee plays next
+    const open = last && last.status !== 'done' ? { round: last.round, id: last.ladderId ?? `arena-r${last.round}` } : { round: (last?.round ?? -1) + 1, id: `arena-r${(last?.round ?? -1) + 1}` };
+    let playing = false;
+    try {
+        playing = now - fs.statSync(path.join(home.RESULTS, open.id, 'referee.lock')).mtimeMs < ROUND_LOCK_FRESH_MS;
+    } catch {
+        // no lock: nothing is playing
+    }
+    return { tournament: null, round: playing ? open.round : last?.round ?? null, roundIndex: null, plannedRounds: null, phase: playing ? 'ladder' : 'idle', deadline: null, minutesLeft: null };
 }
 
 // submitted code must not see the arena's secrets, nor the egress proxy (in a cloud session it adds credentials)
@@ -444,7 +466,7 @@ async function call(method, args = {}) {
 
 // readOnly: changes nothing (MCP readOnlyHint); destructive: may overwrite existing data (the live folder, on upload)
 const METHODS = {
-    status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
+    status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left; on the hosted arena the round playing now with phase ladder, else the newest round with phase idle), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
     submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
     withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },

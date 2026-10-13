@@ -597,6 +597,44 @@ test('a holdout tournament\'s extra ladder does not count as a planned round', (
     }
 });
 
+test('on the hosted arena the clock follows the round whose ladder a live referee holds', () => {
+    const { clock } = require('../arena/api');
+    const { RESULTS } = require('../arena/home');
+    const file = path.join(HOME, 'standings.json');
+    const before = readJson(file, null);
+    const lock = (id, ageMs) => {
+        fs.mkdirSync(path.join(RESULTS, id), { recursive: true });
+        const f = path.join(RESULTS, id, 'referee.lock');
+        fs.writeFileSync(f, '{}');
+        const at = new Date(Date.now() - ageMs);
+        fs.utimesSync(f, at, at);
+    };
+    const pick = (c) => ({ round: c.round, phase: c.phase, tournament: c.tournament });
+    try {
+        fs.rmSync(file, { force: true });
+        assert.deepStrictEqual(pick(clock()), { round: null, phase: 'idle', tournament: null }, 'before the first round');
+        lock('arena-r0', 5000);
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'ladder', tournament: null }, 'round 0 started, not in standings yet');
+        writeJson(file, { rounds: [{ round: 0, status: 'running', ladderId: 'arena-r0' }] });
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'ladder', tournament: null });
+        lock('arena-r0', 10 * 60000);
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'idle', tournament: null }, 'a stopped machine left the lock behind');
+        writeJson(file, { rounds: [{ round: 0, status: 'done', ladderId: 'arena-r0' }] });
+        fs.rmSync(path.join(RESULTS, 'arena-r0', 'referee.lock'));
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'idle', tournament: null }, 'between rounds: the newest round');
+        lock('arena-r1', 1000);
+        assert.deepStrictEqual(pick(clock()), { round: 1, phase: 'ladder', tournament: null });
+    } finally {
+        fs.rmSync(path.join(RESULTS, 'arena-r0'), { recursive: true, force: true });
+        fs.rmSync(path.join(RESULTS, 'arena-r1'), { recursive: true, force: true });
+        if (before) {
+            writeJson(file, before);
+        } else {
+            fs.rmSync(file, { force: true });
+        }
+    }
+});
+
 test('readers get every panel and a round\'s ladder from the API, not from the arena\'s files', async () => {
     const { RESULTS } = require('../arena/home');
     const { call } = require('../arena/api');
