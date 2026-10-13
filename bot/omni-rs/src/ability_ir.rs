@@ -6,6 +6,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+// Inspect every serialized expression position, including selectors and continuations.
+pub(crate) fn contains_force_presence<T: Serialize>(value:&T)->bool {
+    fn visit(v:&Value)->bool {match v {
+        Value::Object(o)=> (o.get("kind").is_some_and(|k|k=="ref") && o.get("path").and_then(Value::as_array).is_some_and(|p|p.last().is_some_and(|v|v=="hasTheForce"))) || (o.get("kind").is_some_and(|k|k=="query") && o.get("name").is_some_and(|n|n=="hasTheForce")) || o.values().any(visit),
+        Value::Array(a)=>a.iter().any(visit),_=>false,
+    }}
+    visit(&serde_json::to_value(value).expect("typed IR serializes"))
+}
+
 pub const SCHEMA: &str = "swu-card-ir/v1";
 pub const MAX_PROGRAM_INSTRUCTIONS: usize = 128;
 pub const MAX_GROUP_RECORDS: usize = 32;
@@ -15,6 +24,10 @@ pub const MAX_ABILITY_NESTING: usize = 8;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Expr {
+    ArenaList { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaFilter { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaSome { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaLength { receiver: Box<Expr> },
     Array {
         items: Vec<Expr>,
     },
@@ -61,6 +74,10 @@ pub enum Expr {
 #[allow(dead_code)]
 #[serde(remote = "Expr", tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 enum PortableExpr {
+    ArenaList { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaFilter { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaSome { receiver: Box<Expr>, predicate: Box<Expr> },
+    ArenaLength { receiver: Box<Expr> },
     Array { items: Vec<Expr> },
     Math { name: String, args: Vec<Expr> },
     Const { value: Value },
@@ -108,6 +125,7 @@ impl Expr {
     fn references_title(&self) -> bool {
         match self {
             Self::Compiled(compiled) => compiled.original.references_title(),
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.references_title() || predicate.references_title(), Self::ArenaLength {receiver} => receiver.references_title(),
             Self::Ref {path}=>path.last().is_some_and(|p|p=="title"),
             Self::Array {items}=>items.iter().any(Self::references_title),Self::Math {args,..}=>args.iter().any(Self::references_title),Self::Unary {value,..}=>value.references_title(),Self::Binary {left,right,..}=>left.references_title()||right.references_title(),Self::Conditional {condition,then,r#else}=>condition.references_title()||then.references_title()||r#else.references_title(),Self::Query {receiver,args,..}=>receiver.references_title()||args.iter().any(Self::references_title),_=>false,
         }
@@ -115,10 +133,9 @@ impl Expr {
     fn depends_on_stats(&self) -> bool {
         match self {
             Self::Compiled(compiled) => compiled.original.depends_on_stats(),
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.depends_on_stats() || predicate.depends_on_stats(), Self::ArenaLength {receiver} => receiver.depends_on_stats(),
             Self::Const { .. } => false,
-            Self::Ref { path } => path
-                .iter()
-                .any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
+            Self::Ref { path } => path.iter().any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
             Self::Array { items } => items.iter().any(Self::depends_on_stats),
             Self::Math { args, .. } => args.iter().any(Self::depends_on_stats),
             Self::Binary { left, right, .. } => left.depends_on_stats() || right.depends_on_stats(),
@@ -144,10 +161,9 @@ impl Expr {
     fn depends_on_keywords(&self) -> bool {
         match self {
             Self::Compiled(compiled) => compiled.original.depends_on_keywords(),
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.depends_on_keywords() || predicate.depends_on_keywords(), Self::ArenaLength {receiver} => receiver.depends_on_keywords(),
             Self::Const { .. } => false,
-            Self::Ref { path } => path
-                .iter()
-                .any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
+            Self::Ref { path } => path.iter().map(String::as_str).collect::<Vec<_>>()==["card","keywords","length"] || path.iter().any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
             Self::Array { items } => items.iter().any(Self::depends_on_keywords),
             Self::Math { args, .. } => args.iter().any(Self::depends_on_keywords),
             Self::Binary { left, right, .. } => left.depends_on_keywords() || right.depends_on_keywords(),
@@ -171,7 +187,9 @@ impl Expr {
         }
     }
     fn live_only(&self)->bool {
-        match self {Self::Compiled(compiled)=>compiled.original.live_only(),Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
+        match self {
+            Self::Compiled(compiled)=>compiled.original.live_only(),
+            Self::ArenaList {receiver,predicate} | Self::ArenaFilter {receiver,predicate} | Self::ArenaSome {receiver,predicate} => receiver.live_only() || predicate.live_only(), Self::ArenaLength {receiver} => receiver.live_only(),Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
     }
     fn live_stat_bounds(&self)->Result<(i64,i64),String> {
         fn root(e:&Expr,paths:&[&[&str]])->bool {matches!(e.original(),Expr::Ref {path} if paths.iter().any(|p|path.iter().map(String::as_str).collect::<Vec<_>>()==*p))}
@@ -233,6 +251,7 @@ impl Expr {
         self.validate()?;
         let numeric = match self {
             Self::Compiled(compiled) => compiled.original.validate_number().is_ok(),
+            Self::ArenaLength {..} => true, Self::ArenaList {..}|Self::ArenaFilter {..}|Self::ArenaSome {..} => false,
             Self::Array { .. } => false,
             Self::Math { name, args } => {
                 ["min", "max"].contains(&name.as_str())
@@ -280,6 +299,9 @@ impl Expr {
         let sub = |e: &Expr| e.validate_depth(depth + 1);
         match self {
             Self::Compiled(compiled) => compiled.original.validate_depth(depth),
+            Self::ArenaList {receiver,predicate} => {if !matches!(receiver.as_ref(),Self::Ref{path} if path.len()==1 && ["player","opponent","game"].contains(&path[0].as_str())) {return Err("arena list requires exact player/opponent/game receiver".into());}sub(predicate)},
+            Self::ArenaFilter {receiver,predicate}|Self::ArenaSome {receiver,predicate} => {if !matches!(receiver.as_ref(),Self::ArenaList{..}) {return Err("arena filter/some requires direct arena list".into());}sub(receiver)?;sub(predicate)},
+            Self::ArenaLength {receiver} => {if !matches!(receiver.as_ref(),Self::ArenaList{..}|Self::ArenaFilter{..}) {return Err("arena length requires bounded list".into());}sub(receiver)},
             Self::Array { items } => {
                 for item in items {
                     sub(item)?;
@@ -313,7 +335,9 @@ impl Expr {
                 {
                     ["source" | "target" | "card" | "player" | "opponent"] => true,
                     ["source" | "target" | "card", "title"] => true,
+                    ["player", "hasTheForce"] => true,
                     ["card","activeAttack","attacker"] => true,
+                    ["card","keywords","length"] => true,
                     ["modifierTarget"] | ["modifierTarget","damage"|"controller"] | ["modifierTarget","controller","resources","length"] => true,
                     ["source", "parentCard" | "parentUnit"] => true,
                     ["source", "parentCard" | "parentUnit", "damage" | "power" | "hp" | "remainingHp" | "controller" | "exhausted" | "unique"] => true,
@@ -370,7 +394,7 @@ impl Expr {
             } => {
                 if receiver.references_title() || args.iter().any(Self::references_title) { return Err("printed title query coercion is unsupported".into()); }
                 let arity = match name.as_str() {
-                    "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
+                    "hasCost" | "isUpgrade" | "canBeExhausted" | "isUpgraded" | "isInPlay" | "isNonLeaderUnit"
                     | "hasInitiative" | "isUnit" | "isBase" | "isLeader" | "getPower" | "getHp"
                     | "getCost" | "getPrintedCost" | "isToken" | "isTokenUnit" | "resourcePairs" | "isAttacking" | "isDefending" => 0,
                     "hasSomeTrait" | "hasSomeAspect" | "hasSomeKeyword" | "hasSomeArenaUnit"
@@ -380,6 +404,8 @@ impl Expr {
                 if args.len() != arity {
                     return Err(format!("query {name} expects {arity} arguments"));
                 }
+                if name=="isUpgrade" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("isUpgrade requires an explicit card receiver".into());}
+                if name=="hasCost" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("hasCost requires an explicit card receiver".into());}
                 if name=="isTokenUnit" && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("isTokenUnit requires an explicit card receiver".into());}
                 if ["isAttacking","isDefending"].contains(&name.as_str()) && !matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && ["source","card","target"].contains(&path[0].as_str())) {return Err("attack query requires a scalar source/card/target receiver".into());}
                 sub(receiver)?;
@@ -396,7 +422,75 @@ impl Expr {
 #[serde(untagged)]
 pub enum Target {
     Name(String),
+    ArenaList(ArenaListTarget),
     Expression(Expr),
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArenaListTarget { pub kind: ArenaListKind, pub receiver: Expr, pub predicate: Expr }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ArenaListKind { #[serde(rename = "arenaList")] ArenaList }
+impl ArenaListTarget {
+    fn validate_phase_stats(&self)->Result<(),String> {
+        if self.validate_scope(false).is_ok() {return Ok(());}
+        self.receiver.validate()?;self.predicate.validate()?;
+        if !matches!(&self.receiver,Expr::Ref{path} if path.len()==1&&["player","opponent"].contains(&path[0].as_str())) {return Err("phase-stat lists require one player arena inventory".into());}
+        fn reference(e:&Expr,name:&str)->bool {matches!(e,Expr::Ref{path} if path.len()==1&&path[0]==name)}
+        fn predicate(e:&Expr)->bool {
+            // getArenaUnits({otherThan:source}) generates the nullable exclusion.
+            if matches!(e,Expr::Binary{op,left,right} if op=="||" && matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source"))) {return true;}
+            match e {
+                Expr::Const{value}=>value.is_boolean(),
+                Expr::Binary{op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left)&&predicate(right),
+                Expr::Query{name,receiver,args} if name=="hasSomeTrait" && reference(receiver,"card") && args.len()==1=>matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|v|!v.is_empty())),
+                Expr::Binary{op,left,right} if op=="==="=> {
+                    let zone=|e:&Expr|matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
+                    let name=|e:&Expr|matches!(e,Expr::Const{value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
+                    (zone(left)&&name(right))||(name(left)&&name(right))
+                },_=>false,
+            }
+        }
+        if !predicate(&self.predicate) {return Err("phase-stat filters require static traits, arenas or source exclusion".into());}Ok(())
+    }
+    fn validate_damage(&self)->Result<(),String> {
+        if !matches!(&self.receiver,Expr::Ref{path} if path.len()==1&&["game","player","opponent"].contains(&path[0].as_str())) {return Err("arena damage requires an explicit game/player/opponent receiver".into());}
+        self.predicate.validate()?;
+        fn reference(e:&Expr,name:&str)->bool {matches!(e,Expr::Ref{path} if path.len()==1&&path[0]==name)}
+        fn predicate(e:&Expr)->bool {
+            if matches!(e,Expr::Binary{op,left,right} if op=="||" && matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source"))) {return true;}
+            match e {
+                Expr::Const{value}=>value.is_boolean(),
+                Expr::Unary{op,value} if op=="!"=>matches!(value.as_ref(),Expr::Const{value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"))),
+                Expr::Binary{op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left)&&predicate(right),
+                Expr::Binary{op,left,right} if op=="==="=>{
+                    let zone=|e:&Expr|matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
+                    let name=|e:&Expr|matches!(e,Expr::Const{value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
+                    (zone(left)&&name(right))||(name(left)&&name(right))
+                },
+                Expr::Query{name,receiver,args} if name=="isUnit"=>reference(receiver,"card")&&args.is_empty(),
+                Expr::Ref{path}=>path.iter().map(String::as_str).collect::<Vec<_>>()==["card","exhausted"],
+                _=>false,
+            }
+        }
+        if !predicate(&self.predicate) {return Err("arena damage predicates require static arena/source/exhausted unit scope".into());}Ok(())
+    }
+    fn validate_scope(&self, global:bool)->Result<(),String> {
+        if !(global && matches!(&self.receiver,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["game"])) {self.receiver.validate()?;}
+        self.predicate.validate()?;
+        if !matches!(&self.receiver,Expr::Ref {path} if path.len()==1 && (["player","opponent"].contains(&path[0].as_str()) || (global && path[0]=="game"))) {return Err("arena-list receiver is outside the verified scope".into());}
+        fn predicate(e:&Expr,global:bool)->bool {match e {
+            Expr::Const {value}=>value.is_boolean(),
+            Expr::Unary {op,value} if op=="!"=>predicate(value,global)||matches!(value.as_ref(),Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"))),
+            Expr::Binary {op,left,right} if ["&&","||"].contains(&op.as_str())=>predicate(left,global)&&predicate(right,global),
+            Expr::Binary {op,left,right} if op=="==="=>{
+                let zone=|e:&Expr|matches!(e,Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","zoneName"]);
+                let name=|e:&Expr|matches!(e,Expr::Const {value} if matches!(value.as_str(),Some("groundArena"|"spaceArena"|"anyArena")));
+                (zone(left)&&name(right))||(name(left)&&name(right))
+            },
+            Expr::Query {name,receiver,args} if global && ["isUnit","isUpgraded"].contains(&name.as_str())=>args.is_empty() && matches!(receiver.as_ref(),Expr::Ref {path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card"]),
+            _=>false}}
+        if !predicate(&self.predicate,global) {return Err("arena-list phase-stat predicate requires verified arena-only scope".into());}Ok(())
+    }
 }
 impl Target {
     pub fn name(name: &str) -> Self {
@@ -404,6 +498,7 @@ impl Target {
     }
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            Self::ArenaList(_)=>Err("arena lists require standalone verified phase-stat semantics".into()),
             Self::Name(s)
                 if [
                     "self",
@@ -453,6 +548,8 @@ impl Target {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TargetResolver {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    pub prompt_title: Option<String>,
     #[serde(default = "any_owner")]
     pub owner: String,
     #[serde(rename = "type", default = "any_owner")]
@@ -474,21 +571,48 @@ fn any_owner() -> String {
     "any".into()
 }
 impl TargetResolver {
+    /// A positive type predicate supplies the selector inventory domain; ordinary
+    /// `any` continues to enumerate units/bases. Do not admit mixed domains.
+    pub fn is_upgrade_domain(&self) -> bool {
+        fn implies(e:&Expr)->bool { match e.original() {
+            Expr::Query {name,receiver,args} if name=="isUpgrade" && args.is_empty()=>matches!(receiver.as_ref(),Expr::Ref {path} if path.len()==1 && path[0]=="card"),
+            Expr::Binary {op,left,right} if op=="&&"=>implies(left)||implies(right),
+            Expr::Binary {op,left,right} if op=="||"=>implies(left)&&implies(right),
+            _=>false,
+        }}
+        self.card_type=="upgrade" || (self.card_type=="any" && self.predicate.as_ref().is_some_and(implies))
+    }
+    fn mentions_upgrade_query(&self)->bool {
+        fn mentions(e:&Expr)->bool {match e.original() {
+            Expr::Query {name,receiver,args}=>name=="isUpgrade"||mentions(receiver)||args.iter().any(mentions),
+            Expr::Array {items}=>items.iter().any(mentions), Expr::Math {args,..}=>args.iter().any(mentions),
+            Expr::Binary {left,right,..}=>mentions(left)||mentions(right), Expr::Unary {value,..}=>mentions(value),
+            Expr::Conditional {condition,then,r#else}=>mentions(condition)||mentions(then)||mentions(r#else),
+            _=>false,
+        }}
+        self.predicate.as_ref().is_some_and(mentions)
+    }
     pub fn max_targets(&self) -> Result<usize, String> {
         match self.mode.as_deref() {
             None | Some("single") if self.count.is_none() => Ok(1),
             Some("upTo") => match self.count.as_ref().map(Expr::original) {
-                Some(Expr::Const { value }) if value.as_u64().is_some_and(|n| (1..=3).contains(&n)) => Ok(value.as_u64().unwrap() as usize),
-                _ => Err("UpTo selectors require literal counts from one to three".into()),
+                Some(Expr::Const { value }) if value.as_u64().is_some_and(|n| (1..=5).contains(&n)) => Ok(value.as_u64().unwrap() as usize),
+                _ => Err("UpTo selectors require literal counts from one to five".into()),
             },
             Some("unlimited") if self.card_type == "base" && self.arena.is_none() && self.count.is_none() && self.optional && matches!(self.zone.as_deref(), None | Some("base" | "anyAttackable")) => Ok(2),
             _ => Err("unsupported target mode/count; unlimited selection is base-only".into()),
         }
     }
     pub fn is_multiple(&self) -> bool { matches!(self.mode.as_deref(), Some("upTo" | "unlimited")) }
+    pub fn validate_inline(&self)->Result<(),String> {
+        if self.prompt_title.as_ref().is_some_and(|t|t.is_empty()||t.len()>1024){return Err("inline prompt title must be a bounded nonempty literal".into());}
+        let mut r=self.clone();r.prompt_title=None;r.validate()
+    }
     pub fn validate(&self) -> Result<(), String> {
+        if self.prompt_title.is_some() {return Err("named prompt titles require a named descriptor".into());}
         self.max_targets()?;
-        if self.card_type=="upgrade" && (self.arena.is_some() || !matches!(self.zone.as_deref(),None|Some("arena"|"anyAttackable"))) {return Err("upgrade selectors require arena/anyAttackable without an arena filter".into());}
+        if self.card_type=="any" && self.mentions_upgrade_query() && !self.is_upgrade_domain() {return Err("mixed upgrade selector domains are not modeled".into());}
+        if self.is_upgrade_domain() && (self.arena.is_some() || !matches!(self.zone.as_deref(),None|Some("arena"|"anyAttackable"|"discard"))) {return Err("upgrade selectors require arena/anyAttackable without an arena filter".into());}
         if !["self", "opponent", "any"].contains(&self.owner.as_str()) {
             return Err(format!("unsupported target owner {}", self.owner));
         }
@@ -553,6 +677,7 @@ pub enum Effect {
         amount: Expr,
     },
     NoAction,
+    ResourceCard { target: Target },
     ReturnToHand {
         target: Target,
     },
@@ -578,6 +703,9 @@ pub enum Effect {
         amount: Expr,
         target: Target,
     },
+    UseForce {target:Target},
+    GainForce {target:Target},
+    GiveWeakness { amount:Expr, target:Target },
     GiveExperience {
         #[serde(default = "one")]
         amount: Expr,
@@ -653,9 +781,24 @@ impl Effect {
             Self::DistributeHealing { amount, target_resolver, .. } => {
                 visit(amount); target_resolver.visit_expression_roots_mut(visit);
             }
-            Self::NoAction => {}
+            // Resource, Force and Weakness operations keep their expressions portable:
+            // their runtime matches on the raw shapes.
+            Self::ResourceCard { .. } | Self::UseForce { .. } | Self::GainForce { .. }
+            | Self::GiveWeakness { .. } | Self::NoAction => {}
         }
     }
+}
+/// Upgrade departure is scalar and has a single chosen-card event. Conditional
+/// no-action branches retain feasibility; groups and other operations stay blocked.
+fn scalar_upgrade_operation(effect:&Effect,discard:bool)->bool {
+    fn walk(e:&Effect,discard:bool)->(bool,bool) {match e {
+        Effect::ReturnToHand {target}=>(matches!(target,Target::Name(name) if name=="chosen"),true),
+        Effect::Defeat {..}=>(!discard,true),
+        Effect::NoAction=>(true,false),
+        Effect::Conditional {on_true,on_false,..}=>{let a=walk(on_true,discard);let b=on_false.as_ref().map_or((true,false),|e|walk(e,discard));(a.0&&b.0,a.1||b.1)},
+        _=>(false,false),
+    }}
+    let (valid,operation)=walk(effect,discard);valid&&operation
 }
 fn one() -> Expr {
     Expr::number(1)
@@ -664,6 +807,8 @@ fn one() -> Expr {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Ability {
+    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    pub target_resolvers: Vec<NamedTargetResolver>,
     #[serde(default)]
     pub trigger: String,
     #[serde(default)]
@@ -688,6 +833,15 @@ pub struct Ability {
     pub if_you_do: Option<Box<Ability>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct NamedTargetResolver {
+    pub name:String,
+    pub target_resolver:TargetResolver,
+    pub chooser:String,
+    pub effect:Effect,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sides {
@@ -698,6 +852,44 @@ pub struct Sides {
     #[serde(default)]
     pub card: Vec<Ability>,
 }
+
+fn contains_resource<T:Serialize>(v:&T)->bool {
+    fn walk(v:&Value)->bool {v["kind"]=="resourceCard" || match v {Value::Array(a)=>a.iter().any(walk),Value::Object(o)=>o.values().any(walk),_=>false}}
+    serde_json::to_value(v).map(|v|walk(&v)).unwrap_or(true)
+}
+fn resource_self(e:&Effect)->bool {matches!(e,Effect::ResourceCard{target:Target::Name(n)} if n=="self")}
+#[derive(Clone,Copy,PartialEq,Eq)]
+enum ForceContinuation { Drain, Wave, Shields }
+fn plain_success(a:&Ability)->bool {a.trigger.is_empty()&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()}
+fn force_continuation(a:&Ability)->Option<ForceContinuation> {
+    if a.coordinate||a.requires_confirmation||!a.context_title.is_empty()||!a.costs.is_empty()||a.condition.is_some()||a.target_resolver.is_some()||!a.target_resolvers.is_empty()||a.then.is_some(){return None;}
+    fn own(e:&Effect,gain:bool)->bool {match e {Effect::GainForce{target:Target::Name(n)} if gain=>n=="ownPlayer",Effect::UseForce{target:Target::Name(n)} if !gain=>n=="ownPlayer",_=>false}}
+    fn unit(r:&TargetResolver)->bool {r.owner=="any"&&r.card_type=="unit"&&r.zone.as_deref()==Some("anyAttackable")&&r.arena.is_none()&&r.predicate.is_none()}
+    if a.trigger=="event"&&!a.optional&&a.if_you_do.is_none() {if let Effect::Simultaneous{effects}=&a.effect {if effects.len()==2&&own(&effects[1],true) {if let Effect::Select{target_resolver:r,effect}=&effects[0] {if unit(r)&&!r.optional&&r.mode.is_none()&&r.count.is_none()&&r.prompt_title.as_ref().is_some_and(|t|!t.is_empty())&&matches!(effect.as_ref(),Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(2)){return Some(ForceContinuation::Drain);}}}}}
+    if a.trigger!="whenPlayed"||!a.optional||!own(&a.effect,false){return None;}
+    let next=a.if_you_do.as_ref()?;if !plain_success(next){return None;}
+    if let Some(r)=&next.target_resolver {if unit(r)&&r.optional&&r.mode.as_deref()==Some("upTo")&&matches!(&r.count,Some(Expr::Const{value}) if value.as_u64()==Some(5))&&r.prompt_title.is_none()&&matches!(&next.effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1)){return Some(ForceContinuation::Shields);}}
+    else if let Effect::Defeat{target:Target::ArenaList(list)}=&next.effect {if matches!(&list.receiver,Expr::Ref{path} if path==&["game".to_string()])&&force_wave_predicate(&list.predicate){return Some(ForceContinuation::Wave);}}
+    None
+}
+fn force_wave_predicate(e:&Expr)->bool {
+    fn part(e:&Expr)->Option<u8>{match e {
+      Expr::Const{value} if value==&Value::Bool(true)=>Some(0),
+      Expr::Query{name,receiver,args} if name=="isUnit"&&args.is_empty()&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["card".to_string()])=>Some(1),
+      Expr::Unary{op,value} if op=="!"&&matches!(value.as_ref(),Expr::Query{name,receiver,args} if name=="hasSomeTrait"&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["card".to_string()])&&matches!(args.as_slice(),[Expr::Const{value:Value::String(s)}] if !s.is_empty()))=>Some(2),
+      Expr::Binary{op,left,right} if op=="<="&&matches!(left.as_ref(),Expr::Ref{path} if path==&["card".to_string(),"remainingHp".to_string()])&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(3))=>Some(4),
+      Expr::Binary{op,left,right} if op=="&&"=>Some(part(left)?|part(right)?),_=>None}}
+    part(e)==Some(7)
+}
+fn contains_force(effect:&Effect)->bool {
+    match effect {Effect::UseForce{..}|Effect::GainForce{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_force(on_true)||on_false.as_deref().is_some_and(contains_force),Effect::Select{effect,..}=>contains_force(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_force),_=>false}
+}
+fn contains_weakness(effect:&Effect)->bool {
+    match effect {Effect::GiveWeakness{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_weakness(on_true)||on_false.as_deref().is_some_and(contains_weakness),Effect::Select{effect,..}=>contains_weakness(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_weakness),_=>false}
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum NamedChooser { Own, Opponent }
 
 #[derive(Debug, Clone, Serialize)]
 pub enum Instruction {
@@ -710,6 +902,14 @@ pub enum Instruction {
     Jump { to: usize },
     Apply(Effect),
     Group(Effect),
+    /// Independent named selectors prepare before commitment and share one event window.
+    NamedGroup(Effect),
+    /// Independent mandatory selectors with separate prompt actors; original actor owns commitment.
+    NamedChooserGroup { effect: Effect, choosers: Vec<NamedChooser> },
+}
+impl Instruction {
+    pub fn group_effect(&self)->Option<&Effect> {match self {Self::Group(e)|Self::NamedGroup(e)|Self::NamedChooserGroup{effect:e,..}=>Some(e),_=>None}}
+    pub fn is_named_group(&self)->bool {matches!(self,Self::NamedGroup(_)|Self::NamedChooserGroup{..})}
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -731,6 +931,166 @@ pub struct Program {
     #[serde(skip)]
     pub select_ends: Vec<(usize, usize)>,
 }
+pub(crate) fn basezone_source_kind(entry:&Value)->Option<bool> {
+ let sides: Sides=serde_json::from_value(entry["abilities"].clone()).ok()?;
+ if !entry["card"]["unique"].is_boolean()||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null()){return None;}
+ fn header(a:&Ability)->bool {a.trigger=="constant"&&!a.optional&&a.costs.is_empty()&&a.condition.is_none()&&!a.coordinate&&a.then.is_none()&&a.if_you_do.is_none()&&a.context_title.is_empty()&&a.target_resolvers.is_empty()}
+ fn resolver(a:&Ability,kind:&str)->bool {a.target_resolver.as_ref().is_some_and(|r|r.owner=="self"&&r.card_type==kind&&r.zone.as_deref()==Some("arena")&&!r.optional&&r.arena.is_none()&&r.count.is_none()&&r.mode.is_none()&&r.prompt_title.is_none())}
+ fn num(e:&Expr,n:u64)->bool {matches!(e,Expr::Const{value} if value.as_u64()==Some(n))}
+ if entry["baseClass"]=="BaseCard"&&entry["card"]["types"]==serde_json::json!(["base"])&&entry["card"]["unique"]==false&&entry["card"]["hp"]==26&&entry["card"]["cost"].is_null()&&entry["card"]["power"].is_null()&&entry["keywordValues"]==serde_json::json!({})&&entry["card"]["keywords"]==serde_json::json!([])&&sides.card.len()==1&&sides.leader.is_empty()&&sides.unit.is_empty() {
+  let a=&sides.card[0];let text=match &a.effect {Effect::ModifyStats{power,hp,..} if num(power,0)&&num(hp,1)=>"Each leader unit you control gets +0/+1.",_=>"Each leader unit you control gets +1/+0."};if entry["card"]["text"]!=text||!(entry["card"]["epicAction"].is_null()||entry["card"]["epicAction"].as_str()==Some(""))||!entry["card"]["rules"].is_null()||!entry["card"]["deployBox"].is_null()||!entry["card"]["upgradePower"].is_null()||!entry["card"]["upgradeHp"].is_null(){return None;}if header(a)&&resolver(a,"leaderUnit")&&a.target_resolver.as_ref().unwrap().predicate.is_none()&&matches!(&a.effect,Effect::ModifyStats{target:Target::Name(n),power,hp,duration} if n=="chosen"&&duration=="persistent"&&((num(power,0)&&num(hp,1))||(num(power,1)&&num(hp,0)))){return Some(false);}return None;
+ }
+ fn reference(e:&Expr,p:&[&str])->bool {matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==p)}
+ fn cost_predicate(e:&Expr)->bool {matches!(e,Expr::Binary{op,left,right} if op=="&&"&&matches!(left.as_ref(),Expr::Query{name,receiver,args} if name=="isUnit"&&reference(receiver,&["card"])&&args.is_empty())&&matches!(right.as_ref(),Expr::Binary{op,left,right} if op==">="&&reference(left,&["card","cost"])&&num(right,3)))}
+ fn raid(a:&Ability,exclude:bool)->bool {if !header(a)||!resolver(a,"unit")||!matches!(&a.effect,Effect::GainKeyword{target:Target::Name(n),keyword,amount,duration} if n=="chosen"&&keyword=="raid"&&num(amount,1)&&duration=="persistent"){return false;}a.target_resolver.as_ref().unwrap().predicate.as_ref().is_some_and(|p| if exclude{matches!(p,Expr::Binary{op,left,right} if op=="&&"&&cost_predicate(left)&&matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,&["card"])&&reference(right,&["source"])))}else{cost_predicate(p)})}
+ if entry["card"]["text"]=="Friendly units that cost 3 or more gain Raid 1."&&entry["card"]["deployBox"]=="Raid 1\nOther friendly units that cost 3 or more gain Raid 1."&&entry["card"]["epicAction"]=="Epic Action: If you control 6 or more resources, deploy this leader."&&entry["card"]["rules"]=="Abilities that refer to a card’s cost always refer to its printed cost, regardless of modifiers.\n"&&entry["card"]["upgradePower"].is_null()&&entry["card"]["upgradeHp"].is_null()&&entry["baseClass"]=="LeaderUnitCard"&&entry["card"]["types"]==serde_json::json!(["leader"])&&entry["card"]["unique"]==true&&entry["card"]["cost"]==6&&entry["card"]["hp"]==5&&entry["card"]["power"]==5&&entry["card"]["arena"]=="ground"&&entry["keywordValues"]==serde_json::json!({"raid":1})&&entry["card"]["keywords"]==serde_json::json!(["raid"])&&sides.card.is_empty()&&sides.leader.len()==1&&sides.unit.len()==1&&raid(&sides.leader[0],false)&&raid(&sides.unit[0],true){Some(true)}else{None}
+}
+fn contains_arena_tokens(a:&Ability)->bool {fn walk(e:&Effect)->bool {match e {Effect::GiveShield{target:Target::ArenaList(_),..}|Effect::GiveExperience{target:Target::ArenaList(_),..}=>true,Effect::Conditional{on_true,on_false,..}=>walk(on_true)||on_false.as_deref().is_some_and(walk),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(walk),Effect::Select{effect,..}=>walk(effect),_=>false}}walk(&a.effect)||a.then.as_deref().is_some_and(contains_arena_tokens)||a.if_you_do.as_deref().is_some_and(contains_arena_tokens)||a.target_resolvers.iter().any(|d|walk(&d.effect))}
+fn arena_token_kind(a:&Ability)->Option<u8> {
+ if !["whenPlayed","whenDefeated"].contains(&a.trigger.as_str())||a.optional||!a.costs.is_empty()||a.condition.is_some()||a.target_resolver.is_some()||!a.target_resolvers.is_empty()||a.then.is_some()||a.if_you_do.is_some()||a.coordinate||!a.context_title.is_empty(){return None;}
+ let (list,shield)=match &a.effect {Effect::GiveShield{target:Target::ArenaList(l),amount:Expr::Const{value}} if value.as_u64()==Some(1)=>(l,true),Effect::GiveExperience{target:Target::ArenaList(l),amount:Expr::Const{value}} if value.as_u64()==Some(1)=>(l,false),_=>return None};
+ if !matches!(&list.receiver,Expr::Ref{path} if path==&["player"])||list.predicate.validate().is_err(){return None;}
+ let Expr::Binary{op,left,right}=&list.predicate else{return None};if op!="&&"||!matches!(left.as_ref(),Expr::Const{value} if value.as_bool()==Some(true)){return None;}
+ let reference=|e:&Expr,name:&str|matches!(e,Expr::Ref{path} if path==&[name]);
+ if shield {if a.trigger=="whenPlayed"&&matches!(right.as_ref(),Expr::Query{name,receiver,args} if name=="hasSomeKeyword"&&reference(receiver,"card")&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str()==Some("shielded"))){return Some(0);}return None;}
+ if matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="||"&&matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source"))&&matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source"))){return Some(1);}
+ if a.trigger=="whenDefeated"&&matches!(right.as_ref(),Expr::Query{name,receiver,args} if name=="hasSomeTrait"&&reference(receiver,"card")&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str()==Some("rebel"))){return Some(2);}
+ if a.trigger=="whenPlayed"&&matches!(right.as_ref(),Expr::Binary{op,left,right} if op==">"&&matches!(left.as_ref(),Expr::Ref{path} if path==&["card","damage"])&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(0))){return Some(3);}None
+}
+fn contains_arena_damage(ability:&Ability)->bool {
+    fn walk(v:&Value)->bool {match v {Value::Object(o)=>o.get("kind").and_then(Value::as_str)==Some("damage")&&o.get("target").is_some_and(|t|t["kind"]=="arenaList")||o.values().any(walk),Value::Array(a)=>a.iter().any(walk),_=>false}}
+    walk(&serde_json::to_value(ability).unwrap())
+}
+fn arena_damage_header(a:&Ability)->bool {
+    ["whenPlayed","onAttack","whenDefeated"].contains(&a.trigger.as_str())&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()
+}
+fn conditional_arena_damage_ability(a:&Ability)->bool {
+    if !arena_damage_header(a){return false;}
+    let Effect::Conditional{condition,on_true,on_false}=&a.effect else{return false;};
+    if !on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)){return false;}
+    let Effect::Damage{target:Target::ArenaList(list),amount:Expr::Const{value}}=on_true.as_ref() else{return false;};
+    if !matches!(&list.receiver,Expr::Ref{path} if path==&["opponent"]){return false;}
+    let Expr::Binary{op,left,right}=condition else{return false;};if op!=">="{return false;}
+    if a.trigger=="whenPlayed"&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(4))&&value.as_u64()==Some(3)&&matches!(&list.predicate,Expr::Const{value} if value.as_bool()==Some(true))&&matches!(left.as_ref(),Expr::Query{name,receiver,args} if name=="arenaUnitCount"&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["player"])&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_bool()==Some(true))) {return true;}
+    let ground=serde_json::json!({"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"const","value":"groundArena"}},"right":{"kind":"binary","op":"||","left":{"kind":"binary","op":"===","left":{"kind":"const","value":"groundArena"},"right":{"kind":"const","value":"anyArena"}},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"groundArena"}}}}});
+    a.trigger=="onAttack"&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(15))&&value.as_u64()==Some(1)&&matches!(left.as_ref(),Expr::Ref{path} if path==&["player","base","damage"])&&serde_json::to_value(&list.predicate).ok()==Some(ground)
+}
+fn arena_damage_ability(a:&Ability)->bool {
+    arena_damage_header(a)&&(matches!(&a.effect,Effect::Damage{target:Target::ArenaList(_),amount:Expr::Const{value}} if value.as_u64().is_some_and(|n|(1..=3).contains(&n)))||conditional_arena_damage_ability(a))
+}
+fn contains_new_arena_keywords(a:&Ability)->bool {
+    fn walk(v:&Value)->bool {(matches!(v["kind"].as_str(),Some("phaseModifiers"|"simultaneous"))&&v["effects"].as_array().is_some_and(|items|items.iter().any(|e|matches!(e["kind"].as_str(),Some("gainKeyword"|"loseKeyword"))&&e["target"]["kind"]=="arenaList"))) || (v["trigger"]=="onAttack"&&v["effect"]["kind"]=="gainKeyword"&&v["effect"]["target"]["kind"]=="arenaList") || match v {Value::Array(a)=>a.iter().any(walk),Value::Object(o)=>o.values().any(walk),_=>false}}
+    walk(&serde_json::to_value(a).expect("Ability serializes"))
+}
+fn validate_keyword_list(list:&ArenaListTarget)->Result<(),String> {
+    fn reference(e:&Expr,n:&str)->bool {matches!(e,Expr::Ref{path} if path==&[n])}
+    fn predicate(e:&Expr)->bool {match e {
+        Expr::Const{value}=>value.as_bool()==Some(true),
+        Expr::Binary{op,left,right} if op=="&&"=>predicate(left)&&predicate(right),
+        Expr::Query{name,receiver,args}=>name=="hasSomeTrait"&&reference(receiver,"card")&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|s|!s.is_empty())),
+        Expr::Binary{op,left,right} if op=="||"=>matches!(left.as_ref(),Expr::Unary{op,value} if op=="!"&&reference(value,"source"))&&matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&reference(left,"card")&&reference(right,"source")),
+        _=>false}}
+    if !matches!(&list.receiver,Expr::Ref{path} if path.len()==1&&["game","player","opponent"].contains(&path[0].as_str())) || !predicate(&list.predicate) {return Err("arena keyword list requires static receiver/trait/source exclusion".into());}
+    list.predicate.validate()
+}
+fn validate_arena_keyword_group(effect:&Effect)->Result<(),String> {
+    fn leaf(e:&Effect,gain_only:bool)->Result<(),String> {
+        match e {
+            Effect::GainKeyword{target:Target::ArenaList(list),keyword,amount:Expr::Const{value},duration} if duration=="phase"=>{validate_keyword(keyword)?;validate_keyword_list(list)?;if !value.as_u64().is_some_and(|n|if ["raid","restore"].contains(&keyword.as_str()) {(1..=65535).contains(&n)}else {n==1}) {return Err("arena keyword gain requires positive bounded literal".into());}Ok(())},
+            Effect::LoseKeyword{target:Target::ArenaList(list),keyword,duration} if !gain_only&&duration=="phase"=>{validate_keyword(keyword)?;validate_keyword_list(list)},
+            _=>Err("arena keyword group supports only literal phase keyword factories".into())}
+    }
+    match effect {
+        Effect::PhaseModifiers{effects} if effects.len()==2=>{
+            for e in effects {leaf(e,false)?;}
+            let target=|e:&Effect|match e {Effect::GainKeyword{target,..}|Effect::LoseKeyword{target,..}=>serde_json::to_value(target).unwrap(),_=>unreachable!()};
+            if target(&effects[0])!=target(&effects[1]) {return Err("one phase event requires identical target snapshots for all factories".into());}Ok(())
+        },
+        Effect::Simultaneous{effects} if effects.len()==2=>{for e in effects {leaf(e,true)?;}Ok(())},
+        _=>Err("arena keyword group requires exactly two independent factories".into())}
+}
+fn keyword_trait_and_exclusion(e:&Expr)->(bool,bool) {
+    match e {
+        Expr::Binary{op,left,right} if op=="&&"=>{let a=keyword_trait_and_exclusion(left);let b=keyword_trait_and_exclusion(right);(a.0||b.0,a.1||b.1)},
+        Expr::Query{name,..} if name=="hasSomeTrait"=>(true,false),
+        Expr::Binary{op,..} if op=="||"=>(false,true),
+        _=>(false,false),
+    }
+}
+fn arena_keyword_registration(a:&Ability)->bool {
+    let header=!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none();
+    header&&((a.trigger=="event"&&validate_arena_keyword_group(&a.effect).is_ok())||(a.trigger=="onAttack"&&matches!(&a.effect,Effect::GainKeyword{target:Target::ArenaList(list),keyword,amount:Expr::Const{value},duration} if keyword=="restore"&&value.as_u64()==Some(1)&&duration=="phase"&&validate_keyword_list(list).is_ok()&&matches!(&list.receiver,Expr::Ref{path} if path==&["player"])&&keyword_trait_and_exclusion(&list.predicate)==(true,true))))
+}
+#[derive(Clone,Copy,PartialEq,Eq)]
+enum WeaknessExtension { Torrent, Picador, Mixed, Sequence }
+fn selected_weakness(e:&Effect)->bool {matches!(e,Effect::GiveWeakness{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1))}
+fn weakness_selector(r:&TargetResolver,owner:&str)->bool {r.owner==owner&&r.card_type=="unit"&&r.zone.as_deref()==Some("anyAttackable")&&r.arena.is_none()&&!r.optional&&r.mode.is_none()&&r.count.is_none()&&r.predicate.is_none()&&r.prompt_title.is_none()}
+fn own_base_trait(e:&Expr)->bool {matches!(e,Expr::Query{name,receiver,args} if name=="hasSomeTrait"&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["player","base"])&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|n|!n.is_empty())))}
+fn torrent_amount(e:&Expr)->bool {matches!(e,Expr::Conditional{condition,then,r#else} if own_base_trait(condition)&&matches!(then.as_ref(),Expr::Const{value} if value.as_u64()==Some(2))&&matches!(r#else.as_ref(),Expr::Const{value} if value.as_u64()==Some(1)))}
+fn torrent_title(a:&Ability)->bool {
+    let Effect::GiveWeakness{amount:Expr::Conditional{condition,..},..}=&a.effect else{return false;};
+    a.context_title.len()==5&&matches!(&a.context_title[0],Expr::Const{value} if value.as_str()==Some("Give "))&&matches!(&a.context_title[1],Expr::Conditional{condition:c,then,r#else} if serde_json::to_value(c).unwrap()==serde_json::to_value(condition).unwrap()&&matches!(then.as_ref(),Expr::Const{value} if value.as_str()==Some("2 Weakness tokens"))&&matches!(r#else.as_ref(),Expr::Const{value} if value.as_str()==Some("a Weakness token")))&&matches!(&a.context_title[2],Expr::Const{value} if value.as_str()==Some(" to "))&&matches!(&a.context_title[3],Expr::Conditional{condition,then,r#else} if matches!(condition.as_ref(),Expr::Ref{path} if path==&["target"])&&matches!(then.as_ref(),Expr::Ref{path} if path==&["target","title"])&&matches!(r#else.as_ref(),Expr::Const{value} if value.as_str()==Some("a unit")))&&matches!(&a.context_title[4],Expr::Const{value} if value.as_str()==Some(""))
+}
+fn weakness_extension(a:&Ability)->Option<WeaknessExtension> {
+    let header=!a.requires_confirmation&&!a.coordinate&&a.costs.is_empty()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.if_you_do.is_none();
+    if !header{return None;}
+    if a.trigger=="event"&&!a.optional&&a.then.is_none()&&a.target_resolver.as_ref().is_some_and(|r|weakness_selector(r,"any"))&&matches!(&a.effect,Effect::GiveWeakness{target:Target::Name(n),amount} if n=="chosen"&&torrent_amount(amount))&&torrent_title(a){return Some(WeaknessExtension::Torrent);}
+    if !a.context_title.is_empty(){return None;}
+    if a.trigger=="whenPlayed"&&!a.optional&&a.target_resolver.is_none()&&matches!(&a.effect,Effect::CreateTokenUnit{token_type,target:Target::Name(n),amount:Expr::Const{value},enters_ready} if token_type=="beast"&&n=="ownPlayer"&&value.as_u64()==Some(1)&&!*enters_ready)&&a.then.as_ref().is_some_and(|next|next.trigger.is_empty()&&!next.optional&&!next.requires_confirmation&&!next.coordinate&&next.costs.is_empty()&&next.context_title.is_empty()&&next.target_resolvers.is_empty()&&next.condition.is_none()&&next.then.is_none()&&next.if_you_do.is_none()&&next.target_resolver.as_ref().is_some_and(|r|weakness_selector(r,"self"))&&selected_weakness(&next.effect)){return Some(WeaknessExtension::Picador);}
+    if !a.optional||a.then.is_some()||!a.target_resolver.as_ref().is_some_and(|r|weakness_selector(r,"any")){return None;}
+    if ["whenPlayed","whenDefeated"].contains(&a.trigger.as_str())&&matches!(&a.effect,Effect::Simultaneous{effects} if effects.len()==2&&matches!(&effects[0],Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1))&&selected_weakness(&effects[1])){return Some(WeaknessExtension::Mixed);}
+    if a.trigger=="whenPlayed"&&matches!(&a.effect,Effect::Sequence{effects} if effects.len()==2&&selected_weakness(&effects[0])&&matches!(&effects[1],Effect::Conditional{condition:Expr::Ref{path},on_true,on_false} if path==&["target","unique"]&&matches!(on_true.as_ref(),Effect::Exhaust{target:Target::Name(n)} if n=="chosen")&&on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)))){return Some(WeaknessExtension::Sequence);}
+    None
+}
+fn named_unit_base_damage(ability: &Ability) -> bool {
+    ability.trigger == "onAttack" && ability.target_resolvers.len() == 2 &&
+    ability.target_resolvers.iter().enumerate().all(|(index, descriptor)| {
+        let r = &descriptor.target_resolver;
+        let domain = if index == 0 {
+            r.owner == "opponent" && r.card_type == "any" && r.zone.as_deref() == Some("arena") &&
+                r.arena.as_deref() == Some("ground")
+        } else {
+            r.owner == "any" && r.card_type == "base" && r.zone.as_deref() == Some("anyAttackable") && r.arena.is_none()
+        };
+        domain && !r.optional && r.mode.is_none() && r.count.is_none() && r.predicate.is_none() &&
+            r.prompt_title.as_ref().is_some_and(|title| !title.is_empty()) &&
+            matches!(&descriptor.effect, Effect::Damage { target: Target::Name(name), amount: Expr::Const { value } }
+                if name == "chosen" && value.as_u64() == Some(2))
+    })
+}
+
+fn contains_keyword_inventory(v:&Value)->bool {
+    (v["kind"]=="ref"&&v["path"]==serde_json::json!(["card","keywords","length"])) || match v {Value::Object(o)=>o.values().any(contains_keyword_inventory),Value::Array(a)=>a.iter().any(contains_keyword_inventory),_=>false}
+}
+fn keyword_inventory_registration(a:&Ability)->bool {
+    if a.requires_confirmation||a.coordinate||!a.costs.is_empty()||!a.context_title.is_empty()||!a.target_resolvers.is_empty()||a.condition.is_some()||a.then.is_some()||a.if_you_do.is_some(){return false;}
+    let Some(r)=&a.target_resolver else{return false;};
+    if r.card_type!="unit"||r.optional||r.mode.is_some()||r.count.is_some()||r.arena.is_some()||r.prompt_title.is_some(){return false;}
+    let length=serde_json::json!({"kind":"ref","path":["card","keywords","length"]});
+    let more=|n:u64|serde_json::json!({"kind":"binary","op":">","left":length,"right":{"kind":"const","value":n}});
+    let predicate=r.predicate.as_ref().and_then(|e|serde_json::to_value(e).ok());
+    if a.trigger=="whenPlayed"&&a.optional&&r.owner=="any"&&r.zone.as_deref()==Some("anyAttackable")&&matches!(&a.effect,Effect::Exhaust{target:Target::Name(n)} if n=="chosen") {return predicate==Some(more(0));}
+    let excluded=serde_json::json!({"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}});
+    let unit=serde_json::json!({"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]});
+    let expected=serde_json::json!({"kind":"binary","op":"&&","left":{"kind":"binary","op":"&&","left":excluded,"right":unit},"right":more(1)});
+    a.trigger=="constant"&&!a.optional&&r.owner=="self"&&r.zone.as_deref()==Some("arena")&&predicate==Some(expected)&&matches!(&a.effect,Effect::ModifyStats{target:Target::Name(n),power:Expr::Const{value:p},hp:Expr::Const{value:h},duration} if n=="chosen"&&duration=="persistent"&&p.as_i64()==Some(2)&&h.as_i64()==Some(2))
+}
+
+// Complete ordinary upgrade registrations only; parent getters remain asserting.
+fn parent_upgrade_registration(a:&Ability)->Option<bool> {
+    if a.trigger!="whenPlayed"||a.optional||a.requires_confirmation||a.coordinate||!a.costs.is_empty()||a.target_resolver.is_some()||!a.target_resolvers.is_empty()||a.condition.is_some()||a.then.is_some()||a.if_you_do.is_some(){return None;}
+    let Effect::Conditional{condition,on_true,on_false}=&a.effect else{return None;};
+    if !on_false.as_ref().is_some_and(|e|matches!(e.as_ref(),Effect::NoAction)){return None;}
+    let parent=|e:&Expr,name:&str|matches!(e,Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["source",name]);
+    if a.context_title.is_empty() && matches!(on_true.as_ref(),Effect::CreateTokenUnit{token_type,amount:Expr::Const{value},target:Target::Name(n),enters_ready} if token_type=="beast"&&value.as_u64()==Some(1)&&n=="ownPlayer"&&!*enters_ready) {
+        if let Expr::Binary{op,left,right}=condition {
+            if op=="&&" && matches!(left.as_ref(),Expr::Binary{op,left,right} if ["!=","!=="].contains(&op.as_str())&&parent(left,"parentCard")&&matches!(right.as_ref(),Expr::Const{value} if value.is_null())) && matches!(right.as_ref(),Expr::Query{name,receiver,args} if name=="hasSomeTrait"&&parent(receiver,"parentCard")&&args.len()==1&&matches!(&args[0],Expr::Array{items} if !items.is_empty()&&items.iter().all(|e|matches!(e,Expr::Const{value} if value.as_str().is_some_and(|s|!s.is_empty()))))) {return Some(false);}
+        }
+    }
+    if matches!(condition,Expr::Query{name,receiver,args} if name=="hasSomeAspect"&&parent(receiver,"parentUnit")&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|s|!s.is_empty()))) && matches!(on_true.as_ref(),Effect::GiveShield{target:Target::Expression(e),amount:Expr::Const{value}} if parent(e,"parentUnit")&&value.as_u64()==Some(1)) && a.context_title.len()==3 && matches!(&a.context_title[0],Expr::Const{value} if value.is_string())&&matches!(&a.context_title[2],Expr::Const{value} if value.is_string())&&matches!(&a.context_title[1],Expr::Binary{op,left,right} if op=="??"&&matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["source","parentUnit","title"])&&matches!(right.as_ref(),Expr::Const{value} if value.is_string())) {return Some(true);}
+    None
+}
+
 impl Program {
     /// Where the effect of the selection at `pc` ends. A selection inside an effect covers its own effect, the way
     /// forceteki's SelectCardSystem checks only its immediate effect; an ability's target covers the rest of the program.
@@ -748,17 +1108,27 @@ impl Program {
                 Instruction::Select(resolver) => resolver.visit_expression_roots_mut(visit),
                 Instruction::Conditional { condition, .. } => visit(condition),
                 Instruction::Apply(effect) | Instruction::Group(effect) => effect.visit_expression_roots_mut(visit),
+                // Named selector groups stay portable, like the named resolvers they prepare.
+                Instruction::NamedGroup(_) | Instruction::NamedChooserGroup { .. } => {}
                 Instruction::EndStep | Instruction::Commit | Instruction::IfResult { .. } | Instruction::Jump { .. } => {}
             }
         }
     }
     pub fn compile(ability: &Ability) -> Result<Self, String> {
+        if contains_arena_scalar(&serde_json::to_value(ability).map_err(|e|e.to_string())?) && !arena_query_ability(ability) {return Err("arena scalar queries require exact reviewed registration".into());}
+        if parent_upgrade_registration(ability)==Some(false) {
+            let mut normalized=ability.clone();
+            if let Effect::Conditional{condition:Expr::Binary{left,..},..}=&mut normalized.effect {
+                if let Expr::Binary{op,..}=left.as_mut(){if op=="!="{*op="!==".into();return Self::compile(&normalized);}}
+            }
+        }
         // Deck discard has per-card events plus an aggregate event. The scalar
         // result is not a modeled engine event payload; reject payload captures.
         fn contains(value:&Value, predicate:fn(&Value)->bool)->bool {
             predicate(value) || match value {Value::Array(a)=>a.iter().any(|v|contains(v,predicate)),Value::Object(o)=>o.values().any(|v|contains(v,predicate)),_=>false}
         }
         let encoded=serde_json::to_value(ability).map_err(|e|e.to_string())?;
+        if contains_keyword_inventory(&encoded)&&!keyword_inventory_registration(ability){return Err("keyword inventory requires bounded optional unit Exhaust or other-friendly persistent stat registration".into());}
         fn binder_context(value:&Value,live:bool)->Result<(),String> {
             if value["kind"]=="ref"&&value["path"][0]=="modifierTarget"&&!live {return Err("modifierTarget only exists in persistent stat expressions".into());}
             if value["kind"]=="query"&&value["name"]=="resourcePairs"&&!live {return Err("resourcePairs only exists in persistent stat expressions".into());}
@@ -779,13 +1149,23 @@ impl Program {
                 _ => e.validate(),
             }
         }
-        if ability.target_resolver.as_ref().is_some_and(|r|r.card_type=="upgrade" && (r.is_multiple() || !matches!(ability.effect,Effect::Defeat {..}))) {return Err("upgrade selection supports only scalar defeat".into());}
+        if let Effect::Defeat {target:Target::ArenaList(list)}=&ability.effect {
+            if ability.trigger!="event" || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate {return Err("arena-list defeat requires a standalone event without selectors or continuations".into());}
+            list.validate_scope(true)?;
+        }
+        if let Effect::ModifyStats {target:Target::ArenaList(list),power,hp,duration}=&ability.effect {
+            if !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.target_resolver.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.condition.is_some() || ability.coordinate || ability.optional || ability.requires_confirmation || !ability.costs.is_empty() || !ability.context_title.is_empty() || !ability.target_resolvers.is_empty() || duration!="phase" {return Err("arena-list phase stats require a standalone event or WhenPlayed without selectors, costs or continuations".into());}
+            list.validate_phase_stats()?;
+            fn literal(e:&Expr)->bool {match e {Expr::Const {value}=>value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n)),Expr::Unary {op,value} if ["+","-"].contains(&op.as_str())=>matches!(value.as_ref(),Expr::Const {value} if value.as_i64().is_some_and(|n|(0..=65535).contains(&n))),_=>false}}
+            if !literal(power)||!literal(hp) {return Err("arena-list phase stats require bounded signed literals".into());}
+        }
         if ability.coordinate && !["constant","onAttack"].contains(&ability.trigger.as_str()) {return Err("Coordinate supports only constant or onAttack registrations".into());}
         if ability.then.as_ref().is_some_and(|a|a.coordinate) || ability.if_you_do.as_ref().is_some_and(|a|a.coordinate) {return Err("Coordinate cannot register on a continuation".into());}
         if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
         fn title_literal_bytes(e: &Expr) -> usize {
             match e {
                 Expr::Compiled(compiled) => title_literal_bytes(&compiled.original),
+ Expr::ArenaList{receiver,predicate}|Expr::ArenaFilter{receiver,predicate}|Expr::ArenaSome{receiver,predicate}=>title_literal_bytes(receiver)+title_literal_bytes(predicate),Expr::ArenaLength{receiver}=>title_literal_bytes(receiver),
                 Expr::Const {value} => value.as_str().map_or(0, str::len),
                 Expr::Array {items} => items.iter().map(title_literal_bytes).sum(),
                 Expr::Math {args, ..} => args.iter().map(title_literal_bytes).sum(),
@@ -798,12 +1178,14 @@ impl Program {
         }
         let mut literal_bytes = 0;
         for fragment in &ability.context_title {
-            validate_title(fragment)?;
+            if parent_upgrade_registration(ability)==Some(true) && matches!(fragment,Expr::Binary{op,..} if op=="??") {
+                // This exact title-only form never broadens general Expr validation.
+            } else { validate_title(fragment)?; }
             literal_bytes += title_literal_bytes(fragment);
             if literal_bytes > 1024 { return Err("context title aggregate literal bytes exceed capacity".into()); }
         }
 
-        if !["action", "whenPlayed", "whenDefeated", "onAttack", "event", "constant"]
+        if !["action", "whenPlayed", "whenDefeated", "onAttack", "onDefense", "event", "constant"]
             .contains(&ability.trigger.as_str())
         {
             return Err(format!("unsupported runtime trigger {}", ability.trigger));
@@ -918,6 +1300,167 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        fn oversized(v:&Value)->bool {v["mode"]=="upTo"&&v["count"]["value"].as_u64().is_some_and(|n|n>3) || match v {Value::Object(o)=>o.values().any(oversized),Value::Array(a)=>a.iter().any(oversized),_=>false}}
+        if depth==0&&oversized(&serde_json::to_value(ability).map_err(|e|e.to_string())?)&&force_continuation(ability)!=Some(ForceContinuation::Shields){return Err("selectors above three require exact Force Shield continuation".into());}
+
+        if depth==0 {if let Some(form)=force_continuation(ability) {
+            match form {
+              ForceContinuation::Drain=>{if let Effect::Simultaneous{effects}=&ability.effect {if let Effect::Select{target_resolver,..}=&effects[0]{target_resolver.validate_inline()?;}}self.instructions.push(Instruction::Group(ability.effect.clone()));},
+              ForceContinuation::Wave|ForceContinuation::Shields=>{
+                self.instructions.push(Instruction::Apply(ability.effect.clone()));
+                let skip=self.instructions.len();self.instructions.push(Instruction::IfResult{skip:0});self.instructions.push(Instruction::EndStep);
+                let next=ability.if_you_do.as_ref().unwrap();
+                if let Some(r)=&next.target_resolver {r.validate()?;self.instructions.push(Instruction::Select(r.clone()));self.instructions.push(Instruction::Group(next.effect.clone()));}
+                else {if let Effect::Defeat{target:Target::ArenaList(list)}=&next.effect {list.predicate.validate()?;}self.instructions.push(Instruction::Apply(next.effect.clone()));}
+                self.instructions[skip]=Instruction::IfResult{skip:self.instructions.len()};
+              }
+            }return Ok(());
+        }}
+        if depth==0 {if let Some(form)=weakness_extension(ability) {
+            if let Some(r)=&ability.target_resolver {r.validate()?;self.instructions.push(Instruction::Select(r.clone()));}
+            match form {
+                WeaknessExtension::Torrent|WeaknessExtension::Mixed=>self.instructions.push(Instruction::Group(ability.effect.clone())),
+                WeaknessExtension::Sequence=>self.compile_effect(&ability.effect,0)?,
+                WeaknessExtension::Picador=>{self.compile_effect(&ability.effect,0)?;let next=ability.then.as_ref().unwrap();let r=next.target_resolver.as_ref().unwrap();r.validate()?;self.instructions.push(Instruction::Select(r.clone()));self.compile_effect(&next.effect,1)?;},
+            }
+            return Ok(());
+        }}
+
+        if contains_arena_tokens(ability)&&(depth!=0||arena_token_kind(ability).is_none()){return Err("arena tokens require verified mandatory standalone unit registration".into());}
+        if contains_new_arena_keywords(ability) {
+            if depth!=0||!arena_keyword_registration(ability) {return Err("arena keyword batches require standalone event or ordinary OnAttack Restore grant".into());}
+            self.instructions.push(Instruction::Apply(ability.effect.clone()));return Ok(());
+        }
+
+        if contains_arena_damage(ability) && (depth!=0 || !arena_damage_ability(ability)) {return Err("arena damage requires a mandatory standalone ordinary-unit play/attack/death registration".into());}
+        if depth==0 && contains_resource(ability) {
+            let header=!ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
+            let event=ability.trigger=="event" && !ability.optional && resource_self(&ability.effect) && ability.if_you_do.is_none();
+            let death=ability.trigger=="whenDefeated" && ability.optional && ability.if_you_do.is_none() && matches!(&ability.effect,Effect::Conditional{condition:Expr::Binary{op,left,right},on_true,on_false} if op=="===" && matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["source","zoneName"]) && matches!(right.as_ref(),Expr::Const{value} if value.as_str()==Some("discard")) && resource_self(on_true) && on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)));
+            let force=ability.trigger=="whenDefeated" && ability.optional && matches!(&ability.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && ability.if_you_do.as_ref().is_some_and(|n|resource_self(&n.effect));
+            if !header || !(event||death||force) {return Err("resourceCard requires bounded self event/death registration".into());}
+        }
+        if contains_force_presence(ability) {
+            let header=depth==0 && ability.trigger=="constant" && !ability.optional && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolvers.is_empty() && ability.then.is_none() && ability.if_you_do.is_none() && matches!(&ability.condition,Some(Expr::Ref{path}) if path.iter().map(String::as_str).collect::<Vec<_>>()==["player","hasTheForce"]);
+            let keyword=ability.target_resolver.is_none() && matches!(&ability.effect,Effect::GainKeyword{target:Target::Name(n),duration,keyword,amount:Expr::Const{value}} if n=="self" && duration=="persistent" && ["grit","sentinel","ambush"].contains(&keyword.as_str()) && value.as_u64()==Some(1));
+            let aura=ability.target_resolver.as_ref().is_some_and(|r|r.owner=="self" && r.card_type=="unit" && r.zone.as_deref()==Some("arena") && r.arena.is_none() && !r.optional && r.mode.is_none() && r.count.is_none() && r.prompt_title.is_none() && matches!(&r.predicate,Some(Expr::Query{name,receiver,args}) if name=="isUnit" && args.is_empty() && matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card"))) && matches!(&ability.effect,Effect::ModifyStats{target:Target::Name(n),duration,power:Expr::Const{value:p},hp:Expr::Const{value:h}} if n=="chosen" && duration=="persistent" && p.as_i64().is_some_and(|n|(-65535..=65535).contains(&n)) && h.as_i64()==Some(0));
+            if !header || !(keyword||aura){return Err("Force presence supports bounded ordinary constant own-player keyword or friendly literal stat aura".into());}
+        }
+        if contains_force(&ability.effect) {
+            let root=depth==0 && ["whenPlayed","whenDefeated","onAttack","event"].contains(&ability.trigger.as_str()) && !ability.requires_confirmation && !ability.coordinate && ability.context_title.is_empty() && ability.costs.is_empty() && ability.target_resolver.is_none() && ability.target_resolvers.is_empty() && ability.condition.is_none() && ability.then.is_none();
+            let gain=["whenPlayed","onAttack","whenDefeated"].contains(&ability.trigger.as_str()) && matches!(&ability.effect,Effect::GainForce{target:Target::Name(n)} if n=="ownPlayer") && !ability.optional && ability.if_you_do.is_none();
+            let use_force=["whenPlayed","whenDefeated","event"].contains(&ability.trigger.as_str()) && matches!(&ability.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && ability.optional==(ability.trigger!="event") && ability.if_you_do.as_ref().is_some_and(|next| {
+                if !next.trigger.is_empty() || next.coordinate || !next.context_title.is_empty() || !next.costs.is_empty() || next.optional || next.requires_confirmation || !next.target_resolvers.is_empty() || next.condition.is_some() || next.then.is_some() || next.if_you_do.is_some() {return false;}
+                fn bounded(e:&Expr)->bool {matches!(e,Expr::Const{value} if value.as_i64().is_some_and(|n|(-65535..=65535).contains(&n))) || matches!(e,Expr::Unary{op,value} if op=="-" && matches!(value.as_ref(),Expr::Const{value} if value.as_u64().is_some_and(|n|n<=65535)))}
+                match (&next.target_resolver,&next.effect) {
+                    (None,Effect::ResourceCard{target:Target::Name(n)})=>ability.trigger=="whenDefeated" && n=="self",
+                    (None,Effect::Draw{target:Target::Name(n),amount:Expr::Const{value}})=>ability.trigger=="whenPlayed" && n=="ownPlayer"&&value.as_u64()==Some(2),
+                    (None,Effect::Ready{target:Target::Name(n)})=>ability.trigger=="whenPlayed" && n=="self",
+                    (None,Effect::DiscardOwnHand{target:Target::Name(n),amount:Expr::Const{value}})=>ability.trigger=="whenDefeated" && n=="enemyPlayer"&&value.as_u64()==Some(1),
+                    (Some(r),effect)=> {
+                        let domain=(["any","self"].contains(&r.owner.as_str()) && ["unit","base"].contains(&r.card_type.as_str()) && matches!(r.zone.as_deref(),Some("arena"|"anyAttackable"))) || (r.owner=="any" && r.card_type=="any" && r.zone.as_deref()==Some("base") && matches!(effect,Effect::Heal{..}));
+                        let selector=domain && r.arena.is_none() && !r.optional && r.mode.is_none() && r.count.is_none() && r.prompt_title.is_none() && r.predicate.is_none();
+                        selector && match effect {
+                            Effect::ModifyStats{target:Target::Name(n),duration,power,hp}=>r.card_type=="unit"&&n=="chosen"&&duration=="phase"&&bounded(power)&&bounded(hp),
+                            Effect::Heal{target:Target::Name(n),amount:Expr::Const{value}}=>n=="chosen"&&value.as_u64().is_some_and(|n|(1..=65535).contains(&n)),
+                            Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}}=>r.card_type=="unit"&&n=="chosen"&&value.as_u64().is_some_and(|n|(1..=65535).contains(&n)),
+                            _=>false,
+                        }
+                    },
+                    _=>false,
+                }
+            });
+            if !root || !(gain||use_force) {return Err("Force requires standalone ordinary play/death/event use and one bounded independent success continuation".into());}
+        }
+
+        if contains_weakness(&ability.effect) {
+            fn primitive(e:&Effect)->bool {matches!(e,Effect::GiveWeakness{amount:Expr::Const{value},target:Target::Name(n)} if value.as_u64()==Some(1)&&n=="chosen")}
+            let shape=primitive(&ability.effect) || matches!(&ability.effect,Effect::Conditional{condition:Expr::Binary{op,left,right},on_true,on_false} if op==">=" && matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["player","resources","length"]) && matches!(right.as_ref(),Expr::Const{value} if value.as_u64().is_some_and(|n|n<=1000)) && primitive(on_true) && on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)));
+            fn damaged_predicate(e:&Expr)->bool {matches!(e,Expr::Binary{op,left,right} if op=="&&" && matches!(left.as_ref(),Expr::Query{name,receiver,args} if name=="isUnit"&&args.is_empty()&&matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="!=="&&matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","damage"])&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(0))))}
+            let selector=ability.target_resolver.as_ref().is_some_and(|r| r.owner=="any" && r.card_type=="unit" && matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) && r.arena.is_none() && !r.optional && r.mode.is_none() && r.count.is_none() && r.prompt_title.is_none() && r.predicate.as_ref().map_or(true,damaged_predicate));
+            if depth!=0 || !["whenPlayed","whenDefeated"].contains(&ability.trigger.as_str()) || !ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !ability.target_resolvers.is_empty() || !shape || !selector {return Err("Weakness requires an optional standalone scalar unit play/death registration with amount one".into());}
+        }
+
+        if !ability.target_resolvers.is_empty() {
+            if depth!=0 || !["event","whenPlayed","onAttack"].contains(&ability.trigger.as_str()) || ability.target_resolvers.len()!=2 || ability.target_resolver.is_some() || ability.optional || ability.requires_confirmation || ability.coordinate || !ability.context_title.is_empty() || !ability.costs.is_empty() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || !matches!(ability.effect,Effect::NoAction) {
+                return Err("named selectors require two independent standalone event/WhenPlayed/OnAttack stat systems".into());
+            }
+            if ability.target_resolvers.iter().any(|d|d.chooser!="self") {
+                let damage=ability.target_resolvers.iter().all(|d|matches!(&d.effect,Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(3)));
+                let defeat=ability.target_resolvers.iter().all(|d|matches!(&d.effect,Effect::Defeat{target:Target::Name(n)} if n=="chosen"));
+                if !(damage&&ability.trigger=="whenPlayed" || defeat&&["whenPlayed","event"].contains(&ability.trigger.as_str())) {return Err("opponent named chooser requires ordinary play damage3 or play/event defeat pair".into());}
+                let expected_type=if ability.trigger=="event" {"nonLeaderUnit"}else{"unit"};
+                let expected_zone=if damage {"anyAttackable"}else{"arena"};
+                let mut names=std::collections::HashSet::new();let mut effects=Vec::new();
+                for (index,d) in ability.target_resolvers.iter().enumerate() {
+                    let owner=if index==0 {"opponent"}else{"self"};let r=&d.target_resolver;
+                    if d.name.is_empty() || ["target","constructor","prototype","__proto__"].contains(&d.name.as_str()) || !d.name.chars().next().is_some_and(|c|c.is_ascii_alphabetic()||c=='_') || !d.name.chars().all(|c|c.is_ascii_alphanumeric()||c=='_') || !names.insert(d.name.as_str()) || d.chooser!=owner || r.owner!=owner || r.card_type!=expected_type || r.zone.as_deref()!=Some(expected_zone) || r.arena.is_some() || r.optional || r.mode.is_some() || r.count.is_some() || r.predicate.is_some() || r.prompt_title.is_some() {return Err("opponent named chooser requires mandatory opposite/self scalar domains and default prompts".into());}
+                    r.validate()?;effects.push(Effect::Select{target_resolver:r.clone(),effect:Box::new(d.effect.clone())});
+                }
+                let effect=Effect::Simultaneous{effects};self.validate_group(&effect,1)?;
+                self.instructions.push(Instruction::NamedChooserGroup{effect,choosers:vec![NamedChooser::Opponent,NamedChooser::Own]});return Ok(());
+            }
+            let fervor=matches!(&ability.target_resolvers[0].effect,Effect::Ready{target:Target::Name(n)} if n=="chosen") && matches!(&ability.target_resolvers[1].effect,Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(3));
+            let sanctuary=matches!(&ability.target_resolvers[0].effect,Effect::Exhaust{target:Target::Name(n)} if n=="chosen") && matches!(&ability.target_resolvers[1].effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1));
+            fn minus(e:&Expr,n:u64)->bool {matches!(e,Expr::Unary{op,value} if op=="-" && matches!(value.as_ref(),Expr::Const{value} if value.as_u64()==Some(n)))}
+            let mislead=matches!(&ability.target_resolvers[0].effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1)) && matches!(&ability.target_resolvers[1].effect,Effect::ModifyStats{target:Target::Name(n),duration,power,hp} if n=="chosen"&&duration=="phase"&&minus(power,3)&&minus(hp,0));
+            if (fervor||sanctuary||mislead) && ability.trigger!="event" {return Err("named mixed systems require standalone event".into());}
+            let damage=ability.target_resolvers.iter().all(|d|matches!(d.effect,Effect::Damage{..}));
+            if damage && !["whenPlayed","onAttack"].contains(&ability.trigger.as_str()) {return Err("named damage requires ordinary play/attack registration".into());}
+            let unit_base_damage = named_unit_base_damage(ability);
+            let mut names=std::collections::HashSet::new();
+            let mut effects=Vec::new();
+            for (index,descriptor) in ability.target_resolvers.iter().enumerate() {
+                if descriptor.name.is_empty() || descriptor.name=="target" || !descriptor.name.chars().all(|c|c.is_ascii_alphanumeric()||c=='_') || !names.insert(descriptor.name.as_str()) || descriptor.chooser!="self" {return Err("named selectors require distinct ordinary names and own chooser".into());}
+                let mut r=descriptor.target_resolver.clone();
+                r.prompt_title=None;
+                r.validate()?;
+                if fervor||sanctuary||mislead {
+                    let common=!r.optional && r.mode.is_none() && r.count.is_none() && matches!(r.zone.as_deref(),Some("arena"|"anyAttackable"));
+                    let domain=if fervor||mislead {r.owner=="any" && r.card_type=="unit" && r.arena.is_none() && r.predicate.is_none()} else if index==0 {r.owner=="opponent" && r.card_type=="any" && r.zone.as_deref()==Some("arena") && r.arena.is_none() && r.predicate.is_none()} else {
+                        r.owner=="self" && r.card_type=="any" && r.zone.as_deref()==Some("anyAttackable") && r.arena.is_none() && matches!(&r.predicate,Some(Expr::Binary{op,left,right}) if op=="&&" && matches!(left.as_ref(),Expr::Query{name,receiver,args} if name=="isUnit"&&args.is_empty()&&matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card")) && matches!(right.as_ref(),Expr::Binary{op,left,right} if op=="<="&&matches!(left.as_ref(),Expr::Ref{path} if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","cost"])&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(3))))
+                    };
+                    if !common||!domain || (sanctuary && descriptor.target_resolver.prompt_title.is_some()) {return Err("named mixed selector domain is unverified".into());}
+                    let effect=if mislead && index==1 {Effect::ModifyStats{target:Target::Name("chosen".into()),duration:"phase".into(),power:Expr::number(-3),hp:Expr::number(0)}} else {descriptor.effect.clone()};
+                    effects.push(Effect::Select{target_resolver:r,effect:Box::new(effect)});continue;
+                }
+                if unit_base_damage {
+                    effects.push(Effect::Select { target_resolver: r, effect: Box::new(descriptor.effect.clone()) });
+                    continue;
+                }
+                if damage {
+                    if r.owner!=if index==0 {"self"}else{"opponent"} || r.card_type!="unit" || r.optional || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) || r.predicate.is_some() || descriptor.target_resolver.prompt_title.is_some() {return Err("named damage requires mandatory own/opponent scalar arena units with default prompts".into());}
+                    let Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}}=&descriptor.effect else {return Err("named damage requires literal chosen amounts".into());};
+                    if n!="chosen" || !value.as_u64().is_some_and(|n|(1..=2).contains(&n)) {return Err("named damage requires one or two ability damage".into());}
+                    effects.push(Effect::Select{target_resolver:r,effect:Box::new(descriptor.effect.clone())});
+                    continue;
+                }
+                if r.owner!="any" || r.card_type!="unit" || (!r.optional && !(ability.trigger=="onAttack" && index==0)) || r.mode.is_some() || r.count.is_some() || !matches!(r.zone.as_deref(),Some("arena"|"anyAttackable")) || r.arena.as_deref().is_some_and(|a|!["ground","space"].contains(&a)) {return Err("named selectors require optional scalar any-owner arena units".into());}
+                if ability.trigger=="onAttack" && r.predicate.is_some() {return Err("named attack selectors require unconditional arena domains".into());}
+                if let Some(predicate)=&r.predicate {
+                    if !matches!(predicate,Expr::Query{name,receiver,args} if name=="hasSomeTrait" && matches!(receiver.as_ref(),Expr::Ref{path} if path.len()==1&&path[0]=="card") && args.len()==1 && matches!(&args[0],Expr::Const{value} if value.as_str().is_some_and(|v|!v.is_empty()))) {return Err("named selector predicates require one literal unit trait".into());}
+                }
+                fn literal(e:&Expr,negative:bool)->Option<Expr> {
+                    match e {Expr::Const{value} if value.as_i64().is_some_and(|v|(-65535..=65535).contains(&v))=>Some(e.clone()),Expr::Unary{op,value} if negative && op=="-"=>match value.as_ref(){Expr::Const{value}=>value.as_u64().filter(|v|*v<=65535).map(|v|Expr::Const{value:Value::from(-(v as i64))}),_=>None},_=>None}
+                }
+                let effect=match &descriptor.effect {
+                    Effect::ModifyStats{target:Target::Name(n),duration,power,hp} if n=="chosen" && duration=="phase"=>Effect::ModifyStats{target:Target::Name(n.clone()),duration:duration.clone(),power:literal(power,ability.trigger=="onAttack").ok_or("named selectors require literal scalar phase power")?,hp:literal(hp,ability.trigger=="onAttack").ok_or("named selectors require literal scalar phase HP")?},
+                    _=>return Err("named selectors require literal scalar phase stats".into()),
+                };
+                effects.push(Effect::Select{target_resolver:r,effect:Box::new(effect)});
+            }
+            let effect=Effect::Simultaneous{effects};
+            self.validate_group(&effect,1)?;
+            self.instructions.push(Instruction::NamedGroup(effect));
+            return Ok(());
+        }
+
+        if matches!(&ability.effect,Effect::GainKeyword {target:Target::ArenaList(_),..}|Effect::LoseKeyword {target:Target::ArenaList(_),..}) {
+            if depth!=0 || !["event","whenPlayed"].contains(&ability.trigger.as_str()) || ability.optional || ability.target_resolver.is_some() || ability.condition.is_some() || ability.then.is_some() || ability.if_you_do.is_some() || ability.coordinate || !ability.context_title.is_empty() {
+                return Err("arena-list keywords require a standalone event or WhenPlayed registration".into());
+            }
+        }
+        if ability.target_resolver.as_ref().is_some_and(|r|r.is_upgrade_domain() && (r.is_multiple() || !scalar_upgrade_operation(&ability.effect,r.zone.as_deref()==Some("discard")))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
         if depth > MAX_ABILITY_NESTING {
             return Err("ability continuation nesting exceeds capacity".into());
         }
@@ -949,6 +1492,19 @@ impl Program {
         if multiple {
             self.validate_group(&ability.effect, ability.target_resolver.as_ref().unwrap().max_targets()?)?;
             self.instructions.push(Instruction::Group(ability.effect.clone()));
+        } else if arena_token_kind(ability).is_some() {
+            self.instructions.push(Instruction::Apply(ability.effect.clone()));
+        } else if conditional_arena_damage_ability(ability) {
+            // The complete root shape proves this one leaf is standalone.
+            // Do not relax the general nested-arena depth guard.
+            let Effect::Conditional{condition,on_true,on_false}=&ability.effect else{unreachable!()};
+            condition.validate()?;
+            let start=self.instructions.len();self.instructions.push(Instruction::Conditional{condition:condition.clone(),skip:0});
+            self.compile_effect(on_true,0)?;
+            let jump=self.instructions.len();self.instructions.push(Instruction::Jump{to:0});
+            self.instructions[start]=Instruction::Conditional{condition:condition.clone(),skip:self.instructions.len()};
+            self.compile_effect(on_false.as_deref().expect("validated NoAction"),depth+1)?;
+            self.instructions[jump]=Instruction::Jump{to:self.instructions.len()};
         } else { self.compile_effect(&ability.effect, depth)?; }
         if let Some(next) = &ability.then {
             self.compile_ability(next, depth + 1)?;
@@ -996,6 +1552,7 @@ impl Program {
         fn dependent_in_scope(e: &Expr, card_bound: bool) -> bool {
             match e {
                 Expr::Compiled(compiled) => dependent_in_scope(&compiled.original,card_bound),
+ Expr::ArenaList{receiver,predicate}|Expr::ArenaFilter{receiver,predicate}|Expr::ArenaSome{receiver,predicate}=>dependent_in_scope(receiver,card_bound)||dependent_in_scope(predicate,true),Expr::ArenaLength{receiver}=>dependent_in_scope(receiver,card_bound),
                 Expr::Ref {path} => matches!(path.first().map(String::as_str), Some("target" | "targets")) || (!card_bound && path.first().is_some_and(|p|p=="card")),
                 Expr::Array {items} => items.iter().any(|e|dependent_in_scope(e,card_bound)),
                 Expr::Math {args, ..} => args.iter().any(|e|dependent_in_scope(e,card_bound)),
@@ -1025,6 +1582,7 @@ impl Program {
                     _ => Err("card event groups do not support player targets".into()),
                 },
                 Target::Expression(e) => { card_expr(e,array)?; Ok(1) },
+                Target::ArenaList(_)=>Err("grouped arena lists require separate event-capacity witnesses".into()),
             }
         }
         fn walk(p: &Program, effect: &Effect, targets: usize, array: bool, depth: usize) -> Result<(usize, bool, bool), String> {
@@ -1044,8 +1602,8 @@ impl Program {
                     (a.0.max(b.0),a.1||b.1,a.2||b.2)
                 },
                 Effect::Select {target_resolver, effect} => {
-                    if target_resolver.card_type=="upgrade" {return Err("grouped upgrade selection is not modeled".into());}
-                    target_resolver.validate()?;
+                    if target_resolver.is_upgrade_domain() {return Err("grouped upgrade selection is not modeled".into());}
+                    target_resolver.validate_inline()?;
                     if array && target_resolver.predicate.as_ref().is_some_and(|e|dependent_in_scope(e,true)) { return Err("array-dependent nested selection is unsupported".into()); }
                     // Nested selection replaces the outer selected value, not its multiplicity.
                     walk(p,effect,target_resolver.max_targets()?,target_resolver.is_multiple(),depth+1)?
@@ -1100,7 +1658,7 @@ impl Program {
         }
         fn contains_select(e: &Effect) -> bool { match e { Effect::Select {..}=>true,Effect::Simultaneous {effects}|Effect::PhaseModifiers {effects}|Effect::Sequence {effects}=>effects.iter().any(contains_select),Effect::Conditional {on_true,on_false,..}=>contains_select(on_true)||on_false.as_deref().is_some_and(contains_select),_=>false } }
         fn primitive_captures_target(e: &Effect) -> bool {
-            fn target(t: &Target) -> bool { match t { Target::Name(n)=>n=="chosen",Target::Expression(e)=>target_dependent(e) } }
+            fn target(t: &Target) -> bool { match t { Target::Name(n)=>n=="chosen",Target::Expression(e)=>target_dependent(e),Target::ArenaList(_)=>true } }
             match e {
                 Effect::Damage {target:t,amount}|Effect::Heal {target:t,amount}|Effect::Draw {target:t,amount}|Effect::GiveShield {target:t,amount}|Effect::GiveExperience {target:t,amount}|Effect::ReadyResources {target:t,amount}|Effect::GainKeyword {target:t,amount,..}=>target(t)||target_dependent(amount),
                 Effect::ModifyStats {target:t,power,hp,..}=>target(t)||target_dependent(power)||target_dependent(hp),
@@ -1219,26 +1777,49 @@ impl Program {
                 if matches!(target,Target::Name(name) if name=="bothPlayers") {return Err("multi-player resource ready requires verified event batching".into());}
                 self.instructions.push(Instruction::Apply(effect.clone()));
             }
+            Effect::Damage{target:Target::ArenaList(list),amount:Expr::Const{value}}=>{
+                if depth!=0 || !["whenPlayed","onAttack","whenDefeated"].contains(&self.trigger.as_str()) || !value.as_u64().is_some_and(|n|(1..=3).contains(&n)) {return Err("arena damage requires literal standalone unit damage1..3".into());}
+                list.validate_damage()?;self.instructions.push(Instruction::Group(effect.clone()));
+            }
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::Select { target_resolver, effect } => {
-                if target_resolver.card_type=="upgrade" && (target_resolver.is_multiple() || !matches!(effect.as_ref(),Effect::Defeat {..})) {return Err("upgrade selection supports only scalar defeat".into());}
-                target_resolver.validate()?; self.instructions.push(Instruction::Commit); let at=self.instructions.len(); self.instructions.push(Instruction::Select(target_resolver.clone()));
+                if target_resolver.is_upgrade_domain() && (target_resolver.is_multiple() || !scalar_upgrade_operation(effect,target_resolver.zone.as_deref()==Some("discard"))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
+                target_resolver.validate_inline()?; self.instructions.push(Instruction::Commit); let at=self.instructions.len(); self.instructions.push(Instruction::Select(target_resolver.clone()));
                 if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
                 else { self.compile_effect(effect,depth+1)?; }
                 self.select_ends.push((at, self.instructions.len()));
             }
+            Effect::UseForce {target}|Effect::GainForce{target} => {if !matches!(target,Target::Name(n) if n=="ownPlayer") {return Err("Force requires default own player target".into());}self.instructions.push(Instruction::Apply(effect.clone()));}
+            Effect::GiveWeakness {amount,target} => {if !matches!(amount,Expr::Const{value} if value.as_u64()==Some(1)) || !matches!(target,Target::Name(n) if n=="chosen") {return Err("Weakness supports one selected unit token".into());}self.instructions.push(Instruction::Apply(effect.clone()));}
             Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
+            Effect::Defeat {target:Target::ArenaList(list)} => {
+                if depth!=0 {return Err("nested arena-list defeat requires explicit timing witnesses".into());}
+                list.validate_scope(true)?;self.instructions.push(Instruction::Apply(effect.clone()));
+            }
+            Effect::ResourceCard {target} => {if !matches!(target,Target::Name(n) if n=="self") {return Err("resourceCard supports self only".into());} self.instructions.push(Instruction::Apply(effect.clone()));}
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::ModifyStats { target, power, hp, duration } => {
+                if matches!(target,Target::ArenaList(_)) && depth!=0 {return Err("nested arena-list modifiers require explicit continuation witnesses".into());}
                 if duration != "phase" && !(self.trigger=="constant" && duration=="persistent") { return Err("only phase stat modifications execute".into()); }
-                target.validate()?;
-                if duration=="persistent" {power.live_stat_bounds()?;hp.live_stat_bounds()?;}else{power.validate_number()?;hp.validate_number()?;}
-                self.instructions.push(Instruction::Apply(effect.clone()));
+                if let Target::ArenaList(list)=target {list.validate_phase_stats()?;}else{target.validate()?;}
+                if matches!(target,Target::ArenaList(_)) {
+                    // Unary plus is emitted by signed source literals. Normalize only this
+                    // bounded stat scope; general expression unary-plus remains rejected.
+                    fn normalized(e:&Expr)->Expr {match e {Expr::Unary{op,value} if op=="+" && matches!(value.as_ref(),Expr::Const{value} if value.as_i64().is_some_and(|n|(0..=65535).contains(&n)))=>*value.clone(),_=>e.clone()}}
+                    let power=normalized(power);let hp=normalized(hp);power.validate_number()?;hp.validate_number()?;
+                    self.instructions.push(Instruction::Apply(Effect::ModifyStats{target:target.clone(),power,hp,duration:duration.clone()}));
+                }else {
+                    if duration=="persistent" {power.live_stat_bounds()?;hp.live_stat_bounds()?;}else{power.validate_number()?;hp.validate_number()?;}
+                    self.instructions.push(Instruction::Apply(effect.clone()));
+                }
             }
             Effect::GainKeyword { target, keyword, amount, duration } => {
                 validate_keyword(keyword)?;
                 if duration != "phase" && !(self.trigger == "constant" && duration == "persistent") { return Err("only phase or constant keywords execute".into()); }
-                target.validate()?; amount.validate_number()?;
+                if let Target::ArenaList(list)=target {
+                    if depth!=0 || duration!="phase" {return Err("nested or constant arena-list keywords are unsupported".into());}
+                    list.validate_scope(true)?;
+                }else{target.validate()?;} amount.validate_number()?;
                 let bounded_shape = matches!(amount, Expr::Const {value} if value.as_u64().is_some_and(|n| n <= 65535))
                     || (duration == "persistent" && matches!(amount, Expr::Ref {path} if matches!(path.last().map(String::as_str), Some("damage" | "readyResourceCount" | "exhaustedResourceCount"))));
                 if !bounded_shape { return Err("keyword amounts require nonnegative literals or verified live damage/resource counts".into()); }
@@ -1252,7 +1833,10 @@ impl Program {
             Effect::LoseKeyword { target, keyword, duration } => {
                 validate_keyword(keyword)?;
                 if duration != "phase" && !(self.trigger == "constant" && duration == "persistent") { return Err("only phase or constant keyword losses execute".into()); }
-                target.validate()?; self.instructions.push(Instruction::Apply(effect.clone()));
+                if let Target::ArenaList(list)=target {
+                    if depth!=0 || duration!="phase" {return Err("nested or constant arena-list keyword loss is unsupported".into());}
+                    list.validate_scope(true)?;
+                }else{target.validate()?;} self.instructions.push(Instruction::Apply(effect.clone()));
             }
             Effect::Ready { target } | Effect::Exhaust { target } | Effect::Defeat { target } => { target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
         }
@@ -1268,6 +1852,21 @@ pub struct CardPrograms {
     pub attach_condition: Option<Expr>,
 }
 
+fn query_shape(value:&Value)->Value {match value {Value::Object(o)=>Value::Object(o.iter().filter(|(k,_)|k.as_str()!="title").map(|(k,v)|(k.clone(),query_shape(v))).collect()),Value::Array(a)=>Value::Array(a.iter().map(query_shape).collect()),_=>value.clone()}}
+pub(crate) fn contains_arena_query(v:&Value)->bool {v["kind"].as_str().is_some_and(|s|["arenaList","arenaFilter","arenaLength","arenaSome"].contains(&s)) && (v.get("receiver").is_some()) || match v {Value::Array(a)=>a.iter().any(contains_arena_query),Value::Object(o)=>o.values().any(contains_arena_query),_=>false}}
+fn contains_arena_scalar(v:&Value)->bool {fn walk(v:&Value,target_container:bool)->bool {if !target_container&&v["kind"].as_str().is_some_and(|s|["arenaList","arenaFilter","arenaLength","arenaSome"].contains(&s)){return true;}match v{Value::Array(a)=>a.iter().any(|v|walk(v,false)),Value::Object(o)=>o.iter().any(|(k,v)|walk(v,k=="target"&&v["kind"]=="arenaList")),_=>false}}walk(v,false)}
+pub(crate) fn arena_query_source_kind(entry:&Value)->Option<usize> {
+ if !entry["card"]["unique"].is_boolean() || !entry["attachCondition"].is_null() || !entry["piloting"].is_null() || ["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null()) {return None;}
+ let shape=query_shape(&entry["abilities"]);let shapes:Vec<Value>=vec![
+serde_json::from_str(r##"{"leader":[],"unit":[],"card":[{"trigger":"constant","costs":[],"effect":{"kind":"gainKeyword","target":"self","duration":"persistent","keyword":"ambush","amount":{"kind":"const","value":1}},"condition":{"kind":"arenaSome","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"ref","path":["source"]}},"right":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}}},"predicate":{"kind":"unary","op":"!","value":{"kind":"ref","path":["card","unique"]}}}}]}"##).ok()?,
+serde_json::from_str(r##"{"leader":[],"unit":[],"card":[{"trigger":"whenPlayed","costs":[],"optional":true,"targetResolver":{"owner":"any","type":"unit","zone":"anyAttackable"},"effect":{"kind":"conditional","condition":{"kind":"binary","op":">","left":{"kind":"arenaLength","receiver":{"kind":"arenaFilter","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"const","value":"spaceArena"}},"right":{"kind":"binary","op":"||","left":{"kind":"binary","op":"===","left":{"kind":"const","value":"spaceArena"},"right":{"kind":"const","value":"anyArena"}},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"spaceArena"}}}}}},"predicate":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}},"right":{"kind":"const","value":0}},"onTrue":{"kind":"exhaust","target":"chosen"},"onFalse":{"kind":"noAction"}}}]}"##).ok()?,
+serde_json::from_str(r##"{"leader":[{"trigger":"action","costs":[{"kind":"exhaustSelf"},{"kind":"resources","amount":{"kind":"const","value":1}}],"effect":{"kind":"conditional","condition":{"kind":"binary","op":">=","left":{"kind":"arenaLength","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["game"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"ref","path":["card","exhausted"]}}}}},"right":{"kind":"const","value":4}},"onTrue":{"kind":"createTokenUnit","tokenType":"spy","amount":{"kind":"const","value":1},"target":"ownPlayer","entersReady":false},"onFalse":{"kind":"noAction"}}}],"unit":[{"trigger":"onAttack","costs":[],"optional":true,"targetResolver":{"owner":"any","type":"unit","zone":"anyAttackable","predicate":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"ref","path":["card","exhausted"]}}},"effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":2}}}],"card":[]}"##).ok()?];
+ let kind=shapes.iter().position(|s|s==&shape)?;let metadata:Vec<Value>=serde_json::from_str(r##"[{"cost":4,"hp":5,"power":4,"arena":"ground","text":"While you control another non-<uq> unit, this unit gains Ambush. (When you play this unit, it may attack an enemy unit.)","deployBox":null,"epicAction":"","rules":"Ambush is an ability that triggers at the same time as \u201cWhen Played\u201d abilities. The unit does not have to be ready in order to attack.\n","upgradePower":null,"upgradeHp":null,"unique":false,"keywords":["ambush"]},{"cost":3,"hp":3,"power":3,"arena":"space","text":"When Played: If you control another space unit, you may exhaust a unit.","deployBox":null,"epicAction":"","rules":null,"upgradePower":null,"upgradeHp":null,"unique":false,"keywords":[]},{"cost":5,"hp":6,"power":3,"arena":"ground","text":"Action [1 resource, Exhaust]: If there are 4 or more exhausted units in play, create a Spy token.","deployBox":"On Attack: You may deal 2 damage to an exhausted unit.","epicAction":"Epic Action: If you control 5 or more resources, deploy this leader.","rules":"Sly\u2019s leader ability still can be used as an action even if fewer than 4 exhausted units are in play (but no Spy token is created).\n","upgradePower":null,"upgradeHp":null,"unique":true,"keywords":[]}]"##).ok()?;if !metadata[kind].as_object()?.iter().all(|(k,v)|entry["card"][k]==*v)||entry["keywordValues"]!=serde_json::json!({}){return None;}let ty=if kind==2 {"leader"}else{"unit"};if entry["card"]["types"]!=serde_json::json!([ty]) || entry["baseClass"]!=if kind==2 {"LeaderUnitCard"}else{"NonLeaderUnitCard"} {return None;}Some(kind)
+}
+fn arena_query_ability(a:&Ability)->bool {let v=query_shape(&serde_json::to_value(a).unwrap());let templates:Vec<Value>=vec![
+query_shape(&serde_json::to_value(serde_json::from_str::<Ability>(r##"{"trigger":"constant","title":"Gain Ambush while you control another non-unique unit","costs":[],"effect":{"kind":"gainKeyword","target":"self","duration":"persistent","keyword":"ambush","amount":{"kind":"const","value":1}},"condition":{"kind":"arenaSome","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"ref","path":["source"]}},"right":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}}},"predicate":{"kind":"unary","op":"!","value":{"kind":"ref","path":["card","unique"]}}}}"##).unwrap()).unwrap()),
+query_shape(&serde_json::to_value(serde_json::from_str::<Ability>(r##"{"trigger":"whenPlayed","title":"Exhaust a unit.","costs":[],"optional":true,"targetResolver":{"owner":"any","type":"unit","zone":"anyAttackable"},"effect":{"kind":"conditional","condition":{"kind":"binary","op":">","left":{"kind":"arenaLength","receiver":{"kind":"arenaFilter","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"const","value":"spaceArena"}},"right":{"kind":"binary","op":"||","left":{"kind":"binary","op":"===","left":{"kind":"const","value":"spaceArena"},"right":{"kind":"const","value":"anyArena"}},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"spaceArena"}}}}}},"predicate":{"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}}}},"right":{"kind":"const","value":0}},"onTrue":{"kind":"exhaust","target":"chosen"},"onFalse":{"kind":"noAction"}}}"##).unwrap()).unwrap()),
+query_shape(&serde_json::to_value(serde_json::from_str::<Ability>(r##"{"trigger":"action","title":"If there are 4 or more exhausted units in play, create a Spy token","costs":[{"kind":"exhaustSelf"},{"kind":"resources","amount":{"kind":"const","value":1}}],"effect":{"kind":"conditional","condition":{"kind":"binary","op":">=","left":{"kind":"arenaLength","receiver":{"kind":"arenaList","receiver":{"kind":"ref","path":["game"]},"predicate":{"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"&&","left":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]},"right":{"kind":"ref","path":["card","exhausted"]}}}}},"right":{"kind":"const","value":4}},"onTrue":{"kind":"createTokenUnit","tokenType":"spy","amount":{"kind":"const","value":1},"target":"ownPlayer","entersReady":false},"onFalse":{"kind":"noAction"}}}"##).unwrap()).unwrap())];templates.iter().any(|t|t==&v)}
 #[derive(Debug, Default)]
 pub struct Catalogue {
     pub programs: Vec<Program>,
@@ -1305,8 +1904,78 @@ impl Catalogue {
                     (value["kind"]=="ref" && value["path"][1].as_str().is_some_and(|p|p=="parentCard"||p=="parentUnit")) || (value["target"]=="parent") || match value {Value::Array(a)=>a.iter().any(parent_reference),Value::Object(o)=>o.values().any(parent_reference),_=>false}
                 }
                 if parent_reference(&entry["abilities"]) && entry["baseClass"]!="UpgradeCard" {return Err("parent references require an ordinary attached upgrade".into());}
+                let basezone_relevant=entry["abilities"]["card"].as_array().is_some_and(|a|(entry["baseClass"]=="BaseCard"||entry["card"]["types"].as_array().is_some_and(|t|t.iter().any(|v|v=="base")))&&!a.is_empty()) || entry["abilities"]["leader"].as_array().is_some_and(|a|a.iter().any(|a|a["trigger"]=="constant"));
+                if basezone_relevant&&basezone_source_kind(entry).is_none(){return Err("base-zone ongoing source requires exact reviewed base or two-side leader shape".into());}
+                if contains_arena_scalar(&entry["abilities"]) && arena_query_source_kind(entry).is_none() {return Err("arena scalar query requires exact reviewed complete source shape".into());}
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
+                let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
+                if contains_keyword_inventory(&entry["abilities"]) {
+                    if entry["baseClass"]!="NonLeaderUnitCard"||!exact_type("unit")||sides.card.len()!=1||!sides.card.iter().all(keyword_inventory_registration)||!sides.unit.is_empty()||!sides.leader.is_empty()||!entry["piloting"].is_null()||!entry["attachCondition"].is_null()||!entry["card"]["unique"].is_boolean()||entry["keywordValues"]!=serde_json::json!({})||entry["card"]["keywords"]!=serde_json::json!([])||["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null()) {return Err("keyword inventory requires sole ordinary nonleader unit metadata".into());}
+                }
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(|a|parent_upgrade_registration(a).is_some()) {
+                    if entry["baseClass"]!="UpgradeCard"||!exact_type("upgrade")||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||entry["card"]["unique"]!=false||!entry["card"]["title"].is_string()||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null())||entry["keywordValues"]!=serde_json::json!({})||entry["card"]["keywords"]!=serde_json::json!([]) {return Err("parent token play requires sole ordinary nonunique attached upgrade metadata".into());}
+                }
+                if sides.card.iter().any(|a|a.target_resolvers.iter().any(|d|d.chooser!="self")) {
+                    let no_keywords=entry["keywordValues"].as_object().is_some_and(|v|v.is_empty())&&entry["card"]["keywords"].as_array().is_some_and(|v|v.is_empty());
+                    let no_pilot=["pilotText","pilotBox","pilotingBox"].iter().all(|k|entry["card"][k].is_null())&&entry["piloting"].is_null();
+                    if sides.card.len()!=1 || !sides.leader.is_empty() || !sides.unit.is_empty() || !no_keywords || !no_pilot || !entry["attachCondition"].is_null() || !entry["card"]["unique"].is_boolean() || !((entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")&&sides.card[0].trigger=="whenPlayed")||(entry["baseClass"]=="EventCard"&&exact_type("event")&&sides.card[0].trigger=="event")) {return Err("opponent named chooser requires a sole ordinary play/event source without side, intrinsic or pilot mechanics".into());}
+                }
+                if sides.card.iter().any(named_unit_base_damage) {
+                    let no_keywords = entry["keywordValues"].as_object().is_some_and(|values| values.is_empty()) &&
+                        entry["card"]["keywords"].as_array().is_some_and(|values| values.is_empty());
+                    let no_pilot = ["pilotText", "pilotBox", "pilotingBox"].iter().all(|key| entry["card"][key].is_null()) &&
+                        entry["piloting"].is_null();
+                    if sides.card.len() != 1 || !sides.leader.is_empty() || !sides.unit.is_empty() ||
+                        entry["baseClass"] != "NonLeaderUnitCard" || !exact_type("unit") || !no_keywords || !no_pilot ||
+                        !entry["attachCondition"].is_null() {
+                        return Err("named unit/base damage requires a sole ordinary nonleader card-side source without intrinsic keywords or piloting".into());
+                    }
+                }
+                if sides.leader.iter().chain(&sides.unit).any(|a|!a.target_resolvers.is_empty()) || sides.card.iter().any(|a|!a.target_resolvers.is_empty() && !((a.trigger=="event" && entry["baseClass"]=="EventCard" && exact_type("event")) || (["whenPlayed","onAttack"].contains(&a.trigger.as_str()) && entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit")))) {return Err("named selectors support ordinary unit WhenPlayed or event card-side sources".into());}
+                let upgrade_weakness = entry["baseClass"] == "UpgradeCard" && exact_type("upgrade") &&
+                    sides.card.len() == 1 && sides.leader.is_empty() && sides.unit.is_empty() &&
+                    entry["keywordValues"].as_object().is_some_and(|v|v.is_empty()) &&
+                    entry["card"]["keywords"].as_array().is_some_and(|v|v.is_empty()) &&
+                    ["pilotText","pilotBox","pilotingBox"].iter().all(|key|entry["card"][key].is_null()) &&
+                    entry["piloting"].is_null() && entry["attachCondition"].is_null() &&
+                    sides.card.first().is_some_and(|a|a.trigger == "whenPlayed" && a.optional &&
+                        matches!(&a.effect,Effect::GiveWeakness{amount:Expr::Const{value},target:Target::Name(n)} if value.as_u64()==Some(1)&&n=="chosen") &&
+                        a.target_resolver.as_ref().is_some_and(|r|r.owner=="any"&&r.card_type=="unit"&&r.zone.as_deref()==Some("anyAttackable")&&r.predicate.is_none()));
+                let extension=sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(|a|weakness_extension(a).is_some());
+                if extension {
+                    let source=if sides.card.iter().any(|a|weakness_extension(a)==Some(WeaknessExtension::Mixed)) {
+                        sides.card.len()==2&&sides.card.iter().all(|a|weakness_extension(a)==Some(WeaknessExtension::Mixed))&&sides.card.iter().any(|a|a.trigger=="whenPlayed")&&sides.card.iter().any(|a|a.trigger=="whenDefeated")&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")
+                    }else {sides.card.len()==1&&((weakness_extension(&sides.card[0])==Some(WeaknessExtension::Torrent)&&entry["baseClass"]=="EventCard"&&exact_type("event"))||(matches!(weakness_extension(&sides.card[0]),Some(WeaknessExtension::Picador|WeaknessExtension::Sequence))&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))};
+                    if !source||!sides.leader.is_empty()||!sides.unit.is_empty()||!entry["piloting"].is_null()||!entry["attachCondition"].is_null()||!entry["card"]["unique"].is_boolean()||!entry["keywordValues"].as_object().is_some_and(|v|v.is_empty())||["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {return Err("extended Weakness requires complete ordinary event/unit metadata and bounded registration topology".into());}
+                }
+                if !extension && (sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && !(entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") || upgrade_weakness)) ) {return Err("Weakness source requires ordinary unit or bounded ordinary upgrade play metadata".into());}
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(contains_arena_tokens) {
+                    let kinds=sides.card.iter().map(arena_token_kind).collect::<Option<Vec<_>>>().ok_or("unsupported arena token registration")?;
+                    let pair=kinds==[1,1]&&sides.card[0].trigger=="whenPlayed"&&sides.card[1].trigger=="whenDefeated";
+                    if !entry["card"]["unique"].is_boolean()||entry["baseClass"]!="NonLeaderUnitCard"||entry["card"]["types"]!=serde_json::json!(["unit"])||!sides.unit.is_empty()||!sides.leader.is_empty()||!(pair||(kinds.len()==1&&kinds[0]!=1))||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {return Err("arena token source requires complete ordinary unit shape".into());}
+                }
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(contains_arena_damage) {
+                    if sides.card.iter().any(conditional_arena_damage_ability)&&sides.card.len()!=1 {return Err("conditional arena damage requires a sole ordinary unit registration".into());}
+                    let companion=|a:&Ability|a.trigger=="constant"&&a.coordinate&&!a.optional&&!a.requires_confirmation&&a.costs.is_empty()&&a.context_title.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()&&matches!(&a.effect,Effect::GainKeyword{target:Target::Name(n),keyword,amount:Expr::Const{value},duration} if n=="self"&&keyword=="raid"&&duration=="persistent"&&value.as_u64().is_some_and(|n|n<=65535));
+                    if entry.get("baseClass").and_then(Value::as_str)!=Some("NonLeaderUnitCard") || entry["card"]["types"]!=serde_json::json!(["unit"]) || !sides.unit.is_empty() || !sides.leader.is_empty() || sides.card.iter().filter(|a|contains_arena_damage(a)).count()!=1 || !sides.card.iter().all(|a|arena_damage_ability(a)||companion(a)) || entry.get("piloting").is_some_and(|v|!v.is_null()) || ["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {
+                        return Err("arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion".into());
+                    }
+                }
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(contains_new_arena_keywords) {
+                    let ordinary=(sides.card.first().is_some_and(|a|a.trigger=="event")&&entry["baseClass"]=="EventCard"&&exact_type("event"))||(sides.card.first().is_some_and(|a|a.trigger=="onAttack")&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit"));
+                    if !ordinary||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||!arena_keyword_registration(&sides.card[0])||!entry["piloting"].is_null()||!entry["attachCondition"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {return Err("arena keyword batch requires sole ordinary event/unit registration without side mechanics".into());}
+                }
+                let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
+                if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(|a|force_continuation(a).is_some()) {
+                    let ordinary=sides.card.first().is_some_and(|a|if a.trigger=="event" {entry["baseClass"]=="EventCard"&&exact_type("event")}else{entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")});
+                    if !ordinary||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {return Err("Force continuation requires sole ordinary source registration without side mechanics".into());}
+                }
+                let upgrade_force=|a:&Ability|entry["baseClass"]=="UpgradeCard" && exact_type("upgrade") && a.trigger=="whenPlayed" && a.optional && matches!(&a.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && a.if_you_do.as_ref().is_some_and(|next|next.target_resolver.as_ref().is_some_and(|r|r.owner=="any" && r.card_type=="any" && r.zone.as_deref()==Some("base")) && matches!(&next.effect,Effect::Heal{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen" && value.as_u64().is_some_and(|n|(1..=65535).contains(&n))));
+                if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && ["whenPlayed","whenDefeated","onAttack"].contains(&a.trigger.as_str())) || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event") || upgrade_force(a))) {return Err("Force registration requires ordinary unit/event or bounded upgrade play-heal metadata".into());}
+                if sides.leader.iter().chain(&sides.unit).any(contains_force_presence) || sides.card.iter().any(|a|contains_force_presence(a) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Force presence requires ordinary unit card-side metadata".into());}
+                if sides.leader.iter().chain(&sides.unit).any(contains_resource) || sides.card.iter().any(|a|contains_resource(a) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && a.trigger=="whenDefeated") || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event"))) {return Err("resourceCard requires ordinary unit death/event metadata".into());}
                 let coordinates=sides.card.iter().filter(|a|a.coordinate).count();
                 if sides.leader.iter().chain(&sides.unit).any(|a|a.coordinate) || coordinates>1 || (coordinates==1 && (entry["baseClass"]!="NonLeaderUnitCard" || entry["keywordValues"]["coordinate"].as_u64()!=Some(1))) {return Err("Coordinate requires exactly one printed nonleader card-side registration".into());}
                 if entry["keywordValues"].get("coordinate").is_some() && coordinates!=1 {return Err("printed Coordinate must have one implemented registration".into());}
@@ -1419,9 +2088,9 @@ mod tests {
     }
     #[test]
     fn compiled_expression_preserves_named_portable_rejections() {
-        for kind in ["arenaSome", "arenaLength", "collection", "compiled"] {
+        for kind in ["arenaCount", "collection", "compiled"] {
             let expression = json!({"kind":kind});
-            let expected = format!("unknown variant `{kind}`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`");
+            let expected = format!("unknown variant `{kind}`, expected one of `arenaList`, `arenaFilter`, `arenaSome`, `arenaLength`, `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`");
             assert_eq!(serde_json::from_value::<Expr>(expression.clone()).unwrap_err().to_string(), expected);
             let nested = json!({"kind":"unary", "op":"!", "value":expression});
             assert_eq!(serde_json::from_value::<Expr>(nested).unwrap_err().to_string(), expected);
@@ -1443,7 +2112,7 @@ mod tests {
         assert!(matches!(portable, Expr::Const { .. }));
         assert_eq!(bytes, serde_json::to_vec(&portable).unwrap());
         let resolver = TargetResolver { owner: "any".into(), card_type:"unit".into(), arena:None,
-            zone:None, optional:false, predicate:None, mode:Some("upTo".into()), count:Some(expression) };
+            zone:None, optional:false, predicate:None, mode:Some("upTo".into()), count:Some(expression), prompt_title:None };
         assert_eq!(resolver.max_targets(), Ok(3));
     }
     #[test]
@@ -1604,5 +2273,46 @@ mod tests {
 
 }
 
-pub const CORE_KEYWORDS: [&str; 8] = ["sentinel", "overwhelm", "saboteur", "ambush", "grit", "shielded", "raid", "restore"];
+pub const CORE_KEYWORDS: [&str; 9] = ["sentinel", "overwhelm", "saboteur", "ambush", "grit", "shielded", "raid", "restore", "hidden"];
 fn validate_keyword(keyword: &str) -> Result<(), String> { if CORE_KEYWORDS.contains(&keyword) { Ok(()) } else { Err(format!("unsupported keyword {keyword}")) } }
+
+#[cfg(test)]
+mod arena_list_phase_tests {
+    use super::*;
+    use serde_json::json;
+    fn ability()->serde_json::Value {json!({"trigger":"event","title":"Phase stats","effect":{"kind":"modifyStats","duration":"phase","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["player"]},"predicate":{"kind":"const","value":true}},"power":{"kind":"const","value":1},"hp":{"kind":"const","value":1}}})}
+    fn compile(v:serde_json::Value)->Result<Program,String>{Program::compile(&serde_json::from_value(v).unwrap())}
+    #[test] fn accepts_only_witnessed_standalone_shape() {
+        assert!(compile(ability()).is_ok());
+        let mut v=ability();let mut predicate=json!({"kind":"const","value":true});
+        for _ in 0..20 {predicate=json!({"kind":"unary","op":"!","value":predicate});}
+        v["effect"]["target"]["predicate"]=predicate;assert!(compile(v).is_err(),"arena-list expressions retain the general depth bound");
+        let mut v=ability();v["trigger"]=json!("whenPlayed");assert!(compile(v).is_ok(),"ordinary WhenPlayed list effects are now source-witnessed");
+        let mut v=ability();v["then"]=json!({"title":"Continuation","effect":{"kind":"noAction"}});assert!(compile(v).is_err());
+        let mut v=ability();v["targetResolver"]=json!({"type":"unit"});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["game"]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"hasSomeTrait","receiver":{"kind":"ref","path":["card"]},"args":[{"kind":"const","value":"creature"}]});assert!(compile(v).is_ok(),"one static card trait is now source-witnessed");
+        let mut v=ability();v["effect"]["power"]=json!({"kind":"ref","path":["target","damage"]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["kind"]=json!("damage");v["effect"].as_object_mut().unwrap().remove("duration");v["effect"].as_object_mut().unwrap().remove("power");v["effect"].as_object_mut().unwrap().remove("hp");v["effect"]["amount"]=json!({"kind":"const","value":1});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]=json!({"kind":"sequence","effects":[v["effect"].clone()]});assert!(compile(v).is_err());
+    }
+}
+
+#[cfg(test)]
+mod arena_list_defeat_tests {
+    use super::*;use serde_json::json;
+    fn ability()->serde_json::Value {json!({"trigger":"event","title":"Defeat","effect":{"kind":"defeat","target":{"kind":"arenaList","receiver":{"kind":"ref","path":["game"]},"predicate":{"kind":"const","value":true}}}})}
+    fn compile(v:serde_json::Value)->Result<Program,String>{Program::compile(&serde_json::from_value(v).unwrap())}
+    #[test]fn defeat_list_rejects_unwitnessed_contexts_and_predicates(){
+        assert!(compile(ability()).is_ok());
+        let mut v=ability();v["trigger"]=json!("onAttack");assert!(compile(v).is_err());
+        let mut v=ability();v["then"]=json!({"title":"Next","effect":{"kind":"noAction"}});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["predicate"]=json!({"kind":"query","name":"isUpgraded","receiver":{"kind":"ref","path":["card"]},"args":[]});assert!(compile(v.clone()).is_ok());v["effect"]["target"]["predicate"]["receiver"]=json!({"kind":"ref","path":["target"]});assert!(compile(v).is_err());
+        let mut v=ability();let mut p=json!({"kind":"const","value":true});for _ in 0..20 {p=json!({"kind":"unary","op":"!","value":p});}v["effect"]["target"]["predicate"]=p;assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]=json!({"kind":"simultaneous","effects":[v["effect"].clone()]});assert!(compile(v).is_err());
+        let mut v=ability();v["effect"]["target"]["receiver"]=json!({"kind":"ref","path":["source"]});assert!(compile(v).is_err());
+    }
+}
+
+/// Numeric storage slots remain independent of keyword bit positions.
+pub fn numeric_keyword_slot(index: usize) -> Option<usize> { match index { 6 => Some(0), 7 => Some(1), _ => None } }

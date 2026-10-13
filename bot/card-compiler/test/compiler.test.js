@@ -276,7 +276,7 @@ test('keyword modifier lists retain gain loss, live numeric and shared targets',
     assert.equal(phase.status,'supported');assert.equal(phase.abilities.card[0].effect.effects[0].duration,'phase');assert.equal(phase.abilities.card[0].effect.effects[0].amount.path[0],'player');
 });
 test('keyword lowering rejects unsupported keywords, helper fields, cycles and live phase callbacks', () => {
-    for(const modifier of ["gainKeyword('hidden')","gainKeyword({keyword:'raid'})","gainKeyword({keyword:'sentinel',amount:2})","gainKeyword({keyword:'raid',amount:1,extra:true})","gainKeyword(unit=>({keyword:'raid',amount:unit.getPower()}))","loseKeyword(['sentinel','hidden'])"]) assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:AbilityHelper.ongoingEffects.${modifier}});`).status,'unsupported',modifier);
+    for(const modifier of ["gainKeyword('unsupported-keyword')","gainKeyword({keyword:'raid'})","gainKeyword({keyword:'sentinel',amount:2})","gainKeyword({keyword:'raid',amount:1,extra:true})","gainKeyword(unit=>({keyword:'raid',amount:unit.getPower()}))","loseKeyword(['sentinel','unsupported-keyword'])"]) assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:AbilityHelper.ongoingEffects.${modifier}});`).status,'unsupported',modifier);
     assert.equal(compile(`registrar.addConstantAbility({condition:ctx=>ctx.source.hasSomeKeyword('sentinel'),ongoingEffect:AbilityHelper.ongoingEffects.gainKeyword('saboteur')});`).status,'unsupported');
     assert.equal(compile(action(`forThisPhaseCardEffect({effect:AbilityHelper.ongoingEffects.gainKeyword(unit=>({keyword:'raid',amount:unit.damage}))})`)).status,'unsupported');
     assert.equal(compile(`registrar.addConstantAbility({ongoingEffect:[]});`).status,'unsupported');

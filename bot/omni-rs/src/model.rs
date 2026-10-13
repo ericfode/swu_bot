@@ -120,6 +120,8 @@ pub struct Card {
     pub phase_keyword_values: [u16; 2],
     pub phase_keyword_presence: u8,
     pub phase_lost_keywords: u8,
+    /// Current phase play/deploy/create qualification, independent of live Hidden.
+    pub hidden_state: u8,
     pub exhausted: bool,
     pub deployed: bool,
     pub epic_used: bool,
@@ -142,6 +144,8 @@ pub struct Player {
     pub ground: Zone,
     pub space: Zone,
     pub out: bool,
+    pub force_id: CardId,
+    pub force_held: bool,
 }
 
 /// Every engine prompt is retained, including confirmation and cancellation prompts.
@@ -175,20 +179,47 @@ pub enum Decision {
 
 /// Ordered target context retained across suspended event generation.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Selection { pub ids: [CardId; 3], pub len: u8 }
+pub struct Selection { pub ids: [CardId; 5], pub len: u8 }
 impl Selection {
-    pub fn one(id: CardId) -> Self { Self { ids: [id, 0, 0], len: u8::from(id != 0) } }
-    pub fn toggle(&mut self, id: CardId) {
+    pub fn hash_ids(&self)->impl Iterator<Item=CardId>+'_ { self.ids[..if self.len>3 {5}else{3}].iter().copied() }
+    pub fn one(id: CardId) -> Self { Self { ids: [id, 0, 0, 0, 0], len: u8::from(id != 0) } }
+    pub fn toggle(&mut self, id: CardId) -> Result<(), String> {
         if let Some(i) = self.ids[..self.len as usize].iter().position(|v| *v == id) {
             for j in i..self.len as usize - 1 { self.ids[j] = self.ids[j+1]; }
             self.len -= 1; self.ids[self.len as usize] = 0;
-        } else { self.ids[self.len as usize] = id; self.len += 1; }
+        } else { if self.len as usize >= self.ids.len() { return Err("selection capacity exceeded".into()); } self.ids[self.len as usize] = id; self.len += 1; }
+        Ok(())
     }
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PreparedEvent {
     pub op: u16, pub target: CardId, pub amount: u16,
     pub power: i32, pub hp: i32, pub token: CardId,
+}
+/// Uniform arena damage retains one ordered recipient and Shield context per event.
+/// Both IDs are checked against the model's 256-card domain before compact storage.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UniformDamageRecord { pub target: u8, pub shield: u8 }
+impl UniformDamageRecord {
+    pub fn new(target:CardId,shield:CardId)->Result<Self,String> {
+        if target==0 {return Err("uniform damage requires a real recipient".into());}
+        Ok(Self {target:u8::try_from(target).map_err(|_|"uniform damage recipient exceeds card domain")?,
+            shield:u8::try_from(shield).map_err(|_|"uniform damage Shield exceeds card domain")?})
+    }
+    pub fn target(self)->CardId {self.target as CardId}
+    pub fn shield(self)->CardId {self.shield as CardId}
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UniformDamageState {
+    pub records:[UniformDamageRecord;MAX_CARDS], pub prevented:[u64;4],
+    pub count:u16, pub active:bool,
+}
+impl Default for UniformDamageState {
+    fn default()->Self {Self {records:[UniformDamageRecord::default();MAX_CARDS],prevented:[0;4],count:0,active:false}}
+}
+impl UniformDamageState {
+    pub fn is_prevented(&self,index:usize)->bool {self.prevented[index/64]&(1u64<<(index%64))!=0}
+    pub fn prevent(&mut self,index:usize) {self.prevented[index/64]|=1u64<<(index%64);}
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EventGroupState {
@@ -199,11 +230,12 @@ pub struct EventGroupState {
     pub context: Selection, pub picks: Selection,
     pub stack: [Selection; 8], pub depth: u8,
     pub records: [PreparedEvent; 32],
+    pub uniform_damage: UniformDamageState,
 }
 impl Default for EventGroupState {
     fn default() -> Self { Self { active:false, resolving:false, replacement_done:false, pc:0, count:0, discard_count:0, discard_owner:Seat::P1, shield_mask:0, shield_count:0, shield_priority:0, initiator:Seat::P1, shield_stash:[0;MAX_CARDS], shield_stash_len:0,
         context:Selection::default(), picks:Selection::default(), stack:[Selection::default();8], depth:0,
-        records:[PreparedEvent::default();32] } }
+        records:[PreparedEvent::default();32], uniform_damage:UniformDamageState::default() } }
 }
 pub const MAX_DEATH_TRIGGERS: usize = 64;
 pub const MAX_DEATH_DEPTH: usize = 8;
@@ -265,6 +297,8 @@ pub struct State {
     pub arena_unit_order:[ArenaOrder;2],
     /// False only for immutable legacy imports without ordinary upgrades.
     pub arena_order_exact:bool,
+    pub hidden_history_exact:bool,
+    pub force_state_exact:bool,
     pub round: u16,
     pub regroup: bool,
     pub initiative: Seat,
@@ -311,7 +345,7 @@ impl Default for State {
             cards: [Card::default(); MAX_CARDS],
             next_id: 1,
             players: [Player::default(); 2],
-            arena_unit_order:[ArenaOrder::default();2],arena_order_exact:true,
+            arena_unit_order:[ArenaOrder::default();2],arena_order_exact:true,hidden_history_exact:false,force_state_exact:false,
             round: 1,
             regroup: false,
             initiative: Seat::P1,
@@ -393,7 +427,7 @@ impl State {
         };
         fn context_values(c:&ResolutionContext,put:&mut impl FnMut(u64)) {
             for v in [c.active.index() as u64,c.decision as u64,c.source as u64,c.target as u64,c.ambush as u64,c.after_attack_triggers as u64,c.attack_restore as u64,c.attack_source as u64,c.attack_defender as u64,c.attack_shield_opponent_first as u64,c.pending_triggers as u64,c.trigger_context as u64,c.pending_programs as u64,c.after_attack_programs as u64,c.ability_program as u64,c.ability_pc as u64,c.ability_target as u64,c.ability_result as u64,c.ability_succeeded as u64,c.ability_return as u64,c.ability_committed as u64,c.ability_selection.len as u64] {put(v);}
-            for id in c.ability_selection.ids {put(id as u64);}
+            for id in c.ability_selection.hash_ids() {put(id as u64);}
         }
         fn window_values(w:&DeathWindow,put:&mut impl FnMut(u64)) {
             for v in [w.len as u64,w.initiator.index() as u64,w.player.index() as u64,w.player_chosen as u64,w.group_program as u64,w.group_source as u64,w.group_keyword as u64,w.resolve_all as u64] {put(v);}
@@ -406,6 +440,8 @@ impl State {
         put(self.arena_order_exact as u64);
         for arena in self.arena_unit_order {put(arena.len as u64);for id in arena.ids {put(id as u64);}}
         put(self.round as u64);
+        if self.hidden_history_exact {put(1); }
+        if self.force_state_exact {put(1);}
         put(self.regroup as u64);
         put(self.initiative.index() as u64);
         put(self.initiative_claimed as u64);
@@ -430,15 +466,23 @@ impl State {
         put(self.ability_pc as u64);
         put(self.ability_target as u64);
         put(self.ability_selection.len as u64);
-        for id in self.ability_selection.ids { put(id as u64); }
+        for id in self.ability_selection.hash_ids() { put(id as u64); }
         let g = &self.event_group;
         put(g.discard_count as u64);put(g.discard_owner.index() as u64);
         put(g.active as u64); put(g.resolving as u64); put(g.replacement_done as u64); put(g.shield_mask as u64); put(g.shield_count as u64); put(g.shield_priority as u64); put(g.shield_stash_len as u64); for id in g.shield_stash { put(id as u64); } put(g.initiator.index() as u64); put(g.pc as u64); put(g.count as u64); put(g.depth as u64);
         for selection in [g.context, g.picks].into_iter().chain(g.stack) {
-            put(selection.len as u64); for id in selection.ids { put(id as u64); }
+            put(selection.len as u64); for id in selection.hash_ids() { put(id as u64); }
         }
         for event in g.records { put(event.op as u64); put(event.target as u64); put(event.amount as u64);
             put(event.power as u64); put(event.hp as u64); put(event.token as u64);  }
+
+        // Inactive default storage preserves the historical hash stream.
+        let uniform=&g.uniform_damage;
+        if uniform.active {
+            put(uniform.active as u64);put(uniform.count as u64);
+            for mask in uniform.prevented {put(mask);}
+            for record in uniform.records {put(record.target as u64);put(record.shield as u64);}
+        } else {debug_assert_eq!(*uniform,UniformDamageState::default(),"inactive uniform storage must be cleared");}
 
         put(self.ability_result as u64);
         put(self.ability_succeeded as u64);
@@ -447,6 +491,14 @@ impl State {
         for n in 0..2 {
             put(self.resource_done[n] as u64);
             put(self.resource_selected[n] as u64);
+        }
+        // Qualification is observable only for current arena members. Build
+        // membership once rather than scanning every zone for every card.
+        let mut hidden_arena_members=[false;MAX_CARDS];
+        if self.hidden_history_exact {
+            for player in &self.players {for arena in [&player.ground,&player.space] {
+                for &id in arena.as_slice() {hidden_arena_members[id as usize]=true;}
+            }}
         }
         for (idx, c) in self
             .cards
@@ -462,6 +514,11 @@ impl State {
             for amount in c.phase_keyword_values { put(amount as u64); }
             put(c.phase_lost_keywords as u64);
             put(c.phase_keyword_presence as u64);
+            if self.hidden_history_exact {
+                let in_arena=hidden_arena_members[idx];
+                // Identity history outside the arena is inert in the admitted no-reentry domain.
+                put((c.hidden_state & if in_arena {u8::MAX}else{!1}) as u64);
+            }
             put(c.next_token as u64);
             put(c.parent as u64);put(c.upgrades as u64);put(c.next_upgrade as u64);
             put(c.def as u64
@@ -477,6 +534,7 @@ impl State {
             put(p.base as u64);
             put(p.leader as u64);
             put(p.out as u64);
+            if self.force_state_exact {put(p.force_id as u64);put(p.force_held as u64);}
             for zone in [
                 &p.hand,
                 &p.deck,
@@ -536,7 +594,14 @@ impl Action {
 }
 
 impl Card {
+    pub fn hidden_qualified(&self)->bool {self.hidden_state & 1 != 0}
+    pub fn set_hidden_qualified(&mut self,value:bool) {self.hidden_state=(self.hidden_state & !1)|u8::from(value);}
+    pub fn phase_keyword_mask(&self)->u16 {self.phase_keyword_presence as u16 | if self.hidden_state&2!=0 {1<<8}else{0}}
+    pub fn lost_keyword_mask(&self)->u16 {self.phase_lost_keywords as u16 | if self.hidden_state&4!=0 {1<<8}else{0}}
+    pub fn add_phase_keyword(&mut self,index:usize) {if index==8 {self.hidden_state|=2;}else{self.phase_keyword_presence|=1<<index;}}
+    pub fn add_lost_keyword(&mut self,index:usize) {if index==8 {self.hidden_state|=4;}else{self.phase_lost_keywords|=1<<index;}}
+    pub fn clear_hidden_phase_effects(&mut self) {self.hidden_state &= 1;}
     pub fn phase_keyword_amount(&self, index: usize) -> u16 {
-        if index >= 6 { self.phase_keyword_values[index - 6] } else { u16::from(self.phase_keyword_presence & (1 << index) != 0) }
+        if let Some(slot) = crate::ability_ir::numeric_keyword_slot(index) { self.phase_keyword_values[slot] } else { u16::from(self.phase_keyword_mask() & (1 << index) != 0) }
     }
 }

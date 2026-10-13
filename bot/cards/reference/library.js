@@ -2,6 +2,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const zlib = require('node:zlib');
+const crypto = require('node:crypto');
 const { sha256 } = require('../inventory');
 const root = __dirname;
 const defaultCorpus = path.join(root, 'fixtures');
@@ -25,11 +27,33 @@ function definition(id, index = registry(), recordedDefinition = null) {
     }
     throw new Error('Unknown reference case: ' + id);
 }
-function corpus(directory = defaultCorpus) {
-    const value = read(path.join(directory, 'manifest.json'));
-    assert.equal(value.schema, 'swu-reference-corpus/v1');
-    assert.ok(Array.isArray(value.recordings) && value.recordings.length, 'Empty reference corpus');
-    return value;
+// Keep storage evidence separate from the unchanged v1 document.
+function manifestArtifact(directory = defaultCorpus) {
+    const files = ['manifest.json', 'manifest.json.gz'].map(name => path.join(directory, name)).filter(file => fs.existsSync(file));
+    assert.equal(files.length, 1, 'Reference corpus needs exactly one manifest.json or manifest.json.gz');
+    const file = files[0], bytes = fs.readFileSync(file);
+    const decodedBytes = file.endsWith('.gz') ? zlib.gunzipSync(bytes) : bytes;
+    const document = JSON.parse(decodedBytes.toString('utf8'));
+    assert.equal(document.schema, 'swu-reference-corpus/v1');
+    assert.ok(Array.isArray(document.recordings) && document.recordings.length, 'Empty reference corpus');
+    return { path: file, bytes, decodedBytes, document };
+}
+function corpus(directory = defaultCorpus) { return manifestArtifact(directory).document; }
+function writeManifest(directory, document) {
+    assert.equal(document.schema, 'swu-reference-corpus/v1');
+    assert.ok(Array.isArray(document.recordings) && document.recordings.length, 'Empty reference corpus');
+    const existing = ['manifest.json', 'manifest.json.gz'].filter(name => fs.existsSync(path.join(directory, name)));
+    assert.ok(existing.length <= 1, 'Ambiguous reference manifests');
+    // Existing corpus format is stable; newly generated corpora use gzip.
+    const file = path.join(directory, existing[0] ?? 'manifest.json.gz');
+    const decoded = Buffer.from(JSON.stringify(document, null, 2) + '\n');
+    const bytes = file.endsWith('.gz') ? zlib.gzipSync(decoded) : decoded;
+    const temporary = file + '.' + crypto.randomUUID() + '.tmp';
+    try {
+        fs.writeFileSync(temporary, bytes, { flag: 'wx' });
+        fs.renameSync(temporary, file);
+    } finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
+    return manifestArtifact(directory);
 }
 function artifact(directory, kind, hash) {
     assert.match(hash, /^[a-f0-9]{64}$/);
@@ -85,4 +109,4 @@ function verify(directory = defaultCorpus) {
     }
     return { cases: new Set(manifest.recordings.map(r => r.caseId)).size, recordings: manifest.recordings.length, pools: pools.size, traces: traces.size };
 }
-module.exports = { root, defaultCorpus, read, registry, definition, corpus, artifact, checkedArtifact, selectCases, verify };
+module.exports = { root, defaultCorpus, read, registry, definition, corpus, manifestArtifact, writeManifest, artifact, checkedArtifact, selectCases, verify };

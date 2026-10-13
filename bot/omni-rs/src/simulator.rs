@@ -38,6 +38,8 @@ pub struct Engine {
     by_code: HashMap<String, u16>,
     shield_def: u16,
     experience_def: Option<u16>,
+    weakness_def: Option<u16>,
+    force_def: Option<u16>,
     catalogue: Option<Catalogue>,
     rules_backend: RulesBackend,
     rules_instrumentation: bool,
@@ -73,19 +75,29 @@ fn keyword_text(text: &str) -> Result<(u16, u16, u16), String> {
     let mut nesting = 0;
     for c in text.chars() {
         if c == '(' {
+            if nesting != 0 {return Err("nested keyword reminder is unsupported".into());}
             nesting += 1;
         } else if c == ')' {
+            if nesting == 0 {return Err("unbalanced keyword reminder".into());}
             nesting -= 1;
         } else if nesting == 0 {
             plain.push(c);
         }
     }
+    if nesting != 0 {return Err("unbalanced keyword reminder".into());}
     let mut flags = 0;
-    let mut raid = 0;
-    let mut restore = 0;
-    for line in plain.lines().map(str::trim).filter(|s| !s.is_empty()) {
+    let mut raid:u16 = 0;
+    let mut restore:u16 = 0;
+    let mut seen=std::collections::HashSet::new();
+    for line in plain.split(['\n',',']).map(str::trim).filter(|s| !s.is_empty()) {
+        let line=line.strip_suffix('.').unwrap_or(line);
+        if line.ends_with(char::is_whitespace) {return Err(format!("invalid keyword punctuation {line:?}"));}
         let words: Vec<_> = line.split_whitespace().collect();
+        if words.is_empty() {return Err(format!("invalid keyword token {line:?}"));}
         let kw = words[0].to_ascii_lowercase();
+        if !seen.insert(kw.clone()) {return Err(format!("duplicate keyword {kw}"));}
+        let numeric=kw=="raid"||kw=="restore";
+        if words.len()!=if numeric {2}else{1} {return Err(format!("invalid keyword token {line:?}"));}
         match kw.as_str() {
             "sentinel" => flags |= SENTINEL,
             "overwhelm" => flags |= OVERWHELM,
@@ -93,15 +105,17 @@ fn keyword_text(text: &str) -> Result<(u16, u16, u16), String> {
             "ambush" => flags |= AMBUSH,
             "grit" => flags |= GRIT,
             "shielded" => flags |= SHIELDED,
+            "hidden" => flags |= 1<<8,
             "raid" | "restore" => {
+                if !words[1].bytes().all(|c|c.is_ascii_digit()) {return Err(format!("invalid numeric keyword {line:?}"));}
                 let amount = words
                     .get(1)
                     .and_then(|s| s.parse::<u16>().ok())
                     .ok_or_else(|| format!("invalid keyword {line}"))?;
                 if kw == "raid" {
-                    raid += amount;
+                    raid=raid.checked_add(amount).ok_or("Raid amount overflow")?;
                 } else {
-                    restore += amount;
+                    restore=restore.checked_add(amount).ok_or("Restore amount overflow")?;
                 }
             }
             _ => return Err(format!("unsupported ability text {line:?}")),
@@ -206,6 +220,8 @@ impl Engine {
             by_code,
             shield_def: shield_def.ok_or("pool must include TOKEN_SHIELD")?,
             experience_def: None,
+            weakness_def: None,
+            force_def: None,
             catalogue: None,
             rules_backend: RulesBackend::Auto,
             rules_instrumentation: false,
@@ -305,7 +321,7 @@ impl Engine {
         Ok(())
     }
     fn upgrade_stats(&self,s:&State,parent:CardId)->(i64,i64) {
-        self.upgrades(s,parent).iter().filter(|id|!self.def(s,**id).info.is("token")).fold((0,0),|a,id| {
+        self.upgrades(s,parent).iter().filter(|id|!self.def(s,**id).info.is("token") || Some(s.card(**id).def)==self.weakness_def).fold((0,0),|a,id| {
             let info=&self.def(s,*id).info;(a.0+info.upgrade_power.unwrap_or(0) as i64,a.1+info.upgrade_hp.unwrap_or(0) as i64)
         })
     }
@@ -391,6 +407,7 @@ impl Engine {
             .iter()
             .copied()
             .filter(|&c| !sentinel || self.keyword_amount(s, c, "sentinel") > 0)
+            .filter(|&c| self.keyword_amount(s,c,"sentinel") > 0 || self.keyword_amount(s,c,"hidden") == 0 || !s.card(c).hidden_qualified())
             .collect();
         if !ambush && !sentinel {
             out.push(opp.base);
@@ -663,6 +680,7 @@ impl Engine {
                     self.spend(&mut t, self.cost(s, id));
                     t.player_mut(seat).hand.remove(id);
                     t.card_mut(id).exhausted = true;
+                    t.card_mut(id).set_hidden_qualified(true);
                     self.add_arena(&mut t, id)?;
                     t.source = id;
                     t.trigger_context = 1;
@@ -708,6 +726,7 @@ impl Engine {
                         c.epic_used = true;
                         c.exhausted = false;
                     }
+                    t.card_mut(leader).set_hidden_qualified(true);
                     self.add_arena(&mut t, leader)?;
                     t.source = leader;
                     self.enter_triggers(&mut t)?;
@@ -738,6 +757,9 @@ impl Engine {
                     t.card_mut(source).exhausted = true;
                     t.trigger_context = 2;
                     t.attack_source = source;t.attack_defender=id;
+                    // The declaration registers before queued framework deaths
+                    // physically remove combatants. Copy only for defender rules.
+                    let declaration_context=if self.has_defense_registration(&t,id) {Some(t)}else{None};
                     self.sweep_stat_defeats(&mut t)?;
                     t.pending_triggers = 0;
                     let d = self.def(&t, source);
@@ -752,7 +774,9 @@ impl Engine {
                         t.pending_triggers |= T_LEADER;
                     }
                     self.queue_programs(&mut t, "onAttack");
-                    self.process_triggers(&mut t)?;
+                    if let Some(context)=declaration_context.as_ref() {
+                        if !self.capture_defense_window(&mut t,context)? {self.process_triggers(&mut t)?;}
+                    } else {self.process_triggers(&mut t)?;}
                 }
             }
             Decision::VaderBase => {
@@ -1021,6 +1045,7 @@ impl Engine {
                     present: true,
                     def: self.shield_def,
                     owner: s.active,
+                    next_token: s.card(s.source).shield,
                     ..Card::default()
                 };
                 s.card_mut(s.source).shield = id;
@@ -1118,7 +1143,12 @@ impl Engine {
             self.finish(s)?;
         } else {
             if (s.after_attack_triggers != 0 || s.after_attack_programs != 0)
-                && self.in_arena(s, source)
+                && (self.in_arena(s, source)
+                    // Ordinary unit WhenPlayed registrations were captured before
+                    // Ambush; source departure cannot erase the remaining window.
+                    // Leader program indices depend on deployed side, so retain
+                    // their existing live-source policy (leaders do not queue WP).
+                    || (s.after_attack_programs != 0 && !self.def(s, source).info.is("leader")))
             {
                 s.pending_programs = s.after_attack_programs;
                 s.after_attack_programs = 0;
@@ -1154,6 +1184,11 @@ impl Engine {
         Ok(())
     }
     fn leave_play_primary(&self, s: &mut State, id: CardId) -> Result<(), String> {
+        self.leave_play_primary_to_discard(s,id,true)
+    }
+    // A returned upgrade moves directly to hand, never through discard. Keep
+    // the common detach/state-reset path without consuming a discard slot.
+    fn leave_play_primary_to_discard(&self, s: &mut State, id: CardId, discard: bool) -> Result<(), String> {
         self.detach(s,id);
         let owner = s.card(id).owner;
         let leader = id == s.player(owner).leader;
@@ -1162,16 +1197,18 @@ impl Engine {
         let p = s.player_mut(owner);
         p.ground.remove(id);
         p.space.remove(id);
-        if !leader && !token {
+        if discard && !leader && !token {
             p.discard.push(id)?;
         }
         let c = s.card_mut(id);
+        if !leader && !token {c.set_hidden_qualified(false);}
         c.damage = 0;
         c.phase_power = 0;
         c.phase_hp = 0;
         c.phase_keyword_values = [0; 2];
         c.phase_keyword_presence = 0;
         c.phase_lost_keywords = 0;
+        c.clear_hidden_phase_effects();
         c.shield = 0;
         c.experience = 0;
         c.upgrades = 0;
@@ -1242,11 +1279,13 @@ impl Engine {
         if s.players.iter().all(|p| p.out) {
             s.action_player=None;
             for id in 1..s.next_id {
+                s.card_mut(id).set_hidden_qualified(false);
                 s.card_mut(id).phase_power = 0;
                 s.card_mut(id).phase_hp = 0;
                 s.card_mut(id).phase_keyword_values = [0; 2];
                 s.card_mut(id).phase_keyword_presence = 0;
                 s.card_mut(id).phase_lost_keywords = 0;
+                s.card_mut(id).clear_hidden_phase_effects();
             }
             self.sweep_stat_defeats(s)?;
             if self.open_deaths(s,4)? {return Ok(());}
@@ -1327,6 +1366,7 @@ impl Engine {
             return Err(format!("conflicting card identity {text}"));
         }
         let c = s.card_mut(id);
+        if let Some(q)=v.get("hiddenQualified") {c.set_hidden_qualified(q.as_bool().ok_or("hiddenQualified must be boolean")?);}
         c.present = true;
         c.def = def;
         c.owner = owner;
@@ -1355,14 +1395,14 @@ impl Engine {
                 let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or("unsupported phase keyword")?;
                 let amount = amount.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or("phase keyword amount must be bounded integer")?;
                 if index == 7 && amount == 0 { return Err("zero phase Restore requires verified nullable trigger titles".into()); }
-                if index >= 6 { c.phase_keyword_values[index - 6] = amount; } else if amount != 1 { return Err("boolean phase keyword amount must be one".into()); }
-                c.phase_keyword_presence |= 1 << index;
+                if let Some(slot) = crate::ability_ir::numeric_keyword_slot(index) { c.phase_keyword_values[slot] = amount; } else if amount != 1 { return Err("boolean phase keyword amount must be one".into()); }
+                c.add_phase_keyword(index);
             }
         }
         if let Some(keywords) = v.get("phaseLostKeywords") {
             for keyword in keywords.as_array().ok_or("phaseLostKeywords must be array")? {
                 let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| Some(*k) == keyword.as_str()).ok_or("unsupported lost keyword")?;
-                c.phase_lost_keywords |= 1 << index;
+                c.add_lost_keyword(index);
             }
         }
         s.next_id = s.next_id.max(id + 1);
@@ -1380,7 +1420,7 @@ impl Engine {
                     s.card_mut(id).experience = uid;
                     prior
                 } else {
-                    if !self.def(s,uid).info.is("upgrade") || self.def(s,uid).info.is("token") {return Err("unsupported attachment type".into());}
+                    if !self.def(s,uid).info.is("upgrade") || (self.def(s,uid).info.is("token") && Some(s.card(uid).def)!=self.weakness_def) {return Err("unsupported attachment type".into());}
                     0
                 };
                 s.card_mut(uid).next_token = prior;
@@ -1399,6 +1439,8 @@ impl Engine {
             return Err("positions must start at an action window in the action phase".into());
         }
         let mut s = State::default();
+        s.hidden_history_exact=v.get("hiddenHistoryVersion").is_some();
+        if !s.hidden_history_exact && self.needs_hidden_history() {return Err("selected pool requires explicit Hidden phase history".into());}
         s.round = n(v, "round");
         if s.round == 0 {
             return Err("invalid round".into());
@@ -1455,6 +1497,12 @@ impl Engine {
                     .into(),
             );
         }
+        if let Some(version)=v.get("forceStateVersion") {
+            if version.as_u64()!=Some(1) {return Err("unsupported forceStateVersion".into());}
+            s.force_state_exact=true;
+            for seat in [Seat::P1,Seat::P2] {let token=&v["players"][seat.as_str()]["forceToken"];s.player_mut(seat).force_id=cid(token["id"].as_str().ok_or("Force identity missing")?)?;s.player_mut(seat).force_held=token["held"].as_bool().ok_or("Force held must be boolean")?;}
+            if self.force_def.is_none() && s.players.iter().any(|p|p.force_held) {return Err("held Force requires reviewed native definition".into());}
+        }else if self.needs_force_state() {return Err("selected pool requires explicit Force state version".into());}
         self.check_stat_capacity(&s)?;
         for seat in [Seat::P1, Seat::P2] {
             let p = &v["players"][seat.as_str()];
@@ -1530,15 +1578,16 @@ impl Engine {
                             let mut v = self.card_ref(s, id);
                             let c = s.card(id);
                             v["damage"] = json!(c.damage);
+                            if s.hidden_history_exact {v["hiddenQualified"]=json!(c.hidden_qualified());}
                             if c.phase_power != 0 || c.phase_hp != 0 {
                                 v["phaseStats"] = json!({"power":c.phase_power,"hp":c.phase_hp});
                             }
-                            if c.phase_keyword_presence != 0 {
+                            if c.phase_keyword_mask() != 0 {
                                 let mut keywords = serde_json::Map::new();
-                                for (i, name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() { if c.phase_keyword_presence & (1 << i) != 0 { keywords.insert((*name).into(), json!(c.phase_keyword_amount(i))); } }
+                                for (i, name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() { if c.phase_keyword_mask() & (1 << i) != 0 { keywords.insert((*name).into(), json!(c.phase_keyword_amount(i))); } }
                                 v["phaseKeywords"] = Value::Object(keywords);
                             }
-                            if c.phase_lost_keywords != 0 { v["phaseLostKeywords"] = json!(crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter_map(|(i,k)| (c.phase_lost_keywords & (1 << i) != 0).then_some(*k)).collect::<Vec<_>>()); }
+                            if c.lost_keyword_mask() != 0 { v["phaseLostKeywords"] = json!(crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter_map(|(i,k)| (c.lost_keyword_mask() & (1 << i) != 0).then_some(*k)).collect::<Vec<_>>()); }
                             v["exhausted"] = json!(c.exhausted);
                             v["power"] = json!(self.power(s, id, self.is_attacking(s, id)));
                             v["hp"] = json!(self.hp(s, id));
@@ -1560,6 +1609,8 @@ impl Engine {
             s.winner().map(Seat::as_str)
         };
         let mut value=json!({"round":s.round,"phase":if s.regroup{"regroup"}else{"action"},"initiative":s.initiative.as_str(),"initiativeClaimed":s.initiative_claimed,"prevPassed":s.prev_passed,"activePlayer":s.action_player.map(Seat::as_str),"actor":if s.is_action_window(){Some(s.active.as_str())}else{None},"winner":winner,"nextCardId":s.next_id-1,"players":players});
+        if s.force_state_exact {value["forceStateVersion"]=json!(1);for seat in [Seat::P1,Seat::P2] {let p=s.player(seat);value["players"][seat.as_str()]["forceToken"]=json!({"id":format!("c{}",p.force_id-1),"held":p.force_held});}}
+        if s.hidden_history_exact {value["hiddenHistoryVersion"]=json!(1);}
         if s.arena_order_exact {value["arenaUnitOrder"]=json!({"ground":s.arena_unit_order[0].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>(),"space":s.arena_unit_order[1].as_slice().iter().map(|id|format!("c{}",id-1)).collect::<Vec<_>>()});}
         value
     }

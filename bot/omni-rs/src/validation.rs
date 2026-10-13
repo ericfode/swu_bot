@@ -163,9 +163,13 @@ pub fn validate_state_with_catalogue(
             "winner",
             "players",
             "arenaUnitOrder",
+            "hiddenHistoryVersion",
+            "forceStateVersion",
         ],
         "state",
     )?;
+    let history = match v.get("hiddenHistoryVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported hiddenHistoryVersion".into())};
+    let force_exact = match v.get("forceStateVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported forceStateVersion".into())};
     let next = number(v, "nextCardId", (MAX_CARDS - 1) as u64, "state")?;
     if number(v, "round", u16::MAX as u64, "state")? == 0 {
         return Err("state.round must be positive".into());
@@ -216,9 +220,19 @@ pub fn validate_state_with_catalogue(
                 "ground",
                 "space",
                 "out",
+                "forceToken",
             ],
             seat,
         )?;
+        if force_exact {
+            let token=&p["forceToken"];
+            fields(token,&["id","held"],"forceToken")?;
+            let held=boolean(token,"held","forceToken")?;
+            let id=token["id"].as_str().ok_or("Force identity missing")?;
+            id.strip_prefix('c').and_then(|n|n.parse::<u64>().ok()).filter(|n|format!("c{n}")==id && *n<next && *n+1<MAX_CARDS as u64).ok_or("invalid Force stable identity")?;
+            if refs.seen.insert(id.to_owned(),format!("{seat}.forceToken")).is_some(){return Err("duplicate Force identity".into());}
+            if held && !catalogue.contains_key("TOKEN_THE_FORCE"){return Err("held Force requires selected native definition".into());}
+        } else if p.get("forceToken").is_some(){return Err("Force identity requires forceStateVersion".into());}
         let out = boolean(p, "out", seat)?;
         if !terminal && v["actor"] == *seat && out {
             return Err(format!("{seat} cannot act after leaving the phase"));
@@ -288,6 +302,7 @@ pub fn validate_state_with_catalogue(
                         "phaseStats",
                         "phaseKeywords",
                         "phaseLostKeywords",
+                        "hiddenQualified",
                     ]
                 } else if zone == "resources" {
                     &["id", "setCode", "name", "exhausted"]
@@ -327,6 +342,7 @@ pub fn validate_state_with_catalogue(
                     boolean(c, "exhausted", &at)?;
                 }
                 if arena {
+                    if history {boolean(c,"hiddenQualified",&at)?;} else if c.get("hiddenQualified").is_some() {return Err(format!("{at}: hiddenQualified requires hiddenHistoryVersion"));}
                     if info["arena"] != zone {
                         return Err(format!("{at}: card is in the wrong arena"));
                     }
@@ -366,9 +382,10 @@ pub fn validate_state_with_catalogue(
                         if !has_type(info,"upgrade") {return Err(format!("{at}: attachment must be an upgrade"));}
                         let token=boolean(u,"token","upgrade")?;
                         if token {
-                            if !matches!(u["setCode"].as_str(),Some("TOKEN_SHIELD"|"TOKEN_EXPERIENCE")) || !has_type(info,"token") {return Err(format!("{at}: only Shield and Experience tokens are supported"));}
+                            if !matches!(u["setCode"].as_str(),Some("TOKEN_SHIELD"|"TOKEN_EXPERIENCE"|"TOKEN_WEAKNESS")) || !has_type(info,"token") {return Err(format!("{at}: only Shield, Experience and Weakness tokens are supported"));}
+                            if u["setCode"]=="TOKEN_WEAKNESS" {upgrade_stats.0+=info["upgradePower"].as_i64().ok_or("Weakness missing signed power")?;upgrade_stats.1+=info["upgradeHp"].as_i64().ok_or("Weakness missing signed HP")?;}
                         }else{
-                            if has_type(info,"token") {return Err(format!("{at}: only Shield and Experience tokens are supported"));}
+                            if has_type(info,"token") {return Err(format!("{at}: only Shield, Experience and Weakness tokens are supported"));}
                             let controller=u["controller"].as_str().ok_or("ordinary upgrade needs controller")?;
                             let owner=u["owner"].as_str().ok_or("ordinary upgrade needs owner")?;
                             if owner!=controller {return Err("foreign-controlled upgrade imports are unsupported".into());}
@@ -379,9 +396,10 @@ pub fn validate_state_with_catalogue(
                     if let Some(keywords) = c.get("phaseKeywords") {
                         let object = keywords.as_object().ok_or_else(|| format!("{at}: phaseKeywords must be object"))?;
                         for (keyword, amount) in object {
+                            if keyword=="hidden" && !history {return Err(format!("{at}: Hidden phase effect requires explicit history"));}
                             let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or_else(|| format!("{at}: unknown phase keyword {keyword}"))?;
                             let amount = amount.as_u64().filter(|n| *n <= 65535).ok_or_else(|| format!("{at}: invalid phase keyword amount"))?;
-                            if index < 6 && amount != 1 { return Err(format!("{at}: boolean phase keyword amount must be one")); }
+                            if crate::ability_ir::numeric_keyword_slot(index).is_none() && amount != 1 { return Err(format!("{at}: boolean phase keyword amount must be one")); }
                             if keyword == "restore" && amount == 0 { return Err(format!("{at}: zero phase Restore requires verified nullable trigger titles")); }
                         }
                     }
@@ -390,6 +408,7 @@ pub fn validate_state_with_catalogue(
                         let mut seen = HashSet::new();
                         for keyword in array {
                             let name = keyword.as_str().filter(|k| crate::ability_ir::CORE_KEYWORDS.contains(k)).ok_or_else(|| format!("{at}: unknown lost phase keyword"))?;
+                            if name=="hidden" && !history {return Err(format!("{at}: Hidden phase loss requires explicit history"));}
                             if !seen.insert(name) { return Err(format!("{at}: duplicate lost phase keyword")); }
                         }
                     }
@@ -603,7 +622,7 @@ mod tests {
         upgrades[2]["token"] = json!(false);
         assert!(validate_state_with_catalogue(&state, &cards)
             .unwrap_err()
-            .contains("only Shield and Experience tokens"));
+            .contains("only Shield, Experience and Weakness tokens"));
     }
 
     #[test]

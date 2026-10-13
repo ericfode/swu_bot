@@ -81,6 +81,9 @@ pub fn expression(e: &Expr) -> Result<String, String> {
             args,
         } => query(name, receiver, args)?,
         Expr::Compiled(c) => expression(&c.original)?,
+        Expr::ArenaList { .. } | Expr::ArenaFilter { .. } | Expr::ArenaSome { .. } | Expr::ArenaLength { .. } => {
+            return Err("arena list expression requires interpreter".into())
+        }
     })
 }
 fn reference(path: &[String]) -> Result<String, String> {

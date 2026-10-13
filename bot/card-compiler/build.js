@@ -10,7 +10,7 @@ const codeFor = (card) => card.setId?.number == null ? `TOKEN_${card.internalNam
 function files(root, extension) {
     return fs.readdirSync(root, { recursive: true }).filter((f) => f.endsWith(extension)).sort();
 }
-function requiredCapabilities(abilities, card) {
+function requiredCapabilities(abilities, card, attachCondition) {
     const capabilities = new Set();
     const walk = (value) => {
         if (Array.isArray(value)) return value.forEach(walk);
@@ -31,13 +31,14 @@ function requiredCapabilities(abilities, card) {
         }
     };
     walk(abilities);
+    walk(attachCondition);
     for (const keyword of card.keywords ?? []) capabilities.add(`keyword:${keyword}`);
     for (const type of card.types ?? []) capabilities.add(`cardType:${type}`);
     return [...capabilities].sort();
 }
 function keywordValues(card) {
     const values = {};
-    const parsedKeywords = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded', 'Coordinate'].map(name => [name.toLowerCase(), name]));
+    const parsedKeywords = new Map(['Sentinel', 'Raid', 'Overwhelm', 'Saboteur', 'Restore', 'Ambush', 'Grit', 'Shielded', 'Coordinate', 'Hidden'].map(name => [name.toLowerCase(), name]));
     // Card's constructor parses text for units; leaders parse deployBox and
     // text separately. Metadata supplies expected names, including mentions
     // that do not become intrinsic keywords without an own-line text match.
@@ -121,7 +122,7 @@ function compileCatalog({ source = path.join(repository, 'forceteki/server'), ca
             compiled = { id: card.id, internalName: card.internalName, sourcePath: null, sourceHash: null, status: supported ? 'supported' : 'unsupported', abilities: { leader: [], unit: [], card: [] }, diagnostics: supported ? [] : [{ code: 'MISSING_IMPLEMENTATION', pattern: 'no-source-for-rules-text', file: `data/Card/${file}`, line: 1, column: 1, message: 'No source implementation and card is not a plain base or supported keyword-only unit' }] };
         }
         const definition = { setCode, ...compiled, card, dataHash: hash(text), keywordValues: keywordValues(card) };
-        definition.requiredCapabilities = requiredCapabilities(definition.abilities, card);
+        definition.requiredCapabilities = requiredCapabilities(definition.abilities, card, definition.attachCondition);
         definitions.push(definition);
     }
     definitions.sort((a, b) => a.setCode.localeCompare(b.setCode));

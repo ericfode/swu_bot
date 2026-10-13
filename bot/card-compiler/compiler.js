@@ -89,6 +89,31 @@ function titleHelper(node, ctx) {
         return name;
     }
     if(ts.isCallExpression(node)&&node.expression.getText(ctx.source).startsWith('TextHelper.')) {
+        if(node.expression.getText(ctx.source)==='TextHelper.resource') {
+            if(node.arguments.length!==1)fail(ctx,node,'unsupported-title-helper');
+            const amount=literal(node.arguments[0],ctx);
+            if(!Number.isSafeInteger(amount)||amount<0)fail(ctx,node,'title-helper-amount');
+            // Env defaults NODE_ENV to test: preserve the real headless labels.
+            return `${amount} resource${amount!==1?'s':''}`;
+        }
+        if(node.expression.getText(ctx.source)==='TextHelper.keyword') {
+            if(node.arguments.length!==1)fail(ctx,node,'unsupported-title-helper');
+            const input=unwrap(node.arguments[0]);
+            let keyword, amount;
+            if(ts.isObjectLiteralExpression(input)) {
+                const obj=object(input,ctx);
+                for(const key of obj.props.keys())if(!['keyword','amount'].includes(key))fail(ctx,input,'unsupported-title-helper');
+                if(!obj.props.has('keyword'))fail(ctx,input,'unsupported-title-helper');
+                keyword=literal(obj.props.get('keyword'),obj.ctx);
+                if(obj.props.has('amount')) {
+                    amount=literal(obj.props.get('amount'),obj.ctx);
+                    if(!Number.isSafeInteger(amount)||amount<0)fail(ctx,input,'title-helper-amount');
+                }
+            } else keyword=literal(input,ctx);
+            const keywords=Object.entries(ctx.enums).filter(([key])=>key.startsWith('KeywordName.')).map(([,value])=>value);
+            if(typeof keyword!=='string'||!keywords.includes(keyword))fail(ctx,input,'unsupported-title-helper');
+            return keyword.charAt(0).toUpperCase()+keyword.slice(1)+(amount===undefined?'':` ${amount}`);
+        }
         if(node.expression.getText(ctx.source)==='TextHelper.aspectList') {
             if(node.arguments.length<1||node.arguments.length>2)fail(ctx,node,'unsupported-title-helper');
             const values=literal(node.arguments[0],ctx), conjunction=node.arguments.length===2?literal(node.arguments[1],ctx):null;
@@ -235,7 +260,7 @@ function arenaPredicate(value, ctx, node, depth = 0) {
         return;
     }
     if (!['const','binary','unary','conditional','query','math','array'].includes(value.kind)) fail(ctx, node, 'arena-predicate-expression');
-    if (value.kind === 'query' && !['isUnit','isBase','isLeader','isNonLeaderUnit','isUpgrade','isToken','isEvent','hasSomeTrait','hasEveryTrait','hasSomeAspect','hasEveryAspect','hasSomeKeyword','hasEveryKeyword','getPower','getHp','getCost','getPrintedCost','hasInitiative','getNumericKeywordTotal','isInPlay','isDeployed','isUpgraded','canBeDamaged','canBeExhausted'].includes(value.name)) fail(ctx, node, 'arena-predicate-query');
+    if (value.kind === 'query' && !['isUnit','isBase','isLeader','isNonLeaderUnit','isUpgrade','isToken','isEvent','hasSomeTrait','hasEveryTrait','hasSomeAspect','hasEveryAspect','hasSomeKeyword','hasEveryKeyword','getPower','getHp','getCost','getPrintedCost','hasInitiative','getNumericKeywordTotal','isInPlay','isDeployed','isUpgraded','canBeDamaged','canBeExhausted','hasCost'].includes(value.name)) fail(ctx, node, 'arena-predicate-query');
     for (const child of Object.values(value)) {
         if (Array.isArray(child)) { for (const item of child) if (item && typeof item === 'object') arenaPredicate(item, ctx, node, depth + 1); }
         else if (child && typeof child === 'object') arenaPredicate(child, ctx, node, depth + 1);
@@ -411,6 +436,15 @@ function expr(input, context, params = ['context']) {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const call = node.expression;
         const name = call.name.text;
+        if (name === 'hasCost') {
+            if(node.questionDotToken || call.questionDotToken)fail(ctx,node,'optional-cost-query');
+            if(node.arguments.length)fail(ctx,node,'cost-query-arity');
+            const receiver=expr(call.expression,ctx);
+            const roots=['source','card','target'];
+            if(ctx.attachPredicate)roots.push('attachTarget');
+            if(receiver.kind!=='ref'||receiver.path.length!==1||!roots.includes(receiver.path[0]))fail(ctx,node,'cost-query-receiver');
+            return {kind:'query',name,receiver,args:[]};
+        }
         if (['isAttacking','isDefending'].includes(name)) {
             if(node.questionDotToken || call.questionDotToken) fail(ctx,node,'optional-attack-query');
             if(node.arguments.length) fail(ctx,node,'attack-query-arity');
@@ -547,7 +581,7 @@ function liveStatBounds(value, ctx, node, depth = 0) {
     }
     rejected();
 }
-const MODIFIER_KEYWORDS = new Set(['sentinel','saboteur','overwhelm','grit','raid','restore','ambush','shielded']);
+const MODIFIER_KEYWORDS = new Set(['sentinel','saboteur','overwhelm','grit','raid','restore','ambush','shielded','hidden']);
 function modifierEffects(input, ctx, duration, targetValue) {
     let raw = unwrap(input);
     while (ts.isIdentifier(raw) && ctx.constants.has(raw.text)) raw = unwrap(readConstant(raw.text, ctx));
@@ -673,7 +707,28 @@ function effect(input, context, defaultTarget = 'self') {
     }
     if (kind === 'selectCard') {
         knownProperties(obj, ['cardTypeFilter', 'controller', 'zoneFilter', 'cardCondition', 'optional', 'mode', 'numCards', 'canChooseNoCards', 'immediateEffect', 'choosingPlayer']);
-        return { kind: 'select', targetResolver: targetResolverProperties(obj), effect: effect(obj.props.get('immediateEffect'), obj.ctx, 'chosen') };
+        const spec = targetResolverProperties(obj);
+        if (obj.props.has('activePromptTitle')) {
+            const node = unwrap(obj.props.get('activePromptTitle'));
+            if (!(ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node) && node.templateSpans.every(span => titleHelper(span.expression, obj.ctx) !== null))) fail(obj.ctx, node, 'inline-prompt-title');
+            const title = displayText(node, obj.ctx);
+            if (!title.length || title.length > 1024) fail(obj.ctx, node, 'inline-prompt-title');
+            spec.promptTitle = title;
+        }
+        return { kind: 'select', targetResolver: spec, effect: effect(obj.props.get('immediateEffect'), obj.ctx, 'chosen') };
+    }
+    if (kind === 'useTheForce' || kind === 'theForceIsWithYou') {
+        if (defaultTarget !== 'self') fail(ctx, node, 'force-inherited-target');
+        knownProperties(obj, []);
+        return { kind: kind === 'useTheForce' ? 'useForce' : 'gainForce', target: 'ownPlayer' };
+    }
+    if (kind === 'resourceCard') {
+        knownProperties(obj, ['target']);
+        return { kind, target: target(obj.props.get('target'), obj.ctx, defaultTarget) };
+    }
+    if (kind === 'giveWeakness') {
+        knownProperties(obj, ['amount', 'target']);
+        return { kind, target: target(obj.props.get('target'), obj.ctx, defaultTarget), amount: obj.props.has('amount') ? expr(obj.props.get('amount'), obj.ctx) : constant(1) };
     }
     if (!BASIC_EFFECTS.has(kind)) fail(ctx, node, 'immediateEffect:' + kind);
     knownProperties(obj, ['amount', 'target', 'isCost', 'type', 'damageType', 'isIndirect', 'cannotBePrevented']);

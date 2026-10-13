@@ -101,3 +101,82 @@ test('pipeline CLI keeps builds mandatory and parses multiple selected cards', (
     assert.throws(() => options(['--no-build']), /Unknown/);
     assert.throws(() => options(['--out']), /Missing/);
 });
+
+ test('arena-list mutants independently alter receiver, arena scope, amount and sign', () => {
+    const entry = catalogue.cards.find(c => c.setCode === 'TS26_048');
+    const changes = mutants(entry);
+    for (const label of ['swap-owner','all-arenas','amount-plus-one','remove-negation'])
+        assert.ok(changes.some(c => c.label === label), label);
+    assert.ok(!changes.some(c => c.label.includes('sequential')));
+});
+
+
+test('defeat list sensitivity includes empty targets and owner restriction', () => {
+    const entry = {setCode:'TST_002',abilities:{card:[{effect:{kind:'defeat',target:{kind:'arenaList',receiver:{kind:'ref',path:['game']},predicate:{kind:'const',value:true}}}}]}};
+    const changes = mutants(entry);
+    assert.deepEqual(changes.map(c => c.label).sort(), ['empty-list','friendly-only-list']);
+    assert.equal(entry.abilities.card[0].effect.target.predicate.value,true);
+});
+test('cost query sensitivity covers zero-cost capability and attachment thresholds', () => {
+    const condition = {kind:'binary',op:'&&',left:{kind:'query',name:'hasCost',receiver:{kind:'ref',path:['card']},args:[]},right:{kind:'binary',op:'<=',left:{kind:'ref',path:['card','cost']},right:{kind:'const',value:4}}};
+    const entry = {setCode:'TST_003',abilities:{card:[]},attachCondition:condition};
+    const before=digest(entry), changes=mutants(entry);
+    assert.deepEqual(changes.map(c=>c.label).sort(),['amount-plus-one','no-cost-cards','positive-cost-only']);
+    assert.equal(digest(entry),before);
+    assert.ok(changes.every(c=>c.path.startsWith('attachCondition.')));
+    const positive=changes.find(c=>c.label==='positive-cost-only').entry.attachCondition.left;
+    assert.equal(positive.left.name,'getPrintedCost');
+    assert.equal(positive.right.value,0);
+});
+
+
+test('upgrade return mutations challenge movement, inventory, optionality and source-player conditions', () => {
+    const byId = id => mutants(catalogue.cards.find(c => c.setCode === id));
+    for (const id of ['HMW_222','HMW_236','SEC_200','SHD_044','SHD_209']) {
+        const changes = byId(id);
+        assert.ok(changes.some(c => c.label === 'defeat-instead-of-return'));
+        assert.ok(changes.some(c => c.label === 'mandatory-instead-of-optional'));
+    }
+    for (const label of ['opponent-instead-of-self','arena-instead-of-discard'])
+        assert.ok(byId('SHD_044').some(c => c.label === label));
+    for (const label of ['opponent-base-trait','always-true-branch','always-false-branch'])
+        assert.ok(byId('HMW_222').some(c => c.label === label));
+    for (const id of ['HMW_236','SEC_200'])
+        assert.ok(byId(id).some(c => c.label === 'unit-type-instead-of-upgrade'));
+});
+
+
+test('defense trigger mutations challenge registration, mandatory effects and controller-relative results',()=>{
+    const changes=id=>mutants(catalogue.cards.find(c=>c.setCode===id));
+    for(const id of ['LOF_047','SHD_035','SOR_196','TS26_024','TWI_049','TWI_083'])
+        assert.ok(changes(id).some(c=>c.label==='attack-instead-of-defense'));
+    assert.ok(changes('SOR_196').some(c=>c.label==='reverse-readiness'));
+    assert.ok(changes('TS26_024').some(c=>c.label==='swap-effect-owner'));
+    assert.ok(changes('SHD_035').some(c=>c.label==='shield-instead-of-experience'));
+    for(const label of ['optional-instead-of-mandatory','reverse-token-readiness','wrong-token-type','swap-effect-owner'])
+        assert.ok(changes('TWI_049').some(c=>c.label===label));
+});
+
+
+test('keyword sensitivity removes intrinsic presence without altering metadata or source', () => {
+    const entry = {setCode:'TST_004', sourceHash:hash, card:{keywords:['hidden','raid']}, keywordValues:{hidden:1,raid:0}, abilities:{card:[]}};
+    const before=digest(entry), changes=mutants(entry);
+    assert.deepEqual(changes.map(c=>c.label),['remove-intrinsic-hidden','remove-intrinsic-raid']);
+    for(const c of changes){
+        assert.deepEqual(c.entry.card,entry.card);
+        assert.deepEqual(c.entry.abilities,entry.abilities);
+        assert.equal(c.entry.sourceHash,entry.sourceHash);
+        assert.equal(Object.keys(c.entry.keywordValues).length,1);
+    }
+    assert.deepEqual(changes[0].entry.keywordValues,{raid:0});
+    assert.deepEqual(changes[1].entry.keywordValues,{hidden:1});
+    assert.equal(digest(entry),before);
+});
+test('Hidden query sensitivity distinguishes presence from another live keyword', () => {
+    const query={kind:'query',name:'hasSomeKeyword',receiver:{kind:'ref',path:['card']},args:[{kind:'const',value:'hidden'}]};
+    const entry={setCode:'TST_005',abilities:{card:[{targetResolver:{predicate:query},effect:{kind:'gainKeyword',keyword:'hidden'}}]}};
+    const changes=mutants(entry);
+    assert.ok(changes.some(c=>c.label==='sentinel-instead-of-hidden-query'&&c.entry.abilities.card[0].targetResolver.predicate.args[0].value==='sentinel'));
+    assert.ok(changes.some(c=>c.label==='sentinel-instead-of-hidden-modifier'&&c.entry.abilities.card[0].effect.keyword==='sentinel'));
+    assert.equal(query.args[0].value,'hidden');
+});

@@ -1,6 +1,6 @@
 use omni_rs::{check, Engine};
 use sha2::{Digest, Sha256};
-use std::{collections::{BTreeMap, BTreeSet}, path::Path};
+use std::{collections::{BTreeMap, BTreeSet}, path::Path, io::Read};
 
 fn checked_bytes(path: &Path, expected: &str) -> Vec<u8> {
     let bytes = std::fs::read(path).unwrap();
@@ -8,12 +8,61 @@ fn checked_bytes(path: &Path, expected: &str) -> Vec<u8> {
     bytes
 }
 
+fn read_manifest(directory: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let json = directory.join("manifest.json");
+    let gzip = directory.join("manifest.json.gz");
+    if json.try_exists()? == gzip.try_exists()? {
+        return Err("Reference corpus needs exactly one manifest.json or manifest.json.gz".into());
+    }
+    let bytes = if json.try_exists()? {
+        std::fs::read(json)?
+    } else {
+        let compressed = std::fs::read(gzip)?;
+        let mut decoded = Vec::new();
+        flate2::read::MultiGzDecoder::new(compressed.as_slice()).read_to_end(&mut decoded)?;
+        decoded
+    };
+    let document: serde_json::Value = serde_json::from_slice(&bytes)?;
+    if document["schema"] != "swu-reference-corpus/v1" || !document["recordings"].as_array().is_some_and(|rows| !rows.is_empty()) {
+        return Err("Invalid reference corpus v1 document".into());
+    }
+    Ok(document)
+}
+
+#[test]
+fn reference_manifest_reader_accepts_both_formats_and_rejects_damage() {
+    use std::io::Write;
+    let directory = std::env::temp_dir().join(format!("swu-manifest-reader-{}", std::process::id()));
+    std::fs::create_dir(&directory).unwrap();
+    let raw = br#"{"schema":"swu-reference-corpus/v1","recordings":[{"caseId":"a","witness":null},{"caseId":"b"}]}"#;
+    let json = directory.join("manifest.json");
+    let gzip = directory.join("manifest.json.gz");
+    assert!(read_manifest(&directory).is_err());
+    std::fs::write(&json, raw).unwrap();
+    let expected = read_manifest(&directory).unwrap();
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(raw).unwrap();
+    let compressed = encoder.finish().unwrap();
+    std::fs::write(&gzip, &compressed).unwrap();
+    assert!(read_manifest(&directory).is_err());
+    std::fs::remove_file(&json).unwrap();
+    assert_eq!(read_manifest(&directory).unwrap(), expected);
+    std::fs::write(&gzip, &compressed[..compressed.len()-4]).unwrap();
+    assert!(read_manifest(&directory).is_err());
+    std::fs::write(&gzip, b"not gzip").unwrap();
+    assert!(read_manifest(&directory).is_err());
+    std::fs::remove_file(&gzip).unwrap();
+    std::fs::write(&json, br#"{"schema":"wrong","recordings":[{}]}"#).unwrap();
+    assert!(read_manifest(&directory).is_err());
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
 #[test]
 fn every_reference_matches_current_programs_and_immutable_engine_recordings() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let catalogue = std::fs::read(root.join("../card-compiler/generated/catalog.json")).unwrap();
     let directory = root.join("../cards/reference/fixtures");
-    let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(directory.join("manifest.json")).unwrap()).unwrap();
+    let manifest = read_manifest(&directory).unwrap();
     assert_eq!(manifest["schema"], "swu-reference-corpus/v1");
     let recordings = manifest["recordings"].as_array().unwrap();
     assert!(!recordings.is_empty(), "missing reference recordings");
