@@ -8,8 +8,9 @@
  * ARENA_DASH overrides the dashboard folder (default /mnt/project-files/dashboard, skipped when it does not exist).
  * Panel thread names come from roster.json `owner` (the project thread that runs that competitor).
  *
- * A competitor panel has two writers, the competitor (say: now, idea, plan, thoughts, strategy diagram) and the referee
- * (publishStandings: versions, standings widgets, status). Each keeps its half in its own file in ARENA_HOME,
+ * A competitor panel has two halves: the competitor's (updatePanel: now, idea, plan, thoughts, strategy diagram; today
+ * only api.register writes it) and the referee's (publishStandings: versions, standings widgets, status). Each half has
+ * its own file in ARENA_HOME,
  *   panels/<agent>.say.json   panels/<agent>.rated.json
  * and every write of either half recomposes the dashboard panel from both, so neither overwrites the other's fields.
  * The leaderboard and the experiment are kept in ARENA_HOME too (panels/leaderboard.json, panels/experiment.json), so
@@ -28,10 +29,21 @@ function enabled() {
     return fs.existsSync(DASH);
 }
 
-const panelFile = (agent) => path.join(DASH, 'panels', `arena-${agent}.json`);
-const halfFile = (agent, side) => path.join(HOME, 'panels', `${agent}.${side}.json`);
+// a competitor's name is part of a file name: only names api.js register allows (roster.json is the bots' user's, and
+// the referee writing these runs as root)
+const NAME = /^[a-z][a-z0-9_]{0,31}$/;
+const named = (agent) => {
+    if (!NAME.test(String(agent))) {
+        throw new Error(`not a competitor name: ${JSON.stringify(agent)}`);
+    }
+    return agent;
+};
+const panelFile = (agent) => path.join(DASH, 'panels', `arena-${named(agent)}.json`);
+const halfFile = (agent, side) => path.join(HOME, 'panels', `${named(agent)}.${side}.json`);
 const boardFile = (name) => path.join(HOME, 'panels', `${name}.json`);
-const agentInfo = (agent) => roster().agents.find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
+// benched competitors (api.js withdraw) keep their panels, ratings and history
+const everyone = (r) => [...r.agents, ...(r.bench ?? [])].filter((a) => NAME.test(String(a?.name)));
+const agentInfo = (agent) => everyone(roster()).find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
 
 /** A trimmed string of at most max chars, or undefined (null, empty, objects). */
 function text(v, max) {
@@ -123,18 +135,20 @@ function publishStandings(st) {
     const show = (v) => (v === null || v === undefined ? '-' : v);
     const t = new Date().toISOString();
     const done = st.status === 'done';
-    const eloSeries = () => bestFirst(r.agents.map((a) => ({ name: a.name, points: rounds.filter((rd) => eloOf(a.name, rd) !== null).map((rd) => [rd.round, eloOf(a.name, rd)]) })));
+    const eloSeries = () => bestFirst(everyone(r).map((a) => ({ name: a.name, points: rounds.filter((rd) => eloOf(a.name, rd) !== null).map((rd) => [rd.round, eloOf(a.name, rd)]) })));
 
-    for (const a of r.agents) {
+    for (const a of everyone(r)) {
         const rows = rounds.map((rd) => ({ rd, b: rd.bots.find((b) => b.agent === a.name) })).filter((x) => x.b);
         const cur = rows[rows.length - 1]?.b;
+        // the round those stats are from: the latest one it played (a benched or missing competitor sat out the later ones)
+        const curRd = rows[rows.length - 1]?.rd ?? last;
         const curElo = cur ? elo(cur.name) : null;
         writeJson(halfFile(a.name, 'rated'), {
             bots: [...new Set(rows.map((x) => x.b.name))], status: done ? 'done' : 'running', updatedAt: t,
             widgets: [
                 { type: 'stats', items: [
                     { label: 'Elo (all rounds)', value: !cur ? '-' : curElo === null ? NO_GAMES : curElo },
-                    { label: `rank in round ${last?.round ?? '-'}`, value: !cur ? '-' : cur.rank === null || cur.rank === undefined ? NO_GAMES : `${cur.rank} / ${last.bots.length}` },
+                    { label: `rank in round ${curRd?.round ?? '-'}`, value: !cur ? '-' : cur.rank === null || cur.rank === undefined ? NO_GAMES : `${cur.rank} / ${curRd.bots.length}` },
                     { label: 'win rate', value: cur?.winRate === null || !cur ? '-' : `${Math.round(cur.winRate * 100)}%` },
                     { label: 'ms / decision', value: cur?.msPerDecision ?? '-' },
                     { label: 'forfeits', value: cur?.forfeits ?? 0 }

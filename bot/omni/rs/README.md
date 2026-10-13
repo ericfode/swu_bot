@@ -53,3 +53,62 @@ This regenerates three additional small engine fixtures, independently of the 30
 The three-decision `vader-dual-lethal` fixture starts from a naturally reached ready deployed-Vader window and constructs the initial base damage values as 28 for the attacker and 29 for the defender. All recorded actions and resulting state come from the unmodified engine. Vader attacks the enemy base but targets his own base with the On Attack ability. His own base dies first; combat still completes and defeats the other base. The first declared winner remains, even though both bases end at 30 damage. This is explicitly marked as a constructed scenario and is not counted as an ordinary measured game.
 
 Together with the three normal-game fixtures, the six compressed files are approximately 122 KB. The Rust conformance test discovers and checks all of them.
+
+## Stress test with bots
+
+```sh
+cargo build --release -p omni-rs && npm run wasm:build -- --target node
+node bot/omni/rs/stress.js --bots heuristic,aggro,control,c-clock,rust-search,node-search --seeds 1-4 \
+    --pool bot/omni/rs/pool.json --out replays/omni-rs-stress --workers 3 --sim-every 5
+```
+
+Bots play ordinary games through the referee (`bot/match.js`), every pair once per seed, on decks dealt from the pool.
+forceteki decides every game. The Rust simulator (the WebAssembly build) only follows along (`mirror.js`):
+
+- **Real moves.** From the first action window on, Rust is loaded with forceteki's full state, then gets every move
+  the bots make. Before each move it compares the legal action sets; at each action window, the full state; at the
+  end, the final state and winner.
+- **Lookahead moves.** Bots that ask for simulations (`rust-search`, `node-search`) try many moves no real game
+  reaches. One simulation in `--sim-every` is followed the same way, from its re-dealt start position. `0` turns it off.
+
+After a disagreement the mirror waits for the next action window and loads forceteki's state again, so one game can
+show several. A checker bug never changes a game: it is counted as `mirror-error` and that line stops being checked.
+The checker reads the engine only; the same game with and without it makes the same moves.
+
+Output in `--out`: `games-<worker>.jsonl` (one line per game: outcome, moves checked, findings) and `summary.json`
+(totals, findings by kind, source and card, engine errors). Each finding has a file `findings/<game>-<n>.jsonl.gz` in
+the trace format above: the last loaded window and the moves after it, up to the disagreement. `target/release/omni-rs
+check --pool <pool> <file>` replays it on the Rust side alone and stops at the same place (if Rust now agrees, it
+stops at "missing terminal result" instead, since the file ends there). Finding kinds: `actions` (legal action sets
+differ, with the keys only one side has), `state` (full states differ, with the differing paths), `apply` (Rust
+refused the chosen move), `terminal`, `rust-error` and `mirror-error`. `cards` and `lastCard` (the card of the move
+before the disagreement) name the cards involved; `summary.json` counts findings per card.
+
+For the compiled card pool (PR #121, 830 cards), add `--catalogue bot/card-compiler/generated/catalog.json --pool
+bot/card-compiler/generated/runtime-pool.json --selection-toggles`: the compiled card programs, and forceteki with the
+opt-in select-card rule that this Rust engine follows (`env.newGame({ selectionToggles: true })`). `omni-rs check` then
+needs the same `--catalogue` and `--pool`.
+
+`--views` also builds, from the Rust state, the protocol views a bot would get from Rust simulations (`rust-view.js`)
+and compares them with `bot/view.js` on forceteki: the action list at every checked decision and the board at every
+action window. The first difference in a line is a `view` finding.
+
+First run (`/mnt/project-files/omni/stress/r1-pool100/`, `summary-short.json` for the totals):
+11 bots (heuristic, aggro, control, tempo, rush, random, c-clock, py-clock, rust-greedy2, rust-search, node-search),
+every pair on seeds 21-22, 110 games on the 100-card pool: 13,647 real moves and 6,703 action windows, plus 13,441
+moves and 6,066 windows inside 1,631 bot simulations, with no disagreement and no engine error. A `--views` run had no
+view difference either.
+
+Second run (`/mnt/project-files/omni/stress/r2-pool830/`, `FINDINGS.md`), the same bots and seeds on the 830-card pool of
+PR #121 before it merged: 12,687 real moves and 5,813 moves inside 610 simulations, no engine error, and 3 findings from
+2 Rust bugs. Force Illusion (LOF_223) offers already-exhausted enemy units to exhaust, where forceteki skips that step.
+The deployed C-3PO leader (SEC_015) loses its On Attack trigger.
+
+## Simulations on the Rust engine (opt-in)
+
+A protocol bot that sends `"simEngine": "rust"` in `ready` gets its simulations from the Rust simulator whenever every
+card in the game is in the pool (`rust-sims.js`; spec/protocol.md#simulations-on-the-rust-engine). Otherwise it gets
+forceteki simulations, as every bot does by default. `node-search-rust` is `node-search` opted in: on pool decks it
+spends about 17 ms per decision against 35 ms, and in three test games (seeds 31-33 against heuristic) it played games of
+the same length with the same winner. The WebAssembly package
+must be built (`npm run wasm:build -- --target node`); without it the referee says so once and serves forceteki.

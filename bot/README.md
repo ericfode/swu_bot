@@ -37,7 +37,7 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
 ## Bots in other languages
 - `wasm/` — a bot written by hand in WebAssembly text (`bot.wat`) behind a thin stdio shim (`host.js`), registered as `wasm`. See `wasm/README.md`.
 - `python/` — `py-clock`, a Python bot (race-clock evaluation, beam search over attack sequences, card data from the engine JSON); see `python/README.md`.
-- `c/` — `c-clock`, a bot in C on that protocol (`make -C bot/c` first). See `c/README.md`.
+- `c/` — `c-clock`, a bot in C on that protocol (`make -C bot/c` first), and `c-clock2` (`--v2`: Pilot deploys, no duplicate uniques). See `c/README.md`.
 - The full interface and replay format are written up in `spec/`.
 - `jev/jev_bot.py` — `jev`: each move is picked by TypeSafe's Jev model (a Choice over the legal actions). See `jev/README.md`.
 - `rust/` — Rust bot (`swu-bot-rs`, policies `random`, `greedy`, `greedy2` and `search`) speaking the stdio protocol (v1, or v2 with simulations when offered); registered as `rust-<policy>` in `external-bots.json`. `greedy2` reads card stats from `forceteki/test/json`. Build with `cargo build --release` at the repo root (Cargo workspace, binaries in `target/release/`), test with `cargo test --workspace`, then `node bot/rust/check.js [gamesPerSeat] [startSeed] [cardJsonDir]` plays both against `random-a` on the real engine. Why a subprocess rather than WASM or a native addon: see `rust/README.md`.
@@ -83,7 +83,8 @@ Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, o
   `analysis/realdeck/compare.js` compares that with human results.
 - `npm test` — unit tests for ratings, the report and bot logic on mock boards (needs `forceteki/build`, not card data).
 
-## Arena (competing Claudes)
-- `bot/arena/` runs a competition where several Claude threads, each with its own research prompt, improve their own
-  bot. Bots live in the shared project folder (`/mnt/project-files/arena/`); `players/index.js` resolves `<agent>` and
-  `<agent>-v<N>` names through `arena/registry.js`. See `bot/arena/README.md`.
+## Arena
+- `bot/arena/` is the hosted arena on Fly: builders submit bots on the arena window (swu-arena.fly.dev), and the games
+  machine packs each one into a WebAssembly bundle and rates it in rounds against the project's own bots. Bots live
+  in the arena folder (`ARENA_HOME`); `players/index.js` resolves `<agent>` and `<agent>-v<N>` names through
+  `arena/registry.js`. See `bot/arena/README.md`.

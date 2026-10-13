@@ -14,7 +14,8 @@ then runs the WebAssembly (WASI preview 1) program with:
 No sockets (WASI preview 1 has none), no writable files, no subprocesses.
 
 Limits:
-  --memory-mb N   linear memory cap (default: the bundle's memory_mb, else 512). Past it, allocation fails in the bot.
+  --memory-mb N   linear memory cap (default: the bundle's memory_mb, at most 1024, else 512). Past it, allocation
+                  fails in the bot. The program gets one linear memory, a few tables and instances, whatever it declares.
   --fuel N        wasm fuel (about one unit per instruction) per reply, refilled each time the bot finishes a reply line
                   other than a `sim` request; waiting on stdin burns none. Running out traps, which the referee scores
                   as a forfeit. 0 (default) = off: the referee's per-decision clock is the limit.
@@ -40,6 +41,7 @@ from wasmtime import _ffi as ffi  # noqa: E402
 from importlib.metadata import version as _version  # noqa: E402
 
 WASMTIME = _version("wasmtime")
+MAX_BUNDLE_MEMORY_MB = 1024  # the most a bundle's arena.json may ask for; --memory-mb (ours) may set more
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bundle  # noqa: E402
@@ -134,7 +136,10 @@ def main():
         return
 
     store = wasmtime.Store(engine)
-    store.set_limits(memory_size=(o.memory_mb or m.get("resources", {}).get("memory_mb") or 512) * 1024 * 1024)
+    # a bundle's own memory_mb is a wish, capped by the host; set_limits caps each memory, so allow only one
+    want = m.get("resources", {}).get("memory_mb")
+    memory_mb = o.memory_mb or min(want if isinstance(want, int) and want > 0 else 512, MAX_BUNDLE_MEMORY_MB)
+    store.set_limits(memory_size=memory_mb * 1024 * 1024, memories=1, tables=8, instances=4, table_elements=1000000)
     wasi = wasmtime.WasiConfig()
     wasi.argv = argv
     wasi.env = sorted(env.items())

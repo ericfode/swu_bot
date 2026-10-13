@@ -86,10 +86,17 @@ data CardDb = CardDb
 emptyDb :: CardDb
 emptyDb = CardDb M.empty M.empty M.empty
 
--- | Load every card file in a directory. Unreadable files are skipped; a missing directory gives an empty db
--- (the bot still plays, it just knows less).
+-- | Load the card data from the folder that holds @Card/@ (@$SWU_CARD_JSON@, as the other bots and the arena read
+-- it) or from @Card/@ itself. Unreadable files are skipped; a missing directory gives an empty db (the bot still
+-- plays, it just knows less).
 loadCardDb :: FilePath -> IO CardDb
-loadCardDb dir = do
+loadCardDb given = do
+  nested <- doesDirectoryExist (given </> "Card")
+  loadDir (if nested then given </> "Card" else given)
+
+-- | Load every card file in one directory.
+loadDir :: FilePath -> IO CardDb
+loadDir dir = do
   ok <- doesDirectoryExist dir
   if not ok
     then pure emptyDb

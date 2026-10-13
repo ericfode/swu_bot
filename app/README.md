@@ -73,6 +73,10 @@ Owners' result widgets (dashboard contract section 5) draw with the same pieces:
 - `src/atlas.js`: spot rules on a replay snapshot, built on the Atlas kit.
 - `src/app.js`: routes and pages. Results are drawn with shared pieces (face-off bar, score bar with the 50% line,
   Brier scale, nine-spot strip, board glyph), never as stat boxes.
+  Games against people (karabast.net, a run with `kind: 'people'`) live on their own tab, Vs people: every other
+  view shows bot-vs-bot games only, and wherever a people game shows, the person's seat reads "a person" in the
+  people colour (`--human`) with a "vs a person" pill. On the hosted arena, the Share button gives a link to the page
+  you are on, and an admin's Share page edits who may sign in (`/api/share`, `bot/arena/WINDOW.md`).
 - `test/`: unit tests for the model (`npm test` runs them; no card data needed).
 
 ## Next

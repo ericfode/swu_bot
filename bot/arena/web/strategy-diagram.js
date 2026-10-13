@@ -1,6 +1,9 @@
 /*
- * Draws a "swu-strategy/1" diagram (see bot/arena/strategy.js) as SVG. No dependencies; uses anime.js for the
- * pulse and storyboard if window.anime exists, CSS otherwise. Colors come from CSS variables on the host
+ * Draws a "swu-strategy/1" diagram as SVG: {title, caption, nodes: [{id, label, kind, value, note}], edges: [{from, to,
+ * weight, label}], highlight: [node ids], steps: [{caption, highlight}]}, with one column per node kind in the order
+ * input, memory, feature, decision, action. Panels from the old arena carry these as widgets {type: 'strategy', ...}.
+ * No dependencies; uses anime.js for the pulse and storyboard if window.anime exists, CSS otherwise. Colors come from
+ * CSS variables on the host
  * (--ink, --muted, --line, --accent, --good, --bad, --panel) with fallbacks, so it fits both themes.
  *   SWUStrategy.render(element, diagram)  -> { destroy() }
  * destroy() stops the storyboard timer and every animation and empties the element; rendering into an element again

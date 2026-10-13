@@ -7,7 +7,6 @@
  *   versions/<agent>-v<N>/      frozen submissions; the referee only rates these
  *   versions/.staging-*         submissions being copied and checked (invisible to versionsOf and the registry)
  *   standings.json, rounds/     referee output
- *   inbox/<agent>.jsonl         messages, one JSON object per line
  * Default: /mnt/project-files/arena when the project folder exists, else arena-home/ in the repo (gitignored).
  * Keep file access to ARENA_HOME behind the helpers here.
  */
@@ -20,14 +19,28 @@ const AGENTS = path.join(HOME, 'agents');
 const VERSIONS = path.join(HOME, 'versions');
 const ROSTER = path.join(HOME, 'roster.json');
 const RESULTS = path.resolve(process.env.ARENA_RESULTS ?? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', '..', 'results')));
-// where competitors read RESULTS: the same folder, or a mirror of it when the referee writes to local disk (launch.sh)
+// where competitors read RESULTS: the same folder, or a mirror of it when the referee writes to local disk
 const PUBLIC_RESULTS = path.resolve(process.env.ARENA_PUBLIC_RESULTS ?? RESULTS);
 
-function writeJson(file, data) {
+/**
+ * Replaces file with text in one step. The temporary file gets a random name and is created with O_EXCL, which never
+ * follows a symlink: the arena's folders belong to the bots' user, and a root writer (the referee) must not write
+ * through a link planted there.
+ */
+function writeAtomic(file, text) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
-    fs.renameSync(tmp, file);
+    const tmp = `${file}.${require('crypto').randomBytes(6).toString('hex')}.tmp`;
+    try {
+        fs.writeFileSync(tmp, text, { flag: 'wx' });
+        fs.renameSync(tmp, file);
+    } catch (e) {
+        fs.rmSync(tmp, { force: true });
+        throw e;
+    }
+}
+
+function writeJson(file, data) {
+    writeAtomic(file, JSON.stringify(data, null, 1));
 }
 
 function readJson(file, dflt) {
@@ -175,6 +188,15 @@ function removeDir(dir) {
     fs.rmSync(dir, { recursive: true, force: true });
 }
 
+/**
+ * Removes a folder whose contents another user may be changing (a check's job folder), as root. GNU rm never follows a
+ * link it meets inside, where Node's rmSync resolves each path again and can be raced onto a link. What rm cannot
+ * remove stays, for the next start's cleanup.
+ */
+function removeTree(dir) {
+    require('child_process').spawnSync('rm', ['-rf', '--', dir], { stdio: 'ignore' });
+}
+
 /** A fresh, empty versions/.staging-<agent>-<random> folder for a submission being assembled. (Not mkdtemp: its 0700
  *  mode would survive the rename and hide the version from other users of the shared folder.) */
 function stagingDir(agent) {
@@ -208,7 +230,13 @@ function promote(staging, dst) {
 
 function appendJsonl(file, obj) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(file, `${JSON.stringify(obj)}\n`);
+    // never through a symlink (see writeAtomic)
+    const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o644);
+    try {
+        fs.writeSync(fd, `${JSON.stringify(obj)}\n`);
+    } finally {
+        fs.closeSync(fd);
+    }
 }
 
 /** The objects of a JSON Lines file, oldest first; [] when it is missing. Lines that do not parse are skipped. */
@@ -234,6 +262,6 @@ function readJsonl(file) {
 }
 
 module.exports = {
-    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeJson, readJson, roster, updateRoster, versionsOf,
-    exists, claimDir, writeFiles, mirror, removeDir, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
+    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeAtomic, writeJson, readJson, roster, updateRoster, versionsOf,
+    exists, claimDir, writeFiles, mirror, removeDir, removeTree, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
 };

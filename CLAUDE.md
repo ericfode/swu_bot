@@ -11,6 +11,7 @@ A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives 
 - `forceteki/` — **git submodule** of `ericfode/forceteki`, pinned to `2ebed8ca2` (upstream `SWU-Karabast/forceteki` plus the search-engine optimizations). It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
 - `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `coord/` — the games machine's Elixir coordinator (Phoenix, Oban on SQLite, FLAME): it decides when the hosted arena takes submissions, plays rounds and pushes results; `bot/arena/gamesctl.js` does that work in Node. `GAMES_COORDINATOR` in `fly.games.toml` picks it or `bot/arena/games.js`; see `coord/README.md`.
 - `app/` — the SWU Arena app (watch the arena, read the research): one HTML file built from the shared project folder by `app/build.mjs`; see `app/README.md` and `app/DESIGN.md`.
 - `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
 - `replays/` — recorded tournaments (gitignored): `replays/<id>/index.json` and `games/<id>.jsonl`.
@@ -82,7 +83,7 @@ Usage rule for every thread. Perch (semantic lint with Jev) is advisory, never a
 
 ## Fly.io (MCP server)
 
-`.mcp.json` starts Fly's MCP server (`flyctl mcp server`, through `tools/bin/fly-mcp`): tools for apps, machines, volumes, secrets, certs, IPs and logs. In cloud sessions `.claude/hooks/session-start.sh` builds flyctl from source through the Go module proxy (a few minutes the first time), and the egress proxy injects the Fly key for api.fly.io and api.machines.dev, so no key is stored anywhere. Locally, flyctl uses your own `fly auth login`. Creating Fly resources costs money: the compute budget is $70 a month.
+`.mcp.json` starts Fly's MCP server (`flyctl mcp server`, through `tools/bin/fly-mcp`): tools for apps, machines, volumes, secrets, certs, IPs and logs. In cloud sessions `.claude/hooks/session-start.sh` builds flyctl from source through the Go module proxy (a few minutes the first time), and the egress proxy injects the Fly key for api.fly.io and api.machines.dev, so no key is stored anywhere. Locally, flyctl uses your own `fly auth login`. Creating Fly resources costs money: the compute budget is $70 a month. Two apps: `swu-arena` (the window, `fly.toml`) and `swu-arena-games` (the games machine that plays submitted bots, `fly.games.toml`, private address only; `bot/arena/WINDOW.md`).
 
 ## Architecture of `bot/env.js`
 

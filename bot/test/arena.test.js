@@ -22,6 +22,9 @@ const t = (p1, p2) => ({ p1: { ms: p1, n: 10, p95: 1 }, p2: { ms: p2, n: 10, p95
 const dashFile = (...p) => readJson(path.join(process.env.ARENA_DASH, ...p), null);
 const ladderOf = (bots, games, status = 'running') => ({ id: 'arena-r1', status, config: { bots, firstSeed: 77, gamesPerPair: 2 }, progress: { scheduled: 4 }, games });
 
+// a minimal bot program (spec/protocol.md): ready to hello, the first action to decide, ok to over
+const PY_BOT = 'import json, sys\nfor line in sys.stdin:\n    t = json.loads(line)["t"]\n    print(json.dumps({"hello": {"t": "ready", "v": 2}, "over": {"t": "ok"}}.get(t, {"t": "act", "i": 0})), flush=True)\n';
+
 function setRoster(agents, baselines = ['rush', 'heuristic']) {
     writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines, agents: agents.map((name) => ({ name, title: name, start: 'rush', philosophy: `${name}'s prompt` })) });
 }
@@ -64,6 +67,13 @@ test('scoreRound counts results, forfeits, lost games and pins the baselines to 
     assert.strictEqual(rd.leader, 'x-v0');
     const bl = rd.bots.filter((b) => b.name !== 'x-v0');
     assert.ok(Math.abs((bl[0].btElo + bl[1].btElo) / 2 - 1500) <= 1);
+});
+
+test('a competitor benched while its round runs still owns the games of that round', () => {
+    writeJson(path.join(HOME, 'roster.json'), { thinkCapMs: 60000, baselines: ['rush'], agents: [], bench: [{ name: 'gone', title: 'gone' }] });
+    const rd = scoreRound(1, ladderOf(['gone-v0', 'rush'], [{ id: 'g1', p1: 'gone-v0', p2: 'rush', outcome: 'won', winner: 'gone-v0', winnerSeat: 'p1', timing: t(5, 5), rounds: 5 }]));
+    assert.strictEqual(rd.bots.find((b) => b.name === 'gone-v0').agent, 'gone');
+    assert.strictEqual(rd.leader, 'gone-v0');
 });
 
 test('a round without rated games has no Elo, ranks or leader', () => {
@@ -140,6 +150,17 @@ test('dashboard: progress counts planned rounds, series are best first, and done
     assert.strictEqual(dashFile('panels', 'arena-lo.json').status, 'done');
 });
 
+test('dashboard: a competitor that sat out the latest round shows the round its stats come from', () => {
+    setRoster(['sat', 'on']);
+    const win = (id, w, l) => ({ id, p1: w, p2: l, outcome: 'won', winner: w, winnerSeat: 'p1', timing: t(5, 5), rounds: 5 });
+    const r1 = scoreRound(1, ladderOf(['sat-v0', 'on-v0', 'rush'], [win('g1', 'sat-v0', 'rush'), win('g2', 'sat-v0', 'on-v0'), win('g3', 'rush', 'on-v0')], 'done'));
+    const r2 = scoreRound(2, ladderOf(['on-v0', 'rush'], [win('g4', 'on-v0', 'rush')], 'done'));
+    dash.publishStandings({ status: 'running', rounds: [r1, r2], global: globalElo([r1, r2]), tournament: { id: 't', plannedRounds: 3, rounds: [1, 2] } });
+    const items = (n) => Object.fromEntries(dashFile('panels', `arena-${n}.json`).widgets[0].items.map((i) => [i.label, i.value]));
+    assert.strictEqual(items('sat')['rank in round 1'], '1 / 3');
+    assert.strictEqual(items('on')['rank in round 2'], '1 / 2');
+});
+
 test('dashboard: say and the referee write separate halves, so neither loses the other\'s update', () => {
     setRoster(['half']);
     const diagram = { type: 'strategy', title: 'd', nodes: [{ id: 'n', label: 'n', kind: 'input' }], edges: [], highlight: [], steps: [] };
@@ -161,24 +182,15 @@ test('dashboard: say and the referee write separate halves, so neither loses the
     assert.ok(fs.existsSync(path.join(HOME, 'panels', 'half.say.json')) && fs.existsSync(path.join(HOME, 'panels', 'half.rated.json')));
 });
 
-test('eval reads results from by and winnerSeat', () => {
-    const { resultFor } = require('../arena/eval');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', by: 'p1', winnerSeat: 'p2' }, 'p1'), 'loss');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', by: 'p1', winnerSeat: 'p2' }, 'p2'), 'win');
-    assert.strictEqual(resultFor({ outcome: 'won', winner: 'me', winnerSeat: 'p2', by: null }, 'p2'), 'win');
-    assert.strictEqual(resultFor({ outcome: 'won', winner: 'draw', winnerSeat: 'draw' }, 'p1'), 'draw');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', by: null, error: 'TIME_FORFEIT me' }, 'p1'), 'ERROR');
-});
-
 test('a stdio submission freezes its folder: cmd is a file in it or a program on PATH, and later edits do not reach it', () => {
     setRoster([]);
     const { api } = require('../arena/api');
     api.register({ name: 'pyb', start: 'rush' });
     const live = path.join(HOME, 'agents', 'pyb');
-    fs.writeFileSync(path.join(live, 'bot.py'), 'print("v1")\n');
+    fs.writeFileSync(path.join(live, 'bot.py'), `${PY_BOT}# v1\n`);
     const v = api.submit({ name: 'pyb', note: 'stdio', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }).version;
-    fs.writeFileSync(path.join(live, 'bot.py'), 'print("v2")\n');
-    assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', v, 'bot.py'), 'utf8'), 'print("v1")\n');
+    fs.writeFileSync(path.join(live, 'bot.py'), `${PY_BOT}# v2\n`);
+    assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', v, 'bot.py'), 'utf8'), `${PY_BOT}# v1\n`);
     const { resolveArena } = require('../arena/registry');
     assert.strictEqual(resolveArena(v).dir, path.join(HOME, 'versions', v));
     for (const bot of [{ kind: 'stdio', cmd: '/usr/bin/python3' }, { kind: 'stdio', cmd: '../x' }, { kind: 'stdio', cmd: './missing' }, { kind: 'stdio', cmd: 'python3', cwd: '/tmp' },
@@ -191,6 +203,88 @@ test('a stdio submission freezes its folder: cmd is a file in it or a program on
     const prog = makeArenaBot(v);
     assert.ok(prog instanceof StdioClient);
     assert.deepStrictEqual([prog.name, prog.opts.cmd, prog.opts.args, prog.opts.cwd], [v, 'python3', ['bot.py'], path.join(HOME, 'versions', v)]);
+    // with the card data: the version folder has none
+    assert.strictEqual(prog.opts.env.SWU_CARD_JSON, require('../arena/registry').CARD_JSON);
+});
+
+test('a bot program must start and answer hello with ready, or the submit fails and no version is made', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'mute', start: 'rush' });
+    const live = path.join(HOME, 'agents', 'mute');
+    const before = require('../arena/home').versionsOf('mute');
+    fs.writeFileSync(path.join(live, 'bot.py'), 'import sys\nprint("hi")\n');
+    assert.throws(() => api.submit({ name: 'mute', note: 'not json', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }),
+        (e) => e.code === 'bad_bot' && /failed the start check/.test(e.message) && /not JSON/.test(e.message));
+    fs.writeFileSync(path.join(live, 'bot.py'), 'import sys\nsys.exit(3)\n');
+    assert.throws(() => api.submit({ name: 'mute', note: 'exits', bot: { kind: 'stdio', cmd: 'python3', args: ['bot.py'] } }), (e) => e.code === 'bad_bot' && /exited \(code 3/.test(e.message));
+    // a file without its exec bit (a synced arena folder keeps none) cannot start: the error says how to run it instead
+    fs.writeFileSync(path.join(live, 'run.sh'), `#!/bin/sh\nexec python3 -c '${PY_BOT.replace(/'/g, "'\\''")}'\n`, { mode: 0o644 });
+    assert.throws(() => api.submit({ name: 'mute', note: 'no x bit', bot: { kind: 'stdio', cmd: './run.sh' } }),
+        (e) => e.code === 'bad_bot' && /EACCES/.test(e.message) && /"cmd": "sh", "args": \["\.\/run\.sh"\]/.test(e.message));
+    assert.deepStrictEqual(require('../arena/home').versionsOf('mute'), before);
+    const v = api.submit({ name: 'mute', note: 'through sh', bot: { kind: 'stdio', cmd: 'sh', args: ['run.sh'] } }).version;
+    assert.strictEqual(readJson(path.join(HOME, 'versions', v, 'SUBMISSION.json'), {}).checked, true);
+});
+
+test('the load check runs submitted code without the arena secrets or the egress proxy', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'nosy', start: 'rush' });
+    fs.writeFileSync(path.join(HOME, 'agents', 'nosy', 'bot.js'),
+        "const leak = ['HTTPS_PROXY', 'https_proxy', 'ARENA_ADMIN_TOKEN'].filter((k) => process.env[k]);\nif (leak.length) throw new Error('saw ' + leak.join(' '));\nexports.createBot = (name) => ({ name, choose: () => 0 });\n");
+    const saved = { HTTPS_PROXY: process.env.HTTPS_PROXY, https_proxy: process.env.https_proxy, ARENA_ADMIN_TOKEN: process.env.ARENA_ADMIN_TOKEN };
+    Object.assign(process.env, { HTTPS_PROXY: 'http://proxy.invalid:1', https_proxy: 'http://proxy.invalid:1', ARENA_ADMIN_TOKEN: 'x' });
+    try {
+        assert.ok(api.submit({ name: 'nosy', note: 'env' }).version);
+    } finally {
+        for (const [k, v] of Object.entries(saved)) {
+            if (v === undefined) {
+                delete process.env[k];
+            } else {
+                process.env[k] = v;
+            }
+        }
+    }
+});
+
+test('withdraw benches a competitor or stops rating one version; rejoin undoes either', () => {
+    setRoster([]);
+    const { api } = require('../arena/api');
+    api.register({ name: 'wd', start: 'rush' });
+    api.submit({ name: 'wd', note: 'v1' });
+    api.submit({ name: 'wd', note: 'v2, broken' });
+    assert.ok(lineup().includes('wd-v2'));
+    assert.deepStrictEqual(api.withdraw({ name: 'wd', version: 2 }), { name: 'wd', withdrawn: 'wd-v2', rated: 'wd-v1' });
+    assert.ok(lineup().includes('wd-v1') && !lineup().includes('wd-v2'));
+    assert.throws(() => api.withdraw({ name: 'wd', version: 9 }), (e) => e.code === 'not_found');
+    assert.throws(() => api.rejoin({ name: 'wd', version: 9 }), (e) => e.code === 'not_found');
+    api.rejoin({ name: 'wd', version: '2' }); // query strings and shells send numbers as text
+    assert.ok(lineup().includes('wd-v2'));
+    assert.strictEqual(api.withdraw({ name: 'wd' }).benched, true);
+    const r = readJson(path.join(HOME, 'roster.json'), {});
+    assert.deepStrictEqual([r.agents.map((a) => a.name), r.bench.map((a) => a.name)], [[], ['wd']]);
+    assert.ok(!lineup().some((b) => b.startsWith('wd-')));
+    assert.strictEqual(api.status().competitors.find((c) => c.name === 'wd')?.benched, true, 'status still lists it, marked benched');
+    assert.ok(api.panel({ name: 'wd' }) && api.panels().panels.length >= 1, 'its panel stays readable');
+    assert.deepStrictEqual(api.versions({ name: 'wd' }).map((v) => v.name), ['wd-v0', 'wd-v1', 'wd-v2'], 'its versions stay readable');
+    api.register({ name: 'wo', start: 'rush' });
+    // a version withdrawn and rejoined while benched applies once the competitor rejoins
+    assert.strictEqual(api.withdraw({ name: 'wd', version: 1 }).withdrawn, 'wd-v1');
+    assert.strictEqual(api.rejoin({ name: 'wd', version: 1 }).benched, true);
+    api.withdraw({ name: 'wd', version: 2 });
+    api.rejoin({ name: 'wd' });
+    assert.ok(lineup().includes('wd-v1') && !lineup().includes('wd-v2'));
+    api.rejoin({ name: 'wd', version: 2 });
+    const back = readJson(path.join(HOME, 'roster.json'), {});
+    assert.deepStrictEqual([back.agents.map((a) => a.name), back.bench.length, 'benchedAt' in back.agents[1]], [['wo', 'wd'], 0, false]);
+    assert.ok(lineup().includes('wd-v2'));
+    // a benched competitor may still submit (a builder's later versions from the window): the version sits out with it
+    api.withdraw({ name: 'wd' });
+    const sub = api.submit({ name: 'wd', note: 'while benched' });
+    assert.ok(!lineup().some((b) => b.startsWith('wd-')), `${sub.version} is not rated while wd is benched`);
+    api.rejoin({ name: 'wd' });
+    assert.ok(lineup().includes(sub.version));
 });
 
 test('an in-process protocol client passes the load check and plays as one', () => {
@@ -288,90 +382,108 @@ test('a registration whose first submit fails is undone, so the name can be regi
 test('panel is composed from the arena\'s own halves, with or without the dashboard folder', () => {
     setRoster([]);
     const { api } = require('../arena/api');
-    const { token } = api.register({ name: 'pan', start: 'rush' });
-    api.say({ name: 'pan', now: 'Tuning', token });
+    api.register({ name: 'pan', start: 'rush' });
+    dash.updatePanel('pan', { now: 'Tuning' });
     const dashPanel = path.join(process.env.ARENA_DASH, 'panels', 'arena-pan.json');
     fs.rmSync(dashPanel, { force: true });
     assert.strictEqual(api.panel({ name: 'pan' }).now, 'Tuning');
 });
 
-test('runner: a harness is stopped at its deadline with everything it started, in any process group', async () => {
-    const { runUntil, tagged } = require('../arena/runner');
-    const tag = `test-${process.pid}`;
-    const out = path.join(tmp, 'harness.log');
-    const t0 = Date.now();
-    const res = await runUntil('bash', ['-c', 'setsid sleep 913 & sleep 914 & sleep 915'], { cwd: tmp, env: { ...process.env, ARENA_RUN: tag }, out, stopAt: Date.now() + 1500, tag });
-    assert.strictEqual(res.stopped, true);
-    assert.ok(Date.now() - t0 < 5000, 'stopped at the deadline');
-    await new Promise((r) => setTimeout(r, 300));
-    assert.deepStrictEqual(tagged(tag), [], 'nothing it started is left, the setsid child included');
+test('referee lock: pids decide inside one PID namespace, the heartbeat across namespaces (isolate.sh gives the referee its own)', () => {
+    const { takeLock, releaseLock } = require('../arena/referee');
+    const dir = fs.mkdtempSync(path.join(tmp, 'lock-'));
+    const file = path.join(dir, 'referee.lock');
+    const ns = fs.readlinkSync('/proc/self/ns/pid');
+    const dead = 2 ** 22 + 7; // above pid_max on Linux, so never a live process
+    writeJson(file, { pid: dead, host: os.hostname(), pidns: ns });
+    takeLock(dir); // a dead holder in this namespace: taken at once
+    assert.strictEqual(readJson(file, {}).pid, process.pid);
+    releaseLock();
+    writeJson(file, { pid: dead, host: os.hostname(), pidns: 'pid:[1]' });
+    assert.throws(() => takeLock(dir), /is running the ladder/, 'another namespace with a fresh heartbeat may still be running');
+    const old = (Date.now() - 80000) / 1000;
+    fs.utimesSync(file, old, old);
+    takeLock(dir);
+    assert.strictEqual(readJson(file, {}).pidns, ns);
+    releaseLock();
+    assert.ok(!fs.existsSync(file));
 });
 
-test('runner: the usage brake holds while a window is over its limit, until that window resets', () => {
-    const { lastLimits, noteLimits, braked } = require('../arena/runner');
-    const soon = Math.floor(Date.now() / 1000) + 3600;
-    const event = (u5, u7, status = 'allowed') => JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status, unifiedWindows: { five_hour: { utilization: u5, resetsAt: soon }, seven_day: { utilization: u7, resetsAt: soon } } } });
-    assert.strictEqual(lastLimits('{"type":"system"}\n'), null);
-    noteLimits(lastLimits(`${event(0.9, 0.5)}\n{"type":"assistant"}\n${event(0.2, 0.5)}\n`));
-    assert.strictEqual(braked(), null, 'the newest event counts');
-    noteLimits(lastLimits(`${event(0.85, 0.5)}\n`));
-    assert.match(braked(), /five_hour usage 85%/);
-    assert.strictEqual(braked(soon * 1000 + 1), null, 'over once the window resets');
-    noteLimits(lastLimits(`${event(0.1, 0.96)}\n`));
-    assert.match(braked(), /seven_day/);
-    noteLimits(lastLimits(`${event(0.1, 0.1, 'rejected')}\n`));
-    assert.match(braked(), /over its limit/);
-    noteLimits(lastLimits(`${event(0.1, 0.1)}\n`));
-    assert.strictEqual(braked(), null);
-});
-
-test('runner: the usage brake stops Claude sessions only, and the runner starts only harnesses it knows', () => {
-    const { noteLimits, running, runnable } = require('../arena/runner');
-    const stopped = [];
-    running.set('a-r1', { stop: () => stopped.push('a-r1'), claude: true });
-    running.set('opt-r1', { stop: () => stopped.push('opt-r1'), claude: false });
+test('isolate.sh: the command sees only its own processes, hidden paths are empty, /tmp is its own, and --user cannot undo it', { skip: process.getuid?.() !== 0 && 'needs root (unshare)' }, () => {
+    const { spawnSync } = require('child_process');
+    const secret = path.join(tmp, 'secret.txt');
+    fs.writeFileSync(secret, 'the round seeds');
+    const script = `echo "procs $(ls /proc | grep -c '^[0-9]')"; echo "file [$(cat ${secret})]"; cat /proc/${process.pid}/environ 2>/dev/null | tr '\\0' '\\n' | grep -c ISO_PARENT_SECRET; exit 4`;
+    const r = spawnSync('bash', [path.join(__dirname, '..', 'arena', 'ops', 'isolate.sh'), '--hide', secret, '--', 'sh', '-c', script],
+        { env: { ...process.env, ISO_PARENT_SECRET: 'x' }, encoding: 'utf8', timeout: 20000 });
+    if (/unshare failed|Operation not permitted/.test(r.stderr)) {
+        return; // a container without namespaces: nothing to check here
+    }
+    assert.strictEqual(r.status, 4, r.stderr);
+    assert.ok(Number(/procs (\d+)/.exec(r.stdout)[1]) < 10, r.stdout);
+    assert.match(r.stdout, /file \[\]/);
+    assert.match(r.stdout, /^0$/m, 'the test process\'s environment is out of reach');
+    assert.strictEqual(fs.readFileSync(secret, 'utf8'), 'the round seeds', 'hidden, not changed');
+    // --tmp: a folder of its own in place of /tmp, where nothing of the real /tmp shows
+    const own = path.join(tmp, 'own-tmp');
+    const marker = `/tmp/isolate-outside-${process.pid}`;
+    fs.writeFileSync(marker, 'x');
     try {
-        noteLimits({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.99, resetsAt: Math.floor(Date.now() / 1000) + 3600 } } });
-        assert.deepStrictEqual(stopped, ['a-r1']);
+        const t = spawnSync('bash', [path.join(__dirname, '..', 'arena', 'ops', 'isolate.sh'), '--tmp', own, '--', 'sh', '-c', `[ -e ${marker} ] && echo seen; echo made > /tmp/inside`],
+            { encoding: 'utf8', timeout: 20000 });
+        assert.strictEqual(t.status, 0, t.stderr);
+        assert.doesNotMatch(t.stdout, /seen/);
+        assert.strictEqual(fs.readFileSync(path.join(own, 'inside'), 'utf8'), 'made\n');
     } finally {
-        running.clear();
-        noteLimits({ status: 'allowed', unifiedWindows: { five_hour: { utilization: 0 }, seven_day: { utilization: 0 } } });
+        fs.rmSync(marker, { force: true });
     }
-    assert.ok(runnable({ kind: 'claude-code', model: 'opus' }));
-    assert.ok(runnable({ kind: 'script', cmd: 'node bot/arena/optimizer.js' }));
-    assert.ok(runnable({ kind: 'command', cmd: ['prog', '{prompt_file}'] }));
-    for (const h of [{ kind: 'script' }, { kind: 'command', cmd: [] }, { kind: 'codex' }, { kind: 'Claude Code' }, null]) {
-        assert.ok(!runnable(h), JSON.stringify(h));
+    // --user: the command runs as that user without capabilities, so it cannot undo the hiding
+    const u = spawnSync('bash', [path.join(__dirname, '..', 'arena', 'ops', 'isolate.sh'), '--user', 'nobody', '--hide', secret, '--', 'sh', '-c',
+        `id -u; umount ${secret} 2>/dev/null && echo unmounted; umount -l /proc 2>/dev/null && echo proc-unmounted; grep CapEff /proc/self/status`],
+        { encoding: 'utf8', timeout: 20000 });
+    assert.strictEqual(u.status, 0, u.stderr);
+    assert.match(u.stdout, /^65534$/m);
+    assert.doesNotMatch(u.stdout, /unmounted/);
+    assert.match(u.stdout, /CapEff:\s+0+$/m);
+});
+
+test('referee: bot code (the ladder) runs as ARENA_BOT_USER, cannot read the round-seed secret and does not get its path', { skip: process.getuid?.() !== 0 && 'needs root (setpriv)' }, async () => {
+    const { spawnBots, giveToBots } = require('../arena/referee');
+    // a folder the bot user can reach (the test's own is closed to it), holding a root-only secret
+    const open = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-bot-user-'));
+    fs.chmodSync(open, 0o755);
+    const secret = path.join(open, 'secret');
+    fs.writeFileSync(secret, 'the round seeds', { mode: 0o600 });
+    const dir = path.join(open, 'ladder');
+    fs.mkdirSync(dir);
+    const saved = { user: process.env.ARENA_BOT_USER, file: process.env.ARENA_SECRET_FILE };
+    process.env.ARENA_BOT_USER = 'nobody';
+    process.env.ARENA_SECRET_FILE = secret;
+    try {
+        giveToBots(dir);
+        assert.strictEqual(fs.statSync(dir).uid, 65534);
+        const script = `const fs = require('fs'); let read = 'refused'; try { read = fs.readFileSync(${JSON.stringify(secret)}, 'utf8'); } catch {}
+            fs.writeFileSync(${JSON.stringify(path.join(dir, 'out.json'))}, JSON.stringify({ uid: process.getuid(), read, path: process.env.ARENA_SECRET_FILE ?? null,
+                cap: /CapEff:\\s+(\\w+)/.exec(fs.readFileSync('/proc/self/status', 'utf8'))[1] }));`;
+        const child = spawnBots(['-e', script], { stdio: 'ignore', cwd: open });
+        const code = await new Promise((resolve) => child.on('exit', resolve));
+        assert.strictEqual(code, 0);
+        const out = readJson(path.join(dir, 'out.json'), {});
+        assert.deepStrictEqual([out.uid, out.read, out.path, /^0+$/.test(out.cap)], [65534, 'refused', null, true]);
+    } finally {
+        fs.rmSync(open, { recursive: true, force: true });
+        for (const [k, v] of [['ARENA_BOT_USER', saved.user], ['ARENA_SECRET_FILE', saved.file]]) {
+            if (v === undefined) {
+                delete process.env[k];
+            } else {
+                process.env[k] = v;
+            }
+        }
     }
 });
 
-test('runner: a session that follows another with the same tag is not stopped by the first one\'s cleanup', async () => {
-    const { runUntil } = require('../arena/runner');
-    const tag = `test-next-${process.pid}`;
-    const opts = { cwd: tmp, env: { ...process.env, ARENA_RUN: tag }, out: path.join(tmp, 'next.log'), stopAt: Date.now() + 60000, tag };
-    const first = await runUntil('bash', ['-c', 'sleep 30 & exit 0'], opts);
-    assert.strictEqual(first.code, 0);
-    const second = await runUntil('bash', ['-c', 'sleep 6'], opts);
-    assert.deepStrictEqual([second.code, second.stopped], [0, false], 'the second session ran to its end');
-});
-
-test('optimizer: against a remote arena it goes on from the genome it last submitted (--state)', () => {
+test('register on a hosted arena: only the admin token keeps a harness\'s command', () => {
     const { spawnSync } = require('child_process');
-    const state = path.join(tmp, 'opt-state.json');
-    const read = () => spawnSync(process.execPath, ['-e', 'console.log(JSON.stringify(require("./bot/arena/optimizer").latestGenome()))', '--', '--state', state],
-        { cwd: path.join(__dirname, '..', '..'), env: { ...process.env, ARENA_URL: 'http://127.0.0.1:9' }, encoding: 'utf8' });
-    assert.strictEqual(read().stdout.trim(), 'null', 'nothing submitted yet');
-    const g = require('../arena/optimizer').genomeFrom('tempo');
-    g['weights.power'] = 2.5;
-    fs.writeFileSync(state, JSON.stringify({ version: 'opt-v3', genome: g }));
-    assert.deepStrictEqual(JSON.parse(read().stdout), g);
-    fs.writeFileSync(state, JSON.stringify({ genome: { a: 1 } }));
-    assert.strictEqual(read().stdout.trim(), 'null', 'a broken state file is ignored');
-});
-
-test('register on a hosted arena: only the admin token keeps a harness the runner starts', () => {
-    const { spawnSync } = require('child_process');
-    const { runnable } = require('../arena/runner');
     const home = path.join(tmp, 'hosted');
     fs.mkdirSync(path.join(home, 'agents'), { recursive: true });
     fs.writeFileSync(path.join(home, 'roster.json'), JSON.stringify({ thinkCapMs: 60000, baselines: ['rush'], agents: [] }));
@@ -384,59 +496,7 @@ test('register on a hosted arena: only the admin token keeps a harness the runne
     const agents = JSON.parse(fs.readFileSync(path.join(home, 'roster.json'), 'utf8')).agents;
     const pub = agents.find((a) => a.name === 'pub').harness;
     assert.deepStrictEqual(pub, { kind: 'command', model: 'x', selfRun: true }, 'the command is dropped');
-    assert.ok(!runnable(pub));
-    assert.ok(runnable(agents.find((a) => a.name === 'adm').harness), 'the admin may register one the runner starts');
-});
-
-test('server: a queued eval\'s lost-game replay is served, and eval_result names its URL', async () => {
-    const http = require('http');
-    const { handler } = require('../arena/server');
-    const { RESULTS } = require('../arena/home');
-    const dir = path.join(RESULTS, 'arena-evals', 'me-v1-abc');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'me-v1-vs-rush-20001-s1.jsonl'), '{"t":"header"}\n');
-    writeJson(path.join(HOME, 'queue', 'me-v1-abc.json'), { id: 'me-v1-abc', state: 'done', summary: { losses: [{ id: 'g', replay: path.join(dir, 'me-v1-vs-rush-20001-s1.jsonl') }] } });
-    const out = await require('../arena/api').call('eval_result', { id: 'me-v1-abc' });
-    const url = out.result.summary.losses[0].replayUrl;
-    assert.strictEqual(url, 'replays/arena-evals/me-v1-abc/me-v1-vs-rush-20001-s1.jsonl');
-    const srv = http.createServer(handler).listen(0, '127.0.0.1');
-    await new Promise((r) => srv.once('listening', r));
-    const base = `http://127.0.0.1:${srv.address().port}`;
-    try {
-        assert.strictEqual(await (await fetch(`${base}/${url}`)).text(), '{"t":"header"}\n');
-        assert.strictEqual((await fetch(`${base}/replays/arena-evals/..%2F..%2Fsecret/x.jsonl`)).status, 404);
-    } finally {
-        srv.close();
-    }
-});
-
-test('server: / is the app when its build exists, /arena is always the arena UI', async () => {
-    const http = require('http');
-    const { handler } = require('../arena/server');
-    const app = path.join(HOME, 'public.html');
-    fs.writeFileSync(app, '<!doctype html><title>SWU Arena app</title>');
-    const before = process.env.ARENA_APP;
-    const srv = http.createServer(handler).listen(0, '127.0.0.1');
-    await new Promise((r) => srv.once('listening', r));
-    const base = `http://127.0.0.1:${srv.address().port}`;
-    const ui = fs.readFileSync(path.join(__dirname, '..', 'arena', 'web', 'index.html'), 'utf8');
-    try {
-        process.env.ARENA_APP = app;
-        assert.match(await (await fetch(`${base}/`)).text(), /SWU Arena app/);
-        assert.strictEqual(await (await fetch(`${base}/arena`)).text(), ui);
-        assert.ok((await (await fetch(`${base}/api/status`)).json()).result, '/api is unchanged');
-        process.env.ARENA_APP = '';
-        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui, 'no app build: / stays the arena UI');
-        process.env.ARENA_APP = path.join(HOME, 'missing.html');
-        assert.strictEqual(await (await fetch(`${base}/`)).text(), ui);
-    } finally {
-        srv.close();
-        if (before === undefined) {
-            delete process.env.ARENA_APP;
-        } else {
-            process.env.ARENA_APP = before;
-        }
-    }
+    assert.deepStrictEqual(agents.find((a) => a.name === 'adm').harness, { kind: 'script', cmd: 'node x.js' }, 'the admin\'s harness is kept as given');
 });
 
 test('server: gzip only when Accept-Encoding allows it', () => {
@@ -449,44 +509,29 @@ test('server: gzip only when Accept-Encoding allows it', () => {
     }
 });
 
-test('tournament rounds get ladder ids scoped to the tournament; games and the server follow them', async () => {
+test('round ladder ids: arena-r<K>, or the ladder standings name; games follows them', async () => {
     const { ladderIdOf } = require('../arena/referee');
-    assert.strictEqual(ladderIdOf(3), 'arena-r3', 'outside a tournament');
-    assert.strictEqual(ladderIdOf(1, { id: 'arena-t202610130610' }), 'arena-t202610130610-r1');
-    assert.strictEqual(ladderIdOf(2, { id: 'holdout' }), 'arena-holdout-r2', 'every arena run keeps the arena- prefix');
+    assert.strictEqual(ladderIdOf(3), 'arena-r3');
     const { RESULTS } = require('../arena/home');
-    const { call, TOURNAMENT } = require('../arena/api');
+    const { call } = require('../arena/api');
     const index = (id) => {
         fs.mkdirSync(path.join(RESULTS, id, 'games'), { recursive: true });
         writeJson(path.join(RESULTS, id, 'index.json'), { games: [{ id: `${id}-g1` }] });
         fs.writeFileSync(path.join(RESULTS, id, 'games', `${id}-g1.jsonl`), `{"id":"${id}"}\n`);
     };
     index('arena-r41');
+    index('arena-r42');
     index('arena-tx-r41');
-    index('arena-tx-r42');
     const before = readJson(path.join(HOME, 'standings.json'), null);
-    writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: 'arena-tx-r41', bots: [] }], global: {} });
-    writeJson(TOURNAMENT(), { id: 'arena-tx', state: 'running', rounds: [{ n: 41, ladder: 'arena-tx-r41' }, { n: 42, ladder: 'arena-tx-r42' }] });
-    const http = require('http');
-    const { handler } = require('../arena/server');
-    const srv = http.createServer(handler).listen(0, '127.0.0.1');
-    await new Promise((r) => srv.once('listening', r));
-    const base = `http://127.0.0.1:${srv.address().port}`;
     try {
-        const g41 = (await call('games', { round: 41 })).result;
-        assert.strictEqual(g41.replayBase, 'replays/arena-tx-r41/games/', 'published rounds: standings name the ladder');
-        const g42 = (await call('games', { round: 42 })).result;
-        assert.strictEqual(g42.replayBase, 'replays/arena-tx-r42/games/', 'a round not published yet: tournament.json names it');
-        assert.strictEqual(await (await fetch(`${base}/${g42.replayBase}${g42.games[0].id}.jsonl`)).text(), '{"id":"arena-tx-r42"}\n');
-        assert.strictEqual((await fetch(`${base}/replays/arena-r41/index.json`)).status, 200, 'arena-r<K> is still served');
+        // a round of an old clocked tournament: standings name its ladder
+        writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: 'arena-tx-r41', bots: [] }], global: {} });
+        assert.strictEqual((await call('games', { round: 41 })).result.replayBase, 'replays/arena-tx-r41/games/', 'published rounds: standings name the ladder');
+        assert.strictEqual((await call('games', { round: 42 })).result.replayBase, 'replays/arena-r42/games/', 'a round not published yet is arena-r<K>');
         // a ladder id that is not an arena folder name is ignored
         writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: '../arena-tx-r41', bots: [] }], global: {} });
-        writeJson(TOURNAMENT(), { id: 'arena-tx', state: 'running', rounds: [] });
         assert.strictEqual((await call('games', { round: 41 })).result.replayBase, 'replays/arena-r41/games/');
-        assert.strictEqual((await fetch(`${base}/replays/..%2Fsecret-r1/index.json`)).status, 404);
     } finally {
-        srv.close();
-        fs.rmSync(TOURNAMENT(), { force: true });
         if (before) {
             writeJson(path.join(HOME, 'standings.json'), before);
         } else {
@@ -533,31 +578,6 @@ test('holdout split: seeded, per stratum, disjoint, every base in both pools', (
     assert.throws(() => loadPool(path.join(dir, 'other.json')), /not an arena card pool/);
 });
 
-test('a held-out round is compared with the last training round and stays out of the all-round Elo', () => {
-    const { rankCorrelation, report } = require('../arena/referee');
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3 }, { a: 1, b: 2, c: 3 }), 1);
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3 }, { a: 3, b: 2, c: 1 }), -1);
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2 }, { a: 2, b: 1 }), null, 'fewer than 3 bots');
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3, d: 4 }, { a: 1, b: 2, c: 3 }), 1, 'only the bots both rounds rated');
-    setRoster(['x']);
-    const game = (id, p1, p2, winner) => ({ id, p1, p2, outcome: 'won', winner, winnerSeat: winner === p1 ? 'p1' : 'p2', by: null, timing: t(5, 5) });
-    const ladder = (id, kind, games) => ({ ...ladderOf(['x-v1', 'rush', 'heuristic'], games, 'done'), id, config: { bots: ['x-v1', 'rush', 'heuristic'], firstSeed: 9, gamesPerPair: 2, pool: { kind, cards: kind === 'holdout' ? 600 : 1400 } } });
-    const train = scoreRound(3, ladder('arena-tx-r3', 'train', [game('g1', 'x-v1', 'rush', 'x-v1'), game('g2', 'x-v1', 'heuristic', 'x-v1'), game('g3', 'rush', 'heuristic', 'heuristic')]));
-    const held = scoreRound(4, ladder('arena-tx-r4', 'holdout', [game('h1', 'x-v1', 'rush', 'rush'), game('h2', 'x-v1', 'heuristic', 'heuristic'), game('h3', 'rush', 'heuristic', 'rush')]));
-    assert.strictEqual(train.pool, 'train');
-    assert.strictEqual(held.pool, 'holdout');
-    assert.deepStrictEqual(globalElo([train, held]), globalElo([train]), 'held-out games are not in the all-round Elo');
-    const md = report(held, globalElo([train]), train);
-    assert.match(md, /results \(held-out cards\)/);
-    assert.match(md, /dealt only from the held-out pool \(600 cards/);
-    assert.match(md, /## Held-out cards vs training cards/);
-    assert.match(md, /Spearman rank correlation: -1/, 'x-v1 went from first to last');
-    assert.match(report(train, globalElo([train])), /this tournament's training pool \(1400 cards/);
-    const { rulesText } = require('../arena/runner');
-    assert.strictEqual(rulesText(null), '');
-    assert.match(rulesText({ holdout: { fraction: 0.3, trainPool: '/a/train.json', trainCards: 1400, holdoutCards: 600 } }), /30% of the leaders and main-deck cards are held out.*1400 training cards.*600 held-out cards/s);
-});
-
 test('a holdout tournament\'s extra ladder does not count as a planned round', () => {
     const { clock, TOURNAMENT } = require('../arena/api');
     const now = new Date().toISOString();
@@ -577,7 +597,45 @@ test('a holdout tournament\'s extra ladder does not count as a planned round', (
     }
 });
 
-test('readers get every panel, a round\'s ladder and archived tournaments from the API, not from the arena\'s files', async () => {
+test('on the hosted arena the clock follows the round whose ladder a live referee holds', () => {
+    const { clock } = require('../arena/api');
+    const { RESULTS } = require('../arena/home');
+    const file = path.join(HOME, 'standings.json');
+    const before = readJson(file, null);
+    const lock = (id, ageMs) => {
+        fs.mkdirSync(path.join(RESULTS, id), { recursive: true });
+        const f = path.join(RESULTS, id, 'referee.lock');
+        fs.writeFileSync(f, '{}');
+        const at = new Date(Date.now() - ageMs);
+        fs.utimesSync(f, at, at);
+    };
+    const pick = (c) => ({ round: c.round, phase: c.phase, tournament: c.tournament });
+    try {
+        fs.rmSync(file, { force: true });
+        assert.deepStrictEqual(pick(clock()), { round: null, phase: 'idle', tournament: null }, 'before the first round');
+        lock('arena-r0', 5000);
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'ladder', tournament: null }, 'round 0 started, not in standings yet');
+        writeJson(file, { rounds: [{ round: 0, status: 'running', ladderId: 'arena-r0' }] });
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'ladder', tournament: null });
+        lock('arena-r0', 10 * 60000);
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'idle', tournament: null }, 'a stopped machine left the lock behind');
+        writeJson(file, { rounds: [{ round: 0, status: 'done', ladderId: 'arena-r0' }] });
+        fs.rmSync(path.join(RESULTS, 'arena-r0', 'referee.lock'));
+        assert.deepStrictEqual(pick(clock()), { round: 0, phase: 'idle', tournament: null }, 'between rounds: the newest round');
+        lock('arena-r1', 1000);
+        assert.deepStrictEqual(pick(clock()), { round: 1, phase: 'ladder', tournament: null });
+    } finally {
+        fs.rmSync(path.join(RESULTS, 'arena-r0'), { recursive: true, force: true });
+        fs.rmSync(path.join(RESULTS, 'arena-r1'), { recursive: true, force: true });
+        if (before) {
+            writeJson(file, before);
+        } else {
+            fs.rmSync(file, { force: true });
+        }
+    }
+});
+
+test('readers get every panel and a round\'s ladder from the API, not from the arena\'s files', async () => {
     const { RESULTS } = require('../arena/home');
     const { call } = require('../arena/api');
     setRoster(['pa', 'pb']);
@@ -602,27 +660,7 @@ test('readers get every panel, a round\'s ladder and archived tournaments from t
         const l = (await call('ladder')).result;
         assert.deepStrictEqual([l.round, l.ladderId, l.ladder.schema, l.ladder.games.length], [7, 'arena-tp-r7', 'swu-ladder/1', 1]);
         assert.strictEqual((await call('ladder', { round: -1 })).error.code, 'bad_request');
-
-        // archives: hand-made copies of the dashboard files, in panels/ (t0) or dash/ (later)
-        const arch = (...p) => path.join(HOME, 'archive', ...p);
-        assert.deepStrictEqual((await call('archive')).result, { tournaments: [] });
-        writeJson(arch('t0', 'README.json'), { note: 'smoke round' });
-        writeJson(arch('t0', 'standings.json'), { rounds: [{ round: 0 }] });
-        writeJson(arch('t0', 'panels', 'arena-coach.json'), { id: 'arena-coach' });
-        writeJson(arch('t0', 'panels', 'arena-leaderboard.json'), { id: 'arena-leaderboard' });
-        writeJson(arch('t0', 'experiment-arena.json'), { id: 'arena', old: true });
-        writeJson(arch('s1', 'dash', 'arena-x.json'), { id: 'arena-x' });
-        writeJson(arch('s1', 'dash', 'arena.json'), { id: 'arena' });
-        writeJson(arch('s1', 'panels', 'x.rated.json'), { bots: [] });
-        assert.deepStrictEqual((await call('archive')).result.tournaments, [{ id: 's1', note: null, rounds: 0 }, { id: 't0', note: 'smoke round', rounds: 1 }]);
-        const t0 = (await call('archive', { id: 't0' })).result;
-        assert.deepStrictEqual([t0.note, t0.standings.rounds.length, t0.leaderboard.id, t0.experiment.old, t0.panels.map((x) => x.id)], ['smoke round', 1, 'arena-leaderboard', true, ['arena-coach']]);
-        const s1 = (await call('archive', { id: 's1' })).result;
-        assert.deepStrictEqual([s1.leaderboard, s1.experiment.id, s1.panels.map((x) => x.id)], [null, 'arena', ['arena-x']]);
-        assert.strictEqual((await call('archive', { id: '..' })).error.code, 'bad_request');
-        assert.strictEqual((await call('archive', { id: 'none' })).error.code, 'not_found');
     } finally {
-        fs.rmSync(path.join(HOME, 'archive'), { recursive: true, force: true });
         if (before) {
             writeJson(path.join(HOME, 'standings.json'), before);
         } else {
@@ -630,3 +668,170 @@ test('readers get every panel, a round\'s ladder and archived tournaments from t
         }
     }
 });
+
+// the intake of bots people submit on the window (intake.js): its checker as a plain child process here, since the
+// scratch arena lives under /tmp, which isolate.sh would replace
+process.env.ARENA_INTAKE_NO_ISOLATE = '1';
+process.env.ARENA_INTAKE_WORK = path.join(tmp, 'intake-work');
+const wasmReady = (() => {
+    const { spawnSync } = require('child_process');
+    const rt = path.join(__dirname, '..', '..', 'build', 'compiled', '.tools', 'python-3.14.7', 'python.wasm');
+    return fs.existsSync(rt) && spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
+})();
+
+test('a submitted wasm bundle is held to the host memory cap: its own memory_mb counts up to 1024, and it gets one memory', { skip: require('child_process').spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status !== 0 && 'needs wasmtime' }, () => {
+    const { spawnSync } = require('child_process');
+    // a WASI program that grows its last memory by 20000 pages (1.25 GiB) and prints whether that worked
+    const program = (memories) => `(module
+  (import "wasi_snapshot_preview1" "fd_write" (func $w (param i32 i32 i32 i32) (result i32)))
+  (memory $m0 1) ${memories > 1 ? '(memory $m1 1)' : ''}
+  (export "memory" (memory $m0))
+  (data (memory $m0) (i32.const 16) "grew\\n")
+  (data (memory $m0) (i32.const 32) "fail\\n")
+  (func (export "_start") (local $p i32)
+    (local.set $p (i32.const 16))
+    (if (i32.eq (memory.grow ${memories > 1 ? '$m1' : '$m0'} (i32.const 20000)) (i32.const -1)) (then (local.set $p (i32.const 32))))
+    (i32.store $m0 (i32.const 0) (local.get $p))
+    (i32.store $m0 (i32.const 4) (i32.const 5))
+    (drop (call $w (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 8)))))`;
+    const run = (memories) => {
+        const dir = fs.mkdtempSync(path.join(tmp, 'memhog-'));
+        const make = 'import sys, json, hashlib, wasmtime\nb = wasmtime.wat2wasm(sys.stdin.read())\nopen(sys.argv[1] + "/bot.wasm", "wb").write(b)\n' +
+            'json.dump({"schema": "swu-arena-bot/1", "name": "memhog", "lang": "wat", "protocol": 2, "kind": "wasm", "platform": "wasm32-wasip1", "runtime": "wasi-p1",' +
+            ' "run": {"cmd": "./bot.wasm", "args": [], "env": {}}, "entry_sha256": hashlib.sha256(b).hexdigest(), "resources": {"memory_mb": 4096},' +
+            ' "cards": {"use": "none"}, "network": "none"}, open(sys.argv[1] + "/arena.json", "w"))';
+        assert.strictEqual(spawnSync('python3', ['-c', make, dir], { input: program(memories) }).status, 0);
+        const runPy = path.join(__dirname, '..', 'compiled', 'run.py');
+        return spawnSync('python3', [runPy, dir], { encoding: 'utf8', env: { ...process.env, SWU_WASM_CACHE: path.join(dir, 'cache') }, timeout: 60000 });
+    };
+    assert.strictEqual(run(1).stdout, 'fail\n', 'asking for 4096 MB in arena.json gives 1024 at most');
+    assert.match(run(2).stderr, /memory count too high/);
+});
+
+/** A window that holds submissions in memory, with the two calls the intake makes (push.js request and putDoc). */
+function fakeWindow(docs) {
+    const reads = [];
+    return {
+        docs, reads,
+        request: async (method, p) => {
+            reads.push(p);
+            const id = decodeURIComponent(p.split('/')[4] ?? '');
+            return id ? structuredClone(docs[id] ?? null) : Object.keys(docs).map((k) => ({ id: k }));
+        },
+        putDoc: async (ns, id, doc) => {
+            docs[id] = structuredClone(doc);
+        }
+    };
+}
+
+test('intake: a submission that cannot be packed or names someone else\'s competitor is rejected, with the reason, and its files dropped', async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const roster = readJson(path.join(HOME, 'roster.json'), { baselines: ['rush'], agents: [] });
+    writeJson(path.join(HOME, 'roster.json'), { ...roster, agents: [...roster.agents, { name: 'kim_b_taken', title: 'taken', owner: 'github:someone' }] });
+    const base = { owner: 'kim-b', note: 'try', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
+    const w = fakeWindow({
+        'kim-b.1': { ...base, name: 'kim_b', kind: 'python', files: { 'main.py': 'print(1)' } },
+        'kim-b.2': { ...base, name: 'kim_b', kind: 'js', files: { 'bot.js': "require('../../../etc/hostname')" } },
+        'kim-b.3': { ...base, name: 'kim_b_taken', kind: 'js', files: { 'bot.js': '' } },
+        'kim-b.4': { ...base, name: 'kim_b', kind: 'js', files: {}, state: 'accepted', version: 'kim_b-v1' },
+        'kim-b.5': { ...base, name: 'pal', kind: 'js', files: { 'bot.js': '' } }
+    });
+    const finished = new Set();
+    // with no toolchain yet, nothing is checked and nothing is rejected
+    assert.strictEqual(await intakeOnce({ window: w, finished, missing: () => 'no Javy' }), 0);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => d.state), ['pending', 'pending', 'pending', 'accepted', 'pending']);
+    const ready = () => null; // these fail before any tool runs
+    assert.strictEqual(await intakeOnce({ window: w, finished, missing: ready }), 4);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => d.state), ['rejected', 'rejected', 'rejected', 'accepted', 'rejected']);
+    assert.match(w.docs['kim-b.1'].error, /no bot\.py/);
+    assert.match(w.docs['kim-b.2'].error, /cannot find '\.\.\/\.\.\/\.\.\/etc\/hostname' in the bot's folder/);
+    assert.match(w.docs['kim-b.3'].error, /belongs to another competitor/);
+    assert.match(w.docs['kim-b.5'].error, /"pal" is not yours: use your builder name kim_b/);
+    assert.deepStrictEqual([w.docs['kim-b.1'].files, w.docs['kim-b.1'].fileNames], [undefined, ['main.py']]);
+    assert.ok(!readJson(path.join(HOME, 'roster.json')).agents.some((a) => a.name === 'kim_b'), 'no competitor made for a bot that never started');
+    w.reads.length = 0;
+    assert.strictEqual(await intakeOnce({ window: w, finished, missing: ready }), 0);
+    assert.deepStrictEqual(w.reads, ['/api/docs/submissions'], 'a later pass reads only the list');
+});
+
+test('intake: a Python bot becomes a sandboxed WebAssembly version of the builder\'s competitor', { skip: !wasmReady && 'needs wasmtime and the CPython for WASI (bot/compiled/README.md)' }, async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const { describeArenaBot, makeArenaBot } = require('../arena/registry');
+    const base = { owner: 'pal', name: 'pal', kind: 'python', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
+    const w = fakeWindow({
+        'pal.1': { ...base, note: 'first', files: { 'bot.py': PY_BOT } },
+        'pal.2': { ...base, note: 'reads a file it may not', files: { 'bot.py': `open('${HOME}/roster.json').read()\n${PY_BOT}` } },
+        'pal.3': { ...base, note: 'second', files: { 'bot.py': `# v2\n${PY_BOT}` } }
+    });
+    assert.strictEqual(await intakeOnce({ window: w }), 3);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => [d.state, d.version ?? null, d.benched ?? null]), [['accepted', 'pal-v1', false], ['rejected', null, null], ['accepted', 'pal-v2', false]]);
+    assert.match(w.docs['pal.2'].error, /failed the start check[\s\S]*No such file or directory/);
+    const r = readJson(path.join(HOME, 'roster.json'));
+    assert.deepStrictEqual(r.agents.filter((a) => a.name === 'pal').map((a) => [a.owner, a.harness]), [['github:pal', { kind: 'builder', selfRun: true }]]);
+    assert.deepStrictEqual(fs.readdirSync(path.join(HOME, 'versions', 'pal-v2', 'bundle')).sort(), ['arena.json', 'bot.py']);
+    assert.strictEqual(describeArenaBot('pal-v2').lang, 'wasm');
+    const bot = makeArenaBot('pal-v2');
+    const awake = setTimeout(() => {}, 60000); // a bot program never keeps node running by itself (stdio.js)
+    try {
+        const ready = await bot.hello({ t: 'hello', v: 2, bot: 'pal-v2', you: 'p1', seed: 1, ms: 30000 });
+        assert.strictEqual(ready.t, 'ready');
+    } finally {
+        clearTimeout(awake);
+        await bot.close();
+    }
+});
+
+test('intake: one version per submission, even when the window misses the result or the check runs again; a JS bot may bring Node\'s stdio.js or live in a folder', { skip: !(wasmReady && fs.existsSync(path.join(__dirname, '..', '..', 'build', 'compiled', '.tools', 'javy-8.0.0', 'javy'))) && 'needs wasmtime, the CPython for WASI and Javy (bot/compiled/README.md)' }, async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const { versionsOf } = require('../arena/home');
+    const base = { owner: 'ros', name: 'ros', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
+    const w = fakeWindow({ 'ros.1': { ...base, kind: 'python', note: 'first', files: { 'bot.py': PY_BOT } } });
+    let down = true;
+    const put = w.putDoc;
+    w.putDoc = async (ns, id, doc) => {
+        if (down && doc.state !== 'checking') {
+            throw new Error('502 from the window');
+        }
+        return put(ns, id, doc);
+    };
+    const unsent = new Map();
+    await assert.rejects(intakeOnce({ window: w, unsent }), /502/);
+    assert.deepStrictEqual([w.docs['ros.1'].state, versionsOf('ros')], ['checking', [0, 1]]);
+    down = false;
+    await intakeOnce({ window: w, unsent });
+    assert.deepStrictEqual([w.docs['ros.1'].state, w.docs['ros.1'].version, versionsOf('ros')], ['accepted', 'ros-v1', [0, 1]], 'sent again, not entered again');
+
+    // an intake that died after the entry leaves the doc 'checking'; checked again, it gets the same version
+    w.docs['ros.1'] = { ...w.docs['ros.1'], state: 'checking', checkingAt: '2026-10-12T06:00:00Z', version: undefined };
+    assert.strictEqual(await intakeOnce({ window: w }), 1);
+    assert.deepStrictEqual([w.docs['ros.1'].state, w.docs['ros.1'].version, versionsOf('ros')], ['accepted', 'ros-v1', [0, 1]]);
+
+    const js = "const { serve } = require('./stdio');\nserve({ decide: (m) => ({ t: 'act', i: 0 }) });\n";
+    w.docs['ros.2'] = { ...base, kind: 'js', note: 'tested at home with stdio.js', files: { 'bot.js': js, 'stdio.js': fs.readFileSync(path.join(__dirname, '..', 'stdio.js'), 'utf8') } };
+    w.docs['ros.3'] = { ...base, kind: 'js', note: 'in a folder', entry: 'src/main.js', files: { 'src/main.js': js } };
+    assert.strictEqual(await intakeOnce({ window: w }), 2);
+    assert.deepStrictEqual(['ros.2', 'ros.3'].map((id) => [w.docs[id].state, w.docs[id].version ?? w.docs[id].error]), [['accepted', 'ros-v2'], ['accepted', 'ros-v3']]);
+});
+
+test('intake: a check that ends with no result is the arena\'s fault: the submission waits and is tried again, three times at most', async () => {
+    const { intakeOnce } = require('../arena/intake');
+    const base = { owner: 'kim-b', name: 'kim_b', kind: 'js', note: 'try', state: 'pending', submittedAt: '2026-10-12T06:00:00Z', files: { 'bot.js': '' } };
+    const w = fakeWindow({ 'kim-b.1': { ...base }, 'kim-b.2': { ...base } });
+    let calls = 0;
+    const flaky = async (job) => (calls++, job.id === 'kim-b.2' && job.tries ? { ok: true, version: 'kim_b-v1', benched: false } : { ok: false, retry: true, error: 'the arena could not check it' });
+    const opts = { window: w, missing: () => null, checker: flaky };
+    assert.strictEqual(await intakeOnce(opts), 0);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => [d.state, d.tries, !!d.files]), [['pending', 1, true], ['pending', 1, true]], 'files kept for the next try');
+    assert.ok(Date.parse(w.docs['kim-b.1'].retryAt) > Date.now());
+    assert.strictEqual(await intakeOnce(opts), 0);
+    assert.strictEqual(calls, 2, 'not before retryAt');
+    const due = () => Object.values(w.docs).forEach((d) => d.retryAt && (d.retryAt = '2026-10-12T00:00:00Z'));
+    due();
+    assert.strictEqual(await intakeOnce(opts), 1);
+    assert.deepStrictEqual([w.docs['kim-b.1'].state, w.docs['kim-b.1'].tries, w.docs['kim-b.2'].state], ['pending', 2, 'accepted']);
+    due();
+    assert.strictEqual(await intakeOnce(opts), 1);
+    assert.strictEqual(w.docs['kim-b.1'].state, 'rejected');
+    assert.match(w.docs['kim-b.1'].error, /could not check it \(tried 3 times; submit it again later\)/);
+});
+

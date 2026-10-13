@@ -238,6 +238,36 @@ async function check(name, fn) {
         return r.outcome !== 'won' ? `${r.outcome} ${r.error}` : errors.length < 5 && `only ${errors.length} errors`;
     });
 
+    await check('Rust simulations play both seats in protocol shapes', async () => {
+        const { rustEngine } = require('./omni/rs/rust-sims');
+        if (!(await rustEngine())) {
+            return console.log('     (skipped: no Rust build; npm run wasm:build -- --target node)');
+        }
+        const pool = require('./omni/rs/pool').loadPool(path.join(__dirname, 'omni', 'rs', 'pool.json'));
+        const rng = seededRng('rust-sims');
+        const decks = { p1: env.randomDeck(rng, { pool }), p2: env.randomDeck(rng, { pool }) };
+        const seen = { lines: 0, opponent: 0, problems: [] };
+        const walker = {
+            name: 'walker', hello: () => ({ t: 'ready', v: 2, sim: true, simEngine: 'rust' }),
+            async decide(m, sim) {
+                if (m.simEngine === 'rust' && seen.lines < 8) {
+                    seen.lines++;
+                    let r = await sim({ t: 'sim', op: 'begin' });
+                    for (let k = 0; k < 40 && r.actions; k++) {
+                        if (r.actor !== m.you) seen.opponent++;
+                        if (typeof r.prompt.signature !== 'string') seen.problems.push('a prompt without a signature');
+                        if (r.actions.some((a) => a.kind === 'distribute' && !a.split)) seen.problems.push('a distribute action without its split');
+                        r = await sim({ t: 'sim', op: 'act', i: Math.floor(rng() * r.actions.length) });
+                    }
+                    if (r.error) seen.problems.push(r.error);
+                }
+                return { t: 'act', i: 0 };
+            }
+        };
+        await play(8, [walker, createRandomBot('r')], { decks, maxSteps: 120 });
+        return !seen.lines ? 'no Rust simulation ran' : seen.problems.length ? seen.problems[0] : !seen.opponent && 'no simulated move by the opponent';
+    });
+
     await check('bot failures end the game, name the bot, and spare the opponent', async () => {
         const reader = "require('readline').createInterface({input: process.stdin}).on('line', (l) => { const m = JSON.parse(l); ";
         const cases = [

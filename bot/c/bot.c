@@ -24,6 +24,10 @@
 #define KEYLEN 256
 
 static int debug;
+/* --v2 (c-clock2): lessons from the games against people on Karabast (2026-10-12). A leader that can deploy as a Pilot
+   deploys onto a Vehicle, and a unique card is never played while I already control a copy (the uniqueness rule would
+   defeat one at once); such copies are resourced first. */
+static int v2, pilotFix, uniqueFix; /* --v2 = both fixes; --pilot and --unique turn on one each */
 
 /* ---------- observation ---------- */
 
@@ -33,6 +37,8 @@ typedef struct {
     int p, h, d, x, sn;
     int shields, ups;
     int space, side, leader;
+    const Card *upc[8]; /* non-token upgrades on the unit (pilots included) */
+    int nupc;
 } Unit;
 
 typedef struct {
@@ -176,6 +182,9 @@ static void parse_units(const JVal *arr, State *st, int side, int space, const c
                 u->shields++;
             } else if (!jtrue(jget(up, "t"))) {
                 u->ups++;
+                if (u->nupc < 8) {
+                    u->upc[u->nupc++] = lookup(jstr(jget(up, "s"), NULL), jstr(jget(up, "n"), NULL));
+                }
             }
         }
     }
@@ -322,10 +331,48 @@ static int count_units(const State *st, int side) {
     return n;
 }
 
+static int same_card(const Card *a, const Card *b) {
+    return a && b && (a == b || (a->internal && b->internal && *a->internal && !strcmp(a->internal, b->internal)));
+}
+
+/* A unique card I already control a copy of: one of my units (a deployed leader too) or an upgrade on one (a pilot). */
+static int unique_in_play(const State *st, const Card *c) {
+    if (!c || !c->unique) {
+        return 0;
+    }
+    for (int i = 0; i < st->nu; i++) {
+        const Unit *u = &st->u[i];
+        if (u->side != 0) {
+            continue;
+        }
+        if (same_card(u->c, c)) {
+            return 1;
+        }
+        for (int k = 0; k < u->nupc; k++) {
+            if (same_card(u->upc[k], c)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Copies of `c` in my hand. */
+static int copies_in_hand(const State *st, const Card *c) {
+    int k = 0;
+    for (int i = 0; c && i < st->s[0].nhand; i++) {
+        k += same_card(st->s[0].hand[i].c, c);
+    }
+    return k;
+}
+
 /* Value of playing a card from hand now (before its cost). */
 static double play_value(const State *st, const Card *c) {
     if (!c) {
         return 2.0;
+    }
+    if (uniqueFix && unique_in_play(st, c)) {
+        return -1.0; /* the uniqueness rule defeats one copy right away: the card and its cost are lost */
     }
     if (c->types & T_UNIT) {
         double v = c->power + 0.6 * c->hp + 0.35 * c->cost;
@@ -365,6 +412,14 @@ static double keep_value(const State *st, const Card *c) {
     }
     if (c->types & T_UPGRADE) {
         v -= 0.3;
+    }
+    if (uniqueFix && c->unique) {
+        /* a copy of a unique card I control can't be played: resource it first; a second copy in hand is a spare */
+        if (unique_in_play(st, c)) {
+            v -= 3.0;
+        } else if (copies_in_hand(st, c) > 1) {
+            v -= 1.0;
+        }
     }
     return v;
 }
@@ -792,6 +847,12 @@ static Effect classify(const Prompt *pr) {
     }
     if (has(t, "exploit")) {
         e.fx = FX_EXPLOIT;
+        return e;
+    }
+    if (pilotFix && has(t, "as a pilot")) {
+        /* "Deploy <leader> as a Pilot": the leader goes on one of my Vehicles; best on a big one that can still attack */
+        e.fx = FX_HELP;
+        e.buff = 4;
         return e;
     }
     if (has(t, "attach ")) {
@@ -1257,7 +1318,21 @@ static const Act *choose_buttons(State *st, const Prompt *pr, const Act *acts, i
     }
     if (starts(t, "play ") && has(t, ":")) {
         /* leader menu (deploy / ability) or a unit with Piloting */
-        const Act *dep = find_button(acts, n, "deploy");
+        const Act *dep = NULL;
+        if (pilotFix) {
+            /* a Pilot leader on a Vehicle: a bigger leader unit that enemy card abilities can't easily remove, and
+               its upgrade text (Luke: "On Attack: deal 3 damage to a unit") on a unit that can attack this round */
+            for (int i = 0; i < n && !dep; i++) {
+                char l[256];
+                lower_into(l, sizeof l, acts[i].label, NULL);
+                if (!strcmp(acts[i].kind, "button") && starts(l, "deploy") && has(l, "pilot")) {
+                    dep = &acts[i];
+                }
+            }
+        }
+        if (!dep) {
+            dep = find_button(acts, n, "deploy");
+        }
         if (dep && strcmp(G.intent, "ability")) return dep;
         if (!dep && !strcmp(G.intent, "deploy")) {
             /* this leader has no deploy now: back out and keep the resources for the hand (its ability comes last) */
@@ -1422,8 +1497,17 @@ static void reply(const char *line) {
     fflush(stdout);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     debug = getenv("SWU_C_DEBUG") && *getenv("SWU_C_DEBUG") && strcmp(getenv("SWU_C_DEBUG"), "0");
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--v2")) {
+            v2 = pilotFix = uniqueFix = 1;
+        } else if (!strcmp(argv[i], "--pilot")) {
+            pilotFix = 1;
+        } else if (!strcmp(argv[i], "--unique")) {
+            uniqueFix = 1;
+        }
+    }
     const char *root = getenv("SWU_CARD_JSON");
     char dir[4096];
     snprintf(dir, sizeof dir, "%s/Card", root && *root ? root : "forceteki/test/json");
@@ -1456,7 +1540,7 @@ int main(void) {
         if (!strcmp(t, "hello")) {
             reset_game();
             snprintf(G.me, sizeof G.me, "%s", jstr(jget(m, "you"), "p1"));
-            reply("{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock\"}");
+            reply(v2 ? "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock2\"}" : "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock\"}");
             continue;
         }
         if (strcmp(t, "decide")) {

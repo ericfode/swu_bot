@@ -112,3 +112,33 @@ test('bundled search bot searches through sims like the Node one (sha1 situation
     assert.strictEqual(acts[0], 3); // the winning line
     assert.notStrictEqual(acts[1], 3); // never the same choice twice in the same situation
 });
+
+test('with a root, only files inside it are bundled: no path, link or ../ leads out', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-root-'));
+    try {
+        fs.writeFileSync(path.join(root, 'bot.js'), "const s = require('./stdio');\nconst h = require('./lib/help');\n");
+        fs.mkdirSync(path.join(root, 'lib'));
+        fs.writeFileSync(path.join(root, 'lib', 'help.js'), "module.exports = require('../data.json');\n");
+        fs.writeFileSync(path.join(root, 'data.json'), '{"x": 1}');
+        fs.writeFileSync(path.join(root, 'stdio.js'), 'module.exports = {};\n');
+        const out = bundle(path.join(root, 'bot.js'), ['me'], { root });
+        assert.match(out, /from bot\.js; do not edit/);
+        assert.match(out, /"lib\/help\.js"/);
+        const outside = path.join(os.tmpdir(), `bundle-outside-${process.pid}.js`);
+        fs.writeFileSync(outside, 'module.exports = "secret";\n');
+        fs.symlinkSync(outside, path.join(root, 'link.js'));
+        try {
+            for (const spec of [outside, `../${path.basename(outside)}`, './link.js', '../../etc/hostname']) {
+                fs.writeFileSync(path.join(root, 'bad.js'), `require('${spec}');\n`);
+                assert.throws(() => bundle(path.join(root, 'bad.js'), [], { root }), /in the bot's folder/, spec);
+            }
+            assert.throws(() => bundle(outside, [], { root }), /must be inside/);
+        } finally {
+            fs.rmSync(outside, { force: true });
+        }
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

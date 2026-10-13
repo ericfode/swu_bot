@@ -19,5 +19,7 @@ COPY --from=build /src/app/dist/public.html app/dist/public.html
 COPY --from=build /src/meta/atlas-kit.js meta/atlas-kit.js
 COPY --from=build /src/dashboard/site dashboard/site
 COPY --from=build /src/studio/dist-kit/swu-viewer-kit.js studio/dist-kit/swu-viewer-kit.js
+# the bot protocol, which the window's arena_guide tool hands to people building bots
+COPY --from=build /src/spec/protocol.md spec/protocol.md
 EXPOSE 8080
 CMD ["node", "bot/arena/server.js", "--host", "0.0.0.0", "--port", "8080"]

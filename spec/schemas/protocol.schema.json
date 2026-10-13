@@ -229,6 +229,12 @@
           "type": "boolean",
           "description": "v2: ask for simulations."
         },
+        "simEngine": {
+          "enum": [
+            "rust"
+          ],
+          "description": "v2, with sim: simulate on the Rust simulator when it knows every card in the game."
+        },
         "version": {
           "type": "string",
           "maxLength": 200,
@@ -529,6 +535,12 @@
           "type": "boolean",
           "description": "v2: sim requests are allowed for this decision."
         },
+        "simEngine": {
+          "enum": [
+            "rust"
+          ],
+          "description": "v2: this decision's simulations run on the Rust simulator (absent: forceteki)."
+        },
         "ms": {
           "$ref": "#/$defs/Ms"
         },
@@ -734,6 +746,10 @@
               }
             }
           }
+        },
+        "split": {
+          "$ref": "#/$defs/Split",
+          "description": "Rust simulations only (simEngine rust): the one split this distribute action makes; such an action has no distribute object."
         }
       },
       "allOf": [
@@ -761,8 +777,17 @@
             }
           },
           "then": {
-            "required": [
-              "distribute"
+            "anyOf": [
+              {
+                "required": [
+                  "distribute"
+                ]
+              },
+              {
+                "required": [
+                  "split"
+                ]
+              }
             ]
           }
         }

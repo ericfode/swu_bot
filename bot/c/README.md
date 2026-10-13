@@ -40,6 +40,15 @@ exhaust, capture, -N/-N) from helpful ones (heal, shield, +N/+N, experience, rea
 unit; splits distributed damage to kill the most valuable units first, healing onto its most valuable damaged units.
 A pick that leaves the window unchanged (a play that got cancelled) is banned for the rest of the round.
 
+## c-clock2 (`--v2`)
+
+`bot/c/swu-c --v2`, registered as `c-clock2`, adds two fixes found in the games against people on Karabast
+(analysis/karabast/README.md): a leader that can deploy as a Pilot does so, onto its best Vehicle (Luke Skywalker, Hero
+of Yavin, was always deployed as a plain 5/6 ground unit), and a unique card is never played while it already controls a
+copy (a unit or an upgrade such as a pilot); such copies, then spare copies in hand, are resourced first. `--pilot` and
+`--unique` turn on one fix each. Without a flag the bot plays exactly as before, so c-clock stays the reference of the
+standard test.
+
 ## Files
 
 - `bot.c`: protocol loop, observation parsing, the strategy.
