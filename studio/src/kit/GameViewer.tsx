@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Eye, Image, Pause, Play, Radio, Shapes, SkipBack, SkipForward, Sparkles, Trophy } from 'lucide-react';
 import { Board } from '../components/Board';
@@ -24,6 +24,15 @@ import { cardTextVersion, loadedCardCost } from '../lib/cardText';
 import { humanize } from '../lib/cards';
 import { spotTimeline } from '../data/atlas';
 import { SPEEDS, useSettings, type Perspective } from '../lib/settings';
+import { batchA14IntermediateLayout } from '../effects/batchA14Signatures';
+import { batchA15IntermediateLayout } from '../effects/batchA15Signatures';
+import { batchA16IntermediateLayout } from '../effects/batchA16Signatures';
+import { CardEffectOverlay } from '../effects/CardEffectOverlay';
+import { useCardEffectAudio } from '../effects/audio';
+import { EffectSoundControls } from '../components/EffectSoundControls';
+import { detectCardEffects } from '../effects/detect';
+import { preparePreviewCue, previewSceneKey } from '../effects/previewStages';
+import type { CardEffectCue, EffectPreview } from '../effects/types';
 
 /** A lens file as given to the viewer: a parsed file, or a file with its dir ('' = the default path). */
 export type LensEntry = LensFile | LensInput;
@@ -99,10 +108,12 @@ export interface GameViewerProps {
     fillWindow?: boolean;
     back?: { href: string; label: string };
     control?: (c: ViewerControl) => void;
+    /** A deliberately staged animation, using the same board and effect renderer as recorded gameplay. */
+    effectPreview?: EffectPreview;
 }
 
 /** The whole replay experience in one component: Holotable's game page and every embed (dashboard, analysis pages) use it. */
-export function GameViewer({ game, live = false, startStep = 0, evals = null, lens = null, registry = null, score: requested = null, onScore, estimate, spots = true, lanes: startLanes, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control }: GameViewerProps) {
+export function GameViewer({ game, live = false, startStep = 0, evals = null, lens = null, registry = null, score: requested = null, onScore, estimate, spots = true, lanes: startLanes, onStep, keyboard = 'focus', layout = 'full', fillWindow = false, back, control, effectPreview }: GameViewerProps) {
     const last = game.steps.length - 1;
     const [stepState, setStep] = useState(() => (live && !startStep ? last : Math.min(startStep, last)));
     // a live file can be rewritten with fewer steps (a re-run into the same folder): never read past the end
@@ -124,8 +135,18 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     };
     // the timeline step under the pointer: the board score panel previews it
     const [hoverStep, setHoverStep] = useState<number | null>(null);
-    const { speed, setSpeed, perspective, setPerspective, art, setArt, lens: forcedValues, score: savedScore, setScore: saveScore } = useSettings();
+    const { speed, setSpeed, perspective, setPerspective, art, setArt, lens: forcedValues, score: savedScore, setScore: saveScore, sound, volume } = useSettings();
     const root = useRef<HTMLDivElement>(null);
+    const effectBoard = useRef<HTMLDivElement>(null);
+    const [effectsOn, setEffectsOn] = useState(true);
+    const [effectCue, setEffectCue] = useState<CardEffectCue | null>(null);
+    const [completedEffect, setCompletedEffect] = useState<CardEffectCue | null>(null);
+    useCardEffectAudio(effectCue, sound, volume);
+    const dismissEffect = useCallback(() => {
+        if (!effectCue) return;
+        setCompletedEffect(effectCue);
+        setEffectCue(current => current?.key === effectCue.key ? null : current);
+    }, [effectCue]);
     // the game's score sources (its lens files, or the Omni v1 estimate) and the chosen one resolved over every step
     const lensFiles = useMemo(() => lensInputs(lens), [lens]);
     // printed costs from the loaded card data, for the estimate and for Omni v1 files without parts; a new function
@@ -158,6 +179,55 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
 
     const ids = useMemo(() => trackUnits(game), [game]);
     const actions = useMemo(() => classifyGame(game, ev, score), [game, ev, score]);
+    const cardEffects = useMemo(() => detectCardEffects(game, actions), [game, actions]);
+    const lastEffectStep = useRef(step);
+    const gameIdentity = JSON.stringify(game.header);
+    const lastEffectGame = useRef(gameIdentity);
+    const effectSerial = useRef(0);
+    const lastPlayedCue = useRef<string | null>(null);
+    const currentEffectDuration = effectsOn ? cardEffects.get(step)?.definition.durationMs ?? 0 : 0;
+    const currentLast = useRef(last);
+    currentLast.current = last;
+    useLayoutEffect(() => {
+        const changedGame = lastEffectGame.current !== gameIdentity;
+        lastEffectGame.current = gameIdentity;
+        const previousStep = lastEffectStep.current;
+        const forward = step === previousStep + 1;
+        const moved = step !== previousStep;
+        lastEffectStep.current = step;
+        if (effectPreview) {
+            return;
+        }
+        if (!effectsOn || changedGame) {
+            setEffectCue(null);
+            setCompletedEffect(null);
+            if (changedGame) lastPlayedCue.current = null;
+        } else if (moved) {
+            // Live recordings confirm the preceding action when the next prompt arrives.
+            const cue = forward ? cardEffects.get(step) ?? (live && follow ? cardEffects.get(previousStep) : undefined) : undefined;
+            if (cue && (!(live && follow) || cue.key !== lastPlayedCue.current)) {
+                lastPlayedCue.current = cue.key;
+                setEffectCue({ ...cue, key: `${cue.key}:${++effectSerial.current}` });
+            } else if (!(live && follow && forward)) {
+                setEffectCue(null);
+            }
+        } else if (live && follow) {
+            const cue = cardEffects.get(step);
+            if (cue && cue.key !== lastPlayedCue.current) {
+                lastPlayedCue.current = cue.key;
+                setEffectCue({ ...cue, key: `${cue.key}:${++effectSerial.current}` });
+            }
+        }
+    }, [step, effectsOn, cardEffects, effectPreview, gameIdentity, live, follow]);
+
+    useLayoutEffect(() => {
+        if (!effectPreview) {
+            return;
+        }
+        const before = game.steps[step].state;
+        const cue = preparePreviewCue(effectPreview, before);
+        setEffectCue(cue);
+    }, [effectPreview, game, step]);
     const pivotal = useMemo(() => pivotalActions(actions, 10), [actions]);
     const actionAt = useMemo(() => new Map(actions.map((a) => [a.index, a])), [actions]);
     const [why, setWhy] = useState<'analyst' | 'board' | 'weights'>(() => (evals?.points?.length ? 'analyst' : 'board'));
@@ -227,8 +297,8 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
         if (!playing) {
             return undefined;
         }
-        const t = setInterval(() => setStep((s) => {
-            if (s >= last) {
+        const t = setTimeout(() => setStep((s) => {
+            if (s >= currentLast.current) {
                 setPlaying(false);
                 if (live) {
                     setFollow(true);
@@ -236,9 +306,9 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                 return s;
             }
             return s + 1;
-        }), SPEEDS[speed].ms);
-        return () => clearInterval(t);
-    }, [playing, speed, last, live]);
+        }), Math.max(SPEEDS[speed].ms, currentEffectDuration + (currentEffectDuration ? 100 : 0)));
+        return () => clearTimeout(t);
+    }, [playing, speed, live, step, currentEffectDuration]);
 
     const go = useCallback((n: number) => {
         const target = Math.max(0, Math.min(last, n));
@@ -308,8 +378,43 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
     // v2: the bot that broke the game (it loses)
     const failed = failedSeat(game.end);
     const analysis = ev.size ? evalAt(ev, step) : null;
-    // the board and the card inspector show the playhead's step
-    const view = useMemo((): ScoreView | null => (score && score.steps[step] ? { source: score.source, step: score.steps[step] } : null), [score, step]);
+    const previewKey = effectPreview ? previewSceneKey(effectPreview) : null;
+    const heldResult = effectPreview?.progress != null && effectPreview.progress >= 1;
+    const settledPreview = !!effectPreview && !effectCue && completedEffect?.key === previewKey;
+    const presentation = effectCue?.transition ?? (settledPreview ? completedEffect?.transition : undefined);
+    const boardState = presentation && (effectCue || settledPreview)
+        ? (heldResult || settledPreview ? presentation.after : presentation.before) : cur.state;
+    // A departing card may unmount before its mouse-leave arrives. Close only the floating hover;
+    // retain the side inspector's selection across preview Replay, completion, and actual step changes.
+    useLayoutEffect(() => { setHovering(false); }, [boardState, previewKey]);
+    // Hold the complete footprint through handoff, including recorded single-step completion.
+    // Adaptive lanes must not put a surviving card into an arriving card's measured destination.
+    const footprintCue = effectCue ?? (settledPreview || completedEffect?.transition?.afterStep === step ? completedEffect : null);
+    const footprint = footprintCue?.transition;
+    const intermediates = useMemo(() => footprintCue
+        ? [batchA14IntermediateLayout(footprintCue), batchA15IntermediateLayout(footprintCue), batchA16IntermediateLayout(footprintCue)].filter(s => s != null)
+        : [], [footprintCue]);
+    const arenaFootprints = footprint ? [footprint.before, footprint.after, ...intermediates] : [];
+    const reservePlayerEffect = arenaFootprints.some(snapshot => !!snapshot.pendingPlayers?.length || !!snapshot.matchResult);
+    const reserveBaseProtection = footprint ? Object.fromEntries((['p1', 'p2'] as const).map(seat => [seat, arenaFootprints.some(s => !!s.players[seat].base.damageProtection?.length)])) as Record<Seat, boolean> : undefined;
+    const reserveArenaSlots = footprint ? Object.fromEntries((['p1', 'p2'] as const).map(seat => [seat,
+        Object.fromEntries((['ground', 'space'] as const).map(zone => [zone, Math.max(...arenaFootprints.map(s => s.players[seat][zone].length))]))
+    ])) as Record<Seat, Record<'ground' | 'space', number>> : undefined;
+    const reserveDiscardPermissions = presentation ? Object.fromEntries((['p1', 'p2'] as const).map(seat => [seat,
+        [...new Set([presentation.before, presentation.after].flatMap(s => s.discardPlayPermissions?.filter(p => p.player === seat && p.round === s.round && p.phase === s.phase).map(p => p.id) ?? []))]
+    ])) as Record<Seat, string[]> : undefined;
+    const presentationIds = useMemo(() => presentation ? trackUnits({ ...game, steps: [
+        { t: 'step', n: 0, state: presentation.before }, { t: 'step', n: 1, state: presentation.after }
+    ] }) : null, [game, presentation]);
+    const boardIds = presentationIds ? presentationIds[heldResult || settledPreview ? 1 : 0] : ids[step];
+    const ownsBoardChange = !!effectPreview || !!effectCue?.transition || completedEffect?.transition?.afterStep === step;
+    // Card values belong to the snapshot actually on the board. An authored boundary/result with no
+    // recorded step has no matching score; never attach the playhead's positional values to those cards.
+    const boardScoreStep = effectPreview ? undefined : presentation
+        ? (heldResult || settledPreview ? presentation.afterStep : presentation.beforeStep ?? (presentation.before === cur.state ? step : undefined))
+        : step;
+    const boardScore = useMemo((): ScoreView | null => (score && boardScoreStep != null && score.steps[boardScoreStep]
+        ? { source: score.source, step: score.steps[boardScoreStep] } : null), [score, boardScoreStep]);
     // the board score panel shows the playhead's step, or the one under the pointer on the timeline
     const shown = hoverStep != null && hoverStep >= 0 && hoverStep <= last ? hoverStep : step;
     const shownScore = score?.steps[shown] ?? null;
@@ -374,14 +479,14 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
         }
     };
 
-    const full = layout === 'full';
+    const full = layout === 'full' && !effectPreview;
     // the Weights tab, beside the board score: for any score that resolved (a refused file has nothing to show)
     const weightsTab = !!score && !score.source.error;
     // the chosen source unless its file was refused (a refused file draws no lane)
     const liveSource = score && !score.source.error ? score.source : null;
     return (
         <div ref={root} tabIndex={keyboard === 'focus' ? 0 : undefined} className="@container flex flex-col gap-3 outline-none" aria-label={`Replay: ${bots.p1} vs ${bots.p2}`}>
-            <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {!effectPreview && <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 {back && <a href={back.href} className="btn" aria-label={`Back to ${back.label}`}><ChevronLeft size={16} />{back.label}</a>}
                 <div className="flex items-baseline gap-3 min-w-0 flex-wrap">
                     {(['p1', 'p2'] as Seat[]).map((s, i) => (
@@ -395,6 +500,23 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                     ))}
                 </div>
                 <div className="flex gap-2 ml-auto items-center flex-wrap">
+                    <button className="btn !h-8 !px-2" aria-pressed={effectsOn} onClick={() => setEffectsOn(!effectsOn)} title="Card animations pause playback briefly so each effect can finish">
+                        <Sparkles size={14} />Effects
+                    </button>
+                    <EffectSoundControls onEnabled={() => {
+                        const cue = effectCue ?? cardEffects.get(step);
+                        if (cue && effectsOn) {
+                            setPlaying(false);
+                            setFollow(false);
+                            setEffectCue({ ...cue, key: `${cue.key}:sound:${++effectSerial.current}` });
+                        }
+                    }} />
+                    {cardEffects.has(step) && <button className="btn !h-8" disabled={!effectsOn} onClick={() => {
+                        setPlaying(false);
+                        setFollow(false);
+                        const cue = cardEffects.get(step)!;
+                        setEffectCue({ ...cue, key: `${cue.key}:${++effectSerial.current}` });
+                    }}>Replay effect</button>}
                     <div className="inline-flex rounded-lg border border-line bg-ink p-0.5" role="group" aria-label="Card display">
                         <button className="btn !h-7 !border-0 !bg-transparent aria-pressed:!bg-raise aria-pressed:!text-fg text-dim" aria-pressed={!art} onClick={() => setArt(false)} title="Generated tiles: always available, light"><Shapes size={14} />Vector</button>
                         <button className="btn !h-7 !border-0 !bg-transparent aria-pressed:!bg-raise aria-pressed:!text-fg text-dim" aria-pressed={art} onClick={() => setArt(true)} title="Card images; cards without art fall back to tiles"><Image size={14} />Card art</button>
@@ -413,13 +535,14 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                         </button>
                     )}
                 </div>
-            </header>
+            </header>}
 
             <div className={`grid gap-3 grid-cols-[minmax(0,1fr)] min-h-0 ${full ? '@5xl:grid-cols-[minmax(0,1fr)_384px]' : ''}`}>
                 <div className="flex flex-col gap-3 min-w-0">
-                    <div className="panel p-2 @3xl:p-3 relative overflow-hidden">
-                        <Board state={cur.state} prev={prev?.state ?? null} ids={ids[step]} prevIds={step > 0 ? ids[step - 1] : null} bots={bots} actor={actor} step={step}
-                            onFocus={onCardFocus} onLeave={onCardLeave} score={view} values={valuesOn} spots={spots} />
+                    <div ref={effectBoard} className="panel p-2 @3xl:p-3 relative overflow-hidden" data-effect-state={effectCue && !heldResult ? 'animating' : 'settled'}>
+                        <Board key={effectCue?.key ?? 'recorded-board'} state={boardState} prev={ownsBoardChange ? null : prev?.state ?? null} ids={boardIds} prevIds={ownsBoardChange ? null : step > 0 ? ids[step - 1] : null} bots={bots} actor={actor} step={step}
+                            animateChanges={!ownsBoardChange} reservePlayerEffect={reservePlayerEffect} reserveArenaSlots={reserveArenaSlots} reserveDiscardPermissions={reserveDiscardPermissions} reserveBaseProtection={reserveBaseProtection} onFocus={onCardFocus} onLeave={onCardLeave} score={boardScore} values={valuesOn} spots={spots} />
+                        <CardEffectOverlay cue={heldResult ? null : effectCue} boardRef={effectBoard} onComplete={dismissEffect} />
                         <AnimatePresence>
                             {end && !hideResult && (
                                 <motion.div className="absolute inset-0 z-20 grid place-items-center bg-bg/60 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setHideResult(true)}>
@@ -440,7 +563,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                         </AnimatePresence>
                     </div>
 
-                    <div className="panel p-3 flex flex-col gap-2">
+                    {!effectPreview && <div className="panel p-3 flex flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-2">
                             <button className="btn" onClick={() => roundJump(-1)} aria-label="Previous round"><SkipBack size={15} /></button>
                             <button className="btn" onClick={() => seek(step - 1)} aria-label="Previous decision"><ChevronLeft size={15} /></button>
@@ -504,13 +627,13 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                             </div>
                         </div>
                         <Spine game={game} step={step} evals={ev} onSeek={seek} />
-                    </div>
+                    </div>}
                 </div>
 
                 {full && (
                     <aside className={`flex flex-col gap-3 min-h-0 ${fillWindow ? '@5xl:h-[calc(100vh-110px)] @5xl:sticky @5xl:top-3' : '@5xl:max-h-[960px]'}`}>
                         <div className="panel p-3 shrink-0 overflow-y-auto @5xl:max-h-[72%]">
-                            {focus ? <CardInspector focus={focus} score={valuesOn || !canValues ? view : null} /> : (
+                            {focus ? <CardInspector focus={focus} score={valuesOn || !canValues ? boardScore : null} /> : (
                                 <div className="flex flex-col items-center gap-2 py-2">
                                     {lastAction ? (
                                         <>
@@ -540,7 +663,7 @@ export function GameViewer({ game, live = false, startStep = 0, evals = null, le
                 )}
             </div>
             <AnimatePresence>
-                {focus && hovering && !(full && beside) && <FloatingZoom key={`${focus.card.n}:${focus.rect?.left}:${focus.rect?.top}`} focus={focus} score={valuesOn ? view : null} />}
+                {focus && hovering && !(full && beside) && <FloatingZoom key={`${focus.card.n}:${focus.rect?.left}:${focus.rect?.top}`} focus={focus} score={valuesOn ? boardScore : null} />}
             </AnimatePresence>
         </div>
     );

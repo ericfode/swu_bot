@@ -107,8 +107,10 @@ export const cardTextVersion = () => version;
 
 /**
  * A token unit or upgrade (Battle Droid, Clone Trooper, X-Wing, Shield, Experience…): the recorder writes `s: null` for
- * cards with no set number, which only tokens lack, and `t: 1` on token upgrades; card data marks them 'token' too.
+ * cards with no set number, and `t: 1` on token upgrades; card data marks them 'token' too.
+ * Hidden replay cards and unknown preview draws also have no set number, without being tokens.
  */
 export function isToken(card: Pick<CardRef, 'n' | 's'> & { t?: 0 | 1 }): boolean {
-    return card.t === 1 || card.s == null || !!cardTextOf(card)?.ty?.includes('token');
+    const hidden = /^(?:unknown|hidden) card$/i.test(card.n);
+    return card.t === 1 || !!cardTextOf(card)?.ty?.includes('token') || (card.s == null && !hidden);
 }

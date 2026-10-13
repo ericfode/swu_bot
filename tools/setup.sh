@@ -9,7 +9,7 @@ case "${1:-}" in
     --help|-h)
         echo 'Usage: npm run setup -- [--skip-cards]'
         echo 'Install locked dependencies and build the engine and both viewers.'
-        echo '--skip-cards leaves real games unavailable; fixture viewers and unit tests still work.'
+        echo '--skip-cards leaves real games unavailable; fixture viewers and non-animation unit tests still work.'
         exit 0
         ;;
     '') ;;
@@ -56,6 +56,6 @@ if [ "$cards" = true ]; then
     '
     echo 'Setup complete. Run npm run smoke, then npm run gate to check real games.'
 else
-    echo 'Setup complete without card data. Run npm run smoke; see README.md for fixture viewing.'
+    echo 'Setup complete without card data. See README.md for fixture checks; full smoke requires card data.'
 fi
 echo 'For a source snapshot without Git history, use npm run smoke:source instead of npm run smoke.'
