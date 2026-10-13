@@ -24,6 +24,9 @@ function ordinary(entry) {
         !entry.card.pilotText && !entry.card.pilotBox && !entry.card.pilotingBox && !entry.piloting && !entry.attachCondition;
 }
 function classifyArenaDamage(entry) {
+    const conditional = classifyConditionalArenaDamage(entry);
+    if (conditional)
+        return conditional;
     if (!ordinary(entry) || !keys(entry.abilities, ['card', 'leader', 'unit']) || entry.abilities.leader?.length || entry.abilities.unit?.length)
         return null;
     const all = entry.abilities.card ?? [];
@@ -86,10 +89,140 @@ function nativeShield(e) {
         !e.attachCondition && same(e.abilities, { leader: [], unit: [], card: [] }) && same(e.keywordValues, {}) &&
         same(e.card, { title: 'Shield', subtitle: null, cost: 0, hp: 0, power: 0, text: 'If damage would be dealt to attached unit, prevent that damage. If you do, defeat a Shield token on it.', deployBox: null, epicAction: null, unique: false, rules: null, upgradePower: 0, upgradeHp: 0, id: '8752877738', aspects: [], traits: ['armor'], keywords: [], types: ['token', 'upgrade'], setId: { set: 'SOR' }, internalName: 'shield' });
 }
+function strictConditionalUnit(e) {
+    return e?.status === 'supported' && e.baseClass === 'NonLeaderUnitCard' && same(e.card?.types, ['unit']) &&
+        typeof e.sourcePath === 'string' && e.sourcePath.length > 0 && /^[a-f0-9]{64}$/.test(e.sourceHash ?? '') &&
+        typeof e.card.unique === 'boolean' && e.card.arena === 'ground' && Number.isInteger(e.card.hp) && e.card.hp > 0 &&
+        Number.isInteger(e.card.power) && e.card.power >= 0 && Number.isInteger(e.card.cost) && e.card.cost >= 0 && e.card.cost <= 6 &&
+        Array.isArray(e.card.aspects) && e.card.aspects.length <= 2 && e.card.aspects.every(v => typeof v === 'string') &&
+        Array.isArray(e.card.traits) && e.card.traits.every(v => typeof v === 'string') && e.card.pilotText == null && e.card.pilotBox == null &&
+        e.card.pilotingBox == null && e.piloting == null && e.attachCondition == null && e.card.deployBox == null && e.card.upgradeHp == null && e.card.upgradePower == null && keys(e.abilities, ['leader', 'unit', 'card']) &&
+        same(e.abilities.leader, []) && same(e.abilities.unit, []) && Array.isArray(e.abilities.card);
+}
+function classifyConditionalArenaDamage(e) {
+    if (!strictConditionalUnit(e) || e.abilities.card.length !== 1)
+        return null;
+    const a = e.abilities.card[0];
+    if (!keys(a, ['trigger', 'title', 'costs', 'effect'])) return null;
+    const effect = a.effect;
+    if (!keys(a, ['trigger', 'title', 'costs', 'effect']) || typeof a.title !== 'string' || !a.title.length || Buffer.byteLength(a.title, 'utf8') > 1024 || !same(a.costs, []) ||
+        !keys(effect, ['kind', 'condition', 'onTrue', 'onFalse']) || effect.kind !== 'conditional' || !same(effect.onFalse, { kind: 'noAction' }))
+        return null;
+    const count = binary('>=', { kind: 'query', name: 'arenaUnitCount', receiver: ref('player'), args: [constant(true)] }, constant(4));
+    const base = binary('>=', ref('player', 'base', 'damage'), constant(15));
+    const leaf = (amount, predicate) => ({ kind: 'damage', target: { kind: 'arenaList', receiver: ref('opponent'), predicate }, amount: constant(amount) });
+    if (a.trigger === 'whenPlayed' && same(effect.condition, count) && same(effect.onTrue, leaf(3, constant(true))) && same(e.keywordValues, { restore: 1 }) && same(e.card.keywords, ['restore']))
+        return { family: 'arena-damage', trigger: 'whenPlayed', amount: 3, receiver: 'opponent', arena: null, excludeSource: false, exhaustedOnly: false, coordinateRaid: 0, overwhelm: false,
+            condition: 'own-arena-count', threshold: 4, restore: 1, raid: 0 };
+    if (a.trigger === 'onAttack' && same(effect.condition, base) && same(effect.onTrue, leaf(1, binary('&&', constant(true), arenaGuard('groundArena')))) && same(e.keywordValues, { raid: 2 }) && same(e.card.keywords, ['raid']))
+        return { family: 'arena-damage', trigger: 'onAttack', amount: 1, receiver: 'opponent', arena: 'ground', excludeSource: false, exhaustedOnly: false, coordinateRaid: 0, overwhelm: false,
+            condition: 'own-base-damage', threshold: 15, restore: 0, raid: 2 };
+    return null;
+}
+function conditionalQuiet(e) {
+    return require('./keyword-inventory-probes').literalUnit(e) && same(e.keywordValues, {});
+}
+function planConditionalArenaDamage(entry, shape, options = {}) {
+    const defs = [...(Array.isArray(options.catalogue) ? options.catalogue : options.catalogue?.cards ?? [])].sort((a, b) => a.setCode.localeCompare(b.setCode));
+    const result = { schema: 'swu-card-probes/v1', cardId: entry.setCode, sourceHash: entry.sourceHash, cases: [], obligations: [], uncovered: [] };
+    const obligation = (name, reason) => { const id = entry.setCode + ':conditional-arena-damage:' + name; result.obligations.push({ id, path: 'abilities.card.0.effect', dimension: name }); if (reason)
+        result.uncovered.push({ id, path: 'abilities.card.0.effect', reason }); return id; };
+    const quiet = defs.filter(conditionalQuiet), ground = quiet.find(e => e.card.arena === 'ground' && e.card.hp >= shape.amount + 4), space = quiet.find(e => e.card.arena === 'space' && e.card.hp >= shape.amount + 4);
+    if (!ground || !space) {
+        obligation('donors', 'No complete quiet ground/space construction donors');
+        return result;
+    }
+    const row = (e, owner, extra = {}) => ({ code: e.setCode, owner, arena: e.card.arena, exhausted: true, damage: 0, ...extra });
+    const friends = count => Array.from({ length: count }, (_, i) => row(i % 2 ? space : ground, 'self'));
+    const enemyMixed = () => [row(ground, 'opponent'), row(space, 'opponent')];
+    const shield = defs.find(nativeShield), attachment = () => ({ code: shield.setCode, token: 'shield' });
+    const add = (name, sourceSeat, targets, extra = {}) => {
+        const id = obligation(name + '-seat-' + sourceSeat), probe = { ...shape, cardId: entry.setCode, sourceArena: entry.card.arena, conditionalTitle: entry.abilities.card[0].title, resourceCount: 30, sourceSeat, targets, ...extra };
+        result.cases.push({ id: 'auto/' + entry.setCode + '/conditional-arena-' + name + '-seat-' + sourceSeat, name: 'conditional-arena-' + name + '-seat-' + sourceSeat, kind: 'probe', focusCardIds: [entry.setCode],
+            setupCardIds: [...new Set([...targets.map(t => t.code), ...targets.flatMap(t => (t.attachments ?? []).map(a => a.code)), ...(probe.deathGain ? ['TOKEN_THE_FORCE'] : []), ...(probe.defenseToken ? ['TOKEN_CLONE_TROOPER'] : [])])].sort(),
+            source: { module: '../pipeline/probe-fixture.js', scenario: 'conditional-arena-' + name + '-seat-' + sourceSeat }, behaviorIds: ['conditional', 'arena-list', 'damage', shape.trigger, ...(shape.restore ? ['restore'] : ['raid'])],
+            assertionStages: ['construction', 'normal-play', 'resolved-list', 'terminal'], coverageObligationIds: [id], probe });
+    };
+    const gain = defs.find(e => strictConditionalUnit(e) && same(e.keywordValues, {}) && same(e.card.keywords, []) && e.abilities.card.length === 2 &&
+        e.abilities.card.every(a => keys(a, ['trigger', 'title', 'costs', 'effect']) && typeof a.title === 'string' && same(a.costs, []) && ['onAttack', 'whenDefeated'].includes(a.trigger) && same(a.effect, { kind: 'gainForce', target: 'ownPlayer' })) && new Set(e.abilities.card.map(a => a.trigger)).size === 2);
+    const hevy = defs.find(e => strictConditionalUnit(e) && classifyArenaDamage(e)?.trigger === 'whenDefeated' && classifyArenaDamage(e).amount === 1 && classifyArenaDamage(e).coordinateRaid === 2);
+    const defense = defs.find(e => strictConditionalUnit(e) && e.card.unique === false && same(e.keywordValues, {}) && same(e.card.keywords, []) && e.abilities.card.length === 1 &&
+        keys(e.abilities.card[0], ['trigger', 'title', 'costs', 'effect']) && e.abilities.card[0].trigger === 'onDefense' && same(e.abilities.card[0].costs, []) &&
+        same(e.abilities.card[0].effect, { kind: 'createTokenUnit', target: 'ownPlayer', tokenType: 'cloneTrooper', amount: constant(1), entersReady: false }));
+    const devotion = defs.find(e => require('./keyword-inventory-probes').roleDonor(e, 'restore-upgrade'));
+    for (const seat of [1, 2]) {
+        if (shape.trigger === 'whenPlayed') {
+            for (const count of [3, 4])
+                add('count-' + count, seat, [...enemyMixed(), ...friends(count - 1)], { friendlyCount: count });
+            add('true-empty', seat, friends(3), { friendlyCount: 4 });
+            if (entry.card.unique)
+                for (const count of [3, 4])
+                    for (const keep of ['old', 'new']) {
+                        const targets = [...enemyMixed(), ...friends(count - 1), row(entry, 'self')];
+                        add('unique-count-' + count + '-keep-' + keep, seat, targets, { friendlyCount: count, oldIndex: targets.length - 1, keep });
+                    }
+            else
+                obligation('unique-copy-scope', 'Source is not unique; unique construction unavailable');
+            const beast = defs.find(require('./weakness-continuation-probes').nativeBeast), leader = defs.find(require('./parent-upgrade-probes').leaderHost);
+            if (beast)
+                add('token-count', seat, [...enemyMixed(), ...friends(2), row(beast, 'self', { token: 'beast' })], { friendlyCount: 4 });
+            else
+                obligation('token-count', 'Reviewed Beast dependency absent');
+            if (leader)
+                add('leader-count', seat, [...enemyMixed(), ...friends(2), row(leader, 'self', { leader: true, arena: 'ground' })], { friendlyCount: 4, leaderCode: leader.setCode });
+            else
+                obligation('leader-count', 'Complete ordinary leader donor absent');
+            const other = quiet.find(e => e.card.arena === 'ground' && e.card.hp >= shape.amount + 4 && e !== ground);
+            if (shield && other)
+                add('paired-shields', seat, [row(ground, 'opponent', { attachments: [attachment(), attachment()] }), row(other, 'opponent', { attachments: [attachment(), attachment()] }), ...friends(3)], { friendlyCount: 4, sameOwnerShields: true });
+            else
+                obligation('shield-identities', 'Reviewed Shield or second quiet recipient absent');
+            if (gain && gain.card.hp >= 3 && defs.some(require('./force-probes').nativeForce))
+                add('ordered-death-gains', seat, [row(gain, 'opponent', { damage: gain.card.hp - 3 }), row(space, 'opponent'), row(gain, 'opponent', { damage: gain.card.hp - 3 }), ...friends(3)], { friendlyCount: 4, deathGain: true });
+            else
+                obligation('captured-deaths', 'Complete mandatory Force-death donor absent');
+            for (const damage of [0, 3])
+                add('restore-base-' + damage, seat, [], { friendlyCount: 1, restoreCombat: true, initialBaseDamage: damage });
+        }
+        else {
+            for (const damage of [14, 15])
+                add('base-' + damage, seat, enemyMixed(), { initialBaseDamage: damage, initialEnemyBaseDamage: damage === 14 ? 15 : 14 });
+            const survivor = quiet.find(e => e.card.arena === 'ground' && e.card.hp > shape.amount && e.card.power < entry.card.hp);
+            if (survivor)
+                add('surviving-unit-defender', seat, [row(survivor, 'opponent')], { initialBaseDamage: 15, attackTargetIndex: 0, conditionalUnitAttack: true });
+            else
+                obligation('surviving-defender', 'No quiet defender survives the wave and leaves source alive after retaliation');
+            if (defense && defs.some(require('./parent-upgrade-probes').nativeCloneTrooper))
+                add('captured-defense', seat, [row(defense, 'opponent', { damage: defense.card.hp - 1 })], { initialBaseDamage: 15, attackTargetIndex: 0, defenderLethal: true, defenseToken: true, ownerFirst: 'self' });
+            else
+                obligation('captured-defense', 'Complete ground OnDefense Clone donor absent');
+            const other = quiet.find(e => e.card.arena === 'ground' && e.card.hp >= 5 && e !== ground);
+            if (shield && other)
+                add('paired-shields', seat, [row(ground, 'opponent', { attachments: [attachment(), attachment()] }), row(other, 'opponent', { attachments: [attachment(), attachment()] })], { initialBaseDamage: 15, sameOwnerShields: true });
+            if (shield && ground.card.power < entry.card.hp)
+                add('wave-then-combat-shields', seat, [row(ground, 'opponent', { attachments: [attachment(), attachment()] })], { initialBaseDamage: 15, attackTargetIndex: 0, shieldCombat: true, conditionalUnitAttack: true });
+            if (hevy && entry.card.hp > 1)
+                add('captured-hevy-death', seat, [row(hevy, 'opponent', { damage: hevy.card.hp - 1 }), row(space, 'opponent')], { initialBaseDamage: 15, deathDamage: true, deathDamageIndex: 0 });
+            else
+                obligation('captured-hevy', 'Complete mandatory ground-damage death donor absent');
+            if (devotion)
+                for (const order of ['saw-first', 'restore-first'])
+                    add('devotion-' + order, seat, [...enemyMixed(), { code: devotion.setCode, owner: 'self', zone: 'hand' }], { initialBaseDamage: 15, devotionIndex: 2, restoreOrder: order });
+            else
+                obligation('restore-order', 'Complete printed Restore2 upgrade donor absent');
+            add('no-enemy-ground', seat, [row(space, 'opponent')], { initialBaseDamage: 15 });
+        }
+    }
+    for (const gap of ['independent-source-review', 'controller-transfer', 'late-entry-during-replacement', 'source-departure-during-shield', 'arbitrary-competing-death-order', 'capacity-overflow', 'gained-overwhelm', 'exotic-aura-cache', 'multi-player'])
+        obligation(gap, 'No actual terminal full-source construction for this further interaction; existing primitive/source partials are separate evidence');
+    return result;
+}
 function planArenaDamageProbes(entry, options = {}) {
     const shape = classifyArenaDamage(entry);
     if (!shape)
         return null;
+    if (shape.condition)
+        return planConditionalArenaDamage(entry, shape, options);
     const defs = Array.isArray(options.catalogue) ? options.catalogue : options.catalogue?.cards ?? [];
     const result = { schema: 'swu-card-probes/v1', cardId: entry.setCode, sourceHash: entry.sourceHash, cases: [], obligations: [], uncovered: [] };
     function obligation(name, reason) {
@@ -150,16 +283,19 @@ function planArenaDamageProbes(entry, options = {}) {
             obligation('printed-overwhelm-combat', 'No bounded quiet defender');
     }
     if (shape.coordinateRaid) {
-        const plainBase = defs.filter(e => e.card.types.includes('base') && !e.card.text).sort((a,b) => a.setCode.localeCompare(b.setCode))[0];
+        const plainBase = defs.filter(e => e.card.types.includes('base') && !e.card.text).sort((a, b) => a.setCode.localeCompare(b.setCode))[0];
         if (plainBase && entry.card.power + shape.coordinateRaid < plainBase.card.hp)
             for (const count of [2, 3])
                 add('coordinate-friendly-count-' + count, [...Array.from({ length: count - 1 }, () => row(ground, 'self'))], { coordinateCombat: true, friendlyCount: count });
-        else obligation('coordinate-combat-boundary', 'No nonterminal plain-base construction for this printed power/Raid total');
+        else
+            obligation('coordinate-combat-boundary', 'No nonterminal plain-base construction for this printed power/Raid total');
     }
     if (shape.trigger === 'onAttack') {
         const survivor = ground.card.power < entry.card.hp ? ground : quiet.find(e => e.card.arena === entry.card.arena && e.card.hp >= shape.amount + 4 && e.card.power < entry.card.hp);
-        if (survivor) add('unit-defender-survives-wave-combat', [row(survivor, 'opponent')], { attackTargetIndex: 0, defenderSurvivesWave: true });
-        else obligation('surviving-wave-combat', 'No bounded surviving-wave defender whose retaliation leaves the focus alive');
+        if (survivor)
+            add('unit-defender-survives-wave-combat', [row(survivor, 'opponent')], { attackTargetIndex: 0, defenderSurvivesWave: true });
+        else
+            obligation('surviving-wave-combat', 'No bounded surviving-wave defender whose retaliation leaves the focus alive');
         add('unit-defender-departs-before-combat', [row(ground, 'opponent', { damage: ground.card.hp - shape.amount })], { attackTargetIndex: 0, defenderLethal: true });
         const defense = defs.find(e => ordinary(e) && e.card.arena === entry.card.arena && !e.card.unique && !e.card.keywords?.length && !Object.keys(e.keywordValues ?? {}).length && Object.values(e.abilities ?? {}).flat().length === 1 && e.abilities.card[0].trigger === 'onDefense' && keys(e.abilities.card[0], ['trigger', 'title', 'costs', 'effect']) && same(e.abilities.card[0].costs, []) && same(e.abilities.card[0].effect, { kind: 'createTokenUnit', target: 'ownPlayer', tokenType: 'cloneTrooper', amount: { kind: 'const', value: 1 }, entersReady: false }));
         if (defense && defense.card.hp >= shape.amount)
@@ -171,4 +307,4 @@ function planArenaDamageProbes(entry, options = {}) {
         obligation(gap, 'No actual source-card construction for this dimension; separate primitive diagnostics are not full-card witnesses');
     return result;
 }
-module.exports = { classifyArenaDamage, planArenaDamageProbes, parsePredicate, quietUnit, defeatEvent, nativeShield };
+module.exports = { classifyArenaDamage, planArenaDamageProbes, parsePredicate, quietUnit, defeatEvent, nativeShield, classifyConditionalArenaDamage, strictConditionalUnit, conditionalQuiet };

@@ -1557,6 +1557,48 @@
       "upgradePower": null
     },
     {
+      "arena": "ground",
+      "aspects": [
+        "command",
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 5,
+      "id": "5301694614",
+      "internalName": "luke-skywalker#answering-the-call",
+      "keywords": [
+        "restore"
+      ],
+      "power": 5,
+      "rules": "All damage dealt by Luke's \"\"When Played\"\" ability is dealt simultaneously.\n",
+      "setCode": "ASH_112",
+      "setCodes": [
+        {
+          "number": 112,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 112,
+        "set": "ASH"
+      },
+      "subtitle": "Answering the Call",
+      "text": "Restore 1\nWhen Played: If you control at least 4 units, deal 3 damage to each enemy unit.",
+      "title": "Luke Skywalker",
+      "traits": [
+        "force",
+        "jedi"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
       "aspects": [
         "command",
         "heroism"
@@ -36810,6 +36852,48 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "aggression",
+        "heroism"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": null,
+      "hp": 8,
+      "id": "0354710662",
+      "internalName": "saw-gerrera#resistance-is-not-terrorism",
+      "keywords": [
+        "raid"
+      ],
+      "power": 4,
+      "rules": null,
+      "setCode": "TWI_150",
+      "setCodes": [
+        {
+          "number": 150,
+          "set": "TWI"
+        }
+      ],
+      "setId": {
+        "number": 150,
+        "set": "TWI"
+      },
+      "subtitle": "Resistance is Not Terrorism",
+      "text": "Raid 2\nOn Attack: If your base has 15 or more damage on it, deal 1 damage to each enemy ground unit.",
+      "title": "Saw Gerrera",
+      "traits": [
+        "fringe",
+        "trooper"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

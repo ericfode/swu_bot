@@ -435,6 +435,20 @@ Hidden history expiry, competing death triggers and capacity remain uncovered;
 token/leader selection and live phase changes in the exhaustion selector remain
 separate from the aura witnesses.
 
+Conditional arena-damage experiments cover normal source play, both source seats,
+live own-unit counts and own-base damage thresholds, ground/space membership,
+empty recipient lists and exact damage. Unique replacement checks both physical
+copies and post-removal counts; a captured play ability can resolve after its
+source leaves. Native unit tokens and deployed leaders contribute to the count.
+Natural readiness, printed Restore and Raid, normally attached Devotion and both
+Restore/wave orders exercise live declaration conditions. Exact Shield identities,
+a surviving unit defender, two successive Shield replacements and captured
+mandatory defense/death effects check attack continuation. Controller transfer,
+late entry during replacement, source departure during a Shield prompt, arbitrary
+competing death orders, gained Overwhelm and further aura interactions remain
+explicit gaps. Capacity and pending-window threshold changes have separate
+runtime diagnostics.
+
 Self-resource experiments cover real event play and ordinary-unit defeat, both
 controllers, optional decline, own/absent/enemy Force, exact paid cost, exhausted
 entry, persistent card identity, repeated copies and natural phase readiness.

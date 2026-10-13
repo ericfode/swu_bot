@@ -801,8 +801,22 @@ fn contains_arena_damage(ability:&Ability)->bool {
     fn walk(v:&Value)->bool {match v {Value::Object(o)=>o.get("kind").and_then(Value::as_str)==Some("damage")&&o.get("target").is_some_and(|t|t["kind"]=="arenaList")||o.values().any(walk),Value::Array(a)=>a.iter().any(walk),_=>false}}
     walk(&serde_json::to_value(ability).unwrap())
 }
+fn arena_damage_header(a:&Ability)->bool {
+    ["whenPlayed","onAttack","whenDefeated"].contains(&a.trigger.as_str())&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()
+}
+fn conditional_arena_damage_ability(a:&Ability)->bool {
+    if !arena_damage_header(a){return false;}
+    let Effect::Conditional{condition,on_true,on_false}=&a.effect else{return false;};
+    if !on_false.as_deref().is_some_and(|e|matches!(e,Effect::NoAction)){return false;}
+    let Effect::Damage{target:Target::ArenaList(list),amount:Expr::Const{value}}=on_true.as_ref() else{return false;};
+    if !matches!(&list.receiver,Expr::Ref{path} if path==&["opponent"]){return false;}
+    let Expr::Binary{op,left,right}=condition else{return false;};if op!=">="{return false;}
+    if a.trigger=="whenPlayed"&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(4))&&value.as_u64()==Some(3)&&matches!(&list.predicate,Expr::Const{value} if value.as_bool()==Some(true))&&matches!(left.as_ref(),Expr::Query{name,receiver,args} if name=="arenaUnitCount"&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["player"])&&args.len()==1&&matches!(&args[0],Expr::Const{value} if value.as_bool()==Some(true))) {return true;}
+    let ground=serde_json::json!({"kind":"binary","op":"&&","left":{"kind":"const","value":true},"right":{"kind":"binary","op":"||","left":{"kind":"unary","op":"!","value":{"kind":"const","value":"groundArena"}},"right":{"kind":"binary","op":"||","left":{"kind":"binary","op":"===","left":{"kind":"const","value":"groundArena"},"right":{"kind":"const","value":"anyArena"}},"right":{"kind":"binary","op":"===","left":{"kind":"ref","path":["card","zoneName"]},"right":{"kind":"const","value":"groundArena"}}}}});
+    a.trigger=="onAttack"&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(15))&&value.as_u64()==Some(1)&&matches!(left.as_ref(),Expr::Ref{path} if path==&["player","base","damage"])&&serde_json::to_value(&list.predicate).ok()==Some(ground)
+}
 fn arena_damage_ability(a:&Ability)->bool {
-    ["whenPlayed","onAttack","whenDefeated"].contains(&a.trigger.as_str())&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()&&matches!(&a.effect,Effect::Damage{target:Target::ArenaList(_),amount:Expr::Const{value}} if value.as_u64().is_some_and(|n|(1..=3).contains(&n)))
+    arena_damage_header(a)&&(matches!(&a.effect,Effect::Damage{target:Target::ArenaList(_),amount:Expr::Const{value}} if value.as_u64().is_some_and(|n|(1..=3).contains(&n)))||conditional_arena_damage_ability(a))
 }
 fn contains_new_arena_keywords(a:&Ability)->bool {
     fn walk(v:&Value)->bool {(matches!(v["kind"].as_str(),Some("phaseModifiers"|"simultaneous"))&&v["effects"].as_array().is_some_and(|items|items.iter().any(|e|matches!(e["kind"].as_str(),Some("gainKeyword"|"loseKeyword"))&&e["target"]["kind"]=="arenaList"))) || (v["trigger"]=="onAttack"&&v["effect"]["kind"]=="gainKeyword"&&v["effect"]["target"]["kind"]=="arenaList") || match v {Value::Array(a)=>a.iter().any(walk),Value::Object(o)=>o.values().any(walk),_=>false}}
@@ -1291,6 +1305,17 @@ impl Program {
         if multiple {
             self.validate_group(&ability.effect, ability.target_resolver.as_ref().unwrap().max_targets()?)?;
             self.instructions.push(Instruction::Group(ability.effect.clone()));
+        } else if conditional_arena_damage_ability(ability) {
+            // The complete root shape proves this one leaf is standalone.
+            // Do not relax the general nested-arena depth guard.
+            let Effect::Conditional{condition,on_true,on_false}=&ability.effect else{unreachable!()};
+            condition.validate()?;
+            let start=self.instructions.len();self.instructions.push(Instruction::Conditional{condition:condition.clone(),skip:0});
+            self.compile_effect(on_true,0)?;
+            let jump=self.instructions.len();self.instructions.push(Instruction::Jump{to:0});
+            self.instructions[start]=Instruction::Conditional{condition:condition.clone(),skip:self.instructions.len()};
+            self.compile_effect(on_false.as_deref().expect("validated NoAction"),depth+1)?;
+            self.instructions[jump]=Instruction::Jump{to:self.instructions.len()};
         } else { self.compile_effect(&ability.effect, depth)?; }
         if let Some(next) = &ability.then {
             self.compile_ability(next, depth + 1)?;
@@ -1716,6 +1741,7 @@ impl Catalogue {
                 }
                 if !extension && (sides.leader.iter().chain(&sides.unit).any(|a|contains_weakness(&a.effect)) || sides.card.iter().any(|a|contains_weakness(&a.effect) && !(entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") || upgrade_weakness)) ) {return Err("Weakness source requires ordinary unit or bounded ordinary upgrade play metadata".into());}
                 if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(contains_arena_damage) {
+                    if sides.card.iter().any(conditional_arena_damage_ability)&&sides.card.len()!=1 {return Err("conditional arena damage requires a sole ordinary unit registration".into());}
                     let companion=|a:&Ability|a.trigger=="constant"&&a.coordinate&&!a.optional&&!a.requires_confirmation&&a.costs.is_empty()&&a.context_title.is_empty()&&a.target_resolver.is_none()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()&&matches!(&a.effect,Effect::GainKeyword{target:Target::Name(n),keyword,amount:Expr::Const{value},duration} if n=="self"&&keyword=="raid"&&duration=="persistent"&&value.as_u64().is_some_and(|n|n<=65535));
                     if entry.get("baseClass").and_then(Value::as_str)!=Some("NonLeaderUnitCard") || entry["card"]["types"]!=serde_json::json!(["unit"]) || !sides.unit.is_empty() || !sides.leader.is_empty() || sides.card.iter().filter(|a|contains_arena_damage(a)).count()!=1 || !sides.card.iter().all(|a|arena_damage_ability(a)||companion(a)) || entry.get("piloting").is_some_and(|v|!v.is_null()) || ["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {
                         return Err("arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion".into());

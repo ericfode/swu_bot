@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 584
+    "sourceIr": 586
   },
   "runtimeAdmittedCards": [
     {
@@ -204,6 +204,11 @@
       "implementation": "sourceIr",
       "internalName": "children-of-the-watch",
       "setCode": "ASH_111"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "luke-skywalker#answering-the-call",
+      "setCode": "ASH_112"
     },
     {
       "implementation": "sourceIr",
@@ -4572,6 +4577,11 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "saw-gerrera#resistance-is-not-terrorism",
+      "setCode": "TWI_150"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "mister-bones#i-performed-violence",
       "setCode": "TWI_154"
     },
@@ -4811,7 +4821,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 960,
+  "runtimeAdmittedCount": 962,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5172,11 +5182,6 @@
       "internalName": "admiral-ackbar#assume-attack-coordinates",
       "reason": "admiral-ackbar#assume-attack-coordinates: compiler rejected \"admiral-ackbar#assume-attack-coordinates\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":34,\"file\":\"game/cards/08_ASH/units/AdmiralAckbarAssumeAttackCoordinates.ts\",\"line\":23,\"message\":\"immediateEffect:playMultipleCardsFromDeck\",\"pattern\":\"immediateEffect:playMultipleCardsFromDeck\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/AdmiralAckbarAssumeAttackCoordinates.ts\",\"line\":36,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:costSum\"}]",
       "setCode": "ASH_110"
-    },
-    {
-      "internalName": "luke-skywalker#answering-the-call",
-      "reason": "luke-skywalker#answering-the-call: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
-      "setCode": "ASH_112"
     },
     {
       "internalName": "mandalorian-flagship#captured-from-the-empire",
@@ -12004,11 +12009,6 @@
       "setCode": "TWI_146"
     },
     {
-      "internalName": "saw-gerrera#resistance-is-not-terrorism",
-      "reason": "saw-gerrera#resistance-is-not-terrorism: arena damage requires ordinary unit metadata and only a bounded Coordinate Raid companion",
-      "setCode": "TWI_150"
-    },
-    {
       "internalName": "resolute#under-anakins-command",
       "reason": "resolute#under-anakins-command: compiler rejected \"resolute#under-anakins-command\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/03_TWI/units/ResoluteUnderAnakinsCommand.ts\",\"line\":16,\"message\":\"registrar:addDecreaseCostAbility\",\"pattern\":\"registrar:addDecreaseCostAbility\"}]",
       "setCode": "TWI_151"
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1498,
+  "runtimeRejectedCount": 1496,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }
