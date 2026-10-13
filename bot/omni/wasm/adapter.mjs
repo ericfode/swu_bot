@@ -1,7 +1,7 @@
 // The live position, checkpoints, and all search nodes belong to Rust/Wasm.
 // Objects returned by snapshot() are detached observations, never mutable game state.
 export class WasmSimulator {
-    constructor(bindings, poolJson, { catalogueJson } = {}) {
+    constructor(bindings, poolJson, { catalogueJson, backend, instrumentation } = {}) {
         if (catalogueJson !== undefined && typeof catalogueJson !== 'string') throw new TypeError('Pass the compiled catalogue as JSON text');
         if ((catalogueJson === undefined || poolJson !== undefined) && typeof poolJson !== 'string') throw new TypeError('Pass the original pool JSON text to preserve its SHA-256');
         this.bindings = bindings;
@@ -9,6 +9,15 @@ export class WasmSimulator {
             ? new bindings.WasmEngine(poolJson)
             : bindings.WasmEngine.fromCatalogue(catalogueJson, poolJson);
         this.disposed = false;
+        try {
+            if (backend !== undefined) this.handle.setRulesBackend(backend);
+            if (instrumentation) this.handle.setRulesInstrumentation(true);
+        } catch (error) { this.handle.free(); this.disposed = true; throw error; }
+    }
+
+    rulesBackendReport() {
+        this.assertAlive();
+        return JSON.parse(this.handle.rulesBackendReport());
     }
 
     assertAlive() {

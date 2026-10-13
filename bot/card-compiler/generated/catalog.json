@@ -2,8 +2,8 @@
   "schema": "swu-card-ir/v1",
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
-  "sourceTreeHash": "f2c7e75336b433d8a90fac4dba56c88d6a1e853d0cda71e4bc68152a6e9d2831",
-  "compilerHash": "64d877788e879763b0d3181c3887d3728620bd344d364eec96d46655c388ecec",
+  "sourceTreeHash": "13ea7c27e06a9833caa3a4123f607250ed601c894e53cad40ab2391b2095e59f",
+  "compilerHash": "01d6adda0f84a1e134f937f632e4bfa234c3d938286f934e978f5d9ba9836fb9",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -18814,6 +18814,22 @@
       "sha256": "af1168d0345d40d0094078693d1dff8d0a36f0e04cda92fa8f7f2e4a8cf54c75"
     },
     {
+      "file": "server/game/core/gameSteps/prompts/GameOverPrompt.js",
+      "sha256": "917b4379706944ae2740caa86bf7893166f43e8558a96e853af7f7e491856e2b"
+    },
+    {
+      "file": "server/game/core/gameSteps/prompts/HandlerMenuMultipleSelectionPrompt.js",
+      "sha256": "5d361f7efadb05615467bb2110b5fa5105ac0c2225eabbad2f04c589717e475e"
+    },
+    {
+      "file": "server/game/core/gameSteps/prompts/HandlerMenuPrompt.js",
+      "sha256": "4f550211e5ccfd7daf6b75c4e817834f8ccb0ae770201e426f15b12258613da0"
+    },
+    {
+      "file": "server/game/core/gameSteps/prompts/MenuPrompt.js",
+      "sha256": "6c9cb0905b17ede17670cf3c37847d8d9f4b117cea3356d27652ad3196079075"
+    },
+    {
       "file": "server/game/core/gameSteps/prompts/MulliganPrompt.ts",
       "sha256": "64592892c830c7c8015e18b5f5e965236bce8523c809b48d41c51f15c5e9c52e"
     },
@@ -18844,6 +18860,10 @@
     {
       "file": "server/game/core/gameSteps/prompts/UiPrompt.ts",
       "sha256": "e0341220b4f546bed64d29a1dc81b45479db4c40d8e5ad3e84d48673634f2742"
+    },
+    {
+      "file": "server/game/core/gameSteps/prompts/UndoConfirmationPrompt.js",
+      "sha256": "c6dc8ba3c55ec36615547eea7ad921e75befe0070da8ec94ec12fc755dfffa9c"
     },
     {
       "file": "server/game/core/gameSteps/prompts/VariableResourcePrompt.ts",
@@ -19698,6 +19718,10 @@
       "sha256": "7123f3ddcd2499ed92309704524ed6094aec3e2ef7d20901c6702ff8088a2272"
     },
     {
+      "file": "server/socket.js",
+      "sha256": "9cd745fc6e4e7b7270e09d1826b8643f5f4316b1d37abff73576b9def8b4c89d"
+    },
+    {
       "file": "server/Spectator.ts",
       "sha256": "227240e676de8f2c293dbd72f3f5cd29ae5df322f8cfe9651cd4f0de2f6a6062"
     },
@@ -19788,6 +19812,10 @@
     {
       "file": "server/utils/IScheduler.ts",
       "sha256": "6455e320736e77c3c21f08ff4153b30e15112b656e95bc7dfaf7bce979f7707a"
+    },
+    {
+      "file": "server/utils/logger.js",
+      "sha256": "b679b73d359387a7ee55aa7d12e5ee6f0915ebaed08a9507ee10c42ced0282a4"
     },
     {
       "file": "server/utils/ModActionService.ts",

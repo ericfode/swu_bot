@@ -555,6 +555,12 @@
       "scope": "The setup and assertions in linked named cases define the scope."
     },
     {
+      "id": "live-count-mirror-binding-boundaries",
+      "label": "live count mirror binding boundaries",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
       "id": "live-damage-signed-stat-expression",
       "label": "live damage signed stat expression",
       "kind": "behavior",

@@ -101,6 +101,19 @@ The JavaScript prover has a different move model: deeper prompts and regroup cho
 Comparing its winner labels to Rust is useful, but agreement alone does not establish correctness. Differential
 replay checks the independent Rust transitions against the reference engine.
 
+## Equal-work search profiling
+
+The [search benchmark](benchmarks/README.md) prepares fixed positions from immutable
+reference recordings, profiles actual proof search, and interleaves binaries with
+identical node budgets. It rejects differences in results or work counts, retains
+raw receipts outside the repository, and reports per-node time, variance and sizes.
+Use separate instrumented runs to inspect compiled expression/step dispatch.
+
+The expression backend binds canonical content after admission and evaluates live
+state at each original call site. The constant-registration filter skips cards
+with no constant programs before arena membership scans; it does not cache live
+values or change source order, uniqueness, conditions or event scheduling.
+
 ## Reproducible measurements
 
 The report joins results by `(game, i)` and rejects duplicate identities. Missing Rust results remain visible.

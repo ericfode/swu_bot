@@ -127,3 +127,13 @@ bytes, metadata, scenario identity, seed, decision/window counts and completion.
 Absolute paths inside older trace headers are historical; checking always passes
 the content-addressed pool explicitly. A new recording supplements an old one;
 retiring a regression is an explicit manifest change, not an accidental overwrite.
+
+## Automatic configuration, experiments, and semantic review
+
+Use the [automatic pipeline](PIPELINE.md) to compile configuration, construct
+experiments from rule shapes, record the pinned engine, compare native generated
+Rust, native interpreted rules and Wasm, and test experiment sensitivity with
+mutated configurations. The output includes per-obligation uncovered behavior
+and a source-bound packet for independent LLM review. `cards show SET_NNN` also
+lists planned automatic cases and remaining construction gaps. Passing ordinary
+reference checks alone does not complete semantic review.

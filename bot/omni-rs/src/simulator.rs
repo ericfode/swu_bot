@@ -29,6 +29,9 @@ pub struct Definition {
     programs: CardPrograms,
     traits: Vec<String>,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RulesBackend { #[default] Auto, Interpreter, Aot }
+
 pub struct Engine {
     pool_hash: String,
     pub definitions: Vec<Definition>,
@@ -36,6 +39,10 @@ pub struct Engine {
     shield_def: u16,
     experience_def: Option<u16>,
     catalogue: Option<Catalogue>,
+    rules_backend: RulesBackend,
+    rules_instrumentation: bool,
+    rules_hits: std::sync::Mutex<std::collections::BTreeMap<usize, [u64;2]>>,
+    expression_hits: std::sync::Mutex<[u64;2]>,
 }
 fn aspect(s: &str) -> Result<usize, String> {
     match s {
@@ -200,6 +207,10 @@ impl Engine {
             shield_def: shield_def.ok_or("pool must include TOKEN_SHIELD")?,
             experience_def: None,
             catalogue: None,
+            rules_backend: RulesBackend::Auto,
+            rules_instrumentation: false,
+    rules_hits: Default::default(),
+    expression_hits: Default::default(),
         })
     }
     pub fn pool_hash(&self) -> &str {
@@ -1557,3 +1568,9 @@ impl Engine {
 #[cfg(test)]
 #[path = "simulator_tests.rs"]
 mod tests;
+
+pub(crate) fn program_backend(hash:&str,bytes:&[u8])->Result<usize,&'static str> {generic_runtime::generated_backend(hash,bytes)}
+
+pub(crate) fn expression_backend(hash: &str, bytes: &[u8]) -> Option<usize> {
+    generic_runtime::generated_expression_backend(hash, bytes)
+}

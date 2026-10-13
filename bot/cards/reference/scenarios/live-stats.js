@@ -169,4 +169,107 @@ for(const zero of [false,true])scenarios.push({name:'kino-exhausted-other-count-
 scenarios.push({name:'pryce-ready-token-controller-active-interval',family:'live-ready-token-count',actualScriptedCardIds:['SEC_011','TWI_145','ASH_111'],leaderCode:'SEC_011',deployedLeader:true,units:[u('ordinary','ASH_261')],baseDamage:0,plan:[{code:'TWI_145'},{code:'SOR_169',target:'enemyToken'},{code:'ASH_111'},{code:'SOR_169',target:'ownToken'},{code:'SEC_011',from:'leader',target:'enemyBase'}],beforeWindow:c=>{c.targets.enemyToken??=c.enemy.getArenaUnits().find(t=>t.isTokenUnit());c.targets.ownToken??=c.own.getArenaUnits().find(t=>t.isTokenUnit());},beforeApply:c=>{before(c);if(c.observed.postAction||!c.atWindow||c.chosen.kind!=='card')return;if(c.pending?.code==='ASH_111'){assert.equal(c.targets.enemyToken.exhausted,false);assert.equal(c.targets.leader.getPower(),4);c.observed.enemyReadyTokenExcluded=true;}if(c.pending?.code==='SOR_169'&&c.pending.target==='ownToken'){assert.equal(c.targets.leader.getPower(),4);assert.equal(c.targets.ownToken.exhausted,true);}if(c.pending?.from==='leader'){assert.equal(c.targets.leader.getPower(),5);c.observed.ownReadyTokenCounted=true;}},assertAfter:c=>{assert.ok(c.observed.enemyReadyTokenExcluded&&c.observed.ownReadyTokenCounted);assert.equal(c.enemy.base.damage,5);assert.equal(c.targets.leader.getPower(),5);const spies=c.own.getArenaUnits().filter(t=>t.internalName==='spy');assert.equal(spies.length,1);assert.equal(spies[0].exhausted,true);c.observed.exhaustedSpyDidNotAddPower=true;}});
 scenarios.push({name:'legion-controller-total-resource-regroup',family:'live-resource-hp-power',actualScriptedCardIds:['SOR_118'],units:[u('ownSource','SOR_118','own',2),u('enemySource','SOR_118','enemy',2)],finalResourceCounts:[3,5],initiative:'own',baseDamage:0,plan:[],assertAfter:c=>{assert.equal(c.targets.ownSource.getPower(),3);assert.equal(c.targets.ownSource.getHp(),3);assert.equal(c.targets.enemySource.getPower(),5);assert.equal(c.targets.enemySource.getHp(),5);c.observed.controllerRelativeTotals=true;},chooseLater:addOneOwnResource,assertLater:c=>{assert.equal(c.own.getCardsInZone('resource').length,4);assert.equal(c.targets.ownSource.getHp(),4);assert.equal(c.targets.ownSource.getPower(),4);assert.equal(c.targets.enemySource.getHp(),5);c.observed.liveHpReevaluated=true;}});
 scenarios.push({name:'grievous-resource-sentinel-damage-heal',family:'live-resource-stats-keyword-interaction',actualScriptedCardIds:['TS26_050'],leaderCode:'TWI_015',baseCode:'HMW_019',units:[u('source','TS26_050')],finalResourceCounts:[4,7],baseDamage:0,plan:[{code:'HMW_207',target:'source'},{code:'JTL_075',target:'source'}],beforeApply:c=>{before(c);if(c.observed.postAction||!c.atWindow||c.chosen.kind!=='card')return;if(c.pending?.code==='HMW_207'){assert.equal(c.targets.source.getPower(),4);assert.equal(c.targets.source.getHp(),4);assert.equal(c.targets.source.hasSomeKeyword('sentinel'),true);}if(c.pending?.code==='JTL_075'){assert.equal(c.targets.source.damage,1);assert.equal(c.targets.source.hasSomeKeyword('sentinel'),false);c.observed.damageRemovedSentinel=true;}},assertAfter:c=>{assert.ok(c.observed.damageRemovedSentinel);assert.equal(c.targets.source.damage,0);assert.equal(c.targets.source.hasSomeKeyword('sentinel'),true);assert.equal(c.targets.source.getPower(),4);assert.equal(c.targets.source.getHp(),4);}});
+
+// Kino's source excludes itself before testing the iterated card's exhaustion.
+// Each controller owns an independent count across both arenas, even when the
+// other controller plays the ready effect. Printed power is 1 for both mirrors.
+scenarios.push({
+    name: 'kino-mirrors-source-controller-and-query-card',
+    family: 'live-count-mirror-binding-boundaries',
+    actualScriptedCardIds: ['SEC_114'],
+    units: [
+        u('ownKino', 'SEC_114', 'own', 0, true),
+        u('ownGround', 'ASH_261', 'own', 0, true),
+        u('ownSpace', 'JTL_212', 'own', 0, true),
+        u('ownReady', 'HMW_116'),
+        u('enemyKino', 'SEC_114', 'enemy', 0, true),
+        u('enemyGround', 'ASH_261', 'enemy', 0, true),
+        u('enemySpace', 'JTL_212', 'enemy'),
+    ],
+    baseDamage: 0,
+    plan: [
+        { code: 'SOR_169', target: 'ownKino' },
+        { code: 'SOR_169', target: 'ownGround' },
+        { code: 'SOR_169', target: 'enemyGround' },
+    ],
+    beforeApply: c => {
+        if (c.observed.postAction || !c.atWindow || c.chosen.kind !== 'card') return;
+        const expected = [[3, 2], [3, 2], [2, 2]][c.index - 1];
+        assert.deepEqual([c.targets.ownKino.getPower(), c.targets.enemyKino.getPower()], expected);
+        if (c.index === 2) {
+            assert.equal(c.targets.ownKino.exhausted, false);
+            c.observed.readyingSourceDidNotChangeCount = true;
+        }
+        if (c.index === 3) {
+            assert.equal(c.targets.ownGround.exhausted, false);
+            assert.equal(c.targets.ownSpace.exhausted, true);
+            c.observed.readyingOwnCandidateChangedOnlyOwnCount = true;
+        }
+    },
+    assertAfter: c => {
+        assert.ok(c.observed.readyingSourceDidNotChangeCount);
+        assert.ok(c.observed.readyingOwnCandidateChangedOnlyOwnCount);
+        assert.equal(c.targets.ownKino.exhausted, false);
+        assert.equal(c.targets.enemyKino.exhausted, true);
+        assert.equal(c.targets.enemyGround.exhausted, false);
+        assert.equal(c.targets.ownSpace.exhausted, true);
+        assert.deepEqual([c.targets.ownKino.getPower(), c.targets.enemyKino.getPower()], [2, 1]);
+        c.observed.opposingCandidateChangedOnlyItsControllerCount = true;
+    },
+});
+
+// Chirpa uses the ongoing modifier's affected card for otherThan, and the
+// constant ability controller for the arena query. Non-Ewoks in both arenas
+// never count; both mirrored sources are Ewoks but each excludes itself.
+scenarios.push({
+    name: 'chirpa-mirrors-affected-exclusion-and-controller-counts',
+    family: 'live-count-mirror-binding-boundaries',
+    actualScriptedCardIds: ['HMW_164'],
+    units: [
+        u('ownChirpa', 'HMW_164'),
+        u('ownEwok', 'HMW_116'),
+        u('ownGround', 'ASH_261'),
+        u('ownSpace', 'JTL_212'),
+        u('enemyChirpa', 'HMW_164', 'enemy'),
+        u('enemyEwok', 'HMW_116', 'enemy'),
+        u('enemyOtherEwok', 'HMW_116', 'enemy'),
+        u('enemySpace', 'JTL_212', 'enemy'),
+    ],
+    baseDamage: 0,
+    plan: [
+        { code: 'HMW_116' },
+        { code: 'TWI_226', target: 'enemyEwok' },
+        { code: 'TWI_226', target: 'ownEwok' },
+        { code: 'TWI_226', target: 'enemyOtherEwok' },
+    ],
+    beforeApply: c => {
+        if (c.observed.postAction || !c.atWindow || c.chosen.kind !== 'card') return;
+        const expected = [[2, 3], [3, 3], [3, 2], [2, 2]][c.index - 1];
+        assert.deepEqual([c.targets.ownChirpa.getPower(), c.targets.enemyChirpa.getPower()], expected);
+        if (c.index === 2) {
+            assert.equal(c.own.getArenaUnits({ trait: 'ewok' }).length, 3);
+            c.observed.friendlyEntryChangedOnlyOwnCount = true;
+        }
+        if (c.index === 3) {
+            assert.equal(c.targets.enemyEwok.zoneName, 'hand');
+            c.observed.opposingRemovalChangedOnlyOpposingCount = true;
+        }
+        if (c.index === 4) {
+            assert.equal(c.targets.ownEwok.zoneName, 'hand');
+            c.observed.friendlyRemovalChangedOnlyOwnCount = true;
+        }
+    },
+    assertAfter: c => {
+        assert.ok(c.observed.friendlyEntryChangedOnlyOwnCount);
+        assert.ok(c.observed.opposingRemovalChangedOnlyOpposingCount);
+        assert.ok(c.observed.friendlyRemovalChangedOnlyOwnCount);
+        assert.equal(c.targets.enemyOtherEwok.zoneName, 'hand');
+        assert.deepEqual([c.targets.ownChirpa.getPower(), c.targets.enemyChirpa.getPower()], [2, 1]);
+        assert.equal(c.targets.ownGround.zoneName, 'groundArena');
+        assert.equal(c.targets.ownSpace.zoneName, 'spaceArena');
+        assert.equal(c.targets.enemySpace.zoneName, 'spaceArena');
+        c.observed.selfAndNonEwoksExcludedAtZeroOtherFriendlyEwoks = true;
+    },
+});
+
 module.exports = { scenarios, fixture };
