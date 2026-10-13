@@ -1397,6 +1397,46 @@
       "arena": "ground",
       "aspects": [
         "command",
+        "villainy"
+      ],
+      "cost": 6,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 7,
+      "id": "7588520146",
+      "internalName": "gallius-rax#counselor-to-the-empire",
+      "keywords": [],
+      "power": 4,
+      "rules": "\"\"Different\"\" keywords means different words, regardless of numbers that might follow them. \"\"Raid 1\"\" and \"\"Raid 2\"\" do not count as different keywords.\n",
+      "setCode": "ASH_100",
+      "setCodes": [
+        {
+          "number": 100,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 100,
+        "set": "ASH"
+      },
+      "subtitle": "Counselor to the Empire",
+      "text": "Other friendly units with 2 or more different keywords get +2/+2.",
+      "title": "Gallius Rax",
+      "traits": [
+        "imperial",
+        "official"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "command",
         "heroism"
       ],
       "cost": 2,
@@ -2949,6 +2989,45 @@
       "title": "Womp Rat",
       "traits": [
         "creature"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "cunning"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 2,
+      "id": "0978988682",
+      "internalName": "amnesty-officer",
+      "keywords": [],
+      "power": 2,
+      "rules": null,
+      "setCode": "ASH_214",
+      "setCodes": [
+        {
+          "number": 214,
+          "set": "ASH"
+        }
+      ],
+      "setId": {
+        "number": 214,
+        "set": "ASH"
+      },
+      "subtitle": "",
+      "text": "When Played: You may exhaust a unit with one or more keywords.",
+      "title": "Amnesty Officer",
+      "traits": [
+        "new republic",
+        "official"
       ],
       "types": [
         "unit"

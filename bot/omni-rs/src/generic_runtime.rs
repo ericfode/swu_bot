@@ -238,6 +238,13 @@ impl Engine {
                 } else if !info.is("unit") && !info.is("leader") {
                     return Err("runtime card type is not implemented".into());
                 }
+                // Coordinate instances carry independent ability definitions. The
+                // bounded loader supports exactly one printed card-side instance,
+                // and inventory may rely on metadata only after this agreement.
+                let coordinate_names=entry["card"]["keywords"].as_array().map_or(0,|names|names.iter().filter(|n|*n=="coordinate").count());
+                let coordinate_programs=programs.card.iter().chain(&programs.unit).chain(&programs.leader).filter(|&&id|catalogue.programs[id as usize].coordinate).count();
+                let coordinate_value=entry["keywordValues"].get("coordinate");
+                if coordinate_names>1||coordinate_names!=coordinate_programs||if coordinate_names==0 {coordinate_value.is_some()}else{coordinate_value.and_then(Value::as_u64)!=Some(1)} {return Err("Coordinate printed metadata, keyword value and registration count must agree at zero or one".into());}
                 let mut flags = 0;
                 let mut raid = 0;
                 let mut restore = 0;
@@ -596,6 +603,20 @@ impl Engine {
         if effects.iter().any(|(_,e)| matches!(e, Effect::LoseKeyword {keyword: name, ..} if name == keyword)) { return false; }
         s.card(target).phase_keyword_mask() & (1 << index) != 0 || (self.def(s, target).flags & (1 << index) != 0 || (index == 6 && self.def(s, target).raid > 0) || (index == 7 && self.def(s, target).restore > 0)) || effects.iter().any(|(_,e)| matches!(e, Effect::GainKeyword {keyword: name, ..} if name == keyword))
     }
+    fn keyword_inventory_len(&self,s:&State,target:CardId)->u16 {
+        // Presence is orthogonal to numeric value and gameplay effectiveness.
+        let mut mask=(self.def(s,target).flags|s.card(target).phase_keyword_mask())&0x1ff;
+        let mut lost=s.card(target).lost_keyword_mask();
+        for (_,effect) in self.constant_effects(s,target,true) {
+            match effect {
+                Effect::GainKeyword{keyword,..}=>if let Some(i)=crate::ability_ir::CORE_KEYWORDS.iter().position(|k|k==keyword){mask|=1<<i;},
+                Effect::LoseKeyword{keyword,..}=>if let Some(i)=crate::ability_ir::CORE_KEYWORDS.iter().position(|k|k==keyword){lost|=1<<i;},
+                _=>{}
+            }
+        }
+        let coordinate=self.catalogue.as_ref().and_then(|c|c.metadata.get(&self.def(s,target).code)).is_some_and(|m|m["keywords"].as_array().is_some_and(|names|names.iter().any(|n|n=="coordinate"))) && self.def(s,target).programs.card.iter().any(|&id|self.program(id).coordinate);
+        ((mask&!lost).count_ones() as u16)+u16::from(coordinate)
+    }
     pub(super) fn effective_flags(&self, s: &State, target: CardId) -> u16 {
         crate::ability_ir::CORE_KEYWORDS.iter().enumerate().filter(|(i,_)| crate::ability_ir::numeric_keyword_slot(*i).is_none()).fold(0, |flags, (i, k)| flags | if self.keyword_amount(s, target, k) > 0 { 1 << i } else { 0 })
     }
@@ -734,6 +755,7 @@ impl Engine {
                     assert!(modifier_target!=0,"modifierTarget unavailable outside persistent stat evaluation");
                     return match field {None=>Eval::Card(modifier_target),Some("damage")=>Eval::Number(s.card(modifier_target).damage as i64),Some("controller") if path.len()==2=>Eval::Player(s.card(modifier_target).owner),Some("controller") if path.iter().map(String::as_str).collect::<Vec<_>>()==["modifierTarget","controller","resources","length"]=>Eval::Number(s.player(s.card(modifier_target).owner).resources.len as i64),_=>Eval::Null};
                 }
+                if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","keywords","length"] {return Eval::Number(if card==0 {0}else{self.keyword_inventory_len(s,card) as i64});}
                 if path.iter().map(String::as_str).collect::<Vec<_>>()==["card","activeAttack","attacker"] {return Eval::Card(self.active_attack_pair(s,card).0);}
                 if root=="source" && matches!(field,Some("parentCard"|"parentUnit")) {
                     let parent=s.card(source).parent;

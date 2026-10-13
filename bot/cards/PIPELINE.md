@@ -421,6 +421,20 @@ the actual ability context; competing title menus, detached captured play,
 reattachment, controller transfer, host uniqueness reactions, natural phase
 persistence and further token replacements remain explicit gaps.
 
+Keyword-inventory experiments distinguish current keyword names from numerical
+amounts, inactive effects and metadata mentions. Both seats exercise an optional
+exhaustion selector and an aura for other friendly units, including live Raid 0,
+inactive Coordinate, consumed Shielded, repeated numeric grants, phase expiry,
+keyword loss and resulting HP defeats. Normal source play, unique replacement,
+source departure, later entrants, native Beast and deployed-leader recipients
+preserve membership and physical identity. Real Force gain/use/regain checks
+cached HP boundaries and damage that becomes lethal before a later Force gain.
+Coordinate metadata, values and printed registration counts must agree. Further
+controller transfer, keyword replacements/blanking, cost-bearing instances,
+Hidden history expiry, competing death triggers and capacity remain uncovered;
+token/leader selection and live phase changes in the exhaustion selector remain
+separate from the aura witnesses.
+
 Self-resource experiments cover real event play and ordinary-unit defeat, both
 controllers, optional decline, own/absent/enemy Force, exact paid cost, exhausted
 entry, persistent card identity, repeated copies and natural phase readiness.

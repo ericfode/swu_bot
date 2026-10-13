@@ -68,9 +68,7 @@ impl Expr {
     fn depends_on_stats(&self) -> bool {
         match self {
             Self::Const { .. } => false,
-            Self::Ref { path } => path
-                .iter()
-                .any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
+            Self::Ref { path } => path.iter().any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
             Self::Array { items } => items.iter().any(Self::depends_on_stats),
             Self::Math { args, .. } => args.iter().any(Self::depends_on_stats),
             Self::Binary { left, right, .. } => left.depends_on_stats() || right.depends_on_stats(),
@@ -96,9 +94,7 @@ impl Expr {
     fn depends_on_keywords(&self) -> bool {
         match self {
             Self::Const { .. } => false,
-            Self::Ref { path } => path
-                .iter()
-                .any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
+            Self::Ref { path } => path.iter().map(String::as_str).collect::<Vec<_>>()==["card","keywords","length"] || path.iter().any(|p| ["power", "hp", "remainingHp"].contains(&p.as_str())),
             Self::Array { items } => items.iter().any(Self::depends_on_keywords),
             Self::Math { args, .. } => args.iter().any(Self::depends_on_keywords),
             Self::Binary { left, right, .. } => left.depends_on_keywords() || right.depends_on_keywords(),
@@ -261,6 +257,7 @@ impl Expr {
                     ["source" | "target" | "card", "title"] => true,
                     ["player", "hasTheForce"] => true,
                     ["card","activeAttack","attacker"] => true,
+                    ["card","keywords","length"] => true,
                     ["modifierTarget"] | ["modifierTarget","damage"|"controller"] | ["modifierTarget","controller","resources","length"] => true,
                     ["source", "parentCard" | "parentUnit"] => true,
                     ["source", "parentCard" | "parentUnit", "damage" | "power" | "hp" | "remainingHp" | "controller" | "exhausted" | "unique"] => true,
@@ -888,6 +885,23 @@ fn named_unit_base_damage(ability: &Ability) -> bool {
     })
 }
 
+fn contains_keyword_inventory(v:&Value)->bool {
+    (v["kind"]=="ref"&&v["path"]==serde_json::json!(["card","keywords","length"])) || match v {Value::Object(o)=>o.values().any(contains_keyword_inventory),Value::Array(a)=>a.iter().any(contains_keyword_inventory),_=>false}
+}
+fn keyword_inventory_registration(a:&Ability)->bool {
+    if a.requires_confirmation||a.coordinate||!a.costs.is_empty()||!a.context_title.is_empty()||!a.target_resolvers.is_empty()||a.condition.is_some()||a.then.is_some()||a.if_you_do.is_some(){return false;}
+    let Some(r)=&a.target_resolver else{return false;};
+    if r.card_type!="unit"||r.optional||r.mode.is_some()||r.count.is_some()||r.arena.is_some()||r.prompt_title.is_some(){return false;}
+    let length=serde_json::json!({"kind":"ref","path":["card","keywords","length"]});
+    let more=|n:u64|serde_json::json!({"kind":"binary","op":">","left":length,"right":{"kind":"const","value":n}});
+    let predicate=r.predicate.as_ref().and_then(|e|serde_json::to_value(e).ok());
+    if a.trigger=="whenPlayed"&&a.optional&&r.owner=="any"&&r.zone.as_deref()==Some("anyAttackable")&&matches!(&a.effect,Effect::Exhaust{target:Target::Name(n)} if n=="chosen") {return predicate==Some(more(0));}
+    let excluded=serde_json::json!({"kind":"binary","op":"!==","left":{"kind":"ref","path":["card"]},"right":{"kind":"ref","path":["source"]}});
+    let unit=serde_json::json!({"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]},"args":[]});
+    let expected=serde_json::json!({"kind":"binary","op":"&&","left":{"kind":"binary","op":"&&","left":excluded,"right":unit},"right":more(1)});
+    a.trigger=="constant"&&!a.optional&&r.owner=="self"&&r.zone.as_deref()==Some("arena")&&predicate==Some(expected)&&matches!(&a.effect,Effect::ModifyStats{target:Target::Name(n),power:Expr::Const{value:p},hp:Expr::Const{value:h},duration} if n=="chosen"&&duration=="persistent"&&p.as_i64()==Some(2)&&h.as_i64()==Some(2))
+}
+
 // Complete ordinary upgrade registrations only; parent getters remain asserting.
 fn parent_upgrade_registration(a:&Ability)->Option<bool> {
     if a.trigger!="whenPlayed"||a.optional||a.requires_confirmation||a.coordinate||!a.costs.is_empty()||a.target_resolver.is_some()||!a.target_resolvers.is_empty()||a.condition.is_some()||a.then.is_some()||a.if_you_do.is_some(){return None;}
@@ -917,6 +931,7 @@ impl Program {
             predicate(value) || match value {Value::Array(a)=>a.iter().any(|v|contains(v,predicate)),Value::Object(o)=>o.values().any(|v|contains(v,predicate)),_=>false}
         }
         let encoded=serde_json::to_value(ability).map_err(|e|e.to_string())?;
+        if contains_keyword_inventory(&encoded)&&!keyword_inventory_registration(ability){return Err("keyword inventory requires bounded optional unit Exhaust or other-friendly persistent stat registration".into());}
         fn binder_context(value:&Value,live:bool)->Result<(),String> {
             if value["kind"]=="ref"&&value["path"][0]=="modifierTarget"&&!live {return Err("modifierTarget only exists in persistent stat expressions".into());}
             if value["kind"]=="query"&&value["name"]=="resourcePairs"&&!live {return Err("resourcePairs only exists in persistent stat expressions".into());}
@@ -1660,6 +1675,9 @@ impl Catalogue {
                 let sides: Sides = serde_json::from_value(entry["abilities"].clone())
                     .map_err(|e| format!("invalid ability IR: {e}"))?;
                 let exact_type=|expected:&str|entry["card"]["types"].as_array().is_some_and(|types|types.len()==1&&types[0]==expected);
+                if contains_keyword_inventory(&entry["abilities"]) {
+                    if entry["baseClass"]!="NonLeaderUnitCard"||!exact_type("unit")||sides.card.len()!=1||!sides.card.iter().all(keyword_inventory_registration)||!sides.unit.is_empty()||!sides.leader.is_empty()||!entry["piloting"].is_null()||!entry["attachCondition"].is_null()||!entry["card"]["unique"].is_boolean()||entry["keywordValues"]!=serde_json::json!({})||entry["card"]["keywords"]!=serde_json::json!([])||["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null()) {return Err("keyword inventory requires sole ordinary nonleader unit metadata".into());}
+                }
                 if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(|a|parent_upgrade_registration(a).is_some()) {
                     if entry["baseClass"]!="UpgradeCard"||!exact_type("upgrade")||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||entry["card"]["unique"]!=false||!entry["card"]["title"].is_string()||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|!entry["card"][k].is_null())||entry["keywordValues"]!=serde_json::json!({})||entry["card"]["keywords"]!=serde_json::json!([]) {return Err("parent token play requires sole ordinary nonunique attached upgrade metadata".into());}
                 }

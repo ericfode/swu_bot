@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 582
+    "sourceIr": 584
   },
   "runtimeAdmittedCards": [
     {
@@ -184,6 +184,11 @@
       "implementation": "sourceIr",
       "internalName": "moff-gideon#remnant-commander",
       "setCode": "ASH_097"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "gallius-rax#counselor-to-the-empire",
+      "setCode": "ASH_100"
     },
     {
       "implementation": "sourceIr",
@@ -379,6 +384,11 @@
       "implementation": "dataOnly",
       "internalName": "womp-rat",
       "setCode": "ASH_213"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "amnesty-officer",
+      "setCode": "ASH_214"
     },
     {
       "implementation": "dataOnly",
@@ -4801,7 +4811,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 958,
+  "runtimeAdmittedCount": 960,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -5122,11 +5132,6 @@
       "internalName": "gozanti-assault-carrier",
       "reason": "unimplemented runtime keyword support",
       "setCode": "ASH_099"
-    },
-    {
-      "internalName": "gallius-rax#counselor-to-the-empire",
-      "reason": "gallius-rax#counselor-to-the-empire: unsupported runtime reference card.keywords.length",
-      "setCode": "ASH_100"
     },
     {
       "internalName": "the-great-mothers#with-strange-magicks",
@@ -5487,11 +5492,6 @@
       "internalName": "peli-motto#you-bring-the-cash",
       "reason": "peli-motto#you-bring-the-cash: compiler rejected \"peli-motto#you-bring-the-cash\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PeliMottoYouBringTheCash.ts\",\"line\":11,\"message\":\"Class-local persistent state requires conversion\",\"pattern\":\"class-state:cardsPlayedThisPhaseWatcher\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PeliMottoYouBringTheCash.ts\",\"line\":20,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:setupStateWatchers\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":28,\"file\":\"game/cards/08_ASH/units/PeliMottoYouBringTheCash.ts\",\"line\":28,\"message\":\"unsupported-modifier:AbilityHelper.ongoingEffects.ignoreAllAspectPenalties\",\"pattern\":\"unsupported-modifier:AbilityHelper.ongoingEffects.ignoreAllAspectPenalties\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":1,\"file\":\"game/cards/08_ASH/units/PeliMottoYouBringTheCash.ts\",\"line\":35,\"message\":\"Additional class method requires conversion\",\"pattern\":\"method:isFirstNonUnitCardPlayedThisPhase\"}]",
       "setCode": "ASH_212"
-    },
-    {
-      "internalName": "amnesty-officer",
-      "reason": "amnesty-officer: unsupported runtime reference card.keywords.length",
-      "setCode": "ASH_214"
     },
     {
       "internalName": "flanking-tie-interceptor",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1500,
+  "runtimeRejectedCount": 1498,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

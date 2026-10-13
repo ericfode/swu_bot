@@ -152,6 +152,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'keyword-inventory') return require('./keyword-inventory-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'parent-upgrade') return require('./parent-upgrade-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'force-continuation') return require('./force-continuation-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'weakness-continuation') return require('./weakness-continuation-probe-fixture').fixture(env, pool, scenario, seed);
@@ -405,6 +406,9 @@ module.exports = {
     constructProbeFixture,
     buildDeck,
     dependencies: [
+        'bot/cards/pipeline/keyword-inventory-probes.js',
+        'bot/cards/pipeline/keyword-inventory-probe-fixture.js',
+        'bot/omni/rs/make-pool.js',
         'bot/cards/pipeline/parent-upgrade-probes.js',
         'bot/cards/pipeline/parent-upgrade-probe-fixture.js',
         'bot/cards/pipeline/force-continuation-probes.js',
