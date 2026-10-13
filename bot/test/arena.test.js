@@ -14,7 +14,7 @@ process.env.ARENA_SECRET_FILE = path.join(tmp, 'secret');
 fs.mkdirSync(process.env.ARENA_DASH, { recursive: true });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const { cappedScore, scoreRound, globalElo, lineup, stillIn, roundSeed, loadSecret } = require('../arena/referee');
+const { cappedScore, scoreRound, globalElo, lineup, roundSeed, loadSecret } = require('../arena/referee');
 const dash = require('../arena/dash');
 const { HOME, writeJson, readJson } = require('../arena/home');
 
@@ -182,15 +182,6 @@ test('dashboard: say and the referee write separate halves, so neither loses the
     assert.ok(fs.existsSync(path.join(HOME, 'panels', 'half.say.json')) && fs.existsSync(path.join(HOME, 'panels', 'half.rated.json')));
 });
 
-test('eval reads results from by and winnerSeat', () => {
-    const { resultFor } = require('../arena/eval');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', by: 'p1', winnerSeat: 'p2' }, 'p1'), 'loss');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', by: 'p1', winnerSeat: 'p2' }, 'p2'), 'win');
-    assert.strictEqual(resultFor({ outcome: 'won', winner: 'me', winnerSeat: 'p2', by: null }, 'p2'), 'win');
-    assert.strictEqual(resultFor({ outcome: 'won', winner: 'draw', winnerSeat: 'draw' }, 'p1'), 'draw');
-    assert.strictEqual(resultFor({ outcome: 'ERROR', by: null, error: 'TIME_FORFEIT me' }, 'p1'), 'ERROR');
-});
-
 test('a stdio submission freezes its folder: cmd is a file in it or a program on PATH, and later edits do not reach it', () => {
     setRoster([]);
     const { api } = require('../arena/api');
@@ -274,23 +265,16 @@ test('withdraw benches a competitor or stops rating one version; rejoin undoes e
     const r = readJson(path.join(HOME, 'roster.json'), {});
     assert.deepStrictEqual([r.agents.map((a) => a.name), r.bench.map((a) => a.name)], [[], ['wd']]);
     assert.ok(!lineup().some((b) => b.startsWith('wd-')));
-    assert.deepStrictEqual(stillIn(['wd-v1', 'rush']), ['rush'], 'a lineup replayed later (the held-out ladder) drops it too');
-    assert.deepStrictEqual(api.send({ to: 'wd', text: 'for when you are back' }).delivered, ['wd'], 'a benched competitor can be messaged by name');
     assert.strictEqual(api.status().competitors.find((c) => c.name === 'wd')?.benched, true, 'status still lists it, marked benched');
     assert.ok(api.panel({ name: 'wd' }) && api.panels().panels.length >= 1, 'its panel stays readable');
     assert.deepStrictEqual(api.versions({ name: 'wd' }).map((v) => v.name), ['wd-v0', 'wd-v1', 'wd-v2'], 'its versions stay readable');
-    // its frozen versions stay eval opponents for the others
     api.register({ name: 'wo', start: 'rush' });
-    const ev = api.eval({ name: 'wo', vs: ['wd-v1'] });
-    assert.strictEqual(ev.state, 'queued');
-    fs.rmSync(path.join(HOME, 'queue', `${ev.id}.json`));
     // a version withdrawn and rejoined while benched applies once the competitor rejoins
     assert.strictEqual(api.withdraw({ name: 'wd', version: 1 }).withdrawn, 'wd-v1');
     assert.strictEqual(api.rejoin({ name: 'wd', version: 1 }).benched, true);
     api.withdraw({ name: 'wd', version: 2 });
     api.rejoin({ name: 'wd' });
     assert.ok(lineup().includes('wd-v1') && !lineup().includes('wd-v2'));
-    assert.deepStrictEqual(stillIn(['wd-v1', 'wd-v2', 'rush']), ['wd-v1', 'rush']);
     api.rejoin({ name: 'wd', version: 2 });
     const back = readJson(path.join(HOME, 'roster.json'), {});
     assert.deepStrictEqual([back.agents.map((a) => a.name), back.bench.length, 'benchedAt' in back.agents[1]], [['wo', 'wd'], 0, false]);
@@ -319,7 +303,6 @@ test('a call made for one competitor (ARENA_COMPETITOR) acts for it only, whatev
         await refused('rejoin', { name: 'me1' }, /it alone benches/);
         await refused('register', { name: 'new1', start: 'rush' }, /cannot register/);
         await refused('say', { name: 'you1', text: 'hi' }, /you are "me1"/);
-        await refused('send', { to: 'all', text: 'hi' }, /one competitor at a time/);
         assert.ok((await call('say', { text: 'my name is filled in' })).result.ok);
         assert.ok((await call('status')).result);
     } finally {
@@ -488,7 +471,7 @@ test('isolate.sh: the command sees only its own processes, hidden paths are empt
     assert.match(u.stdout, /CapEff:\s+0+$/m);
 });
 
-test('referee: bot code (ladders, evals) runs as ARENA_BOT_USER, cannot read the round-seed secret and does not get its path', { skip: process.getuid?.() !== 0 && 'needs root (setpriv)' }, async () => {
+test('referee: bot code (the ladder) runs as ARENA_BOT_USER, cannot read the round-seed secret and does not get its path', { skip: process.getuid?.() !== 0 && 'needs root (setpriv)' }, async () => {
     const { spawnBots, giveToBots } = require('../arena/referee');
     // a folder the bot user can reach (the test's own is closed to it), holding a root-only secret
     const open = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-bot-user-'));
@@ -540,28 +523,6 @@ test('register on a hosted arena: only the admin token keeps a harness\'s comman
     assert.deepStrictEqual(agents.find((a) => a.name === 'adm').harness, { kind: 'script', cmd: 'node x.js' }, 'the admin\'s harness is kept as given');
 });
 
-test('server: a queued eval\'s lost-game replay is served, and eval_result names its URL', async () => {
-    const http = require('http');
-    const { handler } = require('../arena/server');
-    const { RESULTS } = require('../arena/home');
-    const dir = path.join(RESULTS, 'arena-evals', 'me-v1-abc');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'me-v1-vs-rush-20001-s1.jsonl'), '{"t":"header"}\n');
-    writeJson(path.join(HOME, 'queue', 'me-v1-abc.json'), { id: 'me-v1-abc', state: 'done', summary: { losses: [{ id: 'g', replay: path.join(dir, 'me-v1-vs-rush-20001-s1.jsonl') }] } });
-    const out = await require('../arena/api').call('eval_result', { id: 'me-v1-abc' });
-    const url = out.result.summary.losses[0].replayUrl;
-    assert.strictEqual(url, 'replays/arena-evals/me-v1-abc/me-v1-vs-rush-20001-s1.jsonl');
-    const srv = http.createServer(handler).listen(0, '127.0.0.1');
-    await new Promise((r) => srv.once('listening', r));
-    const base = `http://127.0.0.1:${srv.address().port}`;
-    try {
-        assert.strictEqual(await (await fetch(`${base}/${url}`)).text(), '{"t":"header"}\n');
-        assert.strictEqual((await fetch(`${base}/replays/arena-evals/..%2F..%2Fsecret/x.jsonl`)).status, 404);
-    } finally {
-        srv.close();
-    }
-});
-
 test('server: / is the app when its build exists, /arena is always the arena UI', async () => {
     const http = require('http');
     const { handler } = require('../arena/server');
@@ -601,44 +562,29 @@ test('server: gzip only when Accept-Encoding allows it', () => {
     }
 });
 
-test('tournament rounds get ladder ids scoped to the tournament; games and the server follow them', async () => {
+test('round ladder ids: arena-r<K>, or the ladder standings name; games follows them', async () => {
     const { ladderIdOf } = require('../arena/referee');
-    assert.strictEqual(ladderIdOf(3), 'arena-r3', 'outside a tournament');
-    assert.strictEqual(ladderIdOf(1, { id: 'arena-t202610130610' }), 'arena-t202610130610-r1');
-    assert.strictEqual(ladderIdOf(2, { id: 'holdout' }), 'arena-holdout-r2', 'every arena run keeps the arena- prefix');
+    assert.strictEqual(ladderIdOf(3), 'arena-r3');
     const { RESULTS } = require('../arena/home');
-    const { call, TOURNAMENT } = require('../arena/api');
+    const { call } = require('../arena/api');
     const index = (id) => {
         fs.mkdirSync(path.join(RESULTS, id, 'games'), { recursive: true });
         writeJson(path.join(RESULTS, id, 'index.json'), { games: [{ id: `${id}-g1` }] });
         fs.writeFileSync(path.join(RESULTS, id, 'games', `${id}-g1.jsonl`), `{"id":"${id}"}\n`);
     };
     index('arena-r41');
+    index('arena-r42');
     index('arena-tx-r41');
-    index('arena-tx-r42');
     const before = readJson(path.join(HOME, 'standings.json'), null);
-    writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: 'arena-tx-r41', bots: [] }], global: {} });
-    writeJson(TOURNAMENT(), { id: 'arena-tx', state: 'running', rounds: [{ n: 41, ladder: 'arena-tx-r41' }, { n: 42, ladder: 'arena-tx-r42' }] });
-    const http = require('http');
-    const { handler } = require('../arena/server');
-    const srv = http.createServer(handler).listen(0, '127.0.0.1');
-    await new Promise((r) => srv.once('listening', r));
-    const base = `http://127.0.0.1:${srv.address().port}`;
     try {
-        const g41 = (await call('games', { round: 41 })).result;
-        assert.strictEqual(g41.replayBase, 'replays/arena-tx-r41/games/', 'published rounds: standings name the ladder');
-        const g42 = (await call('games', { round: 42 })).result;
-        assert.strictEqual(g42.replayBase, 'replays/arena-tx-r42/games/', 'a round not published yet: tournament.json names it');
-        assert.strictEqual(await (await fetch(`${base}/${g42.replayBase}${g42.games[0].id}.jsonl`)).text(), '{"id":"arena-tx-r42"}\n');
-        assert.strictEqual((await fetch(`${base}/replays/arena-r41/index.json`)).status, 200, 'arena-r<K> is still served');
+        // a round of an old clocked tournament: standings name its ladder
+        writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: 'arena-tx-r41', bots: [] }], global: {} });
+        assert.strictEqual((await call('games', { round: 41 })).result.replayBase, 'replays/arena-tx-r41/games/', 'published rounds: standings name the ladder');
+        assert.strictEqual((await call('games', { round: 42 })).result.replayBase, 'replays/arena-r42/games/', 'a round not published yet is arena-r<K>');
         // a ladder id that is not an arena folder name is ignored
         writeJson(path.join(HOME, 'standings.json'), { rounds: [{ round: 41, ladderId: '../arena-tx-r41', bots: [] }], global: {} });
-        writeJson(TOURNAMENT(), { id: 'arena-tx', state: 'running', rounds: [] });
         assert.strictEqual((await call('games', { round: 41 })).result.replayBase, 'replays/arena-r41/games/');
-        assert.strictEqual((await fetch(`${base}/replays/..%2Fsecret-r1/index.json`)).status, 404);
     } finally {
-        srv.close();
-        fs.rmSync(TOURNAMENT(), { force: true });
         if (before) {
             writeJson(path.join(HOME, 'standings.json'), before);
         } else {
@@ -685,28 +631,6 @@ test('holdout split: seeded, per stratum, disjoint, every base in both pools', (
     assert.throws(() => loadPool(path.join(dir, 'other.json')), /not an arena card pool/);
 });
 
-test('a held-out round is compared with the last training round and stays out of the all-round Elo', () => {
-    const { rankCorrelation, report } = require('../arena/referee');
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3 }, { a: 1, b: 2, c: 3 }), 1);
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3 }, { a: 3, b: 2, c: 1 }), -1);
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2 }, { a: 2, b: 1 }), null, 'fewer than 3 bots');
-    assert.strictEqual(rankCorrelation({ a: 1, b: 2, c: 3, d: 4 }, { a: 1, b: 2, c: 3 }), 1, 'only the bots both rounds rated');
-    setRoster(['x']);
-    const game = (id, p1, p2, winner) => ({ id, p1, p2, outcome: 'won', winner, winnerSeat: winner === p1 ? 'p1' : 'p2', by: null, timing: t(5, 5) });
-    const ladder = (id, kind, games) => ({ ...ladderOf(['x-v1', 'rush', 'heuristic'], games, 'done'), id, config: { bots: ['x-v1', 'rush', 'heuristic'], firstSeed: 9, gamesPerPair: 2, pool: { kind, cards: kind === 'holdout' ? 600 : 1400 } } });
-    const train = scoreRound(3, ladder('arena-tx-r3', 'train', [game('g1', 'x-v1', 'rush', 'x-v1'), game('g2', 'x-v1', 'heuristic', 'x-v1'), game('g3', 'rush', 'heuristic', 'heuristic')]));
-    const held = scoreRound(4, ladder('arena-tx-r4', 'holdout', [game('h1', 'x-v1', 'rush', 'rush'), game('h2', 'x-v1', 'heuristic', 'heuristic'), game('h3', 'rush', 'heuristic', 'rush')]));
-    assert.strictEqual(train.pool, 'train');
-    assert.strictEqual(held.pool, 'holdout');
-    assert.deepStrictEqual(globalElo([train, held]), globalElo([train]), 'held-out games are not in the all-round Elo');
-    const md = report(held, globalElo([train]), train);
-    assert.match(md, /results \(held-out cards\)/);
-    assert.match(md, /dealt only from the held-out pool \(600 cards/);
-    assert.match(md, /## Held-out cards vs training cards/);
-    assert.match(md, /Spearman rank correlation: -1/, 'x-v1 went from first to last');
-    assert.match(report(train, globalElo([train])), /this tournament's training pool \(1400 cards/);
-});
-
 test('a holdout tournament\'s extra ladder does not count as a planned round', () => {
     const { clock, TOURNAMENT } = require('../arena/api');
     const now = new Date().toISOString();
@@ -726,7 +650,7 @@ test('a holdout tournament\'s extra ladder does not count as a planned round', (
     }
 });
 
-test('readers get every panel, a round\'s ladder and archived tournaments from the API, not from the arena\'s files', async () => {
+test('readers get every panel and a round\'s ladder from the API, not from the arena\'s files', async () => {
     const { RESULTS } = require('../arena/home');
     const { call } = require('../arena/api');
     setRoster(['pa', 'pb']);
@@ -751,27 +675,7 @@ test('readers get every panel, a round\'s ladder and archived tournaments from t
         const l = (await call('ladder')).result;
         assert.deepStrictEqual([l.round, l.ladderId, l.ladder.schema, l.ladder.games.length], [7, 'arena-tp-r7', 'swu-ladder/1', 1]);
         assert.strictEqual((await call('ladder', { round: -1 })).error.code, 'bad_request');
-
-        // archives: hand-made copies of the dashboard files, in panels/ (t0) or dash/ (later)
-        const arch = (...p) => path.join(HOME, 'archive', ...p);
-        assert.deepStrictEqual((await call('archive')).result, { tournaments: [] });
-        writeJson(arch('t0', 'README.json'), { note: 'smoke round' });
-        writeJson(arch('t0', 'standings.json'), { rounds: [{ round: 0 }] });
-        writeJson(arch('t0', 'panels', 'arena-coach.json'), { id: 'arena-coach' });
-        writeJson(arch('t0', 'panels', 'arena-leaderboard.json'), { id: 'arena-leaderboard' });
-        writeJson(arch('t0', 'experiment-arena.json'), { id: 'arena', old: true });
-        writeJson(arch('s1', 'dash', 'arena-x.json'), { id: 'arena-x' });
-        writeJson(arch('s1', 'dash', 'arena.json'), { id: 'arena' });
-        writeJson(arch('s1', 'panels', 'x.rated.json'), { bots: [] });
-        assert.deepStrictEqual((await call('archive')).result.tournaments, [{ id: 's1', note: null, rounds: 0 }, { id: 't0', note: 'smoke round', rounds: 1 }]);
-        const t0 = (await call('archive', { id: 't0' })).result;
-        assert.deepStrictEqual([t0.note, t0.standings.rounds.length, t0.leaderboard.id, t0.experiment.old, t0.panels.map((x) => x.id)], ['smoke round', 1, 'arena-leaderboard', true, ['arena-coach']]);
-        const s1 = (await call('archive', { id: 's1' })).result;
-        assert.deepStrictEqual([s1.leaderboard, s1.experiment.id, s1.panels.map((x) => x.id)], [null, 'arena', ['arena-x']]);
-        assert.strictEqual((await call('archive', { id: '..' })).error.code, 'bad_request');
-        assert.strictEqual((await call('archive', { id: 'none' })).error.code, 'not_found');
     } finally {
-        fs.rmSync(path.join(HOME, 'archive'), { recursive: true, force: true });
         if (before) {
             writeJson(path.join(HOME, 'standings.json'), before);
         } else {
@@ -865,7 +769,7 @@ test('intake: a submission that cannot be packed or names someone else\'s compet
     assert.deepStrictEqual(w.reads, ['/api/docs/submissions'], 'a later pass reads only the list');
 });
 
-test('intake: a Python bot becomes a sandboxed WebAssembly version of the builder\'s competitor, on the bench when asked', { skip: !wasmReady && 'needs wasmtime and the CPython for WASI (bot/compiled/README.md)' }, async () => {
+test('intake: a Python bot becomes a sandboxed WebAssembly version of the builder\'s competitor', { skip: !wasmReady && 'needs wasmtime and the CPython for WASI (bot/compiled/README.md)' }, async () => {
     const { intakeOnce } = require('../arena/intake');
     const { describeArenaBot, makeArenaBot } = require('../arena/registry');
     const base = { owner: 'pal', name: 'pal', kind: 'python', state: 'pending', submittedAt: '2026-10-12T06:00:00Z' };
@@ -874,11 +778,11 @@ test('intake: a Python bot becomes a sandboxed WebAssembly version of the builde
         'pal.2': { ...base, note: 'reads a file it may not', files: { 'bot.py': `open('${HOME}/roster.json').read()\n${PY_BOT}` } },
         'pal.3': { ...base, note: 'second', files: { 'bot.py': `# v2\n${PY_BOT}` } }
     });
-    assert.strictEqual(await intakeOnce({ window: w, benchNew: true }), 3);
-    assert.deepStrictEqual(Object.values(w.docs).map((d) => [d.state, d.version ?? null, d.benched ?? null]), [['accepted', 'pal-v1', true], ['rejected', null, null], ['accepted', 'pal-v2', true]]);
+    assert.strictEqual(await intakeOnce({ window: w }), 3);
+    assert.deepStrictEqual(Object.values(w.docs).map((d) => [d.state, d.version ?? null, d.benched ?? null]), [['accepted', 'pal-v1', false], ['rejected', null, null], ['accepted', 'pal-v2', false]]);
     assert.match(w.docs['pal.2'].error, /failed the start check[\s\S]*No such file or directory/);
     const r = readJson(path.join(HOME, 'roster.json'));
-    assert.deepStrictEqual(r.bench.filter((a) => a.name === 'pal').map((a) => [a.owner, a.harness]), [['github:pal', { kind: 'builder', selfRun: true }]]);
+    assert.deepStrictEqual(r.agents.filter((a) => a.name === 'pal').map((a) => [a.owner, a.harness]), [['github:pal', { kind: 'builder', selfRun: true }]]);
     assert.deepStrictEqual(fs.readdirSync(path.join(HOME, 'versions', 'pal-v2', 'bundle')).sort(), ['arena.json', 'bot.py']);
     assert.strictEqual(describeArenaBot('pal-v2').lang, 'wasm');
     const bot = makeArenaBot('pal-v2');
@@ -946,20 +850,3 @@ test('intake: a check that ends with no result is the arena\'s fault: the submis
     assert.match(w.docs['kim-b.1'].error, /could not check it \(tried 3 times; submit it again later\)/);
 });
 
-test('intake: one intake at a time; one that is gone does not hold the place', () => {
-    const { onlyIntake } = require('../arena/intake');
-    const pidFile = path.join(process.env.ARENA_INTAKE_WORK, 'intake.pid');
-    fs.mkdirSync(process.env.ARENA_INTAKE_WORK, { recursive: true });
-    fs.writeFileSync(pidFile, '999999999');
-    assert.strictEqual(onlyIntake(), true, 'a pid that is not an intake');
-    assert.strictEqual(fs.readFileSync(pidFile, 'utf8'), String(process.pid));
-    const { spawn } = require('child_process');
-    const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', 'intake.js'], { stdio: 'ignore' });
-    try {
-        fs.writeFileSync(pidFile, String(other.pid));
-        assert.strictEqual(onlyIntake(), false);
-    } finally {
-        other.kill();
-        fs.rmSync(pidFile, { force: true });
-    }
-});

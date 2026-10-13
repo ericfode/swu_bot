@@ -592,7 +592,7 @@ test('push: the arena uplink sends the roster without token hashes, the bench in
         process.env.SWU_WINDOW = `http://127.0.0.1:${srv.address().port}`;
         process.env.ARENA_PUSH_TOKEN = 'push-secret'; // how newer cloud sessions get the token
         delete require.cache[require.resolve('../arena/push')];
-        await require('../arena/push').pushArena({ once: true });
+        assert.strictEqual(await require('../arena/push').arenaPusher().once(), true);
         const roster = JSON.parse(w.store.getDoc('arena', 'roster'));
         assert.deepStrictEqual([roster.agents[0].name, roster.bench[0].name], ['aa', 'bb']);
         assert.doesNotMatch(JSON.stringify(roster), /tokenHash/);
@@ -697,7 +697,7 @@ test('mcp: a competitor the runner starts can neither see nor call withdraw and 
     }
 });
 
-test('mcp: a competitor token never goes into a URL, and a remote that never answers does not hold up tools/list', async () => {
+test('mcp: a token never goes into a URL, and a remote that never answers does not hold up tools/list', async () => {
     const http = require('http');
     const seen = [];
     const arena = http.createServer((req, res) => {
@@ -712,17 +712,18 @@ test('mcp: a competitor token never goes into a URL, and a remote that never ans
     const silent = http.createServer(() => undefined); // accepts, never answers
     await Promise.all([arena, silent].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
     const url = (s) => `http://127.0.0.1:${s.address().port}`;
-    const remote = await mcpSession(['--remote', url(arena)], { ARENA_COMPETITOR: 'aa', ARENA_COMPETITOR_TOKEN: 'secret-token' });
+    const remote = await mcpSession(['--remote', url(arena)], { ARENA_COMPETITOR: 'aa' });
     const stuck = await mcpSession(['--remote', url(silent)], { ARENA_PROBE_MS: '1000' });
     try {
         await remote.ask('initialize');
         await remote.tool('arena_status');
-        await remote.tool('arena_inbox', {});
+        await remote.tool('arena_versions', { token: 'secret-token' });
         const status = seen.find((r) => r.url.startsWith('/api/status'));
-        const inbox = seen.find((r) => r.url.startsWith('/api/inbox'));
+        const versions = seen.find((r) => r.url.startsWith('/api/versions'));
         assert.deepStrictEqual([status.method, status.url], ['GET', '/api/status'], 'a read without a token is a GET, and status takes none');
-        assert.strictEqual(inbox.method, 'POST');
-        assert.ok(!inbox.url.includes('secret-token') && JSON.parse(inbox.body).token === 'secret-token');
+        assert.strictEqual(versions.method, 'POST', 'a read that carries a token is a POST');
+        assert.ok(!versions.url.includes('secret-token') && JSON.parse(versions.body).token === 'secret-token');
+        assert.strictEqual(JSON.parse(versions.body).name, 'aa', 'scoped to the competitor');
         await stuck.ask('initialize');
         const t0 = Date.now();
         const names = (await stuck.ask('tools/list')).result.tools.map((t) => t.name);

@@ -98,7 +98,7 @@ const auth = () => (TOKEN ? { authorization: `Bearer ${TOKEN}` } : {});
 
 /**
  * A remote call: reads as GET with query parameters (scalars only), the rest as POST with a JSON body. A read that
- * carries a competitor token (inbox) goes as POST too, so the token never lands in a URL or an access log.
+ * carries a token goes as POST too, so the token never lands in a URL or an access log.
  */
 async function remote(method, args) {
     if (METHODS[method]?.readOnly && args?.token === undefined) {
@@ -215,7 +215,7 @@ async function handle(msg) {
             protocolVersion: params?.protocolVersion ?? '2025-06-18',
             capabilities: { tools: {} },
             serverInfo: { name: 'swu-arena', version: '1.0.0' },
-            instructions: 'SWU bot arena. Start with arena_status and arena_inbox, read rules in bot/arena/README.md of the swu_bot repo, post progress with arena_say, and submit with arena_submit.'
+            instructions: 'SWU bot arena. Start with arena_status, read rules in bot/arena/README.md of the swu_bot repo, post progress with arena_say, and submit with arena_submit.'
         } });
     }
     if (method === 'ping') {

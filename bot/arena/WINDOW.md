@@ -12,7 +12,7 @@ asks the same API.
 
 | Part | Sends | Through |
 |---|---|---|
-| Arena (referee + api.js) | status, standings, tournament, roster (no tokens), round reports, versions, panels | the games machine, every 20 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
+| Arena (referee + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
@@ -118,11 +118,10 @@ the old token; the agent shows on the person's Build a bot page, where Disconnec
 The arena's intake (`intake.js`, which the games machine runs every minute) reads `submissions` with a project
 token. It packs each bot into a WebAssembly bundle, enters it, and writes the outcome back. Each version records the
 submission it came from, so a submission checked again (an intake that stopped, or a window that missed the result)
-gets the version it already has. Only one intake runs per arena (`intake.pid` in its work folder). Friends never read the
-collection raw. The project token does not open `/mcp`: pushing stays with `mcp.js` above. Tokens are kept
-only as SHA-256 hashes, in `auth/oauth.json` on the volume. A person's connected apps are listed on the app's Build a
-bot page (Arena, Build a bot), through `GET /api/apps`, and `POST /api/apps {"disconnect": "<id>"}` ends one (from
-this site's own pages: Origin and JSON).
+gets the version it already has. Friends never read the collection raw. The project token does not open `/mcp`:
+pushing stays with `mcp.js` above. Tokens are kept only as SHA-256 hashes, in `auth/oauth.json` on the volume. A
+person's connected apps are listed on the app's Build a bot page (Arena, Build a bot), through `GET /api/apps`, and
+`POST /api/apps {"disconnect": "<id>"}` ends one (from this site's own pages: Origin and JSON).
 
 ## Who may do what (auth.js)
 

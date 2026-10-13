@@ -97,10 +97,9 @@ function handler(req, res) {
     if (req.method === 'GET' && url.pathname === '/kit.js') {
         return serveFile(req, res, KIT, 'text/javascript');
     }
-    // a round's replays (<ladder id>/games/<id>.jsonl, index.json; the ladder id is arena-r<K> or <tournament id>-r<K>)
-    // and a queued eval's (arena-evals/<eval id>/<game>.jsonl)
-    const rep = /^\/replays\/(arena-(?:[\w-]+-)?r\d+)\/((?:games\/[\w.#@-]+\.jsonl)|index\.json)$/.exec(url.pathname)
-        ?? /^\/replays\/(arena-evals\/[\w-]+)\/([\w.#@-]+\.jsonl)$/.exec(url.pathname);
+    // a round's replays (<ladder id>/games/<id>.jsonl, index.json; the ladder id is arena-r<K>, or <tournament id>-r<K>
+    // for a round of the old clocked tournaments)
+    const rep = /^\/replays\/(arena-(?:[\w-]+-)?r\d+)\/((?:games\/[\w.#@-]+\.jsonl)|index\.json)$/.exec(url.pathname);
     if (req.method === 'GET' && rep) {
         return serveFile(req, res, path.join(RESULTS, rep[1], rep[2]), rep[2].endsWith('.json') ? 'application/json' : 'application/x-ndjson');
     }

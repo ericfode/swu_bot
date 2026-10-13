@@ -7,7 +7,6 @@
  *   versions/<agent>-v<N>/      frozen submissions; the referee only rates these
  *   versions/.staging-*         submissions being copied and checked (invisible to versionsOf and the registry)
  *   standings.json, rounds/     referee output
- *   inbox/<agent>.jsonl         messages, one JSON object per line
  * Default: /mnt/project-files/arena when the project folder exists, else arena-home/ in the repo (gitignored).
  * Keep file access to ARENA_HOME behind the helpers here.
  */
