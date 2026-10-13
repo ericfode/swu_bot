@@ -1,0 +1,27 @@
+# A15 read-only research packet
+
+Future preparation only; no implementation or acceptance. Verified all ten installed JSON records and matching `04_JTL/events` classes. Relevant engine tests are read-only evidence; no engine code changed and no games were generated. Sole prints JTL080/091/092/106/121/122/123/124/125/126. Printed costs9,1,7,6,0,1,1,1,2,2; current Command/Vigilance/Heroism showcase event costs9,3,9,8,0,1,1,1,2,2. Nested Salvage unit payment is separate.
+
+| Identity | Rules distinction for the eventual specification |
+| --- | --- |
+| Nebula Ignition | Defeat every non-upgraded unit across both players and both arenas, including deployed leaders and tokens. A Shield or Experience is an upgrade; upgraded survivors remain. Actual leader departure and native aftermath need evidence. |
+| Apology Accepted | Defeat a friendly unit, then optionally give two Experience tokens to any unit, including an enemy. Engine uses `then`, so do not invent an `ifYouDo` success dependency. A defeated first target cannot also receive the tokens while absent. |
+| Scramble Fighters | Create eight ready1/1 TIE Fighter tokens in space. Only these actual generated entries cannot attack bases this phase; existing TIEs remain unrestricted. No false exhausted intermediate pose. New explicit phase restriction and dense mobile arrival geometry are required. |
+| Unity of Purpose | Count distinct printed titles among current friendly units in both arenas, then give every current friendly unit that many +1/+1 for the phase. Different subtitles of Millennium Falcon count once. Count and affected set are captured at resolution; later entrants do not gain it or alter existing buffs. Double Command costs an extra2 in the current showcase. |
+| Salvage | Pay the selected Vehicle unit's full legal cost to play it from own discard, then deal1 damage to that new entry. This is a play with normal entry/trigger rules, not a free rescue. Engine test verifies the damage occurs before queued when-played triggers. Preserve native Grit/Shield/trigger aftermath or decline unsupported variants. |
+| All Wings Report In | Exhaust up to two friendly space units; create one exhausted X-Wing token for each actual successful exhaustion. Selected count alone is insufficient. Zero/no-ready and declined selections are legal paid outcomes. |
+| Dogfight | Attack with a unit even if already exhausted; the target must be a unit. Do not ready the attacker or claim an attack against a base. Ground and space both remain legal with normal arena/Sentinel rules. Attack-only permission expires immediately. |
+| Tandem Assault | Actual first space attack authorizes the following ground attack, with+2/+0 only during that second attack. Separate attackers, targets, combat windows and counterdamage; the bonus must not remain on the resting board. |
+| Air Superiority | Strictly more friendly than opposing space units licenses4 damage to that opponent's ground unit. Equal counts fail the condition. Count tokens and current controllers; preserve native damage aftermath. |
+| Eject | Detach an actual Pilot unit upgrade from either player's unit; move that same card to ground and exhaust it. Host loses only that Pilot's contribution and keeps other upgrades; detached Pilot loses its piloting ability. Drawing is simultaneous and still occurs when there is no eligible Pilot. Leader Pilots are legal but need correct summary and side handling; this is neither an ordinary unit play nor a hand return. |
+
+## Existing recordings
+
+`results/card-effects-drafts/A15/existing-replay-inventory.json` records four actions across three identities, matched by exact known print codes. Raw snapshots are separately saved under `/tmp/swu-a15-*`. Before is the classified action's index−1; after is its existing `until` index. Seven identities lack recordings.
+
+- All Wings Report In at `random-b-vs-random-c-11`,52: P1 pays1 and discards eventc40; no unit changes or token creations. The recording does not show a successful exhaustion.
+- Eject in the same game,124: P2 pays2, discards eventc81 and draws actual c53 Overwhelming Barrage; deck34→33. No Pilot detaches or board unit changes, so this is draw-only recorded coverage.
+- Scramble Fighters in the same game,327: P2 pays7, discards eventc58 and creates eight ready1/1 TIE Fighters c109–c116 in space. The snapshot does not carry phase restriction metadata; these arrivals cannot alone prove a visible restriction receipt.
+- All Wings Report In at `random-c-vs-random-a-6`,477→478: P1 pays1 and explicitly chooses nothing. Eventc44 enters discard; both arenas remain unchanged and no X-Wings are invented.
+
+Source tests inspected in detail for Eject, Salvage and Unity. Their test titles are not sole authority: the actual assertions establish the independent draw, pilot leaders/host preservation, damage-before-trigger sequence and snapshot count/recipient semantics described above. Root has now read all seven remaining complete source tests too. Nebula explicitly retains non-upgraded Lurking TIE Phantom: the requested unupgraded set is not proof every target can actually be defeated. Scramble's replacement test creates sixteen ready TIEs via Moff Jerjerrod, and the phase restriction applies to that actual generated set. Dogfight allows Strafing Gunship's native cross-arena attack; an ordinary same-arena primary does not authorize rejecting all such native exceptions.
