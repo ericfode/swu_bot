@@ -34,7 +34,9 @@ on the 27 real decks, so people beat it much more than bots do.
   a card and about 3 resources lost each time (Red Five 7, R2-D2 6, Blue Leader 6, Black One 5, ...). The deck runs 3
   copies of 7 unique units, and c-clock's play and resource choices ignored uniqueness.
 - **People remove, heal and hit harder.** In lost games the opponent made 4.8 removal plays per game (2.9 in won games),
-  healed 3.4 damage from their base (1.2), and their base attacks did 2.9 damage each against our 2.1. At the start of
+  healed 3.4 damage from their base (1.2), and attacked our base more often and harder: 8.9 base attacks per game of 3.6
+  damage each, against our 6.7 of 2.8 (counted until the next action, since an attack with an On Attack prompt resolves
+  over two steps; the first count, 2.9 against 2.1, read only the attack's own step). At the start of
   round 5 of a lost game our base had taken 15.8 damage and theirs 8.7, with about the same power on both boards.
 
 ## The fix: c-clock2
