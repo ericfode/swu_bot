@@ -43,9 +43,10 @@ defmodule Coord.ProcTest do
   end
 
   test "a timeout stops the whole group" do
-    task = Task.async(fn -> Proc.run(:sleeper, @two_sleeps, timeout: 300, grace: 2_000) end)
+    task = Task.async(fn -> Proc.run(:sleeper, @two_sleeps, timeout: 1_000, grace: 2_000) end)
     %{pgid: pgid} = running_proc(:sleeper)
-    assert length(group_members(pgid)) == 3
+    # the Proc is registered before sh has forked its two sleeps
+    eventually(fn -> length(group_members(pgid)) == 3 end)
     assert {:timeout, ""} = Task.await(task)
     eventually(fn -> group_members(pgid) == [] end)
   end
