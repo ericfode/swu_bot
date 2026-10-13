@@ -7,7 +7,9 @@
 //
 //   node bot/omni/rs/stress.js --bots heuristic,aggro,control,rust-search,node-search --seeds 1-4 \
 //       --pool bot/omni/rs/pool.json --out replays/omni-rs-stress [--sim-every 10] [--workers 3] [--key none]
-// --selection-toggles plays forceteki with env.js's opt-in select-card rule, which a Rust engine built for it follows.
+// --catalogue FILE loads compiled card programs (bot/card-compiler/generated/catalog.json) for a pool beyond the 100
+// keyword-only cards. --selection-toggles plays forceteki with env.js's opt-in select-card rule, which a Rust engine
+// built for it follows.
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -39,7 +41,7 @@ async function worker(id, list, opts) {
     const { RustViews } = require('./rust-view');
     const pool = loadPool(opts.pool);
     const views = opts.views ? new RustViews(pool) : null;
-    const simulator = await createSimulator({ poolPath: pool.provenance.path });
+    const simulator = await createSimulator({ poolPath: pool.provenance.path, ...(opts.catalogue ? { cataloguePath: opts.catalogue } : {}) });
     const env = new Env();
     const findingsDir = path.join(opts.out, 'findings');
     fs.mkdirSync(findingsDir, { recursive: true });
@@ -50,7 +52,7 @@ async function worker(id, list, opts) {
         // decks dealt here (not by playGame) so the repro header can carry them
         const rng = seededRng(`stress${job.seed}`);
         const decks = { p1: env.randomDeck(rng, { pool }), p2: env.randomDeck(rng, { pool }) };
-        const meta = { pool: pool.provenance, seed: job.seed, bots: job.bots, decks: [decks.p1, decks.p2] };
+        const meta = { pool: pool.provenance, ...(opts.catalogue ? { catalogue: opts.catalogue } : {}), seed: job.seed, bots: job.bots, decks: [decks.p1, decks.p2] };
         let n = 0;
         const report = (f) => {
             const file = `${tag}-${++n}`;
@@ -165,9 +167,10 @@ async function main() {
     const opts = {
         out, pool: path.resolve(arg('pool', path.join(__dirname, 'pool.json'))), simEvery: Number(arg('sim-every', 10)),
         key: key === 'none' ? null : key, limits: {}, jobs: split, views: process.argv.includes('--views'),
-        engine: process.argv.includes('--selection-toggles') ? { selectionToggles: true } : {}
+        engine: process.argv.includes('--selection-toggles') ? { selectionToggles: true } : {},
+        catalogue: arg('catalogue', null) && path.resolve(arg('catalogue'))
     };
-    fs.writeFileSync(path.join(out, 'run.json'), JSON.stringify({ bots, seeds, workers, simEvery: opts.simEvery, key: opts.key, pool: opts.pool, engine: opts.engine, started: new Date().toISOString() }, null, 2) + '\n');
+    fs.writeFileSync(path.join(out, 'run.json'), JSON.stringify({ bots, seeds, workers, simEvery: opts.simEvery, key: opts.key, pool: opts.pool, catalogue: opts.catalogue, engine: opts.engine, started: new Date().toISOString() }, null, 2) + '\n');
     const codes = await Promise.all(split.map((_, id) => new Promise((resolve) => {
         const child = fork(__filename, ['--worker', String(id)], { env: { ...process.env, STRESS_OPTS: JSON.stringify(opts) } });
         child.on('exit', resolve);
