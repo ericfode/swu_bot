@@ -308,6 +308,10 @@ impl Engine {
             by_code,
             shield_def: shield_def.ok_or("catalogue must include native Shield token")?,
             experience_def,
+            rules_backend: RulesBackend::Auto,
+            rules_instrumentation: false,
+            rules_hits: Default::default(),
+            expression_hits: Default::default(),
             catalogue: Some(catalogue),
         })
     }
@@ -466,6 +470,14 @@ impl Engine {
         if self.catalogue.is_none() || !self.in_arena(s, target) { return vec![]; }
         let mut effects = vec![];
         for source in 1..s.next_id {
+            // Most allocated cards have no constant registration. Inspect the
+            // current definition side before paying for arena/attachment scans;
+            // keep activation, conditions and targets live below.
+            let mut programs = self.card_programs(s, source).iter()
+                .map(|&id| self.program(id))
+                .filter(|program| program.trigger == "constant")
+                .peekable();
+            if programs.peek().is_none() { continue; }
             // Incoming unique copies have not activated their ongoing abilities:
             // the engine resolves uniqueness before resolveGameState.
             if !(self.in_arena(s, source)||self.attached_in_play(s,source))
@@ -474,13 +486,9 @@ impl Engine {
             {
                 continue;
             }
-            for program in self
-                .card_programs(s, source)
-                .iter()
-                .map(|&id| self.program(id))
-            {
+            for program in programs {
                 if keywords && !program.instructions.iter().any(|i| matches!(i, Instruction::Apply(Effect::GainKeyword { .. } | Effect::LoseKeyword { .. }))) { continue; }
-                if (program.coordinate && !self.coordinate_active(s,source)) || program.trigger != "constant"
+                if (program.coordinate && !self.coordinate_active(s,source))
                     || program
                         .condition
                         .as_ref()
@@ -622,9 +630,21 @@ impl Engine {
         modifier_target:CardId,
         e: &Expr,
     ) -> Eval {
+        if let Expr::Compiled(compiled) = e {
+            let generated = self.rules_backend != RulesBackend::Interpreter;
+            if self.rules_instrumentation {
+                self.expression_hits.lock().expect("expression metrics lock")[usize::from(!generated)] += 1;
+            }
+            return if generated {
+                self.generated_expression(s, source, target, card, modifier_target, compiled.index)
+            } else {
+                self.eval_with_binding(s, source, target, card, modifier_target, &compiled.original)
+            };
+        }
         let player = s.card(source).owner;
         let sub = |e| self.eval_with_binding(s, source, target, card, modifier_target,e);
         match e {
+            Expr::Compiled(_) => unreachable!("compiled expression handled above"),
             Expr::Array { items } => Eval::Array(items.iter().map(sub).collect()),
             Expr::Math { name, args } => {
                 let values: Vec<i64> = args.iter().map(|a| sub(a).number()).collect();
@@ -1337,6 +1357,14 @@ impl Engine {
         loop {
             if self.open_deaths(s,1)? {return Ok(());}
             let p = self.program(s.ability_program - 1);
+            if self.rules_backend != RulesBackend::Interpreter {
+                match p.executable {
+                    Ok(index)=>{if self.rules_instrumentation {self.rules_hits.lock().expect("rules metrics lock").entry(s.ability_program as usize-1).or_default()[0]+=1;}if self.generated_step(s,p,index)? {return Ok(());} continue;},
+                    Err(reason) if self.rules_backend==RulesBackend::Aot=>return Err(format!("AOT backend unavailable: {reason}")),
+                    Err(_)=>{},
+                }
+            }
+            if self.rules_instrumentation {self.rules_hits.lock().expect("rules metrics lock").entry(s.ability_program as usize-1).or_default()[1]+=1;}
             let Some(instruction) = p.instructions.get(s.ability_pc as usize) else {
                 return self.end_program(s);
             };
@@ -2332,3 +2360,31 @@ impl Engine {
 #[cfg(test)]
 #[path = "generic_runtime_tests.rs"]
 mod tests;
+
+// Generated executable code shares the executor's private event/prompt primitives.
+include!(concat!(env!("OUT_DIR"), "/rules_aot.rs"));
+impl Engine {
+    pub fn set_rules_instrumentation(&mut self, enabled:bool) {self.rules_instrumentation=enabled;}
+    pub fn set_rules_backend(&mut self, backend: RulesBackend)->Result<(),String> {
+        if backend==RulesBackend::Aot {
+            if let Some(c)=&self.catalogue {
+                for d in &self.definitions {
+                    for &index in d.programs.leader.iter().chain(&d.programs.unit).chain(&d.programs.card) {
+                        if let Err(reason)=c.programs[index as usize].executable {return Err(format!("AOT backend unavailable for {} program {}: {reason}",d.code,index));}
+                    }
+                }
+            }
+        }
+        self.rules_backend=backend;Ok(())
+    }
+    pub fn rules_backend_report(&self)->serde_json::Value {
+        let programs=self.catalogue.as_ref().map(|c| c.programs.iter().enumerate().map(|(index,p)| {
+            let bytes=serde_json::to_vec(p).expect("program serialization");
+            let hash=format!("{:x}",Sha256::digest(&bytes));
+            let dispatch=p.executable;
+            serde_json::json!({"index":index,"contentHash":hash,"title":p.title,"trigger":p.trigger,"backend":if self.rules_backend==RulesBackend::Interpreter {"interpreter"} else if dispatch.is_ok() {"aot"} else {"interpreterFallback"},"fallbackReason":dispatch.err(),"canonicalProgram":p,"executedSteps":self.rules_hits.lock().expect("rules metrics lock").get(&index).copied().unwrap_or_default()})
+        }).collect::<Vec<_>>()).unwrap_or_default();
+        let cards=self.catalogue.as_ref().map(|c| c.cards.iter().map(|(code,p)| (code.clone(),serde_json::json!({"leader":p.leader,"unit":p.unit,"card":p.card}))).collect::<std::collections::BTreeMap<_,_>>()).unwrap_or_default();
+        serde_json::json!({"cards":cards,"compiledScope":"instruction dispatch, supported direct primitives, and content-bound pure expressions","sharedRuntime":["target enumeration","costs","event boundaries","constant live modifier scheduling","uncompiled expression fallbacks"],"instrumentationEnabled":self.rules_instrumentation,"sourceHash":format!("{:x}",Sha256::digest(include_bytes!(concat!(env!("OUT_DIR"),"/rules_aot.rs")))),"generatorAbi":"direct-primitives-expressions/v2","expressions":serde_json::from_str::<Value>(GENERATED_EXPRESSIONS).expect("generated expression manifest"),"expressionExecutions":*self.expression_hits.lock().expect("expression metrics lock"),"executionCounterOrder":["aot","interpreter"],"schema":"swu-rules-aot/v1","mode":format!("{:?}",self.rules_backend).to_lowercase(),"programs":programs,"generatedSource":include_str!(concat!(env!("OUT_DIR"),"/rules_aot.rs"))})
+    }
+}

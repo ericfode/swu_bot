@@ -27,7 +27,7 @@ async function check(options = {}) {
         const poolPath = lib.checkedArtifact(directory, 'pool', poolSha256), group = rows.filter(r => r.poolSha256 === poolSha256);
         const files = group.map(r => lib.checkedArtifact(directory, 'trace', r.traceSha256));
         if (runtime !== 'wasm') {
-            const run = spawnSync(native, ['check', ...files, '--pool', poolPath, '--catalogue', cataloguePath], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+            const run = spawnSync(native, ['check', ...files, '--pool', poolPath, '--catalogue', cataloguePath, ...(options.backend ? ['--backend', options.backend] : []), ...(options.dispatchDir ? ['--rules-receipt', path.join(options.dispatchDir, poolSha256 + '-native-' + (options.backend ?? 'auto') + '.json')] : [])], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
             if (run.error) throw run.error;
             assert.equal(run.status, 0, run.stderr || run.stdout);
             const checked = run.stdout.trim().split('\n').map(JSON.parse); assert.equal(checked.length, group.length);
@@ -35,9 +35,9 @@ async function check(options = {}) {
         }
         if (runtime !== 'native') {
             const { createSimulator } = require('../../omni/wasm/node'), { records, checkRecords } = require('../../omni/wasm/check');
-            const simulator = await createSimulator({ cataloguePath, poolPath });
+            const simulator = await createSimulator({ cataloguePath, poolPath, backend: options.backend, instrumentation: !!options.dispatchDir });
             try { files.forEach((file, i) => { const r = checkRecords(simulator, records(file), file); assert.equal(r.decisions, group[i].decisions); assert.equal(r.windows, group[i].windows); results.push({ caseId: group[i].caseId, traceSha256: group[i].traceSha256, ...r }); }); }
-            finally { simulator.free(); }
+            finally { if (options.dispatchDir) fs.writeFileSync(path.join(options.dispatchDir, poolSha256 + '-wasm-' + (options.backend ?? 'auto') + '.json'), JSON.stringify(simulator.rulesBackendReport(), null, 2) + '\n', {flag:'wx'}); simulator.free(); }
         }
     }
     assert.equal(sha256(fs.readFileSync(cataloguePath)), identities.catalogueSha256, 'Catalogue changed during checks');

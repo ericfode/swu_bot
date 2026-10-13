@@ -92,6 +92,18 @@ impl WasmEngine {
         })
     }
 
+    /// Set before loading game handles; existing handles retain their engine.
+    #[wasm_bindgen(js_name = setRulesBackend)]
+    pub fn set_rules_backend(&mut self, mode: &str) -> Result<(), JsError> {
+        let backend=match mode {"auto"=>omni_rs::RulesBackend::Auto,"interpreter"=>omni_rs::RulesBackend::Interpreter,"aot"=>omni_rs::RulesBackend::Aot,_=>return Err(error("unknown rules backend"))};
+        Rc::get_mut(&mut self.engine).ok_or_else(||error("set rules backend before loading game handles"))?.set_rules_backend(backend).map_err(error)?;
+        Ok(())
+    }
+    #[wasm_bindgen(js_name = setRulesInstrumentation)]
+    pub fn set_rules_instrumentation(&mut self, enabled:bool)->Result<(),JsError> {Rc::get_mut(&mut self.engine).ok_or_else(||error("set instrumentation before loading game handles"))?.set_rules_instrumentation(enabled);Ok(())}
+    #[wasm_bindgen(js_name = rulesBackendReport)]
+    pub fn rules_backend_report(&self)->String {self.engine.rules_backend_report().to_string()}
+
     #[wasm_bindgen(js_name = poolHash)]
     pub fn pool_hash(&self) -> String {
         self.engine.pool_hash().to_string()

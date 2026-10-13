@@ -2,7 +2,9 @@
 
 This pipeline discovers every downloaded card definition and every pinned engine
 card source. It converts a bounded subset of the TypeScript ability DSL into
-`swu-card-ir/v1`, a data-only format interpreted by the Rust simulator. It does
+`swu-card-ir/v1`, a typed data-only rules language consumed by the Rust simulator.
+Its build-time backend emits executable Rust for supported programs; other
+validated programs retain explicit interpreter or live-modifier fallback. It does
 not execute TypeScript callbacks, embed JavaScript in Rust, or select behavior by
 card ID. Adding a card that uses supported source patterns needs no compiler edit.
 
