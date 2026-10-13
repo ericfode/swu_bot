@@ -10,6 +10,9 @@
  *        [--ledger <file> --max-people 10|none] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
  *        [--max-waits 6] [--names <file>]
  *
+ * --bot a,b,... takes turns game by game (a, b, a, b, ...; a wait with no match keeps the same bot), and each line of
+ * games.jsonl and status.json names the bot of that game.
+ *
  * With --games above 1 it is a loop: after each game it waits --gap seconds (at least 25: a finished lobby keeps its
  * users ~20 s) and queues again, until the games, the people cap, the stop file, --max-errors failures in a row or
  * --max-waits waits with no match in a row end it. A wait with no match is no game: it queues again.
@@ -294,7 +297,11 @@ async function main() {
     const seed = arg('seed', '1');
     const user = { id: `swu-bot-${crypto.randomUUID()}`, username: arg('username', 'swu-bot (bot)') };
     const log = (line) => console.error(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
-    const bot = arg('bot', 'c-clock');
+    // a list takes turns game by game (runLoop)
+    const bots = arg('bot', 'c-clock').split(',').map((b) => b.trim()).filter(Boolean);
+    if (!bots.length) {
+        throw new Error('--bot needs a bot name, or a list of names separated by commas');
+    }
     const gapS = Number(arg('gap', 60));
     const waitMinutes = Number(arg('wait-minutes', 10));
     const maxErrors = Number(arg('max-errors', 3));
@@ -311,8 +318,8 @@ async function main() {
         throw new Error('--games, --max-errors and --max-waits must be whole numbers of 1 or more');
     }
     const end = await runLoop({
-        games, gapS, maxErrors, maxWaits, stopFile, ledger, out, bot, deck: name, log,
-        play: (g, hooks) => queueOnce({
+        games, gapS, maxErrors, maxWaits, stopFile, ledger, out, bot: bots, deck: name, log,
+        play: (g, { bot, ...hooks }) => queueOnce({
             server, user, deck, bot, format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
             waitMs: waitMinutes * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
             seed: `${seed}-${g}`, out, names: arg('names', null), log, ...hooks
@@ -324,14 +331,17 @@ async function main() {
 }
 
 /**
- * Plays up to `games` games one after another; play(g, hooks) plays one (queueOnce). Before each game it holds the
- * opponent's place in the ledger; it keeps <out>/status.json current and appends each game's row to games.jsonl.
+ * Plays up to `games` games one after another; play(g, hooks) plays one (queueOnce) with the bot `hooks.bot`. `bot` is
+ * a name, or a list of names that take turns game by game (a wait with no match keeps the same bot). Before each game
+ * it holds the opponent's place in the ledger; it keeps <out>/status.json current and appends each game's row to
+ * games.jsonl.
  * It stops on the stop file, the people cap, a ledger error, or maxErrors failures in a row (a wait with no match is
  * no failure). Resolves to the status it ended on.
  */
 async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = null, ledger = null, out = null, bot, deck, play, log, wait = sleep }) {
     const tally = { played: 0, won: 0, lost: 0, errors: 0 };
-    let status = { bot, deck, state: 'starting', since: new Date().toISOString(), file: null };
+    const bots = [].concat(bot);
+    let status = { bot: bots[0], deck, state: 'starting', since: new Date().toISOString(), file: null };
     const set = (patch) => {
         status = { ...status, ...patch, ...tally };
         writeStatus(out, status);
@@ -358,15 +368,17 @@ async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = nu
                 reason = `the people cap is reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max})`;
                 break;
             }
+            const b = bots[done % bots.length];
             let row;
             let queued = false;
             let matched = false;
             let ledgerError = null;
             try {
                 row = await play(g, {
+                    bot: b,
                     onQueued: () => {
                         queued = true;
-                        set({ state: 'queued', since: new Date().toISOString(), file: null });
+                        set({ bot: b, state: 'queued', since: new Date().toISOString(), file: null });
                     },
                     onMatched: async (opponent) => {
                         matched = true;
@@ -380,7 +392,7 @@ async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = nu
                     onGameFile: (file) => set({ state: 'playing', since: new Date().toISOString(), file })
                 });
             } catch (e) {
-                row = { at: new Date().toISOString(), bot, deck, result: e.message.startsWith(NO_MATCH) ? 'no match' : 'error', reason: e.message };
+                row = { at: new Date().toISOString(), bot: b, deck, result: e.message.startsWith(NO_MATCH) ? 'no match' : 'error', reason: e.message };
             } finally {
                 // once queued, the server may have matched us before we heard of it, even as our wait ran out, or add()
                 // failed: the place stays counted

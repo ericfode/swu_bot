@@ -36,6 +36,7 @@ node bot/karabast/spectate.js --public --games 1 --gap 1 --out captures --predic
 node importer/import.js captures --out replays/karabast-local --source karabast-spectate
 node bot/karabast/queue.js --bot c-clock --deck admiral-piett_jtl_blue --out runs/q     # needs a second player in the queue
 node bot/karabast/queue.js --bot c-clock --deck admiral-piett_jtl_blue --games 50 --gap 25 --out runs/q   # a loop
+node bot/karabast/queue.js --bot c-clock2,c-clock3 --deck admiral-piett_jtl_blue --games 50 --gap 25 --out runs/q   # two bots take turns; each games.jsonl row names its bot
 node bot/karabast/fidelity.js --games 20                                               # needs forceteki/build
 ```
 
