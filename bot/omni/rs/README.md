@@ -121,7 +121,15 @@ PR #121 before it merged: 12,687 real moves and 5,813 moves inside 610 simulatio
 2 Rust bugs. Force Illusion (LOF_223) offered already-exhausted enemy units to exhaust, where forceteki skips that step.
 The deployed C-3PO leader (SEC_015) lost its On Attack trigger. Both are fixed, and a third run
 (`/mnt/project-files/omni/stress/r3-pool830/`, same bots, seeds and pool) found nothing in 12,693 real moves and 5,813
-simulation moves.
+simulation moves. A fourth run after the merge with the generated backends of PR #146
+(`/mnt/project-files/omni/stress/r4-pool830-merged/`) found nothing either.
+
+Fifth run (`/mnt/project-files/omni/stress/r5-pool972/`, `RESULT.md`), the same bots and seeds on the 972-card
+catalogue of PR #150: 14,684 real moves and 6,000 moves inside 667 simulations, with no engine error and no Rust bug.
+Rust agreed on every real move. Its 2 findings come from simulations, where forceteki defeated a different one of
+several identical Shield tokens. In forceteki, which Shield is defeated depends on trigger order, and a rollback changes
+that order (known engine bug 6 in the root `CLAUDE.md`). A fresh forceteki game defeats the first Shield, as Rust
+does.
 
 ## Simulations on the Rust engine (opt-in)
 
