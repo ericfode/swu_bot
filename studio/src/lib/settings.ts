@@ -15,6 +15,9 @@ export interface Settings {
     score: string | null;
     perspective: Perspective;
     speed: number;
+    /** Sound is enabled by a user gesture for this viewer session. */
+    sound: boolean;
+    volume: number;
     /** bumps when a card-art source changes, so cards re-resolve their images */
     artVersion: number;
     setArt: (v: boolean) => void;
@@ -22,15 +25,17 @@ export interface Settings {
     setScore: (v: string | null) => void;
     setPerspective: (v: Perspective) => void;
     setSpeed: (v: number) => void;
+    setSound: (v: boolean) => void;
+    setVolume: (v: number) => void;
 }
 
-type Saved = Pick<Settings, 'art' | 'perspective' | 'speed' | 'score'>;
+type Saved = Pick<Settings, 'art' | 'perspective' | 'speed' | 'score' | 'volume'>;
 
 function load(key: string): Partial<Saved> {
     try {
         // earlier builds also saved 'lens' (card values on or off for every game): no longer applied
-        const { art, perspective, speed, score } = JSON.parse(localStorage.getItem(key) ?? '{}') ?? {};
-        return { art, perspective, speed, ...(typeof score === 'string' ? { score } : {}) };
+        const { art, perspective, speed, score, volume } = JSON.parse(localStorage.getItem(key) ?? '{}') ?? {};
+        return { art, perspective, speed, ...(Number.isFinite(volume) ? { volume } : {}), ...(typeof score === 'string' ? { score } : {}) };
     } catch {
         return {};
     }
@@ -40,7 +45,7 @@ function save(key: string | null, s: Saved) {
         return;
     }
     try {
-        localStorage.setItem(key, JSON.stringify({ art: s.art, perspective: s.perspective, speed: s.speed, score: s.score }));
+        localStorage.setItem(key, JSON.stringify({ art: s.art, perspective: s.perspective, speed: s.speed, score: s.score, volume: s.volume }));
     } catch {
         // storage blocked: settings just don't persist
     }
@@ -64,11 +69,19 @@ export function createSettingsStore(persistKey: string | null = null, initial: P
         artVersion: 0,
         perspective: saved.perspective ?? 'god',
         speed: saved.speed ?? 1,
+        sound: false,
+        volume: Number.isFinite(saved.volume) ? Math.max(0, Math.min(1, saved.volume!)) : .35,
         setArt: (art) => (set({ art }), save(persistKey, { ...get(), art })),
         setLens: (lens) => set({ lens }),
         setScore: (score) => (set({ score }), save(persistKey, { ...get(), score })),
         setPerspective: (perspective) => (set({ perspective }), save(persistKey, { ...get(), perspective })),
-        setSpeed: (speed) => (set({ speed }), save(persistKey, { ...get(), speed }))
+        setSpeed: (speed) => (set({ speed }), save(persistKey, { ...get(), speed })),
+        setSound: (sound) => set({ sound }),
+        setVolume: (value) => {
+            const volume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+            set({ volume });
+            save(persistKey, { ...get(), volume });
+        }
     }));
     live.add(store);
     return store;
@@ -113,6 +126,9 @@ export function setEverywhere(patch: Partial<Saved & Pick<Settings, 'lens'>>) {
         }
         if (patch.speed != null) {
             st.setSpeed(patch.speed);
+        }
+        if (patch.volume != null) {
+            st.setVolume(patch.volume);
         }
     }
 }
