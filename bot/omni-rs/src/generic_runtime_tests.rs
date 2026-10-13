@@ -1737,3 +1737,189 @@ fn confirmed_attack_enables_relationship_hp_aura_before_damage_and_cleans_up_aft
     s=e.apply(&s,&e.card_action(&s,attacker)).unwrap();assert_eq!(s.decision,Decision::AttackTarget);assert!(s.players[1].ground.contains(defender));assert_eq!(s.attack_source,0);
     s=e.apply(&s,&e.card_action(&s,defender)).unwrap();assert!(s.players[1].discard.contains(defender));assert_eq!(s.card(attacker).damage,0);assert_eq!(s.card(base).damage,0);assert_eq!(s.attack_source,0);assert_eq!(s.attack_defender,0);
 }
+
+#[test]
+fn aot_pilot_programs_execute_directly_and_match_forced_interpreter() {
+    for code in ["TWI_124", "TWI_170"] {
+        let mut e=engine();
+        e.set_rules_instrumentation(true);
+        let mut s=board(&e);
+        let target=if code=="TWI_124" {unit(&e,&mut s,Seat::P1,"LOF_254")}else{s.players[1].base};
+        let event=hand(&e,&mut s,code);
+        let index=e.def(&s,event).programs.card[0] as usize;
+        assert!(e.catalogue.as_ref().unwrap().programs[index].executable.is_ok());
+        // This focused pool admits only the pilot execution programs.
+        for d in &mut e.definitions {if d.code!=code {d.programs=Default::default();}}
+        e.set_rules_backend(RulesBackend::Aot).unwrap();
+        let prompt=e.apply(&s,&e.card_action(&s,event)).unwrap();
+        let actual=e.apply(&prompt,&e.card_action(&prompt,target)).unwrap();
+        let hits=e.rules_hits.lock().unwrap()[&index];
+        assert!(hits[0]>0);assert_eq!(hits[1],0);
+        e.rules_hits.lock().unwrap().clear();
+        e.set_rules_backend(RulesBackend::Interpreter).unwrap();
+        let other_prompt=e.apply(&s,&e.card_action(&s,event)).unwrap();
+        assert_eq!(e.snapshot(&prompt),e.snapshot(&other_prompt));
+        assert_eq!(e.legal_actions(&prompt),e.legal_actions(&other_prompt));
+        let expected=e.apply(&other_prompt,&e.card_action(&other_prompt,target)).unwrap();
+        assert_eq!(e.snapshot(&actual),e.snapshot(&expected));
+        let hits=e.rules_hits.lock().unwrap()[&index];assert_eq!(hits[0],0);assert!(hits[1]>0);
+        if code=="TWI_124" {assert_eq!(actual.card(target).phase_power,2);assert_eq!(actual.card(target).phase_hp,2);} else {assert_eq!(actual.card(target).damage,2);}
+    }
+}
+#[test]
+fn aot_identity_is_content_based_and_unknown_programs_have_explicit_fallback() {
+    let e=engine();let c=e.catalogue.as_ref().unwrap();
+    let index=c.cards["TWI_170"].card[0] as usize;
+    let p=&c.programs[index];let bytes=serde_json::to_vec(p).unwrap();
+    let hash=format!("{:x}",Sha256::digest(&bytes));
+    assert_eq!(generated_backend(&hash,&bytes),p.executable);
+    assert!(generated_backend(&hash,b"changed operand").is_err());
+    let mut value:serde_json::Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+    let card=value["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["setCode"]=="TWI_170").unwrap();
+    card["abilities"]["card"][0]["effect"]["amount"]["value"]=serde_json::json!(3);
+    let mut external=Engine::from_catalogue_value(&value).unwrap();
+    let mut s=board(&external);let target=s.players[1].base;let event=hand(&external,&mut s,"TWI_170");
+    assert!(external.set_rules_backend(RulesBackend::Aot).unwrap_err().contains("AOT backend unavailable"));
+    external.set_rules_backend(RulesBackend::Auto).unwrap();
+    let prompt=external.apply(&s,&external.card_action(&s,event)).unwrap();
+    let actual=external.apply(&prompt,&external.card_action(&prompt,target)).unwrap();assert_eq!(actual.card(target).damage,3);
+}
+
+#[test]
+fn generated_expression_values_match_interpreter_bindings_and_live_changes() {
+    let mut e = engine();
+    let mut s = board(&e);
+    let own = unit(&e, &mut s, Seat::P1, "HMW_164");
+    let enemy = unit(&e, &mut s, Seat::P2, "SEC_114");
+    let other = unit(&e, &mut s, Seat::P1, "LOF_256");
+    unit(&e, &mut s, Seat::P2, "JTL_052");
+    hand(&e, &mut s, "TWI_124");
+    let manifest: Vec<Value> = serde_json::from_str(GENERATED_EXPRESSIONS).unwrap();
+    let generated: Vec<_> = manifest.iter().filter(|v| v["index"].is_u64()).collect();
+    assert!(generated.len() > 10);
+    for phase in 0..3 {
+        s.card_mut(own).damage = phase;
+        s.card_mut(enemy).exhausted = phase != 0;
+        s.card_mut(other).exhausted = phase == 2;
+        s.attack_source = if phase == 1 { own } else { 0 };
+        s.attack_defender = if phase == 1 { enemy } else { 0 };
+        s.ability_result = phase;
+        for row in &generated {
+            let expr: Expr = serde_json::from_value(row["expression"].clone()).unwrap();
+            let bytes = serde_json::to_vec(&expr).unwrap();
+            let hash = format!("{:x}", Sha256::digest(&bytes));
+            let index = generated_expression_backend(&hash, &bytes).unwrap();
+            assert_eq!(Some(index as u64), row["index"].as_u64());
+            assert_eq!(generated_expression_backend(&hash, b"different canonical expression"), None);
+            for (source, target, card, affected) in [
+                (own, enemy, other, own),
+                (enemy, own, enemy, other),
+                (other, 0, 0, enemy),
+            ] {
+                e.set_rules_backend(RulesBackend::Interpreter).unwrap();
+                let expected = e.eval_with_binding(&s, source, target, card, affected, &expr);
+                e.set_rules_backend(RulesBackend::Auto).unwrap();
+                let actual = e.generated_expression(&s, source, target, card, affected, index);
+                assert_eq!(actual, expected, "phase {phase}, bindings {source}/{target}/{card}/{affected}, expression {}", row["expression"]);
+            }
+        }
+    }
+}
+
+#[test]
+fn live_expression_dispatch_is_instrumented_only_on_request_and_unknown_content_falls_back() {
+    let mut e = engine();
+    let mut s = board(&e);
+    let source = unit(&e, &mut s, Seat::P1, "JTL_052");
+    s.card_mut(source).damage = 2;
+    let power = e.power(&s, source, false);
+    assert_eq!(*e.expression_hits.lock().unwrap(), [0, 0]);
+    e.set_rules_instrumentation(true);
+    assert_eq!(e.power(&s, source, false), power);
+    let hits = *e.expression_hits.lock().unwrap();
+    assert!(hits[0] > 0);
+    assert_eq!(hits[1], 0);
+    *e.expression_hits.lock().unwrap() = [0, 0];
+    e.set_rules_backend(RulesBackend::Interpreter).unwrap();
+    assert_eq!(e.power(&s, source, false), power);
+    let hits = *e.expression_hits.lock().unwrap();
+    assert_eq!(hits[0], 0);
+    assert!(hits[1] > 0);
+
+    let unknown: Expr = serde_json::from_value(json!({"kind":"binary","op":"+","left":{"kind":"ref","path":["modifierTarget","damage"]},"right":{"kind":"const","value":917}})).unwrap();
+    let bytes = serde_json::to_vec(&unknown).unwrap();
+    assert_eq!(crate::expression_backend(&bytes), None);
+    assert_eq!(e.eval_live_stat(&s, source, source, &unknown), Eval::Number(919));
+    e.set_rules_backend(RulesBackend::Auto).unwrap();
+    assert_eq!(e.eval_live_stat(&s, source, source, &unknown), Eval::Number(919));
+}
+#[test]
+fn constant_candidate_filter_preserves_live_registration_sides_activation_and_order() {
+    // Synthetic registration regression: existing Karabast references establish
+    // these lifetime rules; this isolates the candidate scan from card identities.
+    let mut e = engine();
+    let mut s = board(&e);
+    let target = unit(&e, &mut s, Seat::P1, "LOF_256");
+    let hidden = add(&e, &mut s, Seat::P1, "LOF_254");
+    s.players[0].hand.push(hidden).unwrap();
+    let first = unit(&e, &mut s, Seat::P1, "LOF_254");
+    let second = unit(&e, &mut s, Seat::P1, "ASH_029");
+    for id in [target, first, second] {
+        e.definitions[s.card(id).def as usize].programs.card.clear();
+    }
+    for _ in 0..20 {
+        let resource = add(&e, &mut s, Seat::P1, "LOF_256");
+        s.players[0].resources.push(resource).unwrap();
+    }
+    let observed = |engine: &Engine, state: &State, keywords| {
+        engine.constant_effects(state, target, keywords).into_iter()
+            .map(|(source, effect)| (source, serde_json::to_value(effect).unwrap()["kind"].as_str().unwrap().to_owned()))
+            .collect::<Vec<_>>()
+    };
+    assert!(observed(&e, &s, false).is_empty());
+    let stat = json!({"trigger":"constant","title":"Late stat registration",
+        "targetResolver":{"owner":"self","type":"unit","zone":"arena"},
+        "condition":{"kind":"binary","op":">","left":{"kind":"ref","path":["source","damage"]},"right":{"kind":"const","value":0}},
+        "effect":{"kind":"modifyStats","target":"chosen","duration":"persistent","power":{"kind":"const","value":1},"hp":{"kind":"const","value":0}}});
+    death_program(&mut e, &s, first, stat.clone());
+    let keyword = json!({"trigger":"constant","title":"Late keyword registration",
+        "targetResolver":{"owner":"self","type":"unit","zone":"arena"},
+        "effect":{"kind":"gainKeyword","target":"chosen","duration":"persistent","keyword":"sentinel"}});
+    death_program(&mut e, &s, first, keyword.clone());
+    death_program(&mut e, &s, second, keyword.clone());
+    let gain = |id| (id, "gainKeyword".to_owned());
+    let stats = |id| (id, "modifyStats".to_owned());
+    assert_eq!(observed(&e, &s, false), vec![gain(first), gain(second)]);
+    s.card_mut(first).damage = 1;
+    assert_eq!(observed(&e, &s, false), vec![stats(first), gain(first), gain(second)]);
+    assert_eq!(observed(&e, &s, true), vec![gain(first), gain(second)]);
+    s.disabled_ongoing_source = first;
+    assert_eq!(observed(&e, &s, false), vec![gain(second)]);
+    s.disabled_ongoing_source = 0;
+    s.source = first;
+    s.decision = Decision::Unique;
+    assert_eq!(observed(&e, &s, false), vec![gain(second)]);
+    s.decision = Decision::Window;
+    s.source = 0;
+    let upgrade = add(&e, &mut s, Seat::P2, "HMW_096");
+    e.attach(&mut s, upgrade, target);
+    assert_eq!(observed(&e, &s, false), vec![stats(first), gain(first), gain(second), gain(upgrade)]);
+    s.source = upgrade;
+    s.decision = Decision::Unique;
+    assert_eq!(observed(&e, &s, false), vec![stats(first), gain(first), gain(second)]);
+    s.source = 0;
+    s.decision = Decision::Window;
+    e.detach(&mut s, upgrade);
+    let leader = s.players[0].leader;
+    let ability: crate::ability_ir::Ability = serde_json::from_value(keyword).unwrap();
+    let index = e.catalogue.as_ref().unwrap().programs.len() as u16;
+    e.catalogue.as_mut().unwrap().programs.push(Program::compile(&ability).unwrap());
+    e.definitions[s.card(leader).def as usize].programs.unit.push(index);
+    assert_eq!(observed(&e, &s, false), vec![stats(first), gain(first), gain(second)]);
+    s.card_mut(leader).deployed = true;
+    e.add_arena(&mut s, leader).unwrap();
+    assert_eq!(observed(&e, &s, false), vec![gain(leader), stats(first), gain(first), gain(second)]);
+    e.leave_play(&mut s, leader).unwrap();
+    e.leave_play(&mut s, first).unwrap();
+    assert_eq!(observed(&e, &s, false), vec![gain(second)]);
+}

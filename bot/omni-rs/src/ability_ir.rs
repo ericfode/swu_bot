@@ -12,7 +12,7 @@ pub const MAX_GROUP_RECORDS: usize = 32;
 pub const MAX_GROUP_OPS: usize = 128;
 pub const MAX_ABILITY_NESTING: usize = 8;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Expr {
     Array {
@@ -48,16 +48,73 @@ pub enum Expr {
         #[serde(default)]
         args: Vec<Expr>,
     },
+    /// Runtime attachment only: serialized content remains the portable expression.
+    /// Raw IR cannot select an executable index.
+    #[serde(untagged, skip_deserializing)]
+    Compiled(CompiledExpr),
+}
+// Keep deserialization strictly tagged. Deriving it on Expr with the runtime
+// untagged variant would erase useful unknown-kind/field diagnostics, even when
+// that variant is marked skip_deserializing. The remote derive constructs Expr
+// directly and exposes only its original portable variants to raw IR.
+#[derive(Deserialize)]
+#[allow(dead_code)]
+#[serde(remote = "Expr", tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+enum PortableExpr {
+    Array { items: Vec<Expr> },
+    Math { name: String, args: Vec<Expr> },
+    Const { value: Value },
+    Ref { path: Vec<String> },
+    Binary { op: String, left: Box<Expr>, right: Box<Expr> },
+    Unary { op: String, value: Box<Expr> },
+    Conditional { condition: Box<Expr>, then: Box<Expr>, r#else: Box<Expr> },
+    Query {
+        name: String,
+        receiver: Box<Expr>,
+        #[serde(default)]
+        args: Vec<Expr>,
+    },
+}
+impl<'de> Deserialize<'de> for Expr {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        PortableExpr::deserialize(deserializer)
+    }
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(transparent)]
+pub struct CompiledExpr {
+    pub(crate) original: Box<Expr>,
+    #[serde(skip)]
+    pub(crate) index: usize,
 }
 impl Expr {
+    /// Inspect the portable expression, independent of its executable attachment.
+    pub fn original(&self) -> &Self {
+        match self {
+            Self::Compiled(compiled) => compiled.original.original(),
+            _ => self,
+        }
+    }
+    fn bind_compiled(&mut self) {
+        if matches!(self, Self::Compiled(_)) { return; }
+        // Binding happens only after admission. No serialization or content lookup
+        // is performed while a search evaluates this expression.
+        let bytes = serde_json::to_vec(self).expect("portable expressions serialize");
+        if let Some(index) = crate::expression_backend(&bytes) {
+            let original = Box::new(std::mem::replace(self, Self::Const { value: Value::Null }));
+            *self = Self::Compiled(CompiledExpr { original, index });
+        }
+    }
     fn references_title(&self) -> bool {
         match self {
+            Self::Compiled(compiled) => compiled.original.references_title(),
             Self::Ref {path}=>path.last().is_some_and(|p|p=="title"),
             Self::Array {items}=>items.iter().any(Self::references_title),Self::Math {args,..}=>args.iter().any(Self::references_title),Self::Unary {value,..}=>value.references_title(),Self::Binary {left,right,..}=>left.references_title()||right.references_title(),Self::Conditional {condition,then,r#else}=>condition.references_title()||then.references_title()||r#else.references_title(),Self::Query {receiver,args,..}=>receiver.references_title()||args.iter().any(Self::references_title),_=>false,
         }
     }
     fn depends_on_stats(&self) -> bool {
         match self {
+            Self::Compiled(compiled) => compiled.original.depends_on_stats(),
             Self::Const { .. } => false,
             Self::Ref { path } => path
                 .iter()
@@ -86,6 +143,7 @@ impl Expr {
     }
     fn depends_on_keywords(&self) -> bool {
         match self {
+            Self::Compiled(compiled) => compiled.original.depends_on_keywords(),
             Self::Const { .. } => false,
             Self::Ref { path } => path
                 .iter()
@@ -113,13 +171,14 @@ impl Expr {
         }
     }
     fn live_only(&self)->bool {
-        match self {Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
+        match self {Self::Compiled(compiled)=>compiled.original.live_only(),Self::Ref {path}=>path.first().is_some_and(|p|p=="modifierTarget"),Self::Query {name,receiver,args}=>name=="resourcePairs"||receiver.live_only()||args.iter().any(Self::live_only),Self::Binary {left,right,..}=>left.live_only()||right.live_only(),Self::Unary {value,..}=>value.live_only(),Self::Conditional {condition,then,r#else}=>condition.live_only()||then.live_only()||r#else.live_only(),Self::Array {items}|Self::Math {args:items,..}=>items.iter().any(Self::live_only),_=>false}
     }
     fn live_stat_bounds(&self)->Result<(i64,i64),String> {
-        fn root(e:&Expr,paths:&[&[&str]])->bool {matches!(e,Expr::Ref {path} if paths.iter().any(|p|path.iter().map(String::as_str).collect::<Vec<_>>()==*p))}
+        fn root(e:&Expr,paths:&[&[&str]])->bool {matches!(e.original(),Expr::Ref {path} if paths.iter().any(|p|path.iter().map(String::as_str).collect::<Vec<_>>()==*p))}
         fn predicate(e:&Expr,depth:usize,identity:bool)->Result<(),String> {
             if depth>24 {return Err("live predicate depth exceeds capacity".into());}
             match e {
+                Expr::Compiled(compiled)=>predicate(&compiled.original,depth,identity),
                 Expr::Const {value} if value.is_boolean()||value.is_string()||value.as_i64().is_some_and(|n|(-1000..=1000).contains(&n))=>Ok(()),
                 Expr::Ref {path} if (path.len()==2 && path[0]=="card" && ["damage","exhausted","unique","zoneName"].contains(&path[1].as_str())) || (identity && path.len()==1 && ["card","source","modifierTarget"].contains(&path[0].as_str()))=>Ok(()),
                 Expr::Unary {op,value} if op=="!"=>predicate(value,depth+1,true),
@@ -137,6 +196,7 @@ impl Expr {
         fn walk(e:&Expr,depth:usize)->Result<(i64,i64),String> {
             if depth>24 {return Err("live stat depth exceeds capacity".into());}
             let range=match e {
+                Expr::Compiled(compiled)=>return walk(&compiled.original,depth),
                 Expr::Const {value}=>{let n=value.as_i64().filter(|n|(-1000..=1000).contains(n)).ok_or("live stats require bounded integer literals")?;(n,n)},
                 Expr::Ref {path} if path==&["modifierTarget","damage"]=>(0,65535),
                 Expr::Ref {path} if path==&["modifierTarget","controller","resources","length"] || (path.len()==3&&["player","opponent"].contains(&path[0].as_str())&&["resources","hand"].contains(&path[1].as_str())&&path[2]=="length")=>(0,64),
@@ -156,9 +216,10 @@ impl Expr {
         }
     }
     pub fn validate(&self) -> Result<(), String> {
-        fn positive(e:&Expr)->bool {match e {Expr::Query {name,receiver,args}=>name=="isDefending" && args.is_empty() && matches!(receiver.as_ref(),Expr::Ref {path} if path==&["card"]),Expr::Binary {op,left,right} if op=="&&"=>positive(left)||positive(right),_=>false}}
+        fn positive(e:&Expr)->bool {match e.original() {Expr::Query {name,receiver,args}=>name=="isDefending" && args.is_empty() && matches!(receiver.as_ref(),Expr::Ref {path} if path==&["card"]),Expr::Binary {op,left,right} if op=="&&"=>positive(left)||positive(right),_=>false}}
         fn guard(e:&Expr,defending:bool)->Result<(),String> {
             match e {
+                Expr::Compiled(compiled)=>guard(&compiled.original,defending),
                 Expr::Ref {path} if path.iter().any(|p|p=="activeAttack") => {if defending && path==&["card","activeAttack","attacker"] {Ok(())}else{Err("active attacker reference requires a dominating card.isDefending guard".into())}},
                 Expr::Binary {op,left,right}=>{guard(left,defending)?;guard(right,defending||(op=="&&"&&positive(left)))},
                 Expr::Query {receiver,args,..}=>{guard(receiver,defending)?;for arg in args {guard(arg,false)?;}Ok(())},
@@ -171,6 +232,7 @@ impl Expr {
     pub fn validate_number(&self) -> Result<(), String> {
         self.validate()?;
         let numeric = match self {
+            Self::Compiled(compiled) => compiled.original.validate_number().is_ok(),
             Self::Array { .. } => false,
             Self::Math { name, args } => {
                 ["min", "max"].contains(&name.as_str())
@@ -217,6 +279,7 @@ impl Expr {
         }
         let sub = |e: &Expr| e.validate_depth(depth + 1);
         match self {
+            Self::Compiled(compiled) => compiled.original.validate_depth(depth),
             Self::Array { items } => {
                 for item in items {
                     sub(item)?;
@@ -361,6 +424,7 @@ impl Target {
             Self::Expression(e) => {
                 fn is_target(e: &Expr) -> bool {
                     match e {
+                        Expr::Compiled(compiled) => is_target(&compiled.original),
                         Expr::Ref { path } => matches!(
                             path.iter()
                                 .map(String::as_str)
@@ -413,7 +477,7 @@ impl TargetResolver {
     pub fn max_targets(&self) -> Result<usize, String> {
         match self.mode.as_deref() {
             None | Some("single") if self.count.is_none() => Ok(1),
-            Some("upTo") => match &self.count {
+            Some("upTo") => match self.count.as_ref().map(Expr::original) {
                 Some(Expr::Const { value }) if value.as_u64().is_some_and(|n| (1..=3).contains(&n)) => Ok(value.as_u64().unwrap() as usize),
                 _ => Err("UpTo selectors require literal counts from one to three".into()),
             },
@@ -547,6 +611,52 @@ pub enum Effect {
         target_resolver: TargetResolver,
     },
 }
+impl Target {
+    fn visit_expression_roots_mut(&mut self, visit: &mut impl FnMut(&mut Expr)) {
+        if let Self::Expression(expression) = self { visit(expression); }
+    }
+}
+impl TargetResolver {
+    fn visit_expression_roots_mut(&mut self, visit: &mut impl FnMut(&mut Expr)) {
+        if let Some(predicate) = &mut self.predicate { visit(predicate); }
+        if let Some(count) = &mut self.count { visit(count); }
+    }
+}
+impl Effect {
+    fn visit_expression_roots_mut(&mut self, visit: &mut impl FnMut(&mut Expr)) {
+        match self {
+            Self::DiscardOwnHand { amount, target } | Self::DiscardDeck { amount, target }
+            | Self::CreateTokenUnit { amount, target, .. } | Self::Damage { amount, target }
+            | Self::Heal { amount, target } | Self::Draw { amount, target }
+            | Self::ReadyResources { amount, target } | Self::GiveShield { amount, target }
+            | Self::GiveExperience { amount, target } | Self::GainKeyword { amount, target, .. } => {
+                visit(amount); target.visit_expression_roots_mut(visit);
+            }
+            Self::ReturnToHand { target } | Self::LoseKeyword { target, .. }
+            | Self::Ready { target } | Self::Exhaust { target } | Self::Defeat { target } => {
+                target.visit_expression_roots_mut(visit);
+            }
+            Self::ModifyStats { target, power, hp, .. } => {
+                target.visit_expression_roots_mut(visit); visit(power); visit(hp);
+            }
+            Self::Select { target_resolver, effect } => {
+                target_resolver.visit_expression_roots_mut(visit);
+                effect.visit_expression_roots_mut(visit);
+            }
+            Self::Sequence { effects } | Self::Simultaneous { effects } | Self::PhaseModifiers { effects } => {
+                for effect in effects { effect.visit_expression_roots_mut(visit); }
+            }
+            Self::Conditional { condition, on_true, on_false } => {
+                visit(condition); on_true.visit_expression_roots_mut(visit);
+                if let Some(effect) = on_false { effect.visit_expression_roots_mut(visit); }
+            }
+            Self::DistributeHealing { amount, target_resolver, .. } => {
+                visit(amount); target_resolver.visit_expression_roots_mut(visit);
+            }
+            Self::NoAction => {}
+        }
+    }
+}
 fn one() -> Expr {
     Expr::number(1)
 }
@@ -589,7 +699,7 @@ pub struct Sides {
     pub card: Vec<Ability>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Instruction {
     /// All then/sequence subwindows pass registrations to this initiating ability window.
     EndStep,
@@ -602,7 +712,7 @@ pub enum Instruction {
     Group(Effect),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Program {
     pub title: String,
     pub context_title: Vec<Expr>,
@@ -614,8 +724,25 @@ pub struct Program {
     pub condition: Option<Expr>,
     pub instructions: Vec<Instruction>,
     pub event_end: u8,
+    #[serde(skip)]
+    pub executable: Result<usize, &'static str>,
 }
 impl Program {
+    pub(crate) fn visit_expression_roots_mut(&mut self, visit: &mut impl FnMut(&mut Expr)) {
+        for fragment in &mut self.context_title { visit(fragment); }
+        for cost in &mut self.costs {
+            if let Cost::Resources { amount } = cost { visit(amount); }
+        }
+        if let Some(condition) = &mut self.condition { visit(condition); }
+        for instruction in &mut self.instructions {
+            match instruction {
+                Instruction::Select(resolver) => resolver.visit_expression_roots_mut(visit),
+                Instruction::Conditional { condition, .. } => visit(condition),
+                Instruction::Apply(effect) | Instruction::Group(effect) => effect.visit_expression_roots_mut(visit),
+                Instruction::EndStep | Instruction::Commit | Instruction::IfResult { .. } | Instruction::Jump { .. } => {}
+            }
+        }
+    }
     pub fn compile(ability: &Ability) -> Result<Self, String> {
         // Deck discard has per-card events plus an aggregate event. The scalar
         // result is not a modeled engine event payload; reject payload captures.
@@ -649,6 +776,7 @@ impl Program {
         if ability.context_title.len() > 32 { return Err("context title fragment count exceeds capacity".into()); }
         fn title_literal_bytes(e: &Expr) -> usize {
             match e {
+                Expr::Compiled(compiled) => title_literal_bytes(&compiled.original),
                 Expr::Const {value} => value.as_str().map_or(0, str::len),
                 Expr::Array {items} => items.iter().map(title_literal_bytes).sum(),
                 Expr::Math {args, ..} => args.iter().map(title_literal_bytes).sum(),
@@ -739,6 +867,7 @@ impl Program {
             condition: ability.condition.clone(),
             instructions: vec![],
             event_end:0,
+            executable: Err("program has not been compiled"),
         };
         if let Some(e) = &p.condition {
             e.validate()?;
@@ -774,6 +903,8 @@ impl Program {
         if p.instructions.len() > MAX_PROGRAM_INSTRUCTIONS {
             return Err("ability program exceeds instruction capacity".into());
         }
+        let bytes=serde_json::to_vec(&p).map_err(|e|e.to_string())?;
+        p.executable=crate::program_backend(&bytes);
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
@@ -824,16 +955,16 @@ impl Program {
     }
     fn scalar_hand_amount(amount:&Expr,target:&Target)->Result<usize,String> {
         if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("hand effects require a scalar player target".into());}
-        match amount {Expr::Const {value}=>value.as_u64().filter(|n|(1..=2).contains(n)).map(|n|n as usize).ok_or("hand effect amount must be 1..2".into()),_=>Err("hand effects require literal bounded amounts".into())}
+        match amount.original() {Expr::Const {value}=>value.as_u64().filter(|n|(1..=2).contains(n)).map(|n|n as usize).ok_or("hand effect amount must be 1..2".into()),_=>Err("hand effects require literal bounded amounts".into())}
     }
     fn scalar_deck_amount(amount:&Expr,target:&Target)->Result<usize,String> {
         if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("deck discard requires a scalar player target".into());}
-        match amount {Expr::Const {value}=>value.as_u64().filter(|n|*n<=5).map(|n|n as usize).ok_or("deck discard amount must be 0..5".into()),_=>Err("deck discard requires a literal bounded amount".into())}
+        match amount.original() {Expr::Const {value}=>value.as_u64().filter(|n|*n<=5).map(|n|n as usize).ok_or("deck discard amount must be 0..5".into()),_=>Err("deck discard requires a literal bounded amount".into())}
     }
     fn token_unit_amount(token_type:&str,amount:&Expr,target:&Target)->Result<usize,String> {
         if !["battleDroid","cloneTrooper","beast","spy","tieFighter","xwing","mandalorian"].contains(&token_type) {return Err("unsupported created token unit type".into());}
         if !matches!(target,Target::Name(name) if ["ownPlayer","enemyPlayer"].contains(&name.as_str())) {return Err("token creation requires a scalar player target".into());}
-        match amount {Expr::Const {value}=>value.as_u64().filter(|n|(1..=5).contains(n)).map(|n|n as usize).ok_or("token creation amount must be 1..5".into()),_=>Err("token creation requires a literal bounded amount".into())}
+        match amount.original() {Expr::Const {value}=>value.as_u64().filter(|n|(1..=5).contains(n)).map(|n|n as usize).ok_or("token creation amount must be 1..5".into()),_=>Err("token creation requires a literal bounded amount".into())}
     }
     fn validate_phase_modifiers(&self, effects: &[Effect]) -> Result<(), String> {
         if effects.is_empty() || effects.len() > 8 { return Err("phase modifier list exceeds bounded capacity".into()); }
@@ -854,6 +985,7 @@ impl Program {
     fn validate_group(&self, effect: &Effect, targets: usize) -> Result<(), String> {
         fn dependent_in_scope(e: &Expr, card_bound: bool) -> bool {
             match e {
+                Expr::Compiled(compiled) => dependent_in_scope(&compiled.original,card_bound),
                 Expr::Ref {path} => matches!(path.first().map(String::as_str), Some("target" | "targets")) || (!card_bound && path.first().is_some_and(|p|p=="card")),
                 Expr::Array {items} => items.iter().any(|e|dependent_in_scope(e,card_bound)),
                 Expr::Math {args, ..} => args.iter().any(|e|dependent_in_scope(e,card_bound)),
@@ -1230,6 +1362,14 @@ impl Catalogue {
                 }
             }
         }
+        // Preserve structural admission and canonical program hashes before
+        // adding runtime attachments. Unsupported expression roots stay portable.
+        for program in &mut catalogue.programs {
+            program.visit_expression_roots_mut(&mut Expr::bind_compiled);
+        }
+        for card in catalogue.cards.values_mut() {
+            if let Some(condition) = &mut card.attach_condition { condition.bind_compiled(); }
+        }
         Ok(catalogue)
     }
 }
@@ -1238,6 +1378,63 @@ impl Catalogue {
 mod tests {
     use super::*;
     use serde_json::json;
+    fn attach_test_executable(expression: &mut Expr) {
+        let original = Box::new(std::mem::replace(expression, Expr::number(0)));
+        *expression = Expr::Compiled(CompiledExpr { original, index: usize::MAX });
+    }
+    #[test]
+    fn compiled_expression_preserves_program_canonical_bytes_and_clone() {
+        let ability: Ability = serde_json::from_value(json!({
+            "trigger":"action", "title":"Identity witness", "contextTitle":[{"kind":"const","value":"Witness"}],
+            "condition":{"kind":"const","value":true},
+            "costs":[{"kind":"resources","amount":{"kind":"const","value":1}}],
+            "targetResolver":{"type":"unit","predicate":{"kind":"query","name":"isUnit","receiver":{"kind":"ref","path":["card"]}}},
+            "effect":{"kind":"damage","target":"chosen","amount":{"kind":"const","value":1}}
+        })).unwrap();
+        let mut program = Program::compile(&ability).unwrap();
+        let canonical = serde_json::to_vec(&program).unwrap();
+        let executable = program.executable;
+        let mut roots = 0;
+        program.visit_expression_roots_mut(&mut |expression| {
+            let valid = expression.validate();
+            attach_test_executable(expression);
+            assert_eq!(expression.validate(), valid);
+            roots += 1;
+        });
+        assert_eq!(roots, 5);
+        assert_eq!(serde_json::to_vec(&program).unwrap(), canonical);
+        assert_eq!(serde_json::to_vec(&program.clone()).unwrap(), canonical);
+        assert_eq!(program.executable, executable);
+    }
+    #[test]
+    fn compiled_expression_preserves_named_portable_rejections() {
+        for kind in ["arenaSome", "arenaLength", "collection", "compiled"] {
+            let expression = json!({"kind":kind});
+            let expected = format!("unknown variant `{kind}`, expected one of `array`, `math`, `const`, `ref`, `binary`, `unary`, `conditional`, `query`");
+            assert_eq!(serde_json::from_value::<Expr>(expression.clone()).unwrap_err().to_string(), expected);
+            let nested = json!({"kind":"unary", "op":"!", "value":expression});
+            assert_eq!(serde_json::from_value::<Expr>(nested).unwrap_err().to_string(), expected);
+        }
+        let forged = json!({"kind":"const", "value":1, "index":0});
+        assert_eq!(serde_json::from_value::<Expr>(forged).unwrap_err().to_string(), "unknown field `index`, expected `value`");
+    }
+    #[test]
+    fn compiled_expression_is_not_a_raw_ir_variant_or_field() {
+        for value in [
+            json!({"kind":"compiled","original":{"kind":"const","value":1},"index":0}),
+            json!({"kind":"const","value":1,"index":0}),
+            json!({"original":{"kind":"const","value":1},"index":0}),
+        ] { assert!(serde_json::from_value::<Expr>(value).is_err()); }
+        let mut expression = Expr::number(3);
+        attach_test_executable(&mut expression);
+        let bytes = serde_json::to_vec(&expression).unwrap();
+        let portable: Expr = serde_json::from_slice(&bytes).unwrap();
+        assert!(matches!(portable, Expr::Const { .. }));
+        assert_eq!(bytes, serde_json::to_vec(&portable).unwrap());
+        let resolver = TargetResolver { owner: "any".into(), card_type:"unit".into(), arena:None,
+            zone:None, optional:false, predicate:None, mode:Some("upTo".into()), count:Some(expression) };
+        assert_eq!(resolver.max_targets(), Ok(3));
+    }
     #[test]
     fn rejects_unknown_effects_instead_of_ignoring_them() {
         assert!(

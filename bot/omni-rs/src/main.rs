@@ -1,7 +1,7 @@
 use omni_rs::{
     check::{self, open_jsonl, position_labels},
     search::{Limits, Search},
-    Engine, State,
+    Engine, RulesBackend, State,
 };
 use serde_json::{json, Value};
 use std::{
@@ -18,6 +18,7 @@ const HELP: &str = "omni-rs — independent SWU subset simulator and endgame pro
   omni-rs prove <positions.jsonl[.gz]> [--depth 12] [--ms N | --nodes N | --ms-field jsMs] [--pool FILE] [--catalogue FILE]
   omni-rs bench [trace-or-positions.jsonl[.gz]] [--nodes 100000] [--pool FILE] [--catalogue FILE]
   omni-rs catalogue <catalog.json> [--out-pool FILE]
+  omni-rs rules --catalogue FILE [--pool FILE] [--backend auto|interpreter|aot]
 
 Proof depth and nodes count action-window moves; decisions also counts prompt inputs.
 All proof limits are cumulative across iterative depths and both candidate winners.
@@ -27,6 +28,10 @@ and defaults to the first committed trace fixture. Output is JSON (one line per 
 --catalogue loads compiled card programs; --pool optionally restricts their card set
 and binds trace provenance to that pool. Without --catalogue the strict pool is used.
 catalogue reports runtime admission and rejection reasons, not game conformance.
+--backend selects generated Rust with explicit fallback (auto), forced interpreter, or
+aot (requires all programs in the selected pool to have generated backends).
+--rules-receipt FILE
+records actual per-program dispatch counts after check/bench/prove.
 ";
 
 #[derive(Default)]
@@ -42,6 +47,8 @@ impl Args {
             if value.starts_with("--") {
                 let key = value.trim_start_matches("--");
                 if ![
+                    "backend",
+                    "rules-receipt",
                     "pool",
                     "catalogue",
                     "out-pool",
@@ -343,8 +350,17 @@ fn run() -> Result<(), String> {
     if command == "catalogue" {
         return catalogue(&args);
     }
-    let engine = load_engine(&args)?;
-    match command.as_str() {
+    let mut engine = load_engine(&args)?;
+    let backend = match args.flags.get("backend").map(String::as_str).unwrap_or("auto") {
+        "auto" => RulesBackend::Auto,
+        "interpreter" => RulesBackend::Interpreter,
+        "aot" => RulesBackend::Aot,
+        other => return Err(format!("unknown rules backend {other}")),
+    };
+    engine.set_rules_backend(backend)?;
+    engine.set_rules_instrumentation(args.flags.contains_key("rules-receipt"));
+    let outcome = match command.as_str() {
+        "rules" => emit(&engine.rules_backend_report()),
         "check" => {
             if args.positional.is_empty() {
                 return Err(format!("check requires at least one trace file\n{HELP}"));
@@ -366,7 +382,13 @@ fn run() -> Result<(), String> {
         "prove" => prove(&engine, &args),
         "bench" => bench(&engine, &args),
         _ => Err(format!("unknown command {command}\n{HELP}")),
+    };
+    if let Some(file) = args.flags.get("rules-receipt") {
+        let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(file).map_err(|e| format!("{file}: {e}"))?;
+        serde_json::to_writer_pretty(&mut output, &engine.rules_backend_report()).map_err(|e| e.to_string())?;
+        output.write_all(b"\n").map_err(|e| e.to_string())?;
     }
+    outcome
 }
 
 fn main() {
