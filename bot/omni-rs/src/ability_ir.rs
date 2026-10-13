@@ -614,8 +614,15 @@ pub struct Program {
     pub condition: Option<Expr>,
     pub instructions: Vec<Instruction>,
     pub event_end: u8,
+    /// (pc, end) of each selection made inside an effect (selectCard): instructions pc+1..end are its card's own effect.
+    pub select_ends: Vec<(usize, usize)>,
 }
 impl Program {
+    /// Where the effect of the selection at `pc` ends. A selection inside an effect covers its own effect, the way
+    /// forceteki's SelectCardSystem checks only its immediate effect; an ability's target covers the rest of the program.
+    pub fn select_end(&self, pc: usize) -> usize {
+        self.select_ends.iter().find(|(at, _)| *at == pc).map_or(self.instructions.len(), |(_, end)| *end)
+    }
     pub fn compile(ability: &Ability) -> Result<Self, String> {
         // Deck discard has per-card events plus an aggregate event. The scalar
         // result is not a modeled engine event payload; reject payload captures.
@@ -739,6 +746,7 @@ impl Program {
             condition: ability.condition.clone(),
             instructions: vec![],
             event_end:0,
+            select_ends: vec![],
         };
         if let Some(e) = &p.condition {
             e.validate()?;
@@ -1080,9 +1088,10 @@ impl Program {
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::Select { target_resolver, effect } => {
                 if target_resolver.card_type=="upgrade" && (target_resolver.is_multiple() || !matches!(effect.as_ref(),Effect::Defeat {..})) {return Err("upgrade selection supports only scalar defeat".into());}
-                target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone()));
+                target_resolver.validate()?; self.instructions.push(Instruction::Commit); let at=self.instructions.len(); self.instructions.push(Instruction::Select(target_resolver.clone()));
                 if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
                 else { self.compile_effect(effect,depth+1)?; }
+                self.select_ends.push((at, self.instructions.len()));
             }
             Effect::NoAction => self.instructions.push(Instruction::Apply(effect.clone())),
             Effect::ReturnToHand { target } => { target.validate()?; self.instructions.push(Instruction::Apply(effect.clone())); }

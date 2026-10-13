@@ -1737,3 +1737,76 @@ fn confirmed_attack_enables_relationship_hp_aura_before_damage_and_cleans_up_aft
     s=e.apply(&s,&e.card_action(&s,attacker)).unwrap();assert_eq!(s.decision,Decision::AttackTarget);assert!(s.players[1].ground.contains(defender));assert_eq!(s.attack_source,0);
     s=e.apply(&s,&e.card_action(&s,defender)).unwrap();assert!(s.players[1].discard.contains(defender));assert_eq!(s.card(attacker).damage,0);assert_eq!(s.card(base).damage,0);assert_eq!(s.attack_source,0);assert_eq!(s.attack_defender,0);
 }
+#[test]
+fn selection_in_a_sequence_skips_targets_only_later_steps_change() {
+    // Force Illusion (LOF_223): "Exhaust an enemy unit. A friendly unit gains Sentinel for this phase." With every
+    // enemy unit exhausted, forceteki skips the exhaust and asks only for the Sentinel unit.
+    let e=engine();let mut s=board(&e);
+    let own=unit(&e,&mut s,Seat::P1,"LOF_254");let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");s.card_mut(enemy).exhausted=true;
+    let event=hand(&e,&mut s,"LOF_223");
+    let s=e.apply(&s,&e.card_action(&s,event)).unwrap();
+    assert_eq!(s.decision,Decision::AbilityTarget);
+    let targets:Vec<_>=e.legal_actions(&s).iter().filter_map(Action::id).collect();
+    assert_eq!(targets,vec![own]);
+    let s=e.apply(&s,&e.card_action(&s,own)).unwrap();
+    assert!(e.has_keyword(&s,own,"sentinel"));
+    assert!(s.players[0].discard.contains(event));
+}
+#[test]
+fn selection_without_targets_leaves_later_steps_their_effect() {
+    let e=engine();let mut s=board(&e);
+    let own=unit(&e,&mut s,Seat::P1,"LOF_254");
+    let event=hand(&e,&mut s,"LOF_223");
+    let p=*e.def(&s,event).programs.card.first().unwrap();
+    assert!(e.program_has_effect(&s,event,p),"no enemy unit, but the Sentinel step still resolves");
+    s.card_mut(own).present=false;s.players[0].ground=Default::default();
+    assert!(!e.program_has_effect(&s,event,p));
+}
+#[test]
+fn trigger_window_counts_a_triggered_target_that_changes_nothing() {
+    // forceteki builds a triggered ability's target resolvers before it sets the change-required mode, so C-3PO's
+    // On Attack (SEC_015) is offered when every unit is already exhausted, and then resolves with no effect.
+    let e=engine();let mut s=board(&e);
+    let c3po=add(&e,&mut s,Seat::P1,"SEC_015");s.player_mut(Seat::P1).leader=c3po;
+    s.card_mut(c3po).deployed=true;s.card_mut(c3po).epic_used=true;e.add_arena(&mut s,c3po).unwrap();
+    let own=unit(&e,&mut s,Seat::P1,"LOF_254");let enemy=unit(&e,&mut s,Seat::P2,"LOF_256");
+    for id in [c3po,own,enemy] {s.card_mut(id).exhausted=true;}
+    let p=*e.def(&s,c3po).programs.unit.first().unwrap();
+    assert!(!e.program_has_effect(&s,c3po,p),"resolving it changes nothing");
+    assert!(e.trigger_has_effect(&s,c3po,p));
+    assert_eq!(e.program_menu_title(&s,c3po,p),"Exhaust a unit");
+    s.card_mut(own).exhausted=false;
+    assert!(!e.trigger_has_effect(&s,c3po,p),"no other exhausted unit: the condition fails");
+    assert_eq!(e.program_menu_title(&s,c3po,p),"(No effect) Exhaust a unit");
+}
+#[test]
+fn cards_are_admitted_only_with_the_tokens_they_create() {
+    for (token, card) in [("TOKEN_EXPERIENCE", "LAW_037"), ("TOKEN_XWING", "JTL_099")] {
+        assert!(engine().by_code.contains_key(card));
+        let mut catalogue:Value=serde_json::from_slice(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap();
+        let entry=catalogue["cards"].as_array_mut().unwrap().iter_mut().find(|entry|entry["setCode"]==token).unwrap();
+        entry["card"]["cost"]=json!(5000);
+        let e=Engine::from_catalogue_value(&catalogue).unwrap();
+        assert!(!e.by_code.contains_key(token));
+        assert!(!e.by_code.contains_key(card),"{card} creates {token}");
+        assert_eq!(e.rejected_cards().unwrap()[card],format!("creates {token}, which is not admitted"));
+    }
+}
+#[test]
+fn restricted_pools_must_hold_the_tokens_their_cards_create() {
+    let catalogue=include_bytes!("../../card-compiler/generated/catalog.json");
+    let mut pool=engine().compiled_pool().unwrap();
+    pool["cards"].as_array_mut().unwrap().retain(|c|c["setCode"]!="TOKEN_XWING");
+    let err=Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),catalogue).err().unwrap();
+    assert!(err.contains("creates TOKEN_XWING, which the pool omits"),"{err}");
+    pool["cards"].as_array_mut().unwrap().retain(|c|!["JTL_099","JTL_117","JTL_252","JTL_254"].contains(&c["setCode"].as_str().unwrap()));
+    assert!(Engine::from_compiled_pool_bytes(&serde_json::to_vec(&pool).unwrap(),catalogue).is_ok());
+}
+#[test]
+fn bases_cannot_be_upgraded_by_admitted_cards() {
+    // isUpgraded reads only unit upgrades: Fortify, which attaches an upgrade to a base, must stay unadmitted
+    let e=engine();
+    for (code,card) in &e.catalogue.as_ref().unwrap().metadata {
+        assert!(!card["keywords"].as_array().into_iter().flatten().any(|k|k=="fortify"),"{code} has Fortify");
+    }
+}

@@ -64,6 +64,48 @@ enum Trigger {
     Program(usize, u16),
 }
 
+fn token_unit_code(token_type: &str) -> Option<&'static str> {
+    Some(match token_type {
+        "battleDroid" => "TOKEN_BATTLE_DROID",
+        "cloneTrooper" => "TOKEN_CLONE_TROOPER",
+        "beast" => "TOKEN_BEAST",
+        "spy" => "TOKEN_SPY",
+        "tieFighter" => "TOKEN_TIE_FIGHTER",
+        "xwing" => "TOKEN_XWING",
+        "mandalorian" => "TOKEN_MANDALORIAN",
+        _ => return None,
+    })
+}
+/// The token cards a program can create, so a card is admitted (or dealt from a pool) only with them.
+fn created_tokens(program: &Program) -> Vec<String> {
+    fn walk(e: &Effect, out: &mut Vec<String>) {
+        match e {
+            Effect::GiveShield { .. } => out.push("TOKEN_SHIELD".into()),
+            Effect::GiveExperience { .. } => out.push("TOKEN_EXPERIENCE".into()),
+            Effect::CreateTokenUnit { token_type, .. } => out.push(token_unit_code(token_type).map_or_else(|| format!("unsupported token unit {token_type}"), str::to_owned)),
+            Effect::Select { effect, .. } => walk(effect, out),
+            Effect::Sequence { effects } | Effect::Simultaneous { effects } | Effect::PhaseModifiers { effects } => effects.iter().for_each(|e| walk(e, out)),
+            Effect::Conditional { on_true, on_false, .. } => {
+                walk(on_true, out);
+                if let Some(e) = on_false { walk(e, out); }
+            }
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    for i in &program.instructions {
+        if let Instruction::Apply(e) | Instruction::Group(e) = i { walk(e, &mut out); }
+    }
+    out
+}
+/// The first token a card's programs create that `has` lacks.
+fn missing_token(catalogue: &Catalogue, code: &str, has: impl Fn(&str) -> bool) -> Option<String> {
+    let programs = catalogue.cards.get(code)?;
+    programs.card.iter().chain(&programs.leader).chain(&programs.unit)
+        .flat_map(|p| created_tokens(&catalogue.programs[*p as usize]))
+        .find(|token| !has(token))
+}
+
 impl Engine {
     /// Load every fully executable card, retaining explicit reasons for all others.
     pub fn from_catalogue_value(value: &Value) -> Result<Self, String> {
@@ -248,6 +290,15 @@ impl Engine {
                 }
             }
         }
+        // fail closed: a card whose programs create a token that was not admitted (Experience, unit tokens) is rejected
+        let mut lacking: Vec<_> = by_code.keys().filter_map(|code| Some((code.clone(), missing_token(&catalogue, code, |t| by_code.contains_key(t))?))).collect();
+        lacking.sort();
+        for (code, token) in lacking {
+            by_code.remove(&code);
+            catalogue.cards.remove(&code);
+            catalogue.metadata.remove(&code);
+            catalogue.rejected.insert(code, format!("creates {token}, which is not admitted"));
+        }
         Ok(Self {
             pool_hash: format!(
                 "{:x}",
@@ -341,6 +392,14 @@ impl Engine {
         }
         if !included.contains("TOKEN_SHIELD") {
             return Err("pool must include TOKEN_SHIELD".into());
+        }
+        // a pool must hold the tokens its cards create, or a game could put a card in play the pool lacks
+        let mut codes: Vec<_> = included.iter().collect();
+        codes.sort();
+        for code in codes {
+            if let Some(token) = missing_token(catalogue, code, |t| included.contains(t)) {
+                return Err(format!("pool card {code} creates {token}, which the pool omits"));
+            }
         }
         catalogue.metadata.retain(|code, _| included.contains(code));
         engine.pool_hash = format!("{:x}", Sha256::digest(pool_bytes));
@@ -782,6 +841,7 @@ impl Engine {
                             || d.info.is("event")
                             || d.info.is("upgrade"),
                     ),
+                    // a base is never upgraded here: Fortify, the only way to upgrade one, is not admitted
                     "isUpgraded" => {
                         Eval::Bool(s.card(id).shield != 0 || s.card(id).experience != 0 || s.card(id).upgrades!=0)
                     }
@@ -964,16 +1024,18 @@ impl Engine {
         target: CardId,
         p: u16,
         start: usize,
+        end: usize,
         require_change: bool,
     ) -> bool {
         let instructions = &self.program(p).instructions;
         let mut pc = start;
-        while let Some(instruction) = instructions.get(pc) {
+        while let Some(instruction) = instructions.get(pc).filter(|_| pc < end) {
             match instruction {
                 Instruction::EndStep => {}
                 Instruction::Commit => {}
                 Instruction::Select(resolver) => {
-                    return self.matching_targets(s, source, resolver).into_iter().any(
+                    let scope = self.program(p).select_end(pc).min(end);
+                    if self.matching_targets(s, source, resolver).into_iter().any(
                         |candidate| {
                             self.instructions_can_affect(
                                 s,
@@ -981,10 +1043,16 @@ impl Engine {
                                 candidate,
                                 p,
                                 pc + 1,
+                                scope,
                                 require_change,
                             )
                         },
-                    );
+                    ) {
+                        return true;
+                    }
+                    // a selection with no target it can change is skipped, and the steps after it still resolve
+                    pc = scope;
+                    continue;
                 }
                 Instruction::IfResult { .. } => break,
                 Instruction::Apply(effect) | Instruction::Group(effect) => {
@@ -1018,11 +1086,21 @@ impl Engine {
     ) -> Vec<CardId> {
         self.matching_targets(s, source, r)
             .into_iter()
-            .filter(|id| self.instructions_can_affect(s, source, *id, p, pc + 1, require_change))
+            .filter(|id| self.instructions_can_affect(s, source, *id, p, pc + 1, self.program(p).select_end(pc), require_change))
             .collect()
     }
     fn program_has_effect(&self, s: &State, source: CardId, p: u16) -> bool {
         self.program_has_effect_mode(s, source, p, self.program(p).trigger != "action")
+    }
+    /// Whether a trigger window counts this ability as able to resolve (forceteki hasAnyLegalEffects): titles,
+    /// order and the all-no-effect skip. An ability's own target is checked without requiring a change, since
+    /// forceteki builds a triggered ability's target resolvers before it sets the ability's change-required mode.
+    /// Resolving it still requires a change (begin_program), so such a trigger can be ordered and then do nothing.
+    fn trigger_has_effect(&self, s: &State, source: CardId, p: u16) -> bool {
+        match self.program(p).instructions.first() {
+            Some(Instruction::Select(_)) => self.program_has_effect_mode(s, source, p, false),
+            _ => self.program_has_effect(s, source, p),
+        }
     }
     fn program_has_effect_mode(
         &self,
@@ -1038,7 +1116,7 @@ impl Engine {
             Some(Instruction::Apply(Effect::DistributeHealing {
                 target_resolver, ..
             })) => !self.matching_targets(s, source, target_resolver).is_empty(),
-            _ => self.instructions_can_affect(s, source, 0, p, 0, require_change),
+            _ => self.instructions_can_affect(s, source, 0, p, 0, usize::MAX, require_change),
         }
     }
     pub(super) fn program_menu_title(&self, s: &State, source: CardId, p: u16) -> String {
@@ -1052,7 +1130,7 @@ impl Engine {
                 _ => "[object Object]".into(),
             }).collect::<String>()
         };
-        if self.program_has_effect(s, source, p) {
+        if self.trigger_has_effect(s, source, p) {
             title.clone()
         } else {
             format!("(No effect) {title}")
@@ -1364,7 +1442,7 @@ impl Engine {
             s.event_group.records[n]=PreparedEvent {op:op as u16,target:s.player(player).base,amount,hp:fatigue as i32,..PreparedEvent::default()};s.event_group.count+=1;return Ok(());
         }
         if let Effect::CreateTokenUnit {token_type,amount,target,enters_ready}=e {
-            let code=match token_type.as_str() {"battleDroid"=>"TOKEN_BATTLE_DROID","cloneTrooper"=>"TOKEN_CLONE_TROOPER","beast"=>"TOKEN_BEAST","spy"=>"TOKEN_SPY","tieFighter"=>"TOKEN_TIE_FIGHTER","xwing"=>"TOKEN_XWING","mandalorian"=>"TOKEN_MANDALORIAN",_=>return Err("unsupported token unit type".into())};
+            let code=token_unit_code(token_type).ok_or("unsupported token unit type")?;
             let def=*self.by_code.get(code).ok_or("created token definition missing from loaded pool")?;
             let amount=self.effect_amount(s,amount)? as usize;
             let targets=self.effect_targets(s,target);
@@ -2105,7 +2183,7 @@ impl Engine {
     }
     fn death_has_effect(&self,s:&State,e:DeathTrigger)->bool {
         let mut context=*s;context.active=e.player;context.source=e.source;
-        if e.keyword!=0 {self.trigger_effect(&context,e.keyword)}else{self.program_has_effect(&context,e.source,e.program)}
+        if e.keyword!=0 {self.trigger_effect(&context,e.keyword)}else{self.trigger_has_effect(&context,e.source,e.program)}
     }
     fn remove_death(&self,s:&mut State,i:usize)->DeathTrigger {
         let e=s.death_window.entries[i];let n=s.death_window.len as usize;
@@ -2180,7 +2258,7 @@ impl Engine {
         out.extend(self.trigger_bits(s).into_iter().map(Trigger::Keyword));
         out.sort_by_key(|t| !match t {
             Trigger::Keyword(bit) => self.trigger_effect(s, *bit),
-            Trigger::Program(_, p) => self.program_has_effect(s, s.source, *p),
+            Trigger::Program(_, p) => self.trigger_has_effect(s, s.source, *p),
         });
         out
     }
@@ -2225,7 +2303,7 @@ impl Engine {
         if triggers.len() > 1 {
             if triggers.iter().all(|t| match t {
                 Trigger::Keyword(bit) => !self.trigger_effect(s, *bit),
-                Trigger::Program(_, p) => !self.program_has_effect(s, s.source, *p),
+                Trigger::Program(_, p) => !self.trigger_has_effect(s, s.source, *p),
             }) {
                 s.pending_triggers = 0;
                 s.pending_programs = 0;
