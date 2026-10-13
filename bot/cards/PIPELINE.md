@@ -398,6 +398,18 @@ and aura stacking remain explicit gaps. Other Force queries, hooks, costs,
 groups and continuations remain uncovered or runtime-rejected; passing these
 experiments does not establish them.
 
+Force continuation experiments cover optional Force spending before a bounded
+arena defeat wave or an up-to-five Shield selection, plus damage followed by
+Force gain. Both source seats distinguish the live Sith/remaining-HP filter,
+Force-loss stat deaths, captured death effects and owner ordering, Shield
+prevention, empty event commitment without confirmation and captured play abilities
+after unique replacement. Exact selector titles, selected-card toggles, the
+five-card limit, persistent Force identities and ordered native Shield creation
+are asserted. Actual Restore attacks include capped and full-health healing.
+Beast wave membership, repeated Drain copies, natural Shield phase persistence,
+nonlethal Sentinel-dependent HP refresh, controller transfer, reentry and broader
+token replacement remain explicit gaps.
+
 Self-resource experiments cover real event play and ordinary-unit defeat, both
 controllers, optional decline, own/absent/enemy Force, exact paid cost, exhausted
 entry, persistent card identity, repeated copies and natural phase readiness.

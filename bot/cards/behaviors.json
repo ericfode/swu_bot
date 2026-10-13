@@ -165,6 +165,18 @@
       "scope": "The setup and assertions in linked named cases define the scope."
     },
     {
+      "id": "captured-play-after-ambush",
+      "label": "captured play after ambush",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "captured-play-after-lethal-ambush",
+      "label": "captured play after lethal ambush",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
       "id": "card-play",
       "label": "card play",
       "kind": "play",
@@ -173,6 +185,12 @@
     {
       "id": "conditional-create-mandalorian",
       "label": "conditional create mandalorian",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "conditional-inline-upgrade-selection-title",
+      "label": "conditional inline upgrade selection title",
       "kind": "behavior",
       "scope": "The setup and assertions in linked named cases define the scope."
     },
@@ -521,6 +539,12 @@
     {
       "id": "hand-effects",
       "label": "hand effects",
+      "kind": "behavior",
+      "scope": "The setup and assertions in linked named cases define the scope."
+    },
+    {
+      "id": "inline-upgrade-selection",
+      "label": "inline upgrade selection",
       "kind": "behavior",
       "scope": "The setup and assertions in linked named cases define the scope."
     },

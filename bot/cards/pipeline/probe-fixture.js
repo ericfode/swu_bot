@@ -152,6 +152,7 @@ function observe(card, eg) {
     };
 }
 async function fixture(env, pool, scenario, seed) {
+    if (scenario.probe?.family === 'force-continuation') return require('./force-continuation-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'weakness-continuation') return require('./weakness-continuation-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-keyword-set') return require('./arena-keyword-set-probe-fixture').fixture(env, pool, scenario, seed);
     if (scenario.probe?.family === 'arena-damage') return require('./arena-damage-probe-fixture').fixture(env, pool, scenario, seed);
@@ -403,6 +404,8 @@ module.exports = {
     constructProbeFixture,
     buildDeck,
     dependencies: [
+        'bot/cards/pipeline/force-continuation-probes.js',
+        'bot/cards/pipeline/force-continuation-probe-fixture.js',
         'bot/cards/pipeline/weakness-continuation-probes.js',
         'bot/cards/pipeline/weakness-continuation-probe-fixture.js',
         'bot/omni/rs/make-pool.js',

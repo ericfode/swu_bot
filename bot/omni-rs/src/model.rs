@@ -179,14 +179,16 @@ pub enum Decision {
 
 /// Ordered target context retained across suspended event generation.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Selection { pub ids: [CardId; 3], pub len: u8 }
+pub struct Selection { pub ids: [CardId; 5], pub len: u8 }
 impl Selection {
-    pub fn one(id: CardId) -> Self { Self { ids: [id, 0, 0], len: u8::from(id != 0) } }
-    pub fn toggle(&mut self, id: CardId) {
+    pub fn hash_ids(&self)->impl Iterator<Item=CardId>+'_ { self.ids[..if self.len>3 {5}else{3}].iter().copied() }
+    pub fn one(id: CardId) -> Self { Self { ids: [id, 0, 0, 0, 0], len: u8::from(id != 0) } }
+    pub fn toggle(&mut self, id: CardId) -> Result<(), String> {
         if let Some(i) = self.ids[..self.len as usize].iter().position(|v| *v == id) {
             for j in i..self.len as usize - 1 { self.ids[j] = self.ids[j+1]; }
             self.len -= 1; self.ids[self.len as usize] = 0;
-        } else { self.ids[self.len as usize] = id; self.len += 1; }
+        } else { if self.len as usize >= self.ids.len() { return Err("selection capacity exceeded".into()); } self.ids[self.len as usize] = id; self.len += 1; }
+        Ok(())
     }
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -425,7 +427,7 @@ impl State {
         };
         fn context_values(c:&ResolutionContext,put:&mut impl FnMut(u64)) {
             for v in [c.active.index() as u64,c.decision as u64,c.source as u64,c.target as u64,c.ambush as u64,c.after_attack_triggers as u64,c.attack_restore as u64,c.attack_source as u64,c.attack_defender as u64,c.attack_shield_opponent_first as u64,c.pending_triggers as u64,c.trigger_context as u64,c.pending_programs as u64,c.after_attack_programs as u64,c.ability_program as u64,c.ability_pc as u64,c.ability_target as u64,c.ability_result as u64,c.ability_succeeded as u64,c.ability_return as u64,c.ability_committed as u64,c.ability_selection.len as u64] {put(v);}
-            for id in c.ability_selection.ids {put(id as u64);}
+            for id in c.ability_selection.hash_ids() {put(id as u64);}
         }
         fn window_values(w:&DeathWindow,put:&mut impl FnMut(u64)) {
             for v in [w.len as u64,w.initiator.index() as u64,w.player.index() as u64,w.player_chosen as u64,w.group_program as u64,w.group_source as u64,w.group_keyword as u64,w.resolve_all as u64] {put(v);}
@@ -464,12 +466,12 @@ impl State {
         put(self.ability_pc as u64);
         put(self.ability_target as u64);
         put(self.ability_selection.len as u64);
-        for id in self.ability_selection.ids { put(id as u64); }
+        for id in self.ability_selection.hash_ids() { put(id as u64); }
         let g = &self.event_group;
         put(g.discard_count as u64);put(g.discard_owner.index() as u64);
         put(g.active as u64); put(g.resolving as u64); put(g.replacement_done as u64); put(g.shield_mask as u64); put(g.shield_count as u64); put(g.shield_priority as u64); put(g.shield_stash_len as u64); for id in g.shield_stash { put(id as u64); } put(g.initiator.index() as u64); put(g.pc as u64); put(g.count as u64); put(g.depth as u64);
         for selection in [g.context, g.picks].into_iter().chain(g.stack) {
-            put(selection.len as u64); for id in selection.ids { put(id as u64); }
+            put(selection.len as u64); for id in selection.hash_ids() { put(id as u64); }
         }
         for event in g.records { put(event.op as u64); put(event.target as u64); put(event.amount as u64);
             put(event.power as u64); put(event.hp as u64); put(event.token as u64);  }

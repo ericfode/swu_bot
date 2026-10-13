@@ -518,14 +518,18 @@ impl TargetResolver {
         match self.mode.as_deref() {
             None | Some("single") if self.count.is_none() => Ok(1),
             Some("upTo") => match &self.count {
-                Some(Expr::Const { value }) if value.as_u64().is_some_and(|n| (1..=3).contains(&n)) => Ok(value.as_u64().unwrap() as usize),
-                _ => Err("UpTo selectors require literal counts from one to three".into()),
+                Some(Expr::Const { value }) if value.as_u64().is_some_and(|n| (1..=5).contains(&n)) => Ok(value.as_u64().unwrap() as usize),
+                _ => Err("UpTo selectors require literal counts from one to five".into()),
             },
             Some("unlimited") if self.card_type == "base" && self.arena.is_none() && self.count.is_none() && self.optional && matches!(self.zone.as_deref(), None | Some("base" | "anyAttackable")) => Ok(2),
             _ => Err("unsupported target mode/count; unlimited selection is base-only".into()),
         }
     }
     pub fn is_multiple(&self) -> bool { matches!(self.mode.as_deref(), Some("upTo" | "unlimited")) }
+    pub fn validate_inline(&self)->Result<(),String> {
+        if self.prompt_title.as_ref().is_some_and(|t|t.is_empty()||t.len()>1024){return Err("inline prompt title must be a bounded nonempty literal".into());}
+        let mut r=self.clone();r.prompt_title=None;r.validate()
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.prompt_title.is_some() {return Err("named prompt titles require a named descriptor".into());}
         self.max_targets()?;
@@ -727,6 +731,29 @@ fn contains_resource<T:Serialize>(v:&T)->bool {
     serde_json::to_value(v).map(|v|walk(&v)).unwrap_or(true)
 }
 fn resource_self(e:&Effect)->bool {matches!(e,Effect::ResourceCard{target:Target::Name(n)} if n=="self")}
+#[derive(Clone,Copy,PartialEq,Eq)]
+enum ForceContinuation { Drain, Wave, Shields }
+fn plain_success(a:&Ability)->bool {a.trigger.is_empty()&&!a.optional&&!a.requires_confirmation&&!a.coordinate&&a.context_title.is_empty()&&a.costs.is_empty()&&a.target_resolvers.is_empty()&&a.condition.is_none()&&a.then.is_none()&&a.if_you_do.is_none()}
+fn force_continuation(a:&Ability)->Option<ForceContinuation> {
+    if a.coordinate||a.requires_confirmation||!a.context_title.is_empty()||!a.costs.is_empty()||a.condition.is_some()||a.target_resolver.is_some()||!a.target_resolvers.is_empty()||a.then.is_some(){return None;}
+    fn own(e:&Effect,gain:bool)->bool {match e {Effect::GainForce{target:Target::Name(n)} if gain=>n=="ownPlayer",Effect::UseForce{target:Target::Name(n)} if !gain=>n=="ownPlayer",_=>false}}
+    fn unit(r:&TargetResolver)->bool {r.owner=="any"&&r.card_type=="unit"&&r.zone.as_deref()==Some("anyAttackable")&&r.arena.is_none()&&r.predicate.is_none()}
+    if a.trigger=="event"&&!a.optional&&a.if_you_do.is_none() {if let Effect::Simultaneous{effects}=&a.effect {if effects.len()==2&&own(&effects[1],true) {if let Effect::Select{target_resolver:r,effect}=&effects[0] {if unit(r)&&!r.optional&&r.mode.is_none()&&r.count.is_none()&&r.prompt_title.as_ref().is_some_and(|t|!t.is_empty())&&matches!(effect.as_ref(),Effect::Damage{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(2)){return Some(ForceContinuation::Drain);}}}}}
+    if a.trigger!="whenPlayed"||!a.optional||!own(&a.effect,false){return None;}
+    let next=a.if_you_do.as_ref()?;if !plain_success(next){return None;}
+    if let Some(r)=&next.target_resolver {if unit(r)&&r.optional&&r.mode.as_deref()==Some("upTo")&&matches!(&r.count,Some(Expr::Const{value}) if value.as_u64()==Some(5))&&r.prompt_title.is_none()&&matches!(&next.effect,Effect::GiveShield{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen"&&value.as_u64()==Some(1)){return Some(ForceContinuation::Shields);}}
+    else if let Effect::Defeat{target:Target::ArenaList(list)}=&next.effect {if matches!(&list.receiver,Expr::Ref{path} if path==&["game".to_string()])&&force_wave_predicate(&list.predicate){return Some(ForceContinuation::Wave);}}
+    None
+}
+fn force_wave_predicate(e:&Expr)->bool {
+    fn part(e:&Expr)->Option<u8>{match e {
+      Expr::Const{value} if value==&Value::Bool(true)=>Some(0),
+      Expr::Query{name,receiver,args} if name=="isUnit"&&args.is_empty()&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["card".to_string()])=>Some(1),
+      Expr::Unary{op,value} if op=="!"&&matches!(value.as_ref(),Expr::Query{name,receiver,args} if name=="hasSomeTrait"&&matches!(receiver.as_ref(),Expr::Ref{path} if path==&["card".to_string()])&&matches!(args.as_slice(),[Expr::Const{value:Value::String(s)}] if !s.is_empty()))=>Some(2),
+      Expr::Binary{op,left,right} if op=="<="&&matches!(left.as_ref(),Expr::Ref{path} if path==&["card".to_string(),"remainingHp".to_string()])&&matches!(right.as_ref(),Expr::Const{value} if value.as_u64()==Some(3))=>Some(4),
+      Expr::Binary{op,left,right} if op=="&&"=>Some(part(left)?|part(right)?),_=>None}}
+    part(e)==Some(7)
+}
 fn contains_force(effect:&Effect)->bool {
     match effect {Effect::UseForce{..}|Effect::GainForce{..}=>true,Effect::Conditional{on_true,on_false,..}=>contains_force(on_true)||on_false.as_deref().is_some_and(contains_force),Effect::Select{effect,..}=>contains_force(effect),Effect::Simultaneous{effects}|Effect::Sequence{effects}|Effect::PhaseModifiers{effects}=>effects.iter().any(contains_force),_=>false}
 }
@@ -1035,6 +1062,22 @@ impl Program {
         Ok(p)
     }
     fn compile_ability(&mut self, ability: &Ability, depth: usize) -> Result<(), String> {
+        fn oversized(v:&Value)->bool {v["mode"]=="upTo"&&v["count"]["value"].as_u64().is_some_and(|n|n>3) || match v {Value::Object(o)=>o.values().any(oversized),Value::Array(a)=>a.iter().any(oversized),_=>false}}
+        if depth==0&&oversized(&serde_json::to_value(ability).map_err(|e|e.to_string())?)&&force_continuation(ability)!=Some(ForceContinuation::Shields){return Err("selectors above three require exact Force Shield continuation".into());}
+
+        if depth==0 {if let Some(form)=force_continuation(ability) {
+            match form {
+              ForceContinuation::Drain=>{if let Effect::Simultaneous{effects}=&ability.effect {if let Effect::Select{target_resolver,..}=&effects[0]{target_resolver.validate_inline()?;}}self.instructions.push(Instruction::Group(ability.effect.clone()));},
+              ForceContinuation::Wave|ForceContinuation::Shields=>{
+                self.instructions.push(Instruction::Apply(ability.effect.clone()));
+                let skip=self.instructions.len();self.instructions.push(Instruction::IfResult{skip:0});self.instructions.push(Instruction::EndStep);
+                let next=ability.if_you_do.as_ref().unwrap();
+                if let Some(r)=&next.target_resolver {r.validate()?;self.instructions.push(Instruction::Select(r.clone()));self.instructions.push(Instruction::Group(next.effect.clone()));}
+                else {if let Effect::Defeat{target:Target::ArenaList(list)}=&next.effect {list.predicate.validate()?;}self.instructions.push(Instruction::Apply(next.effect.clone()));}
+                self.instructions[skip]=Instruction::IfResult{skip:self.instructions.len()};
+              }
+            }return Ok(());
+        }}
         if depth==0 {if let Some(form)=weakness_extension(ability) {
             if let Some(r)=&ability.target_resolver {r.validate()?;self.instructions.push(Instruction::Select(r.clone()));}
             match form {
@@ -1306,7 +1349,7 @@ impl Program {
                 },
                 Effect::Select {target_resolver, effect} => {
                     if target_resolver.is_upgrade_domain() {return Err("grouped upgrade selection is not modeled".into());}
-                    target_resolver.validate()?;
+                    target_resolver.validate_inline()?;
                     if array && target_resolver.predicate.as_ref().is_some_and(|e|dependent_in_scope(e,true)) { return Err("array-dependent nested selection is unsupported".into()); }
                     // Nested selection replaces the outer selected value, not its multiplicity.
                     walk(p,effect,target_resolver.max_targets()?,target_resolver.is_multiple(),depth+1)?
@@ -1487,7 +1530,7 @@ impl Program {
             Effect::Damage { amount, target } | Effect::Heal { amount, target } | Effect::Draw { amount, target } | Effect::GiveShield { amount, target } | Effect::GiveExperience { amount, target } => { amount.validate()?; if amount.references_title() { return Err("card title metadata is not an effect amount".into()); } target.validate()?;self.instructions.push(Instruction::Apply(effect.clone())); }
             Effect::Select { target_resolver, effect } => {
                 if target_resolver.is_upgrade_domain() && (target_resolver.is_multiple() || !scalar_upgrade_operation(effect,target_resolver.zone.as_deref()==Some("discard"))) {return Err("upgrade selection supports only scalar defeat or return to hand".into());}
-                target_resolver.validate()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone()));
+                target_resolver.validate_inline()?; self.instructions.push(Instruction::Commit); self.instructions.push(Instruction::Select(target_resolver.clone()));
                 if target_resolver.is_multiple() { self.validate_group(effect,target_resolver.max_targets()?)?; self.instructions.push(Instruction::Group(*effect.clone())); }
                 else { self.compile_effect(effect,depth+1)?; }
             }
@@ -1640,6 +1683,10 @@ impl Catalogue {
                 }
                 let arena_stats=|a:&Ability|matches!(&a.effect,Effect::ModifyStats{target:Target::ArenaList(_),..});
                 if sides.leader.iter().chain(&sides.unit).any(arena_stats) || sides.card.iter().any(|a|arena_stats(a) && !((a.trigger=="event"&&entry["baseClass"]=="EventCard"&&exact_type("event")) || (a.trigger=="whenPlayed"&&entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")))) {return Err("arena phase stats require ordinary unit WhenPlayed or event card-side metadata".into());}
+                if sides.card.iter().chain(&sides.unit).chain(&sides.leader).any(|a|force_continuation(a).is_some()) {
+                    let ordinary=sides.card.first().is_some_and(|a|if a.trigger=="event" {entry["baseClass"]=="EventCard"&&exact_type("event")}else{entry["baseClass"]=="NonLeaderUnitCard"&&exact_type("unit")});
+                    if !ordinary||sides.card.len()!=1||!sides.unit.is_empty()||!sides.leader.is_empty()||!entry["attachCondition"].is_null()||!entry["piloting"].is_null()||["pilotText","pilotBox","pilotingBox"].iter().any(|k|entry["card"].get(*k).is_some_and(|v|!v.is_null())) {return Err("Force continuation requires sole ordinary source registration without side mechanics".into());}
+                }
                 let upgrade_force=|a:&Ability|entry["baseClass"]=="UpgradeCard" && exact_type("upgrade") && a.trigger=="whenPlayed" && a.optional && matches!(&a.effect,Effect::UseForce{target:Target::Name(n)} if n=="ownPlayer") && a.if_you_do.as_ref().is_some_and(|next|next.target_resolver.as_ref().is_some_and(|r|r.owner=="any" && r.card_type=="any" && r.zone.as_deref()==Some("base")) && matches!(&next.effect,Effect::Heal{target:Target::Name(n),amount:Expr::Const{value}} if n=="chosen" && value.as_u64().is_some_and(|n|(1..=65535).contains(&n))));
                 if sides.leader.iter().chain(&sides.unit).any(|a|contains_force(&a.effect)) || sides.card.iter().any(|a|contains_force(&a.effect) && !((entry["baseClass"]=="NonLeaderUnitCard" && exact_type("unit") && ["whenPlayed","whenDefeated","onAttack"].contains(&a.trigger.as_str())) || (entry["baseClass"]=="EventCard" && exact_type("event") && a.trigger=="event") || upgrade_force(a))) {return Err("Force registration requires ordinary unit/event or bounded upgrade play-heal metadata".into());}
                 if sides.leader.iter().chain(&sides.unit).any(contains_force_presence) || sides.card.iter().any(|a|contains_force_presence(a) && (entry["baseClass"]!="NonLeaderUnitCard" || !exact_type("unit"))) {return Err("Force presence requires ordinary unit card-side metadata".into());}

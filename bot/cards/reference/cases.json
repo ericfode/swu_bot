@@ -7,6 +7,7 @@
     "./scenarios/attack-context.js": "debf5bcddb82022b2d939f6c706043aee8d85478c9806b9e2d84ca015a952b69",
     "./scenarios/attack-interactions.js": "0b32bea0f28c55473b948af7ffa3ab00f28401198d02f329d0576653242a0a3b",
     "./scenarios/attack-terminal.js": "10d8d515d784c0dda14163a81a7ffccece9395feb68d04fcd36e715fc28ed533",
+    "./scenarios/captured-play-after-ambush.js": "28c2468fc126b0c580a291828f0d24f5d4d18e2b9a5591ccbee20bcdb613fbf3",
     "./scenarios/card-play.js": "414d98871d7753907eaa458f9c64d9332d628b6df72a25a4c78a89955c5fa811",
     "./scenarios/constant-stats.js": "1e6384af4e2f582fb3a80a746501b2fef10af3b89ff42caa1e560648549f5458",
     "./scenarios/coordinate.js": "dbc5aa1957ddaec4af44898b62ba5205a136564f86335c8fe81b843dcaa76236",
@@ -16,6 +17,7 @@
     "./scenarios/event-groups.js": "4c218854247fa2bc7d2d2c31537475fcc414df4d2b71dbe6ee985a8eda96f91f",
     "./scenarios/fatigue-continuations.js": "85c7fb0eb17f213c9421b763ad296e3147c114761b6c468aeea837dc7823a523",
     "./scenarios/hand-effects.js": "2b921d9080118ca99cbbd8054f839046c28039b6908f7f78c5d58b47a37e40f0",
+    "./scenarios/inline-upgrade-selection.js": "4df19b90ba56cb6043834c9d9203df64a284dcae698f38e808561da52f0e0692",
     "./scenarios/keywords.js": "76c165a0398b9a41d268058717dc4bda1be0fb05530f26ec202ecd2c59a828d6",
     "./scenarios/leaders.js": "1144bae343e116630de22781a8e6e8cf3f5cf47d907875abc7917d92942164c6",
     "./scenarios/live-stats.js": "0ea0dfa1785a9cbb1e9d4a98b8a1ee729219ed7150f730e7be4b3c355d8856e8",
@@ -3146,6 +3148,190 @@
       "assertionStages": [
         "choose",
         "assertAfter"
+      ]
+    },
+    {
+      "id": "captured-play-after-ambush/sabine-captured-play-after-ambush-no-own-command-p1",
+      "behaviorIds": [
+        "captured-play-after-ambush",
+        "captured-play-after-lethal-ambush"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/captured-play-after-ambush.js",
+        "scenario": "sabine-captured-play-after-ambush-no-own-command-p1"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "ASH_190",
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-captured-play-after-ambush-no-own-command-p1",
+        "family": "captured-play-after-lethal-ambush",
+        "sourceSeat": 0,
+        "command": false,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "ASH_190",
+          "LOF_254",
+          "HMW_235",
+          "LOF_102"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
+      ]
+    },
+    {
+      "id": "captured-play-after-ambush/sabine-captured-play-after-ambush-no-own-command-p2",
+      "behaviorIds": [
+        "captured-play-after-ambush",
+        "captured-play-after-lethal-ambush"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/captured-play-after-ambush.js",
+        "scenario": "sabine-captured-play-after-ambush-no-own-command-p2"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "ASH_190",
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-captured-play-after-ambush-no-own-command-p2",
+        "family": "captured-play-after-lethal-ambush",
+        "sourceSeat": 1,
+        "command": false,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "ASH_190",
+          "LOF_254",
+          "HMW_235",
+          "LOF_102"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
+      ]
+    },
+    {
+      "id": "captured-play-after-ambush/sabine-captured-play-after-ambush-own-command-p1",
+      "behaviorIds": [
+        "captured-play-after-ambush",
+        "captured-play-after-lethal-ambush"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/captured-play-after-ambush.js",
+        "scenario": "sabine-captured-play-after-ambush-own-command-p1"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "ASH_190",
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_112",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-captured-play-after-ambush-own-command-p1",
+        "family": "captured-play-after-lethal-ambush",
+        "sourceSeat": 0,
+        "command": true,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "ASH_190",
+          "LOF_254",
+          "HMW_235",
+          "LOF_102",
+          "LOF_112"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
+      ]
+    },
+    {
+      "id": "captured-play-after-ambush/sabine-captured-play-after-ambush-own-command-p2",
+      "behaviorIds": [
+        "captured-play-after-ambush",
+        "captured-play-after-lethal-ambush"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/captured-play-after-ambush.js",
+        "scenario": "sabine-captured-play-after-ambush-own-command-p2"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "ASH_190",
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_112",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-captured-play-after-ambush-own-command-p2",
+        "family": "captured-play-after-lethal-ambush",
+        "sourceSeat": 1,
+        "command": true,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "ASH_190",
+          "LOF_254",
+          "HMW_235",
+          "LOF_102",
+          "LOF_112"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
       ]
     },
     {
@@ -10056,6 +10242,182 @@
         "beforeApply",
         "choose",
         "assertAfter"
+      ]
+    },
+    {
+      "id": "inline-upgrade-selection/sabine-inline-upgrade-no-own-command-p1",
+      "behaviorIds": [
+        "inline-upgrade-selection",
+        "conditional-inline-upgrade-selection-title"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/inline-upgrade-selection.js",
+        "scenario": "sabine-inline-upgrade-no-own-command-p1"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-inline-upgrade-no-own-command-p1",
+        "family": "conditional-inline-upgrade-selection-title",
+        "sourceSeat": 0,
+        "command": false,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "LOF_254",
+          "HMW_235",
+          "LOF_102"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
+      ]
+    },
+    {
+      "id": "inline-upgrade-selection/sabine-inline-upgrade-no-own-command-p2",
+      "behaviorIds": [
+        "inline-upgrade-selection",
+        "conditional-inline-upgrade-selection-title"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/inline-upgrade-selection.js",
+        "scenario": "sabine-inline-upgrade-no-own-command-p2"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-inline-upgrade-no-own-command-p2",
+        "family": "conditional-inline-upgrade-selection-title",
+        "sourceSeat": 1,
+        "command": false,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "LOF_254",
+          "HMW_235",
+          "LOF_102"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
+      ]
+    },
+    {
+      "id": "inline-upgrade-selection/sabine-inline-upgrade-own-command-p1",
+      "behaviorIds": [
+        "inline-upgrade-selection",
+        "conditional-inline-upgrade-selection-title"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/inline-upgrade-selection.js",
+        "scenario": "sabine-inline-upgrade-own-command-p1"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_112",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-inline-upgrade-own-command-p1",
+        "family": "conditional-inline-upgrade-selection-title",
+        "sourceSeat": 0,
+        "command": true,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "LOF_254",
+          "HMW_235",
+          "LOF_102",
+          "LOF_112"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
+      ]
+    },
+    {
+      "id": "inline-upgrade-selection/sabine-inline-upgrade-own-command-p2",
+      "behaviorIds": [
+        "inline-upgrade-selection",
+        "conditional-inline-upgrade-selection-title"
+      ],
+      "kind": "behavior",
+      "source": {
+        "module": "./scenarios/inline-upgrade-selection.js",
+        "scenario": "sabine-inline-upgrade-own-command-p2"
+      },
+      "focusCardIds": [
+        "LAW_078"
+      ],
+      "setupCardIds": [
+        "HMW_235",
+        "LAW_078",
+        "LOF_102",
+        "LOF_112",
+        "LOF_254"
+      ],
+      "setup": {
+        "name": "sabine-inline-upgrade-own-command-p2",
+        "family": "conditional-inline-upgrade-selection-title",
+        "sourceSeat": 1,
+        "command": true,
+        "actualScriptedCardIds": [
+          "LAW_078"
+        ],
+        "setupCardIds": [
+          "LOF_254",
+          "HMW_235",
+          "LOF_102",
+          "LOF_112"
+        ],
+        "plan": [
+          {
+            "code": "LAW_078"
+          }
+        ]
+      },
+      "assertionStages": [
+        "assertRecording"
       ]
     },
     {

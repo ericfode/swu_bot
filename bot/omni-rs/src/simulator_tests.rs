@@ -361,3 +361,47 @@ fn shared_keyword_grammar_matrix_is_fail_closed() {
     let cases:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/keyword-parser-cases.json")).unwrap();
     for case in cases.as_array().unwrap() {let text=case["text"].as_str().unwrap();let result=keyword_text(text);if case["expected"].is_null(){assert!(result.is_err(),"{text}");}else{let (flags,raid,restore)=result.unwrap();let mut actual=serde_json::Map::new();for (index,name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate(){if let Some(slot)=crate::ability_ir::numeric_keyword_slot(index){if case["expected"].get(*name).is_some(){actual.insert((*name).into(),serde_json::json!(if slot==0{raid}else{restore}));}}else if flags&(1<<index)!=0 {actual.insert((*name).into(),serde_json::json!(1));}}assert_eq!(serde_json::Value::Object(actual),case["expected"],"{text}");}}
 }
+fn captured_wp_engine() -> Engine {
+    Engine::from_catalogue_bytes(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap()
+}
+fn captured_wp_board(e:&Engine,seat:Seat)->State {
+    let mut s=board(e);s.active=seat;s.action_player=Some(seat);s.hidden_history_exact=true;s.force_state_exact=true;
+    for player in [Seat::P1,Seat::P2] {s.player_mut(player).force_id=s.next_id;s.next_id+=1;}
+    s
+}
+#[test]
+fn ambush_resumes_captured_ordinary_wp_after_mutual_death_and_with_living_source() {
+    // Primitive declaration construction; all registrations/data are the actual
+    // Sabine card. The separate engine recording proves normal play/cost timing.
+    let e=captured_wp_engine();
+    for seat in [Seat::P1,Seat::P2] {for lethal in [false,true] {
+        let mut s=captured_wp_board(&e,seat);let source=unit(&e,&mut s,seat,"LAW_078");s.card_mut(source).exhausted=true;
+        let victim=unit(&e,&mut s,seat.other(),if lethal {"ASH_190"}else{"LOF_254"});
+        let host=unit(&e,&mut s,seat.other(),"LOF_254");let upgrade=add(&e,&mut s,seat.other(),"HMW_235");e.attach(&mut s,upgrade,host);
+        s.source=source;e.capture_enter_triggers(&mut s);e.process_triggers(&mut s).unwrap();s=button(&e,s,"Ambush");s=button(&e,s,"Trigger");s=click(&e,s,victim);
+        assert_eq!(e.in_arena(&s,source),!lethal);assert!(!e.in_arena(&s,victim));assert_eq!(s.active,seat);assert_eq!(s.decision,Decision::AbilityOptional);assert_eq!(s.source,source);assert_eq!(s.after_attack_programs,0);assert_eq!(s.after_attack_triggers,0);
+        s=button(&e,s,"Trigger");assert_eq!(s.decision,Decision::AbilityTarget);assert!(e.legal_actions(&s).iter().any(|a|a.id()==Some(upgrade)));
+        s=click(&e,s,upgrade);assert!(s.player(seat.other()).discard.contains(upgrade));assert_eq!(s.card(upgrade).parent,0);assert_eq!(e.in_arena(&s,source),!lethal);assert_eq!(s.active,seat.other());assert_eq!(s.decision,Decision::Window);
+    }}
+}
+#[test]
+fn ambush_dead_source_without_effective_captured_wp_finishes_action() {
+    let e=captured_wp_engine();for seat in [Seat::P1,Seat::P2] {
+        let mut s=captured_wp_board(&e,seat);let source=unit(&e,&mut s,seat,"LAW_078");let victim=unit(&e,&mut s,seat.other(),"ASH_190");s.source=source;s.card_mut(source).exhausted=true;e.capture_enter_triggers(&mut s);e.process_triggers(&mut s).unwrap();s=button(&e,s,"Ambush");s=button(&e,s,"Trigger");s=click(&e,s,victim);assert!(!e.in_arena(&s,source));assert_eq!(s.decision,Decision::Window);assert_eq!(s.active,seat.other());assert_eq!(s.pending_programs,0);assert_eq!(s.after_attack_programs,0);
+    }
+}
+#[test]
+fn dead_undeployed_leader_keeps_existing_side_index_policy() {
+    // Synthetic pending-bit boundary: leaders do not capture WhenPlayed in
+    // capture_enter_triggers; do not reinterpret an old unit-side index on base.
+    let e=captured_wp_engine();let mut s=captured_wp_board(&e,Seat::P1);let source=s.players[0].leader;s.source=source;s.after_attack_programs=1;assert!(!e.in_arena(&s,source));e.combat_after_damage(&mut s).unwrap();assert_eq!(s.decision,Decision::Window);assert_eq!(s.active,Seat::P2);assert_eq!(s.pending_programs,0);assert_eq!(s.after_attack_programs,0);
+}
+#[test]
+fn dead_ambush_source_without_captured_programs_finishes_existing_keyword_window() {
+    let e=captured_wp_engine();for seat in [Seat::P1,Seat::P2] {
+        let mut s=captured_wp_board(&e,seat);let source=unit(&e,&mut s,seat,"LOF_231");s.source=source;
+        // The actual Shielded registration has no legal recipient after source
+        // departure. This postcombat primitive must not allocate or rebind it.
+        s.after_attack_triggers=T_SHIELD;let next=s.next_id;e.defeat(&mut s,source).unwrap();e.combat_after_damage(&mut s).unwrap();assert_eq!(s.decision,Decision::Window);assert_eq!(s.active,seat.other());assert_eq!(s.next_id,next);assert_eq!(s.after_attack_triggers,0);assert_eq!(s.after_attack_programs,0);
+    }
+}

@@ -135,7 +135,7 @@ fn reviewed_force_entry(entry:&Value)->bool {
 }"#).expect("reviewed Force metadata");
     entry["sourceHash"]=="3ff3888f5186845acdd8d3ef96f396875b2daf4f9b808fa9b4a2ef03a1b954b6" && entry["baseClass"]=="TokenCard" && entry["card"]==metadata && entry["abilities"]==serde_json::json!({"leader":[],"unit":[],"card":[]}) && entry["keywordValues"]==serde_json::json!({}) && entry["attachCondition"].is_null()
 }
-fn program_needs_force(program:&Program)->bool {crate::ability_ir::contains_force_presence(program) || program.instructions.iter().any(|i|matches!(i,Instruction::Apply(Effect::UseForce{..}|Effect::GainForce{..})))}
+fn program_needs_force(program:&Program)->bool {crate::ability_ir::contains_force_presence(program) || program.instructions.iter().any(|i|match i {Instruction::Apply(e)=>effect_has(e,|e|matches!(e,Effect::UseForce{..}|Effect::GainForce{..})),_=>i.group_effect().is_some_and(|e|effect_has(e,|e|matches!(e,Effect::UseForce{..}|Effect::GainForce{..})))})}
 
 impl Engine {
     pub(super) fn needs_force_state(&self)->bool {
@@ -1148,6 +1148,7 @@ impl Engine {
         p: u16,
         require_change: bool,
     ) -> bool {
+        if self.program(p).trigger=="event"&&self.program(p).instructions.first().is_some_and(|i|matches!(i,Instruction::Group(Effect::Simultaneous{effects}) if effects.len()==2&&matches!(&effects[0],Effect::Select{effect,..} if matches!(effect.as_ref(),Effect::Damage{..}))&&matches!(&effects[1],Effect::GainForce{..}))) {return true;}
         match self.program(p).instructions.first() {
             Some(Instruction::Select(r)) => !self
                 .program_targets(s, source, p, 0, r, require_change)
@@ -1457,6 +1458,7 @@ impl Engine {
                     let (amount, resolved) = self.apply_effect(s, effect)?;
                     s.ability_result = amount;
                     s.ability_succeeded = resolved;
+                    if resolved&&matches!(effect,Effect::UseForce{..})&&p.instructions.iter().skip(s.ability_pc as usize+1).any(|i|matches!(i,Instruction::Apply(Effect::Defeat{target:Target::ArenaList(_)}))){self.sweep_stat_defeats(s)?;}
                     s.ability_pc += 1;
                 }
             }
@@ -1472,6 +1474,13 @@ impl Engine {
         self.matching_targets(s,s.source,r).into_iter().filter(|id| self.effect_can_affect(s,s.source,*id,e,require_change)).collect()
     }
     fn capture_group_leaf(&self,s:&mut State,op:usize,e:&Effect)->Result<(),String> {
+        if matches!(e,Effect::GainForce{..}) {
+            let Effect::GainForce{target}=e else{unreachable!()};
+            let targets=self.effect_targets(s,target);if s.event_group.count as usize+targets.len()>32{return Err("prepared player event capacity exceeded".into());}
+            for target in targets {let Eval::Player(player)=target else{return Err("Force group target must be a player".into());};let n=s.event_group.count as usize;s.event_group.records[n]=PreparedEvent{op:op as u16,target:s.player(player).base,amount:1,..PreparedEvent::default()};s.event_group.count+=1;}
+            return Ok(());
+        }
+
         if let Effect::DiscardDeck {target,amount}=e {
             let Eval::Player(player)=self.effect_targets(s,target).into_iter().next().ok_or("deck discard target missing")? else{return Err("deck discard requires a player target".into());};
             let requested=self.effect_amount(s,amount)?;
@@ -1574,6 +1583,11 @@ impl Engine {
         Ok(true)
     }
     fn generate_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        if s.event_group.pc==0&&matches!(e,Effect::GiveShield{..})&&s.event_group.context.len>3 {
+            let Effect::GiveShield{target,..}=e else{unreachable!()};let n=self.effect_targets(s,target).into_iter().filter(|v|matches!(v,Eval::Card(id) if self.in_arena(s,*id))).count();
+            if s.next_id as usize+n>MAX_CARDS||s.event_group.count as usize+n>32{return Err("five-pick Shield generation capacity exceeded".into());}
+        }
+
         if s.event_group.pc==0&&effect_has(e,|e|matches!(e,Effect::GiveWeakness{..})) {
             self.weakness_def.ok_or("catalogue needs Weakness token")?;
             let mut tokens=0usize;let mut records=0usize;
@@ -1743,6 +1757,9 @@ impl Engine {
         s.event_group.resolving=false;self.finish_group_damage(s,callbacks)?;Ok(true)
     }
     fn resolve_group(&self,s:&mut State,e:&Effect)->Result<bool,String> {
+        let drain=matches!(e,Effect::Simultaneous{effects} if effects.len()==2&&matches!(&effects[0],Effect::Select{effect,..} if matches!(effect.as_ref(),Effect::Damage{..}))&&matches!(&effects[1],Effect::GainForce{..}));
+        let mut cached_lethals=Vec::new();
+
         if s.event_group.uniform_damage.active {return self.resolve_uniform_damage(s,e);}
         let ops=group_ops(e);
         if !s.event_group.replacement_done {
@@ -1835,6 +1852,11 @@ impl Engine {
                 s.card_mut(r.token).set_hidden_qualified(true);self.add_arena(s,r.token)?;s.ability_result=s.ability_result.saturating_add(1);s.ability_succeeded=true;
                 continue;
             }
+            if let Effect::GainForce{..}=effect {
+                let player=[Seat::P1,Seat::P2].into_iter().find(|player|s.player(*player).base==r.target).ok_or("captured Force player identity missing")?;
+                if !s.force_state_exact||s.player(player).force_id==0||self.force_def.is_none(){return Err("Force requires exact reviewed identity".into());}
+                if !s.player(player).force_held{s.player_mut(player).force_held=true;s.ability_result=s.ability_result.saturating_add(1);}s.ability_succeeded=true;continue;
+            }
             if !self.in_arena(s,r.target)&&!self.def(s,r.target).info.is("base") { continue; }
             if r.token!=0 && matches!(effect,Effect::Damage{..}) {
                 self.remove_group_shield(s,r.target,r.token);
@@ -1865,6 +1887,10 @@ impl Engine {
             }
             let (amount,resolved)=self.apply_effect(s,&effect)?;
             if matches!(effect,Effect::Damage {..}) && amount>0 && self.in_arena(s,r.target) {damage_callbacks.push(r.target);}
+            // Drain's only later primary handler changes Force presence, whose ongoing
+            // effects remain cached until the engine post-event callback boundary.
+            if drain&&matches!(effect,Effect::Damage{..})&&amount>0&&self.in_arena(s,r.target)&&s.card(r.target).damage>=self.hp(s,r.target){cached_lethals.push(r.target);}
+
             s.ability_result=s.ability_result.saturating_add(amount); s.ability_succeeded|=resolved;
         }
         let created=s.event_group.records[..s.event_group.count as usize].iter().filter(|r|matches!(&ops[r.op as usize],GroupOp::Leaf(Effect::CreateTokenUnit{..}))).map(|r|r.token).collect::<Vec<_>>();
@@ -1877,6 +1903,7 @@ impl Engine {
             }
         }
         s.event_group.resolving=false;
+        if drain {self.defeat_many(s,&cached_lethals)?;}
         self.finish_group_damage(s,damage_callbacks)?;
         Ok(true)
     }
@@ -2250,7 +2277,7 @@ impl Engine {
             Decision::AbilityDiscard => {
                 let count=t.event_group.discard_count;
                 if count==1 {t.event_group.picks=Selection::one(a.id().ok_or("discard card missing")?);}
-                else if a.kind=="card" {t.event_group.picks.toggle(a.id().ok_or("discard card missing")?);return Ok(t);}
+                else if a.kind=="card" {t.event_group.picks.toggle(a.id().ok_or("discard card missing")?)?;return Ok(t);}
                 if t.event_group.picks.len!=count {return Err("discard selection must match required count".into());}
                 let op=t.event_group.pc;
                 for id in t.event_group.picks.ids[..count as usize].to_vec() {
@@ -2317,8 +2344,12 @@ impl Engine {
                 else if a.arg.as_ref().and_then(Value::as_str)==Some("cancel") { self.cancel(&mut t); }
                 else {
                     if r.is_multiple() && a.id().is_some() {
-                        if nested.is_some() { t.event_group.picks.toggle(a.id().unwrap()); }
-                        else { t.ability_selection.toggle(a.id().unwrap()); }
+                        let picks=if nested.is_some(){t.event_group.picks}else{t.ability_selection};
+                        let id=a.id().unwrap();
+                        if !picks.ids[..picks.len as usize].contains(&id)&&picks.len as usize>=r.max_targets()? {return Err("selection exceeds resolver count".into());}
+
+                        if nested.is_some() { t.event_group.picks.toggle(a.id().unwrap())?; }
+                        else { t.ability_selection.toggle(a.id().unwrap())?; }
                         return Ok(t);
                     }
                     let selected=if r.is_multiple() {

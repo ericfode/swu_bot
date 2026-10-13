@@ -17834,6 +17834,87 @@
       "arena": "ground",
       "aspects": [
         "vigilance",
+        "villainy"
+      ],
+      "cost": 8,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 8,
+      "id": "6797297267",
+      "internalName": "darth-sidious#the-phantom-menace",
+      "keywords": [
+        "restore"
+      ],
+      "power": 6,
+      "rules": null,
+      "setCode": "LOF_039",
+      "setCodes": [
+        {
+          "number": 39,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 39,
+        "set": "LOF"
+      },
+      "subtitle": "The Phantom Menace",
+      "text": "Restore 2 (When this unit attacks, heal 2 damage from your base.)\nWhen Played: You may use the Force. If you do, defeat each non-Sith unit with 3 or less remaining HP.",
+      "title": "Darth Sidious",
+      "traits": [
+        "force",
+        "separatist",
+        "sith"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "aspects": [
+        "vigilance",
+        "villainy"
+      ],
+      "cost": 2,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": null,
+      "id": "5083905745",
+      "internalName": "drain-essence",
+      "keywords": [],
+      "power": null,
+      "rules": null,
+      "setCode": "LOF_041",
+      "setCodes": [
+        {
+          "number": 41,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 41,
+        "set": "LOF"
+      },
+      "subtitle": "",
+      "text": "Deal 2 damage to a unit. The Force is with you (create your Force token).",
+      "title": "Drain Essence",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "event"
+      ],
+      "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance",
         "heroism"
       ],
       "cost": 2,
@@ -18355,6 +18436,44 @@
         "unit"
       ],
       "unique": false,
+      "upgradeHp": null,
+      "upgradePower": null
+    },
+    {
+      "arena": "ground",
+      "aspects": [
+        "vigilance"
+      ],
+      "cost": 7,
+      "deployBox": null,
+      "epicAction": "",
+      "hp": 8,
+      "id": "7012013186",
+      "internalName": "priestesses-of-the-force#eternal",
+      "keywords": [],
+      "power": 6,
+      "rules": null,
+      "setCode": "LOF_072",
+      "setCodes": [
+        {
+          "number": 72,
+          "set": "LOF"
+        }
+      ],
+      "setId": {
+        "number": 72,
+        "set": "LOF"
+      },
+      "subtitle": "Eternal",
+      "text": "When Played: You may use the Force (lose your Force token). If you do, give a Shield token to each of up to 5 units.",
+      "title": "Priestesses of the Force",
+      "traits": [
+        "force"
+      ],
+      "types": [
+        "unit"
+      ],
+      "unique": true,
       "upgradeHp": null,
       "upgradePower": null
     },

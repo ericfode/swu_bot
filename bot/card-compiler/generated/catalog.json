@@ -3,7 +3,7 @@
   "compilerVersion": 1,
   "typescriptVersion": "5.5.4",
   "sourceTreeHash": "ae6d99c09429c9f1bd486244f9f1e052cbb3f326e1d12f8153debcfac9006cfe",
-  "compilerHash": "7ea154cdc2635d8528655c7b154c8ac0c98b489a8eff86967c67a9be4cb80d58",
+  "compilerHash": "5bc1f68a123fca6c3d11888225fb6ab0540db1c428f64c7fff6b417f8f8e13f1",
   "inputs": [
     {
       "file": "data/_mockCardNames.json",
@@ -29504,7 +29504,8 @@
                         }
                       }
                     },
-                    "optional": true
+                    "optional": true,
+                    "promptTitle": "Defeat a unit with 2 or less HP"
                   },
                   "effect": {
                     "kind": "defeat",
@@ -41403,7 +41404,8 @@
                           "value": 2
                         }
                       }
-                    }
+                    },
+                    "promptTitle": "Return an upgrade that costs 2 or less to its owner's hand"
                   },
                   "effect": {
                     "kind": "returnToHand",
@@ -41426,7 +41428,8 @@
                         ]
                       },
                       "args": []
-                    }
+                    },
+                    "promptTitle": "Give a Shield token to a unit"
                   },
                   "effect": {
                     "kind": "giveShield",
@@ -59393,7 +59396,8 @@
                     "targetResolver": {
                       "owner": "any",
                       "type": "base",
-                      "zone": "anyAttackable"
+                      "zone": "anyAttackable",
+                      "promptTitle": "Deal 1 damage to a base"
                     },
                     "effect": {
                       "kind": "damage",
@@ -59409,7 +59413,8 @@
                     "targetResolver": {
                       "owner": "opponent",
                       "type": "unit",
-                      "zone": "anyAttackable"
+                      "zone": "anyAttackable",
+                      "promptTitle": "Deal 1 damage to an enemy unit"
                     },
                     "effect": {
                       "kind": "damage",
@@ -60734,7 +60739,8 @@
                         "owner": "self",
                         "type": "unit",
                         "zone": "arena",
-                        "arena": "ground"
+                        "arena": "ground",
+                        "promptTitle": "Deal 1 damage to a friendly ground unit"
                       },
                       "effect": {
                         "kind": "damage",
@@ -60751,7 +60757,8 @@
                         "owner": "opponent",
                         "type": "unit",
                         "zone": "arena",
-                        "arena": "ground"
+                        "arena": "ground",
+                        "promptTitle": "Deal 1 damage to an enemy ground unit"
                       },
                       "effect": {
                         "kind": "damage",
@@ -64629,7 +64636,8 @@
                   "targetResolver": {
                     "owner": "any",
                     "type": "nonLeaderUnit",
-                    "zone": "anyAttackable"
+                    "zone": "anyAttackable",
+                    "promptTitle": "Return a non-leader unit to its owner's hand"
                   },
                   "effect": {
                     "kind": "returnToHand",
@@ -100956,7 +100964,8 @@
                     "kind": "const",
                     "value": 2
                   },
-                  "optional": true
+                  "optional": true,
+                  "promptTitle": "Give an Experience token and a Shield token to up to 2 units"
                 },
                 "effect": {
                   "kind": "simultaneous",
@@ -100985,7 +100994,8 @@
                 "targetResolver": {
                   "owner": "any",
                   "type": "unit",
-                  "zone": "anyAttackable"
+                  "zone": "anyAttackable",
+                  "promptTitle": "Give an Experience token and a Shield token to a unit"
                 },
                 "effect": {
                   "kind": "simultaneous",
@@ -101834,7 +101844,8 @@
                 "targetResolver": {
                   "owner": "any",
                   "type": "upgrade",
-                  "zone": "anyAttackable"
+                  "zone": "anyAttackable",
+                  "promptTitle": "Defeat an upgrade"
                 },
                 "effect": {
                   "kind": "defeat",
@@ -101857,7 +101868,8 @@
                         "unique"
                       ]
                     }
-                  }
+                  },
+                  "promptTitle": "Defeat a non-unique upgrade"
                 },
                 "effect": {
                   "kind": "defeat",
@@ -120480,7 +120492,8 @@
                   "targetResolver": {
                     "owner": "any",
                     "type": "unit",
-                    "zone": "anyAttackable"
+                    "zone": "anyAttackable",
+                    "promptTitle": "Select a unit to deal 2 damage to"
                   },
                   "effect": {
                     "kind": "damage",
@@ -136616,7 +136629,8 @@
                   "targetResolver": {
                     "owner": "opponent",
                     "type": "unit",
-                    "zone": "anyAttackable"
+                    "zone": "anyAttackable",
+                    "promptTitle": "Exhaust an enemy unit"
                   },
                   "effect": {
                     "kind": "exhaust",
@@ -136628,7 +136642,8 @@
                   "targetResolver": {
                     "owner": "self",
                     "type": "unit",
-                    "zone": "anyAttackable"
+                    "zone": "anyAttackable",
+                    "promptTitle": "A friendly unit gains Sentinel for this phase"
                   },
                   "effect": {
                     "kind": "gainKeyword",

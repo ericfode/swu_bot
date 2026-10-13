@@ -1140,7 +1140,12 @@ impl Engine {
             self.finish(s)?;
         } else {
             if (s.after_attack_triggers != 0 || s.after_attack_programs != 0)
-                && self.in_arena(s, source)
+                && (self.in_arena(s, source)
+                    // Ordinary unit WhenPlayed registrations were captured before
+                    // Ambush; source departure cannot erase the remaining window.
+                    // Leader program indices depend on deployed side, so retain
+                    // their existing live-source policy (leaders do not queue WP).
+                    || (s.after_attack_programs != 0 && !self.def(s, source).info.is("leader")))
             {
                 s.pending_programs = s.after_attack_programs;
                 s.after_attack_programs = 0;

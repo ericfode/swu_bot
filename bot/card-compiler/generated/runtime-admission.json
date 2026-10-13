@@ -1,5 +1,5 @@
 {
-  "catalogueHash": "d80857c9c3388c738133c7eac9e49c0481562cd6328d63ae20dc8c1204354c48",
+  "catalogueHash": "1f514966268591f9afe48c97a9c4becda81cdd29d12da8825ff6aaa116565f05",
   "dataOnlyConvertedCount": 372,
   "gameConformance": "not assessed by this report",
   "irConvertedCount": 1070,
@@ -7,7 +7,7 @@
   "runtimeAdmittedBreakdown": {
     "dataOnly": 372,
     "nativeAdapters": 4,
-    "sourceIr": 577
+    "sourceIr": 580
   },
   "runtimeAdmittedCards": [
     {
@@ -2207,6 +2207,16 @@
     },
     {
       "implementation": "sourceIr",
+      "internalName": "darth-sidious#the-phantom-menace",
+      "setCode": "LOF_039"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "drain-essence",
+      "setCode": "LOF_041"
+    },
+    {
+      "implementation": "sourceIr",
       "internalName": "yaddle#a-chance-to-make-things-right",
       "setCode": "LOF_045"
     },
@@ -2269,6 +2279,11 @@
       "implementation": "sourceIr",
       "internalName": "grappling-guardian",
       "setCode": "LOF_071"
+    },
+    {
+      "implementation": "sourceIr",
+      "internalName": "priestesses-of-the-force#eternal",
+      "setCode": "LOF_072"
     },
     {
       "implementation": "sourceIr",
@@ -4776,7 +4791,7 @@
       "setCode": "TWI_253"
     }
   ],
-  "runtimeAdmittedCount": 953,
+  "runtimeAdmittedCount": 956,
   "runtimeRejectedCards": [
     {
       "internalName": "the-armorer#steel-shapes-us",
@@ -8299,19 +8314,9 @@
       "setCode": "LOF_038"
     },
     {
-      "internalName": "darth-sidious#the-phantom-menace",
-      "reason": "darth-sidious#the-phantom-menace: Force requires standalone ordinary play/death/event use and one bounded independent success continuation",
-      "setCode": "LOF_039"
-    },
-    {
       "internalName": "kylo-rens-lightsaber",
       "reason": "kylo-rens-lightsaber: compiler rejected \"kylo-rens-lightsaber\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":9,\"file\":\"game/cards/05_LOF/upgrades/KyloRensLightsaber.ts\",\"line\":18,\"message\":\"registrar:addReplacementEffectAbilityTargetingAttached\",\"pattern\":\"registrar:addReplacementEffectAbilityTargetingAttached\"}]",
       "setCode": "LOF_040"
-    },
-    {
-      "internalName": "drain-essence",
-      "reason": "drain-essence: Force requires standalone ordinary play/death/event use and one bounded independent success continuation",
-      "setCode": "LOF_041"
     },
     {
       "internalName": "always-two",
@@ -8397,11 +8402,6 @@
       "internalName": "anakin-skywalker#champion-of-mortis",
       "reason": "anakin-skywalker#champion-of-mortis: compiler rejected \"anakin-skywalker#champion-of-mortis\": [{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":45,\"file\":\"game/cards/05_LOF/units/AnakinSkywalkerChampionOfMortis.ts\",\"line\":22,\"message\":\"unsupported-query:hasSomeCard\",\"pattern\":\"unsupported-query:hasSomeCard\"},{\"code\":\"UNSUPPORTED_SOURCE\",\"column\":45,\"file\":\"game/cards/05_LOF/units/AnakinSkywalkerChampionOfMortis.ts\",\"line\":36,\"message\":\"unsupported-query:hasSomeCard\",\"pattern\":\"unsupported-query:hasSomeCard\"}]",
       "setCode": "LOF_070"
-    },
-    {
-      "internalName": "priestesses-of-the-force#eternal",
-      "reason": "priestesses-of-the-force#eternal: Force requires standalone ordinary play/death/event use and one bounded independent success continuation",
-      "setCode": "LOF_072"
     },
     {
       "internalName": "mythosaur#folklore-awakened",
@@ -12304,7 +12304,7 @@
       "setCode": "TWI_257"
     }
   ],
-  "runtimeRejectedCount": 1505,
+  "runtimeRejectedCount": 1502,
   "schema": "omni-rs-catalogue-report-v1",
   "sourceAstConvertedCount": 698
 }

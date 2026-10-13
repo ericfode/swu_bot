@@ -707,7 +707,15 @@ function effect(input, context, defaultTarget = 'self') {
     }
     if (kind === 'selectCard') {
         knownProperties(obj, ['cardTypeFilter', 'controller', 'zoneFilter', 'cardCondition', 'optional', 'mode', 'numCards', 'canChooseNoCards', 'immediateEffect', 'choosingPlayer']);
-        return { kind: 'select', targetResolver: targetResolverProperties(obj), effect: effect(obj.props.get('immediateEffect'), obj.ctx, 'chosen') };
+        const spec = targetResolverProperties(obj);
+        if (obj.props.has('activePromptTitle')) {
+            const node = unwrap(obj.props.get('activePromptTitle'));
+            if (!(ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node) && node.templateSpans.every(span => titleHelper(span.expression, obj.ctx) !== null))) fail(obj.ctx, node, 'inline-prompt-title');
+            const title = displayText(node, obj.ctx);
+            if (!title.length || title.length > 1024) fail(obj.ctx, node, 'inline-prompt-title');
+            spec.promptTitle = title;
+        }
+        return { kind: 'select', targetResolver: spec, effect: effect(obj.props.get('immediateEffect'), obj.ctx, 'chosen') };
     }
     if (kind === 'useTheForce' || kind === 'theForceIsWithYou') {
         if (defaultTarget !== 'self') fail(ctx, node, 'force-inherited-target');
