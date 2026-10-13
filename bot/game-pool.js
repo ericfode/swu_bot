@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Runs game jobs ({id, seed, p1, p2, replayFile?}) on ladder-worker.js threads, with a watchdog, for ladder.js.
+ * Runs game jobs ({id, seed, p1, p2, replayFile?, key?}) on ladder-worker.js threads, with a watchdog, for ladder.js.
  *
  *   runPool(queue, { workers, workerData, hangMs, gameMs, onStart(job), onResult({ job, result }) }) -> Promise
  *
@@ -22,6 +22,8 @@
  * games, or of work left from an earlier game, has not finished a game of the bots it was playing, so its job goes
  * back to the front of the queue (twice at most) instead of getting a result. Only a worker that dies before it has
  * loaded the engine fails the whole run. Results carry each game's key (rng.js gameKey) when workerData.key is set.
+ * A job may carry its own `key` instead (the game key itself, or null for none): a helper that plays one seed for the
+ * games machine gets that seed's game key, never the run key (arena/play-seed.js).
  */
 const fs = require('fs');
 const path = require('path');
@@ -156,7 +158,8 @@ function killChildren(worker = null, { spare = [] } = {}) {
 }
 
 function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs = DEFAULT_GAME_MS(workerData.capMs), onStart = () => {}, onResult = () => {} } = {}) {
-    return new Promise((resolve, reject) => {
+    let grow = () => {};
+    const pool = new Promise((resolve, reject) => {
         const base = Date.now();
         const slots = new Set();
         let timer = null;
@@ -187,7 +190,7 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             }
             s.w.postMessage(job);
         };
-        const keyOf = (job) => (workerData.key ? gameKey(workerData.key, job.seed) : null);
+        const keyOf = (job) => (job.key !== undefined ? job.key : workerData.key ? gameKey(workerData.key, job.seed) : null);
         // puts the worker's job back at the front of the queue (twice at most per job): it was not the bots' doing
         const retry = (s, why) => {
             if (!s.job || (requeued.get(s.job) ?? 0) >= MAX_REQUEUE) {
@@ -318,6 +321,13 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 setTimeout(() => killChildren(s.id), KILL_AFTER_MS).unref();
             }
         }, CHECK_MS);
+        // games put back into the queue while the pool runs (remote-lane.js takes them back from a helper): the
+        // workers that left when the queue ran dry come back, up to `workers`
+        grow = () => {
+            for (let i = Math.min(workers - slots.size, queue.length); i > 0 && !ended; i--) {
+                spawn();
+            }
+        };
         const n = Math.max(0, Math.min(workers, queue.length));
         for (let i = 0; i < n; i++) {
             spawn();
@@ -326,6 +336,8 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
             finish();
         }
     });
+    pool.grow = () => grow();
+    return pool;
 }
 
-module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT };
+module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT, DEFAULT_GAME_MS };

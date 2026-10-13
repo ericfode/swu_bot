@@ -26,15 +26,24 @@ defmodule Coord.Workers.Round do
 
   def perform(%Oban.Job{}), do: {:cancel, "not a round"}
 
+  # Whatever the round's end, the helper node forgets its leases and bundles (Coord.Remote.reset/0): a helper still
+  # playing one of its seeds gets 410 at its next heartbeat.
   defp play(arena, k) do
     case Coord.Gamesctl.referee_cmd(arena, k) do
       {:ok, spec} ->
-        result = FLAME.call(Coord.RoundRunner, fn -> Coord.Round.play(spec) end, timeout: :infinity)
+        result =
+          try do
+            FLAME.call(Coord.RoundRunner, fn -> Coord.Round.play(spec) end, timeout: :infinity)
+          after
+            Coord.Remote.reset()
+          end
+
         Coord.Scheduler.round_done(k, result)
         outcome(k, result)
 
       # a referee-cmd that Coord.Shutdown stopped is not a failed attempt either
       {:error, why} ->
+        Coord.Remote.reset()
         if Coord.Shutdown.stopping?(), do: {:snooze, 60}, else: {:error, "referee-cmd: #{why}"}
     end
   end

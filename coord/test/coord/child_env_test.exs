@@ -63,6 +63,21 @@ defmodule Coord.ChildEnvTest do
       end
     end
 
+    test "a helper's play gets PATH, HOME, LANG, TZ and SWU_WASM_CACHE, and nothing else" do
+      data = Coord.Config.data()
+      env = ChildEnv.play(%{data: data, node_dir: "/opt/node/bin"})
+
+      assert env == %{
+               "PATH" => "/opt/node/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+               "HOME" => Path.join(data, "home"),
+               "LANG" => "C.UTF-8",
+               "TZ" => "UTC",
+               "SWU_WASM_CACHE" => Path.join(data, "wasm-cache")
+             }
+
+      for {k, _} <- env, do: refute(ChildEnv.forbidden?(k), k)
+    end
+
     test "forbidden? covers tokens, proxies, Fly, the release and the BEAM's own variables" do
       for key <- ~w(SWU_WINDOW_TOKEN X_TOKEN HTTPS_PROXY http_proxy FLY_REGION RELEASE_COOKIE ERL_AFLAGS BINDIR
                     ROOTDIR EMU PROGNAME SWU_WINDOW) do

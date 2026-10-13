@@ -127,6 +127,60 @@ defmodule Coord.Workers.RoundTest do
     assert {:error, "referee-cmd: exited with 1"} = perform_job(Round, args(4))
   end
 
+  describe "with the helper node on" do
+    setup do
+      start_helper_node()
+      hex = sha256_hex("tar")
+      :ok = Coord.Remote.store_bundle(hex, "tar")
+
+      claim =
+        Task.async(fn ->
+          {:ok, lease} = Coord.Remote.await_claim("eric", "1", 5_000)
+          Coord.Remote.claim_sent(lease.id)
+        end)
+
+      eventually(fn -> Coord.Remote.status().waiting == 1 end)
+      {:ok, id, "eric"} = Coord.Remote.offer(remote_job(), [hex])
+      Task.await(claim)
+      %{lease: id}
+    end
+
+    defp reset?(id) do
+      Coord.Remote.lease(id) == :unknown and File.ls!(Coord.Remote.bundles_dir()) == []
+    end
+
+    test "a round's end forgets the leases and the bundles", %{lease: id} do
+      assert {:running, "eric", _} = Coord.Remote.lease(id)
+      assert :ok = perform_job(Round, args(4))
+      assert reset?(id)
+      assert Coord.Remote.heartbeat(id, "eric") == :gone
+    end
+
+    test "so does a failed round, and a failed referee-cmd", %{lease: id} do
+      fake("referee", :exit, 1)
+      assert {:error, _} = perform_job(Round, args(4))
+      assert reset?(id)
+
+      claim =
+        Task.async(fn ->
+          {:ok, lease} = Coord.Remote.await_claim("eric", "1", 5_000)
+          Coord.Remote.claim_sent(lease.id)
+        end)
+
+      eventually(fn -> Coord.Remote.status().waiting == 1 end)
+      {:ok, id, "eric"} = Coord.Remote.offer(remote_job(), [])
+      Task.await(claim)
+      fake("referee-cmd", :exit, 1)
+      assert {:error, "referee-cmd: exited with 1"} = perform_job(Round, args(5))
+      assert Coord.Remote.lease(id) == :unknown
+    end
+
+    test "the referee gets ARENA_REMOTE" do
+      assert :ok = perform_job(Round, args(4))
+      assert fake_env("referee")["ARENA_REMOTE"] == Coord.Remote.relay_url()
+    end
+  end
+
   test "the job's time limit is the round cap plus two minutes" do
     put_setting(:round_cap_ms, 1_000)
     assert Round.timeout(%Oban.Job{}) == 121_000

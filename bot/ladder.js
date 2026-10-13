@@ -36,7 +36,14 @@
  * cancel out and the ratings that matter are the decks'.
  * --pool <file> deals the random decks from an arena card pool only (cardpool.js: the training or held-out cards of a
  * holdout split); config.pool records its file name, kind and sha256. Not with --decks.
+ * With ARENA_REMOTE set (the games machine's relay for helper computers, http://127.0.0.1:<port>/r/<nonce>) and
+ * --record, a round robin of random decks also hands whole seeds to helpers (remote-lane.js); their games come back
+ * through the same onResult, and every entry says where it ran: host is the helper's name, or null for here.
  */
+// the relay's address, read before anything starts a worker, a bot program or the window pusher, none of which may
+// inherit it (they all get process.env)
+const REMOTE = process.env.ARENA_REMOTE ?? null;
+delete process.env.ARENA_REMOTE;
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -46,7 +53,8 @@ const { describeBot, programSpec } = require('./players');
 const { runKey, gameKey } = require('./rng');
 const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
-const { runPool, killChildren } = require('./game-pool');
+const { runPool, killChildren, DEFAULT_GAME_MS } = require('./game-pool');
+const { remoteLane, relayBase } = require('./remote-lane');
 const { loadDecks, dealDecks, deckPairs } = require('./decklists');
 const { loadPool, checkPool } = require('./cardpool');
 
@@ -381,26 +389,31 @@ async function main() {
     console.log(`${id}: ${queue.length} of ${schedule.length} games to play, ${names.length} bots, ${decks ? `${decks.length} decks, ` : ''}${pool ? `${pool.kind} pool of ${pool.cards.length} cards, ` : ''}${workers} workers -> ${out}`);
 
     const t0 = Date.now();
-    await runPool(queue, {
-        workers,
-        hangMs,
-        workerData: { maxSteps, engineRev: engine, capMs, key, decks, pool: pool ? { cards: pool.cards } : null },
+    const hooks = {
+        // a game can start twice: a seed a helper lost plays here, and its entry starts over
         onStart: (job) => {
             const entry = {
                 id: job.id, seed: job.seed, p1: job.p1, p2: job.p2, winner: null, winnerSeat: null, outcome: 'running', rounds: 0, steps: 0, ms: 0, error: null, by: null, faultKind: null,
-                ...(job.decks ? { decks: { p1: decks[job.decks[0]].metadata.name, p2: decks[job.decks[1]].metadata.name } } : {})
+                host: null, ...(job.decks ? { decks: { p1: decks[job.decks[0]].metadata.name, p2: decks[job.decks[1]].metadata.name } } : {})
             };
-            games.push(entry);
-            tIndex.games.push({ ...entry });
+            const i = games.findIndex((g) => g.id === job.id);
+            if (i < 0) {
+                games.push(entry);
+                tIndex.games.push({ ...entry });
+            } else {
+                games[i] = entry;
+                tIndex.games[tIndex.games.findIndex((g) => g.id === job.id)] = { ...entry };
+            }
             if (record) {
                 job.replayFile = path.join(out, 'games', `${job.id}.jsonl`);
             }
             save();
         },
-        onResult: ({ job, result: r }) => {
+        // host: the helper that played it (remote-lane.js), null here
+        onResult: ({ job, result: r, host = null }) => {
             const done = {
                 winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null,
-                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, ...(r.versions ? { versions: r.versions } : {})
+                by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, host, ...(r.versions ? { versions: r.versions } : {})
             };
             Object.assign(games.find((g) => g.id === job.id), done, { think: r.think ?? null, botStats: r.botStats });
             Object.assign(tIndex.games.find((g) => g.id === job.id), done);
@@ -417,9 +430,22 @@ async function main() {
             }
             const top = doc.bots.slice(0, 3).map((b) => `${b.name} ${b.btElo}`).join(', ');
             const fault = r.by ? ` (${r.by} ${r.faultKind})` : '';
-            console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}: ${r.outcome}${fault} ${r.winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
+            console.log(`[${doc.progress.finished}/${schedule.length}] ${job.id}${host ? ` @${host}` : ''}: ${r.outcome}${fault} ${r.winner ?? ''} R${r.round} ${r.steps} steps ${r.ms}ms${r.error ? ' ' + r.error : ''} | ${top}`);
         }
-    });
+    };
+    const play = (q, h) => runPool(q, { workers, hangMs, workerData: { maxSteps, engineRev: engine, capMs, key, decks, pool: pool ? { cards: pool.cards } : null }, ...h });
+    // helpers play random-deck round robins only, and only recorded ones (a helper's replay is part of what it sends)
+    const base = relayBase(REMOTE);
+    const lane = !!base && record && !decks && !pool && !vs;
+    if (REMOTE && !lane) {
+        console.log(`remote: helpers stay out of this run (${base ? 'they play recorded round robins of random decks only' : 'ARENA_REMOTE is not a relay address'})`);
+    }
+    if (lane) {
+        const limits = { maxSteps, capMs: config.capMs, hangMs, gameMs: DEFAULT_GAME_MS(capMs) };
+        await remoteLane({ base, queue, keyOf: (seed) => (key ? gameKey(key, seed) : null), limits, runPool: play, ...hooks }).run();
+    } else {
+        await play(queue, hooks);
+    }
     [...held.keys()].forEach(publish);
     status = 'done';
     if (key) {

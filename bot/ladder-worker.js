@@ -1,7 +1,8 @@
 'use strict';
 /**
  * Worker thread for ladder.js (through game-pool.js): loads the engine once, then plays the games it is sent.
- * workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool }.
+ * workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool }. A game is dealt from gameKey(key, seed),
+ * or from the job's own `key` when it has one (null = the seed alone; arena/play-seed.js sends the game key itself).
  *
  * Both bots are built here and guarded (players/guard.js) with the same capMs. While a bot loads or runs (its calls,
  * and the timers and promise callbacks its code left behind) the worker writes its seat and start time into the
@@ -200,7 +201,7 @@ parentPort.on('message', async (job) => {
                 }
             };
         }
-        const key = workerData.key ? gameKey(workerData.key, job.seed) : null;
+        const key = job.key !== undefined ? job.key : workerData.key ? gameKey(workerData.key, job.seed) : null;
         // a fresh copy per game: the deck objects go into the engine and the replay header
         const decks = job.decks && { p1: structuredClone(workerData.decks[job.decks[0]]), p2: structuredClone(workerData.decks[job.decks[1]]) };
         r = await playGame(env, { seed: job.seed, bots, decks, pool: decks ? null : workerData.pool ?? null, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });

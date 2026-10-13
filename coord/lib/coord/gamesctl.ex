@@ -14,9 +14,10 @@ defmodule Coord.Gamesctl do
 
   alias Coord.{ChildEnv, Config}
 
-  # the referee's whole environment may hold these and nothing else (games.js botEnv)
+  # the referee's whole environment may hold these and nothing else (games.js botEnv), and ARENA_REMOTE, the helper
+  # relay's URL, which only this module puts there
   @referee_env ~w(PATH HOME LANG TZ ARENA_HOME ARENA_RESULTS ARENA_PUBLIC_RESULTS ARENA_DASH SWU_WASM_CACHE
-                  SWU_CARD_JSON ARENA_SECRET_FILE ARENA_BOT_USER)
+                  SWU_CARD_JSON ARENA_SECRET_FILE ARENA_BOT_USER ARENA_REMOTE)
   @max_round 1_000_000
   @reasons ~w(changed stale resume same settling no-competitor)
 
@@ -65,7 +66,10 @@ defmodule Coord.Gamesctl do
   defp reason(%{"why" => why}) when why in @reasons, do: why
   defp reason(_), do: "?"
 
-  @doc "The checked command for round k: {:ok, %Coord.Round.Spec{}} (root, 30 s). It also clears a stale lock."
+  @doc """
+  The checked command for round k: {:ok, %Coord.Round.Spec{}} (root, 30 s). It also clears a stale lock. When the
+  helper node is on, the referee's environment gets ARENA_REMOTE, the relay's URL, which it passes to the ladder.
+  """
   def referee_cmd(arena, k) when is_integer(k) do
     args = ["referee-cmd", "--arena", arena, "--round", Integer.to_string(k)]
 
@@ -78,13 +82,19 @@ defmodule Coord.Gamesctl do
         arena: arena,
         round: k,
         cmd: out["cmd"],
-        env: out["env"],
+        env: remote_env(out["env"]),
         cwd: out["cwd"] || Config.app(),
         cap_ms: Config.get(:round_cap_ms)
       }
 
       {:ok, spec}
     end
+  end
+
+  # the relay's URL is this machine's to give: one that came from referee-cmd is dropped
+  defp remote_env(env) do
+    env = Map.delete(env, "ARENA_REMOTE")
+    if Coord.Remote.enabled?(), do: Map.put(env, "ARENA_REMOTE", Coord.Remote.relay_url()), else: env
   end
 
   def referee_cmd!(arena, k) do
