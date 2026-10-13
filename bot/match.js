@@ -18,11 +18,12 @@ const { seatFor, Shadow, BotError } = require('./protocol');
  * `watch` ({ pre(eg, pid, actions, step), post(eg, pid, action, split), end(eg, res), sim?(eg, pid) }) observes every
  * real move, and with `sim` every simulation (sim returns the same three hooks for one, or null): bot/omni/rs/stress.js.
  * It only reads the engine and must not throw.
+ * `engine` adds options to env.newGame for the real game and its lookahead copy, such as { selectionToggles: true }.
  * playGame closes no bot: whoever started a bot program closes it.
  *
  * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, events, botStats, timing}}
  */
-async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null }) {
+async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null, engine = {} }) {
     if (bots[0] === bots[1] && typeof bots[0]?.decide === 'function') {
         throw new Error(`${bots[0].name}: one protocol client cannot play both seats`);
     }
@@ -59,7 +60,7 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         if (Object.keys(versions).length) {
             res.versions = versions;
         }
-        const setup = { seed: streams.engine, deck1: decks.p1, deck2: decks.p2 };
+        const setup = { ...engine, seed: streams.engine, deck1: decks.p1, deck2: decks.p2 };
         eg = env.newGame(setup);
         // every lookahead runs on a copy of the game (protocol.js Shadow) that follows every real move
         const shadow = seats.some((s) => s.wantsSims || s.needsUndo) ? new Shadow(env, setup) : null;
