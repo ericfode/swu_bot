@@ -194,7 +194,12 @@
         };
         try {
             const bundles = {};
-            for (const hex of lease.bundles ?? []) {
+            // the machine lists a lease's bundles as {id, bytes} (coord Remote); a bare id is taken too
+            const hexes = (lease.bundles ?? []).map((b) => (typeof b === 'string' ? b : b?.id)).filter((h) => /^[0-9a-f]{64}$/.test(String(h)));
+            if (hexes.length !== (lease.bundles ?? []).length) {
+                throw new Error('the lease names a bundle this tab cannot read');
+            }
+            for (const hex of hexes) {
                 const r = await call('GET', `/bundle/${hex}`, undefined, { raw: true, timeoutMs: 120000 });
                 if (!r.bytes) {
                     throw new Error(`bundle ${hex.slice(0, 12)} did not download (${r.status || r.error})`);

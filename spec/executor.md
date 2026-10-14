@@ -66,7 +66,7 @@ session cookie on the window. The window adds the swarm's token itself and remem
 | Machine (port 8090) | Window (the swarm) | |
 |---|---|---|
 | `POST /v1/hello` `{build, cards, slots}` | `POST /api/swarm/hello` | 200 `{ok, name, heartbeatMs, leaseLostMs, claimMs}`, or 409 when the executor's build or card data are not the machine's |
-| `POST /v1/claim` `{slot}` | `POST /api/swarm/claim` | waits up to `claimMs`: 200 `{lease, job, bundles, deadlineMs}` or 204 |
+| `POST /v1/claim` `{slot}` | `POST /api/swarm/claim` | waits up to `claimMs`: 200 `{lease, job, bundles, deadlineMs}` or 204; `bundles` is `[{id, bytes}]`, one per version in the job |
 | `GET /v1/bundle/<sha256>` | `GET /api/swarm/bundle/<sha256>` | a bundle of a seed this executor holds (canonical tar) |
 | `POST /v1/lease/<id>/heartbeat` | `POST /api/swarm/lease/<id>/heartbeat` | at once, then every `heartbeatMs`: 200 `{continue: true}`, or 410 when the seed was taken back |
 | `POST /v1/lease/<id>/result` | `POST /api/swarm/lease/<id>/result` | the result or `{failed}`; 410 when taken back |

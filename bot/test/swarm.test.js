@@ -172,7 +172,7 @@ function fakeMachine() {
             return reply(409, { error: { code: 'build', want: { build: 'b1' } } });
         }
         if (u.pathname === '/v1/claim') {
-            return body.slot.endsWith('-2') ? reply(204) : reply(200, { lease: 'L1', job: { seed: 1 }, bundles: ['a'.repeat(64)], deadlineMs: 1 });
+            return body.slot.endsWith('-2') ? reply(204) : reply(200, { lease: 'L1', job: { seed: 1 }, bundles: [{ id: 'a'.repeat(64), bytes: 3 }], deadlineMs: 1 });
         }
         if (u.pathname.startsWith('/v1/lease/')) {
             return reply(200, { continue: true });
