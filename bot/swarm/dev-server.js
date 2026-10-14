@@ -44,8 +44,40 @@ const roster = [...residents.map((n) => ({ name: n, bot: { kind: 'resident' } })
 let handed = 0;
 const leases = new Map();
 const waiting = [];
+// The round's index as the window has it (bot/ladder.js tIndex): tabs take seeds from the front, and the stand-in
+// machine and a helper "play" seeds from the back, one every 2 s, so the page's round grid fills from both ends.
+const index = { id: 'arena-r1', bots: [...new Set(roster.map((r) => r.name))], gamesPerPairing: 0, games: [] };
+let back = SEEDS;
+const entry = (job, outcome, host, winnerSeat = null) => job.games.map((g) => ({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, outcome, winner: winnerSeat ? g[winnerSeat] : null, winnerSeat, host, rounds: 0, steps: 0 }));
+const putEntries = (list) => {
+    for (const e of list) {
+        const i = index.games.findIndex((g) => g.id === e.id);
+        if (i < 0) {
+            index.games.push(e);
+        } else {
+            index.games[i] = e;
+        }
+    }
+};
+setInterval(() => {
+    if (back > handed && Date.now() >= AWAKE_AT) {
+        const k = --back;
+        const job = jobAt(k);
+        putEntries(entry(job, 'won', k % 3 ? null : 'eric', 'p1'));
+    }
+}, 2000).unref();
+function jobAt(k) {
+    const a = roster[(k * 2) % roster.length];
+    const b = roster[(k * 2 + 1) % roster.length];
+    const seed = 900000 + k;
+    return {
+        v: 1, seed, key: crypto.createHash('sha256').update(`dev-${seed}`).digest('hex'), maxSteps: 3000, capMs: 60000, hangMs: 120000, gameMs: 1800000,
+        games: [{ id: `${a.name}-vs-${b.name}-${seed}`, p1: a.name, p2: b.name }, { id: `${b.name}-vs-${a.name}-${seed}`, p1: b.name, p2: a.name }],
+        bots: { [a.name]: a.bot, [b.name]: b.bot }
+    };
+}
 function nextJob() {
-    if (handed >= SEEDS) {
+    if (handed >= back) {
         return null;
     }
     const k = handed++;
@@ -103,6 +135,7 @@ async function machine(req, res, url) {
         }
         const id = crypto.randomBytes(8).toString('hex');
         leases.set(id, { job, slot, at: Date.now(), beats: 0 });
+        putEntries(entry(job, 'running', 'swarm'));
         console.log(`seed ${job.seed} -> ${slot} (lease ${id}): ${job.games[0].id}`);
         // as coord's Remote lists them: {id, bytes}
         const listed = Object.values(job.bots).filter((b) => b.bundle).map((b) => ({ id: b.bundle, bytes: bundles.get(b.bundle).bytes.length }));
@@ -127,6 +160,7 @@ async function machine(req, res, url) {
         }
         const body = JSON.parse(await readAll(req));
         leases.delete(p[2]);
+        putEntries(body.failed ? entry(l.job, 'won', null, 'p2') : body.results.map(({ id, result: r }) => ({ ...entry(l.job, 'won', 'swarm').find((e) => e.id === id), outcome: r.outcome, winner: r.winner, winnerSeat: r.winnerSeat, rounds: r.round, steps: r.steps })));
         if (body.failed) {
             console.log(`seed ${l.job.seed}: FAILED (${body.failed})`);
         } else {
@@ -180,6 +214,13 @@ http.createServer(async (req, res) => {
         if (url.pathname === '/') {
             res.writeHead(302, { location: '/swarm' });
             return res.end();
+        }
+        // the window's own reads that the page's round grid uses
+        if (url.pathname === '/api/standings') {
+            return json(res, 200, { result: { rounds: [{ round: 1, status: 'running', ladderId: 'arena-r1' }] } });
+        }
+        if (url.pathname === '/api/docs/runs/arena-r1') {
+            return json(res, 200, { result: { ...index, gamesPerPairing: 0, games: index.games, scheduled: SEEDS * 2 } });
         }
         if (url.pathname === '/check') {
             res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' });

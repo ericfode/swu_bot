@@ -73,6 +73,41 @@ td .w { color: var(--gold); font-weight: 700; }
 td .f { color: var(--warn); }
 td.f { color: var(--bad); white-space: normal; }
 .empty { color: var(--faint); }
+/* the round: one cell per game, colored by who played it */
+.round { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 12px; }
+.round > header { border: 0; overflow: visible; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; justify-content: space-between; }
+.round h2 { margin: 0; font: 650 16px/1.2 var(--sans); }
+.round h2 small { font: 500 12px var(--mono); color: var(--muted); margin-left: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 500 12px var(--mono); color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(11px, 1fr)); gap: 3px; }
+.cells span { aspect-ratio: 1; border-radius: 3px; background: #1a2240; }
+.cells .m, .legend .m { background: var(--accent); }
+.cells .h, .legend .h { background: #b07cff; }
+.cells .s, .legend .s { background: var(--gold); }
+.cells .x, .legend .x { background: var(--bad); }
+.cells .run, .legend .run { background: transparent; box-shadow: inset 0 0 0 2px var(--p1); animation: pulse 1.2s ease-in-out infinite; }
+.cells .me { box-shadow: 0 0 0 2px var(--ink); }
+.cells .fresh { animation: pop .6s ease-out; }
+@keyframes pulse { 50% { box-shadow: inset 0 0 0 2px var(--p2); } }
+@keyframes pop { 0% { transform: scale(1.7); filter: brightness(1.8); } 100% { transform: none; filter: none; } }
+/* finished seeds: the score, then each game's final board */
+.donegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.fin { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.fin > header { border: 0; overflow: visible; display: flex; justify-content: space-between; gap: 10px; font: 600 12px var(--mono); color: var(--muted); }
+.fin .score { font: 650 14px var(--mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin .score b { color: var(--gold); }
+.fin.failed .score { color: var(--bad); white-space: normal; font-size: 13px; }
+.mini { display: grid; gap: 3px; padding: 7px 9px; border-radius: 8px; background: #0d1222; }
+.mini .meta { font: 500 11px var(--mono); color: var(--muted); display: flex; justify-content: space-between; }
+.mini .row { display: grid; grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) 2.2em; gap: 8px; align-items: center; font: 600 12px var(--mono); }
+.mini .row .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini .row.p1 .n { color: var(--p1); } .mini .row.p2 .n { color: var(--p2); }
+.mini .row .b { height: 6px; border-radius: 3px; background: #1a2240; overflow: hidden; }
+.mini .row .b b { display: block; height: 100%; border-radius: 3px; }
+.mini .row .v { text-align: right; font-variant-numeric: tabular-nums; }
+.mini .row.won .v::after { content: ' ★'; color: var(--gold); }
+.mini .u { font: 500 10px var(--mono); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 7.9em; }
 @media (prefers-reduced-motion: reduce) { .side .bar b { transition: none; } .side .bar b.hit { animation: none; } }
 </style>
 </head>
@@ -108,13 +143,12 @@ td.f { color: var(--bad); white-space: normal; }
     <span><b id="sRate">0</b>games per hour</span>
     <span><b id="sFailed">0</b>handed back</span>
   </section>
-  <section class="slots" id="live" aria-label="Seeds in play"></section>
-  <section class="done" aria-label="Finished seeds">
-    <table>
-      <thead><tr><th>Time</th><th>Seed</th><th>Result, both seats</th><th>Took</th></tr></thead>
-      <tbody id="done"><tr><td class="empty" colspan="4">No seed finished in this tab yet.</td></tr></tbody>
-    </table>
+  <section class="round" aria-labelledby="roundTitle">
+    <header><h2 id="roundTitle">The round</h2><div class="legend" id="legend"></div></header>
+    <div class="cells" id="cells" role="img" aria-label="Every game of the round, colored by who played it"></div>
   </section>
+  <section class="slots" id="live" aria-label="Seeds in play"></section>
+  <section class="donegrid" id="done" aria-label="Seeds this tab finished"><div class="fin"><div class="score empty">No seed finished in this tab yet.</div></div></section>
 </main>
 <script>
 'use strict';
@@ -243,14 +277,104 @@ let dirty = true;
 setInterval(() => { if (dirty) { dirty = false; renderLive(); } }, 200);
 setInterval(() => { dirty = true; const h = Math.max(1 / 60, (Date.now() - started) / 3600000); $('sRate').textContent = Math.round(S.games / h); }, 1000);
 
-function addDone(row) {
-  const tb = $('done');
-  if (tb.querySelector('.empty')) tb.innerHTML = '';
-  const tr = document.createElement('tr');
-  tr.innerHTML = row;
-  tb.prepend(tr);
-  while (tb.children.length > 40) tb.lastChild.remove();
+// A finished seed: its score from both seats, then each game's last board (bases' hp, units, the winner's star).
+function addDone(card) {
+  const box = $('done');
+  if (box.querySelector('.empty')) box.replaceChildren();
+  box.prepend(card);
+  while (box.children.length > 24) box.lastChild.remove();
 }
+function finCard(l, m, time) {
+  const card = el('article', `fin${m.t === 'failed' ? ' failed' : ''}`);
+  const head = el('header');
+  head.append(el('span', null, `Seed ${l?.seed ?? '?'}`), el('span', null, m.t === 'done' ? `${time} · ${m.secs} s` : time));
+  const score = el('div', 'score');
+  card.append(head, score);
+  if (m.t === 'failed') {
+    score.textContent = `Handed back: ${m.why}`;
+    return card;
+  }
+  const games = l ? [...l.games.values()] : [];
+  const [a, b] = games[0]?.bots ?? ['?', '?'];
+  const wa = m.results.filter((r) => r.winner === a).length, wb = m.results.filter((r) => r.winner === b).length;
+  const sa = el(wa > wb ? 'b' : 'span', null, a), sb = el(wb > wa ? 'b' : 'span', null, b);
+  score.append(sa, ` ${wa} – ${wb} `, sb);
+  for (const g of games) {
+    const r = m.results.find((x) => x.id === g.id) ?? g.result ?? {};
+    const mini = el('div', 'mini');
+    mini.append(Object.assign(el('div', 'meta'), { innerHTML: '' }));
+    mini.firstChild.append(el('span', null, `${g.bots[0]} vs ${g.bots[1]}`), el('span', null, `R${r.round ?? '?'} · ${r.steps ?? '?'} steps${r.outcome && r.outcome !== 'won' ? ` · ${r.outcome}` : ''}`));
+    for (const [k, i] of [['p1', 0], ['p2', 1]]) {
+      const p = g.last?.[k];
+      const f = p && p.hp ? Math.max(0, p.hp - p.d) / p.hp : r.winnerSeat === k ? 1 : 0;
+      const row = el('div', `row ${k}${r.winnerSeat === k ? ' won' : ''}`);
+      const bar = el('div', 'b'), fill = el('b');
+      fill.style.width = `${(f * 100).toFixed(1)}%`;
+      fill.style.backgroundColor = hpColor(f);
+      bar.append(fill);
+      row.append(el('span', 'n', g.bots[i]), bar, el('span', 'v', p ? String(Math.max(0, p.hp - p.d)) : '–'));
+      mini.append(row);
+      if (p) mini.append(el('div', 'u', `${p.leader} · ${p.units.join(' ') || 'no units'}`));
+    }
+    card.append(mini);
+  }
+  return card;
+}
+
+// --- the round: every game, from the round's own index on the window (sent by the games machine every 3 s)
+const ROUND = { k: null, sig: '', seen: new Set(), mine: new Set() };
+const api = async (u) => {
+  const r = await fetch(u, { credentials: 'same-origin' });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j?.result ?? null;
+};
+async function pollRound() {
+  try {
+    const st = await api('/api/standings');
+    const rounds = (st?.rounds ?? []).filter((x) => Number.isInteger(x?.round));
+    const last = rounds[rounds.length - 1];
+    // the playing round is in the standings already, or the one after the last finished
+    const tries = last ? (last.status && last.status !== 'done' ? [last] : [{ round: last.round + 1 }, last]) : [{ round: 0 }];
+    for (const t of tries) {
+      const doc = await api(`/api/docs/runs/${encodeURIComponent(t.ladderId || `arena-r${t.round}`)}`);
+      if (doc && Array.isArray(doc.games)) {
+        drawRound(t.round, doc);
+        return;
+      }
+    }
+  } catch { /* the window will answer next time */ }
+}
+function drawRound(k, doc) {
+  const n = Array.isArray(doc.bots) ? doc.bots.length : 0;
+  const scheduled = Math.max(doc.games.length, Number(doc.scheduled) || (n > 1 && doc.gamesPerPairing ? (n * (n - 1) / 2) * doc.gamesPerPairing : 0));
+  const kind = (g) => (g.outcome === 'running' ? 'run' : g.outcome === 'ERROR' && !g.winner ? 'x' : !g.host ? 'm' : g.host === 'swarm' ? 's' : 'h');
+  const sig = `${k}|${scheduled}|${doc.games.map((g) => `${g.id}:${kind(g)}`).join(',')}|${[...ROUND.mine].length}`;
+  if (sig === ROUND.sig) return;
+  ROUND.sig = sig;
+  if (ROUND.k !== k) { ROUND.k = k; ROUND.seen = new Set(doc.games.filter((g) => g.outcome !== 'running').map((g) => g.id)); }
+  const count = { m: 0, h: 0, s: 0, x: 0, run: 0, me: 0 };
+  const cells = [];
+  for (const g of doc.games) {
+    const c = kind(g);
+    count[c]++;
+    const span = document.createElement('span');
+    span.className = c;
+    if (ROUND.mine.has(g.id) && c !== 'run') { span.classList.add('me'); count.me++; }
+    if (c !== 'run' && !ROUND.seen.has(g.id)) { span.classList.add('fresh'); ROUND.seen.add(g.id); }
+    span.title = `${g.p1} vs ${g.p2}: ${c === 'run' ? 'playing' : g.winner ? `${g.winner} won` : g.outcome}${c === 'run' ? '' : ` · ${g.host ?? 'games machine'}`}`;
+    cells.push(span);
+  }
+  for (let i = doc.games.length; i < scheduled; i++) cells.push(document.createElement('span'));
+  $('cells').replaceChildren(...cells);
+  const done = doc.games.length - count.run;
+  $('roundTitle').innerHTML = '';
+  $('roundTitle').append(`Round ${k}`, el('small', null, `${done} of ${scheduled || doc.games.length} games done`));
+  const chip = (cls, text) => { const x = el('span'); x.append(el('i', cls), text); return x; };
+  $('legend').replaceChildren(chip('m', `games machine ${count.m}`), chip('h', `helpers ${count.h}`), chip('s', `swarm ${count.s}${count.me ? ` (this tab ${count.me})` : ''}`), chip('run', `playing ${count.run}`), ...(count.x ? [chip('x', `no result ${count.x}`)] : []));
+}
+pollRound();
+setInterval(() => { if (!document.hidden) pollRound(); }, 4000);
 
 function onMessage(m) {
   if (m.t === 'state') {
@@ -290,15 +414,12 @@ function onMessage(m) {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     if (m.t === 'done') {
       S.seeds++; S.games += m.results.length;
-      // both seats as one score: the first game's p1 against its p2
-      const [a, b] = l ? [...l.games.values()][0].bots : ['?', '?'];
-      const wa = m.results.filter((r) => r.winner === a).length, wb = m.results.filter((r) => r.winner === b).length;
-      const odd = m.results.filter((r) => r.outcome !== 'won').map((r) => esc(r.outcome)).join(', ');
-      addDone(`<td>${time}</td><td>${esc(l?.seed ?? '')}</td><td><span class="${wa > wb ? 'w' : ''}">${esc(a)}</span> ${wa} – ${wb} <span class="${wb > wa ? 'w' : ''}">${esc(b)}</span>${odd ? ` <span class="f">${odd}</span>` : ''}</td><td>${m.secs} s</td>`);
+      for (const r of m.results) ROUND.mine.add(r.id);
+      pollRound();
     } else {
       S.failed++;
-      addDone(`<td>${time}</td><td>${esc(l?.seed ?? '')}</td><td class="f">Handed back: ${esc(m.why)}</td><td></td>`);
     }
+    addDone(finCard(l, m, time));
     $('sGames').textContent = S.games; $('sSeeds').textContent = S.seeds; $('sFailed').textContent = S.failed;
     if (!leases.size && joined) setPhase('connected');
     dirty = true;
