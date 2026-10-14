@@ -12,7 +12,8 @@
  * runPool plays the queue here as before (game-pool.js consumes it with shift); every 2 s the lane
  *   - asks the relay how many helper claims wait (GET status) and, for each, takes an offerable seed out of the queue
  *     and offers it (POST offer). A seed is offerable when all of its games are still in the queue and every bot in
- *     them can run on a helper: heuristic, rush, a WebAssembly resident (play-seed.js RESIDENTS) or a version
+ *     them can run on a helper: heuristic, rush, a WebAssembly resident the image builds (play-seed.js RESIDENTS; the
+ *     games image builds none, its residents are entries) or a version
  *     <agent>-v<N> of kind 'wasm' with a bundle/ folder, whose canonical tar (bot/compiled/bundle.py tar) is put to
  *     the relay before its first offer. The seed whose bots have had the fewest helper games goes first (then the
  *     lowest seed), so no bot plays much more on helpers than another. The seat-swapped games of a seed always go

@@ -51,15 +51,16 @@ function readJson(file, dflt) {
     }
 }
 
-/** Competitors and baselines. A missing roster is the default; a roster that exists but does not parse throws, so a
- *  bad hand edit stops the arena instead of silently running (and later writing) an empty roster. */
+/** Competitors and baselines. A missing roster is the default (no baselines: the arena's own bots are resident entries);
+ *  a roster that exists but does not parse throws, so a bad hand edit stops the arena instead of silently running (and
+ *  later writing) an empty roster. */
 function roster() {
     let text;
     try {
         text = fs.readFileSync(ROSTER, 'utf8');
     } catch (e) {
         if (e.code === 'ENOENT') {
-            return { thinkCapMs: 60000, baselines: ['rush', 'heuristic'], agents: [] };
+            return { thinkCapMs: 60000, baselines: [], agents: [] };
         }
         throw e;
     }
@@ -128,6 +129,24 @@ function versionsOf(agent) {
         .filter((d) => !d.startsWith('.') && d.startsWith(prefix) && /^\d+$/.test(d.slice(prefix.length)))
         .map((d) => Number(d.slice(prefix.length)))
         .sort((a, b) => a - b);
+}
+
+/** The resident entry that replaces a bot built into the image: the same bot, entered as a submission (c-clock-wasm: c_clock). */
+const residentName = (baseline) => baseline.replace(/-wasm$/, '').replace(/-/g, '_');
+
+/**
+ * The arena's own bots in play: each resident entry's newest version it has not withdrawn, then the built-in baselines
+ * that no such version replaces. referee.js lineup fields the same bots (and skips a version it cannot load).
+ */
+function ownBots(r = roster()) {
+    const fielded = new Map();
+    for (const a of r.agents.filter((x) => x.resident)) {
+        const v = versionsOf(a.name).filter((n) => !(a.withdrawn ?? []).includes(n)).pop();
+        if (v !== undefined) {
+            fielded.set(a.name, `${a.name}-v${v}`);
+        }
+    }
+    return [...fielded.values(), ...r.baselines.filter((b) => !fielded.has(residentName(b)))];
 }
 
 const exists = (file) => fs.existsSync(file);
@@ -262,6 +281,6 @@ function readJsonl(file) {
 }
 
 module.exports = {
-    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeAtomic, writeJson, readJson, roster, updateRoster, versionsOf,
+    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeAtomic, writeJson, readJson, roster, updateRoster, versionsOf, residentName, ownBots,
     exists, claimDir, writeFiles, mirror, removeDir, removeTree, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
 };

@@ -318,3 +318,54 @@ resourcing, then the scorer. With resourcing fixed, the value head costs about 1
 parts left in jepa-plan-reval are the candidate order (the 16 best moves by the imagined score), the follow-up
 branching, and the prompts the planner does not reach. jepa-plan-r stays the entry whose positions the JEPA judges
 itself; jepa-plan-reval is the strongest bot built on it.
+
+## Teaching the value head to rank moves (jepa-v1k, jepa-v1d)
+
+The planner keeps the move whose settled position V scores highest, so V has to order the positions one window's
+moves reach. `rank_data.js` replays recorded games of c-clock and rust-search (the teachers) and, at 15% of their
+action windows, plays up to 16 candidate moves on the referee's copy the way the planner does: each move, up to 4 of
+its first follow-up options, then random choices until it settles. The teacher's line is the real game up to the same
+point. `rank_train.py` fits V on frozen v1 latents with a softmax per window that puts the teacher's position first,
+plus an outcome term (`--target rank`), or trains V to copy linear-deck-g4's score at every position
+(`--target eval`).
+
+    node bot/jepa/rank_data.js --out data/rank/v1 --workers 4 --p 0.15 <run dirs>   # --skip DIR carries on a stopped run
+    python3 bot/jepa/rank_train.py prep --data data/rank/v1 --out data/jepa/rank-v1-ev.npz --eval linear-deck-g4 --eval-all
+    python3 bot/jepa/rank_train.py fit --data data/jepa/rank-v1-ev.npz --out bot/jepa/models/jepa-v1k --epochs 30
+    python3 bot/jepa/rank_train.py fit --data data/jepa/rank-v1-ev.npz --target eval --hidden 256 --epochs 60 --out bot/jepa/models/jepa-v1d
+
+Data: 2,776 games (the run stopped at a time limit after 35% of the 7,916 recorded games), 14,392 windows, 155k
+settled positions; 10% of games held out (1,414 windows). Play: 702 fresh-deal games against c-clock, as above.
+
+| Scorer of the planned positions | Picks the teacher's move | Same move as linear-deck-g4 | Wins vs c-clock |
+|---|---|---|---|
+| v1 value head (jepa-plan-r) | 40.1% | 56.5% | 266/694 = 38.3% |
+| ranking head v1k, plans only (jepa-plan-rkp) | 63.6% | 59.0% | 263/689 = 38.2% |
+| ranking head v1k everywhere (jepa-plan-rk) | 63.6% | | 248/690 = 35.9% |
+| evaluator copy v1d, plans only (jepa-plan-rd) | 45.8% | 76.8% | 262/690 = 38.0% |
+| linear-deck-g4 (jepa-plan-reval) | 50.1% | 100% | 337/691 = 48.8% |
+
+The first two columns are held-out windows. `--plan-model` scores only the planner's positions with the second model
+and leaves every other prompt to v1; jepa-plan-rk uses v1k for those prompts too and loses a little.
+
+- The ranking head learned what it was taught: it picks the teacher's move 64% of the time against 40% for v1 and 50%
+  for linear-deck-g4. That is no artifact of the teacher's line being the real game: with the teacher's move played on
+  by random choices like the other lines (`prep --teacher-line alt`), v1k still picks it 62.5%.
+- Play did not change. jepa-plan-rkp and jepa-plan-r won the same games to within one (89 against 88 games only one of
+  them won). Agreement with strong bots on held-out windows does not predict strength; the branch fine-tune (v1b)
+  showed the same.
+- The copy of the evaluator does not play like it either. In 60 logged games (a scratch copy of the bot that scores
+  each planned window with all three), it picks linear-deck-g4's move in 74% of real windows (v1: 59%), so the planner's
+  own positions are not out of distribution, and it still plays at 38.0%. The 10 points sit in the 1 window in 4 where
+  even a close copy disagrees.
+- The latent is the limit for scoring. A head on the encoder's 73 raw state features alone (`fit --input state`, an
+  offline check that jepa_bot.py cannot load) copies the evaluator better than any head on z (85.8% same move) and
+  ranks better (68.6% teacher moves); z next to the raw features adds nothing. v1's 96 numbers drop details the
+  scorer needs, and no training target for the head brings them back.
+- v1k's level drifts (Brier 0.264 on the teacher's positions, base rate 0.222) because ended games and no-op moves sit
+  in the softmax with fixed scores. `--live-only --w-outcome 1` keeps V a win estimate (Brier 0.158, better than v1's
+  0.175) at 61.9% teacher moves. The planner only compares, so the drift does not affect play.
+
+jepa-plan-reval stays the strongest JEPA bot. A better JEPA scorer needs an encoder that keeps those details, for
+example one trained with the ranking or copy loss flowing into it; a new target for the head on v1's latent is
+unlikely to help.

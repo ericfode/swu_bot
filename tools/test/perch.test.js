@@ -165,7 +165,7 @@ test('plan lists the in-scope files for scan and coverage, and keeps other comma
 });
 
 test('the repo scope reads the shared core and leaves the bots out', () => {
-  for (const file of ['bot/env.js', 'bot/match.js', 'bot/ladder.js', 'bot/players/index.js', 'bot/players/external.js', 'spec/schemas/x.json', 'viewer/src/core/api.ts', 'studio/src/main.tsx', 'analysis/lib/llm.js', 'meta/analyze.js', 'importer/import.js', 'tools/bin/perch', 'bot/arena/referee.js', 'bot/arena/web/strategy-diagram.js', 'bot/eval/curves.js', 'bot/info/dial.js', 'bot/omni/lens.js', 'bot/learn/eval.js']) {
+  for (const file of ['bot/env.js', 'bot/match.js', 'bot/ladder.js', 'bot/players/index.js', 'bot/players/external.js', 'spec/schemas/x.json', 'studio/src/main.tsx', 'analysis/lib/llm.js', 'meta/analyze.js', 'importer/import.js', 'tools/bin/perch', 'bot/arena/referee.js', 'bot/arena/web/strategy-diagram.js', 'bot/eval/curves.js', 'bot/info/dial.js', 'bot/omni/lens.js', 'bot/learn/eval.js']) {
     assert.ok(inScope(file, scopes.repo), file);
   }
   for (const file of ['bot/players/heuristic.js', 'bot/players/rush.js', 'bot/rust/src/main.rs', 'bot/haskell/src/Main.hs', 'bot/examples/random_bot.py', 'bot/test/bots.test.js', 'bot/test/ratings.test.js', 'analysis/test/units.test.js', 'forceteki/server/game/Game.ts', 'README.md',

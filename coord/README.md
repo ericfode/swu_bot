@@ -57,7 +57,7 @@ GAMES_DATA=/srv/x/data GAMES_APP=$PWD/.. PORT=18181 GAMES_PROXY_PORT=18182 GAMES
 | `GAMES_REQUIRE_MOUNT` | unset | `1`: refuse to start unless `GAMES_DATA` is its own file system |
 | `SWU_WINDOW` | required in prod | the window's address |
 | `SWU_WINDOW_TOKEN` | required in prod | taken out of the environment at boot |
-| `ARENA_RESIDENTS`, `SWU_CARD_JSON` | unset | passed on to the children when set |
+| `SWU_CARD_JSON` | unset | passed on to the children when set |
 | `GAMES_HELPER_PORT` | unset | the helper API; unset, helpers are off and the ladder plays every game |
 | `GAMES_HELPER_LISTEN` | `FLY_PRIVATE_IP`, else `::` | the helper API's address |
 | `GAMES_RELAY_PORT` | 8082 | the ladder's relay to the helpers, 127.0.0.1 only |

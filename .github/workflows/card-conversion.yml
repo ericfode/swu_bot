@@ -1,7 +1,10 @@
 name: Convert card definitions
 
+# Pull requests run it on their branch and main runs it after a merge; a push to any other branch does not,
+# so a PR no longer starts two runs that cancel each other.
 on:
   push:
+    branches: [main]
     paths:
       - forceteki
       - bot/card-compiler/**
@@ -41,8 +44,6 @@ on:
       - Cargo.lock
       - package.json
       - .github/workflows/card-conversion.yml
-  schedule:
-    - cron: '17 11 * * *'
   workflow_dispatch:
 
 permissions:
@@ -74,7 +75,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm --prefix forceteki run build
       # cards:compile rewrites the generated files, so check the committed ones first;
-      # the daily run skips this and uploads the regenerated diff instead.
+      # a manual run skips this and uploads the regenerated diff instead.
       - name: Fail if committed generated files are stale
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: npm run cards:check

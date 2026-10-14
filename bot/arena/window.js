@@ -22,7 +22,8 @@
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
  * Start it with ARENA_MODE=window node bot/arena/server.js --host 0.0.0.0 --port 8080. With ARENA_GAMES_WAKE set (the
  * games machine's private address, http://swu-arena-games.flycast/wake), every submission wakes the games machine
- * (coord/), and server.js wakes it every 6 hours.
+ * (coord/): arena_submit's, and a new pending one a token writes to the submissions collection (ops/house-submit.js).
+ * server.js also wakes it every 6 hours.
  */
 const fs = require('fs');
 const path = require('path');
@@ -613,7 +614,7 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
 
 /**
  * The window's request handler. opts: home (storage folder), auth (an auth.js instance; default from the environment),
- * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts and staleMs (for tests).
+ * app (the friends' page file), kit (the viewer kit), appParts and staleMs (for tests).
  */
 /**
  * Wakes the games machine (its coordinator's POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
@@ -638,7 +639,6 @@ function createWindow(opts = {}) {
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
-    const webFile = opts.web ?? path.join(__dirname, 'web', 'index.html');
     const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'studio', 'dist-kit', 'swu-viewer-kit.js');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm') });
@@ -720,10 +720,14 @@ function createWindow(opts = {}) {
     const schema = (props, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
     const pick = (a, keys) => Object.fromEntries(keys.filter((k) => a[k] !== undefined && a[k] !== null).map((k) => [k, a[k]]));
     const REPLAY_SLICE = 100000;
-    // GitHub logins ignore case; the arena names an owner github:<login> in lowercase
-    const mySubmissions = (login) => store.listDocs('submissions').filter((d) => d.id.startsWith(`${String(login).toLowerCase()}.`))
-        .map((d) => parseOr(store.getDoc('submissions', d.id), null)).filter(Boolean)
-        .sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+    // GitHub logins ignore case; the arena names an owner github:<login> in lowercase. The owner decides, not the id
+    // alone: the arena's own (house) submissions are house.<name>.<t>, and house is a GitHub login too.
+    const mySubmissions = (login) => {
+        const me = String(login).toLowerCase();
+        return store.listDocs('submissions').filter((d) => d.id.startsWith(`${me}.`))
+            .map((d) => parseOr(store.getDoc('submissions', d.id), null)).filter((x) => x && String(x.owner).toLowerCase() === me)
+            .sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+    };
     /**
      * Why @login may not submit as competitor n, or null: a name is its builder's (their builder name, or it with _ and
      * a suffix), never another person's builder name (bob may not take bob_x while @bob-x can sign in), and never
@@ -1129,7 +1133,13 @@ function createWindow(opts = {}) {
                     need(!Array.isArray(doc.games) || !doc.games.length || oursOf(doc).size > 0, 'bad_request', 'a run against people must list our bots in "bots"; every other seat is stored as "opponent"');
                     text = JSON.stringify(maskRun(doc));
                 }
+                // a submission written straight to the collection (ops/house-submit.js, the arena's own bots) wakes the
+                // games machine as arena_submit does; the machine's own writes update submissions that already exist
+                const wake = ns === 'submissions' && doc?.state === 'pending' && store.getDoc(ns, id) == null;
                 store.putDoc(ns, id, text);
+                if (wake) {
+                    wakeGames();
+                }
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
             }
             if (req.method === 'DELETE') {
@@ -1211,10 +1221,15 @@ function createWindow(opts = {}) {
                 return sendText(res, req, who.login ? 403 : 200, 'text/html; charset=utf-8', auth.signInPage(url.pathname + url.search, who.login));
             }
             if (url.pathname === '/' || url.pathname === '/index.html') {
-                return serveFile(req, res, fs.existsSync(appFile) ? appFile : webFile, 'text/html; charset=utf-8');
+                if (!fs.existsSync(appFile)) {
+                    return sendText(res, req, 503, 'text/plain', 'the app is not built: npm run app -- --public (app/README.md)');
+                }
+                return serveFile(req, res, appFile, 'text/html; charset=utf-8');
             }
+            // the old arena page is gone; its bookmarks open the app
             if (url.pathname === '/arena' || url.pathname === '/arena.html') {
-                return serveFile(req, res, webFile, 'text/html; charset=utf-8');
+                res.writeHead(302, { location: '/', 'cache-control': 'no-store' });
+                return res.end();
             }
             if (url.pathname === '/strategy-diagram.js') {
                 return serveFile(req, res, path.join(__dirname, 'web', 'strategy-diagram.js'), 'text/javascript');
@@ -1222,7 +1237,7 @@ function createWindow(opts = {}) {
             if (url.pathname === '/kit.js') {
                 return serveFile(req, res, kitFile, 'text/javascript');
             }
-            // the arena page's replay links (<ladder>/games/<id>.jsonl and <ladder>/index.json), from the window's collections
+            // replay links in the replays-server shape of spec/replay-format.md (<ladder>/games/<id>.jsonl and <ladder>/index.json), from the window's collections
             const rep = /^\/replays\/([\w.%@+-]+)\/(?:games\/([\w.%@+-]+)\.jsonl|(index)\.json)$/.exec(url.pathname);
             if (rep) {
                 const dec = (x) => {

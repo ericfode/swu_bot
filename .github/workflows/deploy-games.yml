@@ -36,6 +36,9 @@ on:
       - '.github/workflows/deploy-games.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('games-test-{0}', github.ref) || 'deploy-games' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -43,33 +46,41 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+          package-manager-cache: false
       # play-seed's games need the engine, which this job does not build: those tests skip, the job checks stay
       - run: node --test bot/test/gamesctl-plan.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js
 
   # the Elixir coordinator (coord/): the versions Dockerfile.games builds with; the :node tests call the real gamesctl.js
   test-coord:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: coord
     env:
       MIX_ENV: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+          package-manager-cache: false
       - uses: erlef/setup-beam@v1
         with:
           otp-version: '28.5.0.7'
           elixir-version: '1.19.6'
           version-type: strict
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             coord/deps
@@ -84,6 +95,7 @@ jobs:
     needs: [test, test-coord]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_GAMES_TOKEN }}
     steps:
@@ -91,7 +103,9 @@ jobs:
       - if: env.FLY_API_TOKEN == ''
         run: echo "::notice::FLY_GAMES_TOKEN is not set, so the games machine was not deployed"
       - if: env.FLY_API_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # the engine at the commit this repo pins; FORCETEKI_TOKEN replaces the workflow's token for it when set
       - if: env.FLY_API_TOKEN != ''
         env:

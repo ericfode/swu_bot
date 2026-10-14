@@ -5,15 +5,17 @@
  *
  *   node bot/arena/referee.js [--round K] [--games 4] [--workers 3]           play rated round K (default: the next one)
  *
- * A round is a round robin (bot/ladder.js) of <agent>-v<latest> for every roster agent plus roster.baselines: --games per
- * pair, every seed from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live).
+ * A round is a round robin (bot/ladder.js) of <agent>-v<latest> for every roster agent: --games per pair, every seed
+ * from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live). The arena's own
+ * bots play too: the resident entries (roster agents marked resident, submitted like any other), and the bots built
+ * into the image that roster.baselines names until a resident replaces each (lineup).
  * Round K again resumes its ladder: the games already played are kept (ladder.js --resume).
  * Round seeds and keys are secret until the ladder starts: they come from a 32-byte secret outside the arena folder
  * (roundSeed, roundKey; the key deals every game, rng.js).
  * Every bot plays under the same rules (ladder.js --cap-ms roster.thinkCapMs, --hang-ms 30 s past the 2x wall cap): a bot that thinks
  * more than the cap in a game, throws, answers wrong, hangs or fails to load loses it (the game is an ERROR with `by`
- * = its seat; cappedScore). Ratings are Bradley-Terry with the baselines' mean pinned to 1500, per round and
- * over all rounds (so versions compare across rounds). Writes, all in ARENA_HOME:
+ * = its seat; cappedScore). Ratings are Bradley-Terry with the mean of the arena's own bots (anchorsOf) pinned to 1500,
+ * per round and over all rounds (so versions compare across rounds). Writes, all in ARENA_HOME:
  *   standings.json     every round so far
  *   rounds/r<K>.md     what competitors read: standings, results per opponent, lost games with replay paths
  * plus the dashboard panels and experiment (dash.js), refreshed every 30 s while a round runs. While its ladder runs,
@@ -25,7 +27,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 const { bradleyTerry } = require('../ratings');
-const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, writeAtomic, roster: loadRoster, versionsOf } = require('./home');
+const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, writeAtomic, roster: loadRoster, versionsOf, residentName } = require('./home');
 const dash = require('./dash');
 const { resolveArena } = require('./registry');
 
@@ -42,7 +44,21 @@ function arg(name, dflt) {
 
 let roster = loadRoster();
 // benched competitors too: one withdrawn while its last round's ladder runs still owns that round's games
-const agentOf = (bot) => [...roster.agents, ...(roster.bench ?? [])].find((a) => bot === a.name || bot.startsWith(`${a.name}-v`))?.name ?? null;
+// a resident only by its versions' names (<name>-v<N>): a resident may share a name with the bot built into the image it
+// replaces, and a built-in bot such as ismcts-vlinear-deck is no version of an entry named ismcts
+const entryOf = (bot) => [...roster.agents, ...(roster.bench ?? [])].find((a) => (bot.startsWith(`${a.name}-v`) && /^\d+$/.test(bot.slice(a.name.length + 2))) || (bot === a.name && !a.resident)) ?? null;
+/** The builder whose bot this is, or null for the arena's own bots (a resident entry, or a bot built into the image). */
+const agentOf = (bot) => {
+    const a = entryOf(bot);
+    return a && !a.resident ? a.name : null;
+};
+/** The resident entry this bot is a version of, or null. */
+const residentOf = (bot) => {
+    const a = entryOf(bot);
+    return a?.resident ? a.name : null;
+};
+/** The bots among `names` that anchor the ratings: the arena's own, resident entries and built-in baselines. */
+const anchorsOf = (names) => names.filter((n) => roster.baselines.includes(n) || residentOf(n) !== null);
 
 /**
  * Score of a finished game for p1, or null (unrated). A game a bot broke (outcome ERROR, `by` = the seat whose bot
@@ -97,10 +113,10 @@ function roundKey(secret, id, k) {
 const submissionOf = (name) => readJson(path.join(HOME, 'versions', name, 'SUBMISSION.json'), {});
 const noteOf = (name) => submissionOf(name).note ?? null;
 
-/** Bradley-Terry over the given results with the baselines' mean pinned to 1500. */
-function anchoredBT(names, results) {
+/** Bradley-Terry over the given results with the mean of `anchors` (those among `names`) pinned to 1500. */
+function anchoredBT(names, results, anchors = anchorsOf(names)) {
     const bt = bradleyTerry(names, results);
-    const bl = roster.baselines.filter((b) => names.includes(b));
+    const bl = anchors.filter((b) => names.includes(b));
     const shift = bl.length ? 1500 - bl.reduce((s, b) => s + bt[b], 0) / bl.length : 0;
     return Object.fromEntries(names.map((n) => [n, bt[n] + shift]));
 }
@@ -109,7 +125,7 @@ function scoreRound(round, ladder) {
     roster = loadRoster(); // competitors register while the referee runs
     const names = ladder.config.bots;
     const results = [];
-    const rows = Object.fromEntries(names.map((n) => [n, { name: n, agent: agentOf(n), wins: 0, losses: 0, draws: 0, unfinished: 0, forfeits: 0, thinkMs: 0, decisions: 0, p95: 0, vs: {}, lost: [] }]));
+    const rows = Object.fromEntries(names.map((n) => [n, { name: n, agent: agentOf(n), ...(residentOf(n) ? { resident: residentOf(n) } : {}), wins: 0, losses: 0, draws: 0, unfinished: 0, forfeits: 0, thinkMs: 0, decisions: 0, p95: 0, vs: {}, lost: [] }]));
     // where the games ran: the games machine, or a helper computer by name (ladder.js host, remote-lane.js)
     const hosts = {};
     for (const g of ladder.games.filter((x) => x.outcome !== 'running')) {
@@ -156,7 +172,8 @@ function scoreRound(round, ladder) {
         }
     }
     // no rated game yet: no Elo, ranks or leader to show (Bradley-Terry would put everyone at the prior)
-    const elo = results.length ? anchoredBT(names, results) : null;
+    const anchors = anchorsOf(names);
+    const elo = results.length ? anchoredBT(names, results, anchors) : null;
     const bots = names.map((n) => {
         const r = rows[n];
         const decided = r.wins + r.losses + r.draws;
@@ -173,7 +190,7 @@ function scoreRound(round, ladder) {
     }
     return { round, ladderId: ladder.id, ...(ladder.config.pool ? { pool: ladder.config.pool.kind, poolCards: ladder.config.pool.cards } : {}),
              seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
-             status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, bots, results, hosts,
+             status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, anchors, bots, results, hosts,
              remote: ladder.remote ?? null };
 }
 
@@ -209,18 +226,26 @@ function helpersLine(remote) {
 
 /**
  * All-round Elo of every bot with at least one rated game. Held-out rounds (the old holdout tournaments' last ladders,
- * on another card pool) are left out.
+ * on another card pool) are left out. The anchors stay the same as rounds go by, so a new version of a resident does not
+ * move everyone's rating: the bots built into the image that ever played (rows with no builder and no resident entry),
+ * which keep anchoring the old rounds once the image has none, else the first round's own bots.
  */
 function globalElo(rounds) {
     const results = rounds.filter((rd) => rd.pool !== 'holdout').flatMap((rd) => rd.results);
     const names = [...new Set(results.flatMap((x) => [x.a, x.b]))];
-    return Object.fromEntries(Object.entries(anchoredBT(names, results)).map(([k, v]) => [k, Math.round(v)]));
+    return Object.fromEntries(Object.entries(anchoredBT(names, results, allRoundAnchors(rounds, roster.baselines))).map(([k, v]) => [k, Math.round(v)]));
+}
+
+/** globalElo's anchors (app/src/model.cjs arenaHistory picks the same). */
+function allRoundAnchors(rounds, baselines) {
+    const builtIn = [...new Set([...baselines, ...rounds.flatMap((rd) => (rd.bots ?? []).filter((b) => !b.agent && !b.resident).map((b) => b.name))])];
+    return builtIn.length ? builtIn : rounds.find((rd) => rd.anchors?.length)?.anchors ?? [];
 }
 
 function report(rd, g) {
     const cap = roster.thinkCapMs ? `${roster.thinkCapMs / 1000}s of thinking per game` : 'none';
     const L = [`# Arena round ${rd.round} results`, '', `Ladder \`${rd.ladderId}\`: ${rd.games}/${rd.scheduled} games, ${rd.gamesPerPair} per pair (seeds from ${rd.seed}, each from both seats). Status: ${rd.status}.`,
-        `Elo = Bradley-Terry, baselines' mean pinned to 1500. "All rounds" rates every game played so far, so it compares across rounds. Time cap: ${cap}. A bot that goes over it, throws, hangs or fails to load forfeits the game (a loss).`, ''];
+        `Elo = Bradley-Terry, the mean of the arena's own bots pinned to 1500. "All rounds" rates every game played so far, so it compares across rounds. Time cap: ${cap}. A bot that goes over it, throws, hangs or fails to load forfeits the game (a loss).`, ''];
     if (!rd.bots.some((b) => b.rank !== null)) {
         L.push(`No rated games yet${rd.games ? ` (${rd.games} finished, none rated)` : ''}.`, '');
     }
@@ -285,8 +310,10 @@ function publish(round, id = ladderIdOf(round)) {
 }
 
 /**
- * Newest version of every roster agent that has one, plus the baselines. With a cutoff (ISO time) only versions
- * submitted at or before it count (versions without submittedAt always do); later ones wait for the next round.
+ * Newest version of every roster agent that has one, resident entries included, plus the built-in baselines that no
+ * resident with a version has replaced (residentName: the same bot, entered as a submission), so the arena's own bots
+ * move out of the image one by one and no round misses one. With a cutoff (ISO time) only versions submitted at or
+ * before it count (versions without submittedAt always do); later ones wait for the next round.
  */
 function lineup(cutoff = null) {
     roster = loadRoster();
@@ -308,7 +335,8 @@ function lineup(cutoff = null) {
             console.log(`${a.name}: v${ok[ok.length - 1]} cannot be loaded (no bot.js), using ${v === undefined ? 'nothing' : `v${v}`}`);
         }
     }
-    return [...agents, ...roster.baselines];
+    const fielded = new Set(agents.map(residentOf).filter(Boolean));
+    return [...agents, ...roster.baselines.filter((b) => !fielded.has(residentName(b)))];
 }
 
 // child processes (the ladder) die with the referee
@@ -508,4 +536,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };
+module.exports = { cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

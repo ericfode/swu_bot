@@ -25,7 +25,7 @@ const limit = Number(option('limit-per-card', '1'));
 assert.ok(Number.isInteger(limit) && limit > 0, '--limit-per-card must be a positive integer.');
 const { chromium } = require(option('playwright', process.env.PLAYWRIGHT_MODULE ?? 'playwright'));
 const executablePath = option('browser', process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE);
-const ts = require(path.join(repository, 'viewer/node_modules/typescript'));
+const ts = require(path.join(repository, 'studio/node_modules/typescript5'));
 const modules = new Map();
 function loadTS(filename) {
     filename = path.resolve(filename);

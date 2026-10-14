@@ -190,8 +190,12 @@ test('window: replays grow by appends at the right offset, and readers can tail 
         const tail = await go('/api/replays/arena-t1-r1/g%231?from=15', { cookie: friend });
         assert.strictEqual(await tail.text(), '{"t":"step"}\n');
         assert.deepStrictEqual((await (await go('/api/replays/arena-t1-r1', { cookie: friend })).json()).result, ['g#1']);
-        // the arena page's own replay links
+        // replay links in the replays-server shape
         assert.strictEqual(await (await go('/replays/arena-t1-r1/games/g%231.jsonl', { cookie: friend })).text(), '{"t":"header"}\n{"t":"step"}\n');
+        // the old arena page's address opens the app
+        const old = await go('/arena', { cookie: friend });
+        assert.strictEqual(old.status, 302);
+        assert.strictEqual(old.headers.get('location'), '/');
         // a whole game replaces what was there
         assert.strictEqual((await go('/api/replays/arena-t1-r1/g%231', { method: 'PUT', token: 'push-secret', body: '{"t":"end"}\n', type: 'application/x-ndjson' })).status, 200);
         assert.strictEqual(await (await go('/api/replays/arena-t1-r1/g%231', { cookie: friend })).text(), '{"t":"end"}\n');
@@ -848,7 +852,7 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
     const w = makeWindow('w-submit', { wakeGames: () => wakes++ });
     const { go, close } = await serve(w);
     try {
-        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['Kim-B', 'lee', 'kim-b-x'] }));
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['Kim-B', 'lee', 'kim-b-x', 'house'] }));
         w.store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'duel_opus', owner: null }, { name: 'kim_b_two', owner: 'github:kim-b' }, { name: 'kim_b_old', owner: 'github:someone' }] }));
         const kim = await mcpToken(w, go, 'Kim-B');
         const lee = await mcpToken(w, go, 'lee');
@@ -902,10 +906,24 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
 
         // the arena's intake writes its result back with the project token; the person reads it
         const { files, ...rest } = stored;
+        const woken = wakes;
         assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify({ ...rest, fileNames: ['bot.js'], state: 'accepted', version: 'kim_b-v1' }) })).status, 200);
         assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'feed-secret', body: '{}' })).status, 403, 'a feed cannot');
         const after = (await call(kim, 'arena_my_submissions')).value.find((x) => x.id === first.id);
         assert.deepStrictEqual([after.state, after.version, after.fileNames], ['accepted', 'kim_b-v1', ['bot.js']]);
+        assert.strictEqual(wakes, woken, 'the intake\'s result wakes nothing');
+
+        // the arena's own bots (ops/house-submit.js): a new pending submission written with the token wakes the machine
+        const house = { id: 'house.rush.x1', owner: '@arena', name: 'rush', kind: 'js', note: 'the port', files: bot.files, state: 'pending', submittedAt: new Date().toISOString() };
+        assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: kim, body: JSON.stringify(house) })).status, 403, 'signing in only reads');
+        assert.strictEqual(wakes, woken);
+        assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify(house) })).status, 200);
+        assert.strictEqual(wakes, woken + 1);
+        assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify({ ...house, state: 'checking' }) })).status, 200);
+        assert.strictEqual(wakes, woken + 1, 'only a new one');
+        assert.deepStrictEqual((await call(kim, 'arena_my_submissions')).value.map((x) => x.id).includes(house.id), false, 'no login is @arena');
+        const houseLogin = await mcpToken(w, go, 'house');
+        assert.deepStrictEqual((await call(houseLogin, 'arena_my_submissions')).value, [], 'nor @house, whose ids would match');
     } finally {
         await close();
     }

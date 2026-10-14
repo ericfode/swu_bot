@@ -107,7 +107,7 @@ const windowId = (id) => `${NAME}-${id.split('/').pop()}`;
 const PERSON = /^[^\u0000-\u001f\u007f]{1,64}$/;
 
 /**
- * One row of the run document (TournamentIndex.games, viewer/src/core/types.ts) for a game from Games.get, where
+ * One row of the run document (TournamentIndex.games, studio/src/data/types.ts) for a game from Games.get, where
  * `g.live` and `g.winnerSeat` are the feed's own call (Feed.ended): a game is over only when it says so. `person` is the
  * opponent's Karabast name when known (--names), for the window's admin view.
  */

@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const { checkJob, residentsHere, RESIDENTS, Refused } = require('../arena/play-seed');
+const { checkJob, residentsHere, Refused } = require('../arena/play-seed');
 const { gameKey } = require('../rng');
 const { checkDone } = require('../remote-lane');
 
@@ -54,13 +54,6 @@ function bundleTar(folder, dir) {
     fs.writeFileSync(path.join(dir, `${hex}.tar`), r.stdout);
     return hex;
 }
-
-test('the residents are the WebAssembly bots of gamesctl.js\'s default resident list', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'bot', 'arena', 'gamesctl.js'), 'utf8');
-    const dflt = /process\.env\.ARENA_RESIDENTS \|\| '([^']+)'/.exec(src)[1].split(',');
-    assert.deepStrictEqual(RESIDENTS, dflt.filter((n) => n.endsWith('-wasm')));
-    assert.deepStrictEqual(dflt.filter((n) => !n.endsWith('-wasm')), ['heuristic', 'rush']);
-});
 
 test('checkJob takes the lane\'s jobs and refuses everything else before anything runs', () => {
     const bundles = path.join(tmp, 'check-bundles');
@@ -187,13 +180,13 @@ test('play-seed unpacks a WebAssembly version and plays it in the sandbox', { sk
     assert.ok(fs.existsSync(path.join(r.work, 'arena', 'versions', 'kim-v1', 'bundle', 'bot.wasm')));
 });
 
-test('play-seed --warm prints which residents it compiled and which it could not', { skip: !WASMTIME && 'no wasmtime' }, () => {
+test('play-seed --warm compiles the residents this image builds, and names none it does not', { skip: !WASMTIME && 'no wasmtime' }, () => {
     const r = run(null, { args: ['--warm'] });
     assert.strictEqual(r.code, 0, r.err.join('\n'));
     const doc = JSON.parse(r.out);
     assert.deepStrictEqual(Object.keys(doc), ['ok', 'warmed', 'failed']);
     assert.strictEqual(doc.ok, true);
-    assert.deepStrictEqual([...doc.warmed, ...doc.failed.map((f) => f.name)].sort(), [...RESIDENTS].sort());
+    assert.deepStrictEqual([...doc.warmed, ...doc.failed.map((f) => f.name)].sort(), [...residentsHere()].sort(), 'an image without their bundles warms nothing and fails nothing');
     for (const f of doc.failed) {
         assert.deepStrictEqual(Object.keys(f), ['name', 'error']);
         assert.strictEqual(typeof f.error, 'string');

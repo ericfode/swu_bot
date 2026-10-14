@@ -26,6 +26,7 @@ design rates only v2 bots; moving them is the small change in `spec/MIGRATION.md
 python3 -m pip install wasmtime==49.0.0 ziglang==0.17.0   # once; rustup target add wasm32-wasip1 for the Rust bots
 python3 bot/compiled/build.py                  # all 9 into build/compiled/<name>/, ids in build/compiled/index.json
 python3 bot/compiled/build.py c-clock          # just one
+python3 bot/compiled/build.py --tools          # only Javy and CPython for WASI: what the arena's intake packs with
 node bot/ladder.js --bots c-clock,c-clock-wasm --vs rush --games 6 --key none --out results/wasm-check
 python3 bot/compiled/compare.py results/wasm-check   # same games as the native build?
 python3 bot/compiled/bundle.py build/compiled/c-clock   # print a bundle's id and sizes

@@ -1,7 +1,7 @@
 # swu_bot
 
 A Star Wars Unlimited bot lab using the real forceteki rules engine, with
-tournament runners, replay viewers, and position analysis. Development uses
+tournament runners, a replay viewer, and position analysis. Development uses
 Eric's fork, `https://github.com/ericfode/swu_bot`, whose upstream is
 `https://github.com/thrazznos/swu_bot`. Both repositories are private.
 
@@ -23,8 +23,8 @@ npm run gate
 ```
 
 `setup` installs the exact lockfile dependency versions with `npm ci` at the root
-and in `forceteki`, `viewer`, `analysis`, and `studio`. It builds the pinned
-engine and both viewers, then downloads official card data. It does not start
+and in `forceteki`, `analysis`, and `studio`. It builds the pinned
+engine and the viewer (`studio`), then downloads official card data. It does not start
 services or require API keys. Native npm dependencies are installed for each
 machine; do not copy `node_modules` between macOS and Linux.
 
@@ -47,7 +47,7 @@ by the npm lockfiles; matching code and dependencies alone cannot guarantee
 identical future card data. Record the source revision and card-data snapshot
 when comparing experiments.
 
-`smoke` runs the root, analysis, and studio animation tests and builds both viewers.
+`smoke` runs the root, analysis, and studio animation tests and builds the viewer.
 Animation rules tests read the installed official card JSON, so run the default
 setup (including cards) before the full smoke check.
 It requires a normal Git checkout with history (including commit `5123bc4`), Git
@@ -65,7 +65,7 @@ If the official card-data service is unavailable:
 
 ```bash
 npm run setup -- --skip-cards
-npm test && npm run analysis:test && npm run viewer:build && npm --prefix studio run build
+npm test && npm run analysis:test && npm --prefix studio run build
 npm --prefix studio run fixtures
 REPLAYS_DIR="$PWD/studio/fixtures/replays" npm run studio:dev
 ```
@@ -79,13 +79,12 @@ when access is available, then run the real-game checks.
 ```bash
 npm run random -- 3 1 6000          # real seeded games; needs card data
 npm run demo                       # generate replays/demo
-npm run viewer                     # original viewer, http://localhost:5180
 npm run studio:dev                 # Holotable, http://localhost:5190
 npm run test:py                    # optional Python bot tests; Python 3 required
 ```
 
 Stop viewer processes with Ctrl-C. In a cloud workspace, use its authenticated
-port preview/forwarding for 5180 or 5190. If that preview requires binding Vite
+port preview/forwarding for 5190. If that preview requires binding Vite
 on all interfaces, use `npm run studio:dev -- --host 0.0.0.0` inside that
 workspace; keep its access controls in place.
 
@@ -128,7 +127,7 @@ npm run smoke:source
 ```
 
 `smoke:source` runs bot, importer and app tests, analysis and studio animation checks,
-and both viewer builds. It requires installed official card JSON. It explicitly skips the one legacy-evaluation comparison that reads
+and the viewer build. It requires installed official card JSON. It explicitly skips the one legacy-evaluation comparison that reads
 `5123bc4` from Git, and omits the Perch tooling suite (Git snapshots, parser
 cache, and local HTTP mocks). It is narrower than `smoke`; passing it does not
 validate those omitted checks. The original tests remain unchanged. Restore a

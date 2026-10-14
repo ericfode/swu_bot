@@ -8,7 +8,7 @@ case "${1:-}" in
     --skip-cards) cards=false ;;
     --help|-h)
         echo 'Usage: npm run setup -- [--skip-cards]'
-        echo 'Install locked dependencies and build the engine and both viewers.'
+        echo 'Install locked dependencies and build the engine and the viewer (studio).'
         echo '--skip-cards leaves real games unavailable; fixture viewers and non-animation unit tests still work.'
         exit 0
         ;;
@@ -35,11 +35,10 @@ if [ ! -f forceteki/package-lock.json ]; then
     git submodule update --init --recursive
 fi
 
-for dir in . forceteki viewer analysis studio; do
+for dir in . forceteki analysis studio; do
     npm --prefix "$dir" ci --no-audit --no-fund
 done
 npm --prefix forceteki run build
-npm --prefix viewer run build
 npm --prefix studio run build
 
 if [ "$cards" = true ]; then

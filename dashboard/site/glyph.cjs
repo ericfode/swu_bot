@@ -1,4 +1,4 @@
-// Board-position glyph: a whole SWU Snapshot (recorder format, viewer/src/core/types.ts) in a 40x48 icon.
+// Board-position glyph: a whole SWU Snapshot (recorder format, spec/replay-format.md) in a 40x48 icon.
 // Player 2 is drawn in the top half and player 1 in the bottom half, mirrored around the centre line.
 //   outer edge bar   base HP left (full width = full HP)
 //   tall row         ground units; short row nearest the edge: space units
