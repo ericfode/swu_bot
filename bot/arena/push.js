@@ -252,8 +252,10 @@ async function pushDir(ns, dir) {
 /**
  * The arena's uplink (gamesctl push on the games machine): its state as its own API answers it (status, versions,
  * panels), the files the app's loader reads (roster without tokens, standings, round reports), and the replays of its
- * newest round ladders. `once()` sends what changed since its last pass; false when it failed (logged). `docs` (hashes
- * of the documents sent) and `runs` (per round ladder) can come from an earlier process (gamesctl push).
+ * newest round ladders. `once()` sends what changed since its last pass; false when it failed (logged).
+ * `once({ only: 'round' })` sends only the newest round ladder (its index, ladder document and replays), so the coordinator can
+ * pass it every few seconds while a round plays and viewers see each game move by move. `docs` (hashes of the
+ * documents sent) and `runs` (per round ladder) can come from an earlier process (gamesctl push).
  */
 function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
     const { call } = require('./api');
@@ -262,43 +264,47 @@ function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
         const r = await call(m, a);
         return r.error ? null : r.result;
     };
-    const once = async () => {
+    /** The arena's own documents: status, standings, roster (no tokens), round reports, each builder's versions and panel. */
+    const arenaDocs = async (roster, standings, put) => {
+        await put('status', await result('status'));
+        await put('standings', standings);
+        // no token hashes, wherever the roster keeps competitors (agents, and the bench)
+        await put('roster', JSON.parse(JSON.stringify(roster, (k, v) => (k === 'tokenHash' ? undefined : v))));
+        const rounds = path.join(home.HOME, 'rounds');
+        for (const f of fs.existsSync(rounds) ? fs.readdirSync(rounds) : []) {
+            const m = /^r(\d+)\.md$/.exec(f);
+            const read = m && readRegular(path.join(rounds, f));
+            if (read) {
+                await put(`report-${m[1]}`, { round: Number(m[1]), markdown: read.buf.toString('utf8') });
+            }
+        }
+        for (const a of [...roster.agents, ...(roster.bench ?? [])]) {
+            const vs = home.versionsOf(a.name);
+            const list = (await result('versions', { name: a.name })) ?? [];
+            await put(`versions-${a.name}`, list.map((s, i) => ({ v: vs[i], ...s })));
+            await put(`panel-${a.name}`, await result('panel', { name: a.name }));
+        }
+        // the same panels, leaderboard and experiment where the dashboard's loader reads them (dash.js writes them to
+        // dashboard/panels and dashboard/experiments in the project)
+        const boards = await result('panels');
+        for (const p of [...(boards?.panels ?? []), boards?.leaderboard].filter((x) => typeof x?.id === 'string')) {
+            await putChanged(docs, 'panels', p.id, p);
+        }
+        if (boards?.experiment) {
+            await putChanged(docs, 'experiments', 'arena', boards.experiment);
+        }
+    };
+    const once = async ({ only = null } = {}) => {
         try {
-            const roster = home.roster();
             const standings = readJson(path.join(home.HOME, 'standings.json'));
-            const put = (id, doc) => (doc == null ? null : putChanged(docs, 'arena', id, doc));
-            await put('status', await result('status'));
-            await put('standings', standings);
-            // no token hashes, wherever the roster keeps competitors (agents, and the bench)
-            await put('roster', JSON.parse(JSON.stringify(roster, (k, v) => (k === 'tokenHash' ? undefined : v))));
-            const rounds = path.join(home.HOME, 'rounds');
-            for (const f of fs.existsSync(rounds) ? fs.readdirSync(rounds) : []) {
-                const m = /^r(\d+)\.md$/.exec(f);
-                const read = m && readRegular(path.join(rounds, f));
-                if (read) {
-                    await put(`report-${m[1]}`, { round: Number(m[1]), markdown: read.buf.toString('utf8') });
-                }
-            }
-            for (const a of [...roster.agents, ...(roster.bench ?? [])]) {
-                const vs = home.versionsOf(a.name);
-                const list = (await result('versions', { name: a.name })) ?? [];
-                await put(`versions-${a.name}`, list.map((s, i) => ({ v: vs[i], ...s })));
-                await put(`panel-${a.name}`, await result('panel', { name: a.name }));
-            }
-            // the same panels, leaderboard and experiment where the dashboard's loader reads them (dash.js writes them to
-            // dashboard/panels and dashboard/experiments in the project)
-            const boards = await result('panels');
-            for (const p of [...(boards?.panels ?? []), boards?.leaderboard].filter((x) => typeof x?.id === 'string')) {
-                await putChanged(docs, 'panels', p.id, p);
-            }
-            if (boards?.experiment) {
-                await putChanged(docs, 'experiments', 'arena', boards.experiment);
+            if (only !== 'round') {
+                await arenaDocs(home.roster(), standings, (id, doc) => (doc == null ? null : putChanged(docs, 'arena', id, doc)));
             }
             // the newest two round ladders (the one playing and the one before), from the arena's results folder:
-            // standings name the finished rounds, and the referee plays arena-r<K+1> next
+            // standings name the finished rounds, and the referee plays arena-r<K+1> next. Only the newest with 'round'.
             const done = [...(standings?.rounds ?? [])].sort((a, b) => a.round - b.round);
             const named = [...done.map((r) => r?.ladderId), `arena-r${(done.at(-1)?.round ?? 0) + 1}`];
-            const ids = [...new Set(named)].filter((x) => typeof x === 'string' && /^arena-[\w-]+$/.test(x) && fs.existsSync(path.join(home.PUBLIC_RESULTS, x))).slice(-2);
+            const ids = [...new Set(named)].filter((x) => typeof x === 'string' && /^arena-[\w-]+$/.test(x) && fs.existsSync(path.join(home.PUBLIC_RESULTS, x))).slice(only === 'round' ? -1 : -2);
             for (const id of ids) {
                 const dir = path.join(home.PUBLIC_RESULTS, id);
                 if (fs.existsSync(dir)) {

@@ -428,18 +428,20 @@ function attachViewers(keep) {
     const old = keep.get(key);
     if (old) { ph.replaceWith(old.host); continue; }
     ph.dataset.key = key; ph.innerHTML = '<p class="muted" style="padding:16px">Loading replay…</p>';
-    const v = { host: ph, v: null, key, game: ph.dataset.game, offset: 0, live: ph.dataset.live === '1' };
+    const v = { host: ph, v: null, key, game: ph.dataset.game, offset: 0, live: ph.dataset.live === '1', tried: Date.now() };
     VIEWERS.set(key, v); mountViewer(v, ph);
   }
   for (const [k, v] of VIEWERS) if (!seen.has(k)) { try { v.v?.destroy(); } catch {} VIEWERS.delete(k); }
 }
+// a run's replay folder; on the window, a round that started after the last model is still at results/<id>
+const runDir = run => runById(run)?.dir || (S.api ? `results/${run}` : null);
 async function replayText(key) {
   if (DATA.bundle[key]) return DATA.bundle[key];
   if (REPLAYS.has(key)) return REPLAYS.get(key);
   if (!S.reader) return null;
-  const [run, id] = key.split('/'), r = runById(run);
-  if (!r?.dir) return null;
-  const t = await S.reader.text(`${r.dir}/games/${id}.jsonl`);
+  const [run, id] = key.split('/'), dir = runDir(run);
+  if (!dir) return null;
+  const t = await S.reader.text(`${dir}/games/${id}.jsonl`);
   if (t) { REPLAYS.set(key, t); if (REPLAYS.size > 6) REPLAYS.delete(REPLAYS.keys().next().value); }
   return t;
 }
@@ -457,7 +459,7 @@ async function mountViewer(v, host) {
   if (!text) {
     const i = gameIdx.get(v.game), playing = i != null && M.games[i][4] === 3;
     host.innerHTML = `<div class="notice">${failed ? `<b>The replay did not load</b> (${esc(failed)}). Reload the page to try again.`
-      : S.live ? (playing ? '<b>No board for this game.</b> It is playing, but its run does not record replays, so only its result will show here.' : '<b>No replay for this game.</b> Its run did not record one, so only the result shows.')
+      : S.live ? (playing ? '<b>Waiting for this game\'s moves.</b> Some games send them only when they end.' : '<b>No replay for this game.</b> Its run did not record one, so only the result shows.')
       : `<b>Replay not in this snapshot.</b> ${CAN_LIVE ? 'Open the app with live data (allow project files) and every recorded game loads on demand.' : 'This build carries a few replays; the rest are not included.'}`} ${failed || S.live || !CAN_LIVE ? '' : '<button type="button" class="searchbtn" data-act="golive" style="margin-left:6px">Go live</button>'}</div>`;
     host.querySelector('[data-act]')?.addEventListener('click', () => startLive(true)); return;
   }
@@ -498,10 +500,12 @@ setInterval(loadArt, 2500);
 async function tailViewers() {
   if (!S.files) return;
   for (const v of VIEWERS.values()) {
+    // a playing game whose first moves had not arrived when it opened: open it again every few seconds
+    if (!v.v && v.live && !v.ended && v.host.isConnected && Date.now() - (v.tried || 0) > 4000) { v.tried = Date.now(); mountViewer(v, v.host); continue; }
     if (!v.v || v.ended || !v.live) continue;
-    const [run, id] = v.game.split('/'), r = runById(run); if (!r?.dir) continue;
+    const [run, id] = v.game.split('/'), dir = runDir(run); if (!dir) continue;
     try {
-      const res = await S.files.read((S.prefix + `${r.dir}/games/${id}.jsonl`).replace(/\/+/g, '/'), { offset: v.offset });
+      const res = await S.files.read((S.prefix + `${dir}/games/${id}.jsonl`).replace(/\/+/g, '/'), { offset: v.offset });
       if (!res.bytes.length) continue;
       v.offset += res.bytes.length;
       const txt = (v.partial || '') + new TextDecoder().decode(res.bytes), parts = txt.split('\n'); v.partial = parts.pop();
@@ -612,7 +616,7 @@ async function gridTick() {
       const due = t.live && !t.ended ? Date.now() - (t.at || 0) > 5000 : !t.fetched;
       if (!due) continue;
       t.fetched = true;
-      try { await tailTile(key, t); } catch (e) { if (e?.code === 'rate_limited') break; }
+      try { await tailTile(key, t); } catch (e) { t.at = Date.now(); if (e?.code === 'rate_limited') break; }
       paintTile(el);
     }
   } finally { gridBusy = false; }
@@ -855,13 +859,42 @@ function thoughtsFeed(panels, n = 14) {
   all.sort((a, b) => String(b.t).localeCompare(String(a.t)));
   return all.length ? all.slice(0, n).map(x => `<div class="thought"><span><span class="bot" style="--c:${famColor('llm')}"><i></i><span>${esc(String(x.who).replace(/-v\d+$/, ''))}</span></span><br><span class="mono faint" style="font-size:var(--fs-xs)">${ago(x.t)} ago</span></span><span>${esc(numFix(x.text))}</span></div>`).join('') : '<p class="muted">No thoughts posted yet.</p>';
 }
+// ---------- the Live board follows the round ----------
+// While a round plays, the Live page's board moves on to another game when its game ends or has sent no moves yet.
+// The app's model comes every 15 s and is rebuilt at most every 10 s, longer than most games last (about 17 s), so the
+// board picks from the round's own game list and replay sizes, which the games machine sends every 3 s: a playing
+// game with moves, the one with the fewest (the newest, so there is the most of it to watch).
+const FOLLOW = { run: null, game: null, p1: null, p2: null, busy: false };
+function playingRunId() {
+  const A = M.arena, n = A.current?.n;
+  return A.hosted && A.phase === 'ladder' && n != null ? A.standings?.rounds?.find(r => r.round === n)?.ladderId || `arena-r${n}` : null;
+}
+async function followRound() {
+  const r = route(), rid = playingRunId();
+  if (!S.api || FOLLOW.busy || !rid || r.parts[0] !== 'arena' || (r.parts[1] || '') !== '' || document.hidden) return;
+  const el = document.querySelector('.hero .kithost'), v = el && VIEWERS.get(el.dataset.key);
+  if (v?.v && !v.ended && v.game.startsWith(`${rid}/`)) return;
+  FOLLOW.busy = true;
+  try {
+    const get = async u => { const x = await fetch(u, { credentials: 'same-origin' }); return x.ok ? (await x.json()).result : null; };
+    const [doc, sizes] = await Promise.all([get(`/api/docs/runs/${enc(rid)}`), get(`/api/replays/${enc(rid)}?sizes=1`)]);
+    const size = new Map((sizes || []).map(x => [x.id, x.size || 0]));
+    const next = (doc?.games || []).filter(g => g?.outcome === 'running' && size.get(g.id) > 0 && `${rid}/${g.id}` !== v?.game).sort((a, b) => size.get(a.id) - size.get(b.id))[0];
+    if (!next) return;
+    Object.assign(FOLLOW, { run: rid, game: next.id, p1: next.p1, p2: next.p2 });
+    if (playingRunId() === rid && route().parts[0] === 'arena') render(true);
+  } catch {} finally { FOLLOW.busy = false; }
+}
+setInterval(followRound, 3000);
 /** Arena standings: per round, the standings in Atlas terms next to the round's every-pair grid (who beat whom);
  *  once there are several rounds, one rating line per builder on top. */
 function pageArenaLive() {
   const A = M.arena, run = arenaRun(), st = A.standings, live = A.phase === 'work' || A.phase === 'ladder';
   const ri = st?.rounds?.length ? st.rounds.length - 1 : -1;
-  const ag = run ? (() => { const lg = [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && M.games[i][4] === 3); if (lg != null) return lg; const p = DATA.picks.arena && gameIdx.get(DATA.picks.arena); return p ?? [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && hasReplay(i)); })() : null;
-  const x = ag != null ? gameRow(M.games[ag]) : null, key = x ? `${x.run.id}/${x.id}` : '';
+  // the game the board follows (above), else the round's newest playing game, else a picked or recorded one
+  const fol = FOLLOW.game && FOLLOW.run === playingRunId() ? FOLLOW : null, fi = fol ? gameIdx.get(`${fol.run}/${fol.game}`) : null;
+  const ag = fi != null ? fi : fol ? null : run ? (() => { const lg = [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && M.games[i][4] === 3 && hasReplay(i)) ?? [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && M.games[i][4] === 3); if (lg != null) return lg; const p = DATA.picks.arena && gameIdx.get(DATA.picks.arena); return p ?? [...M.games.keys()].reverse().find(i => M.runs[M.games[i][0]] === run && hasReplay(i)); })() : null;
+  const x = ag != null ? gameRow(M.games[ag]) : fol ? { run: { id: fol.run }, id: fol.game, p1: fol.p1, p2: fol.p2, res: 3 } : null, key = x ? `${x.run.id}/${x.id}` : '';
   const preview = !live && A.archived;
   const panels = live || A.hosted ? A.competitors.map(c => c.panel).filter(Boolean) : (DATA.t0panels || []);
   return `${phaseBanner()}

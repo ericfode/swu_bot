@@ -16,6 +16,8 @@ config :coord, Coord.Config,
   idle_ms: 10 * 60_000,
   settle_ms: 90_000,
   tick_ms: 20_000,
+  # while a round plays, the Pusher sends the round's replays this often (Coord.Pusher)
+  round_tick_ms: 3_000,
   replay_hours: 24,
   round_cap_ms: 6 * 3_600_000,
   games: 2,

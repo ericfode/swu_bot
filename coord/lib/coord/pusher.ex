@@ -3,6 +3,10 @@ defmodule Coord.Pusher do
   Sends the arena's state, standings and round replays to the window (gamesctl push) every 20 s and when poked,
   from the first poke on: the Scheduler pokes it once setup is done.
 
+  While a round plays (a referee child runs), it also sends the playing round's index and replays every 3 s
+  (`gamesctl push --only round`, round_tick_ms), so viewers follow each game move by move: a game lasts about 17 s.
+  A poke is a full push, and so is any push 20 s or more after the last full one.
+
   terminate/2 makes one last push of at most 7 s. It comes after the round has stopped: the Pusher starts before
   the FLAME pool, Oban, the Scheduler and Coord.Shutdown, so it stops after them.
   """
@@ -22,11 +26,11 @@ defmodule Coord.Pusher do
   @impl true
   def init(_opts) do
     Process.flag(:trap_exit, true)
-    {:ok, %{started: false, task: nil, again: false, timer: nil, failing: false}}
+    {:ok, %{started: false, task: nil, again: false, timer: nil, failing: false, full_at: nil, poked: false}}
   end
 
   @impl true
-  def handle_cast(:poke, state), do: {:noreply, push_now(%{state | started: true})}
+  def handle_cast(:poke, state), do: {:noreply, push_now(%{state | started: true, poked: true})}
 
   @impl true
   def handle_info(:tick, state), do: {:noreply, push_now(%{state | timer: nil})}
@@ -60,7 +64,14 @@ defmodule Coord.Pusher do
 
   defp push_now(%{task: nil} = state) do
     if state.timer, do: Process.cancel_timer(state.timer)
-    %{state | task: Task.async(fn -> push_all([]) end), again: false, timer: nil}
+    now = System.monotonic_time(:millisecond)
+
+    full =
+      state.poked or state.full_at == nil or now - state.full_at >= Coord.Config.get(:tick_ms) or not round_playing?()
+
+    opts = if full, do: [], else: [only: :round]
+    state = if full, do: %{state | full_at: now}, else: state
+    %{state | task: Task.async(fn -> push_all(opts) end), again: false, timer: nil, poked: false}
   end
 
   defp push_now(state), do: %{state | again: true}
@@ -68,12 +79,14 @@ defmodule Coord.Pusher do
   defp after_push(state) do
     state = %{state | task: nil}
 
-    if state.again do
-      push_now(state)
-    else
-      %{state | timer: Process.send_after(self(), :tick, Coord.Config.get(:tick_ms))}
+    cond do
+      state.again -> push_now(state)
+      round_playing?() -> %{state | timer: Process.send_after(self(), :tick, Coord.Config.get(:round_tick_ms))}
+      true -> %{state | timer: Process.send_after(self(), :tick, Coord.Config.get(:tick_ms))}
     end
   end
+
+  defp round_playing?, do: Enum.any?(Coord.Proc.running(), &(&1.kind == :referee))
 
   defp push_all(opts) do
     results = for arena <- Coord.Arena.all(), do: Coord.Gamesctl.push(arena.id, opts)

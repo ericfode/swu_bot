@@ -11,7 +11,7 @@ console.log = console.error;
  *   node bot/arena/gamesctl.js plan --arena open --settled-since <ms> [--replay-hours 24]   (as arena)
  *   node bot/arena/gamesctl.js referee-cmd --arena open --round K [--games 2] [--workers 2] [--cap-ms 60000]   (root)
  *   node bot/arena/gamesctl.js intake --state <file> --boot <id>                       (root)
- *   node bot/arena/gamesctl.js push --arena open --state <file> --boot <id>            (as arena)
+ *   node bot/arena/gamesctl.js push --arena open --state <file> --boot <id> [--only round]   (as arena)
  *
  * Each prints exactly one JSON line on stdout and exits 0; 1 is a failure (the reason on stderr), 2 a usage error,
  * 143 a stop by SIGTERM. intake and push reach the window through the coordinator's loopback proxy (SWU_WINDOW), which
@@ -23,7 +23,8 @@ console.log = console.error;
  *     referee-cmd  the command that plays round K, run by the coordinator: {"cmd":[..],"env":{..},"cwd":".."}
  *                  (a new round's --cap-ms becomes the roster's time limit; a round cut short keeps its own rules)
  *     intake       one pass over the window's submissions: {"open":N|null,"accepted":N,"done":N[,"error":".."]}
- *     push         the arena's state and round replays to the window: {"ok":bool}
+ *     push         the arena's state and round replays to the window: {"ok":bool}; --only round sends just the newest
+ *                  round's index and replays (the coordinator's fast pass while a round plays)
  *
  * --state files keep what one pass learned for the next (intake: submissions finished and results the window did not
  * take; push: what was sent). They hold the --boot they were written in: a new boot pushes everything again and reads
@@ -349,8 +350,9 @@ const commands = {
             replays: new Map(Object.entries(r.replays ?? {})),
             ...(r.known ? { known: new Map(r.known) } : {})
         }]));
+        const only = o.only === undefined ? null : need(o, 'only', (v) => v === 'round');
         const pusher = require('./push').arenaPusher({ docs, runs });
-        const ok = await pusher.once();
+        const ok = await pusher.once({ only });
         writeState(file, {
             boot,
             docs: Object.fromEntries(pusher.docs),

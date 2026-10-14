@@ -18,6 +18,37 @@ defmodule Coord.PusherTest do
     assert "start push --arena open --state #{state} --boot #{Coord.Boot.id()}" in fake_events()
   end
 
+  test "while a referee runs, it sends the round every round tick and everything every tick" do
+    put_setting(:tick_ms, 1_000)
+    put_setting(:round_tick_ms, 100)
+
+    pushes_of = fn only ->
+      Enum.count(
+        fake_events(),
+        &(String.starts_with?(&1, "start push ") and String.ends_with?(&1, " --only round") == only)
+      )
+    end
+
+    referee = Task.async(fn -> Coord.Proc.run(:referee, ["/bin/sh", "-c", "sleep 30"], grace: 200) end)
+    running_proc(:referee)
+    start_supervised!(Coord.Pusher)
+    Coord.Pusher.poke()
+
+    # the poke's push is a full one; the round goes every round tick after it, and everything again a tick later
+    eventually(fn -> pushes_of.(true) >= 3 end)
+    assert pushes_of.(false) == 1
+    assert hd(Enum.filter(fake_events(), &String.starts_with?(&1, "start push "))) =~ ~r/--boot \S+$/
+    eventually(fn -> pushes_of.(false) >= 2 end, 3_000)
+
+    # no referee, no round pushes: every push is a full one again, a tick apart
+    Task.shutdown(referee, :brutal_kill)
+    eventually(fn -> not Enum.any?(Coord.Proc.running(), &(&1.kind == :referee)) end)
+    Process.sleep(300)
+    round = pushes_of.(true)
+    Process.sleep(1_300)
+    assert pushes_of.(true) == round
+  end
+
   test "a poke during a push makes one more push right after it" do
     start_supervised!(Coord.Pusher)
     fake("push", :sleep, 1)
