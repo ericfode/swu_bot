@@ -40,6 +40,11 @@ static int v3, eventsFix;
    it mulliganed 2% of its hands, the people 37%. The mulligan is free: a new six from this deck holds such a unit 91%
    of the time. */
 static int mullFix;
+/* --banfix: a click that changed nothing stays banned only until the board changes, instead of for the rest of the round.
+   Luke Skywalker's leader action ("If you attacked with a Fighter unit this phase, deal 1 damage to a unit") clicked
+   before any Fighter attack is cancelled as a no-op; banned for the round, it then stayed unused after the Fighter
+   attacks: c-clock2 skipped the ping in 21% of the rounds where it could have used it on Karabast. */
+static int banFix;
 
 /* ---------- observation ---------- */
 
@@ -111,6 +116,7 @@ static struct {
     char lastKey[KEYLEN];
     char banned[64][KEYLEN];
     int nbanned, bannedRound;
+    unsigned long long bannedFp; /* --banfix: the board the bans were made on */
     /* what the last action-window click was for */
     char intent[16];
     char attacker[64];
@@ -667,11 +673,12 @@ static const Act *choose_window(State *st, const Act *acts, int n) {
 
     /* loop guard */
     unsigned long long fp = fingerprint(st);
-    if (G.bannedRound != st->round) {
+    if (G.bannedRound != st->round || (banFix && G.bannedFp != fp)) {
         G.nbanned = 0;
         G.bannedRound = st->round;
     }
     if (G.lastRound == st->round && G.lastFp == fp && G.lastKey[0] && G.nbanned < 64) {
+        G.bannedFp = fp;
         snprintf(G.banned[G.nbanned++], KEYLEN, "%s", G.lastKey);
         if (debug) fprintf(stderr, "[c-clock] no-op, banning %s\n", G.lastKey);
     }
@@ -1616,6 +1623,8 @@ int main(int argc, char **argv) {
             v2 = v3 = pilotFix = uniqueFix = eventsFix = 1;
         } else if (!strcmp(argv[i], "--mull")) {
             mullFix = 1;
+        } else if (!strcmp(argv[i], "--banfix")) {
+            banFix = 1;
         } else if (!strcmp(argv[i], "--events")) {
             eventsFix = 1;
         } else if (!strcmp(argv[i], "--pilot")) {
