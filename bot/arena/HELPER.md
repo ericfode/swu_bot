@@ -44,10 +44,11 @@ your computer                                       the games machine (private a
 
 ## Running it (macOS or Linux)
 
-Needs Docker (Docker Desktop on a Mac) and flyctl logged in as you (`fly auth login`).
+Needs Docker running (on a Mac, Docker Desktop open: `open -a Docker`) and flyctl logged in as you (`fly auth login`).
 
 1. Once: `sh bot/arena/ops/helper.sh init`. It makes the token and stages its hash on Fly
-   (`fly secrets set --stage`); the next deploy of the games machine takes it.
+   (`fly secrets set --stage`); the next deploy of the games machine takes it, or `fly secrets deploy -a swu-arena-games`
+   now.
 2. Whenever you want to help: `sh bot/arena/ops/helper.sh` (Ctrl-C stops it). It reads the image the machine runs
    (`fly machine list`), pulls it (`fly auth docker`), keeps `fly proxy 18090:8090` running, and starts the container.
    Slots: one seed (two games at once) each, `--slots N` to choose; by default (Docker CPUs - 1) / 2. On a Mac it runs
