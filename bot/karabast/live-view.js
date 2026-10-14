@@ -22,8 +22,9 @@
  *
  * --names <file> is queue.js's private file of opponents' Karabast names (Eric, 2026-10-12: "I also want to know who on
  * karabast i'm playing"). With it, a bot game names the opponent's seat and the picker says who it is. It works only on a
- * view that stays on this machine (local host, no --key), such as the one tailscale serves to Eric's own devices: the
- * share link, the window feed and every file the project shares never carry names.
+ * view that stays on this machine (local host, no --key), such as the one tailscale serves to Eric's own devices. The
+ * share link and every file the project shares never carry names; the window feed sends them only in the `person` field
+ * of its run rows, which the window keeps for its admin sign-in (feed.js --names).
  */
 const http = require('http');
 const fs = require('fs');
@@ -47,34 +48,27 @@ function arg(name, dflt) {
     return i > 0 ? process.argv[i + 1] : dflt;
 }
 
-/** Converts frame files to replays, once per file version. */
-class Games {
-    constructor(runs, { predict = null, now = () => Date.now(), names = null } = {}) {
-        this.runs = path.resolve(runs);
-        this.namesFile = names ? path.resolve(names) : null;
-        this.nameCache = { version: null, map: new Map() };
-        this.now = now;
-        this.cache = new Map(); // file -> { version, game }, the KEEP most recently used
-        this.summaries = new Map(); // file -> { version, info }
-        this.ev = predict ? require('../eval/evaluators').loadEvaluator(predict) : null;
-        this.predictName = predict;
-    }
-
-    /** Opponents' names by game id from the --names file, or null without one. */
-    opponentNames() {
-        if (!this.namesFile) {
+/**
+ * A reader of queue.js's names file (--names): call it for the opponents' names by game id (<run>/frames/<hash>), read
+ * again only when the file changes. With no file it always returns null.
+ */
+function nameReader(file) {
+    const namesFile = file ? path.resolve(file) : null;
+    let cache = { version: null, map: new Map() };
+    return () => {
+        if (!namesFile) {
             return null;
         }
         let st;
         try {
-            st = fs.statSync(this.namesFile);
+            st = fs.statSync(namesFile);
         } catch {
             return new Map(); // no game recorded a name yet
         }
         const version = `${st.size}-${st.mtimeMs}`;
-        if (this.nameCache.version !== version) {
+        if (cache.version !== version) {
             const map = new Map();
-            for (const line of fs.readFileSync(this.namesFile, 'utf8').split('\n')) {
+            for (const line of fs.readFileSync(namesFile, 'utf8').split('\n')) {
                 try {
                     const r = JSON.parse(line);
                     if (typeof r.game === 'string' && typeof r.name === 'string') {
@@ -84,9 +78,27 @@ class Games {
                     // a blank line, or one being written
                 }
             }
-            this.nameCache = { version, map };
+            cache = { version, map };
         }
-        return this.nameCache.map;
+        return cache.map;
+    };
+}
+
+/** Converts frame files to replays, once per file version. */
+class Games {
+    constructor(runs, { predict = null, now = () => Date.now(), names = null } = {}) {
+        this.runs = path.resolve(runs);
+        this.names = nameReader(names);
+        this.now = now;
+        this.cache = new Map(); // file -> { version, game }, the KEEP most recently used
+        this.summaries = new Map(); // file -> { version, info }
+        this.ev = predict ? require('../eval/evaluators').loadEvaluator(predict) : null;
+        this.predictName = predict;
+    }
+
+    /** Opponents' names by game id from the --names file, or null without one. */
+    opponentNames() {
+        return this.names();
     }
 
     /** The frame file of a game id, or null when the id is not one of ours. */
@@ -390,4 +402,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { Games, makeServer, acceptsGzip, checkBinding, LIVE_MS, STATUS_STALE_MS };
+module.exports = { Games, nameReader, makeServer, acceptsGzip, checkBinding, LIVE_MS, STATUS_STALE_MS };

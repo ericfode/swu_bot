@@ -776,6 +776,31 @@ test('the window feed hides our hand while live, holds back the newest step, and
     assert.deepStrictEqual([row.outcome, row.winnerSeat, row.winner], ['won', 'p1', 'opponent']);
 });
 
+test('the window feed sends an opponent\'s name only as `person` in the run row, never in replays or lenses', async () => {
+    const { Feed, indexRow } = require('../karabast/feed');
+    const { nameReader } = require('../karabast/live-view');
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'private-')), 'opponents.jsonl');
+    fs.writeFileSync(file, [{ game: 'q-1/frames/abcdef012345', name: 'Rey Fan' }, { game: 'q-1/frames/abcdef012346', name: 'Bad\u0007Name' }].map((r) => JSON.stringify(r)).join('\n') + '\n');
+    const header = { t: 'header', seed: 0, players: [{ id: 'p1', bot: 'opponent' }, { id: 'p2', bot: 'c-clock2 (ours)' }], source: { pov: 'p2', hiddenHands: ['p1'] }, ours: { seat: 'p2', bot: 'c-clock2' } };
+    const g = { events: [header, { t: 'step', n: 1, pid: 'p2', action: { kind: 'button', label: 'Pass' }, state: { players: { p1: {}, p2: { hand: [] } } } }, { t: 'end', winner: 'p2', round: 2, steps: 1 }], version: 'v1' };
+    const sent = [];
+    const api = { putDoc: async (ns, id, text) => sent.push([`${ns}/${id}`, text]), request: async (method, url, o) => sent.push([url, o.body ? String(o.body) : '']) };
+    const ids = ['q-1/frames/abcdef012345', 'q-1/frames/abcdef012346', 'q-1/frames/abcdef012347'];
+    const games = { list: () => ids.map((id) => ({ id, kind: 'bot game', mtime: 0, size: 1 })), get: () => g, ev: { name: 'test' }, lens: () => ({ schema: 'swu-lens/1', players: header.players }) };
+    await new Feed({ games, api, names: nameReader(file) }).once();
+    const run = JSON.parse(sent.find((c) => c[0] === 'runs/karabast')[1]);
+    // a name with a control character is not one the window takes, and a game with no name has no person
+    const { windowId } = require('../karabast/feed');
+    const persons = Object.fromEntries(run.games.map((r) => [r.id, r.person ?? null]));
+    assert.deepStrictEqual(ids.map((id) => persons[windowId(id)]), ['Rey Fan', null, null]);
+    assert.ok(sent.filter((c) => c[0] !== 'runs/karabast').every((c) => !c[1].includes('Rey')), 'replays and lenses carry no name');
+    assert.ok(!('person' in indexRow(ids[0], { ...g, winnerSeat: 'p2' }, 'x'.repeat(65))));
+    // without --names, rows are as before
+    sent.length = 0;
+    await new Feed({ games, api }).once();
+    assert.ok(!sent.find((c) => c[0] === 'runs/karabast')[1].includes('person'));
+});
+
 test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', () => {
     const { holdPlayLock, lockToken } = require('../karabast/queue');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'play-lock-'));
