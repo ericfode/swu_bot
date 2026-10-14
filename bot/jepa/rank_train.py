@@ -3,8 +3,10 @@
 The planner keeps the move whose settled position the value head scores highest, so what matters for play is the
 order of the positions reached from one window, not who wins in general. Each window in the data holds the teacher's
 settled position (a strong bot's real move) and the settled positions of the other lines the planner would try.
-The value head is trained with a softmax over each window's positions to put the teacher's first, plus a small
-outcome term on the teacher's position so it stays a win estimate. The encoder is frozen (v1's), so only V changes.
+The value head is trained with a softmax over each window's positions to put the teacher's first, plus an outcome
+term on the teacher's position. The encoder is frozen (v1's), so only V changes. By default the softmax also holds
+the positions the planner scores without V (an ended game, a move that changed nothing); that orders moves best on
+held-out games but lets V's level drift, so V stops being a win estimate. --live-only --w-outcome 1 keeps it one.
 
     python3 bot/jepa/rank_train.py prep --data data/rank/v1 --out data/jepa/rank-v1.npz [--eval linear-deck-g4]
     python3 bot/jepa/rank_train.py fit --data data/jepa/rank-v1.npz --out bot/jepa/models/jepa-v1k
@@ -52,15 +54,20 @@ def prep(a):
     for f in files:
         with gzip.open(f, "rt", encoding="utf8") as fh:
             game = None
-            for line in fh:
-                o = json.loads(line)
-                if o["t"] == "game":
-                    game = {"src": o["src"], "decks": o.get("decks"), "winner": None, "windows": []}
-                    games.append(game)
-                elif o["t"] == "w":
-                    game["windows"].append(o)
-                elif o["t"] == "end":
-                    game["winner"] = o["winner"]
+            try:
+                for line in fh:
+                    o = json.loads(line)
+                    if o["t"] == "game":
+                        game = {"src": o["src"], "decks": o.get("decks"), "winner": None, "windows": []}
+                        games.append(game)
+                    elif o["t"] == "w":
+                        game["windows"].append(o)
+                    elif o["t"] == "end":
+                        game["winner"] = o["winner"]
+            except (EOFError, OSError, ValueError):
+                pass  # a run stopped while writing its last game: keep the whole games before it
+            if games and games[-1]["winner"] is None:
+                games.pop()
     held = held_games(len(games))
     t0 = time.time()
     Z, rows, wins = [], [], []
@@ -186,6 +193,13 @@ def fit(a):
              "v2.w": rng.normal(0, 1 / math.sqrt(H), (H, 1)).astype(np.float32), "v2.b": np.zeros(1, np.float32)}
     value = lambda Z, P: (np.maximum(Z @ P["v1.w"] + P["v1.b"], 0) @ P["v2.w"] + P["v2.b"])[:, 0]
     train = np.flatnonzero(~data.is_held)
+    if a.live_only:
+        # The planner scores an ended game 1 or 0 and a no-op 0 without V, and any live position between them, so V
+        # only has to order the live positions: train on those, in windows where the teacher's position is live.
+        # With the fixed positions in the softmax (the default), a teacher's winning move pulls every live V down,
+        # so V orders positions but is no longer a win estimate.
+        teacher_live = np.array([np.isnan(data.leaf_fixed[lo:hi][data.leaf_teacher[lo:hi]][0]) for lo, hi in zip(data.win_lo, data.win_hi)])
+        train = train[teacher_live[train]]
     held = np.flatnonzero(data.is_held)
     # a check on held windows only needs V of their positions
     held_z = np.unique(np.concatenate([data.leaf_z[data.win_lo[w]:data.win_hi[w]] for w in held]))
@@ -219,13 +233,13 @@ def fit(a):
             seg = np.concatenate([np.full(data.win_hi[w] - data.win_lo[w], k) for k, w in enumerate(bw)])
             fx = data.leaf_fixed[idx]
             live = np.isnan(fx)
-            zi = data.leaf_z[idx][live]
-            Zb = data.Z[zi]
+            if a.live_only:
+                idx, seg, fx, live = idx[live], seg[live], fx[live], live[live]
+            Zb = data.Z[data.leaf_z[idx][live]]
             h_pre = Zb @ P["v1.w"] + P["v1.b"]
             h = np.maximum(h_pre, 0)
-            v = (h @ P["v2.w"] + P["v2.b"])[:, 0]
             lg = np.where(live, 0.0, (np.nan_to_num(fx) * 2 - 1) * FIXED_LOGIT)
-            lg[live] = v
+            lg[live] = (h @ P["v2.w"] + P["v2.b"])[:, 0]
             # softmax within each window
             mx = np.full(len(bw), -np.inf)
             np.maximum.at(mx, seg, lg)
@@ -284,6 +298,7 @@ def main():
     f.add_argument("--w-outcome", type=float, default=0.3)
     f.add_argument("--hidden", type=int, default=0, help="0: fine-tune the model's value head; N: a new head with N hidden units")
     f.add_argument("--seed", type=int, default=0)
+    f.add_argument("--live-only", action="store_true", help="softmax over live positions only, which keeps V a win estimate")
     a = ap.parse_args()
     prep(a) if a.cmd == "prep" else fit(a)
 

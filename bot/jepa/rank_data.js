@@ -1,5 +1,5 @@
 'use strict';
-// node bot/jepa/rank_data.js --out data/rank/v1 --workers 4 [--teachers c-clock,rust-search] [--p 0.12] [--max N] <run dir>...
+// node bot/jepa/rank_data.js --out data/rank/v1 --workers 4 [--teachers c-clock,rust-search] [--p 0.12] [--max N] [--skip DIR] <run dir>...
 //
 // Training data for ranking moves with the value head. The planner (jepa_bot.py --score plan) plays each candidate
 // move with its follow-up choices on the referee's copy until the move has settled, and keeps the move whose settled
@@ -20,6 +20,7 @@
 // A leaf is {"over": winner} when the game ended, else {"mine": true, prompt, state, actions} when the mover is back
 // in its action window, else {"mine": false, state}; states are from the mover's seat. "noop": true marks a leaf
 // equal to the root (the move changed nothing), which the planner scores 0 without asking the value head.
+// --skip DIR leaves out the games already in DIR's shards, to carry on a stopped run into a new folder.
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -28,6 +29,33 @@ const { fork } = require('child_process');
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
+}
+
+/** A game's name in the output: its run folder and file name. */
+function srcOf(f) {
+    return path.basename(path.dirname(path.dirname(f))) + '/' + path.basename(f).replace(/\.jsonl(\.gz)?$/, '');
+}
+
+/** The src of every game written to the shards in dir. */
+function gamesIn(dir) {
+    const seen = new Set();
+    for (const f of fs.readdirSync(dir).filter((x) => /^shard-\d+\.jsonl\.gz$/.test(x))) {
+        let text;
+        try {
+            text = zlib.gunzipSync(fs.readFileSync(path.join(dir, f)), { finishFlush: zlib.constants.Z_SYNC_FLUSH }).toString('utf8');
+        } catch {
+            continue;
+        }
+        let src = null;
+        for (const l of text.split('\n')) {
+            if (l.startsWith('{"t":"game"')) {
+                src = JSON.parse(l).src;
+            } else if (l.startsWith('{"t":"end"') && src) {
+                seen.add(src); // a game cut off before its end line is played again
+            }
+        }
+    }
+    return seen;
 }
 
 /** Game files under each argument: a run folder (its games/), a games folder, or one file. */
@@ -172,7 +200,7 @@ async function worker(files, file, cfg) {
             skip('no teacher');
             continue;
         }
-        const src = path.basename(path.dirname(path.dirname(f))) + '/' + path.basename(f).replace(/\.jsonl(\.gz)?$/, '');
+        const src = srcOf(f);
         const lines = [JSON.stringify({ t: 'game', seed: header.seed, bots, src, decks: header.decks })];
         const rng = seededRng(`rank:${src}`);
         const setup = { seed: gameStreams(header.seed, end.key ?? null).engine, deck1: header.decks.p1, deck2: header.decks.p2 };
@@ -290,7 +318,13 @@ async function main() {
     const workers = Number(arg('workers', 4));
     const max = Number(arg('max', 0));
     const inputs = process.argv.slice(2).filter((x, i, all) => !x.startsWith('--') && !(all[i - 1] ?? '').startsWith('--'));
-    const files = gameFiles(inputs, max);
+    let files = gameFiles(inputs, max);
+    const skipDir = arg('skip', null);
+    if (skipDir) {
+        const seen = gamesIn(skipDir);
+        files = files.filter((f) => !seen.has(srcOf(f)));
+        console.log(`skipping ${seen.size} games already in ${skipDir}`);
+    }
     fs.mkdirSync(out, { recursive: true });
     for (const f of fs.readdirSync(out)) {
         if (/^shard-\d+\.jsonl\.gz$/.test(f)) {
