@@ -5,7 +5,7 @@
 # `sh bot/arena/ops/helper.sh build` makes it; it is never deployed.
 #
 # Everything a game runs on comes unchanged from the machine's image (MACHINE_IMAGE, read as files only, never run): the
-# bot code, the engine and its card data, the resident WebAssembly bundles, BUILD_SHA and CARDS_SHA, so the helper still
+# bot code, the engine and its card data, build/compiled (the intake's tools), BUILD_SHA and CARDS_SHA, so the helper still
 # matches the machine's build. Only the native parts are built for this computer: Node and Python with wasmtime from
 # their official images, and the coordinator release from Dockerfile.games's own coord stage at the machine's commit
 # (COORD_IMAGE, which helper.sh builds first).

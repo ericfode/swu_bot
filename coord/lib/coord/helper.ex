@@ -4,8 +4,8 @@ defmodule Coord.Helper do
   for the games machine's rounds (bot/arena/HELPER.md). It reaches the machine through `fly proxy` at
   GAMES_HELPER_URL with its own token (GAMES_HELPER_TOKEN), and it listens on nothing.
 
-  At start it compiles the resident bundles (play-seed.js --warm, as the bots' user; a failure is only logged), then
-  says hello, which checks that both run the same build and card data:
+  At start it compiles the resident bundles the image builds, if any (play-seed.js --warm, as the bots' user; a failure
+  is only logged), then says hello, which checks that both run the same build and card data:
     * 200: GAMES_HELPER_SLOTS slots (Coord.Helper.Slot) start claiming seeds
     * 409: the machine runs another build; the log names the image to pull and the VM stops with 3, which the
       script on the computer takes as "pull it and start again"

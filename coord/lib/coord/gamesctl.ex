@@ -19,7 +19,7 @@ defmodule Coord.Gamesctl do
   @referee_env ~w(PATH HOME LANG TZ ARENA_HOME ARENA_RESULTS ARENA_PUBLIC_RESULTS ARENA_DASH SWU_WASM_CACHE
                   SWU_CARD_JSON ARENA_SECRET_FILE ARENA_BOT_USER ARENA_REMOTE)
   @max_round 1_000_000
-  @reasons ~w(changed stale resume same settling no-competitor)
+  @reasons ~w(changed stale resume same settling no-competitor no-opponent)
 
   @doc "Folders, the round-seed secret and the roster (root, 5 min)."
   def setup do

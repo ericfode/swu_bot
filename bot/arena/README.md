@@ -66,10 +66,13 @@ The residents are entries submitted like any builder's bot; the image builds no 
   panel, and show as baselines in the app and in `status`.
 - **Before.** Until 2026-10-14 the residents were built into the image as the roster's baselines (`heuristic`, `rush`,
   `c-clock-wasm`, `rust-greedy2-wasm`, `rust-search-wasm`, `node-search-wasm`, `py-clock-wasm`). The all-round ratings
-  keep those built-in bots as their anchors, so old ratings stay put. The roster's `baselines` is now empty
-  (`gamesctl.js setup`); a baseline named there would still play until a resident entry with a version replaces it
-  (`referee.js` `residentName`: `c_clock` replaces `c-clock-wasm`). Each round records its anchors (`anchors` in
-  `standings.json`).
+  keep those built-in bots as their anchors, so old ratings stay put. The roster's `baselines` is now empty:
+  `gamesctl.js setup` empties it at every start. (A local arena may still name baselines: `referee.js` `lineup`
+  plays each until a resident entry with a version replaces it, `residentName`: `c_clock` replaces `c-clock-wasm`.)
+  Each round records its anchors (`anchors` in `standings.json`).
+- **A new volume.** The residents live on the games machine's volume like every entry. A new or replaced volume
+  has none until the house submissions run again (`ops/house-submit.js`, once per resident); until then a builder
+  alone plays no round (`gamesctl.js` plan says `no-opponent`).
 - The ports of heuristic and rush to the bot protocol live in Holocron (`ericfode/holocron`, `bots/ports/`); the
   other five are the bundles `bot/compiled/build.py` makes.
 
@@ -102,9 +105,10 @@ Deploys, secrets and a local run of the games machine: `WINDOW.md` ("The games m
 `BUILD.md` ("Rules of the sandbox") has the limits for submitted bots: time per call, memory, no network, no files,
 only their own code. Every bot, the residents included, also plays under these rules:
 
-- **Time cap.** Each bot may think 60 s per game (`roster.json` `thinkCapMs`). A bot program, which every submitted
-  bot is, is timed in wall time from its start to each answer. An in-process resident is timed in CPU time, with
-  twice the cap in wall time as a second limit (`bot/players/guard.js`).
+- **Time cap.** Each bot may think 60 s per game (`roster.json` `thinkCapMs`; the hosted arena sets its own). A bot
+  program, which every submitted bot is (the residents included), is timed in wall time from its start to each
+  answer. An in-process bot (a local arena's baseline) is timed in CPU time, with twice the cap in wall time as a
+  second limit (`bot/players/guard.js`).
 - **Forfeits.** A bot loses the game (outcome `ERROR` with `by` = its seat, and `faultKind` load, error, time or hang)
   when it fails to load or start, answers with something that is not a legal action (or a bad split, or a malformed
   reply), goes over the time cap, or does not answer for 30 s past the cap. Only engine errors outside the bot are

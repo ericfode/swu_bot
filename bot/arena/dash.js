@@ -156,7 +156,7 @@ function publishStandings(st) {
                     { label: 'ms / decision', value: cur?.msPerDecision ?? '-' },
                     { label: 'forfeits', value: cur?.forfeits ?? 0 }
                 ] },
-                { type: 'line', title: 'Elo by round (all-round Bradley-Terry, baselines anchor the scale)', x: 'round',
+                { type: 'line', title: 'Elo by round (all-round Bradley-Terry, the arena\'s own bots anchor the scale)', x: 'round',
                   series: bestFirst([{ name: a.name, points: rows.filter((x) => elo(x.b.name) !== null).map((x) => [x.rd.round, elo(x.b.name)]) },
                                      ...own.filter((bl) => elo(bl) !== null).map((bl) => ({ name: bl, points: rounds.map((rd) => [rd.round, elo(bl)]) }))]).slice(0, 4) },
                 { type: 'line', title: 'Think time, ms per decision (harness-timed)', x: 'round',
