@@ -35,7 +35,9 @@ const bundles = new Map(all('--bundle').map((s, i) => {
     const [file, hex] = s.split(':');
     return [hex, { name: `test_${i + 1}-v1`, bytes: fs.readFileSync(file) }];
 }));
-const residents = ['heuristic', 'rush', 'rust-greedy2-wasm', 'c-clock-wasm', 'node-search-wasm', 'py-clock-wasm'];
+// heuristic and rush, and the WebAssembly residents the pack has (games images before the residents became entries)
+const packed = new Set(Object.keys(JSON.parse(fs.readFileSync(path.join(FILES, 'engine.json'), 'utf8')).files));
+const residents = ['heuristic', 'rush', ...['rust-greedy2-wasm', 'c-clock-wasm', 'node-search-wasm', 'py-clock-wasm'].filter((n) => packed.has(`/app/build/compiled/${n.slice(0, -5)}/arena.json`))];
 const roster = [...residents.map((n) => ({ name: n, bot: { kind: 'resident' } })), ...[...bundles].map(([hex, b]) => ({ name: b.name, bot: { kind: 'wasm', bundle: hex } }))];
 let handed = 0;
 const leases = new Map();
