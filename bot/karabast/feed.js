@@ -5,7 +5,7 @@
  * machines"): the game list as the run document `runs/karabast`, each game's replay as it is played, and its lens.
  *
  *   SWU_WINDOW=https://swu-arena.fly.dev node bot/karabast/feed.js --runs ~/karabast/runs --token-file <file>
- *       [--predict mlp-g5] [--every 3] [--once]
+ *       [--predict mlp-g5] [--every 3] [--once] [--names <file>]
  *
  * The token is the window's feed token for this machine (Fly secret ARENA_FEED_TOKEN_KARABAST): it may write only
  * documents and replays named `karabast` or `karabast-<id>`. Keep it in a mode-600 file on the Sprite.
@@ -15,11 +15,16 @@
  * game is live, our hand goes face-down (count only) and a card our bot picked out of a hidden zone (a card it
  * resourced, a deck search) is not named, so no hidden card leaves this machine before the game ends; the whole
  * replay replaces the live one when it does.
+ *
+ * --names <file> (queue.js's private file of opponents' Karabast names; Eric, 2026-10-14: "I'd like it if it said _who_
+ * i was having my bot play rather then just "a person"") adds `person`, the opponent's name, to that game's row of the
+ * run document, and nowhere else: replays and lenses keep "opponent". The window takes `person` out of the run document
+ * and shows it to its admin sign-in only; friends, view links and the MCP keep "a person".
  */
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { Games } = require('./live-view');
+const { Games, nameReader } = require('./live-view');
 
 const NAME = 'karabast';
 const HIDDEN = { n: 'Hidden card', s: null, hid: 1 };
@@ -98,11 +103,15 @@ function faceDown(events, ours) {
 /** The window's id for a game: karabast-<frame file hash>. */
 const windowId = (id) => `${NAME}-${id.split('/').pop()}`;
 
+/** A name the window takes as `person`: 1-64 characters, none of them control characters. */
+const PERSON = /^[^\u0000-\u001f\u007f]{1,64}$/;
+
 /**
  * One row of the run document (TournamentIndex.games, viewer/src/core/types.ts) for a game from Games.get, where
- * `g.live` and `g.winnerSeat` are the feed's own call (Feed.ended): a game is over only when it says so.
+ * `g.live` and `g.winnerSeat` are the feed's own call (Feed.ended): a game is over only when it says so. `person` is the
+ * opponent's Karabast name when known (--names), for the window's admin view.
  */
-function indexRow(id, g) {
+function indexRow(id, g, person = null) {
     const h = g.events[0];
     const end = g.events[g.events.length - 1];
     const name = (p) => (p.id === h.ours?.seat ? h.ours.bot : 'opponent');
@@ -112,14 +121,18 @@ function indexRow(id, g) {
     const outcome = g.live ? 'running' : winnerSeat === 'draw' ? 'draw' : winnerSeat ? 'won' : 'abandoned';
     return {
         id: windowId(id), seed: h.seed ?? 0, p1, p2, winner, winnerSeat, rounds: end.round ?? 0, steps: end.steps ?? g.events.length - 1,
-        outcome, error: outcome === 'abandoned' ? 'no result' : null, ms: 0
+        outcome, error: outcome === 'abandoned' ? 'no result' : null, ms: 0, ...(typeof person === 'string' && PERSON.test(person) ? { person } : {})
     };
 }
 
 class Feed {
-    /** api: { putDoc(ns, id, doc), request(method, path, opts) } (bot/arena/push.js); games: a live-view Games. */
-    constructor({ games, api, log = () => undefined }) {
+    /**
+     * api: { putDoc(ns, id, doc), request(method, path, opts) } (bot/arena/push.js); games: a live-view Games without
+     * names; names: a nameReader (live-view.js) for the rows' `person`, or null.
+     */
+    constructor({ games, api, names = null, log = () => undefined }) {
         this.games = games;
+        this.names = names;
         this.api = api;
         this.log = log;
         this.docs = new Map(); // ns/id -> hash of what the window has
@@ -233,7 +246,7 @@ class Feed {
             const g = { ...got, live: !over, winnerSeat: over?.winnerSeat ?? null, version: `${got.version}|${over ? 'over' : 'live'}` };
             const wid = windowId(e.id);
             this.created ??= new Date(e.mtime).toISOString();
-            const row = indexRow(e.id, g);
+            const row = indexRow(e.id, g, this.names?.()?.get(e.id) ?? null);
             rows.push(row);
             try {
                 await this.syncReplay(wid, g);
@@ -266,7 +279,7 @@ async function main() {
     const tokenFile = arg('token-file');
     const every = Number(arg('every', 3));
     if (!runs || !tokenFile) {
-        throw new Error('usage: feed.js --runs <runs dir> --token-file <file> [--predict mlp-g5] [--every 3] [--once]');
+        throw new Error('usage: feed.js --runs <runs dir> --token-file <file> [--predict mlp-g5] [--every 3] [--once] [--names <file>]');
     }
     if (!(every >= 1 && every <= 600)) {
         throw new Error('--every must be 1-600 seconds');
@@ -275,8 +288,10 @@ async function main() {
     process.env.SWU_WINDOW_TOKEN = fs.readFileSync(tokenFile, 'utf8').trim();
     const api = require('../arena/push');
     const log = (line) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
-    const feed = new Feed({ games: new Games(path.resolve(runs), { predict: arg('predict', null) }), api, log });
-    log(`feed to ${process.env.SWU_WINDOW || 'https://swu-arena.fly.dev'} from ${runs}, every ${every} s`);
+    // the names go to the rows' `person` only: the Games that build replays and lenses never get the file
+    const names = arg('names', null);
+    const feed = new Feed({ games: new Games(path.resolve(runs), { predict: arg('predict', null) }), api, names: names ? nameReader(names) : null, log });
+    log(`feed to ${process.env.SWU_WINDOW || 'https://swu-arena.fly.dev'} from ${runs}, every ${every} s${names ? ', with opponents\' names for the admin view' : ''}`);
     for (;;) {
         try {
             const rows = await feed.once();
@@ -285,7 +300,10 @@ async function main() {
                 return;
             }
         } catch (e) {
-            log(`feed: ${e.message}`);
+            if (argv.includes('--once')) {
+                throw e; // one try: say it failed, never loop
+            }
+            log(`feed: ${e.message}`); // the window may be down for a while: keep trying
         }
         await sleep(every * 1000);
     }
