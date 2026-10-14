@@ -104,7 +104,9 @@ async function machine(req, res, url) {
         const id = crypto.randomBytes(8).toString('hex');
         leases.set(id, { job, slot, at: Date.now(), beats: 0 });
         console.log(`seed ${job.seed} -> ${slot} (lease ${id}): ${job.games[0].id}`);
-        return json(res, 200, { lease: id, job, bundles: Object.values(job.bots).filter((b) => b.bundle).map((b) => b.bundle), deadlineMs: Date.now() + 3600000 });
+        // as coord's Remote lists them: {id, bytes}
+        const listed = Object.values(job.bots).filter((b) => b.bundle).map((b) => ({ id: b.bundle, bytes: bundles.get(b.bundle).bytes.length }));
+        return json(res, 200, { lease: id, job, bundles: listed, deadlineMs: Date.now() + 3600000 });
     }
     if (p[1] === 'bundle') {
         const b = bundles.get(p[2]);

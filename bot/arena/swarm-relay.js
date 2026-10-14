@@ -224,7 +224,9 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
                 const body = safeJson(await readBody(req, 4096));
                 const r = await toMachine('POST', '/v1/claim', { body: JSON.stringify({ slot: slotOf(person, body?.slot ?? '1') }), build: tabBuild, timeoutMs: 70000 });
                 if (r.status === 200 && r.json && LEASE.test(String(r.json.lease))) {
-                    leases.set(String(r.json.lease), { login: person, bundles: new Set((r.json.bundles ?? []).filter((h) => HEX.test(h))), at: now() });
+                    // the machine lists bundles as {id, bytes}
+                    const ids = (r.json.bundles ?? []).map((b) => (typeof b === 'string' ? b : b?.id)).filter((h) => HEX.test(String(h)));
+                    leases.set(String(r.json.lease), { login: person, bundles: new Set(ids), at: now() });
                 }
                 return pass(res, req, r, sendText);
             }
