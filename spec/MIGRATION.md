@@ -4,6 +4,10 @@ What changed between the first spec (protocol v1, replay header `v: 1`) and this
 old replays and old indexes still work. Without a key, games are the same as upstream's (`npm run gate`: 594/342/486
 steps, p2 wins).
 
+Written before the October 2026 split (`README.md`, "Where things went"): the research paths it names
+(`bot/examples/`, `bot/learn/`, `bot/eval/`, `bot/info/`, `bot/omni/`, `bot/jev/`, `bot/rust/`) are in holocron's
+`bots/` and `lab/` now, and `bot/players/external.js` is gone (use `StdioClient` from `bot/stdio.js`).
+
 ## Bot programs (Rust, Python, any language)
 
 A v1 bot runs unchanged. To move to v2:
