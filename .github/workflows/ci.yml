@@ -1,0 +1,77 @@
+# The checks every change must pass before it merges (stage 3 of the spec): the unit tests, the trace checks (recorded
+# arena games must play out the same again, bot/trace.js), the determinism gate, and the arena server's tests. One job,
+# so it can be the one required check. Most unit tests load the engine, so the job always has it: restored from the
+# cache by engine commit, built only when the pin moves. The server's checks run only when server/ changes.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # the whole history: a pull request checks out its merge commit, whose first parent is the base branch, and
+          # bots.test.js reads an old commit of the heuristic bot
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: What the change touches
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -qE '^(server/|\.github/workflows/ci\.yml$)'; then
+            echo "server=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "server=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Engine commit
+        id: engine
+        run: |
+          git submodule update --init --depth 1 forceteki
+          echo "rev=$(git rev-parse HEAD:forceteki)" >> "$GITHUB_OUTPUT"
+      # the engine build and its card data, once per engine commit (card data comes from the official card site); a
+      # pull request reads the cache main's runs save
+      - uses: actions/cache@v5
+        id: engine-cache
+        with:
+          path: |
+            forceteki/node_modules
+            forceteki/build
+            forceteki/test/json
+          key: engine-${{ steps.engine.outputs.rev }}-v1
+      - name: Build the pinned engine
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          npm --prefix forceteki ci --ignore-scripts
+          npm --prefix forceteki run get-cards
+          npm --prefix forceteki run build
+      - name: Root packages (perch, for tools/test)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Unit tests and trace checks
+        run: npm test
+      - name: Determinism gate (seeds 1-3 give 594/342/486 steps, p2 wins)
+        run: npm run gate
+      - name: Arena server
+        if: steps.changed.outputs.server == 'true'
+        working-directory: server
+        run: |
+          npm ci
+          npm run typecheck
+          npm test

@@ -16,6 +16,8 @@ import { GamePlayer } from "../src/Player.ts"
 import type { Job } from "../src/Player.ts"
 import { Replays } from "../src/Replays.ts"
 import { makeApp, makeRecord } from "../src/Server.ts"
+import { TraceChecker } from "../src/Traces.ts"
+import type { TraceLine } from "../src/Traces.ts"
 
 export const ADMIN = "test-admin-token"
 export const READER = "test-read-token"
@@ -53,10 +55,24 @@ export const fakePlayer = (log: Array<string>, hold: (job: Job) => boolean = () 
       })
   }))
 
-export const startArena = (dir: string, player: Layer.Layer<GamePlayer>) =>
+/** A trace checker that never runs the engine: `verdict` says how each replay file comes out (default: the same). */
+export const fakeChecker = (
+  log: Array<ReadonlyArray<string>> = [],
+  verdict: (file: string) => Partial<TraceLine> = () => ({})
+) =>
+  Layer.succeed(TraceChecker, TraceChecker.of({
+    build: "test-build",
+    check: (files) =>
+      Effect.sync(() => {
+        log.push(files)
+        return files.map((file) => ({ file, ok: true, steps: 100, ms: 5, ...verdict(file) }))
+      })
+  }))
+
+export const startArena = (dir: string, player: Layer.Layer<GamePlayer>, checker: Layer.Layer<TraceChecker> = fakeChecker()) =>
   ManagedRuntime.make(
     HttpRouter.serve(
-      makeApp(Db.layerFile(path.join(dir, "arena.db")), Replays.layerAt(path.join(dir, "replays")), player),
+      makeApp(Db.layerFile(path.join(dir, "arena.db")), Replays.layerAt(path.join(dir, "replays")), player, checker),
       { disableLogger: true, disableListenLog: true }
     ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
   )

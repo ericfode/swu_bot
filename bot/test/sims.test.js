@@ -173,3 +173,29 @@ test('a bot that asks for Rust simulations gets them in a real game, not the for
     assert.equal(seen.other, 0, 'no decision fell back to forceteki simulations');
     assert.equal(seen.rust, seen.simDecides, 'every decision with simulations ran them on Rust');
 });
+
+// round 15 of the live arena: at this position Flarestar Attack Shuttle's effect lasts while its source is in play,
+// which the Rust state cannot express; the referee threw, and the game ended with no winner (27 games of 2,862 ended
+// so, found by replaying them with bot/trace.js)
+test('a position the Rust state cannot express gets forceteki simulations, and the game goes on', { skip: !ENGINE && 'engine or card data not built' }, async () => {
+    const { Env } = require('../env');
+    const { readTrace, replayTrace } = require('../trace');
+    const { rustSimulator, rustEngine } = require('../sims/rust-sims');
+    const { fullState } = require('../sims/state');
+    assert.ok(await rustEngine());
+    const events = readTrace(path.join(__dirname, 'fixtures', 'rust-unsupported-effect.jsonl.gz'));
+    assert.match(events.at(-1).error, /^Unsupported stat effect duration whileSourceInPlay on flarestar-attack-shuttle/);
+    const env = new Env();
+    const replayed = await replayTrace(env, events);
+    assert.equal(replayed.diff, null);
+    // play the recorded moves again to the position where the referee threw
+    const { gameStreams } = require('../rng');
+    const eg = env.newGame({ seed: gameStreams(events[0].seed, events.at(-1).key).engine, deck1: events[0].decks.p1, deck2: events[0].decks.p2 });
+    await eg.start();
+    for (const s of events.filter((e) => e.t === 'step' && e.n > 0)) {
+        eg.apply(eg.pidOf(s.pid), eg.legalActions(eg.pidOf(s.pid))[s.action.i]);
+    }
+    const pid = eg.pidOf('p2');
+    assert.throws(() => fullState(eg, pid), /Unsupported stat effect/);
+    assert.equal(await rustSimulator(eg, pid, (deal) => seededRng(`deal:${deal}`), null), null, 'no Rust simulator, so the referee serves forceteki ones');
+});

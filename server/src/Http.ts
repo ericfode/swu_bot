@@ -13,6 +13,7 @@ import { Games } from "./Games.ts"
 import { ArenaRecord, roundOf } from "./Record.ts"
 import { Rounds } from "./Rounds.ts"
 import { Settings } from "./Settings.ts"
+import { Traces } from "./Traces.ts"
 
 /** Matches a bearer token to a caller: ARENA_ADMIN_TOKEN is Eric, ARENA_READ_TOKEN a reader (Holocron, say). */
 export const tokenCaller = Effect.gen(function*() {
@@ -114,6 +115,11 @@ const ExportHandlers = HttpApiBuilder.group(ArenaApi, "export", Effect.fn(functi
   })
 }))
 
+const TracesHandlers = HttpApiBuilder.group(ArenaApi, "traces", Effect.fn(function*(handlers) {
+  const traces = yield* Traces
+  return handlers.handleAll({ list: ({ query }) => traces.list(query) })
+}))
+
 const SystemHandlers = HttpApiBuilder.group(ArenaApi, "system", (handlers) =>
   Effect.succeed(handlers.handleAll({ health: () => Effect.void })))
 
@@ -126,6 +132,7 @@ export const ApiHandlers = Layer.mergeAll(
   RoundsHandlers,
   GamesHandlers,
   ExportHandlers,
+  TracesHandlers,
   SystemHandlers
 ).pipe(
   Layer.provide([AuthorizationLive, InputErrorsLive])

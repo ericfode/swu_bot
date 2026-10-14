@@ -2,7 +2,7 @@
 
 What `bot/tournament.js` writes and what the viewer (Holotable, `ericfode/holotable`) reads. A replay holds the decisions plus a compact board snapshot
 after every decision, so a viewer never needs the engine; with its deck lists, seed and chosen action indices it can
-also be played again on the engine. Fields marked *(added)* are newer than the original repo's writer; readers that
+also be played again on the engine (`bot/trace.js`, the trace checks). Fields marked *(added)* are newer than the original repo's writer; readers that
 predate them ignore them. Machine-checkable versions:
 [`schemas/replay-event.schema.json`](schemas/replay-event.schema.json),
 [`schemas/tournament-index.schema.json`](schemas/tournament-index.schema.json),

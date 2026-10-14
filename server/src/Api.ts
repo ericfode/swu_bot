@@ -26,6 +26,8 @@ import {
   Standings,
   StandingsQuery,
   StatsQuery,
+  TracesPage,
+  TracesQuery,
   Unauthorized,
   Version,
   VersionId,
@@ -150,6 +152,16 @@ export class ExportApi extends HttpApiGroup.make("export")
   .annotateMerge(OpenApi.annotations({ title: "Export", description: "Bulk export for the lab's own analysis" }))
 {}
 
+export class TracesApi extends HttpApiGroup.make("traces")
+  .add(HttpApiEndpoint.get("list", "/", { query: TracesQuery, success: TracesPage }))
+  .middleware(Authorization)
+  .prefix("/api/v1/traces")
+  .annotateMerge(OpenApi.annotations({
+    title: "Trace checks",
+    description: "Games played again from their replays every night: did every move and board come out the same"
+  }))
+{}
+
 export class SystemApi extends HttpApiGroup.make("system", { topLevel: true })
   .add(HttpApiEndpoint.get("health", "/api/v1/health", { success: HttpApiSchema.NoContent }))
 {}
@@ -162,6 +174,7 @@ export class ArenaApi extends HttpApi.make("arena")
   .add(RoundsApi)
   .add(GamesApi)
   .add(ExportApi)
+  .add(TracesApi)
   .add(SystemApi)
   .middleware(InputErrors)
   // unknown fields are refused, every problem is reported; headers keep the default (they carry transport headers)
