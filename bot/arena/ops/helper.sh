@@ -96,6 +96,9 @@ run() {
     done
     need fly "https://fly.io/docs/flyctl/install/"
     need docker "Docker Desktop"
+    # the Docker CLI is there without its daemon when Docker Desktop is not open (no docker.sock)
+    docker info >/dev/null 2>&1 ||
+        die "Docker is not running: start Docker Desktop (on a Mac: open -a Docker), wait until docker info answers, and run this again"
     [ -s "$ENVFILE" ] || die "no token yet: run sh helper.sh init first"
     chmod 600 "$ENVFILE"
     if [ -z "$slots" ]; then
