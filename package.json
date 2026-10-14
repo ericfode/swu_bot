@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "setup": "bash tools/setup.sh",
-    "smoke": "npm test && npm run analysis:test && npm run viewer:build && npm --prefix studio run build",
-    "smoke:source": "node --test --test-skip-pattern='^legacy profile reproduces the original evaluation exactly$' bot/test/*.test.js importer/test/*.test.js app/test/*.test.js && npm run analysis:test && npm run viewer:build && npm --prefix studio run build",
+    "smoke": "npm test && npm run analysis:test && npm --prefix studio test && npm run viewer:build && npm --prefix studio run build",
+    "smoke:source": "node --test --test-skip-pattern='^legacy profile reproduces the original evaluation exactly$' bot/test/*.test.js importer/test/*.test.js app/test/*.test.js && npm run analysis:test && npm --prefix studio test && npm run viewer:build && npm --prefix studio run build",
     "gate": "node bot/gate.js",
     "random": "node bot/random-run.js",
     "demo": "node bot/tournament.js --bots random-a,random-b,random-c --games 4 --out replays/demo",
@@ -33,7 +33,15 @@
     "lint": "node tools/bin/perch scan --since origin/main",
     "lint:full": "node tools/bin/perch scan --full",
     "lint:shared": "node tools/bin/perch shared scan --full",
-    "perch": "node tools/bin/perch"
+    "perch": "node tools/bin/perch",
+    "cards:compile": "node bot/card-compiler/build.js && node tools/card-runtime-report.js",
+    "cards:check": "node bot/card-compiler/build.js --check && node tools/card-runtime-report.js --check",
+    "cards:test": "node --test bot/card-compiler/test/*.test.js bot/cards/test/*.test.js bot/test/phase-stats-export.test.js bot/test/env-selection-actions.test.js",
+    "wasm:pack": "node bot/omni-wasm/pack.js",
+    "wasm:pack:check": "node bot/omni-wasm/verify-package.js",
+    "cards": "node bot/cards/cli.js",
+    "cards:reference": "node bot/cards/reference/cli.js",
+    "cards:pipeline": "node bot/cards/pipeline/cli.js"
   },
   "devDependencies": {
     "@lakeday/perch": "0.4.3",

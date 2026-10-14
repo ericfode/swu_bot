@@ -1,0 +1,126 @@
+import type { AbilityBeat } from './abilities';
+import type { PreviewAspect, PreviewCardCost } from './previewCosts';
+import type { CardEffectDefinition, CardEffectOutcome, PreviewPlayPayment } from './types';
+import type { CardRef, GrantedDefeatAbility, ResourceRef, Seat, Snapshot, UnitRef, UpgradeRef } from '../data/types';
+const rows:[string,string,string,number,CardEffectDefinition['family'],string][]=[
+ ['synchronized-strike','Synchronized Strike','TWI_099',4400,'damage','Current same-arena allies contribute one counted enemy hit'],
+ ['petition-the-senate','Petition the Senate','TWI_100',4800,'support','Three actual Officials authorize a three-card hand arrival'],
+ ['manufactured-soldiers','Manufactured Soldiers','TWI_102',4600,'support','Choose a two-Clone or three-Droid assembly mode'],
+ ['pyrrhic-assault','Pyrrhic Assault','TWI_103',4600,'tactics','Current friendly units retain a phase last-stand ability'],
+ ['outflank','Outflank','TWI_123',6000,'tactics','Complete the ground fight before the distinct space flank'],
+ ['tactical-advantage','Tactical Advantage','TWI_124',3800,'tactics','An enemy stat expansion retains wounds and a phase marker'],
+ ['the-clone-wars','The Clone Wars','TWI_125',5800,'support','Separate extra payment creates equal counts on opposite sides'],
+ ['encouraging-leadership','Encouraging Leadership','TWI_126',4400,'support','A friendly-only one-step stat wave crosses both arenas'],
+ ['take-captive','Take Captive','TWI_128',5000,'tactics','Same-arena capture strips attachments and enters a measured pocket'],
+ ['in-defense-of-kamino','In Defense of Kamino','TWI_129',4800,'tactics','Current Republic units retain Restore and a phase replacement ability']
+];
+export const A10_DEFINITIONS:CardEffectDefinition[]=rows.map(([id,name,setCode,durationMs,family,description])=>({id,name,setCode,durationMs,family,description,visual:id,color:'#a7c8c7'}));
+export const A10_COSTS:Record<string,PreviewCardCost>={
+ 'synchronized-strike':{printed:2,aspects:['command','heroism']},'petition-the-senate':{printed:3,aspects:['command','heroism']},
+ 'manufactured-soldiers':{printed:3,aspects:['command','command']},'pyrrhic-assault':{printed:3,aspects:['command','command']},outflank:{printed:1,aspects:['command']},
+ 'tactical-advantage':{printed:1,aspects:['command']},'the-clone-wars':{printed:2,aspects:['command']},'encouraging-leadership':{printed:3,aspects:['command']},'take-captive':{printed:3,aspects:['command']},'in-defense-of-kamino':{printed:4,aspects:['command']}
+};
+export const A10_ABILITIES:Record<string,AbilityBeat[]>={
+ 'synchronized-strike':[{kind:'damage',label:'Deal damage to an enemy unit equal to units you control in its arena',scope:'enemy-unit',amount:'current same-arena count',condition:'Current controlled units including deployed leaders/tokens, either arena, any owners/readiness; not base, other-arena units, attachments/captives or power; known zero valid'}],
+ 'petition-the-senate':[{kind:'draw',label:'If you control at least three Official units, draw three cards',scope:'own-hand',from:'own-deck',amount:3,condition:'Current arena units with actual Official trait, both arenas/leaders/tokens if eligible; not ownership, past history, hand or undeployed leader; no invented cards from empty deck'}],
+ 'manufactured-soldiers':[{kind:'create',label:'Choose one: create two Clone Trooper tokens',scope:'friendly-unit',amount:2,mode:'clones',condition:'One exclusive mode; own ground2/2 tokens, fresh stable identities, exhausted created entry, no hand/deck route/aspect cost/When Played'},{kind:'create',label:'Or create three Battle Droid tokens',scope:'friendly-unit',amount:3,mode:'droids',condition:'Own ground1/1 tokens, exclusive with Clone mode; actual token-entry modifiers need separate receipts'}],
+ 'pyrrhic-assault':[{kind:'buff',label:'Each current friendly unit gains When Defeated: deal two damage to an enemy unit, this phase',scope:'all-units',selection:'all',duration:'phase',condition:'Both arenas/deployed leaders/tokens; no immediate damage/defeat/stats or future-arrival aura. Continuing entry/current phase/actual successful defeat and last-known controller authorize a later chosen enemy-unit ability hit'}],
+ outflank:[{kind:'attack',label:'Attack with one ready friendly unit if able',scope:'friendly-unit',condition:'Legal targets/Sentinel/arena; completely resolve actual combat and triggers first, no readying'},{kind:'attack',label:'Then attack with a different ready friendly unit if able',scope:'friendly-unit',condition:'Distinct physical unit, selected after first resolves; no same unit even if readied; each actual damage/counter/Shield/defeat separate; a base never counters'}],
+ 'tactical-advantage':[{kind:'buff',label:'Give any unit +2/+2 this phase',scope:'target',amount:'+2/+2',duration:'phase',condition:'Either side/arena/deployed leader/token; wounds/readiness unchanged, no Experience/Shield/heal'}],
+ 'the-clone-wars':[{kind:'pay',label:'After the event cost, pay any additional number of ready resources',scope:'resources',amount:'chosen N',condition:'Choose0..remaining ready; event cost excluded; no opponent payment'},{kind:'create',label:'Create N Clone Troopers; each opponent creates N Battle Droids',scope:'all-units',amount:'chosen extra payment N',condition:'Sequential extra pay then own Clones then opposing Droids; fresh exhausted created identities, no token aspect/hand/deck/play costs. N0 creates none'}],
+ 'encouraging-leadership':[{kind:'buff',label:'Give every current friendly unit +1/+1 this phase',scope:'all-units',selection:'all',amount:'+1/+1',duration:'phase',condition:'Both arenas/deployed leaders/tokens, controlled not owned; no enemy/future-arrival aura/Experience; wounds/readiness/printed Sentinel preserved'}],
+ 'take-captive':[{kind:'capture',label:'A friendly unit captures an enemy non-leader in the same arena',scope:'friendly-unit',selection:'chosen',condition:'Captor can be exhausted or leader; no printed-cost limit/Hunter/Shield clause. Actual target entry/owner, clean captive ref, ordinary attachments to owners/tokens cease; special cleanup explicitly supplied, no defeat trigger'}],
+ 'in-defense-of-kamino':[{kind:'keyword',label:'Each current friendly Republic unit gains Restore 2 this phase',scope:'all-units',selection:'all',duration:'phase',condition:'Current Republic trait/continuing entries, both arenas/leaders/tokens; heals current controller base only on actual attack declaration, stacked actual Restore/capped existing damage; no immediate heal'},{kind:'buff',label:'Those current units also gain When Defeated: create a Clone Trooper, this phase',scope:'all-units',selection:'all',duration:'phase',condition:'Actual successful defeat/current phase/entry/last-known controller, not return/capture; new exhausted Clone is a fresh entry and does not inherit grants despite Republic trait'}]
+};
+const labels:Record<string,string>={
+ 'synchronized-strike':'Pay 2; two friendly ground units authorize 2 damage to Wampa; its wound count 1 → 3',
+ 'petition-the-senate':'Pay 3; Mon Mothma, Ackbar and Bail are three Officials; draw actual top three into hand',
+ 'manufactured-soldiers':'Pay 5; choose two Clones, each 2/2, entering exhausted; no Droid mode or token aspect payment',
+ 'pyrrhic-assault':'Pay 5; three current friendly units gain a phase When Defeated ability; no immediate hit or stat change',
+ outflank:'Pay 1; Marine and Trooper finish their ground fight, then different X-Wing hits enemy base for 2',
+ 'tactical-advantage':'Pay 1; enemy Wampa 4/5 → 6/7 this phase; damage 1 and readiness remain',
+ 'the-clone-wars':'Event 2, extra 2: two own Clones then two opposing Droids enter exhausted; opponent pays nothing',
+ 'encouraging-leadership':'Pay 3; all three current friendly units +1/+1 across ground and space; wounds stay',
+ 'take-captive':'Pay 3; exhausted Marine captures Wampa in ground despite cost 2 < 4; Academy discarded, Shield ceases',
+ 'in-defense-of-kamino':'Pay 4; Phase I and ARC-170 gain Restore 2 and phase Clone replacement; Marine gains neither'
+};
+export const A10_EXAMPLES:Record<string,{label:string;beats:AbilityBeat[]}>=Object.fromEntries(Object.entries(labels).map(([id,label])=>[id,{label,beats:id==='manufactured-soldiers'?[A10_ABILITIES[id][0]]:id==='the-clone-wars'?[{...A10_ABILITIES[id][0],amount:2},A10_ABILITIES[id][1]]:A10_ABILITIES[id]}]));
+const facts:Record<string,{n:string;p:number;h:number;cost:number;traits:string[];arena:string}>={"SOR_097":{"n":"Admiral Ackbar: Brilliant Strategist","p":1,"h":4,"cost":3,"traits":["rebel","official"],"arena":"ground"},"SOR_033":{"n":"Death Trooper","p":3,"h":3,"cost":3,"traits":["imperial","trooper"],"arena":"ground"},"SOR_094":{"n":"Bail Organa: Rebel Councilor","p":1,"h":2,"cost":1,"traits":["rebel","official"],"arena":"ground"},"SOR_164":{"n":"Wampa","p":4,"h":5,"cost":4,"traits":["creature"],"arena":"ground"},"SOR_098":{"n":"Echo Base Defender","p":4,"h":3,"cost":3,"traits":["rebel","trooper"],"arena":"ground"},"SOR_225":{"n":"TIE/ln Fighter","p":2,"h":1,"cost":1,"traits":["imperial","vehicle","fighter"],"arena":"space"},"TWI_111":{"n":"Republic ARC-170","p":3,"h":4,"cost":3,"traits":["republic","vehicle","fighter"],"arena":"space"},"SOR_237":{"n":"Alliance X-Wing","p":2,"h":3,"cost":2,"traits":["rebel","vehicle","fighter"],"arena":"space"},"TWI_244":{"n":"Eta-2 Light Interceptor","p":3,"h":4,"cost":5,"traits":["republic","vehicle","fighter"],"arena":"space"},"SOR_095":{"n":"Battlefield Marine","p":3,"h":3,"cost":2,"traits":["rebel","trooper"],"arena":"ground"},"SOR_096":{"n":"Mon Mothma: Voice Of The Rebellion","p":1,"h":3,"cost":2,"traits":["rebel","official"],"arena":"ground"},"TWI_241":{"n":"Phase I Clone Trooper","p":3,"h":2,"cost":2,"traits":["republic","clone","trooper"],"arena":"ground"}};
+const supported=new Set(rows.map(r=>r[0]));
+const ref=(c:CardRef):CardRef=>({id:c.id,n:c.n,s:c.s,owner:c.owner});
+const card=(id:string,n:string,s:string|null,owner:Seat):CardRef=>({id,n,s,owner});
+function fail(x:string):never{throw new Error(`A10: ${x}`);}
+const makeUnit=(id:string,code:string,owner:Seat,d=0,extra:Partial<UnitRef>={}):UnitRef=>{const f=facts[code]??fail('unit facts not verified');return{...card(id,f.n,code,owner),p:f.p,h:f.h,d,traits:[...f.traits],incarnation:`${id}:entry-1`,...extra};};
+const token=(id:string,type:'clone-trooper'|'battle-droid',owner:Seat):UnitRef=>({...card(id,type==='clone-trooper'?'Clone Trooper':'Battle Droid',null,owner),t:1,p:type==='clone-trooper'?2:1,h:type==='clone-trooper'?2:1,d:0,x:1,traits:type==='clone-trooper'?['republic','clone','trooper']:['separatist','droid','trooper'],incarnation:`${id}:entry-1`});
+const resources=(seat:Seat,total:number,ready:number):ResourceRef[]=>Array.from({length:total},(_,i)=>({...card(`a10:${seat}:resource:${i}`,'Unknown card',null,seat),...(i>=ready?{x:1 as const}:{})}));
+const deck=(seat:Seat,n:number)=>Array.from({length:n},(_,i)=>card(`a10:${seat}:deck:${i}`,'Unknown card',null,seat));
+const units=(s:Snapshot,seat:Seat)=>[...s.players[seat].ground,...s.players[seat].space];
+function price(d:CardEffectDefinition,s:Snapshot,seat:Seat){const p=s.players[seat],provider:Record<string,PreviewAspect[]>={SOR_024:['command'],SOR_020:['vigilance'],SOR_005:['vigilance','heroism'],SOR_010:['aggression','villainy']},have=[...(p.base.s&&provider[p.base.s]||fail('unverified base')),...(p.leader?(p.leader.s&&provider[p.leader.s]||fail('unverified leader')):[])],m=A10_COSTS[d.id];return m.printed+2*m.aspects.filter(a=>{const i=have.indexOf(a);if(i<0)return true;have.splice(i,1);return false;}).length;}
+export function a10ShowcaseState(d:CardEffectDefinition):Snapshot|undefined{
+ if(!supported.has(d.id))return;
+ const s:Snapshot={round:12,phase:'action',initiative:'p1',players:{
+ p1:{name:'Rebel Alliance',base:{...card('a10:p1:base','Echo Base','SOR_024','p1'),hp:30,d:9},leader:{...card('a10:p1:leader','Luke Skywalker: Faithful Friend','SOR_005','p1'),dep:0,x:0},res:{ready:16,total:16},resources:resources('p1',16,16),hand:[card(`a10:${d.id}:event`,d.name,d.setCode,'p1')],deck:27,knownDeck:deck('p1',27),discard:[],ground:[makeUnit('a10:p1:marine','SOR_095','p1',1),makeUnit('a10:p1:defender','SOR_098','p1',0,{sn:1})],space:[makeUnit('a10:p1:xwing','SOR_237','p1')]},
+ p2:{name:'Galactic Empire',base:{...card('a10:p2:base','Capital City','SOR_020','p2'),hp:30,d:6},leader:{...card('a10:p2:leader','Darth Vader: Dark Lord of the Sith','SOR_010','p2'),dep:0,x:1},res:{ready:7,total:10},resources:resources('p2',10,7),hand:[card('a10:p2:hand:takedown','Takedown','SOR_077','p2'),card('a10:p2:hand:repair','Repair','SOR_074','p2')],deck:29,knownDeck:deck('p2',29),discard:[],ground:[makeUnit('a10:p2:trooper','SOR_033','p2',1),makeUnit('a10:p2:wampa','SOR_164','p2',1)],space:[makeUnit('a10:p2:tie','SOR_225','p2')]}
+ }},p=s.players.p1,q=s.players.p2;
+ switch(d.id){
+ case 'petition-the-senate':p.ground=[makeUnit('a10:petition:mothma','SOR_096','p1'),makeUnit('a10:petition:ackbar','SOR_097','p1'),makeUnit('a10:petition:bail','SOR_094','p1')];p.knownDeck!.splice(0,3,...[['Repair','SOR_074'],['Battlefield Marine','SOR_095'],['Alliance X-Wing','SOR_237']].map(([n,code],i)=>card(`a10:petition:draw:${i}`,n,code,'p1')));break;
+ case 'take-captive':{p.ground[0].x=1;p.ground[0].cap=[];const academy:UpgradeRef={...card('a10:captive:academy','Academy Training','SOR_120','p1'),t:0,controller:'p1',p:2,h:2};q.ground[1].u=[academy,{...card('a10:captive:shield','Shield',null,'p2'),t:1,p:0,h:0}];q.ground[1].p=6;q.ground[1].h=7;break;}
+ case 'in-defense-of-kamino':p.ground[1]=makeUnit('a10:kamino:phase-i','TWI_241','p1');p.space[0]=makeUnit('a10:kamino:arc','TWI_111','p1',1);break;
+ }
+ return s;
+}
+export interface A10Choices{targetId?:string;captorId?:string;mode?:'clones'|'droids';extra?:number;firstId?:string;secondId?:string|null}
+export function a10PreviewSource(d:CardEffectDefinition,s:Snapshot,seat:Seat):CardRef|undefined{if(!supported.has(d.id))return;const c=s.players[seat].hand.filter(c=>c.id===`a10:${d.id}:event`&&c.n===d.name&&c.s===d.setCode&&c.owner===seat);if(c.length!==1)fail('actual source event missing or ambiguous');return c[0];}
+export function a10PreviewPayment(d:CardEffectDefinition,s:Snapshot,seat:Seat):PreviewPlayPayment|undefined{if(!supported.has(d.id))return;a10PreviewSource(d,s,seat);const n=price(d,s,seat),paid=s.players[seat].resources?.filter(c=>!c.x).slice(0,n)??fail('actual resources missing');if(paid.length!==n)fail('event payment unaffordable');return{kind:'resources',cardIds:paid.map(c=>c.id!)};}
+const grant=(source:CardRef,u:UnitRef,s:Snapshot,effect:GrantedDefeatAbility['effect']):GrantedDefeatAbility=>({id:`${source.id}:grant:${u.id}`,sourceId:source.id!,subjectId:u.id!,incarnation:u.incarnation!,round:s.round,phase:s.phase,...(effect==='damage-enemy-unit'?{effect,amount:2 as const}:{effect,amount:1 as const})});
+const create=(source:CardRef,seat:Seat,stem:string,type:'clone-trooper'|'battle-droid',n:number,extra:Partial<CardEffectOutcome>={}):CardEffectOutcome[]=>Array.from({length:n},(_,i)=>{const u=token(`a10:${stem}:${type}:${i}`,type,seat);return{kind:'create',card:u,unit:u,seat,zone:'ground',amount:1,sourceCard:source,ownerSeat:seat,incarnation:u.incarnation,tokenType:type,entryType:'created',entersReady:false,...extra};});
+const die=(u:UnitRef,seat:Seat,source:CardRef,extra:Partial<CardEffectOutcome>={}):CardEffectOutcome=>({kind:'defeat',card:u,seat,zone:facts[u.s??'']?.arena==='space'?'space':'ground',sourceCard:source,ownerSeat:u.owner,incarnation:u.incarnation,...extra});
+export function a10PreviewOutcomes(d:CardEffectDefinition,s:Snapshot,seat:Seat,c:A10Choices={}):CardEffectOutcome[]|undefined{
+ if(!supported.has(d.id))return;const source=a10PreviewSource(d,s,seat)!,p=s.players[seat],enemy:Seat=seat==='p1'?'p2':'p1',q=s.players[enemy],out:CardEffectOutcome[]=[];
+ const locate=(id:string)=>{for(const side of [seat,enemy]){const u=units(s,side).find(u=>u.id===id);if(u?.incarnation)return{u,side,zone:s.players[side].space.includes(u)?'space' as const:'ground' as const};}return fail('current arena unit missing');};
+ switch(d.id){
+ case 'synchronized-strike':{const t=locate(c.targetId??'a10:p2:wampa');if(t.side===seat)fail('Strike requires enemy unit');const witnesses=s.players[seat][t.zone];out.push({kind:'damage',card:t.u,seat:t.side,zone:t.zone,amount:witnesses.length,damageType:'ability',sourceCard:source,basis:{kind:'arena-unit-count',player:seat,arena:t.zone,sourceIds:witnesses.map(u=>u.id!),value:witnesses.length}});if(t.u.d+witnesses.length>=t.u.h)out.push(die(t.u,t.side,source));break;}
+ case 'petition-the-senate':{const all=units(s,seat);if(all.some(u=>!u.traits))fail('Official eligibility must be actual known current trait facts');const officials=all.filter(u=>u.traits!.includes('official'));if(officials.length>=3){const top=p.knownDeck?.slice(0,3)??fail('actual top cards unknown');if(top.length!==3)fail('short staged draw needs separate supported empty-deck consequences');out.push({kind:'draw',seat,zone:'hand',fromSeat:seat,fromZone:'deck',amount:3,cards:top,sourceCard:source,traitCondition:{player:seat,trait:'official',minimum:3,units:officials.map(u=>({id:u.id!,incarnation:u.incarnation!}))}});}break;}
+ case 'manufactured-soldiers':out.push(...create(source,seat,'manufactured',c.mode==='droids'?'battle-droid':'clone-trooper',c.mode==='droids'?3:2));break;
+ case 'pyrrhic-assault':for(const u of units(s,seat))out.push({kind:'buff',card:u,seat,zone:p.space.includes(u)?'space':'ground',duration:'phase',sourceCard:source,incarnation:u.incarnation,label:'WHEN DEFEATED: ENEMY UNIT 2',grantedAbility:grant(source,u,s,'damage-enemy-unit')});break;
+ case 'outflank':{
+  const available=units(s,seat).filter(u=>!u.x&&u.d<u.h),firstId=c.firstId??available.find(u=>u.id==='a10:p1:marine')?.id??available[0]?.id;
+  if(!firstId)break;
+  const first=locate(firstId);if(first.side!==seat||first.u.x)fail('first attacker must be ready friendly');
+  const lane=q[first.zone],sentinels=lane.filter(u=>u.sn),preferred=lane.find(u=>u.id==='a10:p2:trooper'),targetId=c.targetId??sentinels[0]?.id??preferred?.id??q.base.id!;
+  const base=targetId===q.base.id,defender=base?undefined:locate(targetId);
+  if(defender&&(defender.side===seat||first.zone!==defender.zone)||sentinels.length&&(base||!defender?.u.sn))fail('first attack must be legal in its arena/Sentinel');
+  const group='a10:outflank:sequence',seq={attackId:'a10:outflank:first',sequenceId:group,sequenceIndex:1},recipient=defender?.u??q.base;
+  out.push({kind:'attack',combatOrder:'simultaneous',card:recipient,sourceCard:first.u,seat:enemy,zone:base?'base':defender!.zone,...seq},{kind:'exhaust',card:first.u,seat,zone:first.zone,...seq},{kind:'damage',card:recipient,sourceCard:first.u,seat:enemy,zone:base?'base':defender!.zone,amount:first.u.p,damageType:'combat',attackIndex:1,...seq});
+  let defenderDead=false;
+  if(defender){out.push({kind:'damage',card:first.u,sourceCard:defender.u,seat,zone:first.zone,amount:defender.u.p,damageType:'combat',attackIndex:2,...seq});if(first.u.d+defender.u.p>=first.u.h)out.push(die(first.u,seat,source,seq));defenderDead=defender.u.d+first.u.p>=defender.u.h;if(defenderDead)out.push(die(defender.u,enemy,source,seq));}
+  const remaining=available.filter(u=>u.id!==first.u.id),secondId=c.secondId===undefined?remaining.find(u=>u.id==='a10:p1:xwing')?.id??remaining[0]?.id:c.secondId;
+  if(!secondId){if(remaining.length)fail('Outflank must attack with a second unit if able');break;}
+  const second=locate(secondId);if(second.u.id===first.u.id||second.side!==seat||second.u.x)fail('second attack requires distinct ready friendly unit');
+  const survivingSentinel=q[second.zone].find(u=>u.sn&&!(defenderDead&&u.id===defender?.u.id));
+  if(survivingSentinel)fail('this second base-attack recipe requires separately supplied legal Sentinel combat');
+  const secondSeq={attackId:'a10:outflank:second',sequenceId:group,sequenceIndex:2};
+  out.push({kind:'attack',combatOrder:'simultaneous',card:q.base,sourceCard:second.u,seat:enemy,zone:'base',...secondSeq},{kind:'exhaust',card:second.u,seat,zone:second.zone,...secondSeq},{kind:'damage',card:q.base,sourceCard:second.u,seat:enemy,zone:'base',amount:second.u.p,damageType:'combat',attackIndex:1,...secondSeq});break;
+ }
+ case 'tactical-advantage':{const t=locate(c.targetId??'a10:p2:wampa');out.push({kind:'buff',card:t.u,seat:t.side,zone:t.zone,amount:'+2/+2',duration:'phase',label:'+2/+2 PHASE',sourceCard:source,incarnation:t.u.incarnation});break;}
+ case 'the-clone-wars':{const n=c.extra??2,event=price(d,s,seat);if(!Number.isSafeInteger(n)||n<0||n>p.res.ready-event)fail('additional token budget must fit ready resources after event payment');const paid=p.resources!.filter(r=>!r.x).slice(event,event+n);out.push({kind:'pay',card:source,sourceCard:source,seat,zone:'resources',amount:n,cards:paid,label:`EXTRA ${n} (EVENT EXCLUDED)`});out.push(...create(source,seat,'clone-wars:own','clone-trooper',n),...create(source,enemy,'clone-wars:opponent','battle-droid',n));break;}
+ case 'encouraging-leadership':for(const u of units(s,seat))out.push({kind:'buff',card:u,seat,zone:p.space.includes(u)?'space':'ground',amount:'+1/+1',duration:'phase',label:'+1/+1 PHASE',selection:'all',sourceCard:source,incarnation:u.incarnation});break;
+ case 'take-captive':{const cap=locate(c.captorId??'a10:p1:marine'),t=locate(c.targetId??'a10:p2:wampa');if(cap.side!==seat||t.side===seat||cap.zone!==t.zone||t.u.id===s.players[t.u.owner??t.side].leader?.id)fail('capture needs friendly captor and enemy nonleader in same arena');out.push({kind:'capture',card:t.u,seat,zone:cap.zone,fromSeat:t.side,fromZone:t.zone,sourceCard:cap.u,ownerSeat:t.u.owner,incarnation:t.u.incarnation,captureArena:{captorId:cap.u.id!,incarnation:cap.u.incarnation!,arena:cap.zone}});break;}
+ case 'in-defense-of-kamino':if(units(s,seat).some(u=>!u.traits))fail('Republic scope requires actual current traits');for(const u of units(s,seat).filter(u=>u.traits!.includes('republic'))){const zone=p.space.includes(u)?'space' as const:'ground' as const;out.push({kind:'keyword',card:u,seat,zone,sourceCard:source,keyword:{name:'Restore',amount:2},duration:'phase',incarnation:u.incarnation},{kind:'buff',card:u,seat,zone,sourceCard:source,duration:'phase',incarnation:u.incarnation,label:'WHEN DEFEATED: CREATE CLONE',grantedAbility:grant(source,u,s,'create-clone')});}break;
+ }
+ return out;
+}
+export function a10LaterActionOutcomes(d:CardEffectDefinition,s:Snapshot,seat:Seat):CardEffectOutcome[]|undefined{
+ if(!['pyrrhic-assault','in-defense-of-kamino'].includes(d.id))return;
+ const enemy:Seat=seat==='p1'?'p2':'p1',p=s.players[seat],q=s.players[enemy],source=p.discard.find(c=>c.id===`a10:${d.id}:event`&&c.s===d.setCode&&c.n===d.name)??fail('later action requires actual previously played source'),out:CardEffectOutcome[]=[];
+ const get=(side:Seat,id:string)=>units(s,side).find(u=>u.id===id&&u.incarnation)??fail('later action needs continuing actual entry');
+ const origin=(u:UnitRef)=>{const g=u.status?.find(x=>x.grantedAbility?.sourceId===source.id)?.grantedAbility??fail('later activation requires retained grant');return{abilityId:g.id,sourceId:g.sourceId,subjectId:u.id!,incarnation:u.incarnation!,controller:seat,round:s.round,phase:s.phase};};
+ if(d.id==='pyrrhic-assault'){
+  const w=get(enemy,'a10:p2:wampa'),u=get(seat,'a10:p1:defender'),t=get(enemy,'a10:p2:trooper'),id='a10:pyrrhic:later-attack';if(w.x||!u.sn||w.p!==4||u.p!==4||w.d!==1||u.d!==0)fail('verified later Pyrrhic battle prerequisites changed');
+  out.push({kind:'attack',combatOrder:'simultaneous',card:u,seat,zone:'ground',sourceCard:w,attackId:id},{kind:'exhaust',card:w,seat:enemy,zone:'ground',attackId:id},{kind:'damage',card:u,seat,zone:'ground',sourceCard:w,amount:4,damageType:'combat',attackId:id,attackIndex:1},{kind:'damage',card:w,seat:enemy,zone:'ground',sourceCard:u,amount:4,damageType:'combat',attackId:id,attackIndex:2},die(u,seat,w),die(w,enemy,u),{kind:'damage',card:t,seat:enemy,zone:'ground',sourceCard:ref(u),amount:2,damageType:'ability',requiresDefeat:{id:u.id!,incarnation:u.incarnation!},whenDefeatedOrigin:origin(u)});if(t.d+2>=t.h)out.push(die(t,enemy,u));
+ }else{
+  const u=get(seat,'a10:kamino:phase-i'),w=get(enemy,'a10:p2:wampa'),id='a10:kamino:later-attack';if(u.x||u.p!==3||u.h!==2||u.d!==0||w.p!==4||w.d!==1||q.ground.some(c=>c.sn))fail('verified later Kamino attack prerequisites changed');
+  out.push({kind:'attack',combatOrder:'simultaneous',card:w,seat:enemy,zone:'ground',sourceCard:u,attackId:id},{kind:'exhaust',card:u,seat,zone:'ground',attackId:id},{kind:'heal',card:p.base,seat,zone:'base',sourceCard:u,amount:Math.min(2,p.base.d),restoreOrigin:{attackerId:u.id!,incarnation:u.incarnation!,attackId:id,round:s.round,phase:s.phase,amount:2}},{kind:'damage',card:w,seat:enemy,zone:'ground',sourceCard:u,amount:3,damageType:'combat',attackId:id,attackIndex:1},{kind:'damage',card:u,seat,zone:'ground',sourceCard:w,amount:4,damageType:'combat',attackId:id,attackIndex:2},die(u,seat,w),...create(ref(u),seat,'kamino:replacement','clone-trooper',1,{requiresDefeat:{id:u.id!,incarnation:u.incarnation!},whenDefeatedOrigin:origin(u)}));
+ }
+ return out;
+}

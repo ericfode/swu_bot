@@ -3,7 +3,7 @@ defmodule Coord.Workers.Round do
   Plays round k of an arena: referee-cmd gives the checked command, which runs through the FLAME pool.
 
   The unique key is (arena, round, boot) over every state: a round whose referee failed twice (max_attempts 2)
-  waits for the next boot, as in games.js, and so does a round that completed while standings still say it runs
+  waits for the next boot, and so does a round that completed while standings still say it runs
   (that would be a bug, and rerunning it every 20 s would hide it). An explicit round number means a retry
   replays the same round, never the next one.
   """
@@ -26,15 +26,24 @@ defmodule Coord.Workers.Round do
 
   def perform(%Oban.Job{}), do: {:cancel, "not a round"}
 
+  # Whatever the round's end, the helper node forgets its leases and bundles (Coord.Remote.reset/0): a helper still
+  # playing one of its seeds gets 410 at its next heartbeat.
   defp play(arena, k) do
     case Coord.Gamesctl.referee_cmd(arena, k) do
       {:ok, spec} ->
-        result = FLAME.call(Coord.RoundRunner, fn -> Coord.Round.play(spec) end, timeout: :infinity)
+        result =
+          try do
+            FLAME.call(Coord.RoundRunner, fn -> Coord.Round.play(spec) end, timeout: :infinity)
+          after
+            Coord.Remote.reset()
+          end
+
         Coord.Scheduler.round_done(k, result)
         outcome(k, result)
 
       # a referee-cmd that Coord.Shutdown stopped is not a failed attempt either
       {:error, why} ->
+        Coord.Remote.reset()
         if Coord.Shutdown.stopping?(), do: {:snooze, 60}, else: {:error, "referee-cmd: #{why}"}
     end
   end

@@ -91,13 +91,14 @@ pub fn validate_pool(v: &Value) -> Result<(), String> {
     Ok(())
 }
 
-struct References {
+struct References<'a> {
+    catalogue: &'a HashMap<String, Value>,
     seen: HashMap<String, String>,
     next: u64,
 }
 
-impl References {
-    fn card<'a>(&mut self, v: &'a Value, at: &str) -> Result<(&'a str, &'static Value), String> {
+impl<'a> References<'a> {
+    fn card<'v>(&mut self, v: &'v Value, at: &str) -> Result<(&'v str, &'a Value), String> {
         let id = v["id"]
             .as_str()
             .ok_or_else(|| format!("{at}: missing card id"))?;
@@ -120,7 +121,8 @@ impl References {
         let code = v["setCode"]
             .as_str()
             .ok_or_else(|| format!("{at}: missing setCode"))?;
-        let info = catalogue()
+        let info = self
+            .catalogue
             .get(code)
             .ok_or_else(|| format!("unsupported card {} ({code})", v["name"]))?;
         if v["name"] != info["internalName"] {
@@ -137,6 +139,16 @@ fn has_type(info: &Value, kind: &str) -> bool {
 }
 
 pub fn validate_state(v: &Value) -> Result<(), String> {
+    validate_state_with_catalogue(v, catalogue())
+}
+
+/// Validate a snapshot against the card definitions already accepted by its
+/// engine. This checks state shape and references, not ability implementation;
+/// callers must validate a supplied catalogue before constructing their engine.
+pub fn validate_state_with_catalogue(
+    v: &Value,
+    catalogue: &HashMap<String, Value>,
+) -> Result<(), String> {
     fields(
         v,
         &[
@@ -150,9 +162,14 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
             "actor",
             "winner",
             "players",
+            "arenaUnitOrder",
+            "hiddenHistoryVersion",
+            "forceStateVersion",
         ],
         "state",
     )?;
+    let history = match v.get("hiddenHistoryVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported hiddenHistoryVersion".into())};
+    let force_exact = match v.get("forceStateVersion") {None=>false,Some(n) if n.as_u64()==Some(1)=>true,_=>return Err("unsupported forceStateVersion".into())};
     let next = number(v, "nextCardId", (MAX_CARDS - 1) as u64, "state")?;
     if number(v, "round", u16::MAX as u64, "state")? == 0 {
         return Err("state.round must be positive".into());
@@ -184,6 +201,7 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
     }
     fields(&v["players"], &["p1", "p2"], "players")?;
     let mut refs = References {
+        catalogue,
         seen: HashMap::new(),
         next,
     };
@@ -202,9 +220,19 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                 "ground",
                 "space",
                 "out",
+                "forceToken",
             ],
             seat,
         )?;
+        if force_exact {
+            let token=&p["forceToken"];
+            fields(token,&["id","held"],"forceToken")?;
+            let held=boolean(token,"held","forceToken")?;
+            let id=token["id"].as_str().ok_or("Force identity missing")?;
+            id.strip_prefix('c').and_then(|n|n.parse::<u64>().ok()).filter(|n|format!("c{n}")==id && *n<next && *n+1<MAX_CARDS as u64).ok_or("invalid Force stable identity")?;
+            if refs.seen.insert(id.to_owned(),format!("{seat}.forceToken")).is_some(){return Err("duplicate Force identity".into());}
+            if held && !catalogue.contains_key("TOKEN_THE_FORCE"){return Err("held Force requires selected native definition".into());}
+        } else if p.get("forceToken").is_some(){return Err("Force identity requires forceStateVersion".into());}
         let out = boolean(p, "out", seat)?;
         if !terminal && v["actor"] == *seat && out {
             return Err(format!("{seat} cannot act after leaving the phase"));
@@ -224,10 +252,12 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
             &format!("{seat}.base"),
         )?;
         let (_, base_info) = refs.card(base, &format!("{seat}.base"))?;
-        if !has_type(base_info, "base") || number(base, "hp", 30, "base")? != 30 {
-            return Err(format!("{seat}.base must be a plain 30 HP base"));
+        let base_hp = number(base, "hp", 1000, "base")?;
+        if !has_type(base_info, "base") || base_hp == 0 || base_info["hp"].as_u64() != Some(base_hp)
+        {
+            return Err(format!("{seat}.base HP must match admitted base metadata"));
         }
-        dead[seat_index] = number(base, "damage", u16::MAX as u64, "base")? >= 30;
+        dead[seat_index] = number(base, "damage", u16::MAX as u64, "base")? >= base_hp;
         if boolean(base, "epicUsed", "base")? {
             return Err("plain base cannot have a spent epic action".into());
         }
@@ -269,6 +299,10 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                         "power",
                         "hp",
                         "upgrades",
+                        "phaseStats",
+                        "phaseKeywords",
+                        "phaseLostKeywords",
+                        "hiddenQualified",
                     ]
                 } else if zone == "resources" {
                     &["id", "setCode", "name", "exhausted"]
@@ -292,8 +326,15 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                     leader_info
                 } else {
                     let (_, info) = refs.card(c, &at)?;
-                    if !has_type(info, "unit") || has_type(info, "token") {
-                        return Err(format!("{at}: expected a nonleader unit"));
+                    if (has_type(info, "token") && (!arena || !has_type(info,"unit") || has_type(info,"upgrade")))
+                        || has_type(info, "leader")
+                        || has_type(info, "base")
+                        || !(has_type(info, "unit") || (!arena && (has_type(info, "event") || has_type(info,"upgrade"))))
+                    {
+                        return Err(format!(
+                            "{at}: expected a nonleader unit{}",
+                            if arena { "" } else { " or event" }
+                        ));
                     }
                     info
                 };
@@ -301,6 +342,7 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                     boolean(c, "exhausted", &at)?;
                 }
                 if arena {
+                    if history {boolean(c,"hiddenQualified",&at)?;} else if c.get("hiddenQualified").is_some() {return Err(format!("{at}: hiddenQualified requires hiddenHistoryVersion"));}
                     if info["arena"] != zone {
                         return Err(format!("{at}: card is in the wrong arena"));
                     }
@@ -326,19 +368,86 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
                     let upgrades = c["upgrades"]
                         .as_array()
                         .ok_or_else(|| format!("{at}: upgrades must be an array"))?;
-                    if upgrades.len() > 1 {
-                        return Err(format!("{at}: multiple upgrades unsupported"));
+                    if upgrades.len() >= MAX_CARDS {
+                        return Err(format!("{at}: upgrade capacity exceeded"));
                     }
+                    let mut upgrade_stats=(0i64,0i64);
                     for u in upgrades {
                         fields(
                             u,
-                            &["id", "setCode", "name", "token"],
+                            &["id", "setCode", "name", "token", "controller", "owner"],
                             &format!("{at}.upgrades"),
                         )?;
                         let (_, info) = refs.card(u, &format!("{at}.upgrades"))?;
-                        if info["setCode"] != "TOKEN_SHIELD" || !boolean(u, "token", "upgrade")? {
-                            return Err(format!("{at}: only Shield tokens are supported"));
+                        if !has_type(info,"upgrade") {return Err(format!("{at}: attachment must be an upgrade"));}
+                        let token=boolean(u,"token","upgrade")?;
+                        if token {
+                            if !matches!(u["setCode"].as_str(),Some("TOKEN_SHIELD"|"TOKEN_EXPERIENCE"|"TOKEN_WEAKNESS")) || !has_type(info,"token") {return Err(format!("{at}: only Shield, Experience and Weakness tokens are supported"));}
+                            if u["setCode"]=="TOKEN_WEAKNESS" {upgrade_stats.0+=info["upgradePower"].as_i64().ok_or("Weakness missing signed power")?;upgrade_stats.1+=info["upgradeHp"].as_i64().ok_or("Weakness missing signed HP")?;}
+                        }else{
+                            if has_type(info,"token") {return Err(format!("{at}: only Shield, Experience and Weakness tokens are supported"));}
+                            let controller=u["controller"].as_str().ok_or("ordinary upgrade needs controller")?;
+                            let owner=u["owner"].as_str().ok_or("ordinary upgrade needs owner")?;
+                            if owner!=controller {return Err("foreign-controlled upgrade imports are unsupported".into());}
+                            upgrade_stats.0+=info["upgradePower"].as_i64().unwrap_or(0);upgrade_stats.1+=info["upgradeHp"].as_i64().unwrap_or(0);
+                            if !["p1","p2"].contains(&controller) || u["owner"].as_str().is_some_and(|owner|owner!=controller) {return Err("foreign-controlled upgrade imports are unsupported".into());}
                         }
+                    }
+                    if let Some(keywords) = c.get("phaseKeywords") {
+                        let object = keywords.as_object().ok_or_else(|| format!("{at}: phaseKeywords must be object"))?;
+                        for (keyword, amount) in object {
+                            if keyword=="hidden" && !history {return Err(format!("{at}: Hidden phase effect requires explicit history"));}
+                            let index = crate::ability_ir::CORE_KEYWORDS.iter().position(|k| k == keyword).ok_or_else(|| format!("{at}: unknown phase keyword {keyword}"))?;
+                            let amount = amount.as_u64().filter(|n| *n <= 65535).ok_or_else(|| format!("{at}: invalid phase keyword amount"))?;
+                            if crate::ability_ir::numeric_keyword_slot(index).is_none() && amount != 1 { return Err(format!("{at}: boolean phase keyword amount must be one")); }
+                            if keyword == "restore" && amount == 0 { return Err(format!("{at}: zero phase Restore requires verified nullable trigger titles")); }
+                        }
+                    }
+                    if let Some(keywords) = c.get("phaseLostKeywords") {
+                        let array = keywords.as_array().ok_or_else(|| format!("{at}: phaseLostKeywords must be array"))?;
+                        let mut seen = HashSet::new();
+                        for keyword in array {
+                            let name = keyword.as_str().filter(|k| crate::ability_ir::CORE_KEYWORDS.contains(k)).ok_or_else(|| format!("{at}: unknown lost phase keyword"))?;
+                            if name=="hidden" && !history {return Err(format!("{at}: Hidden phase loss requires explicit history"));}
+                            if !seen.insert(name) { return Err(format!("{at}: duplicate lost phase keyword")); }
+                        }
+                    }
+                    let phase = if let Some(stats) = c.get("phaseStats") {
+                        fields(stats, &["power", "hp"], &format!("{at}.phaseStats"))?;
+                        let power = stats["power"]
+                            .as_i64()
+                            .filter(|n| (-65535..=65535).contains(n))
+                            .ok_or_else(|| format!("{at}: phase power out of range"))?;
+                        let hp = stats["hp"]
+                            .as_i64()
+                            .filter(|n| (-65535..=65535).contains(n))
+                            .ok_or_else(|| format!("{at}: phase HP out of range"))?;
+                        (power, hp)
+                    } else {
+                        (0, 0)
+                    };
+                    // Validate composed stat capacity before the compact engine
+                    // calculates it. Terminal snapshots may retain a defeated
+                    // Grit unit, so damage need not be below its printed HP.
+                    let experience = upgrades
+                        .iter()
+                        .filter(|u| u["setCode"] == "TOKEN_EXPERIENCE")
+                        .count() as u64;
+                    let printed_grit = info["keywords"].as_array().is_some_and(|ks| ks.iter().any(|k| k == "grit"))
+                        && [info["text"].as_str(), has_type(info, "leader").then(|| info["deployBox"].as_str()).flatten()].into_iter().flatten().any(|text| text.lines().any(|line| line.starts_with("Grit")));
+                    let grit = c["phaseKeywords"]["grit"] == 1 || printed_grit;
+                    let power = info["power"].as_i64().unwrap_or(0)
+                        + experience as i64 + upgrade_stats.0
+                        + if grit && !c["phaseLostKeywords"].as_array().is_some_and(|ks| ks.iter().any(|k| k == "grit")) { damage as i64 } else { 0 }
+                        + phase.0;
+                    let hp = info["hp"].as_i64().unwrap_or(0) + experience as i64 + phase.1 + upgrade_stats.1;
+                    if power > u16::MAX as i64 {
+                        return Err(format!(
+                            "{at}: computed power exceeds compact state capacity"
+                        ));
+                    }
+                    if hp > u16::MAX as i64 {
+                        return Err(format!("{at}: computed HP exceeds compact state capacity"));
                     }
                 }
             }
@@ -358,6 +467,30 @@ pub fn validate_state(v: &Value) -> Result<(), String> {
     };
     if !consistent {
         return Err("winner disagrees with base damage".into());
+    }
+    validate_arena_unit_order(v,catalogue)?;
+    Ok(())
+}
+
+fn validate_arena_unit_order(v:&Value,catalogue:&HashMap<String,Value>)->Result<(),String> {
+    fn ordinary(value:&Value,catalogue:&HashMap<String,Value>)->bool {
+        value["setCode"].as_str().and_then(|code|catalogue.get(code)).is_some_and(|info|has_type(info,"upgrade")&&!has_type(info,"token")) || match value {Value::Array(items)=>items.iter().any(|v|ordinary(v,catalogue)),Value::Object(fields)=>fields.values().any(|v|ordinary(v,catalogue)),_=>false}
+    }
+    let Some(order)=v.get("arenaUnitOrder") else {
+        if ordinary(v,catalogue) {return Err("ordinary upgrade imports require explicit arenaUnitOrder, including future upgrades in hidden zones".into());}
+        return Ok(());
+    };
+    let object=order.as_object().ok_or("arenaUnitOrder must be an object")?;
+    if object.len()!=2 || !object.contains_key("ground") || !object.contains_key("space") {return Err("arenaUnitOrder must contain ground and space only".into());}
+    for name in ["ground","space"] {
+        let expected=["p1","p2"].into_iter().flat_map(|seat|v["players"][seat][name].as_array().unwrap()).map(|c|c["id"].as_str().unwrap()).collect::<HashSet<_>>();
+        let actual=order[name].as_array().ok_or("arenaUnitOrder arena must be an array")?.iter().map(|id|id.as_str().ok_or("arenaUnitOrder needs stable card IDs")).collect::<Result<Vec<_>,_>>()?;
+        let seen=actual.iter().copied().collect::<HashSet<_>>();
+        if seen.len()!=actual.len() || seen!=expected {return Err("arenaUnitOrder must contain each arena unit exactly once with no foreign/wrong-arena cards".into());}
+        for seat in ["p1","p2"] {
+            let own=v["players"][seat][name].as_array().unwrap().iter().map(|c|c["id"].as_str().unwrap()).collect::<Vec<_>>();
+            if actual.iter().copied().filter(|id|own.contains(id)).collect::<Vec<_>>()!=own {return Err("arenaUnitOrder conflicts with controller arena subsequence".into());}
+        }
     }
     Ok(())
 }
@@ -395,6 +528,148 @@ mod tests {
         assert!(validate_state(&bad)
             .unwrap_err()
             .contains("unsupported state field"));
+    }
+
+    #[test]
+    fn supplied_catalogue_replaces_static_catalogue_without_fallback() {
+        let mut state = initial_state();
+        let mut cards = catalogue().clone();
+        let card = &mut state["players"]["p1"]["hand"][0];
+        let old_code = card["setCode"].as_str().unwrap();
+        let mut custom = cards[old_code].clone();
+        custom["setCode"] = json!("CUSTOM_001");
+        custom["internalName"] = json!("custom-unit");
+        card["setCode"] = custom["setCode"].clone();
+        card["name"] = custom["internalName"].clone();
+        cards.insert("CUSTOM_001".into(), custom);
+
+        validate_state_with_catalogue(&state, &cards).unwrap();
+        assert!(validate_state(&state).unwrap_err().contains("CUSTOM_001"));
+
+        let base_code = state["players"]["p1"]["base"]["setCode"].as_str().unwrap();
+        let removed = cards.remove(base_code).unwrap();
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains(base_code));
+        cards.insert(base_code.into(), removed);
+        state["players"]["p1"]["hand"][0]["name"] = json!("wrong-name");
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("name does not match CUSTOM_001"));
+    }
+
+    #[test]
+    fn catalogue_events_are_allowed_outside_arenas() {
+        let mut state = initial_state();
+        let mut cards = catalogue().clone();
+        let original = state["players"]["p1"]["hand"][0].clone();
+        let code = original["setCode"].as_str().unwrap();
+        let mut event = cards[code].clone();
+        event["types"] = json!(["event"]);
+        event["setCode"] = json!("CUSTOM_EVENT");
+        event["internalName"] = json!("custom-event");
+        cards.insert("CUSTOM_EVENT".into(), event);
+        let reference =
+            json!({"id":original["id"], "setCode":"CUSTOM_EVENT", "name":"custom-event"});
+        state["players"]["p1"]["hand"][0] = reference.clone();
+        validate_state_with_catalogue(&state, &cards).unwrap();
+
+        state["players"]["p1"]["hand"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+        state["players"]["p1"]["ground"] = json!([reference]);
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("expected a nonleader unit"));
+    }
+
+    #[test]
+    fn multiple_shield_and_experience_tokens_keep_unique_references() {
+        let mut state = initial_state();
+        let mut cards = catalogue().clone();
+        let mut experience = cards["TOKEN_SHIELD"].clone();
+        experience["setCode"] = json!("TOKEN_EXPERIENCE");
+        experience["internalName"] = json!("experience");
+        experience["upgradePower"] = json!(1);
+        experience["upgradeHp"] = json!(1);
+        cards.insert("TOKEN_EXPERIENCE".into(), experience);
+        let next = state["nextCardId"].as_u64().unwrap();
+        let info = &cards["IBH_003"];
+        let arena = info["arena"].as_str().unwrap().to_owned();
+        state["players"]["p1"][&arena] = json!([{
+            "id":format!("c{next}"), "setCode":info["setCode"], "name":info["internalName"],
+            "damage":0, "power":info["power"].as_u64().unwrap()+1, "hp":info["hp"].as_u64().unwrap()+1,
+            "exhausted":false, "upgrades":[
+                {"id":format!("c{}",next+1), "setCode":"TOKEN_SHIELD", "name":"shield", "token":true},
+                {"id":format!("c{}",next+2), "setCode":"TOKEN_SHIELD", "name":"shield", "token":true},
+                {"id":format!("c{}",next+3), "setCode":"TOKEN_EXPERIENCE", "name":"experience", "token":true}
+            ]
+        }]);
+        state["nextCardId"] = json!(next + 4);
+        validate_state_with_catalogue(&state, &cards).unwrap();
+        assert!(validate_state(&state)
+            .unwrap_err()
+            .contains("TOKEN_EXPERIENCE"));
+
+        let upgrades = &mut state["players"]["p1"][&arena][0]["upgrades"];
+        upgrades[1]["id"] = upgrades[0]["id"].clone();
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("duplicate card"));
+        let upgrades = &mut state["players"]["p1"][&arena][0]["upgrades"];
+        upgrades[1]["id"] = json!(format!("c{}", next + 2));
+        upgrades[2]["token"] = json!(false);
+        assert!(validate_state_with_catalogue(&state, &cards)
+            .unwrap_err()
+            .contains("only Shield, Experience and Weakness tokens"));
+    }
+
+    #[test]
+    fn conditional_grit_metadata_does_not_add_damage_to_capacity() {
+        let mut cards = catalogue().clone();
+        let code = "LOF_254";
+        let info = cards.get_mut(code).unwrap();
+        info["keywords"] = json!(["grit"]);
+        info["text"] = json!("While you have the initiative, this unit gains Grit.");
+        let info = info.clone();
+        let mut state = initial_state();
+        let next = state["nextCardId"].as_u64().unwrap();
+        state["players"]["p1"][info["arena"].as_str().unwrap()] = json!([{
+            "id":format!("c{next}"),"setCode":code,"name":info["internalName"],"damage":65535,"power":info["power"],"hp":info["hp"],"exhausted":false,"upgrades":[]
+        }]);
+        state["nextCardId"] = json!(next+1);
+        state["players"]["p2"]["base"]["damage"] = json!(30);
+        state["winner"] = json!("p1");
+        validate_state_with_catalogue(&state, &cards).unwrap();
+        cards.get_mut(code).unwrap()["text"] = json!("Grit");
+        assert!(validate_state_with_catalogue(&state, &cards).unwrap_err().contains("computed power"));
+    }
+
+    #[test]
+    fn terminal_grit_damage_cannot_overflow_computed_power() {
+        let mut state = initial_state();
+        let info = catalogue()
+            .values()
+            .find(|c| {
+                has_type(c, "unit")
+                    && c["power"].as_u64().is_some_and(|n| n > 0)
+                    && c["keywords"]
+                        .as_array()
+                        .is_some_and(|ks| ks.iter().any(|k| k == "grit"))
+            })
+            .unwrap();
+        let next = state["nextCardId"].as_u64().unwrap();
+        state["players"]["p1"][info["arena"].as_str().unwrap()] = json!([{
+            "id":format!("c{next}"), "setCode":info["setCode"], "name":info["internalName"],
+            "damage":65535, "power":65535, "hp":info["hp"], "exhausted":false, "upgrades":[]
+        }]);
+        state["nextCardId"] = json!(next + 1);
+        state["players"]["p2"]["base"]["damage"] = json!(30);
+        state["winner"] = json!("p1");
+        assert!(validate_state(&state)
+            .unwrap_err()
+            .contains("computed power"));
     }
 
     #[test]
@@ -475,6 +750,7 @@ mod tests {
         let c = &p["cards"][0];
         let mut card = json!({"id":"c0", "setCode":c["setCode"], "name":c["internalName"]});
         let mut refs = References {
+            catalogue: catalogue(),
             seen: HashMap::new(),
             next: 3,
         };

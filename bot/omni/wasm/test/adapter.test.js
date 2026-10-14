@@ -7,6 +7,8 @@ const path = require('path');
 const { createSimulator } = require('../node');
 const { records, checkRecords } = require('../check');
 const fixtures = path.resolve(__dirname, '../../../omni-rs/tests/fixtures');
+const compiledFixtures = path.resolve(__dirname, '../../../omni-rs/tests/compiled-fixtures');
+const cataloguePath = path.resolve(__dirname, '../../../card-compiler/generated/catalog.json');
 
 test('Wasm adapter matches every engine decision and state in all committed fixtures', async () => {
     const simulator = await createSimulator();
@@ -66,6 +68,79 @@ test('Wasm rejects incorrect pools, unsupported cards, invalid limits and illega
             assert.deepEqual(game.snapshot(), before);
         } finally { game.free(); }
     } finally { simulator.free(); }
+});
+
+test('compiled Wasm programmes replay all sixteen expanded engine games with exact pool provenance', async () => {
+    const simulator = await createSimulator({ cataloguePath, poolPath: path.join(compiledFixtures, 'pool.json') });
+    try {
+        const files = fs.readdirSync(compiledFixtures).filter((file) => file.endsWith('.gz')).sort();
+        assert.equal(files.length, 16);
+        let decisions = 0, windows = 0;
+        for (const file of files) {
+            const result = checkRecords(simulator, records(path.join(compiledFixtures, file)), file);
+            assert.equal(result.matched, true);
+            decisions += result.decisions;
+            windows += result.windows;
+        }
+        assert.ok(decisions > 0 && windows > 0);
+    } finally { simulator.free(); }
+});
+
+test('catalogue JSON supports both all-admitted cards and an exact raw subset pool', async () => {
+    const catalogueJson = fs.readFileSync(cataloguePath, 'utf8');
+    const poolJson = fs.readFileSync(path.join(compiledFixtures, 'pool.json'), 'utf8');
+    const subset = await createSimulator({ catalogueJson, poolJson });
+    const all = await createSimulator({ catalogueJson });
+    const file = fs.readdirSync(compiledFixtures).filter((file) => file.endsWith('.gz')).sort()[0];
+    const rows = records(path.join(compiledFixtures, file));
+    const initial = rows.find((row) => row.type === 'state').state;
+    try {
+        assert.equal(subset.poolHash, rows[0].pool.sha256);
+        assert.throws(() => all.loadState(initial), /requires explicit Hidden phase history/);
+        // This fixture starts before any arena entry, so no per-unit history is inferred.
+        for (const player of Object.values(initial.players)) {
+            assert.equal(player.ground.length, 0);
+            assert.equal(player.space.length, 0);
+        }
+        const hiddenOnly = { ...structuredClone(initial), hiddenHistoryVersion: 1 };
+        assert.throws(() => all.loadState(hiddenOnly), /requires explicit Force state version/);
+        // Persistent Force identities come from an actual engine recording;
+        // they cannot be reconstructed from an older snapshot's arena contents.
+        const referenceFixtures = path.resolve(__dirname, '../../../cards/reference/fixtures');
+        const manifest = require('../../../cards/reference/library').corpus(referenceFixtures);
+        const forceRecording = manifest.recordings.find((row) => row.caseId === 'auto/LOF_193/force-first-gain');
+        assert.ok(forceRecording, 'The corpus must retain the versioned Force engine witness');
+        const versioned = records(path.join(referenceFixtures, 'traces', forceRecording.traceSha256 + '.jsonl.gz')).find((row) => row.type === 'state').state;
+        assert.equal(versioned.forceStateVersion, 1);
+        assert.equal(versioned.hiddenHistoryVersion, 1);
+        for (const [simulator, snapshot] of [[subset, initial], [all, versioned]]) {
+            const game = simulator.loadState(snapshot);
+            try {
+                assert.deepEqual(game.snapshot(), snapshot);
+                assert.equal(game.prove({ nodes: 0 }).complete, false);
+            } finally { game.free(); }
+        }
+        const wrongPool = JSON.parse(poolJson);
+        wrongPool.cards.find((card) => card.types.includes('unit')).power += 1;
+        await assert.rejects(createSimulator({ catalogueJson, poolJson: JSON.stringify(wrongPool) }), /differs/);
+    } finally { subset.free(); all.free(); }
+});
+
+test('invalid wrapper options release their owned Wasm handle and CLI flags cannot disappear', async () => {
+    const { WasmGame } = await import('../adapter.mjs');
+    for (const options of [null, { ids: ['same', 'same'] }, { ids: 'ab' }, { names: ['one'] }]) {
+        let freed = 0;
+        assert.throws(() => new WasmGame({ free() { freed++; } }, options));
+        assert.equal(freed, 1);
+    }
+    const checkOptions = require('../check').options;
+    const proveOptions = require('../prove').options;
+    assert.equal(checkOptions(['trace.gz', '--catalogue', 'catalog.json', '--pool', 'pool.json']).cataloguePath, 'catalog.json');
+    assert.equal(proveOptions(['positions.jsonl', '--catalogue', 'catalog.json']).cataloguePath, 'catalog.json');
+    for (const parse of [checkOptions, proveOptions]) {
+        assert.throws(() => parse(['input.jsonl', '--catalogue']), /requires/);
+        assert.throws(() => parse(['input.jsonl', '--pool', '--catalogue', 'catalog.json']), /requires/);
+    }
 });
 
 test('A drawn game lists both player names, like EnvGame.winners', async () => {

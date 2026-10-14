@@ -14,7 +14,7 @@ Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RES
 const { createWindow, wakeGamesAt, Store, storeReader, scrub } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 
-const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
+const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_GAMES_TOKEN: 'games-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
 
 async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
@@ -291,6 +291,51 @@ test('share: an admin invites and removes people from the Share page, and no one
     }
 });
 
+test('arena settings: an admin sets them from the site or with the admin token, the games machine reads them', async () => {
+    const w = makeWindow('w-settings');
+    const { go, close } = await serve(w);
+    try {
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const post = (body, opts = {}) => go('/api/arena-settings', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
+        const read = async (opts) => (await (await go('/api/arena-settings', opts)).json()).result;
+        assert.deepStrictEqual(await read({ cookie: eric }), { settings: {}, updatedAt: null, by: null }, 'nothing set: the machine\'s defaults');
+        assert.deepStrictEqual((await read({ token: 'games-secret' })).settings, {});
+
+        const r = await (await post({ set: { workers: 3, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 } })).json();
+        assert.deepStrictEqual(r.result.settings, { workers: 3, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 });
+        assert.strictEqual(r.result.by, 'ericfode');
+        assert.deepStrictEqual((await read({ token: 'games-secret' })).settings, { workers: 3, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 });
+        // null goes back to the default; the others stay
+        assert.deepStrictEqual((await (await post({ set: { workers: null } })).json()).result.settings, { gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 });
+        assert.strictEqual((await go('/api/arena-settings', { method: 'POST', token: 'admin-secret', body: '{"set":{"workers":2}}' })).status, 200, 'the admin token, from a program');
+
+        for (const bad of [{}, { set: {} }, { set: [] }, { set: { workers: 0 } }, { set: { workers: 17 } }, { set: { workers: 2.5 } }, { set: { workers: '3' } },
+            { set: { gamesPerPair: 3 } }, { set: { gamesPerPair: 12 } }, { set: { thinkCapSec: 5 } }, { set: { roundGapMin: -1 } }, { set: { idleMin: 5 } },
+            { set: { workers: 3, constructor: 1 } }, { set: { __proto__: 1 } }]) {
+            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
+        }
+        assert.deepStrictEqual((await read({ cookie: eric })).settings, { workers: 2, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 }, 'a refused change changes nothing');
+
+        // only an admin changes them, and a browser only from this site's pages and as JSON
+        assert.strictEqual((await post({ set: { workers: 4 } }, { origin: null })).status, 403);
+        assert.strictEqual((await post({ set: { workers: 4 } }, { origin: 'https://evil.fly.dev' })).status, 403);
+        assert.strictEqual((await post({ set: { workers: 4 } }, { type: 'text/plain' })).status, 400);
+        assert.strictEqual((await post({ set: { workers: 4 } }, { cookie: pal })).status, 403, 'a friend cannot');
+        assert.strictEqual((await go('/api/arena-settings', { cookie: pal })).status, 403, 'nor read them');
+        assert.strictEqual((await go('/api/arena-settings', { method: 'POST', token: 'games-secret', body: '{"set":{"workers":4}}' })).status, 403, 'the games machine only reads');
+        assert.strictEqual((await go('/api/arena-settings', { token: 'push-secret' })).status, 403, 'the project token cannot read them');
+        assert.strictEqual((await read({ token: 'admin-secret' })).settings.workers, 2);
+
+        // a doc with something else in it (an older shape, a hand edit) gives only the valid settings
+        w.store.putDoc('admin', 'arena-settings', JSON.stringify({ settings: { workers: 99, gamesPerPair: 6, junk: 1 }, updatedAt: 7 }));
+        assert.deepStrictEqual(await read({ token: 'games-secret' }), { settings: { gamesPerPair: 6 }, updatedAt: null, by: null });
+    } finally {
+        await close();
+    }
+});
+
 test('view links: a guest reads with no sign-in while the link exists, and never writes', async () => {
     const w = makeWindow('w-links');
     const { go, close } = await serve(w);
@@ -411,6 +456,30 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await append('arena-t1-r1')).status, 403);
         assert.deepStrictEqual((await (await go('/api/replays/karabast?sizes=1', { token: 'feed-secret' })).json()).result, [{ id: 'g1', size: 15 }]);
         assert.strictEqual((await go('/api/docs/panels', { token: 'feed-secret' })).status, 403, 'reads like a friend');
+    } finally {
+        await close();
+    }
+});
+
+test('a feed\'s person names go to admin/people, which only an admin reads; the run keeps "opponent"', async () => {
+    const w = makeWindow('w-names');
+    const { go, close } = await serve(w);
+    try {
+        const friend = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const put = (games) => go('/api/docs/runs/karabast', { method: 'PUT', token: 'feed-secret', body: JSON.stringify({ id: 'karabast', createdAt: '2026-10-14T00:00:00Z', bots: ['c-clock'], games }) });
+        const g = (id, person) => ({ id, p1: 'c-clock', p2: 'opponent', outcome: 'won', winnerSeat: 'p1', person });
+        assert.strictEqual((await put([g('karabast-1', 'Zed Example'), g('karabast-2', 'x'.repeat(65)), g('karabast-3', 'a\nb'), g('karabast-4', '  '), g('karabast-5', 7)])).status, 200, 'a bad name is dropped, never the run');
+        assert.ok(!w.store.getDoc('runs', 'karabast').includes('Zed'), 'the run document never holds a name');
+        const names = async (who) => { const r = await go('/api/docs/admin/people', who); return r.status === 200 ? (await r.json()).result.names : r.status; };
+        assert.deepStrictEqual(await names({ cookie: eric }), { 'karabast-1': 'Zed Example' }, "Eric's sign-in reads them");
+        assert.deepStrictEqual(await names({ token: 'admin-secret' }), { 'karabast-1': 'Zed Example' });
+        for (const who of [{ cookie: friend }, { token: 'push-secret' }, { token: 'feed-secret' }]) {
+            assert.strictEqual(await names(who), 403, JSON.stringify(who));
+        }
+        // a later list keeps the names it no longer carries, and adds new ones
+        assert.strictEqual((await put([g('karabast-6', 'Yan Example')])).status, 200);
+        assert.deepStrictEqual(await names({ cookie: eric }), { 'karabast-1': 'Zed Example', 'karabast-6': 'Yan Example' });
     } finally {
         await close();
     }
@@ -1025,6 +1094,11 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
         const listed = (await (await go('/api/apps', { cookie: session('kim-b') })).json()).result;
         assert.strictEqual(listed.mcp, `${site}/mcp`);
         assert.deepStrictEqual(listed.apps.map((a) => [a.app, a.site]), [['Claude', 'claude.ai']]);
+        // the Build a bot page lists what an app can do from the server's own tools: every one, and only submit writes
+        const mcpList = (await rpc(tok3.access_token, 'tools/list')).result.tools;
+        assert.deepStrictEqual(listed.tools.map((t) => t.name), mcpList.map((t) => t.name));
+        assert.deepStrictEqual(listed.tools.filter((t) => !t.readOnly).map((t) => t.name), ['arena_submit']);
+        assert.ok(listed.tools.every((t) => t.does && !/\n/.test(t.does)));
         assert.deepStrictEqual((await (await go('/api/apps', { cookie: session('ericfode') })).json()).result.apps, [], 'only your own');
         const drop = (cookie, id, origin = site) => go('/api/apps', { method: 'POST', cookie, origin, body: JSON.stringify({ disconnect: id }) });
         assert.strictEqual((await drop(session('kim-b'), listed.apps[0].id, 'https://evil.example')).status, 403);

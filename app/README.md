@@ -1,7 +1,7 @@
 # SWU Arena app
 
-One web app to watch the arena and read the research: Home (the game playing now, live boards, the arena, top
-bots, what we learned), Arena, Bots, Games, Research and, in the project build only, Lab. The design and the reasons
+One web app to watch the arena: Home (the game playing now, live boards, the arena, top bots, what's new), Arena,
+Bots (with Speed and Evaluators), Games and, in the project build only, Lab. The design and the reasons
 behind it are in [DESIGN.md](DESIGN.md).
 
 It builds into one self-contained HTML file. The file carries a snapshot of the data, a few full replays and small
@@ -73,9 +73,8 @@ Owners' result widgets (dashboard contract section 5) draw with the same pieces:
 - `src/atlas.js`: spot rules on a replay snapshot, built on the Atlas kit.
 - `src/app.js`: routes and pages. Results are drawn with shared pieces (face-off bar, score bar with the 50% line,
   Brier scale, nine-spot strip, board glyph), never as stat boxes.
-  Games against people (karabast.net, a run with `kind: 'people'`) live on their own tab, Vs people: every other
-  view shows bot-vs-bot games only, and wherever a people game shows, the person's seat reads "a person" in the
-  people colour (`--human`) with a "vs a person" pill. On the hosted arena, the Share button gives a link to the page
+  Games against people on karabast.net stay out of the app (Eric, 2026-10-14: they have their own page on the
+  Karabast Sprite): the model drops every run a feed sent and every run named `karabast*`. On the hosted arena, the Share button gives a link to the page
   you are on, and an admin's Share page edits who may sign in (`/api/share`, `bot/arena/WINDOW.md`).
 - `test/`: unit tests for the model (`npm test` runs them; no card data needed).
 

@@ -121,6 +121,41 @@ test('gamesctl referee-cmd: an explicit round, the minimal environment, and the 
     assert.ok(fs.existsSync(path.join(elsewhere, 'referee.lock')));
 });
 
+test('gamesctl referee-cmd: a new round takes the games and time limit it is given, a round cut short keeps its own', async () => {
+    const roster = () => JSON.parse(fs.readFileSync(path.join(home, 'roster.json'), 'utf8'));
+    const games = (cmd) => cmd[cmd.indexOf('--games') + 1];
+    const standings = path.join(home, 'standings.json');
+    const before = fs.existsSync(standings) ? fs.readFileSync(standings) : null;
+    try {
+        writeJson(standings, { rounds: [{ round: 11, status: 'done', gamesPerPair: 2 }] });
+        let r = await ctl(['referee-cmd', '--arena', 'open', '--round', '12', '--games', '4', '--workers', '3', '--cap-ms', '90000']);
+        assert.strictEqual(r.code, 0, r.err);
+        assert.strictEqual(games(r.json.cmd), '4');
+        assert.strictEqual(r.json.cmd[r.json.cmd.indexOf('--workers') + 1], '3');
+        assert.strictEqual(roster().thinkCapMs, 90000, 'the new round plays by the new limit');
+
+        // round 12 started with 4 games per pair and a stop cut it short: it keeps 4 and the limit it started with
+        writeJson(standings, { rounds: [{ round: 11, status: 'done', gamesPerPair: 2 }, { round: 12, status: 'running', gamesPerPair: 4 }] });
+        r = await ctl(['referee-cmd', '--arena', 'open', '--round', '12', '--games', '2', '--cap-ms', '60000']);
+        assert.strictEqual(r.code, 0, r.err);
+        assert.strictEqual(games(r.json.cmd), '4');
+        assert.strictEqual(roster().thinkCapMs, 90000);
+
+        // without --cap-ms the roster's limit stays; a limit under a second is refused
+        r = await ctl(['referee-cmd', '--arena', 'open', '--round', '13']);
+        assert.strictEqual(r.code, 0, r.err);
+        assert.strictEqual(roster().thinkCapMs, 90000);
+        assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', '13', '--cap-ms', '5'])).code, 2);
+        assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', '13', '--cap-ms', 'x'])).code, 2);
+    } finally {
+        if (before) {
+            fs.writeFileSync(standings, before);
+        } else {
+            fs.rmSync(standings, { force: true });
+        }
+    }
+});
+
 test('gamesctl push: what was sent is not sent again in the same boot; a new boot sends everything', async () => {
     const w = await fakeWindow();
     try {

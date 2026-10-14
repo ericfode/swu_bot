@@ -1,7 +1,6 @@
 # The games machine: what the Fly app swu-arena-games runs (fly.games.toml). It takes the bots people submit on the
 # window (swu-arena.fly.dev), plays them against each other and the resident bots, and sends the results back to the
-# window. Two programs can run it, picked by GAMES_COORDINATOR (bot/arena/ops/games-entry.sh): the Elixir coordinator
-# (coord/, which calls Node's bot/arena/gamesctl.js for the game work) or bot/arena/games.js alone. Built from the
+# window. The Elixir coordinator (coord/) runs it and calls Node's bot/arena/gamesctl.js for the game work. Built from the
 # repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
 # container). The build context is filtered by Dockerfile.games.dockerignore.
 # No stage installs system packages: each takes what it needs from an official image (node, python, rust, Hex's elixir).
@@ -74,5 +73,10 @@ COPY --from=wasm /src/build/compiled build/compiled
 COPY --from=coord /opt/coord /app/coord
 # the release starts here: crypto, SQLite and the CA store load (runtime.exs needs a window address to load)
 RUN SWU_WINDOW=http://window.invalid /app/coord/bin/coord eval 'true = byte_size(:crypto.strong_rand_bytes(8)) == 8; {:ok, _} = Exqlite.Sqlite3.open(":memory:"); true = :public_key.cacerts_get() != []'
+# What a helper must match to play this machine's games (bot/arena/HELPER.md): the commit the image was built from
+# (deploy-games.yml passes it) and a hash of the card data fetched above. Last, so a new commit rebuilds only this.
+ARG GIT_SHA=unknown
+RUN printf '%s\n' "$GIT_SHA" > /app/BUILD_SHA \
+ && (cd /app/forceteki/test/json && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1) > /app/CARDS_SHA
 EXPOSE 8080
-CMD ["sh", "bot/arena/ops/games-entry.sh"]
+CMD ["/app/coord/bin/coord", "start"]

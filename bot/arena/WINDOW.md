@@ -16,7 +16,7 @@ asks the same API.
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
-| Browsers, the app | the invite list, from Eric's Share page only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` (an admin) |
+| Browsers, the app | the invite list and the arena settings, from Eric's admin pages only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` and `/api/arena-settings` (an admin) |
 
 ## The API
 
@@ -38,6 +38,10 @@ Reads (a signed-in friend, or the project token):
   sign-in, a view link's guest, an MCP app) reads a copy: the person's seat is `opponent` in the run document and
   `a person` in the replay's header and on each board. The copy holds whole lines only, so offsets into it stay valid
   while the game is played, and `?sizes=1` gives `size: null` for its games (`x-size` on each read gives the size).
+- The one exception is Eric's: a feed may send each person's karabast.net name as `person` on a game row (below). The
+  window keeps those names only in the `admin/people` document, `{names: {<game id>: name}}`, which needs the admin
+  token or an admin's sign-in (the app has shown no games against people since 2026-10-14). The run
+  document, replays, `/api/app`, MCP apps and the project token still read `opponent` and `a person`.
 
 Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role,
 except an admin changing the invite list from the app's Share page (below):
@@ -58,6 +62,12 @@ except an admin changing the invite list from the app's Share page (below):
   typed OK, 2026-10-12 04:30): it sets a 30-day guest session tied to that link and sends the browser to `/`, which
   keeps the link's `#/page`. A guest reads like a friend and never writes; removing the link locks its guests out on
   their next request. Someone already signed in keeps their own session when they open a link.
+- `GET /api/arena-settings` gives Eric's arena settings, `{settings, updatedAt, by}`: `gamesPerPair` (even, 2 to 10)
+  and `thinkCapSec` (10 to 600, each bot's thinking per game) for the arena, `workers` (games at once, 1 to 16) and
+  `roundGapMin` (0 to 240, from one round's end to the next round's start) for the games machine. A setting left out
+  is the machine's default (`coord/README.md`). `POST /api/arena-settings` with `{"set": {"<name>": <value> or null}}`
+  changes some of them, null going back to the default; admins only, from the app's own pages as for `/api/share`.
+  The games machine reads them every minute with its own token (`coord/lib/coord/settings.ex`), which may only read.
 - `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
   the invite list and the view links to admins.
 
@@ -151,8 +161,10 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
   running games; a finished one has `outcome` `"won"` (with `winnerSeat` `p1` or `p2`), `"draw"` or `"abandoned"`. The
   window keeps only the fields the app reads, each checked for its type: on the run `createdAt` (required), `bots` and
   `gamesPerPairing`; on each game `id` (distinct), `p1`, `p2`, `outcome`, `winnerSeat` (set from the outcome), `rounds`,
-  `steps` and `error` (text). It drops every other field and refuses a document that does not fit with a 400. It stamps `"feed": "karabast"` on the run,
-  and the app lists every run a feed sent as games against people, kept out of bot records and ratings.
+  `steps` and `error` (text). It drops every other field and refuses a document that does not fit with a 400. A game's
+  `person` (the person's karabast.net name, up to 64 characters of plain text) goes to `admin/people` instead of the run;
+  a name that does not fit is dropped, never the run. It stamps `"feed": "karabast"` on the run,
+  and the app leaves every run a feed sent out of its pages, bot records and ratings.
 - `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
   whole file when it ends. `bot/karabast/feed.js` is a working feed that does all three. (`push.js run` is for
   the project's own runs: it also writes `ladders/<id>`, which a feed token may not.)
@@ -175,12 +187,13 @@ run the tests and deploy nothing). Threads send data when `SWU_WINDOW=https://sw
 ## The games machine (swu-arena-games)
 
 The window stores submissions; the games machine plays them. It is the Fly app `swu-arena-games` (`fly.games.toml`,
-`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running `bot/arena/games.js`:
+`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running the Elixir coordinator (`coord/`,
+[coord/README.md](../../coord/README.md)), which calls `node bot/arena/gamesctl.js` for the game work:
 
 ```
- window ──POST /wake──▶ games.js ──intake.js──▶ versions/ ──referee.js──▶ ladder (bots as user arena, WebAssembly)
-   ▲      (flycast)        │
-   └── submissions, standings, round replays (its own token) ──┘
+ window ──POST /wake──▶ coord ──gamesctl intake──▶ versions/ ──gamesctl referee-cmd──▶ referee ──▶ ladder (bots as arena)
+   ▲      (flycast)       │
+   └── submissions, standings, round replays: gamesctl push through coord's loopback proxy (its token) ──┘
 ```
 
 - It has a private address only (flycast). The window calls `http://swu-arena-games.flycast/wake` (`ARENA_GAMES_WAKE`)
@@ -191,15 +204,18 @@ The window stores submissions; the games machine plays them. It is the Fly app `
   node-search and py-clock built to WebAssembly in the image; `ARENA_RESIDENTS` overrides), 2 games a pair.
 - It pushes the arena's state and the round replays to the window every 20 s, like the old uplink, into the same
   `arena`, `runs` and `ladders` collections the app reads.
-- With nothing to do for 10 minutes it exits, and the machine stays stopped until the next wake-up.
-- Only games.js holds the window token. The referee runs with a minimal environment in its own namespaces with `/.fly`
-  hidden, and the ladders and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
+- With nothing to do for 10 minutes (`GAMES_IDLE_MIN`) it exits, and the machine stays stopped until the next wake-up.
+  A round runs at most 6 hours (`GAMES_ROUND_HOURS`).
+- Only the coordinator (the BEAM) holds the window token; its Node children reach the window through a loopback proxy
+  with a nonce. The referee runs with a minimal environment in its own namespaces with `/.fly` hidden, and the ladders
+  and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
+- Helpers: a computer of Eric's can play some of a round's seeds through `fly proxy` ([HELPER.md](HELPER.md)). The
+  machine listens on `GAMES_HELPER_PORT`; helpers stay off until the `GAMES_HELPER_TOKENS` secret names one.
 
 Deploys: `.github/workflows/deploy-games.yml` on every merge that touches `bot/`, the engine pin or the image, with the
 repository secret `FLY_GAMES_TOKEN` (`fly tokens create deploy -a swu-arena-games`). It checks out forceteki with
-`FORCETEKI_TOKEN` when that secret exists. Locally, `GAMES_DATA=/srv/x SWU_WINDOW=http://localhost:8080
-SWU_WINDOW_TOKEN=t node bot/arena/games.js --idle-min 1` plays against a local window (outside /tmp: isolate.sh gives
-the referee its own /tmp).
+`FORCETEKI_TOKEN` when that secret exists. Locally, the coordinator's release plays against a local window ("Building
+and running the release" in coord/README.md; GAMES_DATA outside /tmp, since isolate.sh gives the referee its own /tmp).
 
 ## Run it locally
 

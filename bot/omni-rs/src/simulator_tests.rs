@@ -51,7 +51,9 @@ fn resources(e: &Engine, s: &mut State, seat: Seat, count: u8) {
 fn state_is_inline_copy_and_hash_covers_prompts_and_deck_order() {
     fn copy<T: Copy>() {}
     copy::<State>();
-    assert!(std::mem::size_of::<State>() < 8192);
+    // Uniform arena damage retains 256 ordered targets; measured State size is 19,112 bytes.
+    assert!(std::mem::size_of::<State>() < 20000, "inline state bytes: {}", std::mem::size_of::<State>());
+    eprintln!("inline state bytes: {}; card bytes: {}", std::mem::size_of::<State>(), std::mem::size_of::<Card>());
     let e = engine();
     let mut s = board(&e);
     let a = add(&e, &mut s, Seat::P1, "LOF_254");
@@ -112,7 +114,7 @@ fn raid_and_grit_are_dynamic_and_only_raid_needs_attacking() {
     assert_eq!(e.power(&s, grit, false), 2);
 }
 #[test]
-fn overwhelm_hits_base_even_when_shield_prevents_unit_damage() {
+fn shield_replacement_prevents_overwhelm_contingent_damage() {
     let e = engine();
     let mut s = board(&e);
     let a = unit(&e, &mut s, Seat::P1, "ASH_029");
@@ -121,7 +123,7 @@ fn overwhelm_hits_base_even_when_shield_prevents_unit_damage() {
     s.card_mut(d).shield = shield;
     let s = click(&e, click(&e, s, a), d);
     assert!(s.is_action_window());
-    assert_eq!(s.card(s.players[1].base).damage, 3);
+    assert_eq!(s.card(s.players[1].base).damage, 0);
     assert_eq!(s.card(d).damage, 0);
     assert_eq!(s.card(d).shield, 0);
     assert_eq!(s.card(a).damage, 1);
@@ -328,4 +330,83 @@ fn simultaneous_resource_choices_can_be_ordered_for_sound_proof() {
     let mut s = button(&e, s, "Skip Resourcing");
     e.order_regroup(&mut s, Seat::P2);
     assert_eq!(s.active, Seat::P1);
+}
+
+#[test]
+fn hidden_keyword_text_is_boolean_and_consumes_the_whole_rule() {
+    for text in ["Hidden","Hidden.","Hidden (This unit can't be attacked this phase.)","Hidden\nSaboteur","Hidden, Restore 2"] {let (flags,_,_)=keyword_text(text).unwrap();assert!(flags&(1<<8)!=0,"{text}");}
+    for text in [".","Hidden 1","Hidden 2","Hidden -1","Hidden extra","Hidden\nDraw a card.","This unit gains Hidden.","Hidden (unclosed","Hidden)","Restore 2 extra","Raid 65536","Raid","Restore 1.5","Restore -1"] {assert!(keyword_text(text).is_err(),"{text}");}
+    assert_eq!(keyword_text("Hidden\nRaid 2\nRestore 1").unwrap(),(1<<8,2,1));
+}
+
+#[test]
+fn strict_hundred_card_pool_keyword_semantics_remain_exact() {
+    let raw:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/pool.json")).unwrap();assert_eq!(raw["cards"].as_array().unwrap().len(),100);
+    let e=Engine::from_pool_value(&raw).unwrap();
+    for c in raw["cards"].as_array().unwrap() {if !c["types"].as_array().unwrap().iter().any(|t|t=="unit") {continue;}
+        let d=&e.definitions[*e.by_code.get(c["setCode"].as_str().unwrap()).unwrap() as usize];
+        for (index,name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate() {let expected=c["keywordValues"][*name].as_u64().unwrap_or(0) as u16;let actual=match crate::ability_ir::numeric_keyword_slot(index) {Some(0)=>d.raid,Some(1)=>d.restore,_=>u16::from(d.flags&(1<<index)!=0)};assert_eq!(actual,expected,"{} {name}",d.code);}
+    }
+}
+
+#[test]
+fn strict_pool_does_not_infer_new_hidden_leader_or_pilot_implementations() {
+    let raw:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/pool.json")).unwrap();
+    for (kind,field,value) in [("leader","text",serde_json::json!("Hidden")),("unit","pilotText",serde_json::json!("Hidden"))] {let mut bad=raw.clone();let card=bad["cards"].as_array_mut().unwrap().iter_mut().find(|c|c["types"].as_array().unwrap().iter().any(|t|t==kind)).unwrap();card[field]=value;assert!(Engine::from_pool_value(&bad).is_err());}
+    let mut bad=raw;bad["cards"][0]["setCode"]=serde_json::json!("ASH_166");assert!(Engine::from_pool_value(&bad).is_err());
+}
+
+#[test]
+fn shared_keyword_grammar_matrix_is_fail_closed() {
+    let cases:serde_json::Value=serde_json::from_str(include_str!("../../omni/rs/keyword-parser-cases.json")).unwrap();
+    for case in cases.as_array().unwrap() {let text=case["text"].as_str().unwrap();let result=keyword_text(text);if case["expected"].is_null(){assert!(result.is_err(),"{text}");}else{let (flags,raid,restore)=result.unwrap();let mut actual=serde_json::Map::new();for (index,name) in crate::ability_ir::CORE_KEYWORDS.iter().enumerate(){if let Some(slot)=crate::ability_ir::numeric_keyword_slot(index){if case["expected"].get(*name).is_some(){actual.insert((*name).into(),serde_json::json!(if slot==0{raid}else{restore}));}}else if flags&(1<<index)!=0 {actual.insert((*name).into(),serde_json::json!(1));}}assert_eq!(serde_json::Value::Object(actual),case["expected"],"{text}");}}
+}
+fn captured_wp_engine() -> Engine {
+    Engine::from_catalogue_bytes(include_bytes!("../../card-compiler/generated/catalog.json")).unwrap()
+}
+fn captured_wp_board(e:&Engine,seat:Seat)->State {
+    let mut s=board(e);s.active=seat;s.action_player=Some(seat);s.hidden_history_exact=true;s.force_state_exact=true;
+    for player in [Seat::P1,Seat::P2] {s.player_mut(player).force_id=s.next_id;s.next_id+=1;}
+    s
+}
+#[test]
+fn ambush_resumes_captured_ordinary_wp_after_mutual_death_and_with_living_source() {
+    // Primitive declaration construction; all registrations/data are the actual
+    // Sabine card. The separate engine recording proves normal play/cost timing.
+    let e=captured_wp_engine();
+    for seat in [Seat::P1,Seat::P2] {for lethal in [false,true] {
+        let mut s=captured_wp_board(&e,seat);let source=unit(&e,&mut s,seat,"LAW_078");s.card_mut(source).exhausted=true;
+        let victim=unit(&e,&mut s,seat.other(),if lethal {"ASH_190"}else{"LOF_254"});
+        let host=unit(&e,&mut s,seat.other(),"LOF_254");let upgrade=add(&e,&mut s,seat.other(),"HMW_235");e.attach(&mut s,upgrade,host);
+        s.source=source;e.capture_enter_triggers(&mut s);e.process_triggers(&mut s).unwrap();s=button(&e,s,"Ambush");s=button(&e,s,"Trigger");s=click(&e,s,victim);
+        assert_eq!(e.in_arena(&s,source),!lethal);assert!(!e.in_arena(&s,victim));assert_eq!(s.active,seat);assert_eq!(s.decision,Decision::AbilityOptional);assert_eq!(s.source,source);assert_eq!(s.after_attack_programs,0);assert_eq!(s.after_attack_triggers,0);
+        s=button(&e,s,"Trigger");assert_eq!(s.decision,Decision::AbilityTarget);assert!(e.legal_actions(&s).iter().any(|a|a.id()==Some(upgrade)));
+        s=click(&e,s,upgrade);assert!(s.player(seat.other()).discard.contains(upgrade));assert_eq!(s.card(upgrade).parent,0);assert_eq!(e.in_arena(&s,source),!lethal);assert_eq!(s.active,seat.other());assert_eq!(s.decision,Decision::Window);
+    }}
+}
+#[test]
+fn ambush_dead_source_without_effective_captured_wp_finishes_action() {
+    let e=captured_wp_engine();for seat in [Seat::P1,Seat::P2] {
+        let mut s=captured_wp_board(&e,seat);let source=unit(&e,&mut s,seat,"LAW_078");let victim=unit(&e,&mut s,seat.other(),"ASH_190");s.source=source;s.card_mut(source).exhausted=true;e.capture_enter_triggers(&mut s);e.process_triggers(&mut s).unwrap();s=button(&e,s,"Ambush");s=button(&e,s,"Trigger");s=click(&e,s,victim);assert!(!e.in_arena(&s,source));assert_eq!(s.decision,Decision::Window);assert_eq!(s.active,seat.other());assert_eq!(s.pending_programs,0);assert_eq!(s.after_attack_programs,0);
+    }
+}
+#[test]
+fn dead_undeployed_leader_keeps_existing_side_index_policy() {
+    // Synthetic pending-bit boundary: leaders do not capture WhenPlayed in
+    // capture_enter_triggers; do not reinterpret an old unit-side index on base.
+    let e=captured_wp_engine();let mut s=captured_wp_board(&e,Seat::P1);let source=s.players[0].leader;s.source=source;s.after_attack_programs=1;assert!(!e.in_arena(&s,source));e.combat_after_damage(&mut s).unwrap();assert_eq!(s.decision,Decision::Window);assert_eq!(s.active,Seat::P2);assert_eq!(s.pending_programs,0);assert_eq!(s.after_attack_programs,0);
+}
+#[test]
+fn dead_ambush_source_without_captured_programs_finishes_existing_keyword_window() {
+    let e=captured_wp_engine();for seat in [Seat::P1,Seat::P2] {
+        let mut s=captured_wp_board(&e,seat);let source=unit(&e,&mut s,seat,"LOF_231");s.source=source;
+        // The actual Shielded registration has no legal recipient after source
+        // departure. This postcombat primitive must not allocate or rebind it.
+        s.after_attack_triggers=T_SHIELD;let next=s.next_id;e.defeat(&mut s,source).unwrap();e.combat_after_damage(&mut s).unwrap();assert_eq!(s.decision,Decision::Window);assert_eq!(s.active,seat.other());assert_eq!(s.next_id,next);assert_eq!(s.after_attack_triggers,0);assert_eq!(s.after_attack_programs,0);
+    }
+}
+#[test]
+fn shielded_retains_bulk_shield_chain_in_both_trigger_orders() {
+ let e=captured_wp_engine();for seat in [Seat::P1,Seat::P2] {for intrinsic_first in [false,true] {let mut s=captured_wp_board(&e,seat);s.arena_order_exact=true;for _ in 0..16 {let id=add(&e,&mut s,seat,"LOF_254");s.player_mut(seat).resources.push(id).unwrap();}let source=add(&e,&mut s,seat,"ASH_064");s.player_mut(seat).hand.push(source).unwrap();let first=s.next_id;s=click(&e,s,source);assert_eq!(s.decision,Decision::TriggerOrder);s=button(&e,s,if intrinsic_first{"Shielded"}else{"Give a Shield token to each friendly unit with Shielded"});assert_eq!(s.decision,Decision::Window);assert_eq!(s.next_id,first+2);assert_eq!(e.upgrades(&s,source),vec![first,first+1]);assert_eq!(s.card(source).shield,first+1);assert_eq!(s.card(first+1).next_token,first);assert_eq!(s.card(first).next_token,0);for id in [first,first+1]{assert_eq!(s.card(id).parent,source);assert_eq!(s.card(id).owner,seat);}e.validate_attachment_links(&s).unwrap();let copy=s;assert_eq!(copy.zobrist(),s.zobrist());
+ e.damage(&mut s,source,3);assert_eq!(s.card(source).damage,0);assert_eq!(e.upgrades(&s,source),vec![first+1]);assert_eq!(s.card(source).shield,first+1);assert_eq!(s.card(first).parent,0);assert_eq!(s.card(first).next_token,0);assert_eq!(s.card(first+1).next_token,0);e.validate_attachment_links(&s).unwrap();e.damage(&mut s,source,2);assert_eq!(s.card(source).damage,0);assert!(e.upgrades(&s,source).is_empty());assert_eq!(s.card(source).shield,0);assert_eq!(s.card(first+1).parent,0);e.validate_attachment_links(&s).unwrap();e.damage(&mut s,source,1);assert_eq!(s.card(source).damage,1);}}
 }

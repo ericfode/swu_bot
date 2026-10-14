@@ -4,12 +4,16 @@ const fs = require('fs');
 const path = require('path');
 
 /** Initialize once, then reuse the Rust card catalog across many persistent games. */
-async function createSimulator({ poolPath = path.join(__dirname, '../rs/pool.json'), poolJson, packagePath } = {}) {
+async function createSimulator({ poolPath, poolJson, cataloguePath, catalogueJson, packagePath, backend, instrumentation } = {}) {
     const file = packagePath ?? path.join(__dirname, '../../omni-wasm/pkg/node/omni_wasm.js');
     if (!fs.existsSync(file)) throw new Error('Wasm package is not built. Run: node bot/omni-wasm/build.js --target node');
     const bindings = require(file);
     const { WasmSimulator } = await import('./adapter.mjs');
-    return new WasmSimulator(bindings, poolJson ?? fs.readFileSync(poolPath, 'utf8'));
+    const catalogue = catalogueJson ?? (cataloguePath === undefined ? undefined : fs.readFileSync(cataloguePath, 'utf8'));
+    const defaultPool = catalogue === undefined ? path.join(__dirname, '../rs/pool.json') : undefined;
+    const sourcePool = poolPath ?? defaultPool;
+    const pool = poolJson ?? (sourcePool === undefined ? undefined : fs.readFileSync(sourcePool, 'utf8'));
+    return new WasmSimulator(bindings, pool, { catalogueJson: catalogue, backend, instrumentation });
 }
 
 /** Transfer the position once. Subsequent transitions/checkpoints/search stay in Wasm. */

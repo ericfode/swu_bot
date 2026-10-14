@@ -7,7 +7,7 @@
  *                      link exists (Eric, 2026-10-12 04:30: "yes: add view links to the arena window")
  *   a bearer token     a program: ARENA_PUSH_TOKEN is 'project' (the project's threads push and read; the cloud proxy
  *                      adds it to their requests, so no thread holds it), ARENA_GAMES_TOKEN is 'project' too (the games
- *                      machine's own, games.js, so it can be replaced alone), ARENA_ADMIN_TOKEN is 'admin' (the same admin
+ *                      machine's own, so it can be replaced alone), ARENA_ADMIN_TOKEN is 'admin' (the same admin
  *                      token api.js accepts); ARENA_FEED_TOKEN_<NAME> is 'feed' for one outside machine (a Sprite
  *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST; NAME is letters and digits): it reads like
  *                      a friend and writes only what carries its name (window.js); any other bearer token is refused

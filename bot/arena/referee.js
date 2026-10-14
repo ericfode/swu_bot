@@ -110,8 +110,16 @@ function scoreRound(round, ladder) {
     const names = ladder.config.bots;
     const results = [];
     const rows = Object.fromEntries(names.map((n) => [n, { name: n, agent: agentOf(n), wins: 0, losses: 0, draws: 0, unfinished: 0, forfeits: 0, thinkMs: 0, decisions: 0, p95: 0, vs: {}, lost: [] }]));
+    // where the games ran: the games machine, or a helper computer by name (ladder.js host, remote-lane.js)
+    const hosts = {};
     for (const g of ladder.games.filter((x) => x.outcome !== 'running')) {
         const { score, forfeit } = cappedScore(g);
+        const h = (hosts[g.host ?? 'machine'] ??= { games: 0, decisions: 0, thinkMs: 0 });
+        h.games++;
+        for (const t of [g.timing?.p1, g.timing?.p2].filter(Boolean)) {
+            h.decisions += t.n;
+            h.thinkMs += t.ms;
+        }
         [g.p1, g.p2].forEach((n, i) => {
             const r = rows[n];
             const seat = i ? 'p2' : 'p1';
@@ -160,9 +168,43 @@ function scoreRound(round, ladder) {
     }
     bots.forEach((b, i) => (b.rank = elo ? i + 1 : null));
     const finished = ladder.games.filter((x) => x.outcome !== 'running').length;
+    for (const h of Object.values(hosts)) {
+        h.thinkMs = Math.round(h.thinkMs);
+    }
     return { round, ladderId: ladder.id, ...(ladder.config.pool ? { pool: ladder.config.pool.kind, poolCards: ladder.config.pool.cards } : {}),
              seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
-             status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, bots, results };
+             status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, bots, results, hosts,
+             remote: ladder.remote ?? null };
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The report's line on helper computers when the games machine offered this round to them (ladder.json remote, from
+ * remote-lane.js), or null when the helper node is off. It says whether a helper said hello and claimed work, so a round
+ * with no helper games shows why.
+ */
+function helpersLine(remote) {
+    if (!remote || typeof remote !== 'object') {
+        return null;
+    }
+    if (remote.lane === false) {
+        return `Helpers: none this round (${remote.why}).`;
+    }
+    const hosts = Array.isArray(remote.hosts) ? remote.hosts : [];
+    const parts = [hosts.length ? `${hosts.join(', ')} said hello` : 'no helper said hello to the games machine'];
+    parts.push(`a claim waited at ${remote.claimLooks} of ${plural(remote.looks, 'look')}`);
+    parts.push(`${plural(remote.leased, 'seed')} went out, ${plural(remote.played, 'game')} came back`);
+    if (remote.lost) {
+        parts.push(`${remote.lost} lost${remote.lastLost ? ` (last: ${remote.lastLost})` : ''}`);
+    }
+    if (remote.relayErrors?.length) {
+        parts.push(`relay errors: ${remote.relayErrors.join(', ')}`);
+    }
+    if (remote.stopped) {
+        parts.push(`the lane stopped: ${remote.stopped}`);
+    }
+    return `Helpers: ${parts.join('; ')}.`;
 }
 
 /**
@@ -185,6 +227,16 @@ function report(rd, g) {
     L.push('| # | bot | Elo (round) | Elo (all rounds) | W-L-D | win % | ms/decision | forfeits |', '|---|---|---|---|---|---|---|---|');
     for (const b of rd.bots) {
         L.push(`| ${b.rank ?? '-'} | ${b.name} | ${b.btElo ?? '-'} | ${g[b.name] ?? '-'} | ${b.wins}-${b.losses}-${b.draws} | ${b.winRate === null ? '-' : Math.round(b.winRate * 100)} | ${b.msPerDecision ?? '-'} | ${b.forfeits} |`);
+    }
+    // only when a helper computer played some of the round (its clock is not the machine's)
+    const hosts = Object.entries(rd.hosts ?? {}).sort(([a], [b]) => (a === 'machine' ? -1 : b === 'machine' ? 1 : a < b ? -1 : 1));
+    if (hosts.some(([h]) => h !== 'machine')) {
+        const where = hosts.map(([h, x]) => `${h} ${x.games} game${x.games === 1 ? '' : 's'}${x.decisions ? ` (${Math.round(x.thinkMs / x.decisions)} ms/decision)` : ''}`);
+        L.push('', `Where games ran: ${where.join(', ')}.`);
+    }
+    const helpers = helpersLine(rd.remote);
+    if (helpers) {
+        L.push('', helpers);
     }
     for (const b of rd.bots.filter((x) => x.agent)) {
         L.push('', `## ${b.agent} (${b.name})`, '', `Submission note: ${b.idea ?? '(none)'}`, '', 'Per opponent (W-L-D, unfinished):');
@@ -456,4 +508,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, ladderIdOf, spawnBots, giveToBots };
+module.exports = { cappedScore, scoreRound, anchoredBT, globalElo, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

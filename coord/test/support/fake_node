@@ -3,9 +3,12 @@
 #
 #   fake_node <app>/bot/arena/gamesctl.js <command> [args...]     a gamesctl command
 #   fake_node <app>/bot/arena/referee.js [args...]                the referee (from the default referee-cmd)
+#   fake_node <app>/bot/arena/play-seed.js --job J --bundles B --work W   a helper's seed ("play-seed")
+#   fake_node <app>/bot/arena/play-seed.js --warm                 a helper's warm ("play-seed-warm")
 #
 # A child gets no variable the tests could set, so the fake's folder is $GAMES_DATA, or for the referee (whose
-# environment is referee-cmd's) the folder above $ARENA_HOME. In it:
+# environment is referee-cmd's) the folder above $ARENA_HOME, or for play-seed (a helper's play, whose environment
+# has neither) the folder above $SWU_WASM_CACHE. In it:
 #   fake-node.log        it appends "start <name> <args>", one "env <name> K=V" per variable, and at the end
 #                        "end <name> <code>", or "term <name>" when SIGTERM stopped it
 #   fake/<name>.json     what it prints on stdout (else a canned result for that command)
@@ -13,6 +16,8 @@
 #   fake/<name>.sleep    seconds to sleep first, in the background, so that a group kill has two processes to stop
 #   fake/<name>.noterm   ignore SIGTERM (only KILL stops it)
 #   fake-node.stderr     its stderr
+# play-seed also logs "job <job.json>" and "bundles <names>", and by default writes the replays out/a.jsonl and
+# out/b.jsonl in its work folder and prints a result for the games "a" and "b" that names them.
 set -u
 script=$1
 shift
@@ -23,7 +28,14 @@ case "$script" in
     ;;
 *) name=$(basename "$script" .js) ;;
 esac
-dir=${GAMES_DATA:-${ARENA_HOME%/arena}}
+[ "$name" = play-seed ] && [ "${1:-}" = --warm ] && name=play-seed-warm
+if [ -n "${GAMES_DATA:-}" ]; then
+    dir=$GAMES_DATA
+elif [ -n "${ARENA_HOME:-}" ]; then
+    dir=${ARENA_HOME%/arena}
+else
+    dir=${SWU_WASM_CACHE%/wasm-cache}
+fi
 log=$dir/fake-node.log
 ctl=$dir/fake/$name
 # the shell's own messages ("Terminated" when a TERM lands during a foreground command) go to a file, not to the
@@ -46,11 +58,21 @@ if [ -f "$ctl.sleep" ]; then
 fi
 
 round=
+job=
+bundles=
+work=
 prev=
 for a in "$@"; do
     [ "$prev" = --round ] && round=$a
+    [ "$prev" = --job ] && job=$a
+    [ "$prev" = --bundles ] && bundles=$a
+    [ "$prev" = --work ] && work=$a
     prev=$a
 done
+if [ "$name" = play-seed ]; then
+    echo "job $(cat "$job")" >>"$log"
+    echo "bundles $(ls "$bundles" | tr '\n' ' ')" >>"$log"
+fi
 
 if [ -f "$ctl.json" ]; then
     cat "$ctl.json"
@@ -72,6 +94,17 @@ else
     referee)
         echo "round $round: game 1 of 2"
         echo "round $round: game 2 of 2"
+        ;;
+    play-seed-warm) echo '{"ok":true,"warmed":["c-clock-wasm"],"failed":[]}' ;;
+    play-seed)
+        mkdir -p "$work/out"
+        for g in a b; do
+            printf '{"t":"header","game":"%s"}\n{"t":"end","game":"%s"}\n' "$g" "$g" >"$work/out/$g.jsonl"
+        done
+        echo "play-seed: a log line on stdout"
+        printf '{"ok":true,"results":[{"id":"a","result":{"outcome":"won","winnerSeat":"p1"}},'
+        printf '{"id":"b","result":{"outcome":"won","winnerSeat":"p2"}}],'
+        printf '"replays":{"a":"%s/out/a.jsonl","b":"%s/out/b.jsonl"}}\n' "$work" "$work"
         ;;
     esac
 fi

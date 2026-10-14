@@ -1,0 +1,105 @@
+name: Convert card definitions
+
+on:
+  push:
+    paths:
+      - forceteki
+      - bot/card-compiler/**
+      - bot/omni-rs/**
+      - bot/omni-wasm/**
+      - bot/omni/wasm/**
+      - bot/omni/rs/**
+      - bot/rust/src/cards.rs
+      - tools/card-runtime-report.js
+      - tools/omni-search-bench.js
+      - tools/test/omni-search-bench.test.js
+      - bot/cards/**
+      - bot/test/phase-stats-export.test.js
+      - bot/env.js
+      - bot/test/env-selection-actions.test.js
+      - .agents/skills/swu-card-conversion/**
+      - Cargo.lock
+      - package.json
+      - .github/workflows/card-conversion.yml
+  pull_request:
+    paths:
+      - forceteki
+      - bot/card-compiler/**
+      - bot/omni-rs/**
+      - bot/omni-wasm/**
+      - bot/omni/wasm/**
+      - bot/omni/rs/**
+      - bot/rust/src/cards.rs
+      - tools/card-runtime-report.js
+      - tools/omni-search-bench.js
+      - tools/test/omni-search-bench.test.js
+      - bot/cards/**
+      - bot/test/phase-stats-export.test.js
+      - bot/env.js
+      - bot/test/env-selection-actions.test.js
+      - .agents/skills/swu-card-conversion/**
+      - Cargo.lock
+      - package.json
+      - .github/workflows/card-conversion.yml
+  schedule:
+    - cron: '17 11 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cards-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install the pinned engine parser and fetch card metadata
+        run: |
+          npm --prefix forceteki ci --ignore-scripts
+          npm --prefix forceteki run get-cards
+      - name: Build the pinned engine (the bot/env.js selection test loads it)
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm --prefix forceteki run build
+      # cards:compile rewrites the generated files, so check the committed ones first;
+      # the daily run skips this and uploads the regenerated diff instead.
+      - name: Fail if committed generated files are stale
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: npm run cards:check
+      - name: Generate every known card and validate supported behavior
+        run: |
+          npm run cards:compile
+          npm run cards:test
+          node --test tools/test/omni-search-bench.test.js
+          cargo test --locked --workspace
+          npm run cards:check
+      - name: Build and test the same programs in WebAssembly
+        run: |
+          npm run wasm:build -- --install-tools
+          npm run wasm:test
+          npm run wasm:pack
+          npm run wasm:pack:check
+      - name: Capture generated changes
+        run: git diff --binary -- bot/card-compiler/generated > card-conversion.patch
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: card-conversion-${{ github.run_id }}
+          path: |
+            bot/card-compiler/generated/
+            bot/omni-wasm/pkg/distribution/*.tgz
+            bot/omni-wasm/pkg/distribution/receipt.json
+            card-conversion.patch
+          if-no-files-found: error

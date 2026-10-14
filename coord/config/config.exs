@@ -20,6 +20,10 @@ config :coord, Coord.Config,
   round_cap_ms: 6 * 3_600_000,
   games: 2,
   workers: 2,
+  # each bot's thinking time per game (roster.thinkCapMs) when Eric's settings name none
+  think_cap_sec: 60,
+  # how often Coord.Settings reads Eric's arena settings from the window
+  settings_ms: 60_000,
   require_mount: false,
   require_token: false,
   window: "http://127.0.0.1:8080",
@@ -28,7 +32,29 @@ config :coord, Coord.Config,
   card_json: nil,
   arena_user: "arena",
   isolate: :auto,
-  choom: :auto
+  choom: :auto,
+  # the helper node (Coord.Remote, CoordWeb.HelperAPI, CoordWeb.RemoteRelay): off while helper_port is nil
+  helper_port: nil,
+  helper_listen: "::",
+  relay_port: 8082,
+  helper_image: "registry.fly.io/swu-arena-games",
+  build: nil,
+  cards: nil,
+  heartbeat_ms: 30_000,
+  lease_lost_ms: 90_000,
+  # a lease's first heartbeat comes as soon as the helper has it; none by then, the claim's answer went nowhere
+  lease_ack_ms: 15_000,
+  claim_ms: 25_000,
+  sweep_ms: 5_000,
+  lease_keep_ms: 30 * 60_000,
+  # the most a round's bundles take on the volume, so puts on the relay cannot fill it
+  bundles_limit: 512 * 1024 * 1024,
+  # the helper role (Coord.Helper): where the games machine is, how many seeds at once, and its retry pace
+  helper_url: nil,
+  helper_slots: 1,
+  helper_req: [],
+  hello_retry_ms: 30_000,
+  claim_backoff_ms: [5_000, 10_000, 20_000, 40_000, 60_000]
 
 config :coord, Oban,
   # SQLite: the Isolated peer (always the leader) and the PG notifier

@@ -10,9 +10,13 @@ defmodule Coord.SchedulerTest do
   @moduletag :fake
 
   setup do
+    File.rm(round_end_file())
     on_exit(fn -> Coord.Shutdown.set_stopping(false) end)
     :ok
   end
+
+  defp round_end_file, do: Path.join(Coord.Config.coord_dir(), "round_end")
+  defp wall, do: System.os_time(:millisecond)
 
   defp start_scheduler(opts \\ []) do
     test = self()
@@ -66,6 +70,69 @@ defmodule Coord.SchedulerTest do
     args = %{"arena" => "open", "round" => 4, "boot" => Coord.Boot.id()}
     assert_enqueued([worker: Coord.Workers.Round, args: args], 2_000)
     assert "start plan --arena open --settled-since 0 --replay-hours 24" in fake_events()
+  end
+
+  test "a new round waits out the wait between rounds, keeping the machine awake; a round cut short does not wait" do
+    :persistent_term.put({Coord.Settings, :settings}, %{round_gap_min: 1})
+    on_exit(fn -> :persistent_term.erase({Coord.Settings, :settings}) end)
+    fake("plan", :json, ~s({"round":4,"resume":false,"why":"changed"}))
+    start_scheduler()
+    ready()
+    finish_jobs()
+
+    # round 3 ended just now; the machine was last busy an hour ago (monotonic time may be negative)
+    an_hour_ago = System.monotonic_time(:millisecond) - 3_600_000
+    :sys.replace_state(Scheduler, &%{&1 | round_end: wall(), busy_at: an_hour_ago})
+    ExUnit.CaptureLog.capture_log(fn -> tick() end)
+    eventually(fn -> :sys.get_state(Scheduler).waiting == 4 end)
+    refute_enqueued(worker: Coord.Workers.Round)
+    assert :sys.get_state(Scheduler).busy_at > an_hour_ago + 3_000_000, "a waiting round keeps the machine awake"
+
+    # the minute is over
+    :sys.replace_state(Scheduler, &%{&1 | round_end: wall() - 61_000})
+    ExUnit.CaptureLog.capture_log(fn -> tick() end)
+    assert_enqueued([worker: Coord.Workers.Round, args: %{"round" => 4}], 2_000)
+    eventually(fn -> :sys.get_state(Scheduler).waiting == nil end)
+
+    # a round a stop cut short goes on at once (an intake pass may come first: every third tick)
+    finish_jobs()
+    fake("plan", :json, ~s({"round":5,"resume":true,"why":"resume"}))
+    :sys.replace_state(Scheduler, &%{&1 | round_end: wall()})
+
+    for _ <- 1..2 do
+      ExUnit.CaptureLog.capture_log(fn -> tick() end)
+      Coord.Repo.update_all(from(j in Oban.Job, where: j.worker == "Coord.Workers.Intake"), set: [state: "completed"])
+    end
+
+    assert_enqueued([worker: Coord.Workers.Round, args: %{"round" => 5}], 2_000)
+  end
+
+  test "the wait counts from the last round that finished, at this boot or an earlier one; a failed round never waits" do
+    :persistent_term.put({Coord.Settings, :settings}, %{round_gap_min: 1})
+    on_exit(fn -> :persistent_term.erase({Coord.Settings, :settings}) end)
+    # an earlier boot's round ended just now
+    File.mkdir_p!(Coord.Config.coord_dir())
+    File.write!(round_end_file(), Integer.to_string(wall()))
+    fake("plan", :json, ~s({"round":4,"resume":false,"why":"changed"}))
+    start_scheduler()
+    ready()
+    finish_jobs()
+    ExUnit.CaptureLog.capture_log(fn -> tick() end)
+    eventually(fn -> :sys.get_state(Scheduler).waiting == 4 end)
+    refute_enqueued(worker: Coord.Workers.Round)
+
+    # a round that failed (exit 1) starts no wait and is not held back by the one before it; a finished one is kept
+    ExUnit.CaptureLog.capture_log(fn -> GenServer.cast(Scheduler, {:round_done, 4, {:exit, 1, ""}}) end)
+    eventually(fn -> :sys.get_state(Scheduler).last_ran == 4 end)
+    ended = :sys.get_state(Scheduler).round_end
+    assert File.read!(round_end_file()) == Integer.to_string(ended)
+    ExUnit.CaptureLog.capture_log(fn -> tick() end)
+    assert_enqueued([worker: Coord.Workers.Round, args: %{"round" => 4}], 2_000)
+
+    finish_jobs()
+    ExUnit.CaptureLog.capture_log(fn -> GenServer.cast(Scheduler, {:round_done, 4, {:exit, 0, ""}}) end)
+    eventually(fn -> :sys.get_state(Scheduler).round_end != ended end)
+    assert File.read!(round_end_file()) == Integer.to_string(:sys.get_state(Scheduler).round_end)
   end
 
   test "no plan while a Round job is incomplete" do

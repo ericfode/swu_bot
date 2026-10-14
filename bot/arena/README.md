@@ -33,14 +33,9 @@ which the window does not answer, so it shows no data there.
 
 One Fly machine (`fly.games.toml`, `Dockerfile.games`) with a private address only. The window wakes it with
 `POST /wake` on every submission and every 6 hours. With nothing to do for 10 minutes it stops until the next wake.
-`ops/games-entry.sh` starts one of two programs, picked by `GAMES_COORDINATOR` in `fly.games.toml`:
-
-- `node`, what runs today: `games.js`, a Node loop that calls the intake, the referee and `push.js` itself.
-- `elixir`: the coordinator in `coord/` (`coord/README.md`). It runs `node bot/arena/gamesctl.js <command>` for each
-  step (setup, warm, plan, referee-cmd, intake, push) and keeps the window token in its own process.
-
-Both run the same Node code: `gamesctl.js` takes its setup, round planning and referee command from `games.js`. Each
-cycle has three parts:
+The Elixir coordinator in `coord/` (`coord/README.md`) runs it: it runs `node bot/arena/gamesctl.js <command>` for each
+step (setup, warm, plan, referee-cmd, intake, push) and keeps the window token in its own process. Each cycle has three
+parts:
 
 1. The intake, every minute and right after a wake (`intake.js` `intakeOnce`). It reads the window's pending
    submissions and packs each bot into a bundle (JavaScript through Javy, Python with CPython for WASI, a ready
@@ -72,7 +67,7 @@ Its data is on the volume (`GAMES_DATA`, `/data`): `arena/` (`ARENA_HOME`: `rost
 `/mnt/project-files/arena` when that folder exists (the old arena's data, which the project build of the app still
 reads), else `arena-home/` in the repo.
 
-The code, besides `games.js`, `gamesctl.js` and `intake.js`:
+The code, besides `gamesctl.js` and `intake.js`:
 
 - `referee.js`: plays one rated round per run and writes `standings.json`, `rounds/r<K>.md` and the panels.
 - `api.js`: competitors, versions and results (below).

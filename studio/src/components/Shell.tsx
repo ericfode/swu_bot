@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Command } from 'cmdk';
 import { AnimatePresence, motion } from 'motion/react';
-import { Command as CmdIcon, Gamepad2, Image, LayoutGrid, Search } from 'lucide-react';
+import { Command as CmdIcon, Gamepad2, Image, LayoutGrid, Search, Sparkles } from 'lucide-react';
 import { dataSource } from '../data/source';
 import type { TournamentIndex, TournamentSummary } from '../data/types';
 import { hrefGame, hrefHome, hrefTournament, type Route } from '../lib/route';
@@ -11,7 +11,7 @@ function Palette({ open, setOpen, route }: { open: boolean; setOpen: (v: boolean
     const [ts, setTs] = useState<TournamentSummary[]>([]);
     const [idx, setIdx] = useState<TournamentIndex | null>(null);
     const { art, setArt, setPerspective } = useSettings();
-    const tid = route.page === 'home' || route.page === 'icons' ? null : route.tid;
+    const tid = route.page === 'tournament' || route.page === 'game' ? route.tid : null;
     useEffect(() => {
         if (!open) {
             return;
@@ -53,6 +53,7 @@ function Palette({ open, setOpen, route }: { open: boolean; setOpen: (v: boolean
                                     ))}
                                 </Command.Group>
                                 <Command.Group heading="Pages">
+                                    <Command.Item value="card effects animations showcase" onSelect={() => go('#/effects')}><Sparkles size={14} />Card effects</Command.Item>
                                     <Command.Item value="action icons gallery" onSelect={() => go('#/icons')}><Gamepad2 size={14} />Action icon gallery</Command.Item>
                                 </Command.Group>
                                 <Command.Group heading="Settings">
@@ -87,6 +88,8 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
     const crumbs: { label: string; href: string }[] = [{ label: 'Tournaments', href: hrefHome() }];
     if (route.page === 'icons') {
         crumbs.push({ label: 'Action icons', href: '#/icons' });
+    } else if (route.page === 'effects') {
+        crumbs.push({ label: 'Card effects', href: '#/effects' });
     } else if (route.page !== 'home') {
         crumbs.push({ label: route.tid, href: hrefTournament(route.tid) });
     }
@@ -104,7 +107,8 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
                 <ol className="hidden sm:flex items-center gap-2 text-sm text-dim min-w-0">
                     {crumbs.map((c) => <li key={c.href} className="truncate before:content-['/'] before:mr-2 before:text-faint"><a href={c.href} className="hover:text-fg">{c.label}</a></li>)}
                 </ol>
-                <button className="btn ml-auto !h-8 text-dim" onClick={() => setOpen(true)} aria-label="Open command palette">
+                <a href="#/effects" className="btn ml-auto !h-8 text-dim" aria-label="Card effects" aria-current={route.page === 'effects' ? 'page' : undefined}><Sparkles size={14} /><span className="hidden sm:inline">Card effects</span></a>
+                <button className="btn !h-8 text-dim" onClick={() => setOpen(true)} aria-label="Open command palette">
                     <Search size={14} /><span className="hidden sm:inline">Jump to…</span>
                     <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[11px] text-faint num"><CmdIcon size={11} />K</kbd>
                 </button>

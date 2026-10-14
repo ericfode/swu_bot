@@ -14,7 +14,7 @@ process.env.ARENA_SECRET_FILE = path.join(tmp, 'secret');
 fs.mkdirSync(process.env.ARENA_DASH, { recursive: true });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const { cappedScore, scoreRound, globalElo, lineup, roundSeed, loadSecret } = require('../arena/referee');
+const { cappedScore, scoreRound, globalElo, lineup, roundSeed, loadSecret, report, helpersLine } = require('../arena/referee');
 const dash = require('../arena/dash');
 const { HOME, writeJson, readJson } = require('../arena/home');
 
@@ -40,6 +40,40 @@ test('the seat that broke the game loses whatever else the record says; the rest
     assert.strictEqual(cappedScore({ ...g, outcome: 'won', winner: 'a-v1' }).score, 1, 'records without winnerSeat');
     // both seats at fault, or an engine error: unrated, nobody forfeits
     assert.deepStrictEqual(cappedScore({ ...g, outcome: 'ERROR', by: null, error: 'engine' }), { score: null, forfeit: [false, false] });
+});
+
+test('scoreRound says where the games ran, and the report names the hosts once a helper played', () => {
+    setRoster(['x']);
+    const g = (id, host, ms) => ({ id, p1: 'x-v0', p2: 'rush', outcome: 'won', winner: 'x-v0', winnerSeat: 'p1', timing: t(ms, ms), rounds: 5, ...(host === undefined ? {} : { host }) });
+    // an entry from before hosts were recorded counts as the machine's
+    const games = [g('g1', null, 400), g('g2', undefined, 420), g('g3', 'eric', 380), { id: 'g4', p1: 'rush', p2: 'x-v0', outcome: 'running', host: null }];
+    const rd = scoreRound(4, ladderOf(['x-v0', 'rush'], games));
+    assert.deepStrictEqual(rd.hosts, { machine: { games: 2, decisions: 40, thinkMs: 1640 }, eric: { games: 1, decisions: 20, thinkMs: 760 } });
+    const md = report(rd, {});
+    assert.match(md, /\nWhere games ran: machine 2 games \(41 ms\/decision\), eric 1 game \(38 ms\/decision\)\.\n/);
+    assert.ok(md.indexOf('Where games ran') > md.indexOf('| x-v0 |') && md.indexOf('Where games ran') < md.indexOf('## x'), 'under the table');
+    // all on the machine: no line
+    const here = scoreRound(4, ladderOf(['x-v0', 'rush'], [g('g1', null, 400)]));
+    assert.deepStrictEqual(here.hosts, { machine: { games: 1, decisions: 20, thinkMs: 800 } });
+    assert.ok(!report(here, {}).includes('Where games ran'));
+});
+
+test('the report says what the helper lane did, so a round with no helper games shows why', () => {
+    setRoster(['x']);
+    const g = { id: 'g1', p1: 'x-v0', p2: 'rush', outcome: 'won', winner: 'x-v0', winnerSeat: 'p1', timing: t(400, 400), rounds: 5, host: null };
+    const lane = { lane: true, hosts: ['eric'], looks: 360, claimLooks: 0, leased: 0, played: 0, lost: 0, lastLost: null, relayErrors: [], stopped: null };
+    const rd = scoreRound(4, { ...ladderOf(['x-v0', 'rush'], [g]), remote: lane });
+    assert.deepStrictEqual(rd.remote, lane);
+    const md = report(rd, {});
+    assert.match(md, /\nHelpers: eric said hello; a claim waited at 0 of 360 looks; 0 seeds went out, 0 games came back\.\n/);
+    assert.ok(md.indexOf('Helpers:') > md.indexOf('| x-v0 |') && md.indexOf('Helpers:') < md.indexOf('## x'), 'under the table');
+    assert.strictEqual(helpersLine({ ...lane, hosts: [], looks: 1 }), 'Helpers: no helper said hello to the games machine; a claim waited at 0 of 1 look; 0 seeds went out, 0 games came back.');
+    assert.strictEqual(helpersLine({ ...lane, claimLooks: 12, leased: 3, played: 4, lost: 1, lastLost: 'eric: no heartbeat', relayErrors: ['ECONNREFUSED'], stopped: 'the relay has failed for 180 s' }),
+        'Helpers: eric said hello; a claim waited at 12 of 360 looks; 3 seeds went out, 4 games came back; 1 lost (last: eric: no heartbeat); relay errors: ECONNREFUSED; the lane stopped: the relay has failed for 180 s.');
+    assert.strictEqual(helpersLine({ lane: false, why: 'ARENA_REMOTE is not a relay address' }), 'Helpers: none this round (ARENA_REMOTE is not a relay address).');
+    // the helper node off (no ARENA_REMOTE): no line, and older ladders have no remote at all
+    assert.strictEqual(scoreRound(4, ladderOf(['x-v0', 'rush'], [g])).remote, null);
+    assert.ok(!report(scoreRound(4, ladderOf(['x-v0', 'rush'], [g])), {}).includes('Helpers:'));
 });
 
 test('the cap comes from by, not from timing or error text', () => {

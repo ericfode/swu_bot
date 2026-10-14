@@ -275,7 +275,7 @@ export function CardFacts({ focus, score, compact = false }: { focus: Focus; sco
 
 /**
  * Props of CardInspector and FloatingZoom: the card under the pointer (its value chip comes from the board) and the
- * chosen score at the playhead (source and ScoreStep); null when card values are off or the game has no score.
+ * score for the displayed board (source and ScoreStep); null when card values are off or that board has no score.
  */
 export interface CardZoomProps {
     focus: Focus;

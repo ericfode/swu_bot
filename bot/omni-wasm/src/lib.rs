@@ -72,6 +72,38 @@ impl WasmEngine {
         })
     }
 
+    /// Load source-compiled card programs without a JavaScript callback. When
+    /// supplied, the exact pool JSON restricts the catalogue and binds its
+    /// SHA-256 to exported positions and reference traces.
+    #[wasm_bindgen(js_name = fromCatalogue)]
+    pub fn from_catalogue(
+        catalogue_json: &str,
+        pool_json: Option<String>,
+    ) -> Result<WasmEngine, JsError> {
+        let engine = match pool_json {
+            Some(pool) => {
+                Engine::from_compiled_pool_bytes(pool.as_bytes(), catalogue_json.as_bytes())
+            }
+            None => Engine::from_catalogue_bytes(catalogue_json.as_bytes()),
+        }
+        .map_err(error)?;
+        Ok(Self {
+            engine: Rc::new(engine),
+        })
+    }
+
+    /// Set before loading game handles; existing handles retain their engine.
+    #[wasm_bindgen(js_name = setRulesBackend)]
+    pub fn set_rules_backend(&mut self, mode: &str) -> Result<(), JsError> {
+        let backend=match mode {"auto"=>omni_rs::RulesBackend::Auto,"interpreter"=>omni_rs::RulesBackend::Interpreter,"aot"=>omni_rs::RulesBackend::Aot,_=>return Err(error("unknown rules backend"))};
+        Rc::get_mut(&mut self.engine).ok_or_else(||error("set rules backend before loading game handles"))?.set_rules_backend(backend).map_err(error)?;
+        Ok(())
+    }
+    #[wasm_bindgen(js_name = setRulesInstrumentation)]
+    pub fn set_rules_instrumentation(&mut self, enabled:bool)->Result<(),JsError> {Rc::get_mut(&mut self.engine).ok_or_else(||error("set instrumentation before loading game handles"))?.set_rules_instrumentation(enabled);Ok(())}
+    #[wasm_bindgen(js_name = rulesBackendReport)]
+    pub fn rules_backend_report(&self)->String {self.engine.rules_backend_report().to_string()}
+
     #[wasm_bindgen(js_name = poolHash)]
     pub fn pool_hash(&self) -> String {
         self.engine.pool_hash().to_string()

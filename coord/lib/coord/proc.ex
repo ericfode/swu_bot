@@ -22,7 +22,8 @@ defmodule Coord.Proc do
   Runs argv to its end under Coord.ProcSup and returns what happened. Options:
 
     * `env:` the child's whole environment (a map); nothing is inherited
-    * `as:` `:root` (default) or `:arena`, which wraps the command in isolate.sh --user arena when the BEAM is root
+    * `as:` `:root` (default) or `:arena`, which wraps the command when the BEAM is root: in isolate.sh --user arena
+      on the games machine, in setpriv on a helper (Coord.Config isolate :user)
     * `tmp:` the folder isolate.sh puts in place of /tmp (default GAMES_DATA/tmp/<kind>)
     * `cd:` the working folder (default GAMES_APP)
     * `timeout:`, `grace:` ms before TERM (default :infinity), then ms before KILL (default 5000)
@@ -123,14 +124,28 @@ defmodule Coord.Proc do
 
   @doc false
   # The argv the Port starts: choom first when there is one (the kernel's OOM killer then picks a ladder or a check
-  # before the BEAM), and isolate.sh for an arena child when the BEAM is root (no wrapper without root, as games.js).
+  # before the BEAM), and for an arena child when the BEAM is root, isolate.sh or setpriv (no wrapper without root). {:error, {:no_user, name}} when setpriv's user does not exist: nothing may run as root instead.
   def command_line(kind, argv, opts) do
-    argv = if Keyword.get(opts, :as, :root) == :arena and isolate?(), do: isolate_argv(kind, opts) ++ argv, else: argv
+    wrapped =
+      case {Keyword.get(opts, :as, :root), isolation()} do
+        {:arena, :isolate} -> {:ok, isolate_argv(kind, opts) ++ argv}
+        {:arena, :setpriv} -> with {:ok, {uid, gid}} <- user_ids(), do: {:ok, setpriv_argv(uid, gid) ++ argv}
+        _ -> {:ok, argv}
+      end
 
-    case choom() do
-      nil -> argv
-      choom -> [choom, "-n", "300", "--" | argv]
+    with {:ok, argv} <- wrapped do
+      case choom() do
+        nil -> {:ok, argv}
+        choom -> {:ok, [choom, "-n", "300", "--" | argv]}
+      end
     end
+  end
+
+  @doc false
+  # as isolate.sh's --user: no supplementary groups, no capabilities and no way to gain any (no setuid programs)
+  def setpriv_argv(uid, gid) do
+    ["setpriv", "--reuid=#{uid}", "--regid=#{gid}", "--clear-groups", "--inh-caps=-all", "--bounding-set=-all"] ++
+      ["--no-new-privs", "--"]
   end
 
   defp isolate_argv(kind, opts) do
@@ -143,10 +158,74 @@ defmodule Coord.Proc do
   end
 
   @doc "Whether arena children are wrapped in isolate.sh: when the BEAM is root, unless Coord.Config isolate says."
-  def isolate? do
+  def isolate?, do: isolation() == :isolate
+
+  @doc """
+  How an arena child is wrapped: `:isolate` (isolate.sh: its own PID and mount namespaces, as the bots' user),
+  `:setpriv` (only the bots' user, no namespaces: a helper, whose Docker container is the boundary) or `:none`.
+  Coord.Config isolate is :auto (isolate.sh when the BEAM is root), :user (setpriv when root), true or false.
+  """
+  def isolation do
     case Coord.Config.get(:isolate) do
-      :auto -> root?()
-      on? -> on? == true
+      :auto -> if root?(), do: :isolate, else: :none
+      :user -> if root?(), do: :setpriv, else: :none
+      true -> :isolate
+      _ -> :none
+    end
+  end
+
+  @doc """
+  The uid and gid of the bots' user (Coord.Config arena_user), from `id -u` and `id -g`: {:ok, {uid, gid}}, or
+  {:error, {:no_user, name}}. Looked up once; a failed lookup is tried again next time.
+  """
+  def user_ids(user \\ Coord.Config.get(:arena_user)) do
+    case :persistent_term.get({__MODULE__, :ids, user}, nil) do
+      nil ->
+        with {:ok, uid} <- id_of(user, "-u"),
+             {:ok, gid} <- id_of(user, "-g") do
+          :persistent_term.put({__MODULE__, :ids, user}, {uid, gid})
+          {:ok, {uid, gid}}
+        end
+
+      ids ->
+        {:ok, ids}
+    end
+  end
+
+  # a name id could read as an option or a number is never asked about
+  defp id_of(user, flag) do
+    with true <- Regex.match?(~r/^[a-z_][a-z0-9_-]{0,31}$/, user),
+         {:ok, file} <- executable("id", @default_path),
+         {0, out} <- short_command(file, [flag, user]),
+         {n, ""} when n >= 0 <- Integer.parse(String.trim(out)) do
+      {:ok, n}
+    else
+      _ -> {:error, {:no_user, user}}
+    end
+  end
+
+  # a quick command whose output is a line or two (id): its exit code and stdout, or :error after 5 s
+  defp short_command(file, args) do
+    port =
+      Port.open({:spawn_executable, file}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        {:args, args},
+        {:env, env_list(%{"PATH" => "/usr/bin:/bin"})}
+      ])
+
+    collect(port, "")
+  end
+
+  defp collect(port, out) do
+    receive do
+      {^port, {:data, data}} -> collect(port, out <> data)
+      {^port, {:exit_status, code}} -> {code, out}
+    after
+      5_000 ->
+        Port.close(port)
+        :error
     end
   end
 
@@ -175,7 +254,7 @@ defmodule Coord.Proc do
 
     # the command is looked up in the child's own PATH, and a missing one is an error here, not choom's exit 127
     with {:ok, file} <- executable(exe, Map.get(env, "PATH", @default_path)),
-         cmd = command_line(kind, [file | args], opts),
+         {:ok, cmd} <- command_line(kind, [file | args], opts),
          {:ok, port, pgid} <- open(cmd, env, Keyword.get(opts, :cd, Coord.Config.app())) do
       timeout = Keyword.get(opts, :timeout, :infinity)
 

@@ -93,7 +93,7 @@ defmodule CoordWeb.WindowProxy do
   defp run?(run), do: Regex.match?(@run, run)
 
   defp forward(conn, rest, limit) do
-    case read_limited(conn, limit) do
+    case CoordWeb.Body.read_limited(conn, limit) do
       {:ok, body, conn} ->
         send_upstream(conn, rest, body)
 
@@ -102,28 +102,6 @@ defmodule CoordWeb.WindowProxy do
 
       {:error, conn} ->
         refuse(conn, 400, "bad_request", "could not read the request body")
-    end
-  end
-
-  defp read_limited(conn, limit) do
-    declared =
-      case get_req_header(conn, "content-length") do
-        [n] -> Integer.parse(n)
-        _ -> :error
-      end
-
-    case declared do
-      {n, ""} when n > limit ->
-        {:too_large, conn}
-
-      _ ->
-        # one byte over the limit is enough to know the body is too large
-        case read_body(conn, length: limit + 1, read_length: 1_000_000) do
-          {:ok, body, conn} when byte_size(body) <= limit -> {:ok, body, conn}
-          {:ok, _body, conn} -> {:too_large, conn}
-          {:more, _body, conn} -> {:too_large, conn}
-          {:error, _reason} -> {:error, conn}
-        end
     end
   end
 
@@ -172,9 +150,5 @@ defmodule CoordWeb.WindowProxy do
     end
   end
 
-  defp refuse(conn, status, code, message) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(%{error: %{code: code, message: message}}))
-  end
+  defp refuse(conn, status, code, message), do: CoordWeb.Body.error(conn, status, code, message)
 end

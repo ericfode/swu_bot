@@ -22,9 +22,26 @@ Trace schema `omni-rs-trace-v1` begins at the first action window. Setup and mul
 - `decision`: `step`, acting seat (`p1`/`p2`), prompt type/title/selected stable IDs/action-window flag, canonical legal `actions`, chosen key, and engine coverage events emitted while applying that choice.
 - `result`: final step, winner (`p1`, `p2`, or `draw`) and full terminal `state`.
 
-`state` has `round`, `phase`, `initiative`, `initiativeClaimed`, `prevPassed`, `activePlayer`, `actor`, `winner`, `nextCardId`, and `players`. `nextCardId` is the length of the engine's complete card registry, including tokens outside visible zones, so future Shield IDs remain reproducible.
+`state` has `hiddenHistoryVersion`, `arenaUnitOrder`, `round`, `phase`, `initiative`, `initiativeClaimed`, `prevPassed`, `activePlayer`, `actor`, `winner`, `nextCardId`, and `players`. `nextCardId` is the length of the engine's complete card registry, including tokens outside visible zones, so future Shield IDs remain reproducible.
 
 Each player's state has `hand`, top-first `deck`, ordered `resources` with `exhausted`, ordered `discard`, `ground`, `space`, `leader`, `base`, and `out` (finished with this action phase). Cards use `{id, setCode, name}`, where IDs are `EnvGame.cardId` values such as `c17`. Shield uses `TOKEN_SHIELD`. Units include `damage`, `exhausted`, observed `power`/`hp`, and ordered `upgrades` with a token flag. Leaders include `deployed`, `exhausted`, and `epicUsed`; a deployed leader also appears in its arena with its unit statistics. Bases include `damage`, `hp`, and `epicUsed`. `prevPassed` identifies a prior consecutive pass; `out` is distinct from a temporary pass.
+
+New full states include `hiddenHistoryVersion: 1` and a boolean `hiddenQualified`
+for every arena unit, even units without Hidden. The value comes from the engine's
+play, deployment and token-creation watchers. Ordinary unit play is tied to the
+current in-play incarnation; generic arena placement does not qualify. Current
+Hidden presence and qualification are independent: a later grant can protect a
+qualified unit, expiry clears qualification without removing a printed keyword,
+and live Sentinel overrides Hidden's attack restriction. Saboteur does not.
+
+The loader rejects unknown history versions, incomplete per-unit evidence and
+unversioned Hidden phase effects. Existing immutable traces can omit these fields
+only when the selected pool cannot reach intrinsic or granted Hidden. That
+compatibility check uses the selected pool, not all definitions loaded from a
+larger catalog. Legacy snapshots keep their original output and hash shape.
+Current admitted movement does not reuse a departed token or redeploy a spent
+leader within the phase; supporting such movement will require preserving the
+engine's identity-based deployment/creation history outside the arena as well.
 
 ## Canonical action identity
 
@@ -84,6 +101,11 @@ differ, with the keys only one side has), `state` (full states differ, with the 
 refused the chosen move), `terminal`, `rust-error` and `mirror-error`. `cards` and `lastCard` (the card of the move
 before the disagreement) name the cards involved; `summary.json` counts findings per card.
 
+For the compiled card pool (PR #121, 830 cards), add `--catalogue bot/card-compiler/generated/catalog.json --pool
+bot/card-compiler/generated/runtime-pool.json --selection-toggles`: the compiled card programs, and forceteki with the
+opt-in select-card rule that this Rust engine follows (`env.newGame({ selectionToggles: true })`). `omni-rs check` then
+needs the same `--catalogue` and `--pool`.
+
 `--views` also builds, from the Rust state, the protocol views a bot would get from Rust simulations (`rust-view.js`)
 and compares them with `bot/view.js` on forceteki: the action list at every checked decision and the board at every
 action window. The first difference in a line is a `view` finding.
@@ -93,6 +115,21 @@ First run (`/mnt/project-files/omni/stress/r1-pool100/`, `summary-short.json` fo
 every pair on seeds 21-22, 110 games on the 100-card pool: 13,647 real moves and 6,703 action windows, plus 13,441
 moves and 6,066 windows inside 1,631 bot simulations, with no disagreement and no engine error. A `--views` run had no
 view difference either.
+
+Second run (`/mnt/project-files/omni/stress/r2-pool830/`, `FINDINGS.md`), the same bots and seeds on the 830-card pool of
+PR #121 before it merged: 12,687 real moves and 5,813 moves inside 610 simulations, no engine error, and 3 findings from
+2 Rust bugs. Force Illusion (LOF_223) offered already-exhausted enemy units to exhaust, where forceteki skips that step.
+The deployed C-3PO leader (SEC_015) lost its On Attack trigger. Both are fixed, and a third run
+(`/mnt/project-files/omni/stress/r3-pool830/`, same bots, seeds and pool) found nothing in 12,693 real moves and 5,813
+simulation moves. A fourth run after the merge with the generated backends of PR #146
+(`/mnt/project-files/omni/stress/r4-pool830-merged/`) found nothing either.
+
+Fifth run (`/mnt/project-files/omni/stress/r5-pool972/`, `RESULT.md`), the same bots and seeds on the 972-card
+catalogue of PR #150: 14,684 real moves and 6,000 moves inside 667 simulations, with no engine error and no Rust bug.
+Rust agreed on every real move. Its 2 findings come from simulations, where forceteki defeated a different one of
+several identical Shield tokens. In forceteki, which Shield is defeated depends on trigger order, and a rollback changes
+that order (known engine bug 6 in the root `CLAUDE.md`). A fresh forceteki game defeats the first Shield, as Rust
+does.
 
 ## Simulations on the Rust engine (opt-in)
 

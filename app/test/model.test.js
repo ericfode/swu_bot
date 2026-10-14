@@ -20,6 +20,28 @@ test('bradleyTerry: a bot with no games stays at the mean (prior)', () => {
     assert.ok(Math.abs(r.c.rating - 1500) < 5);
 });
 
+test('arenaHistory: the rating after each round matches the referee (all rounds so far, baselines pinned at 1500)', () => {
+    // the referee's all-round rating (bot/arena/referee.js anchoredBT and globalElo): bot/ratings.js, then the baselines'
+    // mean moved to 1500
+    const { bradleyTerry } = require('../../bot/ratings');
+    const referee = results => {
+        const names = [...new Set(results.flatMap(x => [x.a, x.b]))], bt = bradleyTerry(names, results), shift = 1500 - (bt.base1 + bt.base2) / 2;
+        return Object.fromEntries(names.map(n => [n, Math.round(bt[n] + shift)]));
+    };
+    const g = (a, b, score) => ({ a, b, score });
+    const rounds = [
+        { round: 0, ladderId: 'arena-r0', results: [g('x-v1', 'base1', 1), g('base2', 'x-v1', 1), g('base1', 'base2', 1), g('x-v1', 'base2', 0)] },
+        { round: 1, ladderId: 'arena-r1', results: [g('x-v2', 'base1', 1), g('base2', 'x-v2', 0), g('x-v2', 'base2', 1), g('base1', 'base2', 0)] },
+        { round: 2, ladderId: 'arena-h', pool: 'holdout', results: [g('x-v2', 'base1', 0)] },
+    ];
+    const h = model.arenaHistory({ rounds }, ['base1', 'base2']);
+    assert.deepEqual(h.map(x => x.round), [0, 1], 'the held-out round is left out');
+    assert.equal(h[0].ratings['x-v2'], undefined, 'a version has no rating before its first round');
+    assert.deepEqual(h[0].ratings, referee(rounds[0].results));
+    assert.deepEqual(h[1].ratings, referee([...rounds[0].results, ...rounds[1].results]), 'after the newest round it is the standings rating');
+    assert.ok(Math.abs((h[1].ratings.base1 + h[1].ratings.base2) / 2 - 1500) <= 1);
+});
+
 test('canonical: the Atlas naming rule', () => {
     assert.equal(model.canonical('random-a', false), 'random');
     assert.equal(model.canonical('random', true), 'random');
@@ -87,49 +109,19 @@ test('buildModel: Atlas names, records, forfeits and running games', () => {
     assert.ok(M.order.every(id => M.bots[id].ratingFrom === 'app'));
 });
 
-test('buildModel: games against people on Karabast show as their own run and stay out of bot records', () => {
+test('buildModel: games against people (a karabast* run, or any run a feed sent) stay out of the app', () => {
     const src = tinySources();
-    const game = (id, p1, p2, winnerSeat) => ({ id, p1, p2, outcome: 'won', winnerSeat });
-    src.runs.push({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock', 'opponent'], games: [
-        game('karabast-1', 'c-clock', 'opponent', 'p2'),
-        game('karabast-2', 'opponent', 'c-clock', 'p1'),
-        { id: 'karabast-3', p1: 'c-clock', p2: 'opponent', outcome: 'running' },
-        { id: 'karabast-4', p1: 'opponent', p2: 'c-clock', outcome: 'won', winnerSeat: 'draw' },
-        { id: 'karabast-5', p1: 'c-clock', p2: 'opponent', outcome: 'abandoned' },
+    src.runs.push({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', bots: ['c-clock'], games: [
+        { id: 'karabast-1', p1: 'c-clock', p2: 'some-person', outcome: 'won', winnerSeat: 'p2' },
+        { id: 'karabast-2', p1: 'opponent', p2: 'c-clock', outcome: 'running' },
     ] });
-    const M = model.buildModel(src, null, null);
-    const r = M.runs.find(x => x.id === 'karabast');
-    assert.equal(r.kind, 'people');
-    assert.deepEqual([r.decided, r.running, r.errors, r.abandoned], [3, 1, 0, 1], 'a draw is a finished game; an abandoned one is neither');
-    assert.deepEqual(r.table.find(t => t.id === 'c-clock'), { id: 'c-clock', w: 0, l: 2, d: 1, n: 3, pct: 1 / 6 });
-    assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'c-clock\'s bot record is unchanged');
-    assert.ok(!M.bots.opponent, 'people are not bots');
-    assert.equal(M.games.filter(g => M.runs[g[0]].id === 'karabast').length, 5, 'every game stays listed');
-    assert.equal(M.games.find(g => g[1] === 'karabast-5')[4], 5, 'an abandoned game keeps its own result code, apart from engine errors');    // the run keeps its own bots list, which the app reads to tell our bot's seat from the person's
-    assert.deepEqual(r.ours, ['c-clock', 'opponent']);
-    src.runs.at(-1).bots = ['c-clock'];
-    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'karabast').ours, ['c-clock']);
-    assert.equal(M.totals.runs, M.runs.length - 1, 'a people run is no ladder or round on Home');
-    // a person is never named: a seat outside the run's bots list becomes "opponent", and the run's table lists only our bots
-    src.runs.at(-1).games.push({ id: 'karabast-6', p1: 'some-person', p2: 'c-clock', outcome: 'won', winnerSeat: 'p1' }, { id: 'karabast-7', p1: 'c-clock', p2: 'x', outcome: 'ERROR', error: 'TIME_FORFEIT x' });
-    const N = model.buildModel(src, null, null), k = N.runs.find(x => x.id === 'karabast');
-    assert.ok(!N.botList.includes('some-person') && !k.bots.includes('some-person'), 'no name reaches the model');
-    assert.deepEqual(k.bots, ['c-clock', 'opponent']);
-    assert.deepEqual(k.table.map(t => t.id), ['c-clock']);
-    assert.deepEqual(N.games.find(g => g[1] === 'karabast-6').slice(2, 5), [N.botList.indexOf('opponent'), N.botList.indexOf('c-clock'), 0]);
-    assert.equal(N.games.find(g => g[1] === 'karabast-7')[4], 0, 'a person who timed out lost');
-});
-
-test('buildModel: a run any outside feed sent is never rated, whatever its name', () => {
-    const src = tinySources();
     src.runs.push({ id: 'sprite', feed: 'sprite', createdAt: '2026-10-11T21:00:00Z', games: [{ id: 'sprite-1', p1: 'c-clock', p2: 'heuristic', outcome: 'won', winnerSeat: 'p1' }] });
-    const M = model.buildModel(src, null, null);
-    assert.equal(M.runs.find(x => x.id === 'sprite').kind, 'people');
+    const M = model.buildModel(src, null, null), plain = model.buildModel(tinySources(), null, null);
+    assert.deepEqual(M.runs.map(r => r.id), plain.runs.map(r => r.id), 'neither run reaches the model');
+    assert.equal(M.games.length, plain.games.length);
+    assert.ok(!M.botList.includes('some-person') && !M.botList.includes('opponent'), 'no person reaches the model');
     assert.deepEqual([M.bots['c-clock'].w, M.bots['c-clock'].l], [2, 1], 'records unchanged');
-    src.runs.push({ id: 'sprite-2', feed: 'sprite', createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-2', p1: 'c-clock', p2: 'opponent', outcome: 'running' }] });
-    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-2').bots, ['opponent'], 'with no bots list the person cannot be told from our bot, so every seat is hidden');
-    src.runs.push({ id: 'sprite-3', feed: 'sprite', bots: [], createdAt: '2026-10-11T22:00:00Z', games: [{ id: 'sprite-3', p1: 'opponent', p2: 'c-clock', outcome: 'running' }] });
-    assert.deepEqual(model.buildModel(src, null, null).runs.find(x => x.id === 'sprite-3').bots, ['opponent'], 'an empty bots list hides every seat too');
+    assert.equal(M.totals.runs, M.runs.length);
 });
 
 test('buildModel: ratings come from meta/ratings.json when it lists the bot', () => {
@@ -162,8 +154,7 @@ test('publicModel: no threads, owners or thread names; the input is not changed'
     assert.equal(P.bots['c-clock'].owner, null);
     assert.equal(P.bots['c-clock'].card.owner, null);
     assert.equal(P.bots['c-clock'].card.oneLine, 'Race-clock bot in C');
-    assert.ok(P.panels.every(p => !('thread' in p)));
-    assert.ok(P.experiments.every(e => !('owner' in e)));
+    assert.deepEqual(P.panels, [], 'panels feed only Lab');
     assert.equal(P.arena.competitors[0].panel.thread, undefined);
     assert.equal(P.arena.competitors[0].panel.title, 'Opus');
     assert.equal(M.bots['c-clock'].owner, 'C bot');

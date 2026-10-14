@@ -12,6 +12,8 @@
  *   browsers         GET  /, /arena, /api/app (the app's model), /api/status, /api/standings, /api/report, /api/games,
  *                         /api/versions, /api/panel (the arena's own read methods, same shapes), /api/replays/<run>/<game>
  *   Eric's Share page     GET, POST /api/share                 who is invited; {add} or {remove} one GitHub login
+ *   Eric's settings  GET, POST /api/arena-settings        games per pair, time limit, games at once, wait between rounds;
+ *                                                          the games machine reads them (coord/lib/coord/settings.ex)
  *   MCP clients      POST /mcp                             each person's own app (Claude, Claude Code...), signed in
  *                                                          with GitHub through OAuth (oauth.js, /oauth/*); it reads
  *   Build a bot page GET, POST /api/apps                   a person's connected apps; {disconnect: id}
@@ -20,7 +22,7 @@
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
  * Start it with ARENA_MODE=window node bot/arena/server.js --host 0.0.0.0 --port 8080. With ARENA_GAMES_WAKE set (the
  * games machine's private address, http://swu-arena-games.flycast/wake), every submission wakes the games machine
- * (games.js), and server.js wakes it every 6 hours.
+ * (coord/), and server.js wakes it every 6 hours.
  */
 const fs = require('fs');
 const path = require('path');
@@ -54,6 +56,14 @@ const SUBMIT_BYTES = 3e6;
 const SUBMIT_PENDING = 3; // waiting at once, per competitor name
 const SUBMIT_PER_DAY = 20; // per competitor name
 const SUBMIT_PER_DAY_PERSON = 60; // per person, over all their names
+// Eric's arena settings (/api/arena-settings): each is an integer in its range, or absent for the games machine's own
+// default (coord Coord.Config, roster.thinkCapMs). gamesPerPair is even: every seed is played from both seats.
+const SETTINGS = {
+    gamesPerPair: { min: 2, max: 10, even: true }, // arena: games each pair plays in a round
+    thinkCapSec: { min: 10, max: 600 }, // arena: thinking time per bot per game; past it, that bot loses the game
+    workers: { min: 1, max: 16 }, // compute: games the games machine plays at once
+    roundGapMin: { min: 0, max: 240 } // compute: minutes from one round's end to the next round's start
+};
 // keys a friend never sees (builder and thread names, Eric's pick 6), at any depth of a document
 const PRIVATE_KEYS = new Set(['owner', 'thread', 'threadId', 'session', 'sessionId', 'tokenHash', 'token']);
 
@@ -77,6 +87,10 @@ function need(cond, code, msg) {
  * break the model build. Games are objects with ids <feed>-<id>; seat names are plain words that are never an
  * Object.prototype key (the model indexes plain objects by them). Returns null for a document that does not fit.
  */
+const okSetting = (k, v) => {
+    const r = SETTINGS[k];
+    return Number.isInteger(v) && v >= r.min && v <= r.max && (!r.even || v % 2 === 0);
+};
 const isName = (x) => typeof x === 'string' && /^[A-Za-z0-9][\w .@#+()-]{0,63}$/.test(x) && !(x in Object.prototype);
 const FEED_OUTCOMES = new Set(['running', 'won', 'draw', 'abandoned']);
 // a game's error text could name the person, so a people run keeps only that there was one
@@ -106,6 +120,31 @@ function feedRun(doc, feed, id) {
     }
     const per = count(doc.gamesPerPairing); // the run's grid draws this many squares per pair, so it stays small
     return { id, feed, createdAt: doc.createdAt, ...(doc.bots ? { bots: doc.bots } : {}), ...(per && per <= 20 ? { gamesPerPairing: per } : {}), games };
+}
+
+/**
+ * A feed's game row may carry the person's name on karabast.net (`person`). It never goes into the run document: the
+ * window keeps it in admin/people, {names: {<game id>: name}}, which only an admin reads. Friends, view links, apps,
+ * the project token and the app's model still see "opponent" (the app has left people games out since 2026-10-14).
+ */
+const PEOPLE_MAX = 20000;
+const personName = (x) => (typeof x === 'string' && x.length <= 64 && !/[\u0000-\u001f\u007f]/.test(x) && x.trim() ? x.trim() : null);
+function keepPeopleNames(store, games) {
+    const prev = parseOr(store.getDoc('admin', 'people'), null)?.names;
+    const names = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {};
+    let changed = false;
+    for (const g of games) {
+        const name = personName(g?.person);
+        if (name && names[g.id] !== name) {
+            delete names[g.id]; // a renamed game moves to the end, so the oldest names are the ones dropped
+            names[g.id] = name;
+            changed = true;
+        }
+    }
+    if (changed) {
+        const ids = Object.keys(names).slice(-PEOPLE_MAX);
+        store.putDoc('admin', 'people', JSON.stringify({ names: Object.fromEntries(ids.map((k) => [k, names[k]])), updatedAt: new Date().toISOString() }));
+    }
 }
 
 /**
@@ -576,7 +615,7 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
  * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts and staleMs (for tests).
  */
 /**
- * Wakes the games machine (games.js POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
+ * Wakes the games machine (its coordinator's POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
  * a stopped machine on the request. Never waits on it and never fails: the machine also wakes every 6 hours.
  */
 function wakeGamesAt(url, { fetchImpl = fetch } = {}) {
@@ -594,7 +633,7 @@ function createWindow(opts = {}) {
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
     const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
-    // the games machine (games.js), woken when a bot comes in; a stopped machine starts on the request
+    // the games machine (coord/), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
@@ -853,7 +892,9 @@ function createWindow(opts = {}) {
         } else {
             need(req.method === 'GET', 'bad_request', 'GET, or POST {disconnect: id}');
         }
-        return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login) } }, req);
+        // the tools a connected app gets, from the server's own list, so the Build a bot page cannot drift from it
+        const tools = mcpTools.map((t) => ({ name: t.name, does: String(t.description).split(/(?<=\.)\s/)[0], readOnly: t.annotations?.readOnlyHint === true }));
+        return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login), tools } }, req);
     }
 
     function sendJson(res, code, body, req) {
@@ -963,6 +1004,54 @@ function createWindow(opts = {}) {
         return sendJson(res, 200, { result: shared() }, req);
     }
 
+    /** The settings Eric set, without anything a doc might carry besides them. */
+    const settingsDoc = () => {
+        const d = parseOr(store.getDoc('admin', 'arena-settings'), null);
+        const set = d && typeof d.settings === 'object' && d.settings ? d.settings : {};
+        const settings = Object.fromEntries(Object.keys(SETTINGS).filter((k) => okSetting(k, set[k])).map((k) => [k, set[k]]));
+        return { settings, updatedAt: typeof d?.updatedAt === 'string' ? d.updatedAt : null, by: typeof d?.by === 'string' ? d.by : null };
+    };
+    /**
+     * Eric's arena settings (SETTINGS): GET for an admin and for the games machine's own token, which reads them every
+     * minute; POST {set: {name: value | null}} changes some of them (null: back to the machine's default), for an admin
+     * only and, from a browser, only from this site's own pages and as JSON, as on the Share page.
+     */
+    async function arenaSettings(req, res, who) {
+        const machine = who.via === 'bearer' && who.games === true;
+        need(who.role === 'admin' || (machine && req.method === 'GET'), 'forbidden', 'only an admin changes the arena settings');
+        if (req.method === 'GET') {
+            return sendJson(res, 200, { result: settingsDoc() }, req);
+        }
+        need(req.method === 'POST', 'bad_request', 'GET, or POST {"set": {"<name>": <value> or null}}');
+        if (who.via === 'cookie') {
+            need(req.headers.origin === auth.origin, 'forbidden', "the arena settings change only from this site's own pages");
+            need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
+        }
+        let q;
+        try {
+            q = JSON.parse((await readBody(req, 4096)).toString('utf8'));
+        } catch (e) {
+            throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
+        }
+        const set = q?.set;
+        need(set && typeof set === 'object' && !Array.isArray(set) && Object.keys(set).length > 0, 'bad_request', 'send {"set": {"<name>": <value> or null}}');
+        for (const [k, v] of Object.entries(set)) {
+            const rule = Object.hasOwn(SETTINGS, k) ? SETTINGS[k] : null;
+            need(rule, 'bad_request', `${k}: not a setting (${Object.keys(SETTINGS).join(', ')})`);
+            need(v === null || okSetting(k, v), 'bad_request', `${k}: ${rule.even ? 'an even' : 'a whole'} number from ${rule.min} to ${rule.max}, or null for the default`);
+        }
+        const next = { ...settingsDoc().settings };
+        for (const [k, v] of Object.entries(set)) {
+            if (v === null) {
+                delete next[k];
+            } else {
+                next[k] = v;
+            }
+        }
+        store.putDoc('admin', 'arena-settings', JSON.stringify({ settings: next, updatedAt: new Date().toISOString(), by: who.login ?? 'admin token' }));
+        return sendJson(res, 200, { result: settingsDoc() }, req);
+    }
+
     async function api(req, res, url, who) {
         const parts = url.pathname.split('/').slice(2).map((s) => {
             try {
@@ -978,6 +1067,9 @@ function createWindow(opts = {}) {
         }
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);
+        }
+        if (parts[0] === 'arena-settings' && parts.length === 1) {
+            return arenaSettings(req, res, who);
         }
         if (parts[0] === 'apps' && parts.length === 1) {
             return apps(req, res, who);
@@ -1027,6 +1119,7 @@ function createWindow(opts = {}) {
                     need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with distinct ids, a createdAt date, and seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
                     // the run keeps which feed sent it, so the app never rates its games (model.cjs)
                     text = JSON.stringify(run);
+                    keepPeopleNames(store, doc.games);
                 } else if (ns === 'runs' && doc && typeof doc === 'object' && peopleRun(id, doc)) {
                     // a run against people sent with the project token: it must name our bots, and is stored with every
                     // other seat as "opponent", like a feed's run, so no read path (the app's model included) sees a name

@@ -8,7 +8,15 @@
  *        [--server http://127.0.0.1:9500] [--allow-host <host>] [--username "swu-bot (bot)"]
  *        [--format premier] [--card-pool current] [--wait-minutes 10] [--chat "<line>"] [--out <dir>]
  *        [--ledger <file> --max-people 10|none] [--stop-file <file>] [--allow-undos 2] [--seed 1] [--gap 60] [--max-errors 3]
- *        [--max-waits 6] [--names <file>]
+ *        [--max-waits 6] [--names <file>] [--desk <dir> --allow-bots a,b,...]
+ *
+ * --bot a,b,... takes turns game by game (a, b, a, b, ...; a wait with no match keeps the same bot), and each line of
+ * games.jsonl and status.json names the bot of that game.
+ *
+ * --desk <dir> is the Karabast desk's folder (desk.js; Eric's own live view writes it, live-view.js --manage). Before
+ * each game the loop waits while <dir>/PAUSE exists (state "paused"), then plays the bots <dir>/bot names instead of
+ * --bot when every one is in --allow-bots (default: the --bot list). status.json carries the allowed list, so the desk
+ * offers only those. Every allowed bot must be a built program in bot/external-bots.json, or the run refuses to start.
  *
  * With --games above 1 it is a loop: after each game it waits --gap seconds (at least 25: a finished lobby keeps its
  * users ~20 s) and queues again, until the games, the people cap, the stop file, --max-errors failures in a row or
@@ -42,6 +50,7 @@ const { KarabastSocket, post } = require('./socket');
 const { KarabastSeat, loadClient } = require('./seat');
 const { makeScrubber } = require('./frame');
 const { PeopleLedger } = require('./ledger');
+const { readChoice, isPaused, parseBots } = require('./desk');
 
 /** Cards whose abilities throw in our engine pin (CLAUDE.md, known engine bugs). */
 const KNOWN_ERRORS = { ASH_044: 'Barriss Offee, Redeeming Herself' };
@@ -55,6 +64,8 @@ const hash = (s) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 1
 const NO_MATCH = 'no match within';
 /** A finished lobby keeps its users ~20 s; queueing again sooner can put us back with the same person. */
 const MIN_GAP_S = 25;
+/** How often a paused loop looks at the desk again. */
+const PAUSE_POLL_MS = 5000;
 
 /** Writes <out>/status.json whole (temp file, then rename), so a reader never sees half of it. */
 function writeStatus(out, status) {
@@ -65,6 +76,29 @@ function writeStatus(out, status) {
     const file = path.join(out, 'status.json');
     fs.writeFileSync(`${file}.tmp`, JSON.stringify({ ...status, at: new Date().toISOString() }) + '\n');
     fs.renameSync(`${file}.tmp`, file);
+}
+
+/**
+ * Refuses a bot that is not a program in the bot list (seat.js loadClient) or whose program is not built, so the desk
+ * never offers a bot that would fail its game.
+ */
+function checkBots(names, file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__dirname, '..', 'external-bots.json')) {
+    const programs = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    const root = path.join(__dirname, '..', '..');
+    for (const name of names) {
+        const base = name.split('#')[0];
+        if (base === 'js-random') {
+            continue;
+        }
+        // own keys only, as seat.js loadClient reads them: "constructor" is no bot
+        if (!Object.hasOwn(programs, base)) {
+            throw new Error(`unknown bot "${name}" (programs in ${file})`);
+        }
+        const spec = programs[base];
+        if (typeof spec.cmd === 'string' && spec.cmd.includes('/') && !fs.existsSync(path.resolve(root, spec.cmd))) {
+            throw new Error(`bot "${name}" is not built: ${spec.cmd} is missing`);
+        }
+    }
 }
 
 /** Refuses a deck holding a card from KNOWN_ERRORS. */
@@ -294,7 +328,17 @@ async function main() {
     const seed = arg('seed', '1');
     const user = { id: `swu-bot-${crypto.randomUUID()}`, username: arg('username', 'swu-bot (bot)') };
     const log = (line) => console.error(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
-    const bot = arg('bot', 'c-clock');
+    // a list takes turns game by game (runLoop)
+    const bots = arg('bot', 'c-clock').split(',').map((b) => b.trim()).filter(Boolean);
+    if (!bots.length) {
+        throw new Error('--bot needs a bot name, or a list of names separated by commas');
+    }
+    const desk = arg('desk', null);
+    const allowed = arg('allow-bots', null) ? parseBots(arg('allow-bots')) : bots;
+    if (!bots.every((b) => allowed.includes(b))) {
+        throw new Error('--allow-bots must name every --bot');
+    }
+    checkBots(allowed);
     const gapS = Number(arg('gap', 60));
     const waitMinutes = Number(arg('wait-minutes', 10));
     const maxErrors = Number(arg('max-errors', 3));
@@ -311,8 +355,8 @@ async function main() {
         throw new Error('--games, --max-errors and --max-waits must be whole numbers of 1 or more');
     }
     const end = await runLoop({
-        games, gapS, maxErrors, maxWaits, stopFile, ledger, out, bot, deck: name, log,
-        play: (g, hooks) => queueOnce({
+        games, gapS, maxErrors, maxWaits, stopFile, ledger, out, bot: bots, desk, allowed, deck: name, log,
+        play: (g, { bot, ...hooks }) => queueOnce({
             server, user, deck, bot, format: arg('format', 'premier'), cardPool: arg('card-pool', 'current'),
             waitMs: waitMinutes * 60000, chat: arg('chat', null), allowHosts, allowUndos: Number(arg('allow-undos', 2)),
             seed: `${seed}-${g}`, out, names: arg('names', null), log, ...hooks
@@ -324,14 +368,20 @@ async function main() {
 }
 
 /**
- * Plays up to `games` games one after another; play(g, hooks) plays one (queueOnce). Before each game it holds the
- * opponent's place in the ledger; it keeps <out>/status.json current and appends each game's row to games.jsonl.
+ * Plays up to `games` games one after another; play(g, hooks) plays one (queueOnce) with the bot `hooks.bot`. `bot` is
+ * a name, or a list of names that take turns game by game (a wait with no match keeps the same bot). Before each game
+ * it holds the opponent's place in the ledger; it keeps <out>/status.json current and appends each game's row to
+ * games.jsonl. With `desk` (a folder, desk.js) it waits while the desk says pause and plays the desk's pick of `allowed`.
  * It stops on the stop file, the people cap, a ledger error, or maxErrors failures in a row (a wait with no match is
  * no failure). Resolves to the status it ended on.
  */
-async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = null, ledger = null, out = null, bot, deck, play, log, wait = sleep }) {
+async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = null, ledger = null, out = null, bot, desk = null, allowed = null, deck, play, log, wait = sleep }) {
     const tally = { played: 0, won: 0, lost: 0, errors: 0 };
-    let status = { bot, deck, state: 'starting', since: new Date().toISOString(), file: null };
+    const bots = [].concat(bot);
+    allowed ??= bots;
+    const pick = () => (desk ? readChoice(desk, allowed) : null) ?? bots;
+    const stopping = () => stopFile && fs.existsSync(stopFile);
+    let status = { bot: pick()[0], deck, state: 'starting', since: new Date().toISOString(), file: null, ...(desk ? { allowed } : {}) };
     const set = (patch) => {
         status = { ...status, ...patch, ...tally };
         writeStatus(out, status);
@@ -348,7 +398,15 @@ async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = nu
     try {
         set({});
         for (let g = 0; done < games; g++) {
-            if (stopFile && fs.existsSync(stopFile)) {
+            // the desk pauses between games only: a game already started always ends
+            while (desk && isPaused(desk) && !stopping()) {
+                if (status.state !== 'paused') {
+                    log('paused at the desk');
+                    set({ state: 'paused', since: new Date().toISOString(), file: null });
+                }
+                await wait(PAUSE_POLL_MS);
+            }
+            if (stopping()) {
                 reason = 'the stop file exists';
                 break;
             }
@@ -358,15 +416,18 @@ async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = nu
                 reason = `the people cap is reached (${ledger.count} counted, ${ledger.reserved()} reserved, of ${ledger.max})`;
                 break;
             }
+            const turns = pick();
+            const b = turns[done % turns.length];
             let row;
             let queued = false;
             let matched = false;
             let ledgerError = null;
             try {
                 row = await play(g, {
+                    bot: b,
                     onQueued: () => {
                         queued = true;
-                        set({ state: 'queued', since: new Date().toISOString(), file: null });
+                        set({ bot: b, state: 'queued', since: new Date().toISOString(), file: null });
                     },
                     onMatched: async (opponent) => {
                         matched = true;
@@ -380,7 +441,7 @@ async function runLoop({ games, gapS, maxErrors = 3, maxWaits = 6, stopFile = nu
                     onGameFile: (file) => set({ state: 'playing', since: new Date().toISOString(), file })
                 });
             } catch (e) {
-                row = { at: new Date().toISOString(), bot, deck, result: e.message.startsWith(NO_MATCH) ? 'no match' : 'error', reason: e.message };
+                row = { at: new Date().toISOString(), bot: b, deck, result: e.message.startsWith(NO_MATCH) ? 'no match' : 'error', reason: e.message };
             } finally {
                 // once queued, the server may have matched us before we heard of it, even as our wait ran out, or add()
                 // failed: the place stays counted
@@ -453,4 +514,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { queueOnce, runLoop, checkDeck, holdPlayLock, lockToken, recordOpponent, KNOWN_ERRORS, MIN_GAP_S };
+module.exports = { queueOnce, runLoop, checkDeck, checkBots, holdPlayLock, lockToken, recordOpponent, KNOWN_ERRORS, MIN_GAP_S };

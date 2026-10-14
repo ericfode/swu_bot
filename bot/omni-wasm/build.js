@@ -27,9 +27,10 @@ function version(command) {
 }
 
 function main(args) {
-    let format = 'all', debug = false, install = false;
+    let format = 'all', debug = false, install = false, outputDirectory;
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--target') format = args[++i];
+        else if (args[i] === '--out-dir') { outputDirectory = args[++i]; if (!outputDirectory || outputDirectory.startsWith('--')) throw new Error('Missing --out-dir value'); }
         else if (args[i] === '--debug') debug = true;
         else if (args[i] === '--install-tools') install = true;
         else throw new Error(`Unknown option ${args[i]}; use [--target node|web|all] [--debug] [--install-tools]`);
@@ -57,7 +58,7 @@ function main(args) {
     const metadata = JSON.parse(run('cargo', ['metadata', '--no-deps', '--format-version', '1', '--locked'], true));
     const profile = debug ? 'debug' : 'release';
     const wasm = path.join(metadata.target_directory, target, profile, 'omni_wasm.wasm');
-    const output = path.join(__dirname, 'pkg');
+    const output = outputDirectory === undefined ? path.join(__dirname, 'pkg') : path.resolve(outputDirectory);
     fs.mkdirSync(output, { recursive: true });
     const builds = [];
     for (const kind of format === 'all' ? ['node', 'web'] : [format]) {

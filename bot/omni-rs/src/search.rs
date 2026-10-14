@@ -85,7 +85,10 @@ impl Game for Engine {
         a.kind == "button"
             && a.label == "Cancel"
             && match s.decision {
-                Decision::LeaderMenu | Decision::NoEffect => true,
+                Decision::LeaderMenu | Decision::NoEffect | Decision::AbilityMenu => true,
+                Decision::AbilityNoEffect | Decision::AbilityTarget => {
+                    !s.ability_committed && s.ability_return == 0
+                }
                 Decision::AttackTarget => !s.ambush,
                 Decision::VaderBase => s.trigger_context == 0,
                 _ => false,
@@ -675,6 +678,32 @@ mod tests {
             win(Some(Seat::P1)),
         ];
         assert_eq!(run(nodes, 1, None, false).result, Some(Seat::P1));
+    }
+
+    #[test]
+    fn compiled_ability_cancellation_is_skipped_only_before_commitment() {
+        use crate::model::Decision;
+        let pool: serde_json::Value =
+            serde_json::from_str(include_str!("../../omni/rs/pool.json")).unwrap();
+        let engine = Engine::from_pool_value(&pool).unwrap();
+        let cancel = Action::button("Cancel", "cancel");
+        let mut state = State::default();
+        for decision in [
+            Decision::AbilityMenu,
+            Decision::AbilityTarget,
+            Decision::AbilityNoEffect,
+        ] {
+            state.decision = decision;
+            assert!(engine.cancels_uncommitted(&state, &cancel));
+        }
+        state.decision = Decision::AbilityTarget;
+        state.ability_committed = true;
+        assert!(!engine.cancels_uncommitted(&state, &cancel));
+        state.ability_committed = false;
+        state.ability_return = 1;
+        assert!(!engine.cancels_uncommitted(&state, &cancel));
+        state.decision = Decision::AbilityOptional;
+        assert!(!engine.cancels_uncommitted(&state, &Action::button("Pass", "pass")));
     }
 
     #[test]

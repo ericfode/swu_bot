@@ -14,6 +14,11 @@ The build creates both a CommonJS Node package and an ES module browser package 
 Generated binaries are local build outputs. Tool versions are pinned; the installer uses the workspace's
 ignored `target/wasm-tools` directory instead of replacing a global installation. No service credentials are needed.
 
+The generated-card build passed 300 original-pool games and 16 expanded-pool games with zero mismatches.
+It proved 102/103 sampled endgame positions in 14.00 seconds including imports, versus JavaScript's 66/103
+in 336.23 seconds; all 66 shared proofs agree. See [measurements and limits](../../../results/omni-wasm-2/README.md).
+For a self-contained local npm tarball usable outside this repository, see [packaging](../../omni-wasm/PACKAGING.md).
+
 ## Node
 
 ```js
@@ -42,6 +47,18 @@ simulator.free();
 must match. Imports start at action windows; copying a live Wasm handle preserves unresolved prompts too.
 Returned snapshots are detached observations: editing one cannot change the retained game.
 
+For compiled cards, pass `cataloguePath` (or raw `catalogueJson`) to `createSimulator`. Optional `poolPath` or
+`poolJson` restricts the admitted cards and preserves the pool's exact hash for recorded games. With a catalogue
+and no pool, the simulator loads every runtime-admitted card. Runtime admission is separate from game validation;
+the compiler's coverage report retains explicit reasons for unsupported cards.
+
+```js
+const simulator = await createSimulator({
+    cataloguePath: './bot/card-compiler/generated/catalog.json',
+    poolPath: './bot/omni-rs/tests/compiled-fixtures/pool.json',
+});
+```
+
 The adapter exposes `legalActions(pid)`, `apply(pid, action)`, `mark(pid)`, `restore(pid, mark)`, `isActionWindow(pid)`,
 `round`, `over`, `winner`, `winners`, `snapshot()`, `clone()`, `prove(limits)`, and `free()`. Player IDs can be mapped
 from the existing engine. Actions have stable canonical keys; they are not forceteki UUID-bearing objects.
@@ -65,19 +82,24 @@ simulator.free();
 Serve the generated `.wasm` alongside its loader over HTTP. Run proofs in a Worker when connected to an
 interactive UI: the call is synchronous until its budget completes. Browser state/search use the same Rust
 implementation; filesystem loading is kept in the Node adapter.
+The browser loader also accepts `catalogueJson`, with optional `poolJson`, using text fetched by the caller.
 
 ## Command-line integration and checks
 
 ```sh
 # Exact fixture/corpus replay through the JavaScript adapter.
 node bot/omni/wasm/check.js bot/omni-rs/tests/fixtures/*.jsonl.gz
+node bot/omni/wasm/check.js bot/omni-rs/tests/compiled-fixtures/*.jsonl.gz --catalogue bot/card-compiler/generated/catalog.json --pool bot/omni-rs/tests/compiled-fixtures/pool.json
 
 # Existing JS match runner, using Wasm for complete endgame searches.
 node bot/omni/solve-games.js --engine wasm --pool bot/omni/rs/pool.json --bots aggro,control --seeds 101 --budget 2000 --depth 12 --sample 0 --out replays/wasm-solves
+# Compiled-card matches use the same runner with the catalogue and its admitted pool.
+node bot/omni/solve-games.js --engine wasm --catalogue bot/card-compiler/generated/catalog.json --pool bot/omni-rs/tests/compiled-fixtures/pool.json --bots heuristic,heuristic --seeds 3001 --budget 100 --depth 2 --sample 0 --stop 1 --out replays/wasm-compiled-solves
 
 # Prove exported positions, with a fixed budget or their measured JS time allowance.
 node bot/omni/wasm/prove.js replays/omni-rs-matched.jsonl --depth 12 --ms-field jsMs
 node bot/omni/wasm/prove.js replays/omni-rs-matched.jsonl --depth 12 --nodes 100000
+# Compiled positions use --catalogue catalog.json plus their exact --pool pool.json.
 
 # Three whole-Wasm rollout runs, with one 10,000-node warmup.
 node bot/omni/wasm/bench.js bot/omni-rs/tests/fixtures/heuristic-vs-heuristic-1.jsonl.gz 1000000 3
@@ -85,7 +107,9 @@ node bot/omni/wasm/bench.js bot/omni-rs/tests/fixtures/heuristic-vs-heuristic-1.
 
 `solve-games.js` defaults to its existing JavaScript prover. `--engine wasm` requires an explicit pool and retains
 each measured position in Wasm during the game; proving does not roll back the JS engine. Its `--budget` remains
-a cumulative node budget per window solve. The file prover also records import time and caller-observed latency,
+a cumulative node budget per window solve. Optional `--catalogue FILE` is accepted only with `--engine wasm`;
+the catalogue's absolute path and exact file SHA-256 are recorded in each result and its configuration. Omitting
+it preserves the original pool-based loader. The file prover also records import time and caller-observed latency,
 separately from the Rust search time. `bench` executes every rollout transition in Wasm, not in a JS loop.
 
 [Low-level bindings, memory ownership, and exact proof semantics](../../omni-wasm/README.md).

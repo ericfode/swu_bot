@@ -91,20 +91,22 @@ class RustMirror {
             return this.drop(`forceteki actions not comparable: ${e.message}`);
         }
         const seat = eg.seatOf(pid);
-        let rust;
-        try {
-            rust = this.game.legalActions(seat);
-        } catch (e) {
-            return this.fail('rust-error', eg, step, { error: e.message });
-        }
-        const have = new Set(rust.map((a) => norm(a.key)));
-        const want = new Set(fk.map((a) => norm(a.key)));
         const p = eg.player(pid).currentPrompt();
         this.pending = {
             type: 'decision', step, actor: seat,
             prompt: { type: p.promptType ?? null, title: p.menuTitle ?? null, selected: (eg.player(pid).promptState.selectedCards ?? []).map((c) => eg.cardId(c.uuid)), actionWindow: window },
             actions: fk, chosen: null, events: []
         };
+        let rust;
+        try {
+            rust = this.game.legalActions(seat);
+        } catch (e) {
+            // like an action-set disagreement: reported with the bot's choice, so `omni-rs check` replays it
+            this.deferred = { kind: 'rust-error', error: e.message };
+            return;
+        }
+        const have = new Set(rust.map((a) => norm(a.key)));
+        const want = new Set(fk.map((a) => norm(a.key)));
         const onlyRust = [...have].filter((k) => !want.has(k));
         const onlyForceteki = [...want].filter((k) => !have.has(k));
         if (onlyRust.length || onlyForceteki.length || this.game.isActionWindow(seat) !== window) {
@@ -148,9 +150,9 @@ class RustMirror {
         const step = this.pending.step;
         this.pending = null;
         if (this.deferred) {
-            const detail = { ...this.deferred, chosen: key };
+            const { kind = 'actions', ...detail } = this.deferred;
             this.deferred = null;
-            return this.fail('actions', eg, step, detail);
+            return this.fail(kind, eg, step, { ...detail, chosen: key });
         }
         this.lastAction = key;
         try {
@@ -166,9 +168,9 @@ class RustMirror {
         if (this.deferred) {
             // the line stopped before the bot chose (a game error or the end of a simulation)
             this.rows.push(this.pending);
-            const detail = this.deferred;
+            const { kind = 'actions', ...detail } = this.deferred;
             this.deferred = null;
-            this.fail('actions', eg, this.rows.at(-1).step, detail);
+            this.fail(kind, eg, this.rows.at(-1).step, detail);
         }
         if (this.game && eg.over) {
             const state = fullState(eg);

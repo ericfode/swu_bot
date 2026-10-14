@@ -1,0 +1,37 @@
+# check=skip=InvalidDefaultArgInFrom,FromPlatformFlagConstDisallowed
+# A games helper image for the computer that builds it (bot/arena/HELPER.md), for ARM computers such as Macs with Apple
+# chips. The games machine's image (Dockerfile.games) is built for amd64 only, and under Rosetta its Erlang stops at
+# start: the JIT cannot set up the emulator's own functions ("prim_tty:isatty ... undef", then "nouser").
+# `sh bot/arena/ops/helper.sh build` makes it; it is never deployed.
+#
+# Everything a game runs on comes unchanged from the machine's image (MACHINE_IMAGE, read as files only, never run): the
+# bot code, the engine and its card data, the resident WebAssembly bundles, BUILD_SHA and CARDS_SHA, so the helper still
+# matches the machine's build. Only the native parts are built for this computer: Node and Python with wasmtime from
+# their official images, and the coordinator release from Dockerfile.games's own coord stage at the machine's commit
+# (COORD_IMAGE, which helper.sh builds first).
+ARG MACHINE_IMAGE
+ARG COORD_IMAGE
+FROM --platform=linux/amd64 ${MACHINE_IMAGE} AS machine
+FROM ${COORD_IMAGE} AS coord
+
+# wasmtime at the version bot/compiled/toolchain.json pins (the machine's copy of it)
+FROM python:3.12-slim-bookworm AS pydeps
+COPY --from=machine /app/bot/compiled/toolchain.json /toolchain.json
+RUN pip install --no-cache-dir --target /opt/py "wasmtime==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['wasmtime'])")"
+
+# the final stage of Dockerfile.games, with the machine's files
+FROM python:3.12-slim-bookworm
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
+RUN useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin arena
+ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
+WORKDIR /app
+COPY --from=machine /app/package.json /app/BUILD_SHA /app/CARDS_SHA ./
+COPY --from=machine /app/bot bot
+COPY --from=machine /app/forceteki forceteki
+COPY --from=machine /app/build build
+COPY --from=coord /opt/coord /app/coord
+RUN SWU_WINDOW=http://window.invalid /app/coord/bin/coord eval 'true = byte_size(:crypto.strong_rand_bytes(8)) == 8; {:ok, _} = Exqlite.Sqlite3.open(":memory:"); true = :public_key.cacerts_get() != []' \
+ && node -e 'require("/app/forceteki/build/server/game/core/Game")' \
+ && python3 -c 'import wasmtime'
+CMD ["/app/coord/bin/coord", "start"]

@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.cjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:static": "node fixtures/stage.mjs && tsc --noEmit && vite build --mode static",
@@ -14,6 +15,7 @@
     "check:lens": "vite build --ssr scripts/check-lens.ts --outDir .check --logLevel warn && node .check/check-lens.js"
   },
   "dependencies": {
+    "animejs": "4.5.0",
     "cmdk": "^1.1.1",
     "lucide-react": "^1.55.0",
     "motion": "^14.1.0",

@@ -2,7 +2,7 @@ defmodule Coord.ChildEnv do
   @moduledoc """
   The environment of each kind of child, built from nothing; Coord.Proc passes it on with every inherited variable
   unset. The referee is the exception: it gets exactly the environment referee-cmd returned, which
-  Coord.Gamesctl checks with forbidden?/1 first.
+  Coord.Gamesctl checks with forbidden?/1 first (and to which it adds ARENA_REMOTE when the helper node is on).
   """
 
   @path "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -40,6 +40,21 @@ defmodule Coord.ChildEnv do
   defp extra(:push, ctx), do: %{"HOME" => bot_home(ctx), "SWU_WINDOW" => ctx.window}
 
   defp bot_home(ctx), do: Path.join(ctx.data, "home")
+
+  @doc """
+  The environment of a helper's play-seed.js (a seed, or --warm): exactly PATH, HOME, LANG, TZ and SWU_WASM_CACHE.
+  Never the helper's token or the games machine's address. No NODE_ENV, as the machine's ladders have none (gamesctl.js
+  botEnv): with NODE_ENV=production the engine logs every rollback a searching bot makes.
+  """
+  def play(ctx) do
+    %{
+      "PATH" => path(ctx.node_dir),
+      "HOME" => Path.join(ctx.data, "home"),
+      "LANG" => "C.UTF-8",
+      "TZ" => "UTC",
+      "SWU_WASM_CACHE" => Path.join(ctx.data, "wasm-cache")
+    }
+  end
 
   @doc "What every gamesctl child gets."
   def base(ctx) do

@@ -28,6 +28,18 @@ static int debug;
    deploys onto a Vehicle, and a unique card is never played while I already control a copy (the uniqueness rule would
    defeat one at once); such copies are resourced first. */
 static int v2, pilotFix, uniqueFix; /* --v2 = both fixes; --pilot and --unique turn on one each */
+/* --v3 (c-clock3): --v2, and the deck's events get played (2026-10-13). Against people c-clock2 resourced almost every
+   event it drew (Hotshot Maneuver: 0 plays in 264 games, Aggressive Negotiations: 1 in 209), because keep_value ranked
+   events below every unit and an event that attacks lost to the plain attack it replaces. Now events are kept like small
+   units, an event that attacks goes before the plain attack, Hotshot Maneuver picks the unit with the most On Attack
+   abilities, and an event whose condition fails (no enemy upgrade to defeat, not more space units) is not played.
+   --events turns on only this. */
+static int v3, eventsFix;
+/* --mull: mulligan a hand with no unit I can play in round 1 (cost 2 or less). Against people on Karabast c-clock2 kept
+   such a hand in 8% of its games (it asked only for a unit of cost 3) and won 13% of them, against 32% of the rest;
+   it mulliganed 2% of its hands, the people 37%. The mulligan is free: a new six from this deck holds such a unit 91%
+   of the time. */
+static int mullFix;
 
 /* ---------- observation ---------- */
 
@@ -35,7 +47,7 @@ typedef struct {
     const char *id, *n, *s;
     const Card *c;
     int p, h, d, x, sn;
-    int shields, ups;
+    int shields, ups, toks; /* Shield tokens, non-token upgrades, other tokens (Experience, Advantage, ...) */
     int space, side, leader;
     const Card *upc[8]; /* non-token upgrades on the unit (pilots included) */
     int nupc;
@@ -180,7 +192,9 @@ static void parse_units(const JVal *arr, State *st, int side, int space, const c
         for (JVal *up = jget(j, "u") ? jget(j, "u")->child : NULL; up; up = up->next) {
             if (!strcmp(jstr(jget(up, "n"), ""), "Shield")) {
                 u->shields++;
-            } else if (!jtrue(jget(up, "t"))) {
+            } else if (jtrue(jget(up, "t"))) {
+                u->toks++;
+            } else {
                 u->ups++;
                 if (u->nupc < 8) {
                     u->upc[u->nupc++] = lookup(jstr(jget(up, "s"), NULL), jstr(jget(up, "n"), NULL));
@@ -366,6 +380,47 @@ static int copies_in_hand(const State *st, const Card *c) {
     return k;
 }
 
+/* Units of `side` in one arena (space = 1). */
+static int count_arena(const State *st, int side, int space) {
+    int n = 0;
+    for (int i = 0; i < st->nu; i++) {
+        n += st->u[i].side == side && st->u[i].space == space;
+    }
+    return n;
+}
+
+/* "On Attack" abilities a unit has: in its own text and its upgrades' (a pilot such as Luke adds one). */
+static int on_attacks(const Unit *u) {
+    int n = 0;
+    for (int i = -1; i < u->nupc; i++) {
+        const Card *c = i < 0 ? u->c : u->upc[i];
+        for (const char *p = c ? c->text : NULL; p && (p = strstr(p, "On Attack")); p += 9) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* --events: an event whose condition fails now does nothing, so it is not worth a card. */
+static int event_does_nothing(const State *st, const Card *c) {
+    const char *t = c->text ? c->text : "";
+    if (has(t, "non-leader upgrade")) {
+        /* System Shock: needs an upgrade or token on an enemy unit (else it would hit one of mine) */
+        for (int i = 0; i < st->nu; i++) {
+            const Unit *u = &st->u[i];
+            if (u->side == 1 && (u->shields || u->ups || u->toks)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    if (has(t, "more space units than")) {
+        /* Air Superiority */
+        return count_arena(st, 0, 1) <= count_arena(st, 1, 1) || !count_arena(st, 1, 0);
+    }
+    return 0;
+}
+
 /* Value of playing a card from hand now (before its cost). */
 static double play_value(const State *st, const Card *c) {
     if (!c) {
@@ -392,6 +447,9 @@ static double play_value(const State *st, const Card *c) {
     }
     /* events: priced by cost, held back when they clearly need an enemy unit and there is none */
     const char *t = c->text;
+    if (eventsFix && event_does_nothing(st, c)) {
+        return 0.1;
+    }
     int needsEnemy = (has(t, "enemy unit") || has(t, "a unit") || has(t, "non-leader unit")) &&
                      (has(t, "damage") || has(t, "Defeat") || has(t, "defeat") || has(t, "Capture") || has(t, "Exhaust") || has(t, "Return"));
     if (needsEnemy && !count_units(st, 1)) {
@@ -412,6 +470,9 @@ static double keep_value(const State *st, const Card *c) {
     }
     if (c->types & T_UPGRADE) {
         v -= 0.3;
+    }
+    if (eventsFix && (c->types & T_EVENT)) {
+        v += 1.2; /* kept like a small unit: a cheap event is a card to play, not only a resource */
     }
     if (uniqueFix && c->unique) {
         /* a copy of a unique card I control can't be played: resource it first; a second copy in hand is a spare */
@@ -704,6 +765,32 @@ static const Act *choose_window(State *st, const Act *acts, int n) {
         pick = leader;
         why = "deploy";
         snprintf(G.intent, sizeof G.intent, "deploy");
+    }
+
+    /* 2b. (--events) an event that attacks goes before the plain attack it replaces: Aggressive Negotiations adds +1/+0
+       per card left in hand, Hotshot Maneuver first deals 2 damage to an enemy unit per On Attack ability */
+    if (!pick && eventsFix && natk) {
+        double bestA = -1;
+        int onAtk = 0;
+        for (int k = 0; k < natk; k++) {
+            bestA = atkV[k] > bestA ? atkV[k] : bestA;
+            onAtk |= on_attacks(atkU[k]) > 0;
+        }
+        for (int k = 0; bestA > 0.2 && k < nplay; k++) {
+            const Card *c = plays[k].c;
+            if (!c || !(c->types & T_EVENT) || plays[k].cost > me->resReady || strcmp(plays[k].a->zone, "hand")) {
+                continue;
+            }
+            const char *t = c->text ? c->text : "";
+            int ok = (has(t, "Attack with a unit") && me->nhand - 1 >= 2) ||
+                     (has(t, "attack with that unit") && onAtk && count_units(st, 1));
+            if (ok) {
+                pick = plays[k].a;
+                why = "attack event";
+                snprintf(G.intent, sizeof G.intent, "play");
+                break;
+            }
+        }
     }
 
     /* 3. attacks that kill something, best first */
@@ -1062,6 +1149,28 @@ static const Act *choose_cards(State *st, const Prompt *pr, const Act *acts, int
             return t;
         }
     }
+    if (eventsFix && has(pr->tl, "abilities on a friendly unit")) {
+        /* Hotshot Maneuver: 2 damage to an enemy unit per On Attack ability of my unit, then that unit attacks */
+        const Act *pickU = NULL;
+        double pv = -1e9;
+        for (int i = 0; i < n; i++) {
+            Unit *u = strcmp(acts[i].kind, "card") ? NULL : find_unit(st, acts[i].cid);
+            if (!u || u->side != 0) {
+                continue;
+            }
+            const Unit *t;
+            double v = 3.0 * imin(on_attacks(u), count_units(st, 1)) + (u->x ? 0 : 1.0 + best_attack(st, &pl, u, 0, &t));
+            if (v > pv) {
+                pv = v;
+                pickU = &acts[i];
+            }
+        }
+        if (pickU) {
+            Unit *u = find_unit(st, pickU->cid);
+            snprintf(G.attacker, sizeof G.attacker, "%s", u ? u->id : "");
+            return pickU;
+        }
+    }
     const Act *best = NULL;
     double bv = -1e9;
     int ncards = 0;
@@ -1124,14 +1233,15 @@ static void learn_aspects(const State *st) {
 }
 
 static const Act *choose_mulligan(const State *st, const Act *acts, int n) {
-    int cheapUnits = 0, cheap = 0;
+    int cheapUnits = 0, cheap = 0, roundOne = 0;
     for (int i = 0; i < st->s[0].nhand; i++) {
         const Card *c = st->s[0].hand[i].c;
         int ec = eff_cost(c);
         if (ec <= 3 && c && (c->types & T_UNIT)) cheapUnits++;
+        if (ec <= 2 && c && (c->types & T_UNIT)) roundOne++;
         if (ec <= 4) cheap++;
     }
-    int keep = cheapUnits >= 1 && cheap >= 2;
+    int keep = (mullFix ? roundOne : cheapUnits) >= 1 && cheap >= 2;
     const Act *b = find_button(acts, n, keep ? "keep" : "mulligan");
     return b ? b : &acts[0];
 }
@@ -1502,6 +1612,12 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--v2")) {
             v2 = pilotFix = uniqueFix = 1;
+        } else if (!strcmp(argv[i], "--v3")) {
+            v2 = v3 = pilotFix = uniqueFix = eventsFix = 1;
+        } else if (!strcmp(argv[i], "--mull")) {
+            mullFix = 1;
+        } else if (!strcmp(argv[i], "--events")) {
+            eventsFix = 1;
         } else if (!strcmp(argv[i], "--pilot")) {
             pilotFix = 1;
         } else if (!strcmp(argv[i], "--unique")) {
@@ -1540,7 +1656,7 @@ int main(int argc, char **argv) {
         if (!strcmp(t, "hello")) {
             reset_game();
             snprintf(G.me, sizeof G.me, "%s", jstr(jget(m, "you"), "p1"));
-            reply(v2 ? "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock2\"}" : "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock\"}");
+            reply(v3 ? "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock3\"}" : v2 ? "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock2\"}" : "{\"t\":\"ready\",\"v\":1,\"name\":\"c-clock\"}");
             continue;
         }
         if (strcmp(t, "decide")) {

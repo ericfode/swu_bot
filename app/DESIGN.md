@@ -83,7 +83,7 @@ objects (the Atlas inside the all-bots table, small boards inside Home, Arena an
    family's band. Green and red only for good and bad. Arena builders take their family's colour plus system chips.
 5. **Live is a mode with a named source.** The header always says what is live: "Arena round 2 · ladder · 14/60
    games", or "No live games · last game 4 min ago (eval-ladder-8)".
-6. **Two audiences, one app.** Public build (Fly, friends): Home, Arena, Bots, Games, Research. Project build
+6. **Two audiences, one app.** Public build (Fly, friends): Home, Arena, Bots, Games. Project build
    (artifact, Eric and threads) adds Lab: work threads, data health, things waiting on Eric.
 7. **Plain words.** Owners are shown as what the bot is ("Rust rule bots"), not thread names. Labels say what a
    number is in the reader's words (win chance, base HP), with the method one hover away.
@@ -92,22 +92,25 @@ objects (the Atlas inside the all-bots table, small boards inside Home, Arena an
    both bots' Atlas style); one bot's score = the run tables' score bar with the 50% line; a bot = its chip with
    Atlas style, nine-spot strip and rating; an evaluator = a dot on the Evaluators page's Brier scale with the bot
    that plays with it; a position = the console's board glyph; a game = a small board or the viewer. App code:
-   `evidence()`, `vsRow()`, `scoreRow()`, `brierRow()`, `botChip()`, `pairBox()`, `famSpotTable()` in app.js.
+   `vsRow()` and `scoreRow()` in app.js.
 
 ## 4. Structure
 
-Top bar: logo, five sections, live status chip, search (press `/`): jump to any bot, game, run or page.
-Phone: the five sections move to a bottom tab bar; Lab sits in the menu.
+Top bar: logo, four sections, live status chip, search (press `/`): jump to any bot, game, run or page.
+Phone: the four sections move to a bottom tab bar; Lab sits in the menu.
 
 ```
 Home
 Arena      Live · Standings · Builders → builder page · Rounds → round page · Join
-Bots       All bots, with the Atlas built in (filter by family, style; sort by any spot) → bot page · Face-off
+Bots       All bots, with the Atlas built in (filter by family, style; sort by any spot) → bot page · Face-off ·
+           Speed · Evaluators
 Games      Now playing (grid of small live boards) · All games (filter) → game page · Runs → run page
-Research   Overview (findings) · Evaluators · Position analysis · Experiments → page ·
-           Research lines → page · Speed
 Lab        Work threads · Waiting on Eric · Data health          (project build only)
 ```
+
+2026-10-14 (Eric): only Speed and Evaluators of the old Research section made sense to a reader, so they moved under
+Bots and the rest (findings, position analysis, experiments, research lines) left the app; the data stays in the
+window's store and MCP. Games against people left too: they get their own page on the Karabast Sprite.
 
 ### Home
 - **Live hero** (Eric 18:18: "excellent and exciting"): the arena game when a round's ladder runs, else the newest

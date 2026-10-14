@@ -483,6 +483,74 @@ test('the live view answers only under its key', async () => {
     }
 });
 
+test('the desk: only the owner\'s local view takes a pick or a pause, with the X-Desk header, and every view shows the record', async () => {
+    const { Games, makeServer, checkBinding } = require('../karabast/live-view');
+    assert.throws(() => checkBinding('0.0.0.0', 'k3y-for-tests', null, '/tmp/desk'), /--manage/);
+    assert.throws(() => checkBinding('127.0.0.1', 'k3y-for-tests', null, '/tmp/desk'), /--manage/);
+    assert.doesNotThrow(() => checkBinding('127.0.0.1', null, null, '/tmp/desk'));
+    const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-desk-'));
+    fs.mkdirSync(path.join(runs, 'q-1'));
+    const writeStatus = (extra) => fs.writeFileSync(path.join(runs, 'q-1', 'status.json'), JSON.stringify({ bot: 'a', state: 'playing', since: new Date().toISOString(), at: new Date().toISOString(), ...extra }));
+    writeStatus({ allowed: ['a', 'b'] });
+    const rows = [
+        { at: '2026-10-13T10:00:00Z', bot: 'a', result: 'win', reason: 'Rey Fan left' }, { at: '2026-10-13T11:00:00Z', bot: 'a', result: 'loss' },
+        { at: '2026-10-14T01:00:00Z', bot: 'b', result: 'win' }, { at: '2026-10-14T01:10:00Z', bot: 'b', result: 'no match' }, { at: '2026-10-14T01:20:00Z', bot: 'b', result: 'error' }
+    ];
+    fs.writeFileSync(path.join(runs, 'q-1', 'games.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\n{"half');
+    const kit = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
+    fs.writeFileSync(path.join(kit, 'swu-viewer-kit.js'), '// kit');
+    fs.writeFileSync(path.join(kit, 'card-text.json'), '{}');
+    const own = makeServer({ games: new Games(runs), kit, manage: dir, review: 'https://example.com/review' });
+    const share = makeServer({ games: new Games(runs), kit, key: 'k3y-for-tests' });
+    await Promise.all([own, share].map((s) => new Promise((r) => s.listen(0, '127.0.0.1', r))));
+    const url = (s, p) => `http://127.0.0.1:${s.address().port}${p}`;
+    const JSONH = { 'Content-Type': 'application/json', 'X-Desk': '1' };
+    const post = (s, p, body, headers = JSONH) => fetch(url(s, p), { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) })
+        .then(async (r) => [r.status, await r.text()]);
+    const get = (s, p) => fetch(url(s, p)).then(async (r) => [r.status, await r.text()]);
+    try {
+        // the share link has no desk and takes no POST
+        assert.strictEqual((await get(share, '/k3y-for-tests/desk'))[0], 404);
+        assert.strictEqual((await post(share, '/k3y-for-tests/desk', { bots: ['b'] }))[0], 404);
+        // a POST another site could send (no header, or a form) is refused, and so are bad picks
+        assert.strictEqual((await post(own, '/desk', { bots: ['b'] }, { 'Content-Type': 'application/json' }))[0], 403);
+        assert.strictEqual((await post(own, '/desk', 'bots=b', { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Desk': '1' }))[0], 403);
+        for (const bad of [{ bots: ['zzz'] }, { bots: ['a', 'a'] }, { bots: [] }, { paused: 'yes' }, {}, ['a']]) {
+            assert.strictEqual((await post(own, '/desk', bad))[0], 400, JSON.stringify(bad));
+        }
+        assert.strictEqual((await post(own, '/desk', '{"bots"'))[0], 400);
+        assert.strictEqual((await post(own, '/desk', JSON.stringify({ bots: ['a'], pad: 'x'.repeat(3000) })))[0], 413);
+        assert.ok(!fs.existsSync(path.join(dir, 'bot')), 'nothing written by a refused POST');
+        // a pick, then a pause and a resume
+        let [code, body] = await post(own, '/desk', { bots: ['b', 'a'] });
+        assert.deepStrictEqual([code, JSON.parse(body).choice], [200, ['b', 'a']]);
+        assert.strictEqual(fs.readFileSync(path.join(dir, 'bot'), 'utf8'), 'b,a\n');
+        [code, body] = await post(own, '/desk', { paused: true });
+        assert.deepStrictEqual([code, JSON.parse(body).paused, fs.existsSync(path.join(dir, 'PAUSE'))], [200, true, true]);
+        await post(own, '/desk', { paused: false });
+        assert.ok(!fs.existsSync(path.join(dir, 'PAUSE')));
+        assert.deepStrictEqual(JSON.parse((await get(own, '/desk'))[1]), { allowed: ['a', 'b'], choice: ['b', 'a'], paused: false, review: 'https://example.com/review' });
+        // a loop run without --desk would not read a pick
+        writeStatus({});
+        assert.strictEqual((await post(own, '/desk', { bots: ['a'] }))[0], 409);
+        // the record: played games only, per bot and per day, and no reasons (they could name someone)
+        const [rc, rtext] = await get(share, '/k3y-for-tests/record');
+        assert.strictEqual(rc, 200);
+        assert.ok(!rtext.includes('Rey'));
+        const rec = JSON.parse(rtext);
+        assert.deepStrictEqual([rec.games, rec.won], [3, 2]);
+        assert.deepStrictEqual(rec.bots.map((b) => [b.bot, b.games, b.won, b.first, b.last]), [['b', 1, 1, rows[2].at, rows[2].at], ['a', 2, 1, rows[0].at, rows[1].at]]);
+        assert.deepStrictEqual(rec.days, [{ day: '2026-10-13', games: 2, won: 1, bot: 'a' }, { day: '2026-10-14', games: 1, won: 1, bot: 'b' }]);
+        // the page has controls only on the owner's view
+        assert.match((await get(own, '/'))[1], /const MANAGE = true;/);
+        assert.match((await get(share, '/k3y-for-tests/'))[1], /const MANAGE = false;/);
+    } finally {
+        own.close();
+        share.close();
+    }
+});
+
 test('the queue loop keeps going after a wait with no match, and stops after maxErrors failures in a row', async () => {
     const { runLoop } = require('../karabast/queue');
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
@@ -528,6 +596,86 @@ test('the queue loop counts a game with no result as a failure and says why it s
     // a failure earlier in the run does not stick to a run that ends well
     const ok = await runLoop({ games: 2, gapS: 25, out, bot: 'c-clock', deck: 'd', play, log: () => {}, wait: async () => {} });
     assert.deepStrictEqual([ok.ok, ok.reason], [true, 'played the 2 game(s) asked for']);
+});
+
+test('the queue loop takes turns between bots game by game, and every row and status names the bot of its game', async () => {
+    const { runLoop } = require('../karabast/queue');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const asked = [];
+    const shown = [];
+    // game 1 waits once with no match: the retry keeps its bot; game 3 fails, and the next game still takes the next bot
+    const play = async (g, hooks) => {
+        asked.push(hooks.bot);
+        hooks.onQueued();
+        shown.push(JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8')).bot);
+        if (g === 1) {
+            throw new Error('no match within 10 minutes');
+        }
+        if (g === 4) {
+            throw new Error('socket closed while queued: transport error');
+        }
+        return { bot: hooks.bot, result: 'win' };
+    };
+    const end = await runLoop({ games: 5, gapS: 25, out, bot: ['a', 'b'], deck: 'd', play, log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual(asked, ['a', 'b', 'b', 'a', 'b', 'a']);
+    assert.deepStrictEqual(shown, asked);
+    const rows = fs.readFileSync(path.join(out, 'games.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepStrictEqual(rows.map((r) => [r.bot, r.result]), [['a', 'win'], ['b', 'no match'], ['b', 'win'], ['a', 'win'], ['b', 'error'], ['a', 'win']]);
+    assert.deepStrictEqual([end.played, end.errors, end.ok], [4, 1, true]);
+    // one name plays every game, as before
+    const one = [];
+    await runLoop({ games: 2, gapS: 25, out, bot: 'c-clock', deck: 'd', play: async (g, hooks) => (one.push(hooks.bot), { result: 'loss' }), log: () => {}, wait: async () => {} });
+    assert.deepStrictEqual(one, ['c-clock', 'c-clock']);
+});
+
+test('the queue loop waits while the desk says pause, between games only, and plays the desk\'s pick of the allowed bots', async () => {
+    const { runLoop, checkBots } = require('../karabast/queue');
+    const desk = require('../karabast/desk');
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-loop-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-desk-'));
+    const status = () => JSON.parse(fs.readFileSync(path.join(out, 'status.json'), 'utf8'));
+    const asked = [];
+    const play = async (g, hooks) => {
+        asked.push(hooks.bot);
+        if (g === 0) {
+            desk.writeChoice(dir, ['b', 'c'], ['a', 'b', 'c']); // picked during a game: from the next game on
+        }
+        if (g === 1) {
+            desk.setPaused(dir, true); // asked during a game: that game ends first
+        }
+        if (g === 3) {
+            fs.writeFileSync(path.join(dir, 'bot'), 'a,zzz\n'); // a bot it does not allow: back to --bot
+        }
+        return { bot: hooks.bot, result: 'win' };
+    };
+    const pauses = [];
+    const wait = async (ms) => {
+        if (status().state === 'paused') {
+            pauses.push([ms, status().allowed]);
+            if (pauses.length === 2) {
+                desk.setPaused(dir, false);
+            }
+        }
+    };
+    const end = await runLoop({ games: 5, gapS: 25, out, bot: 'a', desk: dir, allowed: ['a', 'b', 'c'], deck: 'd', play, log: () => {}, wait });
+    assert.deepStrictEqual(asked, ['a', 'c', 'b', 'c', 'a']);
+    assert.deepStrictEqual(pauses, [[5000, ['a', 'b', 'c']], [5000, ['a', 'b', 'c']]]);
+    assert.deepStrictEqual([end.played, end.ok], [5, true]);
+    // the stop file still ends a paused loop
+    const stop = path.join(dir, 'STOP');
+    desk.setPaused(dir, true);
+    fs.writeFileSync(stop, '');
+    const end2 = await runLoop({ games: 2, gapS: 25, out, bot: 'a', desk: dir, stopFile: stop, deck: 'd', play: () => assert.fail('played while stopped'), log: () => {}, wait });
+    assert.strictEqual(end2.reason, 'the stop file exists');
+    // only built programs from the bot list may be offered
+    const bin = path.join(dir, 'prog');
+    fs.writeFileSync(bin, '');
+    const list = path.join(dir, 'bots.json');
+    fs.writeFileSync(list, JSON.stringify({ built: { cmd: bin, args: [] }, unbuilt: { cmd: path.join(dir, 'missing'), args: [] }, py: { cmd: 'python3', args: ['x.py'] } }));
+    assert.doesNotThrow(() => checkBots(['built', 'py', 'js-random'], list));
+    assert.throws(() => checkBots(['built', 'unbuilt'], list), /not built/);
+    assert.throws(() => checkBots(['nope'], list), /unknown bot/);
+    assert.throws(() => checkBots(['constructor'], list), /unknown bot/);
 });
 
 test('the queue loop retries a wait with no match without using up a game, up to maxWaits in a row', async () => {
@@ -744,6 +892,31 @@ test('the window feed hides our hand while live, holds back the newest step, and
     assert.deepStrictEqual(calls.filter((c) => c[0] === 'PUT' && c[1] !== 'runs/karabast').map((c) => c[3]), [Buffer.from(quiet.events.map((e) => JSON.stringify(e)).join('\n') + '\n').length], 'whole once the seat ended');
     const row = calls.find((c) => c[1] === 'runs/karabast')[2].games[0];
     assert.deepStrictEqual([row.outcome, row.winnerSeat, row.winner], ['won', 'p1', 'opponent']);
+});
+
+test('the window feed sends an opponent\'s name only as `person` in the run row, never in replays or lenses', async () => {
+    const { Feed, indexRow } = require('../karabast/feed');
+    const { nameReader } = require('../karabast/live-view');
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'private-')), 'opponents.jsonl');
+    fs.writeFileSync(file, [{ game: 'q-1/frames/abcdef012345', name: 'Rey Fan' }, { game: 'q-1/frames/abcdef012346', name: 'Bad\u0007Name' }].map((r) => JSON.stringify(r)).join('\n') + '\n');
+    const header = { t: 'header', seed: 0, players: [{ id: 'p1', bot: 'opponent' }, { id: 'p2', bot: 'c-clock2 (ours)' }], source: { pov: 'p2', hiddenHands: ['p1'] }, ours: { seat: 'p2', bot: 'c-clock2' } };
+    const g = { events: [header, { t: 'step', n: 1, pid: 'p2', action: { kind: 'button', label: 'Pass' }, state: { players: { p1: {}, p2: { hand: [] } } } }, { t: 'end', winner: 'p2', round: 2, steps: 1 }], version: 'v1' };
+    const sent = [];
+    const api = { putDoc: async (ns, id, text) => sent.push([`${ns}/${id}`, text]), request: async (method, url, o) => sent.push([url, o.body ? String(o.body) : '']) };
+    const ids = ['q-1/frames/abcdef012345', 'q-1/frames/abcdef012346', 'q-1/frames/abcdef012347'];
+    const games = { list: () => ids.map((id) => ({ id, kind: 'bot game', mtime: 0, size: 1 })), get: () => g, ev: { name: 'test' }, lens: () => ({ schema: 'swu-lens/1', players: header.players }) };
+    await new Feed({ games, api, names: nameReader(file) }).once();
+    const run = JSON.parse(sent.find((c) => c[0] === 'runs/karabast')[1]);
+    // a name with a control character is not one the window takes, and a game with no name has no person
+    const { windowId } = require('../karabast/feed');
+    const persons = Object.fromEntries(run.games.map((r) => [r.id, r.person ?? null]));
+    assert.deepStrictEqual(ids.map((id) => persons[windowId(id)]), ['Rey Fan', null, null]);
+    assert.ok(sent.filter((c) => c[0] !== 'runs/karabast').every((c) => !c[1].includes('Rey')), 'replays and lenses carry no name');
+    assert.ok(!('person' in indexRow(ids[0], { ...g, winnerSeat: 'p2' }, 'x'.repeat(65))));
+    // without --names, rows are as before
+    sent.length = 0;
+    await new Feed({ games, api }).once();
+    assert.ok(!sent.find((c) => c[0] === 'runs/karabast')[1].includes('person'));
 });
 
 test('one game at a time: a live run holds playing.pid, a dead one is taken over; the ledger can count with no cap', () => {

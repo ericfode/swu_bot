@@ -7,7 +7,9 @@ defmodule Coord.Scheduler do
   end. A tick
     1. inserts an Intake job on every third tick (tick 0 is the first) and after a wake,
     2. when ready and no Intake or Round job is incomplete, runs gamesctl plan, and inserts a Round job for the
-       round it names,
+       round it names; a new round first waits out Eric's wait between rounds (Coord.Settings round_gap_ms) after
+       the last round that finished (its end is kept on the volume, so a new boot keeps the wait), and the machine
+       stays awake while it waits,
     3. stops the VM with 0 when the machine is idle (Coord.Scheduler.Policy.idle?/2); when a plan runs, that check
        waits for its answer, so a round about to be queued never meets an idle stop.
   Every Oban insert comes from this one process, so the Lite engine's uniqueness check (read, then insert) never
@@ -59,8 +61,8 @@ defmodule Coord.Scheduler do
       phase: if(set_up?, do: :ready, else: :setup),
       ticks: 0,
       woken: false,
-      # the idle clock starts at boot; settled_at is when the last version came in (nil: none this boot, as
-      # games.js's 0). After a restart (not a boot) both start now, which can only delay a round or the stop.
+      # the idle clock starts at boot; settled_at is when the last version came in (nil: none this
+      # boot). After a restart (not a boot) both start now, which can only delay a round or the stop.
       busy_at: now,
       settled_at: if(restart?, do: now),
       settled_wall: if(restart?, do: System.os_time(:millisecond), else: 0),
@@ -69,6 +71,11 @@ defmodule Coord.Scheduler do
       timer: nil,
       stopped: false,
       warned: MapSet.new(),
+      # when the last round that finished ended (wall clock, from the volume), the round now waiting out the wait
+      # after it, and the last round this boot played (one that failed is not queued again, so it never waits)
+      round_end: read_round_end(),
+      waiting: nil,
+      last_ran: nil,
       stop: Keyword.get(opts, :stop, &System.stop/1)
     }
 
@@ -102,7 +109,9 @@ defmodule Coord.Scheduler do
   def handle_cast({:round_done, k, result}, state) do
     Logger.info("round #{k} ended: #{describe(result)}")
     Coord.Pusher.poke()
-    {:noreply, tick(%{state | busy_at: now()})}
+    # only a round that finished starts the wait between rounds
+    round_end = if match?({:exit, 0, _}, result), do: keep_round_end(), else: state.round_end
+    {:noreply, tick(%{state | busy_at: now(), round_end: round_end, last_ran: k})}
   end
 
   @impl true
@@ -191,11 +200,25 @@ defmodule Coord.Scheduler do
   # The idle check comes after the insert: a round queued now is an incomplete job, so the machine stays up; a round
   # that already ran (or failed twice) at this boot is not queued again, and must not keep the machine up for ever,
   # since only the next boot plays it.
-  defp planned({arena, {:ok, %{round: k, why: why}}}, state) do
-    if state.stopped or Coord.Shutdown.stopping?() do
-      state
-    else
-      arena |> insert_round(k, why, state) |> maybe_stop()
+  defp planned({arena, {:ok, %{round: k, why: why} = plan}}, state) do
+    wait =
+      if plan[:resume] or k == state.last_ran,
+        do: 0,
+        else: Policy.round_wait(state.round_end, Coord.Settings.round_gap_ms(), System.os_time(:millisecond))
+
+    cond do
+      state.stopped or Coord.Shutdown.stopping?() ->
+        state
+
+      # a round that waits keeps the machine awake: nothing else would wake it when the wait is over
+      wait > 0 ->
+        if state.waiting != k,
+          do: Logger.info("round #{k} waits #{div(wait + 59_999, 60_000)} min (the wait between rounds)")
+
+        %{state | waiting: k, busy_at: now()}
+
+      true ->
+        arena |> insert_round(k, why, %{state | waiting: nil}) |> maybe_stop()
     end
   end
 
@@ -270,4 +293,31 @@ defmodule Coord.Scheduler do
   defp describe(other), do: inspect(other)
 
   defp now, do: System.monotonic_time(:millisecond)
+
+  defp round_end_file, do: Path.join(Config.coord_dir(), "round_end")
+
+  defp read_round_end do
+    with {:ok, text} <- File.read(round_end_file()),
+         {ms, ""} <- Integer.parse(String.trim(text)) do
+      ms
+    else
+      _ -> nil
+    end
+  end
+
+  # written whole, then renamed; a failed write only shortens the wait after the next boot
+  defp keep_round_end do
+    ms = System.os_time(:millisecond)
+    tmp = round_end_file() <> ".tmp"
+
+    with :ok <- File.mkdir_p(Config.coord_dir()),
+         :ok <- File.write(tmp, Integer.to_string(ms)),
+         :ok <- File.rename(tmp, round_end_file()) do
+      :ok
+    else
+      {:error, reason} -> Logger.warning("could not keep the round's end on the volume (#{inspect(reason)})")
+    end
+
+    ms
+  end
 end
