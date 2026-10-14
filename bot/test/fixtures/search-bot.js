@@ -1,12 +1,15 @@
 'use strict';
 // One-ply search through simulations (spec/protocol.md#sim): at each action window, try up to `width` actions on a
 // private copy of the game, all on the same deal of the hidden cards, play on until my next action window (the opponent
-// passes when it can), score the board, keep the best. Runs in process or as a program, like random-bot.js:  node bot/examples/search-bot.js
+// passes when it can), score the board, keep the best. Runs in process or as a program, like random-bot.js:
+//   node bot/test/fixtures/search-bot.js <name> [--sim-engine rust]
+// A test fixture here (bot/test/compiled.test.js bundles it, bot/test/sims.test.js asks it for Rust simulations); the
+// example clients themselves live in ericfode/holocron (bots/examples).
 // The engine offers choices that change nothing (click a card, then Cancel its menu), and a search that scores them
 // above passing would take them forever, so the bot never makes the same choice twice in the same situation.
 const { createHash } = require('crypto');
-const { seededRng } = require('../rng');
-const { serve } = require('../stdio');
+const { seededRng } = require('../../rng');
+const { serve } = require('../../stdio');
 
 const sum = (units) => units.reduce((v, u) => v + u.p + u.h - u.d, 0);
 

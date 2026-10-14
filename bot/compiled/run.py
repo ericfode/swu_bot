@@ -2,7 +2,7 @@
 """
 Run a compiled bot bundle (bot/compiled/README.md) as a normal stdio bot program, sandboxed by wasmtime.
 
-    python3 bot/compiled/run.py build/compiled/rust-greedy2 [--fuel N] [--memory-mb N] [--wall-s S] [--quiet] [--warm]
+    python3 bot/compiled/run.py build/compiled/node-random [--fuel N] [--memory-mb N] [--wall-s S] [--quiet] [--warm]
 
 The bundle is a folder with arena.json and the files it lists. The runner checks every file against its sha256,
 then runs the WebAssembly (WASI preview 1) program with:

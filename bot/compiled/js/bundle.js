@@ -1,7 +1,7 @@
 'use strict';
 // Pack a CommonJS bot program and the files it requires into one script for Javy (QuickJS compiled to WebAssembly).
 //
-//   node bot/compiled/js/bundle.js bot/examples/search-bot.js node-search > search-bot.bundle.js
+//   node bot/compiled/js/bundle.js bot/test/fixtures/search-bot.js node-search > search-bot.bundle.js
 //
 // The entry runs as the main module (`require.main === module`) with process.argv = ['javy', <entry>, ...args]: Javy
 // has no command line, so the arguments are fixed at build time. Two substitutions make Node code run there:

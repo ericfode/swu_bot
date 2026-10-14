@@ -4,7 +4,7 @@ Do compiled bots play the same games as the programs they were built from? Reads
 --out <dir>, file ladder.json) that has both <name> and <name>-wasm against the same opponents, seeds and --key, pairs
 their games by (opponent, seed, seat) and counts the pairs with the same winner seat, rounds and steps.
 
-    SWU_EXTERNAL_BOTS=... node bot/ladder.js --bots c-clock,c-clock-wasm --vs rush --games 4 --key none --out results/x
+    SWU_EXTERNAL_BOTS=<file naming both> node bot/ladder.js --bots <name>,<name>-wasm --vs rush --games 4 --key none --out results/x
     python3 bot/compiled/compare.py results/x [--json]
 """
 import glob

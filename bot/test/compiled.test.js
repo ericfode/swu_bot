@@ -21,7 +21,7 @@ test('sha1 shim matches Node crypto, across block boundaries and UTF-8', () => {
 });
 
 test('requires() skips comment lines', () => {
-    const src = "// in process: require('./bot/examples/random-bot')\n * require('x')\nconst a = require('../rng');\nconst b = require(\"crypto\");\n";
+    const src = "// in process: require('./bot/test/fixtures/random-bot')\n * require('x')\nconst a = require('../rng');\nconst b = require(\"crypto\");\n";
     assert.deepStrictEqual(requires(src), ['../rng', 'crypto']);
 });
 
@@ -77,10 +77,10 @@ const decide = (n, sim = false) => ({
 });
 
 test('bundled random bot gives the same replies as the Node one', async () => {
-    const code = bundle(path.join(ROOT, 'bot', 'examples', 'random-bot.js'), ['node-random']);
+    const code = bundle(path.join(__dirname, 'fixtures', 'random-bot.js'), ['node-random']);
     const msgs = [hello, decide(1), decide(2), decide(3), { t: 'over', you: 'p1', winner: 'p2', outcome: 'won' }];
     const got = await runBundled(code, msgs);
-    const node = require('../examples/random-bot').create('node-random');
+    const node = require('./fixtures/random-bot').create('node-random');
     const want = [];
     for (const m of msgs) {
         want.push(m.t === 'hello' ? node.hello(m) : m.t === 'decide' ? node.decide(m) : { t: 'ok' });
@@ -90,12 +90,12 @@ test('bundled random bot gives the same replies as the Node one', async () => {
 });
 
 test('bundled search bot searches through sims like the Node one (sha1 situation keys included)', async () => {
-    const code = bundle(path.join(ROOT, 'bot', 'examples', 'search-bot.js'), ['node-search']);
+    const code = bundle(path.join(__dirname, 'fixtures', 'search-bot.js'), ['node-search']);
     // a toy simulator: acting on index i ends the game, won only for i = 3
     const onSim = (req) => (req.op === 'act' ? { t: 'simulated', op: 'act', over: { winner: req.i === 3 ? 'p1' : 'p2' } } : { t: 'simulated', op: req.op });
     const msgs = [hello, decide(1, true), decide(1, true), decide(2, false)];
     const got = await runBundled(code, msgs, onSim);
-    const node = require('../examples/search-bot').create('node-search');
+    const node = require('./fixtures/search-bot').create('node-search');
     const want = [];
     for (const m of msgs) {
         if (m.t === 'hello') {

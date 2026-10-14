@@ -2,7 +2,7 @@
 Bot bundles (schema swu-arena-bot/1, research/bot-packaging/design.md section 3): read and check a manifest, and
 pack a bundle folder as a canonical tar whose sha256 is the bundle id (the bot's version), and unpack one.
 
-    python3 bot/compiled/bundle.py build/compiled/rust-search      # prints the id and sizes
+    python3 bot/compiled/bundle.py build/compiled/node-random      # prints the id and sizes
     python3 bot/compiled/bundle.py tar <folder> > x.tar            # the canonical tar, on stdout
     python3 bot/compiled/bundle.py unpack <tar> <dest> <hex>       # checks it, then makes <dest> from it
 
