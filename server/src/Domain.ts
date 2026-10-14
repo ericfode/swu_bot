@@ -248,6 +248,34 @@ export const ExportQuery = Schema.Struct({
 export type ExportQuery = typeof ExportQuery.Type
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Trace checks: games played again from their replays (Traces.ts)
+// ---------------------------------------------------------------------------------------------------------------------
+
+export class TraceCheck extends Schema.Class<TraceCheck>("TraceCheck")({
+  game: GameId,
+  round: RoundId,
+  ok: Schema.Boolean.annotate({ description: "Every recorded move was legal again and every board came out the same" }),
+  steps: Count.annotate({ description: "Steps played again before the end or the first difference" }),
+  diff: Schema.NullOr(Schema.String).annotate({ description: "The first step that came out differently, and how" }),
+  note: Schema.NullOr(Schema.String).annotate({ description: "How a game that ended in an engine error was checked" }),
+  build: Schema.NullOr(Schema.String).annotate({ description: "The arena build that played it again" }),
+  checkedAt: Schema.String
+}) {}
+
+export const TracesQuery = Schema.Struct({
+  differs: Schema.optionalKey(Schema.Boolean.annotate({ description: "Only games that came out differently" })),
+  limit: Schema.optionalKey(LimitParam)
+}).annotate({ identifier: "TracesQuery" })
+export type TracesQuery = typeof TracesQuery.Type
+
+export class TracesPage extends Schema.Class<TracesPage>("TracesPage")({
+  checked: Count.annotate({ description: "Games played again so far" }),
+  differ: Count.annotate({ description: "Of those, games that came out differently" }),
+  unchecked: Count.annotate({ description: "Games with a replay not played again yet" }),
+  checks: Schema.Array(TraceCheck).annotate({ description: "Newest games first" })
+}) {}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Standings and stats
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -359,5 +387,10 @@ export class RoundExists extends Schema.TaggedError<RoundExists>()("RoundExists"
 /** The game player could not play a seed (it crashed, refused the job, or printed something that is not a result). */
 export class PlayerFailed extends Schema.TaggedError<PlayerFailed>()("PlayerFailed", {
   seed: Seed,
+  message: Schema.String
+}) {}
+
+/** bot/trace.js could not check a batch of replays (it crashed, or printed something that is not a verdict). */
+export class TracesFailed extends Schema.TaggedError<TracesFailed>()("TracesFailed", {
   message: Schema.String
 }) {}

@@ -33,6 +33,11 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
   `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
 - `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording.
   Run it after touching `view.js` or `match.js`.
+- `node bot/trace.js check <replay.jsonl[.gz] | folder>...` — trace checks: plays recorded games again on this engine
+  from their decks, seed, key and moves, and names the first step whose board differs (exit 1). A game that ended in
+  an engine error is checked to raise it again on the same move. `bot/test/traces/` holds eight games of the live
+  arena that `npm test` replays; after a change meant to alter the boards, `node bot/trace.js rewrite <files>` records
+  them again.
 - View replays in Holotable ([holotable](https://github.com/ericfode/holotable)) or on the arena window, which embeds
   its viewer kit from `vendor/holotable`.
 

@@ -191,6 +191,21 @@ const migrations = SqliteMigrator.fromRecord({
     const rules = JSON.stringify(OPEN_RULES)
     yield* sql`INSERT INTO arenas ${sql.insert({ id: "open", title: "Open", season: 1, rules, createdAt: now })}`
     yield* sql`INSERT INTO seasons ${sql.insert({ arena: "open", number: 1, rules, startedAt: now, endedAt: null, note: null })}`
+  }),
+  // a game played again from its replay (Traces.ts): did every move and board come out the same
+  "0002_traces": Effect.gen(function*() {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`
+      CREATE TABLE traces (
+        game TEXT PRIMARY KEY REFERENCES games (id),
+        ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
+        steps INTEGER NOT NULL,
+        diff TEXT,
+        note TEXT,
+        build TEXT,
+        ms INTEGER NOT NULL,
+        checked_at TEXT NOT NULL
+      )`
   })
 })
 

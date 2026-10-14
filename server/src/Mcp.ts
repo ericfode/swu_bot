@@ -21,6 +21,8 @@ import {
   RoundsQuery,
   SeasonParam,
   Standings,
+  TracesPage,
+  TracesQuery,
   Version,
   VersionId,
   VersionsQuery,
@@ -30,6 +32,7 @@ import { Games } from "./Games.ts"
 import { tokenCaller } from "./Http.ts"
 import { ArenaRecord, roundOf } from "./Record.ts"
 import { Rounds } from "./Rounds.ts"
+import { Traces } from "./Traces.ts"
 
 /** Marks a tool as a read: nothing changes, the same call gives the same answer, and it stays inside the arena. */
 const read = <T extends Tool.Any>(tool: T): T =>
@@ -110,6 +113,13 @@ export const ArenaReplay = read(Tool.make("arena_replay", {
   failure: NotFound
 }))
 
+export const ArenaTraces = read(Tool.make("arena_traces", {
+  description:
+    "Trace checks: each night the arena plays its newest games again from their replays. Gives how many were checked and how many came out differently, then the verdicts, newest games first (default 100, at most 500); differs: true gives only the games that came out differently.",
+  parameters: TracesQuery,
+  success: TracesPage
+}))
+
 export const ArenaToolkit = Toolkit.make(
   ArenaArenas,
   ArenaStandings,
@@ -120,13 +130,15 @@ export const ArenaToolkit = Toolkit.make(
   ArenaRound,
   ArenaGames,
   ArenaGame,
-  ArenaReplay
+  ArenaReplay,
+  ArenaTraces
 )
 
 export const ArenaToolkitLive = ArenaToolkit.toLayer(Effect.gen(function*() {
   const games = yield* Games
   const rounds = yield* Rounds
   const record = yield* ArenaRecord
+  const traces = yield* Traces
   return ArenaToolkit.of({
     arena_arenas: () => record.arenas,
     arena_standings: ({ arena, season }) => record.standings(arena, season),
@@ -141,7 +153,8 @@ export const ArenaToolkitLive = ArenaToolkit.toLayer(Effect.gen(function*() {
       Effect.map(games.replay(id), (gz) => {
         const lines = new TextDecoder().decode(gunzipSync(gz)).split("\n").filter((l) => l.length > 0)
         return { lines: lines.length, from, steps: lines.slice(from, from + limit).map((l) => JSON.parse(l) as unknown) }
-      })
+      }),
+    arena_traces: (query) => traces.list(query)
   })
 }))
 

@@ -1,7 +1,7 @@
 /**
- * Puts the arena together: SQLite underneath, the services, the durable round workflow, and the routes (API, OpenAPI,
- * docs page, MCP). The database and the game player are parameters, so tests run the same stack on a temp file with a
- * fake player.
+ * Puts the arena together: SQLite underneath, the services, the durable round workflow, the nightly trace checks, and
+ * the routes (API, OpenAPI, docs page, MCP). The database, the game player and the trace checker are parameters, so
+ * tests run the same stack on a temp file with fakes.
  */
 import { NodeCrypto } from "@effect/platform-node"
 import { Layer } from "effect"
@@ -18,6 +18,8 @@ import { ArenaRecord } from "./Record.ts"
 import { Replays } from "./Replays.ts"
 import { PlayRoundLive, Rounds } from "./Rounds.ts"
 import { Settings } from "./Settings.ts"
+import type { TraceChecker } from "./Traces.ts"
+import { NightlyTraces, Traces } from "./Traces.ts"
 
 /**
  * Workflows run on Effect's cluster in single-process mode: their messages and activity results live in the same
@@ -38,13 +40,21 @@ export const makeRecord = <E, E2>(db: Layer.Layer<SqlClient.SqlClient, E>, repla
     Layer.provideMerge(db)
   )
 
-export const makeServices = <E, E2, E3>(
+/** The record's services and the trace checks over `db` and `replays`; the traces command uses these alone. */
+export const makeTraces = <E, E2, E3>(
   db: Layer.Layer<SqlClient.SqlClient, E>,
   replays: Layer.Layer<Replays, E2>,
-  player: Layer.Layer<GamePlayer, E3>
+  checker: Layer.Layer<TraceChecker, E3>
+) => Traces.layer.pipe(Layer.provideMerge(makeRecord(db, replays)), Layer.provideMerge(checker))
+
+export const makeServices = <E, E2, E3, E4>(
+  db: Layer.Layer<SqlClient.SqlClient, E>,
+  replays: Layer.Layer<Replays, E2>,
+  player: Layer.Layer<GamePlayer, E3>,
+  checker: Layer.Layer<TraceChecker, E4>
 ) => {
-  const core = Layer.mergeAll(makeRecord(db, replays), WorkflowEngineLive.pipe(Layer.provideMerge(db)))
-  return Layer.mergeAll(Rounds.layer, PlayRoundLive).pipe(
+  const core = Layer.mergeAll(makeTraces(db, replays, checker), WorkflowEngineLive.pipe(Layer.provideMerge(db)))
+  return Layer.mergeAll(Rounds.layer, PlayRoundLive, NightlyTraces).pipe(
     Layer.provideMerge(core),
     Layer.provideMerge(player)
   )
@@ -58,8 +68,9 @@ export const Routes = Layer.mergeAll(
   McpLive
 )
 
-export const makeApp = <E, E2, E3>(
+export const makeApp = <E, E2, E3, E4>(
   db: Layer.Layer<SqlClient.SqlClient, E>,
   replays: Layer.Layer<Replays, E2>,
-  player: Layer.Layer<GamePlayer, E3>
-) => Routes.pipe(Layer.provideMerge(makeServices(db, replays, player)))
+  player: Layer.Layer<GamePlayer, E3>,
+  checker: Layer.Layer<TraceChecker, E4>
+) => Routes.pipe(Layer.provideMerge(makeServices(db, replays, player, checker)))

@@ -151,6 +151,7 @@ test("MCP: the export API's reads as tools, giving the same records", async () =
         "arena_round",
         "arena_rounds",
         "arena_standings",
+        "arena_traces",
         "arena_version_stats",
         "arena_versions"
       ])
