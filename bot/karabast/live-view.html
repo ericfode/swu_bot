@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Karabast live</title>
+<title>Karabast desk</title>
 <style>
-  :root { --bg: #0d1016; --panel: #151a22; --line: #262d39; --fg: #e6e9ef; --muted: #8a93a6; --live: #ff4d5e; color-scheme: dark; }
+  :root { --bg: #0d1016; --panel: #151a22; --line: #262d39; --fg: #e6e9ef; --muted: #8a93a6; --live: #ff4d5e; --win: #46c37b;
+          --bar: #3a4458; --accent: #7aa2ff; color-scheme: dark; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
            padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
@@ -22,21 +23,64 @@
   #status b { color: var(--fg); font-weight: 600; }
   #watch { font: inherit; color: var(--bg); background: var(--live); border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-weight: 600; }
   #game { padding: 12px 16px; }
+  #desk { display: grid; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  #manage { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  #manage[hidden] { display: none; }
+  #manage fieldset { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; border: 1px solid var(--line); border-radius: 8px;
+                     margin: 0; padding: 6px 10px; min-width: 0; }
+  #manage legend { color: var(--muted); padding: 0 4px; }
+  #manage label { color: var(--fg); }
+  .btn { font: inherit; font-weight: 600; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+         padding: 5px 10px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #deskmsg { color: var(--muted); }
+  a { color: var(--accent); }
+  details summary { cursor: pointer; color: var(--muted); }
+  details summary b { color: var(--fg); font-weight: 600; }
+  .rec { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; margin-top: 8px; }
+  @media (max-width: 720px) { .rec { grid-template-columns: minmax(0, 1fr); } }
+  .scroll { overflow-x: auto; min-width: 0; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 3px 10px 3px 0; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.n { text-align: right; }
+  #days svg { display: block; width: 100%; max-width: 640px; height: auto; min-width: 320px; }
+  #days text { fill: var(--muted); font: 12px system-ui, sans-serif; }
 </style>
 </head>
 <body>
 <header>
-  <h1><span class="dot" id="dot"></span>Karabast live</h1>
+  <h1><span class="dot" id="dot"></span>Karabast desk</h1>
   <select id="pick" aria-label="Game"></select>
   <label><input type="checkbox" id="follow" checked> follow the live game</label>
 </header>
 <div id="status" hidden><span id="say"></span><button type="button" id="watch" hidden>Watch it</button></div>
+<section id="desk" aria-label="Desk">
+  <div id="manage" hidden>
+    <fieldset id="bots"><legend>Bots for the next games (ticked bots take turns)</legend></fieldset>
+    <button type="button" class="btn primary" id="use">Use from the next game</button>
+    <button type="button" class="btn" id="pause">Pause after this game</button>
+    <a id="review" hidden target="_blank" rel="noopener">Strategy review</a>
+    <span id="deskmsg" role="status"></span>
+  </div>
+  <details id="record">
+    <summary>Record: <b id="total">…</b></summary>
+    <div class="rec">
+      <div class="scroll"><table><thead><tr><th>Bot</th><th class="n">Games</th><th class="n">Won</th><th class="n">Win %</th><th>First game</th><th>Last game</th></tr></thead><tbody id="bybot"></tbody></table></div>
+      <div class="scroll" id="days"></div>
+    </div>
+  </details>
+</section>
 <div id="note">Looking for games…</div>
 <div id="game"></div>
 <script src="kit/swu-viewer-kit.js"></script>
 <script>
   // Polls the game list; the kit itself re-fetches a live game (no end line) every second and follows its newest move.
   const PREDICT = __PREDICT__;
+  // the desk's controls exist only on the owner's own view (live-view.js --manage); the share link only watches
+  const MANAGE = __MANAGE__;
   const pick = document.getElementById('pick');
   const follow = document.getElementById('follow');
   const note = document.getElementById('note');
@@ -81,12 +125,17 @@
       : s.state === 'queued' ? `${s.bot} is in the queue, waiting for an opponent since ${clock(s.since)}`
       : s.state === 'playing' ? `${s.bot} is playing a game, started ${clock(s.since)}`
       : s.state === 'between games' ? `${s.bot} finished a game and queues again in a moment`
+      : s.state === 'paused' ? `${s.bot} is paused at the desk since ${clock(s.since)}`
       : s.state === 'stopped' ? `${s.bot} stopped at ${clock(s.since)}: ${s.reason}`
       : `${s.bot} is starting`;
     say.innerHTML = '';
     const b = document.createElement('b');
     b.textContent = text;
-    say.append(b, tally);
+    // what the desk changes for the next game, on the owner's view
+    const d = deskState;
+    const next = d?.choice && d.choice.join(', ') !== s.bot ? ` · next game: ${d.choice.join(' and ')}` : '';
+    const pausing = d?.paused && s.state !== 'paused' && s.state !== 'stopped' ? ' · pauses after this game' : '';
+    say.append(b, tally + next + pausing);
     const live = s.state === 'playing' && !s.stale && list.find((g) => g.id === s.game && g.board);
     watch.hidden = !live || live.id === current;
     watch.onclick = () => { follow.checked = true; open(live); };
@@ -151,6 +200,146 @@
     }
   }
 
+  // ---- the record, on every view: results only (desk.js summarize), refreshed every 30 s
+  const pct = (won, games) => (games ? `${Math.round((100 * won) / games)}%` : '–');
+  const day = (t) => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  try {
+    document.getElementById('record').open = localStorage.getItem('karabast-desk.record') === 'open';
+  } catch {
+    // no storage here: the record starts closed
+  }
+  document.getElementById('record').addEventListener('toggle', (e) => {
+    try {
+      localStorage.setItem('karabast-desk.record', e.target.open ? 'open' : 'closed');
+    } catch {
+      // a closed record next time
+    }
+  });
+
+  async function loadRecord() {
+    let r;
+    try {
+      r = await fetch('record', { cache: 'no-store' }).then((x) => x.json());
+    } catch {
+      return;
+    }
+    document.getElementById('total').textContent = `${r.won} won of ${r.games} games (${pct(r.won, r.games)})`;
+    const cell = (text, cls) => Object.assign(document.createElement('td'), { textContent: text, className: cls ?? '' });
+    document.getElementById('bybot').replaceChildren(...r.bots.map((b) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(b.bot), cell(b.games, 'n'), cell(b.won, 'n'), cell(pct(b.won, b.games), 'n'), cell(day(b.first)), cell(day(b.last)));
+      return tr;
+    }));
+    drawDays(r.days.slice(-14));
+  }
+
+  // win % by UTC day: one bar a day, its games below, the bot that played most of them in the bar's tooltip
+  function drawDays(days) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      if (text != null) n.textContent = text;
+      return n;
+    };
+    const W = 420, H = 138, top = 12, base = 100, left = 34, slot = (W - left) / Math.max(days.length, 1);
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Win percentage by day' });
+    for (const p of [0, 50, 100]) {
+      const y = base - ((base - top) * p) / 100;
+      svg.append(el('line', { x1: left, x2: W, y1: y, y2: y, stroke: 'var(--line)' }), el('text', { x: 0, y: y + 3 }, `${p}%`));
+    }
+    days.forEach((d, i) => {
+      const h = d.games ? ((base - top) * d.won) / d.games : 0;
+      const x = left + i * slot + slot * 0.15;
+      const bar = el('rect', { x, y: base - h, width: slot * 0.7, height: Math.max(h, 1), rx: 2, fill: d.won / d.games >= 0.5 ? 'var(--win)' : 'var(--bar)' });
+      bar.append(el('title', {}, `${d.day}: ${d.won} won of ${d.games} (${pct(d.won, d.games)}), mostly ${d.bot}`));
+      svg.append(bar, el('text', { x: x + slot * 0.35, y: base + 15, 'text-anchor': 'middle' }, d.day.slice(5)),
+        el('text', { x: x + slot * 0.35, y: base + 30, 'text-anchor': 'middle' }, `${d.games} g`));
+    });
+    document.getElementById('days').replaceChildren(svg);
+  }
+
+  // ---- the desk's controls (owner's view only): ticks start from the pick, or the bot on duty, until you change them
+  let deskState = null;
+  let ticksTouched = false;
+  let shownAllowed = '';
+  const deskmsg = document.getElementById('deskmsg');
+
+  async function loadDesk() {
+    if (!MANAGE) {
+      return;
+    }
+    try {
+      deskState = await fetch('desk', { cache: 'no-store' }).then((r) => r.json());
+    } catch {
+      return;
+    }
+    showDesk();
+  }
+
+  function showDesk() {
+    const d = deskState;
+    const box = document.getElementById('manage');
+    box.hidden = false;
+    const bots = document.getElementById('bots');
+    const use = document.getElementById('use');
+    if (!d.allowed) {
+      bots.querySelectorAll('label').forEach((l) => l.remove());
+      use.disabled = true;
+      deskmsg.textContent = 'The loop runs without the desk, so it cannot take a pick right now.';
+      shownAllowed = '';
+    } else if (shownAllowed !== d.allowed.join(',')) {
+      shownAllowed = d.allowed.join(',');
+      bots.querySelectorAll('label').forEach((l) => l.remove());
+      for (const name of d.allowed) {
+        const label = document.createElement('label');
+        const tick = Object.assign(document.createElement('input'), { type: 'checkbox', value: name });
+        tick.addEventListener('change', () => { ticksTouched = true; use.disabled = !bots.querySelector('input:checked'); });
+        label.append(tick, name);
+        bots.append(label);
+      }
+      ticksTouched = false;
+    }
+    if (d.allowed && !ticksTouched) {
+      const on = d.choice ?? (status?.bot ? [status.bot] : []);
+      bots.querySelectorAll('input').forEach((b) => { b.checked = on.includes(b.value); });
+      use.disabled = !on.length;
+    }
+    document.getElementById('pause').textContent = d.paused ? 'Resume' : 'Pause after this game';
+    const review = document.getElementById('review');
+    review.hidden = !d.review;
+    if (d.review) {
+      review.href = d.review;
+    }
+  }
+
+  async function sendDesk(body, done) {
+    deskmsg.textContent = 'Saving…';
+    try {
+      const r = await fetch('desk', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Desk': '1' }, body: JSON.stringify(body) });
+      if (!r.ok) {
+        deskmsg.textContent = `Not saved: ${await r.text()}`;
+        return;
+      }
+      deskState = await r.json();
+      ticksTouched = false;
+      deskmsg.textContent = done;
+      showDesk();
+      showStatus();
+    } catch {
+      deskmsg.textContent = 'Not saved: the Sprite did not answer.';
+    }
+  }
+
+  document.getElementById('use').addEventListener('click', () => {
+    const picked = [...document.querySelectorAll('#bots input:checked')].map((b) => b.value);
+    sendDesk({ bots: picked }, `Saved: ${picked.join(' and ')} from the next game.`);
+  });
+  document.getElementById('pause').addEventListener('click', () => {
+    const paused = !deskState?.paused;
+    sendDesk({ paused }, paused ? 'Saved: the bot pauses after this game.' : 'Saved: the bot queues again.');
+  });
+
   pick.addEventListener('change', () => {
     const g = list.find((x) => x.id === pick.value);
     if (g) {
@@ -159,8 +348,12 @@
     }
   });
   refresh();
+  loadDesk();
+  loadRecord();
   // every 2 s: a new bot game opens within a few seconds of its first board
   setInterval(refresh, 2000);
+  setInterval(loadDesk, 5000);
+  setInterval(loadRecord, 30000);
   setInterval(() => {
     if (list.find((g) => g.id === current)?.live) {
       loadLens();

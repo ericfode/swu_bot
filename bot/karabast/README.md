@@ -12,6 +12,7 @@ without a browser. Plain CommonJS on Node 22's built-in `WebSocket` and `fetch`,
 | `queue.js` | Quick match as a bot: enter the queue with a deck, play the match, leave; with `--games N`, a loop that queues again after each game. Counts people (`ledger.js`) and writes what it is doing to `status.json`. |
 | `spectate.js` | Watches games as a spectator and writes scrubbed frames as JSON Lines, which `importer/import.js` turns into replays. `--predict <evaluator>` prints P(win) as the game goes. |
 | `live-view.js` | Serves recorded games to the Holotable viewer kit while they are played: a game picker, the board following each move, and an evaluator's chance that p1 wins. |
+| `desk.js` | The Karabast desk: the bot pick and pause files the owner's live view writes and `queue.js --desk` reads between games, and the record (per bot, per day). |
 | `feed.js` | Streams our bot's games against people to the arena window (`runs/karabast`, replays, lens), with our hand face-down while a game is live. |
 | `watchdog.js` | Keeps a `queue.js` loop going: restarts it when it is stuck or died, and raises an alert past its restart budget. |
 | `ledger.js` | Counts each real person a run touches (salted hashes, no ids) and stops at the people cap, when there is one. |
@@ -87,6 +88,29 @@ The page polls every 2 s, so a game shows up a few seconds after its first board
 state from its `status.json`: in the queue since when, playing, between games, or stopped and why. When the bot starts
 a game the page isn't showing, a button opens it.
 
+## The Karabast desk (`desk.js`, `live-view.js --manage`)
+
+Eric, 2026-10-14: "make it its own thing just make the management interface accessible to me and who ever I share a
+link with hosted from its sprite". Karabast games live on the Sprite, outside the arena window. Every view of
+`live-view.js` is a desk: the bot on duty and what it is doing, the record (`/record`: each bot's games, wins, first and
+last game; win % for each of the last days), the game picker, the board and the win chance.
+
+```bash
+node bot/karabast/queue.js ... --bot c-clock2 --desk ~/karabast/desk --allow-bots c-clock2,c-clock3,lisp,c-clock
+node bot/karabast/live-view.js ... --names <file> --manage ~/karabast/desk --review <strategy review URL>
+```
+
+With `--manage <dir>` the view also has controls: tick the bots for the next games (several take turns game by game)
+and pause after this game or resume. They write two files, `<dir>/bot` and `<dir>/PAUSE`; the server never runs a
+command. `queue.js --desk <dir>` reads them before each game, so a change never cuts a game short: while `PAUSE`
+exists the loop waits in state `paused` (the watchdog leaves it alone, and the stop file still ends it), and it plays
+the picked bots only when every one is in `--allow-bots`. That list goes into `status.json`, so the desk offers only
+those, and `queue.js` refuses to start when one of them is not a built program in `bot/external-bots.json`. Like
+`--names`, `--manage` runs only on a view that stays on this machine (local `--host`, no `--key`): on the Sprite that
+is the `live-view` service behind Eric's tailnet. A POST needs the `X-Desk` header and a JSON body, which a page on
+another site cannot send without a CORS preflight that the server never answers. The share link (`live-share`, with
+`--key`) is the same desk with no controls and no names.
+
 ## Play games back to back (`queue.js --games N`)
 
 With `--games` above 1, `queue.js` queues again `--gap` seconds after each game (at least 25: a finished lobby keeps
@@ -94,8 +118,9 @@ its users ~20 s). A wait with no match queues again without using up a game, and
 (default 6) stop the run. Any other failure, a game cut off with no result included, counts as a game and toward
 `--max-errors` failures in a row (default 3). It also stops on the people cap, a ledger error or the stop
 file, and exits 1 when it ended on a failure. `<out>/status.json` is rewritten whole every 30 s and at each change
-(`state`: starting, queued, playing with `file`, between games, stopped with `reason`; plus `played`, `won`, `lost`,
-`errors`), so a reader tells a dead run from one waiting in the queue.
+(`state`: starting, queued, playing with `file`, between games, paused at the desk, stopped with `reason`; plus
+`played`, `won`, `lost`, `errors`, and `allowed` with `--desk`), so a reader tells a dead run from one waiting in the
+queue.
 
 A seat gives up on a game that does not start within 3 minutes of the match (no result, so it counts as a failure)
 and concedes a started game that sends no frame for 10 minutes (seat options `startMs`, `idleMs`). Before these, a
