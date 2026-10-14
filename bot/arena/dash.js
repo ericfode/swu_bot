@@ -41,8 +41,9 @@ const named = (agent) => {
 const panelFile = (agent) => path.join(DASH, 'panels', `arena-${named(agent)}.json`);
 const halfFile = (agent, side) => path.join(HOME, 'panels', `${named(agent)}.${side}.json`);
 const boardFile = (name) => path.join(HOME, 'panels', `${name}.json`);
-// benched competitors (api.js withdraw) keep their panels, ratings and history
-const everyone = (r) => [...r.agents, ...(r.bench ?? [])].filter((a) => NAME.test(String(a?.name)));
+// benched competitors (api.js withdraw) keep their panels, ratings and history; the arena's own bots (resident entries)
+// are no competitors and have no panel
+const everyone = (r) => [...r.agents, ...(r.bench ?? [])].filter((a) => NAME.test(String(a?.name)) && !a.resident);
 const agentInfo = (agent) => everyone(roster()).find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
 
 /** A trimmed string of at most max chars, or undefined (null, empty, objects). */
@@ -135,6 +136,8 @@ function publishStandings(st) {
     const show = (v) => (v === null || v === undefined ? '-' : v);
     const t = new Date().toISOString();
     const done = st.status === 'done';
+    // the arena's own bots as the newest round fielded them (resident entries, built-in bots), else the roster's
+    const own = last?.anchors ?? r.baselines;
     const eloSeries = () => bestFirst(everyone(r).map((a) => ({ name: a.name, points: rounds.filter((rd) => eloOf(a.name, rd) !== null).map((rd) => [rd.round, eloOf(a.name, rd)]) })));
 
     for (const a of everyone(r)) {
@@ -155,7 +158,7 @@ function publishStandings(st) {
                 ] },
                 { type: 'line', title: 'Elo by round (all-round Bradley-Terry, baselines anchor the scale)', x: 'round',
                   series: bestFirst([{ name: a.name, points: rows.filter((x) => elo(x.b.name) !== null).map((x) => [x.rd.round, elo(x.b.name)]) },
-                                     ...r.baselines.filter((bl) => elo(bl) !== null).map((bl) => ({ name: bl, points: rounds.map((rd) => [rd.round, elo(bl)]) }))]).slice(0, 4) },
+                                     ...own.filter((bl) => elo(bl) !== null).map((bl) => ({ name: bl, points: rounds.map((rd) => [rd.round, elo(bl)]) }))]).slice(0, 4) },
                 { type: 'line', title: 'Think time, ms per decision (harness-timed)', x: 'round',
                   series: [{ name: a.name, points: rows.filter((x) => x.b.msPerDecision !== null).map((x) => [x.rd.round, x.b.msPerDecision]) }] },
                 { type: 'table', title: 'Rounds', columns: ['round', 'version', 'Elo', 'rank', 'W-L', 'ms/dec', 'forfeits', 'submission note'],
@@ -175,7 +178,7 @@ function publishStandings(st) {
         bots: [], status: st.status ?? 'running', updatedAt: t,
         now: st.now ?? (last ? `Round ${last.round} ladder ${last.status}${noGames ? `, ${NO_GAMES}` : ''}` : 'Starting'),
         goal: 'Several Claudes, each with a different research prompt, race to improve their own SWU bot.',
-        mentalModel: { summary: `Each competitor is a project thread with its own prompt. It edits its bot in /mnt/project-files/arena/agents/<name>/ and submits versions; the referee rates the newest version of each against ${r.baselines.join(' and ')}. A bot that thinks more than ${r.thinkCapMs / 1000}s in a game, throws, hangs or fails to load forfeits it. Rules: bot/arena/README.md.` },
+        mentalModel: { summary: `Each competitor is a project thread with its own prompt. It edits its bot in /mnt/project-files/arena/agents/<name>/ and submits versions; the referee rates the newest version of each against the arena's own bots (${own.join(', ')}). A bot that thinks more than ${r.thinkCapMs / 1000}s in a game, throws, hangs or fails to load forfeits it. Rules: bot/arena/README.md.` },
         plan: rounds.map((rd) => ({ text: `Round ${rd.round}: ${rd.games} games, ${rd.leader ? `leader ${rd.leader}` : rd.bots.some((b) => b.rank != null) ? 'no leader' : NO_GAMES}`, state: rd.status === 'done' ? 'done' : 'doing' })),
         thoughts: [],
         widgets: [

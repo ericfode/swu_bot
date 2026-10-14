@@ -382,4 +382,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { putDoc, putChanged, syncReplay, pushRun, pushRunOnce, pushDir, arenaPusher, followRun, request };
+module.exports = { putDoc, putChanged, syncReplay, pushRun, pushRunOnce, pushDir, arenaPusher, followRun, request, proxyEnv };
