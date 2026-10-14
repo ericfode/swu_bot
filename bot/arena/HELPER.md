@@ -49,16 +49,25 @@ Needs Docker running (on a Mac, Docker Desktop open: `open -a Docker`) and flyct
 1. Once: `sh bot/arena/ops/helper.sh init`. It makes the token and stages its hash on Fly
    (`fly secrets set --stage`); the next deploy of the games machine takes it, or `fly secrets deploy -a swu-arena-games`
    now.
-2. Whenever you want to help: `sh bot/arena/ops/helper.sh` (Ctrl-C stops it). It reads the image the machine runs
-   (`fly machine list`), pulls it (`fly auth docker`), keeps `fly proxy 18090:8090` running, and starts the container.
+2. Whenever you want to help: `sh bot/arena/ops/helper.sh` from a swu_bot checkout (Ctrl-C stops it). It reads the
+   image the machine runs (`fly machine list`), pulls it (`fly auth docker`; on ARM it builds a native one, below),
+   keeps `fly proxy 18090:8090` running, and starts the container.
    Slots: one seed (two games at once) each, `--slots N` to choose; by default (Docker CPUs - 1) / 2. On a Mac it runs
    under `caffeinate -i`, so the computer stays awake while it plays.
 3. When the games machine moves to a new build, the helper stops with code 3 and the script pulls the new image. If the
    machine still runs the image the helper just ran (its build or card data differ for another reason, such as an image
    built without `GIT_SHA`), the script stops and says so.
 
-The image is built for Intel CPUs (`linux/amd64`). On an Apple chip Docker runs it under emulation: turn on "Use
-Rosetta for x86_64/amd64 emulation" in Docker Desktop's settings, or the coordinator may crash at start.
+The machine's image is built for Intel CPUs (`linux/amd64`). Under Rosetta, on a Mac with an Apple chip, its Erlang
+stops at start (`prim_tty:isatty ... undef`, then `Kernel pid terminated ... nouser`), so on an ARM computer the script
+builds an image for the computer's own CPU and runs that instead (`sh bot/arena/ops/helper.sh build` does only the
+build). `bot/arena/ops/Dockerfile.helper` takes everything a game runs on from the machine's image unchanged (bot code,
+engine, card data, resident bundles, `BUILD_SHA`, `CARDS_SHA`), so the build still matches, and builds only the native
+parts: Node, Python with wasmtime, and the coordinator from `Dockerfile.games`'s coord stage at the machine's commit,
+read from the checkout the script is in (fetched from origin when missing). The first build takes a few minutes; later
+ones reuse Docker's cache, and a new machine build means a new image (older ones are removed). It needs the default
+Docker Desktop builder, which sees local images. `SWU_HELPER_NATIVE=1` builds on any computer, `SWU_HELPER_NATIVE=0`
+pulls the amd64 image even on ARM.
 
 ## Protocol
 
