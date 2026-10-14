@@ -41,8 +41,9 @@ const named = (agent) => {
 const panelFile = (agent) => path.join(DASH, 'panels', `arena-${named(agent)}.json`);
 const halfFile = (agent, side) => path.join(HOME, 'panels', `${named(agent)}.${side}.json`);
 const boardFile = (name) => path.join(HOME, 'panels', `${name}.json`);
-// benched competitors (api.js withdraw) keep their panels, ratings and history
-const everyone = (r) => [...r.agents, ...(r.bench ?? [])].filter((a) => NAME.test(String(a?.name)));
+// benched competitors (api.js withdraw) keep their panels, ratings and history; the arena's own bots (resident entries)
+// are no competitors and have no panel
+const everyone = (r) => [...r.agents, ...(r.bench ?? [])].filter((a) => NAME.test(String(a?.name)) && !a.resident);
 const agentInfo = (agent) => everyone(roster()).find((x) => x.name === agent) ?? { name: agent, title: agent, philosophy: '', start: '' };
 
 /** A trimmed string of at most max chars, or undefined (null, empty, objects). */

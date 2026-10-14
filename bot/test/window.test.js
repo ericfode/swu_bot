@@ -906,10 +906,22 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
 
         // the arena's intake writes its result back with the project token; the person reads it
         const { files, ...rest } = stored;
+        const woken = wakes;
         assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify({ ...rest, fileNames: ['bot.js'], state: 'accepted', version: 'kim_b-v1' }) })).status, 200);
         assert.strictEqual((await go(`/api/docs/submissions/${first.id}`, { method: 'PUT', token: 'feed-secret', body: '{}' })).status, 403, 'a feed cannot');
         const after = (await call(kim, 'arena_my_submissions')).value.find((x) => x.id === first.id);
         assert.deepStrictEqual([after.state, after.version, after.fileNames], ['accepted', 'kim_b-v1', ['bot.js']]);
+        assert.strictEqual(wakes, woken, 'the intake\'s result wakes nothing');
+
+        // the arena's own bots (ops/house-submit.js): a new pending submission written with the token wakes the machine
+        const house = { id: 'house.rush.x1', owner: '@arena', name: 'rush', kind: 'js', note: 'the port', files: bot.files, state: 'pending', submittedAt: new Date().toISOString() };
+        assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: kim, body: JSON.stringify(house) })).status, 403, 'signing in only reads');
+        assert.strictEqual(wakes, woken);
+        assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify(house) })).status, 200);
+        assert.strictEqual(wakes, woken + 1);
+        assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify({ ...house, state: 'checking' }) })).status, 200);
+        assert.strictEqual(wakes, woken + 1, 'only a new one');
+        assert.deepStrictEqual((await call(kim, 'arena_my_submissions')).value.map((x) => x.id).includes(house.id), false, 'no login is @arena');
     } finally {
         await close();
     }

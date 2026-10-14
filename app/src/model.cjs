@@ -99,13 +99,16 @@
     }
 
     // The arena's all-round rating after each round: Bradley-Terry over every rated game of that round and the ones before
-    // it, the baselines' mean pinned at 1500, as the referee rates all rounds (bot/arena/referee.js globalElo); held-out
-    // rounds are left out there too. After the newest round it is the standings' own rating. Rounds already rated are
-    // cached by their games, since the window rebuilds the model every few seconds while a round plays.
+    // it, the mean of the arena's own bots (`baselines` and every round's anchors, its resident entries) pinned at 1500,
+    // as the referee rates all rounds (bot/arena/referee.js globalElo); held-out rounds are left out there too. After the
+    // newest round it is the standings' own rating. Rounds already rated are cached by their games, since the window
+    // rebuilds the model every few seconds while a round plays.
     const HISTORY = new Map();
     function arenaHistory(st, baselines) {
         const out = [], results = [];
-        let key = (baselines || []).join();
+        // a round from before rounds recorded their anchors: its bots with no builder (the built-in baselines)
+        const anchors = [...new Set([...(baselines || []), ...(st?.rounds || []).flatMap(r => r.anchors || (r.bots || []).filter(b => !b.agent).map(b => b.name))])];
+        let key = anchors.join();
         for (const rd of (st?.rounds || []).filter(r => r.pool !== 'holdout')) {
             const rs = rd.results || [];
             results.push(...rs);
@@ -113,7 +116,7 @@
             if (!results.length) continue;
             const names = [...new Set(results.flatMap(x => [x.a, x.b]))];
             if (!HISTORY.has(key)) {
-                const bt = bradleyTerry(names, results, { anchor: baselines });
+                const bt = bradleyTerry(names, results, { anchor: anchors });
                 HISTORY.set(key, Object.fromEntries(names.map(x => [x, bt[x].rating])));
                 if (HISTORY.size > 400) HISTORY.delete(HISTORY.keys().next().value);
             }
@@ -233,7 +236,12 @@
         const T = hosted ? null : A.tournament, cur = hosted ? (S.round != null ? { n: S.round } : null) : T?.rounds?.at(-1) || null;
         const phase = hosted ? S.phase : !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
         // benched builders (arena withdraw) stay listed, marked, with their versions and panels; rejoin brings them back
-        const competitors = [...(A.roster?.agents || []), ...(A.roster?.bench || []).map(a => ({ ...a, benched: true }))].map(a => {
+        // the arena's own bots (resident entries) are no builders: they show as baselines, each in the place of the
+        // built-in baseline it replaces once it has a version, as in the referee's lineup
+        const residents = (A.roster?.agents || []).filter(a => a.resident && (A.versions?.[a.name] || []).length);
+        const fielded = new Set(residents.map(a => a.name));
+        const ownBots = [...residents.map(a => A.versions[a.name].at(-1).name), ...(A.roster?.baselines || []).filter(b => !fielded.has(b.replace(/-wasm$/, '').replace(/-/g, '_')))];
+        const competitors = [...(A.roster?.agents || []), ...(A.roster?.bench || []).map(a => ({ ...a, benched: true }))].filter(a => !a.resident).map(a => {
             const vs = A.versions?.[a.name] || [];
             const panel = (src.panels || []).find(p => p.id === `arena-${a.name}`) || null;
             return { name: a.name, title: a.title, harness: a.harness || null, philosophy: a.philosophy || '', start: a.start, registeredAt: a.registeredAt, versions: vs, latest: vs.at(-1)?.name || null, panel, ...(a.benched ? { benched: true } : {}) };
@@ -241,7 +249,7 @@
         const arena = {
             phase, hosted, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
             current: cur, deadline: phase === 'work' ? cur?.workEnd : null,
-            competitors, baselines: A.roster?.baselines || [], thinkCapMs: A.roster?.thinkCapMs ?? null,
+            competitors, baselines: ownBots, thinkCapMs: A.roster?.thinkCapMs ?? null,
             standings: A.standings || null, history: arenaHistory(A.standings, A.roster?.baselines || []), archived: A.archived || null, reports: A.rounds || {}, runs: runInfo.filter(r => r.kind === 'arena').map(r => r.id),
         };
 

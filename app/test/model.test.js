@@ -176,6 +176,25 @@ test('buildModel: a tournament keeps its round ladders and its rules (from tourn
     assert.equal(plain.arena.tournament.rules, null);
 });
 
+test('buildModel: the arena\'s own bots (resident entries) are no builders; each shows as a baseline in place of the built-in bot it replaces', () => {
+    const roster = { agents: [{ name: 'kim_b' }, { name: 'heuristic', resident: true }, { name: 'c_clock', resident: true }, { name: 'rush', resident: true }], baselines: ['heuristic', 'rush', 'c-clock-wasm', 'py-clock-wasm'] };
+    const versions = { kim_b: [{ v: 1, name: 'kim_b-v1' }], heuristic: [{ v: 1, name: 'heuristic-v1' }, { v: 2, name: 'heuristic-v2' }], c_clock: [{ v: 1, name: 'c_clock-v1' }] };
+    const a = model.buildModel(tinySources(), { arena: { roster, versions } }, null).arena;
+    assert.deepEqual(a.competitors.map(c => c.name), ['kim_b']);
+    assert.deepEqual(a.baselines, ['heuristic-v2', 'c_clock-v1', 'rush', 'py-clock-wasm'], 'rush has no version yet: the built-in one still plays');
+});
+
+test('arenaHistory: a round\'s own anchors pin it, and an old round without them is pinned by its bots with no builder', () => {
+    const g = (a, b, score) => ({ a, b, score });
+    const rounds = [
+        { round: 0, bots: [{ name: 'x-v1', agent: 'x' }, { name: 'base1', agent: null }], results: [g('x-v1', 'base1', 1), g('base1', 'x-v1', 1), g('x-v1', 'base1', 1)] },
+        { round: 1, anchors: ['base1-v1'], bots: [{ name: 'x-v1', agent: 'x' }, { name: 'base1-v1', agent: null }], results: [g('x-v1', 'base1-v1', 0), g('base1-v1', 'x-v1', 1)] },
+    ];
+    const h = model.arenaHistory({ rounds }, []);
+    assert.equal(Math.round(h[0].ratings.base1), 1500, 'only the built-in bot anchors the old round');
+    assert.ok(Math.abs((h[1].ratings.base1 + h[1].ratings['base1-v1']) / 2 - 1500) <= 1);
+});
+
 test('buildModel: the hosted arena takes its phase and round from arena status, and an old tournament is only an archive', () => {
     const old = { id: 'arena-t0', state: 'done', rounds: [{ n: 1, ladder: 'arena-t0-r1', ladderStart: 'a', ladderEnd: 'b' }] };
     const playing = model.buildModel(tinySources(), { arena: { tournament: old, status: { tournament: null, round: 2, phase: 'ladder' } } }, null).arena;

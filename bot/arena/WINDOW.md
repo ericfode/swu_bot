@@ -201,8 +201,11 @@ The window stores submissions; the games machine plays them. It is the Fly app `
   on every submission and every 6 hours; Fly's proxy starts the stopped machine for that request.
 - Every minute it runs the intake, then starts a round when the lineup changed (90 s after the last version came in,
   so a quick fix joins the same round) or the last round is a day old. Rounds are round robins of every competitor's
-  newest version and the residents (the roster's baselines: heuristic, rush, and c-clock, rust-greedy2, rust-search,
-  node-search and py-clock built to WebAssembly in the image; `ARENA_RESIDENTS` overrides), 2 games a pair.
+  newest version and the residents (the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
+  node-search and py-clock), 2 games a pair. A resident is an entry made by a house submission or, until one replaces
+  it, a bot built into the image (README.md, "The games machine").
+- A submission written straight to the `submissions` collection with the project token (`ops/house-submit.js`, the
+  arena's own bots) wakes the machine like arena_submit's, when it is new and pending.
 - It pushes the arena's state and the round replays to the window every 20 s, like the old uplink, into the same
   `arena`, `runs` and `ladders` collections the app reads; while a round plays, that round's index and replays also
   go every 3 s, and the app's Live board follows a game that is playing.

@@ -22,7 +22,8 @@
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
  * Start it with ARENA_MODE=window node bot/arena/server.js --host 0.0.0.0 --port 8080. With ARENA_GAMES_WAKE set (the
  * games machine's private address, http://swu-arena-games.flycast/wake), every submission wakes the games machine
- * (coord/), and server.js wakes it every 6 hours.
+ * (coord/): arena_submit's, and a new pending one a token writes to the submissions collection (ops/house-submit.js).
+ * server.js also wakes it every 6 hours.
  */
 const fs = require('fs');
 const path = require('path');
@@ -1125,7 +1126,13 @@ function createWindow(opts = {}) {
                     need(!Array.isArray(doc.games) || !doc.games.length || oursOf(doc).size > 0, 'bad_request', 'a run against people must list our bots in "bots"; every other seat is stored as "opponent"');
                     text = JSON.stringify(maskRun(doc));
                 }
+                // a submission written straight to the collection (ops/house-submit.js, the arena's own bots) wakes the
+                // games machine as arena_submit does; the machine's own writes update submissions that already exist
+                const wake = ns === 'submissions' && doc?.state === 'pending' && store.getDoc(ns, id) == null;
                 store.putDoc(ns, id, text);
+                if (wake) {
+                    wakeGames();
+                }
                 return sendJson(res, 200, { result: { ok: true, version: store.version } }, req);
             }
             if (req.method === 'DELETE') {

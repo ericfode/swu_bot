@@ -12,6 +12,9 @@
  * github:<login>), then submits the bundle as that competitor's next version (api.submit kind 'wasm', which starts it
  * once in the sandbox and expects ready). The outcome goes back to the window: the version, or the error lines, which
  * the builder reads with arena_my_submissions. The source is then dropped from the window; the arena keeps the bundle.
+ * A house submission (owner HOUSE, which no GitHub login can be, so only a project or admin token can write one:
+ * ops/house-submit.js) enters one of the arena's own bots: a resident entry under any free name, owner 'arena'
+ * (api.js register resident), rated with everyone and anchoring the ratings.
  *
  * Submitted code never runs outside the wasmtime sandbox, which has no network, no files but its own and the card data,
  * and no other programs. On top of that, packing and checking run in a child process (--check) that gets no token and,
@@ -31,6 +34,7 @@ const TOOLCHAIN = require('../compiled/toolchain.json');
 const TOOLS = path.join(ROOT, 'build', 'compiled', '.tools');
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const LOGIN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/;
+const HOUSE = '@arena'; // the owner of a house submission: the arena's own bots (residents)
 const KINDS = ['js', 'python', 'wasm'];
 const CHECK_MS = 5 * 60000; // packing (Javy) and the start check together
 const STUCK_MS = 15 * 60000; // a submission left 'checking' this long (an intake that died) is checked again
@@ -73,7 +77,7 @@ function manifest(name, lang, entry, runtime, run, cards, owner) {
         entry_sha256: sha256(entry),
         resources: { memory_mb: 1024, start_ms: 30000, decide_ms: 10000 },
         cards: cards ? { use: 'mount', layout: 'dir', env: { SWU_CARD_JSON: '/cards' } } : { use: 'none' },
-        network: 'none', deterministic: true, build: { source: `submitted by github:${owner}`, toolchain: lang === 'js' ? `javy ${TOOLCHAIN.javy.version}` : lang }
+        network: 'none', deterministic: true, build: { source: owner === HOUSE ? 'an arena house submission' : `submitted by github:${owner}`, toolchain: lang === 'js' ? `javy ${TOOLCHAIN.javy.version}` : lang }
     };
 }
 
@@ -157,13 +161,14 @@ function bundleFiles(folder) {
 function check(job, { work }) {
     const { api } = require('./api');
     const home = require('./home');
-    need(LOGIN.test(job.owner ?? ''), 'no owner');
+    const house = job.owner === HOUSE;
+    need(house || LOGIN.test(job.owner ?? ''), 'no owner');
     need(NAME.test(job.name ?? ''), 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
     need(KINDS.includes(job.kind), `kind: one of ${KINDS.join(', ')}`);
     need(typeof job.note === 'string' && job.note.trim(), 'note: one line saying what this version changes');
     const { builderName, ownsName } = require('./api');
-    need(ownsName(job.owner, job.name), `the name "${job.name}" is not yours: use your builder name ${builderName(job.owner)}, or it with _ and a suffix`);
-    const owner = `github:${job.owner}`;
+    need(house || ownsName(job.owner, job.name), `the name "${job.name}" is not yours: use your builder name ${builderName(job.owner)}, or it with _ and a suffix`);
+    const owner = house ? 'arena' : `github:${job.owner}`;
     const r = home.roster();
     const entry = [...r.agents, ...(r.bench ?? [])].find((a) => a.name === job.name);
     need(!entry || entry.owner === owner, `the name "${job.name}" belongs to another competitor; submit under another name`);
@@ -180,8 +185,9 @@ function check(job, { work }) {
         // a builder's first bot must start before a competitor is made for it (api.submit checks it again)
         const { startCheck } = require('./api');
         startCheck(path.dirname(folder), `${job.name}-v1`, require('./registry').WASM_BOT, job.name);
-        api.register({ name: job.name, title: job.name, owner, harness: { kind: 'builder', selfRun: true }, token,
-            philosophy: `Submitted on the arena window by @${job.owner}.` });
+        api.register(house
+            ? { name: job.name, title: job.name, owner, resident: true, token, philosophy: 'One of the arena\'s own bots, played in every round with the builders\' bots.' }
+            : { name: job.name, title: job.name, owner, harness: { kind: 'builder', selfRun: true }, token, philosophy: `Submitted on the arena window by @${job.owner}.` });
     }
     let v;
     try {

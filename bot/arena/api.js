@@ -203,7 +203,7 @@ const api = {
             baselines: r.baselines,
             // benched competitors too (api.withdraw): still registered, with their versions and ratings, and may rejoin
             competitors: [...r.agents.map((a) => [a, false]), ...(r.bench ?? []).map((a) => [a, true])].map(([a, benched]) => ({
-                name: a.name, title: a.title, harness: a.harness ?? null, owner: a.owner ?? null, philosophy: a.philosophy ?? '',
+                name: a.name, title: a.title, harness: a.harness ?? null, owner: a.owner ?? null, philosophy: a.philosophy ?? '', ...(a.resident ? { resident: true } : {}),
                 ...(benched ? { benched: true, benchedAt: a.benchedAt ?? null } : {}),
                 ...(a.withdrawn?.length ? { withdrawn: a.withdrawn.map((v) => `${a.name}-v${v}`) } : {}),
                 latest: (() => { const v = home.versionsOf(a.name).pop(); return v === undefined ? null : `${a.name}-v${v}`; })(),
@@ -212,8 +212,22 @@ const api = {
         };
     },
 
-    register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, token: adminToken } = {}) {
+    /**
+     * A new competitor. resident: one of the arena's own bots (intake.js house submissions): it anchors the ratings with
+     * the baselines, never counts as a builder, may take a built-in bot's name (its versions are <name>-v<N>, which no
+     * built-in name matches), and gets no starter version: its first submitted version is v1.
+     */
+    register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, resident = false, token: adminToken } = {}) {
         need(NAME.test(name ?? ''), 'bad_request', 'name: 1-32 chars, lowercase letters, digits, _; starts with a letter');
+        need(!resident || !AUTH || (process.env.ARENA_ADMIN_TOKEN && adminToken === process.env.ARENA_ADMIN_TOKEN), 'unauthorized', 'only the admin registers a resident');
+        if (resident) {
+            const dir = path.join(home.AGENTS, name);
+            need(home.claimDir(dir), 'conflict', `competitor "${name}" already exists`);
+            const token = crypto.randomBytes(18).toString('base64url');
+            const entry = { name, title: title ?? name, philosophy: philosophy ?? '', harness: null, owner, resident: true, tokenHash: hash(token), registeredAt: new Date().toISOString() };
+            home.updateRoster((r) => ({ ...r, agents: [...r.agents.filter((a) => a.name !== name), entry] }));
+            return { name, dir, version: null, token };
+        }
         need(harness === null || (typeof harness === 'object' && !Array.isArray(harness)), 'bad_request', 'harness: an object such as {"kind": "codex"}');
         // On a hosted arena only the admin registers a competitor with a full harness (a command line, or a Claude Code
         // agent on the arena's account). Anyone else's harness only says how they run themselves: its kind and model
@@ -252,7 +266,7 @@ const api = {
         // Atomic: the version is assembled and load-checked in versions/.staging-*, then renamed into place in one step,
         // so the referee never sees a half-copied or unloadable version. A benched competitor may submit too: its newest
         // version is rated once it rejoins.
-        owned(name, token, { benched: true });
+        const entry = owned(name, token, { benched: true });
         need(typeof note === 'string' && note.trim(), 'bad_request', 'note: one line saying what changed and why');
         need(bot && typeof bot === 'object' && ['js', 'stdio', 'wasm'].includes(bot.kind), 'bad_request', "bot.kind: 'js', 'stdio' or 'wasm'");
         need(bot.kind !== 'wasm' || (bot.cmd === undefined && bot.args === undefined), 'bad_request', 'a wasm bundle says how it runs in its arena.json');
@@ -312,7 +326,8 @@ const api = {
             } else if (bot.kind === 'stdio' && /[\\/]/.test(bot.cmd)) {
                 need(home.exists(path.join(staging, bot.cmd)), 'bad_request', `bot.cmd ${bot.cmd} is not in your folder`);
             }
-            let n = (home.versionsOf(name).pop() ?? -1) + 1;
+            // a resident has no starter v0: its first version is v1, like a builder's first bot
+            let n = (home.versionsOf(name).pop() ?? (entry.resident ? 0 : -1)) + 1;
             const check = () => {
                 if (bot.kind === 'js') {
                     loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
@@ -418,8 +433,9 @@ const api = {
     },
 
     panels() {
-        // every panel the research dashboard shows for the arena, from ARENA_HOME (the dashboard's files are copies)
-        return { ...dash.boards(), panels: [...home.roster().agents, ...(home.roster().bench ?? [])].map((a) => dash.composePanel(a.name)) };
+        // every panel the research dashboard shows for the arena, from ARENA_HOME (the dashboard's files are copies); the
+        // arena's own bots (resident entries) have none, as in dash.js
+        return { ...dash.boards(), panels: [...home.roster().agents, ...(home.roster().bench ?? [])].filter((a) => !a.resident).map((a) => dash.composePanel(a.name)) };
     },
 
     games({ round } = {}) {
