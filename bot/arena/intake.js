@@ -421,7 +421,7 @@ async function intakeOnce({ window = require('./push'), finished = new Set(), un
             if (stopping) {
                 break; // stopped while claiming: release() puts it back
             }
-            log(`${id}: checking ${doc.kind} bot "${doc.name}" from @${doc.owner}`);
+            log(`${id}: checking ${doc.kind} bot "${doc.name}" from ${doc.owner === HOUSE ? 'the arena' : `@${doc.owner}`}`);
             res = await checker({ ...doc, id });
         } finally {
             delete current.id;
