@@ -675,6 +675,7 @@ test('the queue loop waits while the desk says pause, between games only, and pl
     assert.doesNotThrow(() => checkBots(['built', 'py', 'js-random'], list));
     assert.throws(() => checkBots(['built', 'unbuilt'], list), /not built/);
     assert.throws(() => checkBots(['nope'], list), /unknown bot/);
+    assert.throws(() => checkBots(['constructor'], list), /unknown bot/);
 });
 
 test('the queue loop retries a wait with no match without using up a game, up to maxWaits in a row', async () => {

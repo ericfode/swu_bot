@@ -86,14 +86,16 @@ function checkBots(names, file = process.env.SWU_EXTERNAL_BOTS ?? path.join(__di
     const programs = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
     const root = path.join(__dirname, '..', '..');
     for (const name of names) {
-        const spec = programs[name.split('#')[0]];
-        if (name.split('#')[0] === 'js-random') {
+        const base = name.split('#')[0];
+        if (base === 'js-random') {
             continue;
         }
-        if (!spec) {
+        // own keys only, as seat.js loadClient reads them: "constructor" is no bot
+        if (!Object.hasOwn(programs, base)) {
             throw new Error(`unknown bot "${name}" (programs in ${file})`);
         }
-        if (spec.cmd.includes('/') && !fs.existsSync(path.resolve(root, spec.cmd))) {
+        const spec = programs[base];
+        if (typeof spec.cmd === 'string' && spec.cmd.includes('/') && !fs.existsSync(path.resolve(root, spec.cmd))) {
             throw new Error(`bot "${name}" is not built: ${spec.cmd} is missing`);
         }
     }
