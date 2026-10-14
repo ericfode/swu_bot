@@ -69,9 +69,11 @@ WAIT_PROMPT = {"type": "actionWindow", "actionWindow": True, "selectCardMode": N
 
 class JepaPlayer:
     def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round", window_model=None,
-                 plan=None, resource=None):
+                 plan=None, resource=None, plan_model=None):
         w, self.meta = M.load_safetensors(model_path)
         self.net = M.NumpyJepa(w)
+        # optional model that scores only the planner's settled positions (e.g. a value head trained to rank moves)
+        self.plan_net = M.NumpyJepa(M.load_safetensors(plan_model)[0]) if plan_model else self.net
         # optional second model used only in action windows (e.g. a predictor fine-tuned on branches, which only cover windows)
         self.window_net = M.NumpyJepa(M.load_safetensors(window_model)[0]) if window_model else None
         self.db = db
@@ -402,9 +404,9 @@ class JepaPlayer:
             vals[live] = M.sigmoid(np.asarray(self.evaluator.logits(me, self.decks, [m["state"] for m in pos], to_act)))
         elif live:
             es = [F.encode(m, self.db) for m in pos]
-            z = self.net.encode(np.stack([e["state"] for e in es]), np.stack([e["tok_ids"] for e in es]).astype(np.int64),
-                                np.stack([e["tok_feats"] for e in es]), np.stack([e["tok_mask"] for e in es]))
-            vals[live] = M.sigmoid(self.net.value(z))
+            z = self.plan_net.encode(np.stack([e["state"] for e in es]), np.stack([e["tok_ids"] for e in es]).astype(np.int64),
+                                     np.stack([e["tok_feats"] for e in es]), np.stack([e["tok_mask"] for e in es]))
+            vals[live] = M.sigmoid(self.plan_net.value(z))
         score = np.full(n, -1.0)
         best = {}
         for k, (taken, mine, _) in enumerate(leaves):
@@ -553,6 +555,7 @@ def main():
     ap.add_argument("--judge", choices=["round", "window"], default="round",
                     help="when a simulated move is judged: after this round's action phase (round) or at my next action window")
     ap.add_argument("--window-model", default=None, help="a second model used only in action windows")
+    ap.add_argument("--plan-model", default=None, help="a second model that scores only the planner's settled positions")
     ap.add_argument("--log", default=None, help="append every decision's imagined and simulated scores here (JSON lines)")
     a = ap.parse_args()
 
@@ -562,7 +565,7 @@ def main():
     helper = EvalHelper(a.evaluator) if (a.score == "sim-eval" or logf or (a.score == "plan" and a.plan_scorer == "eval")) else None
     plan = {k: float(v) for k, v in (kv.split("=") for kv in a.plan.split(",") if kv)}
     player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge, window_model=a.window_model,
-                        plan={**{k: (v if k == "secs" else int(v)) for k, v in plan.items()}, "scorer": a.plan_scorer}, resource=a.resource)
+                        plan={**{k: (v if k == "secs" else int(v)) for k, v in plan.items()}, "scorer": a.plan_scorer}, resource=a.resource, plan_model=a.plan_model)
     thoughts = os.environ.get("SWU_JEPA_THOUGHTS")
     stdin = sys.stdin
 
