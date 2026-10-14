@@ -7,7 +7,7 @@
  *       [--resume] [--cap-ms 60000] [--hang-ms 600000]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine,
  * uncommitted engine source changes included (config.engineDiff), and same bot code and models: config.harness is the
- * git trees of bot/ and models/, plus a hash of uncommitted changes there, of the $SWU_LEARNED_MODEL file and of the
+ * git trees of bot/ and vendor/kessel/, plus a hash of uncommitted changes there, of the $SWU_LEARNED_MODEL file and of the
  * other $SWU_* settings when set;
  * config.programs hashes the bot programs' entries and the files they name). Without the earlier run's --key, the rest is dealt from a
  * new run key; the games kept have their own keys in their entries, and a seed not played out is played again whole.
@@ -106,16 +106,16 @@ function engineDiff() {
 }
 
 /**
- * The revision of the harness and the built-in bots with their models: the git tree ids of bot/ and models/ at HEAD,
- * plus a hash of uncommitted changes and new files there, of the file $SWU_LEARNED_MODEL names (the learned bots
- * read it instead of models/learned/current.json) and of the other $SWU_* settings bots read ($SWU_LEARNED_BLEND,
+ * The revision of the harness and the built-in bots: the git tree ids of bot/ and vendor/kessel/ (the referee's Rust
+ * simulations) at HEAD, plus a hash of uncommitted changes and new files there, of the file
+ * $SWU_LEARNED_MODEL names (holocron's learned bots read it) and of the other $SWU_* settings bots read ($SWU_LEARNED_BLEND,
  * $SWU_CARD_JSON, ...; not the *_THOUGHTS and *_TRACE outputs), when there are any. Arena versions live outside the
  * repo and never change. null without git.
  */
 function harnessRev() {
     const root = path.join(__dirname, '..');
     const git = (...a) => execFileSync('git', ['-C', root, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
-    const dirs = ['bot', 'models'].filter((d) => fs.existsSync(path.join(root, d)));
+    const dirs = ['bot', 'vendor/kessel'].filter((d) => fs.existsSync(path.join(root, d)));
     try {
         const tree = dirs.map((d) => git('rev-parse', '--short', `HEAD:${d}`).trim()).join('.');
         const extra = git('ls-files', '--others', '--exclude-standard', '-z', '--', ...dirs).split('\0').filter(Boolean).sort();
@@ -147,8 +147,8 @@ function harnessRev() {
 /**
  * A hash of the bot programs in this ladder ($SWU_EXTERNAL_BOTS or bot/external-bots.json): each one's entry and the
  * files it names (its program, the scripts and model files in its arguments, its adapter), which may be built files git
- * does not track (bot/c/swu-c) or live outside the repo. For a named file outside the repo (harnessRev covers bot/ and
- * models/) the other files in its folder count too, as a program may import or load them; an entry lists anything
+ * does not track (build/compiled) or live outside the repo. For a named file outside the repo (harnessRev covers bot/
+ * and vendor/kessel/) the other files in its folder count too, as a program may import or load them; an entry lists anything
  * else its program reads in `inputs` (files or folders, from its cwd). null when no bot program plays.
  */
 function programsRev(names) {
@@ -347,7 +347,7 @@ async function main() {
         writeJson(path.join(out, 'index.json'), tIndex);
         return doc;
     };
-    // tournament.js-format index (TournamentIndex in studio/src/data/types.ts)
+    // tournament.js-format index (TournamentIndex in Holotable's src/data/types.ts)
     const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
     let queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     if (prev) {

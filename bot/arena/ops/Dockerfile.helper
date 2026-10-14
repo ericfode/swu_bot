@@ -5,10 +5,10 @@
 # `sh bot/arena/ops/helper.sh build` makes it; it is never deployed.
 #
 # Everything a game runs on comes unchanged from the machine's image (MACHINE_IMAGE, read as files only, never run): the
-# bot code, the engine and its card data, build/compiled (the intake's tools), BUILD_SHA and CARDS_SHA, so the helper still
-# matches the machine's build. Only the native parts are built for this computer: Node and Python with wasmtime from
-# their official images, and the coordinator release from Dockerfile.games's own coord stage at the machine's commit
-# (COORD_IMAGE, which helper.sh builds first).
+# bot code, Kessel for Rust simulations (vendor/), the engine and its card data, build/compiled (the intake's tools),
+# BUILD_SHA and CARDS_SHA, so the helper still matches the machine's build. Only the native parts are built for this
+# computer: Node and Python with wasmtime from their official images, and the coordinator release from Dockerfile.games's
+# own coord stage at the machine's commit (COORD_IMAGE, which helper.sh builds first).
 ARG MACHINE_IMAGE
 ARG COORD_IMAGE
 FROM --platform=linux/amd64 ${MACHINE_IMAGE} AS machine
@@ -28,6 +28,7 @@ ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
 WORKDIR /app
 COPY --from=machine /app/package.json /app/BUILD_SHA /app/CARDS_SHA ./
 COPY --from=machine /app/bot bot
+COPY --from=machine /app/vendor vendor
 COPY --from=machine /app/forceteki forceteki
 COPY --from=machine /app/build build
 COPY --from=coord /opt/coord /app/coord
