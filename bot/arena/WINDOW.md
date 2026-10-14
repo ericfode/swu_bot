@@ -157,7 +157,7 @@ never in a thread. `<NAME>` is letters and digits only, so one feed's names neve
 hyphen. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
 
 - `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
-  viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
+  studio/src/data/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
   running games; a finished one has `outcome` `"won"` (with `winnerSeat` `p1` or `p2`), `"draw"` or `"abandoned"`. The
   window keeps only the fields the app reads, each checked for its type: on the run `createdAt` (required), `bots` and
   `gamesPerPairing`; on each game `id` (distinct), `p1`, `p2`, `outcome`, `winnerSeat` (set from the outcome), `rounds`,

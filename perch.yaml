@@ -4,6 +4,5 @@ ignore:
   - forceteki/**
   - replays/**
   - results/**
-  - viewer/dist/**
 
 rules: []

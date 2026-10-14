@@ -190,8 +190,12 @@ test('window: replays grow by appends at the right offset, and readers can tail 
         const tail = await go('/api/replays/arena-t1-r1/g%231?from=15', { cookie: friend });
         assert.strictEqual(await tail.text(), '{"t":"step"}\n');
         assert.deepStrictEqual((await (await go('/api/replays/arena-t1-r1', { cookie: friend })).json()).result, ['g#1']);
-        // the arena page's own replay links
+        // replay links in the replays-server shape
         assert.strictEqual(await (await go('/replays/arena-t1-r1/games/g%231.jsonl', { cookie: friend })).text(), '{"t":"header"}\n{"t":"step"}\n');
+        // the old arena page's address opens the app
+        const old = await go('/arena', { cookie: friend });
+        assert.strictEqual(old.status, 302);
+        assert.strictEqual(old.headers.get('location'), '/');
         // a whole game replaces what was there
         assert.strictEqual((await go('/api/replays/arena-t1-r1/g%231', { method: 'PUT', token: 'push-secret', body: '{"t":"end"}\n', type: 'application/x-ndjson' })).status, 200);
         assert.strictEqual(await (await go('/api/replays/arena-t1-r1/g%231', { cookie: friend })).text(), '{"t":"end"}\n');

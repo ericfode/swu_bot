@@ -1,13 +1,13 @@
 # Replay and tournament format (v1)
 
-What `bot/tournament.js` writes and what `viewer/` reads. A replay holds the decisions plus a compact board snapshot
+What `bot/tournament.js` writes and what the viewer (`studio/`) reads. A replay holds the decisions plus a compact board snapshot
 after every decision, so a viewer never needs the engine; with its deck lists, seed and chosen action indices it can
 also be played again on the engine. Fields marked *(added)* are newer than the original repo's writer; readers that
 predate them ignore them. Machine-checkable versions:
 [`schemas/replay-event.schema.json`](schemas/replay-event.schema.json),
 [`schemas/tournament-index.schema.json`](schemas/tournament-index.schema.json),
 [`schemas/tournament-list.schema.json`](schemas/tournament-list.schema.json). TypeScript types:
-`viewer/src/core/types.ts`. Writer: `bot/match.js` (events) and `bot/view.js` (snapshots).
+`studio/src/data/types.ts`. Writer: `bot/match.js` (events) and `bot/view.js` (snapshots).
 
 ## Files
 
@@ -142,7 +142,7 @@ It is the bot's board view (protocol.md, `state`) with both hands shown and no `
 Card art for a ref: `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png` from `s`, with `-b` before `.png` for a
 deployed leader. Tokens and unreleased sets have no art.
 
-## HTTP (viewer/server.cjs)
+## HTTP (studio's dev and preview server)
 
 | Request | Response |
 |---|---|
@@ -154,7 +154,7 @@ deployed leader. Tokens and unreleased sets have no art.
 
 A game file is appended line by line while it is played, and `index.json` lists the game with `outcome: "running"` from
 its first move. A reader following a live game must drop an unfinished last line (no trailing newline) and treat a
-file with a header but no `end` as in progress. `viewer/src/core/api.ts` (`loadGame(..., allowPartial)`) does this and
+file with a header but no `end` as in progress. `studio/src/data/source.ts` (`parseGame(text, allowPartial)`) does this, and the viewer
 re-polls.
 
 ## Compatibility rules

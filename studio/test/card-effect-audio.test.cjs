@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const { createRequire } = require('node:module');
-const ts = require('../../viewer/node_modules/typescript');
+const ts = require('typescript5');
 
 function loader(overrides = {}) {
     const modules = new Map();

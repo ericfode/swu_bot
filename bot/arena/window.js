@@ -612,7 +612,7 @@ const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel'
 
 /**
  * The window's request handler. opts: home (storage folder), auth (an auth.js instance; default from the environment),
- * app (the friends' page file), web (the arena page), kit (the viewer kit), appParts and staleMs (for tests).
+ * app (the friends' page file), kit (the viewer kit), appParts and staleMs (for tests).
  */
 /**
  * Wakes the games machine (its coordinator's POST /wake) at `url`, e.g. http://swu-arena-games.flycast/wake: Fly's proxy starts
@@ -637,7 +637,6 @@ function createWindow(opts = {}) {
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
-    const webFile = opts.web ?? path.join(__dirname, 'web', 'index.html');
     const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'studio', 'dist-kit', 'swu-viewer-kit.js');
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
@@ -1205,10 +1204,15 @@ function createWindow(opts = {}) {
                 return sendText(res, req, who.login ? 403 : 200, 'text/html; charset=utf-8', auth.signInPage(url.pathname + url.search, who.login));
             }
             if (url.pathname === '/' || url.pathname === '/index.html') {
-                return serveFile(req, res, fs.existsSync(appFile) ? appFile : webFile, 'text/html; charset=utf-8');
+                if (!fs.existsSync(appFile)) {
+                    return sendText(res, req, 503, 'text/plain', 'the app is not built: npm run app -- --public (app/README.md)');
+                }
+                return serveFile(req, res, appFile, 'text/html; charset=utf-8');
             }
+            // the old arena page is gone; its bookmarks open the app
             if (url.pathname === '/arena' || url.pathname === '/arena.html') {
-                return serveFile(req, res, webFile, 'text/html; charset=utf-8');
+                res.writeHead(302, { location: '/', 'cache-control': 'no-store' });
+                return res.end();
             }
             if (url.pathname === '/strategy-diagram.js') {
                 return serveFile(req, res, path.join(__dirname, 'web', 'strategy-diagram.js'), 'text/javascript');
@@ -1216,7 +1220,7 @@ function createWindow(opts = {}) {
             if (url.pathname === '/kit.js') {
                 return serveFile(req, res, kitFile, 'text/javascript');
             }
-            // the arena page's replay links (<ladder>/games/<id>.jsonl and <ladder>/index.json), from the window's collections
+            // replay links in the replays-server shape of spec/replay-format.md (<ladder>/games/<id>.jsonl and <ladder>/index.json), from the window's collections
             const rep = /^\/replays\/([\w.%@+-]+)\/(?:games\/([\w.%@+-]+)\.jsonl|(index)\.json)$/.exec(url.pathname);
             if (rep) {
                 const dec = (x) => {

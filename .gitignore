@@ -5,7 +5,6 @@ node_modules/
 !.env.example
 replays/
 replays-*.log
-viewer/dist/
 studio/dist/
 studio/dist-static/
 studio/fixtures/replays/

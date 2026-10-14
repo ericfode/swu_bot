@@ -217,7 +217,7 @@ speed), `meta/meta.json` (spots), `research/eval-theory/td-report.json` (evaluat
 - Recorder (core code, if Eric picks it in Pick 3): write a slim board trace for every game even when full replays
   are off (about 19 KB a game against about 200 KB, measured on eval-ladder-8), so every running game gets a board in
   Now playing and every bot a spot map.
-- Arena (`bot/arena/web/`): adopt the app shell or redirect `/` to the app; keep `/api`.
+- Arena (`bot/arena/web/`): adopt the app shell or redirect `/` to the app; keep `/api`. Done: `/` serves the app, and `/arena` redirects to it since the old page was removed.
 - Research dashboard contract: add result widget types so owners stop posting bot results as stat boxes and bar
   lists: `faceoff` ({a, b, share, n}), `score` ({bot, value}), `spots` ({bot}), drawn by the same pieces as the app.
 - Research dashboard: none needed for the prototype; if Eric picks this structure, its section renderers move

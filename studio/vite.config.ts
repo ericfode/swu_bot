@@ -27,7 +27,7 @@ function effectReviewManifest(): Plugin {
 }
 
 /**
- * Serves the same two routes as viewer/server.cjs (GET /api/tournaments and /replays/*), straight from a replays
+ * Serves the replay routes of spec/replay-format.md (GET /api/tournaments and /replays/*), straight from a replays
  * folder, so `npm run dev` and `npm run preview` need no second server. REPLAYS_DIR overrides <repo>/replays. Also
  * /evals/<gameId>.json, /lens/<gameId>.json, /lens/<dir>/<gameId>.json (one subfolder per score, plus evaluators.json
  * and each folder's index.json) and /card-text.json (CARD_TEXT, default DEFAULT_CARD_TEXT when it exists).
