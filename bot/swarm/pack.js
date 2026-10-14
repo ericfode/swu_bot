@@ -121,7 +121,7 @@ function pack({ root, out }) {
         }
     }
     // the swarm's own code that runs inside the runtime, and the resident WebAssembly bots (bundles, not the tools)
-    for (const f of ['bot/swarm/referee.js', 'bot/compiled/toolchain.json', 'bot/players/guard.js']) {
+    for (const f of ['bot/swarm/referee.js', 'bot/compiled/toolchain.json', 'bot/players/guard.js', 'bot/arena/play-seed.js', 'bot/arena/registry.js', 'bot/arena/home.js', 'bot/game-pool.js']) {
         add(path.join(root, f));
     }
     const compiled = path.join(root, 'build/compiled');

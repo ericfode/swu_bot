@@ -318,9 +318,14 @@ function virtualFs(files, { cwd, Buffer, now = () => Date.now() }) {
         if (!dirs.has(POSIX.dirname(a))) {
             throw fsError('ENOENT', 'open', p);
         }
-        const chunk = typeof data === 'string' ? data : asText(data);
-        const prev = append && files.has(a) ? asText(files.get(a)) : '';
-        files.set(a, prev + chunk);
+        if (!append && typeof data !== 'string') {
+            // bytes stay bytes (a bundle's WebAssembly)
+            files.set(a, Uint8Array.from(data));
+        } else {
+            const chunk = typeof data === 'string' ? data : asText(data);
+            const prev = append && files.has(a) ? asText(files.get(a)) : '';
+            files.set(a, prev + chunk);
+        }
         mtimes.set(a, now());
     };
     const fds = new Map();

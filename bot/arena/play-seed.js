@@ -258,4 +258,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { RESIDENTS, IN_PROCESS, residentsHere, checkJob, Refused };
+module.exports = { RESIDENTS, IN_PROCESS, residentsHere, checkJob, checkResolved, Refused };
