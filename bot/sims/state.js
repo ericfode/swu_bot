@@ -55,7 +55,7 @@ function phaseStats(card) {
 }
 
 function ref(eg, c) {
-    const { placedRef } = require('../../view');
+    const { placedRef } = require('../view');
     const v = placedRef(eg, c);
     return { id: v.id, setCode: v.s || (c.isToken?.() ? `TOKEN_${c.internalName.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}` : null), name: c.internalName };
 }

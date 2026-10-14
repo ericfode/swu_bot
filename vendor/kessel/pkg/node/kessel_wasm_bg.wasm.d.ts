@@ -1,0 +1,35 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_wasmengine_free: (a: number, b: number) => void;
+export const __wbg_wasmgame_free: (a: number, b: number) => void;
+export const capabilities: () => [number, number];
+export const wasmengine_fromCatalogue: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const wasmengine_loadState: (a: number, b: number, c: number) => [number, number, number];
+export const wasmengine_new: (a: number, b: number) => [number, number, number];
+export const wasmengine_poolHash: (a: number) => [number, number];
+export const wasmengine_rulesBackendReport: (a: number) => [number, number];
+export const wasmengine_setRulesBackend: (a: number, b: number, c: number) => [number, number];
+export const wasmengine_setRulesInstrumentation: (a: number, b: number) => [number, number];
+export const wasmgame_actor: (a: number) => [number, number];
+export const wasmgame_apply: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+export const wasmgame_bench: (a: number, b: number) => [number, number, number, number];
+export const wasmgame_clone: (a: number) => number;
+export const wasmgame_isActionWindow: (a: number) => number;
+export const wasmgame_legalActions: (a: number, b: number, c: number) => [number, number, number, number];
+export const wasmgame_over: (a: number) => number;
+export const wasmgame_phase: (a: number) => [number, number];
+export const wasmgame_poolHash: (a: number) => [number, number];
+export const wasmgame_prove: (a: number, b: number, c: number) => [number, number, number, number];
+export const wasmgame_round: (a: number) => number;
+export const wasmgame_setActor: (a: number, b: number, c: number) => [number, number];
+export const wasmgame_snapshot: (a: number) => [number, number];
+export const wasmgame_stateHash: (a: number) => [number, number];
+export const wasmgame_winner: (a: number) => [number, number];
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;

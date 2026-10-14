@@ -4,6 +4,8 @@
 # repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
 # container). The build context is filtered by Dockerfile.games.dockerignore.
 # No stage installs system packages: each takes what it needs from an official image (node, python, rust, Hex's elixir).
+# The Rust simulator that serves Rust simulations (Kessel, "simEngine": "rust" in spec/protocol.md) comes prebuilt from
+# vendor/kessel (vendor/README.md), so no stage builds it.
 
 # the engine: forceteki built at the commit this repo pins, its card data fetched, only its runtime packages kept
 FROM node:22-bookworm AS engine
@@ -25,20 +27,6 @@ FROM python:3.12-slim-bookworm AS tools
 WORKDIR /src
 COPY bot/compiled bot/compiled
 RUN python3 bot/compiled/build.py --tools && rm -rf build/compiled/.tools/downloads
-
-# the Rust simulator as WebAssembly for Node (bot/omni-wasm/pkg/node), which serves the simulations of a bot that asks
-# for them on the Rust engine ("simEngine": "rust", spec/protocol.md); without it such a bot silently gets forceteki
-# ones (bot/omni/rs/rust-sims.js). wasm-bindgen-cli at the version build.js pins, in a layer of its own.
-FROM rust:1.97-bookworm AS omniwasm
-COPY bot/omni-wasm/build.js /build.js
-RUN rustup target add wasm32-unknown-unknown \
- && cargo install wasm-bindgen-cli --locked --root /opt/wasm-tools \
-      --version "$(sed -n "s/^const bindgenVersion = '\(.*\)';$/\1/p" /build.js)"
-COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
-WORKDIR /src
-COPY Cargo.toml Cargo.lock ./
-COPY bot bot
-RUN WASM_BINDGEN=/opt/wasm-tools/bin/wasm-bindgen node bot/omni-wasm/build.js --target node
 
 # the Elixir coordinator as a release (coord/): Erlang and Elixir from Hex's official image, built on the rust image
 # because it has gcc (exqlite's SQLite is compiled from source, config :exqlite, force_build: true). All three images
@@ -70,12 +58,14 @@ ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
 WORKDIR /app
 COPY package.json ./
 COPY bot bot
+# Kessel's adapter and its WebAssembly package for Node (bot/sims/rust-sims.js loads them); without them a bot that
+# asks for Rust simulations silently gets forceteki ones
+COPY vendor/kessel vendor/kessel
 COPY --from=engine /src/forceteki/package.json forceteki/package.json
 COPY --from=engine /src/forceteki/build forceteki/build
 COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
 COPY --from=engine /src/forceteki/test/json forceteki/test/json
 COPY --from=tools /src/build/compiled build/compiled
-COPY --from=omniwasm /src/bot/omni-wasm/pkg/node bot/omni-wasm/pkg/node
 COPY --from=coord /opt/coord /app/coord
 # the release starts here: crypto, SQLite and the CA store load (runtime.exs needs a window address to load)
 RUN SWU_WINDOW=http://window.invalid /app/coord/bin/coord eval 'true = byte_size(:crypto.strong_rand_bytes(8)) == 8; {:ok, _} = Exqlite.Sqlite3.open(":memory:"); true = :public_key.cacerts_get() != []'

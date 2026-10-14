@@ -185,7 +185,7 @@ class ClientSeat {
         }
         this.v = v;
         this.wantsSims = v === 2 && r.sim === true;
-        // simulations on the Rust engine when it knows every card (bot/omni/rs/rust-sims.js); forceteki otherwise
+        // simulations on the Rust engine when it knows every card (bot/sims/rust-sims.js); forceteki otherwise
         this.simEngine = this.wantsSims && r.simEngine === 'rust' ? 'rust' : null;
         // the build that plays this game, recorded with the result (informational, any version)
         this.version = typeof r.version === 'string' && r.version ? r.version.slice(0, 200) : null;
@@ -201,7 +201,7 @@ class ClientSeat {
         let sim = null;
         if (this.wantsSims && eg.isActionWindow(pid)) {
             const deals = (deal) => this.setup.deals(`${seq}:${deal}`);
-            sim = this.simEngine ? await require('./omni/rs/rust-sims').rustSimulator(eg, pid, deals, ms) : null;
+            sim = this.simEngine ? await require('./sims/rust-sims').rustSimulator(eg, pid, deals, ms) : null;
             // the copy catches up with the real game before the clock starts
             const copy = sim ? null : await this.shadow.sync(eg, pid);
             sim ??= copy ? simulator(this.shadow, pid, deals, ms === null ? null : Date.now() + ms) : null;

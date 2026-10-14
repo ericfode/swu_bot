@@ -4,7 +4,7 @@
 // come from the pool file. What the Rust state does not hold is left out: prompt titles and types, the Force, credits.
 const ZONES = { hand: 'hand', resources: 'resource', ground: 'groundArena', space: 'spaceArena', discard: 'discard', deck: 'deck' };
 
-/** setCode -> { title, sentinel } from a loaded pool (bot/omni/rs/pool.js). */
+/** setCode -> { title, sentinel } from a loaded pool (bot/sims/pool.js). */
 function poolCards(pool) {
     return new Map(pool.cards.map((c) => [c.setCode, { title: c.title, sentinel: (c.keywords ?? []).includes('sentinel'), token: (c.types ?? []).includes('token') }]));
 }
