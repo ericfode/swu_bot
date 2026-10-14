@@ -21,7 +21,8 @@ const WORK = '/work';
 function createRefereeHost({ files, makeWorker, compile, log = console, cpus = 1, stderr = null }) {
     let spawn = null;
     const rt = createEngineRuntime({ files, spawn: (...a) => spawn(...a), env: { ARENA_HOME: `${WORK}/arena` }, log, cpus });
-    spawn = createSpawn({ fs: rt.fs, path: rt.path, makeWorker, compile, stderr });
+    const modules = new Map();
+    spawn = createSpawn({ fs: rt.fs, path: rt.path, makeWorker, compile, stderr, modules });
     const { fs, path } = rt;
     // the engine and every card class load now, once per worker
     rt.require('/app/bot/env.js');
@@ -65,7 +66,31 @@ function createRefereeHost({ files, makeWorker, compile, log = console, cpus = 1
         return ref.play({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key });
     }
 
-    return { prepare, play, runtime: rt, close: () => rt.require('/app/bot/players/index.js').closeBots() };
+    /** The bundle runtimes a checked job's bots need ('wasi-p1', 'python-3.14-wasi'), from their arena.json. */
+    function runtimes(job) {
+        const out = new Set();
+        for (const [name, b] of Object.entries(job.bots)) {
+            const dir = b.kind === 'wasm' ? path.join(WORK, 'arena', 'versions', name, 'bundle') : `/app/build/compiled/${name.replace(/-wasm$/, '')}`;
+            const manifest = path.join(dir, 'arena.json');
+            if (fs.existsSync(manifest)) {
+                out.add(String(JSON.parse(fs.readFileSync(manifest, 'utf8')).runtime));
+            }
+        }
+        return out;
+    }
+
+    /** Adds files (an interpreter's library) and compiled modules (its WebAssembly, by the path run.py would read). */
+    function addFiles(entries, compiled = []) {
+        for (const [p, data] of entries) {
+            fs.mkdirSync(path.dirname(p), { recursive: true });
+            fs.writeFileSync(p, data);
+        }
+        for (const [p, module] of compiled) {
+            modules.set(p, Promise.resolve(module));
+        }
+    }
+
+    return { prepare, play, runtimes, addFiles, runtime: rt, close: () => rt.require('/app/bot/players/index.js').closeBots() };
 }
 
 module.exports = { createRefereeHost };

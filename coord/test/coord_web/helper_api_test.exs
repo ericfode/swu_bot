@@ -60,6 +60,31 @@ defmodule CoordWeb.HelperAPITest do
     id
   end
 
+  describe "the swarm's files" do
+    setup do
+      dir = Path.join(System.tmp_dir!(), "swarm-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, "build/swarm"))
+      File.write!(Path.join(dir, "build/swarm/manifest.json"), ~s({"build":"build-1","cards":"cards-1"}))
+      put_setting(:app, dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      :ok
+    end
+
+    test "a helper token reads a listed file without the build header" do
+      conn = api(:get, "/v1/swarm/manifest.json", "", build: nil)
+      assert conn.status == 200
+      assert body(conn) == %{"build" => "build-1", "cards" => "cards-1"}
+      assert get_resp_header(conn, "content-type") == ["application/json"]
+    end
+
+    test "other names, missing files and no token are refused" do
+      assert api(:get, "/v1/swarm/env", "", build: nil).status == 404
+      assert api(:get, "/v1/swarm/..%2Fsecret", "", build: nil).status == 404
+      assert api(:get, "/v1/swarm/engine.json", "", build: nil).status == 404
+      assert api(:get, "/v1/swarm/manifest.json", "", as: nil, build: nil).status == 401
+    end
+  end
+
   describe "the token" do
     test "a token whose sha256 is listed gets in, by its name" do
       conn = api(:post, "/v1/hello", hello_body())

@@ -165,6 +165,25 @@ function pack({ root, out }) {
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, 'engine.json'), json);
     const manifest = { build: doc.build, cards: doc.cards, count: Object.keys(files).length, bytes, packBytes: Buffer.byteLength(json), sha256: crypto.createHash('sha256').update(json).digest('hex') };
+    // Python bundles' interpreter, when the root has it (the games image does): its WebAssembly as is, and its standard
+    // library as python-lib.json, without what a bot never imports (tests, GUI toolkits, docs)
+    const toolchain = JSON.parse(fs.readFileSync(path.join(root, 'bot/compiled/toolchain.json'), 'utf8'));
+    const py = toolchain.runtimes?.['python-3.14-wasi'];
+    const home = py && path.join(root, 'build/compiled/.tools', py.dir);
+    if (home && fs.existsSync(path.join(home, py.wasm))) {
+        fs.copyFileSync(path.join(home, py.wasm), path.join(out, 'python.wasm'));
+        const lib = {};
+        for (const p of walk(path.join(home, 'lib'))) {
+            const rel = path.relative(root, p);
+            if (!/(^|\/)(test|tests|idlelib|tkinter|turtledemo|pydoc_data|ensurepip|__pycache__)(\/|$)|turtle\.py$/.test(rel)) {
+                const buf = fs.readFileSync(p);
+                const text = buf.toString('utf8');
+                lib[`/app/${rel}`] = Buffer.from(text, 'utf8').equals(buf) ? text : `b64:${buf.toString('base64')}`;
+            }
+        }
+        fs.writeFileSync(path.join(out, 'python-lib.json'), JSON.stringify({ build: doc.build, wasm: `/app/${path.relative(root, path.join(home, py.wasm))}`, files: lib }));
+        manifest.python = { wasm: py.wasm, files: Object.keys(lib).length };
+    }
     fs.writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     return manifest;
 }

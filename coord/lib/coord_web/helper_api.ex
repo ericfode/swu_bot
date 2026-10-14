@@ -13,6 +13,8 @@ defmodule CoordWeb.HelperAPI do
     * GET bundle/<hex>: a bundle named by a lease this helper holds now (else 404)
     * POST lease/<id>/heartbeat: 200 {continue: true} while this helper holds it, else 410
     * POST lease/<id>/result {results, replays} or {failed}: 200, or 410 as for a heartbeat
+    * GET swarm/<file>: a file of the browser swarm built with this image (spec/executor.md), the one route without
+      the build header, since the window learns the build from swarm/manifest.json
 
   Tokens and paths are never logged; helper names and lease ids may be.
   """
@@ -37,10 +39,17 @@ defmodule CoordWeb.HelperAPI do
 
   @impl true
   def call(conn, _opts) do
-    with {:ok, name} <- authorize(conn),
-         :ok <- check_build(conn),
-         :ok <- check_running(conn) do
-      route(conn, conn.method, conn.path_info, name)
+    with {:ok, name} <- authorize(conn) do
+      case {conn.method, conn.path_info} do
+        {"GET", ["v1", "swarm", file]} ->
+          swarm_file(conn, file)
+
+        _ ->
+          with :ok <- check_build(conn),
+               :ok <- check_running(conn) do
+            route(conn, conn.method, conn.path_info, name)
+          end
+      end
     end
   rescue
     # a broken connection is Bandit's to report (it logs no path); anything else is answered here, so that no
@@ -147,6 +156,35 @@ defmodule CoordWeb.HelperAPI do
 
     Remote.claim_sent(lease.id)
     conn
+  end
+
+  # the browser swarm's files (bot/swarm), only these names, from this image's build/swarm
+  @swarm_files %{
+    "manifest.json" => "application/json",
+    "engine.json" => "application/json",
+    "python-lib.json" => "application/json",
+    "python.wasm" => "application/wasm",
+    "referee-worker.js" => "text/javascript",
+    "bot-worker.js" => "text/javascript",
+    "executor-worker.js" => "text/javascript"
+  }
+
+  defp swarm_file(conn, file) do
+    path = Path.join(Coord.Config.swarm_dir(), file)
+
+    case Map.fetch(@swarm_files, file) do
+      {:ok, type} ->
+        if File.regular?(path) do
+          conn
+          |> put_resp_content_type(type, nil)
+          |> send_file(200, path)
+        else
+          Body.error(conn, 404, "not_found", "this image has no swarm files")
+        end
+
+      :error ->
+        Body.error(conn, 404, "not_found")
+    end
   end
 
   defp bundle(conn, name, hex) do

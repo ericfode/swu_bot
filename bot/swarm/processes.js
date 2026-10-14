@@ -163,8 +163,8 @@ class BotProcess extends Emitter {
  * The spawn function. fs and path: the runtime's. modules: a Map cache of compiled WebAssembly by file. stderr(bytes):
  * where bots' stderr goes when the caller asked for it.
  */
-function createSpawn({ fs, path, makeWorker, compile = (bytes) => WebAssembly.compile(bytes), stderr = null, cardRoot = '/app/forceteki/test/json', toolsRoot = '/app/build/compiled/.tools' }) {
-    const modules = new Map();
+function createSpawn({ fs, path, makeWorker, compile = (bytes) => WebAssembly.compile(bytes), stderr = null, cardRoot = '/app/forceteki/test/json', toolsRoot = '/app/build/compiled/.tools', modules = new Map() }) {
+    // modules: compiled WebAssembly by file, which the caller may fill ahead (a runtime's interpreter, fetched as is)
     let cards = null;
     const folderFiles = (root) => {
         const out = [];
@@ -214,7 +214,7 @@ function createSpawn({ fs, path, makeWorker, compile = (bytes) => WebAssembly.co
             throw new Error(`unknown runtime ${m.runtime}`);
         }
         const home = path.join(toolsRoot, rt.dir);
-        if (!fs.existsSync(path.join(home, rt.wasm))) {
+        if (!fs.existsSync(path.join(home, rt.wasm)) && !modules.has(path.join(home, rt.wasm))) {
             throw new Error(`runtime ${m.runtime} is not loaded in this tab`);
         }
         for (const [host, guest] of Object.entries(rt.preopen ?? {})) {
