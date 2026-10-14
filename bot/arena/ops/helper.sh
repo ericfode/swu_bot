@@ -114,6 +114,18 @@ image() {
     fi
 }
 
+# Pulls the machine's amd64 image $1. A new build can be on the machine a little before the registry serves it (seen
+# 2026-10-14: "not found" right after a deploy, fine a minute later), so it tries 6 times, 30 s apart.
+pull() {
+    tries=1
+    until docker pull --quiet --platform linux/amd64 "$1" >/dev/null; do
+        [ "$tries" -lt 6 ] || return 1
+        tries=$((tries + 1))
+        echo "could not pull $1 yet; trying again in 30 s ($tries of 6)"
+        sleep 30
+    done
+}
+
 # Builds swu-helper:<commit> for this computer's CPU from the machine's image $1, unless it is there already, and sets
 # $tag to it. Two builds: Dockerfile.games's coord stage at the machine's commit (read from this checkout, fetched when
 # missing), then Dockerfile.helper, which adds the machine's game files to native Node, Python and that coordinator.
@@ -143,8 +155,7 @@ build_native() {
     docker build -f "$ctx/Dockerfile.games" --target coord -t "swu-helper-coord:$sha" "$ctx" ||
         { rm -rf "$ctx"; die "the coordinator did not build (the lines above say why)"; }
     echo "pulling $img for its game files (it does not run here)"
-    docker pull --quiet --platform linux/amd64 "$img" >/dev/null ||
-        { rm -rf "$ctx"; die "could not pull $img"; }
+    pull "$img" || { rm -rf "$ctx"; die "could not pull $img"; }
     docker build -f "$REPO/bot/arena/ops/Dockerfile.helper" --build-arg "MACHINE_IMAGE=$img" \
         --build-arg "COORD_IMAGE=swu-helper-coord:$sha" -t "$tag" "$ctx" ||
         { rm -rf "$ctx"; die "the helper image did not build (the lines above say why)"; }
@@ -233,7 +244,7 @@ run() {
             platform=
         else
             echo "pulling $img"
-            docker pull --quiet --platform linux/amd64 "$img"
+            pull "$img" || die "could not pull $img"
             tag=$img
             platform="--platform linux/amd64"
         fi
