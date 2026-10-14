@@ -87,7 +87,7 @@ def prep(a):
 
     for gi, g in enumerate(games):
         flat = None
-        if helper is not None and gi in held and g["decks"]:
+        if helper is not None and (a.eval_all or gi in held) and g["decks"]:
             flat = {s: [c["id"] for c in g["decks"][s].get("deck") or [] for _ in range(int(c.get("count", 1)))] for s in ("p1", "p2")}
         for w in g["windows"]:
             you, main, main_path = w["you"], w["main"], w.get("mainPath") or [w["main"]]
@@ -167,25 +167,36 @@ def window_logits(data, w, v):
     return out
 
 
-def metrics(data, wins, v):
-    """Move top-1 (planner's pick = best line per move), line top-1, softmax loss; v = logit per encoded position."""
-    move = line = 0
+def pick(data, w, lg):
+    """The planner's move in window w for these logits: the move of its best line."""
+    roots = data.leaf_root[data.win_lo[w]:data.win_hi[w]]
+    best = {}
+    for k, r in enumerate(roots):
+        if r not in best or lg[k] > best[r]:
+            best[r] = lg[k]
+    return max(best, key=best.get)
+
+
+def metrics(data, wins, v, ref=None):
+    """Move top-1 (planner's pick = best line per move), line top-1, softmax loss; v = logit per encoded position.
+    With ref (another scorer's logit per encoded position), also how often the two scorers pick the same move."""
+    move = line = same = 0
     ce = 0.0
     for w in wins:
         lo, hi = data.win_lo[w], data.win_hi[w]
         lg = window_logits(data, w, v)
         t = np.flatnonzero(data.leaf_teacher[lo:hi])[0]
         line += int(np.argmax(lg) == t)
-        roots = data.leaf_root[lo:hi]
-        best = {}
-        for k, r in enumerate(roots):
-            if r not in best or lg[k] > best[r]:
-                best[r] = lg[k]
-        move += int(max(best, key=best.get) == roots[t])
+        move += int(pick(data, w, lg) == data.leaf_root[lo + t])
+        if ref is not None:
+            same += int(pick(data, w, lg) == pick(data, w, window_logits(data, w, ref)))
         m = lg.max()
         ce += -(lg[t] - m - math.log(np.exp(lg - m).sum()))
     n = max(len(wins), 1)
-    return {"move_top1": round(move / n, 4), "line_top1": round(line / n, 4), "ce": round(float(ce) / n, 4), "n": len(wins)}
+    out = {"move_top1": round(move / n, 4), "line_top1": round(line / n, 4), "ce": round(float(ce) / n, 4), "n": len(wins)}
+    if ref is not None:
+        out["same_as_eval"] = round(same / n, 4)
+    return out
 
 
 def fit(a):
@@ -217,21 +228,31 @@ def fit(a):
         v[held_z] = value(data.Z[held_z], P)
         return v
 
-    log = {"args": vars(a), "windows": {"train": int(len(train)), "held": int(len(held))}, "curve": []}
-    base = metrics(data, held, vall(P))
-    log["start"] = base
-    print(f"start ({'v1 value head' if a.hidden == 0 else 'random head'}): {base}", flush=True)
+    ref = None
     if np.isfinite(data.leaf_ev).any():
+        # the evaluator's logit per encoded position, where prep scored it: held windows it scored all of become the check
         ev = np.full(len(data.Z), np.nan, np.float32)
         ok = data.leaf_z >= 0
         ev[data.leaf_z[ok]] = data.leaf_ev[ok]
-        has = [w for w in held if np.isfinite(ev[data.leaf_z[data.win_lo[w]:data.win_hi[w]][data.leaf_z[data.win_lo[w]:data.win_hi[w]] >= 0]]).all()]
-        log["evaluator"] = metrics(data, has, np.nan_to_num(ev))
-        print(f"evaluator (scored in prep) on {len(has)} held windows: {log['evaluator']}", flush=True)
+        scored = lambda w: np.isfinite(ev[data.leaf_z[data.win_lo[w]:data.win_hi[w]][data.leaf_z[data.win_lo[w]:data.win_hi[w]] >= 0]]).all()
+        held = np.array([w for w in held if scored(w)])
+        ref = np.nan_to_num(ev)
+        if a.target == "eval":
+            train = np.array([w for w in train if scored(w)])
+    elif a.target == "eval":
+        sys.exit("--target eval needs data prepped with --eval and --eval-all")
+    goal = "same_as_eval" if a.target == "eval" else "move_top1"
+    log = {"args": vars(a), "windows": {"train": int(len(train)), "held": int(len(held))}, "curve": []}
+    base = metrics(data, held, vall(P), ref)
+    log["start"] = base
+    print(f"start ({'v1 value head' if a.hidden == 0 else 'random head'}): {base}", flush=True)
+    if ref is not None:
+        log["evaluator"] = metrics(data, held, ref)
+        print(f"evaluator (scored in prep) on {len(held)} held windows: {log['evaluator']}", flush=True)
     m = {k: np.zeros_like(x) for k, x in P.items()}
     s = {k: np.zeros_like(x) for k, x in P.items()}
     step = 0
-    best = (base["move_top1"], {k: x.copy() for k, x in P.items()}, 0)
+    best = (base[goal], {k: x.copy() for k, x in P.items()}, 0)
     for ep in range(a.epochs):
         rng.shuffle(train)
         for b0 in range(0, len(train), a.batch):
@@ -255,10 +276,15 @@ def fit(a):
             np.add.at(sm, seg, e)
             p = e / sm[seg]
             teach = data.leaf_teacher[idx]
-            g = p - teach  # d(softmax CE)/d logit, per position
-            # outcome term on the teacher's position: keeps V a win estimate
-            won = data.win_won[bw][seg]
-            g = g + a.w_outcome * teach * (1 / (1 + np.exp(-lg)) - won)
+            if a.target == "eval":
+                # copy the evaluator: cross-entropy against its win probability at every live position
+                g = np.zeros(len(idx))
+                g[live] = (1 / (1 + np.exp(-lg[live])) - 1 / (1 + np.exp(-ref[data.leaf_z[idx][live]]))) * len(bw) / max(live.sum(), 1)
+            else:
+                g = p - teach  # d(softmax CE)/d logit, per position
+                # outcome term on the teacher's position: keeps V a win estimate
+                won = data.win_won[bw][seg]
+                g = g + a.w_outcome * teach * (1 / (1 + np.exp(-lg)) - won)
             gv = g[live] / len(bw)
             grads = {"v2.w": h.T @ gv[:, None], "v2.b": np.array([gv.sum()], np.float32)}
             dh = (gv[:, None] @ P["v2.w"].T) * (h_pre > 0)
@@ -269,12 +295,12 @@ def fit(a):
                 m[k] = 0.9 * m[k] + 0.1 * grads[k]
                 s[k] = 0.999 * s[k] + 0.001 * grads[k] ** 2
                 P[k] -= (a.lr * (m[k] / (1 - 0.9 ** step)) / (np.sqrt(s[k] / (1 - 0.999 ** step)) + 1e-8)).astype(np.float32)
-        r = metrics(data, held, vall(P))
+        r = metrics(data, held, vall(P), ref)
         r["epoch"] = ep + 1
         log["curve"].append(r)
         print(f"epoch {ep + 1}: {r}", flush=True)
-        if r["move_top1"] > best[0]:
-            best = (r["move_top1"], {k: x.copy() for k, x in P.items()}, ep + 1)
+        if r[goal] > best[0]:
+            best = (r[goal], {k: x.copy() for k, x in P.items()}, ep + 1)
     log["best_epoch"] = best[2]
     log["best"] = next((c for c in log["curve"] if c["epoch"] == best[2]), base)
     w = dict(w0)
@@ -282,7 +308,7 @@ def fit(a):
     M.save_safetensors(a.out + ".safetensors", w, {**meta, "value": "rank_train.py", "rank_data": a.data})
     with open(a.out + ".train.json", "w") as fh:
         json.dump(log, fh, indent=1)
-    print(f"wrote {a.out}.safetensors (best epoch {best[2]}: move top-1 {best[0]:.3f}, start {base['move_top1']:.3f})")
+    print(f"wrote {a.out}.safetensors (best epoch {best[2]}: {goal} {best[0]:.3f}, start {base[goal]:.3f})")
 
 
 def main():
@@ -294,6 +320,7 @@ def main():
     p.add_argument("--model", default=os.path.join(here, "models", "jepa-v1.safetensors"))
     p.add_argument("--out", default="data/jepa/rank-v1.npz")
     p.add_argument("--eval", default=None, help="bot/eval evaluator to score held-out windows with, as a yardstick")
+    p.add_argument("--eval-all", action="store_true", help="score every window with --eval, for fit --target eval")
     p.add_argument("--teacher-line", choices=["real", "alt"], default="real",
                    help="the teacher's position: where the real game settled, or its move played on by random choices like the other lines")
     f = sub.add_parser("fit")
@@ -308,6 +335,8 @@ def main():
     f.add_argument("--hidden", type=int, default=0, help="0: fine-tune the model's value head; N: a new head with N hidden units")
     f.add_argument("--seed", type=int, default=0)
     f.add_argument("--live-only", action="store_true", help="softmax over live positions only, which keeps V a win estimate")
+    f.add_argument("--target", choices=["rank", "eval"], default="rank",
+                   help="rank: put the teacher's position first; eval: copy the evaluator's scores (prep with --eval-all)")
     a = ap.parse_args()
     prep(a) if a.cmd == "prep" else fit(a)
 
