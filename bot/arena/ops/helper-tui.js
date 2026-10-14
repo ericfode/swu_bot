@@ -720,7 +720,10 @@ function gameLines(state, g, W, roomy, now) {
     const out = [line];
     if (roomy) {
         const lead = (p, style) => (p ? [[` ${short(clean(p.leader, 16), 16)}`, style], [` ${p.hand}h ${p.ready}/${p.total}r  `, S.dim]] : []);
-        out.push([['        '], ...lead(last.p1, S.p1), ...unitsText(last.p1), ['  │ ', S.faint], ...lead(last.p2, S.p2), ...unitsText(last.p2),
+        // p1's side ends under "vs", where p2's begins
+        const vsCol = 21 + nameW + barW;
+        const left = cut([['        '], ...lead(last.p1, S.p1), ...unitsText(last.p1)], vsCol);
+        out.push([...left, [' '.repeat(Math.max(1, vsCol - visible(left)))], ['│ ', S.faint], ...lead(last.p2, S.p2), ...unitsText(last.p2),
             [`  ${clean(last.label, 30)}`, S.faint]]);
     }
     return out;
