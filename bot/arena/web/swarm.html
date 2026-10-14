@@ -35,6 +35,7 @@ button { font: 650 15px/1 var(--sans); border-radius: 10px; border: 1px solid tr
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #join { background: linear-gradient(90deg, #3f6bff, #8a5cff); color: white; min-width: 170px; }
 #join[data-on="1"] { background: transparent; color: var(--ink); border-color: var(--line); }
+#join:disabled { opacity: .45; cursor: not-allowed; }
 .stepper { display: inline-flex; align-items: center; gap: 10px; font: 600 14px var(--mono); }
 .stepper button { padding: 8px 12px; background: #1a2240; color: var(--ink); border-color: var(--line); }
 .stepper button:disabled { opacity: .35; cursor: default; }
@@ -125,7 +126,9 @@ let info = null, worker = null, joined = false;
 const started = Date.now();
 const S = { games: 0, seeds: 0, failed: 0 };
 const leases = new Map(); // lease -> {slot, seed, games: Map(id -> {bots, last, result}), el}
-const PHASES = { loading: 'Loading', ready: 'Ready', connecting: 'Connecting', connected: 'Waiting for a round', playing: 'Playing', nomachine: 'Machine asleep', stale: 'Reload needed', stopped: 'Not playing', error: 'Error' };
+const PHASES = { loading: 'Loading', ready: 'Ready', waiting: 'Joined, waiting for a round', connecting: 'Connecting', connected: 'Waiting for a seed', playing: 'Playing', nomachine: 'Machine asleep', stale: 'Reloading', stopped: 'Not playing', error: 'Error' };
+// what a round needs: the games machine wakes for one when a bot is submitted, changed or withdrawn, or a day after the last
+const ASLEEP = 'No round is playing, so the games machine is asleep. A round starts when a bot is submitted, changed or withdrawn, or a day after the last one.';
 
 function setPhase(phase, note) {
   $('pill').dataset.phase = phase;
@@ -251,8 +254,17 @@ function addDone(row) {
 
 function onMessage(m) {
   if (m.t === 'state') {
+    if (m.phase === 'nomachine' && joined) {
+      // the round ended and the machine went to sleep: the tab keeps trying, and plays when the next round starts
+      setPhase('waiting', `${ASLEEP} This tab plays again when the next round starts; keep it open.`);
+      return;
+    }
     setPhase(m.phase === 'connected' && leases.size ? 'playing' : m.phase, m.note ?? '');
-    if (m.phase === 'stale') { $('join').disabled = true; }
+    if (m.phase === 'stale') {
+      // a new build of the games machine: reload for its files and join again
+      store.set('swarm.rejoin', '1');
+      setTimeout(() => location.reload(), 3000);
+    }
   } else if (m.t === 'hello') {
     setPhase('connected', `Connected as ${info.login}. Keep this tab open while it plays.`);
   } else if (m.t === 'lease') {
@@ -311,27 +323,51 @@ async function join() {
   joined = true;
   $('minus').disabled = $('plus').disabled = true;
   $('join').textContent = 'Leave the swarm'; $('join').dataset.on = '1';
+  dirty = true;
+  start();
+}
+
+// Joined: the tab starts playing as soon as the games machine is awake, and checks every 30 s until it is.
+async function start() {
+  if (!joined || worker) return;
+  if (!info?.ready) {
+    setPhase('waiting', `${ASLEEP} This tab joins by itself when the next round starts; keep it open.`);
+    setTimeout(async () => { await refresh(); start(); }, 30000);
+    return;
+  }
   worker = new Worker(info.files.executor);
   worker.onmessage = (e) => onMessage(e.data);
   worker.onerror = (e) => setPhase('error', `The swarm stopped: ${e.message}`);
   worker.postMessage({ t: 'start', api: '/api/swarm', files: info.files, build: info.build, cards: info.cards, slots });
   setPhase('connecting', 'Loading the engine and saying hello to the games machine…');
-  dirty = true;
 }
 $('join').onclick = join;
 
-async function load() {
+/** /api/swarm/info: whether the games machine is awake, and the build (and its files) a tab must load. */
+async function refresh() {
   try {
     const r = await fetch('/api/swarm/info', { credentials: 'same-origin' });
     const body = await r.json();
-    if (!r.ok) { setPhase('error', body?.error?.message ?? `The swarm is not available (${r.status}).`); return; }
+    if (!r.ok) { setPhase('error', body?.error?.message ?? `The swarm is not available (${r.status}).`); return false; }
     info = body;
-    if (!info.ready) { setPhase('nomachine', info.why ?? 'The games machine is asleep.'); setTimeout(load, 60000); return; }
-    $('join').disabled = false;
-    setPhase('ready', `Signed in as ${info.login}. Bots run in sandboxed workers with no network; closing the tab hands its seeds back.`);
+    return true;
   } catch (e) {
     setPhase('error', `Could not reach the window (${e.message}).`);
+    return false;
   }
+}
+async function load() {
+  if (!(await refresh())) return;
+  $('join').disabled = false;
+  if (store.get('swarm.rejoin', '') === '1') {
+    // the page reloaded itself for a new build while it was joined
+    store.set('swarm.rejoin', '');
+    join();
+    return;
+  }
+  setPhase(info.ready ? 'ready' : 'nomachine', info.ready
+    ? `Signed in as ${info.login}. A round is playing: join to take seeds. Bots run in sandboxed workers with no network; closing the tab hands its seeds back.`
+    : `Signed in as ${info.login}. ${ASLEEP} You can join now and this tab starts with the next round.`);
 }
 load();
 
