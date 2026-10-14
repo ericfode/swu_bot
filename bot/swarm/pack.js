@@ -68,8 +68,14 @@ async function trace(root) {
     require(path.join(root, 'bot/protocol.js'));
     require(path.join(root, 'bot/stdio.js'));
     require(path.join(root, 'bot/rng.js'));
-    const bots = [players.makeBot('heuristic', []), players.makeBot('rush', [])];
-    await playGame(env, { seed: 7, bots, key: null, maxSteps: 400, record: true, snapshot });
+    // a short game between the in-process bots loads what a game needs; when a lineup has none of them any more (the
+    // arena's residents become submitted bundles), the modules required above still are the pack
+    try {
+        const bots = [players.makeBot('heuristic', []), players.makeBot('rush', [])];
+        await playGame(env, { seed: 7, bots, key: null, maxSteps: 400, record: true, snapshot });
+    } catch (e) {
+        console.error(`pack: no traced game (${String(e?.message ?? e).split('\n')[0]}); packing the modules loaded so far`);
+    }
     for (const name of ['c-clock-wasm', 'rust-greedy2-wasm', 'rust-search-wasm', 'node-search-wasm', 'py-clock-wasm']) {
         try {
             players.describeBot(name);
