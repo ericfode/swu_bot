@@ -1455,7 +1455,9 @@ static const Act *choose_buttons(State *st, const Prompt *pr, const Act *acts, i
             dep = find_button(acts, n, "deploy");
         }
         if (dep && strcmp(G.intent, "ability")) {
-            G.deployedOnce = 1;
+            if (!strcmp(G.intent, "deploy")) {
+                G.deployedOnce = 1;
+            }
             return dep;
         }
         if (!dep && !strcmp(G.intent, "deploy")) {
