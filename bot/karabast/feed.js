@@ -300,7 +300,10 @@ async function main() {
                 return;
             }
         } catch (e) {
-            log(`feed: ${e.message}`);
+            if (argv.includes('--once')) {
+                throw e; // one try: say it failed, never loop
+            }
+            log(`feed: ${e.message}`); // the window may be down for a while: keep trying
         }
         await sleep(every * 1000);
     }
