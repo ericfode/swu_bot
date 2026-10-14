@@ -16,7 +16,7 @@ defmodule Coord.Config do
   | GAMES_THINK_CAP_SEC | think_cap_sec (each bot's thinking per game; Eric's settings come first) | 60 |
   | GAMES_REQUIRE_MOUNT=1 | require_mount | off |
   | SWU_WINDOW | window | required in prod |
-  | ARENA_RESIDENTS, SWU_CARD_JSON | passed on to the children when set | unset |
+  | SWU_CARD_JSON | passed on to the children when set | unset |
   | GAMES_HELPER_PORT | helper_port (the helper API; nil keeps the helper node off) | unset |
   | GAMES_HELPER_LISTEN | helper_listen | FLY_PRIVATE_IP, else :: |
   | GAMES_RELAY_PORT | relay_port (the ladder's relay, 127.0.0.1 only) | 8082 |

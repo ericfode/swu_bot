@@ -38,7 +38,7 @@ defmodule Coord.Helper.Play do
     end
   end
 
-  @doc "Compiles the residents' bundles into the wasm cache (play-seed.js --warm, as the bots' user, 15 min)."
+  @doc "Compiles any resident bundles the image has into the cache (play-seed.js --warm as the bots' user, 15 min)."
   def warm do
     case play(:warm, ["--warm"], :timer.minutes(15)) do
       {:ok, out} ->

@@ -18,7 +18,7 @@ defmodule Coord.ChildEnv do
   def forbidden?(key) when is_binary(key), do: Regex.match?(@forbidden, key)
 
   @doc """
-  The environment of a gamesctl child. ctx holds data, arena_user, residents, card_json, root_home, node_dir, and
+  The environment of a gamesctl child. ctx holds data, arena_user, card_json, root_home, node_dir, and
   for :push and :intake the proxy URL as window.
   """
   def for_kind(kind, ctx) when kind in @kinds do
@@ -67,7 +67,6 @@ defmodule Coord.ChildEnv do
       "ARENA_USER" => ctx.arena_user,
       "GAMES_HIDE" => "/.fly:" <> Path.join(ctx.data, "coord")
     }
-    |> put_set("ARENA_RESIDENTS", ctx.residents)
     |> put_set("SWU_CARD_JSON", ctx.card_json)
   end
 

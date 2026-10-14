@@ -6,6 +6,7 @@ Build compiled bot bundles (bot/compiled/README.md): one folder per bot in build
     python3 bot/compiled/build.py                    # every bot in BOTS
     python3 bot/compiled/build.py rust-search c-clock
     python3 bot/compiled/build.py --list
+    python3 bot/compiled/build.py --tools            # only the tools the arena's intake packs submissions with
 
 Needs: Python packages wasmtime and ziglang (versions in toolchain.json), rustc with the wasm32-wasip1 target, and
 network access the first time, to fetch Javy and python.wasm (checked against their sha256) into build/compiled/.tools.
@@ -237,10 +238,18 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("bots", nargs="*", help="names from BOTS (default: all)")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--tools", action="store_true", help="fetch Javy and the interpreter runtimes only (no bots)")
     o = ap.parse_args()
     if o.list:
         for name, spec in BOTS.items():
             print("%-12s %s" % (name, spec["lang"]))
+        return
+    if o.tools:
+        # what the arena's intake packs submissions with (intake.js toolchainMissing): Javy and CPython for WASI
+        log("javy: %s" % os.path.relpath(javy(), ROOT))
+        for name in TOOLCHAIN["runtimes"]:
+            runtime(name)
+            log("runtime %s: %s" % (name, os.path.relpath(os.path.join(TOOLS, TOOLCHAIN["runtimes"][name]["dir"]), ROOT)))
         return
     unknown = [b for b in o.bots if b not in BOTS]
     if unknown:

@@ -48,13 +48,10 @@ defmodule Coord.ChildEnvTest do
       assert ChildEnv.for_kind(:push, ctx(:push))["HOME"] == Path.join(data, "home")
     end
 
-    test "ARENA_RESIDENTS and SWU_CARD_JSON pass on only when set" do
-      refute Map.has_key?(ChildEnv.for_kind(:setup, ctx(:setup)), "ARENA_RESIDENTS")
-      put_setting(:residents, "heuristic,rush")
+    test "SWU_CARD_JSON passes on only when set" do
+      refute Map.has_key?(ChildEnv.for_kind(:setup, ctx(:setup)), "SWU_CARD_JSON")
       put_setting(:card_json, "/cards")
-      env = ChildEnv.for_kind(:setup, ctx(:setup))
-      assert env["ARENA_RESIDENTS"] == "heuristic,rush"
-      assert env["SWU_CARD_JSON"] == "/cards"
+      assert ChildEnv.for_kind(:setup, ctx(:setup))["SWU_CARD_JSON"] == "/cards"
     end
 
     test "a window that is not this machine's proxy is refused" do

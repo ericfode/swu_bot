@@ -961,7 +961,7 @@ function ratingChart(D, { compact = false } = {}) {
   const every = Math.max(1, Math.ceil(n / (compact ? 6 : 14)));
   H.forEach((x, k) => { if ((n - 1 - k) % every === 0) s += `<text x="${f(X(k))}" y="${h - B + 16}" text-anchor="middle">R${x.round}</text>`; });
   s += `<line class="rc-ref" x1="${L}" x2="${w - R}" y1="${f(Y(1500))}" y2="${f(Y(1500))}"/>`;
-  if (!compact) s += `<text x="${L + 4}" y="${f(Y(1500) - 5)}" class="rc-reft">1500 · baselines' average</text>`;
+  if (!compact) s += `<text x="${L + 4}" y="${f(Y(1500) - 5)}" class="rc-reft">1500 · anchor</text>`;
   // consecutive rounds join; a round a bot sat out breaks its line. A builder's step to a new version is dashed: two bots.
   const path = pts => pts.map((p, i) => `${i && pts[i - 1].k === p.k - 1 ? 'L' : 'M'}${f(X(p.k))},${f(Y(p.v))}`).join('');
   const seg = (a, b) => `M${f(X(a.k))},${f(Y(a.v))}L${f(X(b.k))},${f(Y(b.v))}`;
@@ -1573,7 +1573,7 @@ function pageHelp(r) {
     <div style="margin-top:12px">${fpKey()}</div>` : '<p class="muted">The Strategy Atlas is not in this build.</p>';
   const styles = `<p class="hp">A bot's style comes from how it attacks: the share of its attacks aimed at the base, its base damage and the units it removes per round.</p><div class="row" style="gap:8px 18px;font-size:var(--fs-md)">${(AT?.STYLE_KEY || []).map(([k, d]) => `<span>${styleTag(k)} <span class="muted">${esc(d)}</span></span>`).join('')}</div>${A ? `<p class="muted" style="font-size:var(--fs-sm);margin-top:8px">Spots, edges and styles come from the Strategy meta analyzer (${A.mapped.length} mapped bots, ${int(A.totals?.games)} games, updated ${ago(A.generatedAt)} ago). <a href="https://claude.ai/artifact/JncYCS8KTqThEtvobNS4wy" target="_blank" rel="noopener">The Atlas's own page</a></p>` : ''}`;
   const ratings = `<ul class="plain hp">
-    <li><b>Arena rating.</b> Bradley-Terry over every rated game the arena has played, all rounds together. The baselines' average is pinned at 1500, so a number keeps its meaning as bots come and go. 400 points apart: the higher bot is expected to win about 10 games in 11.</li>
+    <li><b>Arena rating.</b> Bradley-Terry over every rated game the arena has played, all rounds together. The arena's own bots anchor it: the average of the bots that were built into the arena (and played its first rounds) is pinned at 1500, so a number keeps its meaning as bots and versions come and go. 400 points apart: the higher bot is expected to win about 10 games in 11.</li>
     <li><b>Rating after each round</b> (the Standings chart): the same rating from the games of that round and every round before it. After the newest round it is the number in the table.</li>
     <li><b>Round rating</b> (the Rounds page): from one round's games alone. Each pair plays two games a round, one from each seat, so it moves more.</li>
     <li><b>A new version</b> starts with no games: its first rating comes from one round, and its line gets a ring there.</li>

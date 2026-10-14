@@ -80,7 +80,6 @@ if config_env() != :test do
       require_mount: System.get_env("GAMES_REQUIRE_MOUNT") == "1",
       require_token: prod?,
       window: window,
-      residents: System.get_env("ARENA_RESIDENTS"),
       card_json: System.get_env("SWU_CARD_JSON"),
       helper_port: helper_port,
       # Fly's private (6PN) address: `fly proxy` reaches it, the internet does not

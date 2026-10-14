@@ -53,6 +53,26 @@ test('gamesctl plan: a round when a version comes in, after it settles; again wh
     assert.deepStrictEqual(planRound(opts), { round: 3, resume: false, why: 'changed' }, 'a withdrawn version leaves the lineup');
 });
 
+test('gamesctl warm: only the lineup\'s WebAssembly versions are compiled; the image has no bots of its own', () => {
+    const { commands } = require('../arena/gamesctl');
+    assert.deepStrictEqual(commands.warm(), { ok: true, warmed: [], failed: [] }, 'versions with no bundle: nothing to compile');
+    // the lineup is kim_b-v2, heuristic and rush: kim_b-v2 gets a bundle (a broken one, which run.py refuses)
+    writeJson(path.join(home.VERSIONS, 'kim_b-v2', 'bundle', 'arena.json'), {});
+    writeJson(path.join(home.VERSIONS, 'lee-v1', 'bundle', 'arena.json'), {});
+    const w = commands.warm();
+    assert.deepStrictEqual([w.ok, w.warmed, w.failed.map((f) => f.name)], [true, [], ['kim_b-v2']], 'lee-v1 is withdrawn: not in the lineup');
+    assert.strictEqual(typeof w.failed[0].error, 'string');
+});
+
+test('gamesctl setup: no baselines, whatever the roster had; it names the resident entries', () => {
+    const { commands } = require('../arena/gamesctl');
+    home.updateRoster((r) => ({ ...r, baselines: ['heuristic', 'c-clock-wasm'], agents: [...r.agents, { name: 'heuristic', owner: 'arena', resident: true }] }));
+    const s = commands.setup();
+    assert.deepStrictEqual([s.ok, s.residents], [true, ['heuristic']]);
+    assert.deepStrictEqual(home.roster().baselines, []);
+    assert.deepStrictEqual(home.roster().agents.map((a) => a.name), ['kim_b', 'lee', 'heuristic'], 'the competitors stay');
+});
+
 test('gamesctl: the referee gets the arena folders and the secret path, and no token', () => {
     process.env.SWU_WINDOW_TOKEN = 'leak';
     const env = botEnv();

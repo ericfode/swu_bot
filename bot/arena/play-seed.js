@@ -10,8 +10,9 @@
  * The job comes from the ladder's remote lane (bot/remote-lane.js):
  *   { v: 1, seed, key, maxSteps, capMs, hangMs, gameMs, games: [{ id, p1, p2 }], bots: { <name>: { kind, bundle? } } }
  * key is the seed's game key (rng.js gameKey), never the run key; null deals from the seed alone. Only bots that run
- * sandboxed or are the project's own play here: heuristic and rush (in-process), the WebAssembly residents built into
- * this image (RESIDENTS, kind 'resident'), and competitor versions <agent>-v<N> of kind 'wasm' whose bundle, a
+ * sandboxed or are the project's own play here: heuristic and rush (in-process), the old WebAssembly residents when
+ * this image still builds them (RESIDENTS, kind 'resident'; the arena's own bots are now submitted entries, played as
+ * versions), and versions <agent>-v<N> of kind 'wasm' whose bundle, a
  * canonical tar (bot/compiled/bundle.py), is <bundles>/<bundle>.tar. Never another bot program, never a bot.js. The
  * whole job is checked before anything runs.
  *
@@ -22,8 +23,8 @@
  * stdout gets exactly one JSON line, {ok: true, results: [{id, result}], replays: {<id>: <path>}} (a game whose bot
  * failed to load has no replay); everything else, the engine's and the bots' logging included, goes to stderr.
  * Exit 0 ok, 1 failed (the reason is the last line on stderr), 2 usage or a refused job.
- * --warm compiles the residents' bundles into $SWU_WASM_CACHE (run.py --warm, as gamesctl.js warm does) and prints
- * {ok: true, warmed: [name], failed: [{name, error}]}.
+ * --warm compiles the bundles of the old residents this image builds into $SWU_WASM_CACHE (run.py --warm, as gamesctl.js
+ * warm does; none in an image that builds no bot of its own) and prints {ok: true, warmed: [name], failed: [{name, error}]}.
  */
 const fs = require('fs');
 const path = require('path');
@@ -31,8 +32,8 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
 const COMPILED = path.join(ROOT, 'bot', 'compiled');
-// the WebAssembly bots among gamesctl.js's default residents (its RESIDENTS when ARENA_RESIDENTS is not set); heuristic
-// and rush, the other two, run in-process
+// the bots the games image used to play as built-in residents, before they became entries (resident versions, kind
+// wasm): an image that still builds these bundles plays them; heuristic and rush, the other two, run in-process
 const RESIDENTS = ['c-clock-wasm', 'rust-greedy2-wasm', 'rust-search-wasm', 'node-search-wasm', 'py-clock-wasm'];
 const IN_PROCESS = ['heuristic', 'rush'];
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/; // registry.js
@@ -150,15 +151,11 @@ function unpackVersion(arena, name, tar, hex) {
     fs.writeFileSync(path.join(dir, 'SUBMISSION.json'), JSON.stringify({ bot: { kind: 'wasm' } }));
 }
 
-/** Compiles the residents' bundles into $SWU_WASM_CACHE, so the first game does not pay for it. */
+/** Compiles the bundles of the residents this image builds into $SWU_WASM_CACHE, so the first game does not pay for it. */
 function warm() {
     const out = { ok: true, warmed: [], failed: [] };
-    for (const name of RESIDENTS) {
+    for (const name of residentsHere()) {
         const dir = residentDir(name);
-        if (!fs.existsSync(path.join(dir, 'arena.json'))) {
-            out.failed.push({ name, error: 'no bundle' });
-            continue;
-        }
         try {
             execFileSync('python3', [path.join(COMPILED, 'run.py'), '--warm', dir], { stdio: ['ignore', 'ignore', 'pipe'], timeout: WARM_MS });
             out.warmed.push(name);

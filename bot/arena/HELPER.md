@@ -36,7 +36,7 @@ your computer                                       the games machine (private a
 - Fly holds only the token's sha256 (`GAMES_HELPER_TOKENS`, `name:hash`). The token stays on your computer in
   `~/.config/swu-helper/env` and goes into the container as an env file. The helper keeps it inside the coordinator;
   the processes that play games never get it.
-- The helper plays only WebAssembly bots (submitted bundles and the residents built into the image) and the
+- The helper plays only WebAssembly bots (submitted bundles, the arena's own resident entries included) and the
   in-process heuristic and rush. Bot code runs as the image's `arena` user with no capabilities; the container gets
   no folder of yours, only a Docker volume.
 - A helper could send made-up results for the seeds it holds, so tokens go only to your own computers. To revoke all
@@ -74,7 +74,7 @@ The machine's image is built for Intel CPUs (`linux/amd64`). Under Rosetta, on a
 stops at start (`prim_tty:isatty ... undef`, then `Kernel pid terminated ... nouser`), so on an ARM computer the script
 builds an image for the computer's own CPU and runs that instead (`sh bot/arena/ops/helper.sh build` does only the
 build). `bot/arena/ops/Dockerfile.helper` takes everything a game runs on from the machine's image unchanged (bot code,
-engine, card data, resident bundles, `BUILD_SHA`, `CARDS_SHA`), so the build still matches, and builds only the native
+engine, card data, the intake's tools, `BUILD_SHA`, `CARDS_SHA`), so the build still matches, and builds only the native
 parts: Node, Python with wasmtime, and the coordinator from `Dockerfile.games`'s coord stage at the machine's commit,
 read from the checkout the script is in (fetched from origin when missing). The first build takes a few minutes; later
 ones reuse Docker's cache, and a new machine build means a new image (older ones are removed). It needs the default

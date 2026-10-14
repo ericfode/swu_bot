@@ -146,7 +146,7 @@ defmodule Coord.Scheduler do
 
   defp step_done(:warm, result, state) do
     case result do
-      {:ok, %{warmed: warmed, failed: []}} -> Logger.info("warmed #{length(warmed)} resident bundles")
+      {:ok, %{warmed: warmed, failed: []}} -> Logger.info("warmed #{length(warmed)} bundles")
       {:ok, %{failed: failed}} -> Logger.warning("could not warm #{Enum.join(failed, ", ")}")
       {:error, why} -> Logger.warning("gamesctl warm failed (#{why})")
     end

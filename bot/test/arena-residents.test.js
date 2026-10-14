@@ -116,6 +116,12 @@ test('planRound: the arena\'s own bots alone are no reason to play', () => {
     writeJson(path.join(HOME, 'roster.json'), { ...r, agents: [...r.agents, { name: 'kim_b', owner: 'github:kim-b' }] });
     version('kim_b-v1');
     assert.strictEqual(planRound(opts).why, 'changed');
+    // an image with no bots of its own, before the house submissions (a new volume): a builder alone plays no one
+    setRoster([{ name: 'kim_b', owner: 'github:kim-b' }, { name: 'heuristic', owner: 'arena', resident: true }], []);
+    version('kim_b-v1');
+    assert.deepStrictEqual(planRound(opts), { round: null, why: 'no-opponent' });
+    version('heuristic-v1');
+    assert.strictEqual(planRound(opts).why, 'changed');
 });
 
 test('register resident: admin only on a hosted arena, no starter, first version v1, listed apart from the builders', () => {
