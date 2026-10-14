@@ -293,6 +293,9 @@ function remoteLane({
     let poolError = null;
     let growPool = () => {};
     let played = 0;
+    // what the round report says about the lane (ladder.json remote): looks at the relay's status, the looks that found
+    // a claim waiting, leases, losses, the kinds of relay failure and why the lane stopped early
+    const seen = { looks: 0, claimLooks: 0, leased: 0, lost: 0, lastLost: null, relayErrors: new Set(), stopped: null };
 
     const call = async (method, suffix, body = null, contentType) => {
         const res = await send(method, `${base}${suffix}`, body, contentType ? { contentType } : {});
@@ -300,6 +303,9 @@ function remoteLane({
     };
     // a failed relay call: logged once per kind; the lane gives up after UNREACHABLE_MS of nothing but failures
     const failed = (kind) => {
+        if (seen.relayErrors.size < 5) {
+            seen.relayErrors.add(kind);
+        }
         if (!logged.has(kind)) {
             logged.add(kind);
             log(`relay error (${kind}); games keep playing here`);
@@ -451,6 +457,7 @@ function remoteLane({
                 return 'error';
             }
             leases.set(a.lease, { id: a.lease, host: a.host, seed, games, heardAt: now() });
+            seen.leased++;
             countHelper(games, 1);
             log(`seed ${seed} (${games.map((g) => g.id).join(', ')}) -> ${a.host}, lease ${a.lease}`);
             for (const g of games) {
@@ -483,6 +490,8 @@ function remoteLane({
         countHelper(lease.games, -1);
         local.add(lease.seed);
         putBack(lease.games);
+        seen.lost++;
+        seen.lastLost = `${lease.host}: ${String(why).slice(0, 200)}`;
         log(`lease ${lease.id} (seed ${lease.seed}, ${lease.host}) lost: ${why}; playing it here`);
     }
 
@@ -582,6 +591,10 @@ function remoteLane({
             log(`helpers this boot: ${[...hosts].join(', ')}`);
         }
         let waiting = Number.isSafeInteger(st?.waiting) ? st.waiting : 0;
+        seen.looks++;
+        if (waiting > 0) {
+            seen.claimLooks++;
+        }
         while (waiting > 0 && on) {
             const seed = pick();
             if (seed === null || (await offer(seed)) !== 'leased') {
@@ -594,6 +607,7 @@ function remoteLane({
     /** Ends the lane: every open lease's games play here. */
     function giveUp(why) {
         on = false;
+        seen.stopped = why;
         log(`${why}; the lane stops and ${leases.size ? `the games of its ${leases.size} open lease${leases.size === 1 ? '' : 's'} play` : 'everything plays'} here`);
         for (const lease of [...leases.values()]) {
             leases.delete(lease.id);
@@ -651,9 +665,17 @@ function remoteLane({
         }
     }
 
-    return { run, get open() {
-        return leases.size;
-    } };
+    return {
+        run,
+        get open() {
+            return leases.size;
+        },
+        /** What the round report shows about the lane (ladder.json remote, bot/arena/referee.js). */
+        get stats() {
+            return { lane: true, hosts: [...hosts].sort(), looks: seen.looks, claimLooks: seen.claimLooks, leased: seen.leased, played, lost: seen.lost,
+                     lastLost: seen.lastLost, relayErrors: [...seen.relayErrors], stopped: seen.stopped };
+        }
+    };
 }
 
 module.exports = { remoteLane, relayBase, request, tarOf, checkDone, badResult, badReplay, TICK_MS, UNREACHABLE_MS };

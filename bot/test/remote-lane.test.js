@@ -223,6 +223,21 @@ test('an accepted offer goes to the helper whole; its done lease is checked, wri
     assert.deepStrictEqual(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp')), [], 'no temporary files left');
     assert.ok(!relay.calls.includes('DELETE /lease/L1'));
     assert.ok(ladder.logs.some((l) => /seed 1 .*-> eric, lease L1/.test(l)));
+    // what the round report says about the lane (ladder.json remote)
+    const st = lane.stats;
+    // the one claim was taken at the first look; the later looks found none
+    assert.ok(st.looks >= 2 && st.claimLooks === 1, `a claim waited at ${st.claimLooks} of ${st.looks} looks`);
+    assert.deepStrictEqual({ ...st, looks: 0, claimLooks: 0 }, {
+        lane: true, hosts: ['eric'], looks: 0, claimLooks: 0, leased: 1, played: 2, lost: 0, lastLost: null, relayErrors: [], stopped: null
+    });
+});
+
+test('the lane\'s stats say when no helper said hello and no claim waited', async () => {
+    const relay = fakeRelay();
+    relay.hosts = [];
+    const { lane } = setup(schedule([['heuristic', 'rush']]), relay);
+    await lane.run();
+    assert.deepStrictEqual(lane.stats, { lane: true, hosts: [], looks: 1, claimLooks: 0, leased: 0, played: 0, lost: 0, lastLost: null, relayErrors: [], stopped: null });
 });
 
 test('a 204 puts the seed back at the front of the queue, in order, and it plays here', async () => {
@@ -251,6 +266,7 @@ test('a lost lease plays here, and its seed is not offered again', async () => {
     // started for the helper, then again here: ladder.js's onStart resets the entry
     assert.deepStrictEqual(ladder.started, ['heuristic-vs-rush-1', 'rush-vs-heuristic-1', 'heuristic-vs-rush-1', 'rush-vs-heuristic-1']);
     assert.ok(ladder.logs.some((l) => /lease L1 .* lost: no heartbeat/.test(l)));
+    assert.deepStrictEqual([lane.stats.leased, lane.stats.played, lane.stats.lost, lane.stats.lastLost], [1, 0, 1, 'eric: no heartbeat']);
 });
 
 test('games that come back while the pool here runs get its workers back (grow), not just the busy ones', async () => {
@@ -341,6 +357,10 @@ test('with the relay unreachable for 3 minutes, every open lease comes back and 
     const lastCall = Math.max(...s.ladder.callTimes);
     assert.ok(lastCall - downAt >= 180000 && lastCall - downAt < 184000, `gave up ${lastCall - downAt} ms after the relay went down`);
     assert.ok(!s.ladder.logs.some((l) => /lost: no answer about it/.test(l)), 'the lane\'s own limit, not a lease\'s');
+    // the error's kind, never its message (which names the relay's address)
+    assert.deepStrictEqual(s.lane.stats.relayErrors, ['ECONNREFUSED']);
+    assert.match(s.lane.stats.stopped, /^the relay has failed for 18\d s$/);
+    assert.strictEqual(s.lane.stats.lost, 0, 'leases the lane gave back are not counted as lost');
 });
 
 test('only seeds whose bots can all run on a helper go out; a version goes with its bundle put first', async () => {
