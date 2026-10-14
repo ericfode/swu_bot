@@ -335,8 +335,14 @@ async function main() {
         console.log(`resume: bot programs that learn from game to game would start fresh ("stateful": ${stateful.join(', ')}), so the run starts over`);
         prev = null;
     }
+    // what the round report says about helper computers (bot/arena/referee.js): null without ARENA_REMOTE
+    let remoteInfo = () => null;
     const save = () => {
         const doc = summarize({ id, createdAt, status, engine, config, botInfo, games, scheduled: schedule.length });
+        const remote = remoteInfo();
+        if (remote) {
+            doc.remote = remote;
+        }
         writeJson(path.join(out, 'ladder.json'), doc);
         writeJson(path.join(out, 'index.json'), tIndex);
         return doc;
@@ -438,11 +444,15 @@ async function main() {
     const base = relayBase(REMOTE);
     const lane = !!base && record && !decks && !pool && !vs;
     if (REMOTE && !lane) {
-        console.log(`remote: helpers stay out of this run (${base ? 'they play recorded round robins of random decks only' : 'ARENA_REMOTE is not a relay address'})`);
+        const why = base ? 'they play recorded round robins of random decks only' : 'ARENA_REMOTE is not a relay address';
+        console.log(`remote: helpers stay out of this run (${why})`);
+        remoteInfo = () => ({ lane: false, why });
     }
     if (lane) {
         const limits = { maxSteps, capMs: config.capMs, hangMs, gameMs: DEFAULT_GAME_MS(capMs) };
-        await remoteLane({ base, queue, keyOf: (seed) => (key ? gameKey(key, seed) : null), limits, runPool: play, ...hooks }).run();
+        const rl = remoteLane({ base, queue, keyOf: (seed) => (key ? gameKey(key, seed) : null), limits, runPool: play, ...hooks });
+        remoteInfo = () => rl.stats;
+        await rl.run();
     } else {
         await play(queue, hooks);
     }
