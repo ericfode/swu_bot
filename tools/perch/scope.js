@@ -26,6 +26,7 @@ module.exports = {
       'spec/**',
       'app/**', // the SWU Arena app: one page to watch the arena and read the research
       'studio/**',
+      'server/**', // the arena server on Effect (stage 4): API, MCP, rounds as durable workflows, SQLite
       'analysis/**',
       'meta/**',
       'importer/**',
