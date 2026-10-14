@@ -93,11 +93,18 @@ def prep(a):
             you, main, main_path = w["you"], w["main"], w.get("mainPath") or [w["main"]]
             opp = "p2" if you == "p1" else "p1"
             leaves = [(main, True, w["teacher"])]
+            own = None
             for alt in w["alts"]:
                 p = alt["path"]
                 if p == main_path or (len(main_path) == 1 and p[0] == main):
-                    continue  # the teacher's own move played on by random choices
+                    own = alt["leaf"]  # the teacher's own move played on by random choices
+                    continue
                 leaves.append((p[0], False, alt["leaf"]))
+            if a.teacher_line == "alt":
+                # the teacher's position from the same random play as the other lines, so only the move differs
+                if own is None:
+                    continue
+                leaves[0] = (main, True, own)
             first = len(rows)
             ev_states, ev_act, ev_rows = [], [], []
             for root, teacher, leaf in leaves:
@@ -287,6 +294,8 @@ def main():
     p.add_argument("--model", default=os.path.join(here, "models", "jepa-v1.safetensors"))
     p.add_argument("--out", default="data/jepa/rank-v1.npz")
     p.add_argument("--eval", default=None, help="bot/eval evaluator to score held-out windows with, as a yardstick")
+    p.add_argument("--teacher-line", choices=["real", "alt"], default="real",
+                   help="the teacher's position: where the real game settled, or its move played on by random choices like the other lines")
     f = sub.add_parser("fit")
     f.add_argument("--data", default="data/jepa/rank-v1.npz")
     f.add_argument("--model", default=os.path.join(here, "models", "jepa-v1.safetensors"))
