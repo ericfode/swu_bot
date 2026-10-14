@@ -306,5 +306,15 @@ So resourcing at all is most of the gain (12% to 36%), and learned picks add abo
 The new value head trained on strong-bot games (v4) plays worse than v1 with the same resource model, although it
 predicts the winner better. jepa-plan-r is the JEPA entry.
 
-`jepa-plan-reval` (registered) is jepa-plan-r with linear-deck-g4 scoring the planner's settled positions: run on the
-same deals, it says whether the value head is now the main limit.
+## Scoring the plans with the fitted evaluator (jepa-plan-reval)
+
+`jepa-plan-reval` is jepa-plan-r with linear-deck-g4 (`bot/eval/`) scoring the planner's settled positions in place of
+the value head. On the same fresh deals as above it wins 337/691 = 48.8% ± 3.7 against c-clock (on the 690 games both
+played, jepa-plan-reval alone won 120 and jepa-plan-r alone 49). Standard bot test: 47.2% [43.5, 50.9], Elo −20,
+level with rust-search (48.8%) and the c-clock family (49 to 52%).
+
+Without the resource picker the same scorer gave 16.4% (jepa-plan-eval), so the two limits were stacked: first
+resourcing, then the scorer. With resourcing fixed, the value head costs about 10 points against c-clock. The JEPA
+parts left in jepa-plan-reval are the candidate order (the 16 best moves by the imagined score), the follow-up
+branching, and the prompts the planner does not reach. jepa-plan-r stays the entry whose positions the JEPA judges
+itself; jepa-plan-reval is the strongest bot built on it.
