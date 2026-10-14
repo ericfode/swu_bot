@@ -1,0 +1,25 @@
+{
+  "name": "swu-arena-server",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The arena server on Effect 4: the record (one SQLite file and its replays), export API v1, MCP tools, rounds",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "import": "node src/main-import.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.4",
+    "@effect/sql-sqlite-node": "4.0.4",
+    "effect": "4.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "7.0.2"
+  }
+}

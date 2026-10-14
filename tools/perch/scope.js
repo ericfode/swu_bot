@@ -19,6 +19,7 @@ module.exports = {
       'bot/compiled/**', // builds any bot as a sandboxed WebAssembly bundle, and runs it
       'spec/**',
       'app/**', // the SWU Arena app: one page to watch the arena and read the research
+      'server/**', // the arena server on Effect (stage 4): the record, export API v1, MCP, rounds as durable workflows
       'meta/**', // the Strategy Atlas kit the app and the viewer kit use
       'tools/**',
     ],
