@@ -155,7 +155,11 @@ build_native() {
     docker build -f "$ctx/Dockerfile.games" --target coord -t "swu-helper-coord:$sha" "$ctx" ||
         { rm -rf "$ctx"; die "the coordinator did not build (the lines above say why)"; }
     echo "pulling $img for its game files (it does not run here)"
-    pull "$img" || { rm -rf "$ctx"; die "could not pull $img"; }
+    if ! pull "$img"; then
+        rm -rf "$ctx"
+        echo "could not pull $img" >&2
+        return 2
+    fi
     docker build -f "$REPO/bot/arena/ops/Dockerfile.helper" --build-arg "MACHINE_IMAGE=$img" \
         --build-arg "COORD_IMAGE=swu-helper-coord:$sha" -t "$tag" "$ctx" ||
         { rm -rf "$ctx"; die "the helper image did not build (the lines above say why)"; }
@@ -240,11 +244,26 @@ run() {
         [ "$img" != "$last" ] || die "the games machine still runs $img, which this helper just ran: its build or card data differ for another reason (see the lines above)"
         last=$img
         if native; then
-            build_native "$img"
+            # a build the registry never served (seen 2026-10-14: the machine named an image that stayed "not found") is
+            # not this computer's problem: wait, and read the machine's image again, which a later deploy moves on
+            code=0
+            build_native "$img" || code=$?
+            if [ "$code" = 2 ]; then
+                echo "reading the games machine's image again in 2 min"
+                sleep 120
+                last=
+                continue
+            fi
+            [ "$code" = 0 ] || exit "$code"
             platform=
         else
             echo "pulling $img"
-            pull "$img" || die "could not pull $img"
+            if ! pull "$img"; then
+                echo "could not pull $img; reading the games machine's image again in 2 min"
+                sleep 120
+                last=
+                continue
+            fi
             tag=$img
             platform="--platform linux/amd64"
         fi
