@@ -49,11 +49,23 @@ Needs Docker running (on a Mac, Docker Desktop open: `open -a Docker`) and flyct
 1. Once: `sh bot/arena/ops/helper.sh init`. It makes the token and stages its hash on Fly
    (`fly secrets set --stage`); the next deploy of the games machine takes it, or `fly secrets deploy -a swu-arena-games`
    now.
-2. Whenever you want to help: `sh bot/arena/ops/helper.sh` from a swu_bot checkout (Ctrl-C stops it). It reads the
-   image the machine runs (`fly machine list`), pulls it (`fly auth docker`; on ARM it builds a native one, below),
+2. Whenever you want to help: `sh bot/arena/ops/helper.sh` from a swu_bot checkout (q or Ctrl-C stops it). It reads
+   the image the machine runs (`fly machine list`), pulls it (`fly auth docker`; on ARM it builds a native one, below),
    keeps `fly proxy 18090:8090` running, and starts the container.
-   Slots: one seed (two games at once) each, `--slots N` to choose; by default (Docker CPUs - 1) / 2. On a Mac it runs
-   under `caffeinate -i`, so the computer stays awake while it plays.
+   Slots: one seed (two games at once) each, and about one core busy per slot (3 slots averaged 2.8 cores and 1.2 GB on
+   an Apple M5 Max, peak 1.6 GB). `--slots N` chooses; without it the number in `~/.config/swu-helper/slots`; without
+   that, (Docker CPUs - 1) / 2, at most one per 2 GB of Docker's memory. On a Mac it runs under `caffeinate -i`, so the
+   computer stays awake while it plays.
+
+   On a terminal (with Node 18 or later) it runs under its live view, `bot/arena/ops/helper-tui.js`: the games in play
+   with both bases' hp and the boards, the seeds it finished (each from both seats, wins per bot), and the helper's
+   share of the computer's CPU against an aim of 25% (`SWU_HELPER_TARGET`). `+` and `-` choose the slots and Enter
+   restarts the helper with them (the choice goes to `~/.config/swu-helper/slots`); `l` shows the log, `?` explains the
+   screen, `q` stops the helper (`docker stop`, so its seeds go back to the machine at once). The lines also go to
+   `~/.config/swu-helper/helper.log` (`SWU_HELPER_LOG`). `SWU_HELPER_PLAIN=1` prints plain lines instead, and
+   `sh bot/arena/ops/helper.sh watch` shows the view of a helper that already runs. The view reads the games through a
+   small reader it runs in the container as the bots' user (`docker exec -u arena`, regular files only), and cleans
+   every name and log line of control characters before it prints them.
 3. When the games machine moves to a new build, the helper stops with code 3 and the script pulls the new image. If the
    machine still runs the image the helper just ran (its build or card data differ for another reason, such as an image
    built without `GIT_SHA`), the script stops and says so.

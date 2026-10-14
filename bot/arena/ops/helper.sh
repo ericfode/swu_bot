@@ -3,10 +3,13 @@
 # the machine through `fly proxy` under your Fly login. Run it as yourself, from any folder, with Docker running:
 #
 #   sh helper.sh init          make the helper token (once) and stage its hash on Fly; the next games deploy takes it
-#   sh helper.sh [--slots N]   pull the image the machine runs, forward the port, play games until Ctrl-C
+#   sh helper.sh [--slots N]   pull the image the machine runs, forward the port, play games until Ctrl-C (or q)
+#   sh helper.sh watch         the live view of a helper that already runs (helper-tui.js watch)
 #   sh helper.sh build         build the helper image for this computer's CPU at the machine's commit (Dockerfile.helper)
 #   sh helper.sh revoke        remove every helper token from Fly (helpers are refused after the next deploy)
 #
+# On a terminal, with Node 18 or later, the helper runs under its live view (helper-tui.js): the games in play with
+# their boards, the seeds it finished, and its share of the computer's CPU. SWU_HELPER_PLAIN=1 prints the plain lines.
 # The machine's image is built for amd64 only. On an ARM computer (a Mac with an Apple chip) its Erlang stops at start
 # under Rosetta, so there the script builds a native image instead (Dockerfile.helper: the machine's game files, the
 # coordinator built from this checkout at the machine's commit) and runs that; SWU_HELPER_NATIVE=1 or 0 overrides.
@@ -14,8 +17,9 @@
 # The token stays in ~/.config/swu-helper/env (mode 600) and goes to the container as an env file; only its sha256 is
 # set on Fly. Your Fly login stays outside the container: this script runs `fly proxy` and `fly auth docker` itself.
 # The container gets no folder of yours, only a Docker volume (swu-helper-data) for its work and its compiled-module
-# cache. Each slot plays one seed (two games at once); the default is (CPUs - 1) / 2 of Docker's CPUs, at most one per
-# 2 GB of Docker's memory and at most 16 (what the coordinator accepts).
+# cache. Each slot plays one seed (two games at once) and keeps about one core busy (3 slots averaged 2.8 cores on an
+# Apple M5 Max). --slots N chooses; else the number in ~/.config/swu-helper/slots (the view's + and - write it); else
+# (CPUs - 1) / 2 of Docker's CPUs, at most one per 2 GB of Docker's memory. At most 16 (what the coordinator accepts).
 # When the machine moves to a new build, the helper stops with exit code 3 and this script pulls the new image.
 set -eu
 
@@ -23,7 +27,9 @@ APP=${SWU_GAMES_APP:-swu-arena-games}
 PORT=${SWU_HELPER_PORT:-18090}
 DIR=$HOME/.config/swu-helper
 ENVFILE=$DIR/env
+SLOTSFILE=$DIR/slots
 NAME=${SWU_HELPER_NAME:-eric}
+HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
 # the swu_bot checkout this script is in (it builds the native image from it)
 REPO=${SWU_REPO:-$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)}
 
@@ -41,6 +47,13 @@ need_docker() {
     # the Docker CLI is there without its daemon when Docker Desktop is not open (no docker.sock)
     docker info >/dev/null 2>&1 ||
         die "Docker is not running: start Docker Desktop (on a Mac: open -a Docker), wait until docker info answers, and run this again"
+}
+
+# whether to run under the live view: a terminal, SWU_HELPER_PLAIN unset, Node 18 or later, the view next to this file
+tui() {
+    [ -t 0 ] && [ -t 1 ] && [ -z "${SWU_HELPER_PLAIN:-}" ] && [ -f "$HERE/helper-tui.js" ] &&
+        command -v node >/dev/null 2>&1 &&
+        node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)' >/dev/null 2>&1
 }
 
 # whether to build the image for this computer instead of pulling the machine's amd64 one: on ARM (Apple chips, where
@@ -163,10 +176,15 @@ forward() {
 }
 
 run() {
+    # the view runs this script again with SWU_HELPER_PLAIN=1 and shows its lines
+    if tui; then
+        need_docker
+        exec node "$HERE/helper-tui.js" run "$@"
+    fi
     slots=
     while [ $# -gt 0 ]; do
         case $1 in
-        --slots) slots=$2; shift 2 ;;
+        --slots) [ $# -ge 2 ] || die "--slots needs a number"; slots=$2; shift 2 ;;
         *) die "unknown option $1 (see the top of this file)" ;;
         esac
     done
@@ -174,7 +192,11 @@ run() {
     need_docker
     [ -s "$ENVFILE" ] || die "no token yet: run sh helper.sh init first"
     chmod 600 "$ENVFILE"
-    if [ -z "$slots" ]; then
+    [ -n "$slots" ] || [ ! -s "$SLOTSFILE" ] || slots=$(tr -dc 0-9 <"$SLOTSFILE")
+    if [ -n "$slots" ]; then
+        { printf '%s' "$slots" | grep -Eqx '[0-9]{1,2}' && [ "$slots" -ge 1 ] && [ "$slots" -le 16 ]; } ||
+            die "slots must be 1 to 16 (--slots, or $SLOTSFILE)"
+    else
         cpus=$(docker info --format '{{.NCPU}}')
         mem=$(docker info --format '{{.MemTotal}}')
         slots=$(( (cpus - 1) / 2 ))
@@ -230,8 +252,13 @@ run() {
 case ${1:-run} in
 init) init ;;
 build) build ;;
+watch)
+    need_docker
+    tui || die "the live view needs a terminal and Node 18 or later"
+    exec node "$HERE/helper-tui.js" watch
+    ;;
 revoke) revoke ;;
 run) [ $# -eq 0 ] || shift; run "$@" ;;
 --slots) run "$@" ;;
-*) die "unknown command $1 (init, run, build, revoke)" ;;
+*) die "unknown command $1 (init, run, watch, build, revoke)" ;;
 esac
