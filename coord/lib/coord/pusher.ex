@@ -5,7 +5,9 @@ defmodule Coord.Pusher do
 
   While a round plays (a referee child runs), it also sends the playing round's index and replays every 3 s
   (`gamesctl push --only round`, round_tick_ms), so viewers follow each game move by move: a game lasts about 17 s.
-  A poke is a full push, and so is any push 20 s or more after the last full one.
+  A poke is a full push, and so is any push 20 s or more after the last full one. A round push is skipped when the
+  round's folder (its index and each replay's size and time) is as the last push that worked left it: a Node push
+  costs about 0.1 s of CPU, and the bots' thinking time is wall-clock.
 
   terminate/2 makes one last push of at most 7 s. It comes after the round has stopped: the Pusher starts before
   the FLAME pool, Oban, the Scheduler and Coord.Shutdown, so it stops after them.
@@ -26,7 +28,19 @@ defmodule Coord.Pusher do
   @impl true
   def init(_opts) do
     Process.flag(:trap_exit, true)
-    {:ok, %{started: false, task: nil, again: false, timer: nil, failing: false, full_at: nil, poked: false}}
+
+    {:ok,
+     %{
+       started: false,
+       task: nil,
+       again: false,
+       timer: nil,
+       failing: false,
+       full_at: nil,
+       poked: false,
+       mark: nil,
+       sent_mark: nil
+     }}
   end
 
   @impl true
@@ -37,11 +51,12 @@ defmodule Coord.Pusher do
 
   def handle_info({ref, result}, %{task: %Task{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
-    {:noreply, state |> report(result) |> after_push()}
+    sent = if result == {:ok, true}, do: state.mark
+    {:noreply, %{state | sent_mark: sent} |> report(result) |> after_push()}
   end
 
   def handle_info({:DOWN, ref, :process, _, reason}, %{task: %Task{ref: ref}} = state) do
-    {:noreply, state |> report({:error, "crashed: #{inspect(reason)}"}) |> after_push()}
+    {:noreply, %{state | sent_mark: nil} |> report({:error, "crashed: #{inspect(reason)}"}) |> after_push()}
   end
 
   # the push task's link (this server traps exits for terminate/2)
@@ -65,13 +80,28 @@ defmodule Coord.Pusher do
   defp push_now(%{task: nil} = state) do
     if state.timer, do: Process.cancel_timer(state.timer)
     now = System.monotonic_time(:millisecond)
+    playing = round_playing?()
+    full = state.poked or state.full_at == nil or now - state.full_at >= Coord.Config.get(:tick_ms) or not playing
+    mark = if playing, do: round_mark()
 
-    full =
-      state.poked or state.full_at == nil or now - state.full_at >= Coord.Config.get(:tick_ms) or not round_playing?()
+    cond do
+      full ->
+        %{
+          state
+          | task: Task.async(fn -> push_all([]) end),
+            full_at: now,
+            mark: mark,
+            again: false,
+            timer: nil,
+            poked: false
+        }
 
-    opts = if full, do: [], else: [only: :round]
-    state = if full, do: %{state | full_at: now}, else: state
-    %{state | task: Task.async(fn -> push_all(opts) end), again: false, timer: nil, poked: false}
+      mark != nil and mark == state.sent_mark ->
+        %{state | timer: Process.send_after(self(), :tick, Coord.Config.get(:round_tick_ms))}
+
+      true ->
+        %{state | task: Task.async(fn -> push_all(only: :round) end), mark: mark, again: false, timer: nil}
+    end
   end
 
   defp push_now(state), do: %{state | again: true}
@@ -87,6 +117,35 @@ defmodule Coord.Pusher do
   end
 
   defp round_playing?, do: Enum.any?(Coord.Proc.running(), &(&1.kind == :referee))
+
+  # the newest round's folder as it stands: its index and each replay's size and time (nil when there is none)
+  defp round_mark do
+    dirs = Path.wildcard(Path.join([Coord.Config.data(), "results", "arena-r*"]))
+
+    case Enum.max_by(dirs, &round_number/1, fn -> nil end) do
+      nil ->
+        nil
+
+      dir ->
+        files = [Path.join(dir, "index.json") | Path.wildcard(Path.join(dir, "games/*.jsonl"))]
+
+        :erlang.phash2(
+          for f <- files do
+            case File.stat(f, time: :posix) do
+              {:ok, st} -> {f, st.size, st.mtime}
+              _ -> {f, nil}
+            end
+          end
+        )
+    end
+  end
+
+  defp round_number(dir) do
+    case Regex.run(~r/arena-r(\d+)$/, dir) do
+      [_, k] -> String.to_integer(k)
+      _ -> -1
+    end
+  end
 
   defp push_all(opts) do
     results = for arena <- Coord.Arena.all(), do: Coord.Gamesctl.push(arena.id, opts)

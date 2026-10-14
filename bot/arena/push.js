@@ -258,10 +258,9 @@ async function pushDir(ns, dir) {
  * documents sent) and `runs` (per round ladder) can come from an earlier process (gamesctl push).
  */
 function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
-    const { call } = require('./api');
     const home = require('./home');
     const result = async (m, a) => {
-        const r = await call(m, a);
+        const r = await require('./api').call(m, a); // loaded only by a full pass: a round pass stays light
         return r.error ? null : r.result;
     };
     /** The arena's own documents: status, standings, roster (no tokens), round reports, each builder's versions and panel. */
