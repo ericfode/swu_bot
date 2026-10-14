@@ -10,7 +10,7 @@
 // --shell   no data: the page loads it from the arena window's API (bot/arena/window.js); used for the window's image
 //
 // Parts reused read-only from their owners: the research console's loader and board glyphs (dashboard/site, in this
-// repo once committed, else in the data folder), the Strategy Atlas kit (meta/atlas-kit.js), the viewer kit (studio, or its copy in the data folder)
+// repo once committed, else in the data folder), the Strategy Atlas kit (meta/atlas-kit.js), the viewer kit (Holotable's, vendored in vendor/holotable, or its copy in the data folder)
 // and the arena strategy renderer (arena/strategy, in the data folder).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,7 +49,7 @@ const parts = {
     core: first(path.join(repo, 'dashboard/site/core.cjs'), path.join(opts.data, 'dashboard/site/core.cjs')),
     glyph: first(path.join(repo, 'dashboard/site/glyph.cjs'), path.join(opts.data, 'dashboard/site/glyph.cjs')),
     atlasKit: first(path.join(repo, 'meta/atlas-kit.js'), path.join(opts.data, 'meta/kit/atlas-kit.js')),
-    viewerKit: first(path.join(repo, 'studio/dist-kit/swu-viewer-kit.js'), path.join(opts.data, 'viewer-kit/swu-viewer-kit.js')),
+    viewerKit: first(path.join(repo, 'vendor/holotable/swu-viewer-kit.js'), path.join(opts.data, 'viewer-kit/swu-viewer-kit.js')),
     strategy: first(path.join(opts.data, 'arena/strategy/strategy-diagram.js'), path.join(repo, 'bot/arena/web/strategy-diagram.js')),
 };
 for (const k of ['core', 'atlasKit']) if (!parts[k]) { console.error(`missing ${k}: the app needs it to load the data (see app/README.md)`); process.exit(2); }
