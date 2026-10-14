@@ -70,7 +70,7 @@ def prep(a):
                 games.pop()
     held = held_games(len(games))
     t0 = time.time()
-    Z, rows, wins = [], [], []
+    Z, SF, rows, wins = [], [], [], []
     pending, pend_rows = [], []
 
     def flush():
@@ -79,9 +79,10 @@ def prep(a):
         es = [F.encode(m, db) for m in pending]
         z = net.encode(np.stack([e["state"] for e in es]), np.stack([e["tok_ids"] for e in es]).astype(np.int64),
                        np.stack([e["tok_feats"] for e in es]), np.stack([e["tok_mask"] for e in es]))
-        for r, zz in zip(pend_rows, z):
+        for r, zz, e in zip(pend_rows, z, es):
             r["z"] = len(Z)
             Z.append(zz.astype(np.float32))
+            SF.append(e["state"].astype(np.float16))
         pending.clear()
         pend_rows.clear()
 
@@ -136,7 +137,7 @@ def prep(a):
     flush()
     np.savez_compressed(
         a.out,
-        Z=np.stack(Z).astype(np.float16),
+        Z=np.stack(Z).astype(np.float16), S=np.stack(SF),
         leaf_w=np.array([r["w"] for r in rows], np.int32), leaf_root=np.array([r["root"] for r in rows], np.int32),
         leaf_teacher=np.array([r["teacher"] for r in rows], np.bool_), leaf_fixed=np.array([r["fixed"] for r in rows], np.float32),
         leaf_z=np.array([r["z"] for r in rows], np.int32), leaf_ev=np.array([r["ev"] for r in rows], np.float32),
@@ -148,9 +149,14 @@ def prep(a):
 
 
 class Data:
-    def __init__(self, path):
+    def __init__(self, path, inputs="z"):
         d = np.load(path)
         self.Z = d["Z"].astype(np.float32)
+        if inputs != "z":
+            # offline check: the encoder's 73 raw state features (standardised) in place of z, or next to it
+            sf = d["S"].astype(np.float32)
+            sf = (sf - sf.mean(0)) / (sf.std(0) + 1e-3)
+            self.Z = sf if inputs == "state" else np.concatenate([self.Z, sf], 1)
         for k in ("leaf_w", "leaf_root", "leaf_teacher", "leaf_fixed", "leaf_z", "leaf_ev", "win_game", "win_won", "win_lo", "win_hi"):
             setattr(self, k, d[k])
         held = set(d["held"].tolist())
@@ -200,14 +206,17 @@ def metrics(data, wins, v, ref=None):
 
 
 def fit(a):
-    data = Data(a.data)
+    data = Data(a.data, a.input)
     w0, meta = M.load_safetensors(a.model)
+    if a.input != "z" and a.hidden == 0:
+        sys.exit("--input state/both needs a new head (--hidden N)")
+    D = data.Z.shape[1]
     H = w0["v1.w"].shape[1] if a.hidden == 0 else a.hidden
     rng = np.random.default_rng(a.seed)
     if a.hidden == 0:
         P = {k: w0[k].copy() for k in ("v1.w", "v1.b", "v2.w", "v2.b")}
     else:
-        P = {"v1.w": rng.normal(0, 1 / math.sqrt(M.D), (M.D, H)).astype(np.float32), "v1.b": np.zeros(H, np.float32),
+        P = {"v1.w": rng.normal(0, 1 / math.sqrt(D), (D, H)).astype(np.float32), "v1.b": np.zeros(H, np.float32),
              "v2.w": rng.normal(0, 1 / math.sqrt(H), (H, 1)).astype(np.float32), "v2.b": np.zeros(1, np.float32)}
     value = lambda Z, P: (np.maximum(Z @ P["v1.w"] + P["v1.b"], 0) @ P["v2.w"] + P["v2.b"])[:, 0]
     train = np.flatnonzero(~data.is_held)
@@ -305,10 +314,11 @@ def fit(a):
     log["best"] = next((c for c in log["curve"] if c["epoch"] == best[2]), base)
     w = dict(w0)
     w.update(best[1])
-    M.save_safetensors(a.out + ".safetensors", w, {**meta, "value": "rank_train.py", "rank_data": a.data})
+    if a.input == "z":  # jepa_bot.py reads heads on z only; the other inputs are an offline check
+        M.save_safetensors(a.out + ".safetensors", w, {**meta, "value": "rank_train.py", "rank_data": a.data})
     with open(a.out + ".train.json", "w") as fh:
         json.dump(log, fh, indent=1)
-    print(f"wrote {a.out}.safetensors (best epoch {best[2]}: {goal} {best[0]:.3f}, start {base[goal]:.3f})")
+    print(f"wrote {a.out}{'.safetensors' if a.input == 'z' else '.train.json'} (best epoch {best[2]}: {goal} {best[0]:.3f}, start {base[goal]:.3f})")
 
 
 def main():
@@ -335,6 +345,8 @@ def main():
     f.add_argument("--hidden", type=int, default=0, help="0: fine-tune the model's value head; N: a new head with N hidden units")
     f.add_argument("--seed", type=int, default=0)
     f.add_argument("--live-only", action="store_true", help="softmax over live positions only, which keeps V a win estimate")
+    f.add_argument("--input", choices=["z", "state", "both"], default="z",
+                   help="what the head reads: z, the 73 raw state features (needs data prepped by this version), or both; only z heads are saved")
     f.add_argument("--target", choices=["rank", "eval"], default="rank",
                    help="rank: put the teacher's position first; eval: copy the evaluator's scores (prep with --eval-all)")
     a = ap.parse_args()
