@@ -124,8 +124,8 @@ function feedRun(doc, feed, id) {
 
 /**
  * A feed's game row may carry the person's name on karabast.net (`person`). It never goes into the run document: the
- * window keeps it in admin/people, {names: {<game id>: name}}, which only an admin reads (Eric's sign-in shows it on the
- * Vs people page). Friends, view links, apps, the project token and the app's model still see "opponent".
+ * window keeps it in admin/people, {names: {<game id>: name}}, which only an admin reads. Friends, view links, apps,
+ * the project token and the app's model still see "opponent" (the app has left people games out since 2026-10-14).
  */
 const PEOPLE_MAX = 20000;
 const personName = (x) => (typeof x === 'string' && x.length <= 64 && !/[\u0000-\u001f\u007f]/.test(x) && x.trim() ? x.trim() : null);

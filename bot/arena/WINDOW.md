@@ -40,7 +40,7 @@ Reads (a signed-in friend, or the project token):
   while the game is played, and `?sizes=1` gives `size: null` for its games (`x-size` on each read gives the size).
 - The one exception is Eric's: a feed may send each person's karabast.net name as `person` on a game row (below). The
   window keeps those names only in the `admin/people` document, `{names: {<game id>: name}}`, which needs the admin
-  token or an admin's sign-in; the app shows them on the Vs people page to an admin and to no one else. The run
+  token or an admin's sign-in (the app has shown no games against people since 2026-10-14). The run
   document, replays, `/api/app`, MCP apps and the project token still read `opponent` and `a person`.
 
 Writes need a bearer token (the project token, or the admin token); a session cookie never writes, whatever its role,
@@ -164,7 +164,7 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
   `steps` and `error` (text). It drops every other field and refuses a document that does not fit with a 400. A game's
   `person` (the person's karabast.net name, up to 64 characters of plain text) goes to `admin/people` instead of the run;
   a name that does not fit is dropped, never the run. It stamps `"feed": "karabast"` on the run,
-  and the app lists every run a feed sent as games against people, kept out of bot records and ratings.
+  and the app leaves every run a feed sent out of its pages, bot records and ratings.
 - `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
   whole file when it ends. `bot/karabast/feed.js` is a working feed that does all three. (`push.js run` is for
   the project's own runs: it also writes `ladders/<id>`, which a feed token may not.)
