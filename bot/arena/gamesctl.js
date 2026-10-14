@@ -17,8 +17,8 @@ console.log = console.error;
  * 143 a stop by SIGTERM. intake and push reach the window through the coordinator's loopback proxy (SWU_WINDOW), which
  * adds the token: no Node process on the games machine holds it.
  *
- *     setup        folders, the round-seed secret, the residents in the roster: {"ok":true,"residents":[..],"toolchain":null|"no .."}
- *     warm         the resident bundles compiled into the cache: {"ok":true,"warmed":[..],"failed":[{"name","error"}]}
+ *     setup        folders, the round-seed secret, the roster: {"ok":true,"residents":[..],"toolchain":null|"no .."}
+ *     warm         the lineup's bundles compiled into the cache: {"ok":true,"warmed":[..],"failed":[{"name","error"}]}
  *     plan         planRound: {"round":K,"resume":bool,"why":".."} or {"round":null,"why":".."}
  *     referee-cmd  the command that plays round K, run by the coordinator: {"cmd":[..],"env":{..},"cwd":".."}
  *                  (a new round's --cap-ms becomes the roster's time limit; a round cut short keeps its own rules)
@@ -34,8 +34,8 @@ console.log = console.error;
  * namespace (isolate.sh) with a minimal environment, /.fly hidden, and alone reads the round-seed secret; the ladders
  * it starts, where bot code runs, run as the user arena with no capabilities (referee.js spawnBots), and the intake's
  * checker likewise (intake.js). Submitted bots run only as WebAssembly (no network, no files but their own and the
- * card data). The residents are the project's own bots, entered as the roster's baselines (ARENA_RESIDENTS overrides
- * the list).
+ * card data). The residents, the arena's own bots, are submitted entries too (intake.js house submissions): the image
+ * builds no bot of its own.
  *
  * Everything lives on the volume (GAMES_DATA, default /data): arena/ (ARENA_HOME: roster, versions, standings),
  * results/ (round ladders and replays), intake/, wasm-cache/, home/ (the bots' HOME), secret/ (root's), coord/ (the
@@ -62,10 +62,6 @@ const SECRET = path.join(DIRS.secret, 'arena-secret');
 // what nothing started here may see (isolate.sh --hide): Fly's API socket and config, the Elixir coordinator's folder
 // (its job database and state), or GAMES_HIDE's paths
 const HIDE = (process.env.GAMES_HIDE || ['/.fly', path.join(DATA, 'coord')].join(':')).split(':').filter(Boolean);
-// the project's own bots, rated with everyone (their mean is pinned to 1500): two in-process anchors and five
-// WebAssembly bundles built into the image (bot/compiled)
-const RESIDENTS = (process.env.ARENA_RESIDENTS || 'heuristic,rush,c-clock-wasm,rust-greedy2-wasm,rust-search-wasm,node-search-wasm,py-clock-wasm')
-    .split(',').map((x) => x.trim()).filter(Boolean);
 const THINK_CAP_MS = 60000; // per game, the local arena's rule (roster.thinkCapMs)
 const SETTLE_MS = 90000; // a round waits this long after a version comes in, so a quick fix joins the same round
 
@@ -110,8 +106,8 @@ function setupData() {
         log('made the round-seed secret');
     }
     fs.chmodSync(SECRET, 0o600);
-    // the residents are the baselines; the competitors stay as they are
-    home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: RESIDENTS, agents: r.agents ?? [] }));
+    // no baselines: the image has no bots of its own, and the arena's own bots are resident entries; the competitors stay
+    home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: [], agents: r.agents ?? [] }));
     if (asRoot()) {
         // what bot code writes is the bots' user's; the secret, the intake's folder and the referee's /tmp stay root's
         const [uid, gid] = idsOf(BOT_USER);
@@ -123,21 +119,19 @@ function setupData() {
         }
         fs.chownSync(SECRET, 0, 0);
     }
-    return { residents: RESIDENTS };
+    return { residents: home.roster().agents.filter((a) => a.resident).map((a) => a.name) };
 }
 
 /**
- * Compiles the resident bundles into the cache, as the bots' user, so their first game does not pay for it. Returns
- * {warmed: [name], failed: [{name, error}]}.
+ * Compiles the bundles of the lineup's versions (the residents' and the builders') into the cache, as the bots' user,
+ * so their first game after a start does not pay for it. Returns {warmed: [name], failed: [{name, error}]}.
  */
-function warmResidents() {
+function warmLineup() {
     const out = { warmed: [], failed: [] };
-    for (const name of RESIDENTS.filter((n) => n.endsWith('-wasm'))) {
-        const dir = path.join(ROOT, 'build', 'compiled', name.slice(0, -5));
+    for (const name of require('./referee').lineup()) {
+        const dir = path.join(home.VERSIONS, name, 'bundle');
         if (!fs.existsSync(path.join(dir, 'arena.json'))) {
-            log(`resident ${name}: no bundle at ${dir}`);
-            out.failed.push({ name, error: 'no bundle' });
-            continue;
+            continue; // not a WebAssembly version (an older bot.js one): nothing to compile
         }
         const cmd = ['python3', path.join(ROOT, 'bot', 'compiled', 'run.py'), '--warm', dir];
         const run = asRoot() ? ['setpriv', `--reuid=${idsOf(BOT_USER)[0]}`, `--regid=${idsOf(BOT_USER)[1]}`, '--clear-groups', '--', ...cmd] : cmd;
@@ -147,7 +141,7 @@ function warmResidents() {
             out.warmed.push(name);
         } catch (e) {
             const error = String(e.stderr ?? e.message).trim().split('\n').pop();
-            log(`resident ${name}: could not compile (${error})`);
+            log(`${name}: could not compile (${error})`);
             out.failed.push({ name, error });
         }
     }
@@ -281,7 +275,7 @@ const commands = {
     },
 
     warm() {
-        return { ok: true, ...warmResidents() };
+        return { ok: true, ...warmLineup() };
     },
 
     plan(o) {
@@ -381,4 +375,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { commands, readState, planRound, botEnv, RESIDENTS };
+module.exports = { commands, readState, planRound, botEnv };

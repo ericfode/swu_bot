@@ -31,8 +31,8 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
 const COMPILED = path.join(ROOT, 'bot', 'compiled');
-// the WebAssembly bots among gamesctl.js's default residents (its RESIDENTS when ARENA_RESIDENTS is not set); heuristic
-// and rush, the other two, run in-process
+// the bots the games image used to play as built-in residents, before they became entries (resident versions, kind
+// wasm): an image that still builds these bundles plays them; heuristic and rush, the other two, run in-process
 const RESIDENTS = ['c-clock-wasm', 'rust-greedy2-wasm', 'rust-search-wasm', 'node-search-wasm', 'py-clock-wasm'];
 const IN_PROCESS = ['heuristic', 'rush'];
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/; // registry.js

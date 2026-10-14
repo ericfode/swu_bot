@@ -53,6 +53,11 @@ test('gamesctl plan: a round when a version comes in, after it settles; again wh
     assert.deepStrictEqual(planRound(opts), { round: 3, resume: false, why: 'changed' }, 'a withdrawn version leaves the lineup');
 });
 
+test('gamesctl warm: only the lineup\'s WebAssembly versions are compiled; the image has no bots of its own', () => {
+    const { commands } = require('../arena/gamesctl');
+    assert.deepStrictEqual(commands.warm(), { ok: true, warmed: [], failed: [] }, 'versions with no bundle: nothing to compile');
+});
+
 test('gamesctl: the referee gets the arena folders and the secret path, and no token', () => {
     process.env.SWU_WINDOW_TOKEN = 'leak';
     const env = botEnv();

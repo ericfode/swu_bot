@@ -56,20 +56,20 @@ that played it; over all rounds, the bots built into the image that ever played,
 move the scale and versions compare across rounds. A round cut short by a stop (a deploy) resumes at the next start and keeps
 the games already played.
 
-The residents are moving from bots built into the image to entries submitted like any builder's:
+The residents are entries submitted like any builder's bot; the image builds no bot of its own:
 
-- **Built in (until replaced).** The roster's baselines, built to WebAssembly in the image (`ARENA_RESIDENTS`
-  overrides): `heuristic`, `rush`, `c-clock-wasm`, `rust-greedy2-wasm`, `rust-search-wasm`, `node-search-wasm`,
-  `py-clock-wasm`.
 - **Entries.** A house submission (`ops/house-submit.js <name> <folder> --note "..."`) writes a submission with owner
   `@arena` straight to the window, with the project token; no GitHub login can be that owner, so arena_submit cannot
   make one. The intake enters it as a resident entry (`resident: true`, owner `arena`, no starter version, first
   version v1); a later house submission under the same name is its next version. A resident may take the name of a
   built-in bot, never a builder's or a bot program's. Residents are rated with everyone, never lead a round, have no
   panel, and show as baselines in the app and in `status`.
-- **The switch.** Once a resident entry has a version, it plays in place of the built-in bot of the same name
-  (`referee.js` `residentName`: `c_clock` replaces `c-clock-wasm`), one bot at a time, so no round misses one. Each
-  round records its anchors (`anchors` in `standings.json`).
+- **Before.** Until 2026-10-14 the residents were built into the image as the roster's baselines (`heuristic`, `rush`,
+  `c-clock-wasm`, `rust-greedy2-wasm`, `rust-search-wasm`, `node-search-wasm`, `py-clock-wasm`). The all-round ratings
+  keep those built-in bots as their anchors, so old ratings stay put. The roster's `baselines` is now empty
+  (`gamesctl.js setup`); a baseline named there would still play until a resident entry with a version replaces it
+  (`referee.js` `residentName`: `c_clock` replaces `c-clock-wasm`). Each round records its anchors (`anchors` in
+  `standings.json`).
 - The ports of heuristic and rush to the bot protocol live in Holocron (`ericfode/holocron`, `bots/ports/`); the
   other five are the bundles `bot/compiled/build.py` makes.
 

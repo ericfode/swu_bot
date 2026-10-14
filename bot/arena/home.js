@@ -51,15 +51,16 @@ function readJson(file, dflt) {
     }
 }
 
-/** Competitors and baselines. A missing roster is the default; a roster that exists but does not parse throws, so a
- *  bad hand edit stops the arena instead of silently running (and later writing) an empty roster. */
+/** Competitors and baselines. A missing roster is the default (no baselines: the arena's own bots are resident entries);
+ *  a roster that exists but does not parse throws, so a bad hand edit stops the arena instead of silently running (and
+ *  later writing) an empty roster. */
 function roster() {
     let text;
     try {
         text = fs.readFileSync(ROSTER, 'utf8');
     } catch (e) {
         if (e.code === 'ENOENT') {
-            return { thinkCapMs: 60000, baselines: ['rush', 'heuristic'], agents: [] };
+            return { thinkCapMs: 60000, baselines: [], agents: [] };
         }
         throw e;
     }

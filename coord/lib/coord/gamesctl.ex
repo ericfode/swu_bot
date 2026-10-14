@@ -30,7 +30,7 @@ defmodule Coord.Gamesctl do
     end
   end
 
-  @doc "Compiles the resident bundles into the cache (arena, 15 min)."
+  @doc "Compiles the lineup's bundles into the cache (arena, 15 min)."
   def warm do
     case call(:warm, ["warm"], as: :arena, timeout: :timer.minutes(15)) do
       {:ok, %{"ok" => true} = out} -> {:ok, %{warmed: names(out["warmed"]), failed: names(out["failed"])}}
@@ -225,7 +225,6 @@ defmodule Coord.Gamesctl do
     %{
       data: Config.data(),
       arena_user: Config.get(:arena_user),
-      residents: Config.get(:residents),
       card_json: Config.get(:card_json),
       root_home: root_home(),
       node_dir: Path.dirname(Config.get(:node)),

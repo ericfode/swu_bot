@@ -1,6 +1,6 @@
 # The games machine: what the Fly app swu-arena-games runs (fly.games.toml). It takes the bots people submit on the
-# window (swu-arena.fly.dev), plays them against each other and the resident bots, and sends the results back to the
-# window. The Elixir coordinator (coord/) runs it and calls Node's bot/arena/gamesctl.js for the game work. Built from the
+# window (swu-arena.fly.dev), plays them against each other and the arena's own bots (also submitted, as resident
+# entries: bot/arena/README.md), and sends the results back to the window. It builds no bot of its own. The Elixir coordinator (coord/) runs it and calls Node's bot/arena/gamesctl.js for the game work. Built from the
 # repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
 # container). The build context is filtered by Dockerfile.games.dockerignore.
 # No stage installs system packages: each takes what it needs from an official image (node, python, rust, Hex's elixir).
@@ -15,25 +15,16 @@ COPY forceteki/ ./
 RUN export NODE_OPTIONS=--max-old-space-size=4096 && npm run get-cards && npm run build \
  && npm prune --omit=dev --no-audit --no-fund
 
-# the Python packages bot/compiled pins (toolchain.json): wasmtime runs the bundles, ziglang compiles the C resident
+# the Python package bot/compiled pins (toolchain.json): wasmtime runs the bundles
 FROM python:3.12-slim-bookworm AS pydeps
 COPY bot/compiled/toolchain.json /toolchain.json
-RUN pip install --no-cache-dir --target /opt/zig "ziglang==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['ziglang'])")" \
- && pip install --no-cache-dir --target /opt/py "wasmtime==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['wasmtime'])")"
+RUN pip install --no-cache-dir --target /opt/py "wasmtime==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['wasmtime'])")"
 
-# the resident bots as WebAssembly bundles (bot/compiled), and the tools the intake packs submissions with: Javy and
-# CPython for WASI (pinned in toolchain.json, checked by sha256)
-FROM rust:1.97-bookworm AS wasm
-RUN rustup target add wasm32-wasip1
-COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
-COPY --from=pydeps /opt/py /opt/py
-COPY --from=pydeps /opt/zig /opt/zig
-ENV PYTHONPATH=/opt/py:/opt/zig
+# the tools the intake packs submissions with: Javy and CPython for WASI (pinned in toolchain.json, checked by sha256)
+FROM python:3.12-slim-bookworm AS tools
 WORKDIR /src
-COPY Cargo.toml Cargo.lock ./
-COPY bot bot
-RUN python3 bot/compiled/build.py c-clock rust-greedy2 rust-search node-search py-clock \
- && rm -rf build/compiled/.cargo build/compiled/.work build/compiled/.cache build/compiled/.tools/downloads
+COPY bot/compiled bot/compiled
+RUN python3 bot/compiled/build.py --tools && rm -rf build/compiled/.tools/downloads
 
 # the Rust simulator as WebAssembly for Node (bot/omni-wasm/pkg/node), which serves the simulations of a bot that asks
 # for them on the Rust engine ("simEngine": "rust", spec/protocol.md); without it such a bot silently gets forceteki
@@ -83,7 +74,7 @@ COPY --from=engine /src/forceteki/package.json forceteki/package.json
 COPY --from=engine /src/forceteki/build forceteki/build
 COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
 COPY --from=engine /src/forceteki/test/json forceteki/test/json
-COPY --from=wasm /src/build/compiled build/compiled
+COPY --from=tools /src/build/compiled build/compiled
 COPY --from=omniwasm /src/bot/omni-wasm/pkg/node bot/omni-wasm/pkg/node
 COPY --from=coord /opt/coord /app/coord
 # the release starts here: crypto, SQLite and the CA store load (runtime.exs needs a window address to load)

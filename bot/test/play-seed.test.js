@@ -55,13 +55,6 @@ function bundleTar(folder, dir) {
     return hex;
 }
 
-test('the residents are the WebAssembly bots of gamesctl.js\'s default resident list', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'bot', 'arena', 'gamesctl.js'), 'utf8');
-    const dflt = /process\.env\.ARENA_RESIDENTS \|\| '([^']+)'/.exec(src)[1].split(',');
-    assert.deepStrictEqual(RESIDENTS, dflt.filter((n) => n.endsWith('-wasm')));
-    assert.deepStrictEqual(dflt.filter((n) => !n.endsWith('-wasm')), ['heuristic', 'rush']);
-});
-
 test('checkJob takes the lane\'s jobs and refuses everything else before anything runs', () => {
     const bundles = path.join(tmp, 'check-bundles');
     fs.mkdirSync(bundles, { recursive: true });
