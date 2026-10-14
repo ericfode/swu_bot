@@ -1,9 +1,11 @@
 'use strict';
 // What Perch reads. Eric's call (2026-10-11): the shared core of the project, meaning game running,
 // coordination, the bot protocol, viewers, analysis, research tooling and dashboards, and not the
-// code of specific bots. Tests are left out too. Only source files are read, and built bundles
-// (over 256 KB or minified) are skipped. perch runs in a snapshot that holds only these files, so
-// Jev never sees anything else, not even as the caller or callee of a core method.
+// code of specific bots. This repo holds the arena's part of that core (the research and the bots are in
+// holocron, the Rust simulator in kessel, the viewer in holotable). Tests are left out too. Only source
+// files are read, and built bundles (over 256 KB or minified) are skipped. perch runs in a snapshot that
+// holds only these files, so Jev never sees anything else, not even as the caller or callee of a core
+// method.
 // It is an allow-list: a new bot in bot/players/ or in its own folder under bot/ is out of scope with
 // no change here, and a new shared folder must be added to `include`. Globs: `*` stays within one
 // directory, `**` crosses directories.
@@ -13,31 +15,17 @@ module.exports = {
     include: [
       'bot/*.js', // engine wrapper, match, ladder and tournament runners, recorder, ratings, stdio tools
       'bot/players/index.js', // the bot registry
-      'bot/players/external.js', // the stdio protocol adapter for out-of-process bots
       'bot/arena/**', // the arena: API, MCP and HTTP servers, referee, registry, dashboard writer
-      'bot/info/**', // knowledge-dial research
-      'bot/eval/**', // position-evaluation study: evaluators, scoring, dashboard curves and panels
-      'bot/tools/**',
-      'bot/learn/collect.js', // trajectory collector for any bot
-      'bot/learn/eval.js', // head-to-head runner for any two bots
-      'bot/omni/lens.js', // writes the per-card lens files the viewers show
-      'bot/karabast/**', // Karabast socket client, frame reader and spectate recorder (any bot, any game)
       'bot/compiled/**', // builds any bot as a sandboxed WebAssembly bundle, and runs it
       'spec/**',
       'app/**', // the SWU Arena app: one page to watch the arena and read the research
-      'studio/**',
-      'server/**', // the arena server on Effect (stage 4): API, MCP, rounds as durable workflows, SQLite
-      'analysis/**',
-      'meta/**',
-      'importer/**',
+      'server/**', // the arena server on Effect (stage 4): the record, export API v1, MCP, rounds as durable workflows
+      'meta/**', // the Strategy Atlas kit the app and the viewer kit use
       'tools/**',
     ],
     exclude: [
       'bot/arena/starters/**', // starter bots copied into new arena players
-      'bot/eval/bot.js', // the h@<evaluator> bots
-      'bot/determinism-check.js', // checks the heuristic bot's playouts
-      'bot/determinize-check.js', // checks the ISMCTS bot's belief model
-      'bot/ismcts-panel.js', // the ISMCTS bots' own dashboard panel
+      'vendor/**', // other repositories' builds (vendor/README.md)
       '**/test/**', // tests, by folder or by name
       '**/*.test.*',
       '**/*-test.*',
@@ -54,7 +42,7 @@ module.exports = {
     exclude: [
       'dashboard/build.v*.mjs', // old copies of build.mjs
       'dashboard/site/*.v*.cjs', // old copies of core.cjs
-      'viewer-kit/swu-viewer-kit.*', // built from studio/ in the repo
+      'viewer-kit/swu-viewer-kit.*', // Holotable's build (vendor/holotable in the repo)
       '**/node_modules/**',
     ],
   },

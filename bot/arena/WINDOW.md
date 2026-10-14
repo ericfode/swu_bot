@@ -14,7 +14,7 @@ asks the same API.
 |---|---|---|
 | Arena (referee + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s, and the playing round's replays every 3 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
-| Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
+| Meta analyzer (holocron's `lab/meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
 | Browsers, the app | the invite list and the arena settings, from Eric's admin pages only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` and `/api/arena-settings` (an admin) |
 
@@ -157,7 +157,7 @@ never in a thread. `<NAME>` is letters and digits only, so one feed's names neve
 hyphen. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
 
 - `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
-  studio/src/data/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
+  Holotable's src/data/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
   running games; a finished one has `outcome` `"won"` (with `winnerSeat` `p1` or `p2`), `"draw"` or `"abandoned"`. The
   window keeps only the fields the app reads, each checked for its type: on the run `createdAt` (required), `bots` and
   `gamesPerPairing`; on each game `id` (distinct), `p1`, `p2`, `outcome`, `winnerSeat` (set from the outcome), `rounds`,
@@ -166,8 +166,9 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
   a name that does not fit is dropped, never the run. It stamps `"feed": "karabast"` on the run,
   and the app leaves every run a feed sent out of its pages, bot records and ratings.
 - `POST /api/replays/karabast/karabast-<id>?at=<bytes>`: the replay's new lines while the game is played; `PUT` the
-  whole file when it ends. `bot/karabast/feed.js` is a working feed that does all three. (`push.js run` is for
-  the project's own runs: it also writes `ladders/<id>`, which a feed token may not.)
+  whole file when it ends. `bot/karabast/feed.js` (in this repo's history, before the split) was a working feed that
+  does all three. (`push.js run` is for the project's own runs: it also writes `ladders/<id>`, which a feed token may
+  not.)
 - `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how
   the viewer finds it.
 
@@ -228,4 +229,4 @@ and running the release" in coord/README.md; GAMES_DATA outside /tmp, since isol
       node bot/arena/server.js --host 127.0.0.1 --port 8080
     SWU_WINDOW=http://localhost:8080 SWU_WINDOW_TOKEN=t node bot/arena/push.js run /mnt/project-files/results/<run>
 
-Build the page first with `npm run app -- --public --shell` (and the viewer kit with `npm --prefix studio run build:kit`).
+Build the page first with `npm run app -- --public --shell` (the viewer kit is prebuilt in `vendor/holotable`).

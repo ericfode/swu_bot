@@ -639,7 +639,7 @@ function createWindow(opts = {}) {
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
-    const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'studio', 'dist-kit', 'swu-viewer-kit.js');
+    const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'vendor', 'holotable', 'swu-viewer-kit.js');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm') });
 

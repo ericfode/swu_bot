@@ -21,8 +21,9 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..', '..');
-// bot/ folders whose code the swarm may need although the trace does not load it (lazy requires)
-const BOT_DIRS = ['bot/players', 'bot/omni/rs', 'bot/omni/wasm'];
+// folders whose code the swarm may need although the trace does not load it (lazy requires): the referee's Rust
+// simulations and Kessel's adapter (vendor/kessel, without its WebAssembly package)
+const BOT_DIRS = ['bot/players', 'bot/sims', 'vendor/kessel/js'];
 const SKIP = /(^|\/)(test|tests|__pycache__|target)(\/|$)|\.(map|md|ts|py|rs|c|h|o)$/;
 // the engine's logger and what it pulls in: the runtime gives the engine a silent logger instead (runtime.js aliases)
 const LOGGING = /\/node_modules\/(winston|winston-transport|logform|@colors|triple-beam|readable-stream|async|@dabh|colorspace|color|color-string|color-convert|color-name|simple-swizzle|is-arrayish|text-hex|kuler|enabled|one-time|fn\.name|stack-trace|safe-stable-stringify|fecha|is-stream|util-deprecate|process|inherits|string_decoder|safe-buffer|ms)\//;
@@ -85,8 +86,8 @@ async function trace(root) {
         }
     }
     try {
-        require(path.join(root, 'bot/omni/rs/rust-view.js'));
-        require(path.join(root, 'bot/omni/rs/pool.js')).loadPool(path.join(root, 'bot/omni/rs/pool.json'));
+        require(path.join(root, 'bot/sims/rust-view.js'));
+        require(path.join(root, 'bot/sims/pool.js')).loadPool(path.join(root, 'bot/sims/pool.json'));
     } catch {
         // optional
     }

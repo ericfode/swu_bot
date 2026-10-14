@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { phaseStats } = require('../omni/rs/state');
+const { phaseStats } = require('../sims/state');
 const effect = (power, hp, duration = 'untilEndOfPhase', type = 'modifyStats') => ({ duration, type, getValue: () => ({ power, hp }) });
 const card = (effects) => ({ internalName: 'fixture', getOngoingEffects: () => effects });
 test('phase stats preserve signed stacked modifiers independently of visible stat floors', () => {
@@ -42,7 +42,7 @@ test('phase keyword export rejects unsupported mechanics, malformed values and l
 
 
 test('arena order preserves engine entry order across controllers and affects receipt hashes', () => {
-    const { arenaUnitOrder, stateHash } = require('../omni/rs/state');
+    const { arenaUnitOrder, stateHash } = require('../sims/state');
     const calls = [];
     const eg = { cardId: (uuid) => uuid, game: { getArenaUnits: ({ arena }) => {
         calls.push(arena);

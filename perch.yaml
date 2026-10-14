@@ -1,7 +1,9 @@
 # perch: semantic linting with Jev. Run it with `npm run lint` (see CLAUDE.md, "Linting").
-# forceteki/ is the upstream engine (read-only here); the rest is generated output.
+# forceteki/ is the upstream engine (read-only here); vendor/ holds other repositories' builds (vendor/README.md); the
+# rest is generated output.
 ignore:
   - forceteki/**
+  - vendor/**
   - replays/**
   - results/**
 

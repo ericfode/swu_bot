@@ -1,8 +1,7 @@
 {
     "about": "Pinned tools for bot/compiled (README.md). build.py downloads each into build/compiled/.tools and checks its sha256.",
     "python": {
-        "wasmtime": "49.0.0",
-        "ziglang": "0.17.0"
+        "wasmtime": "49.0.0"
     },
     "javy": {
         "version": "8.0.0",

@@ -10,8 +10,7 @@ on:
       - 'bot/**'
       - 'coord/**'
       - 'forceteki'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
+      - 'vendor/kessel/**'
       - 'Dockerfile.games'
       - 'Dockerfile.games.dockerignore'
       - 'fly.games.toml'
@@ -25,6 +24,9 @@ on:
       - 'bot/test/remote-lane.test.js'
       - 'bot/test/play-seed.test.js'
       - 'bot/test/bundle.test.js'
+      - 'bot/test/sims.test.js'
+      - 'bot/sims/**'
+      - 'vendor/kessel/**'
       - 'bot/remote-lane.js'
       - 'bot/ladder.js'
       - 'bot/ladder-worker.js'
@@ -55,8 +57,9 @@ jobs:
         with:
           node-version: 22
           package-manager-cache: false
-      # play-seed's games need the engine, which this job does not build: those tests skip, the job checks stay
-      - run: node --test bot/test/gamesctl-plan.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js
+      # play-seed's and sims' games need the engine, which this job does not build: those tests skip, the job checks and
+      # the vendored Kessel package's checks stay
+      - run: node --test bot/test/gamesctl-plan.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js bot/test/sims.test.js
 
   # the Elixir coordinator (coord/): the versions Dockerfile.games builds with; the :node tests call the real gamesctl.js
   test-coord:

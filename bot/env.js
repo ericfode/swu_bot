@@ -159,9 +159,9 @@ class Env {
 
     /**
      * selectionToggles (default off): in a SelectCardPrompt, list selected cards as unselect toggles and drop
-     * unselected cards once the limit is reached, as the prompt's click handler does. The Rust/Wasm reference
-     * traces (bot/omni/rs, bot/cards/reference) turn it on; everything else keeps the original action list, so
-     * the gate and old replays are unchanged.
+     * unselected cards once the limit is reached, as the prompt's click handler does. Kessel's reference traces
+     * were recorded with it on; everything else keeps the original action list, so the gate and old replays are
+     * unchanged.
      */
     newGame({ seed = 'seed', deck1, deck2, undo = false, names = ['p1', 'p2'], selectionToggles = false } = {}) {
         return new EnvGame(this, { seed, deck1, deck2, undo, names, selectionToggles });

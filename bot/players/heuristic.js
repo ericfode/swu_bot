@@ -240,7 +240,7 @@ class HeuristicBot {
     constructor(name = 'heuristic', { maxCandidates = 40, maxBranch = 8, depth = 1, beam = 3, maxFollowUps = 12, profile = null, evaluate: evalFn = null } = {}) {
         this.name = name;
         this.profile = profile;
-        // optional (eg, pid) -> score that replaces the profile evaluation, to compare evaluators under the same search (bot/eval/)
+        // optional (eg, pid) -> score that replaces the profile evaluation, to compare evaluators under the same search (holocron's lab/eval/)
         this.evaluate = evalFn;
         this.depth = depth;
         this.beam = beam;

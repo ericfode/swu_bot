@@ -8,7 +8,7 @@ on:
     paths: &arena-paths
       - 'bot/arena/**'
       - 'app/**'
-      - 'studio/**'
+      - 'vendor/holotable/**'
       - 'dashboard/site/**'
       - 'meta/atlas-kit.js'
       - 'spec/protocol.md'

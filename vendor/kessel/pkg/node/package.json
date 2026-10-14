@@ -1,0 +1,13 @@
+{
+  "name": "@kessel/wasm-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./kessel_wasm.js",
+  "types": "./kessel_wasm.d.ts",
+  "files": [
+    "*.js",
+    "*.wasm",
+    "*.ts"
+  ]
+}

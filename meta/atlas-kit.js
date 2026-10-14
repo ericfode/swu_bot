@@ -4,7 +4,7 @@
  *
  * Works as a browser script (sets window.AtlasKit, also as window.ATLAS_KIT) and as a Node module (require).
  * No dependencies and no DOM use at load time, so it can be inlined into any page.
- * The Strategy Atlas page is built from this file, and meta/export-kit.js copies it with ready-made SVGs
+ * The Strategy Atlas page is built from this file, and holocron's lab/meta/export-kit.js copies it with ready-made SVGs
  * to /mnt/project-files/meta/kit/ on every refresh, so every page that uses it stays in step with the Atlas.
  */
 (function (root, factory) {
@@ -28,7 +28,7 @@
 
   /**
    * Spots: a round start seen from one player. A game enters a spot at the first round start where `rule` holds.
-   * `label` and `short` must match meta/analyze.js SITUATIONS (build-page.js checks this).
+   * `label` and `short` must match holocron's lab/meta/analyze.js SITUATIONS (its build-page.js checks this).
    * `board` is the icon's final frame; `focus` is the part of the table the spot is about.
    */
   const SPOTS = [
@@ -111,7 +111,7 @@
   ];
 
   /**
-   * Play styles, from per-round stats measured in replays (meta/analyze.js describe()). "High" = top third of the field.
+   * Play styles, from per-round stats measured in replays (holocron's lab/meta/analyze.js describe()). "High" = top third of the field.
    * The order is the order of the tests: the first that holds wins.
    */
   const STYLES = [

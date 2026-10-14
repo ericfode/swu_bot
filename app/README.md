@@ -38,7 +38,7 @@ The app adds no data format. Each part belongs to the thread that writes it; the
 | Spots, styles, edges | `meta/meta.json` | Strategy meta analyzer |
 | Ratings (Atlas rules, one file for every bot) | `meta/ratings.json` | Strategy meta analyzer |
 | Atlas words, icons and colours | `meta/atlas-kit.js` in this repo (else `meta/kit/` in the data folder) | Strategy meta analyzer |
-| Board viewer | `studio/dist-kit/` after `npm --prefix studio run build:kit` (else `viewer-kit/`) | Holotable |
+| Board viewer | `vendor/holotable/swu-viewer-kit.js` in this repo (else `viewer-kit/`) | Holotable (vendored: `vendor/README.md`) |
 | Arena roster, tournament, standings, rounds, versions | `arena/` | Arena |
 | Strategy diagrams | `arena/strategy/strategy-diagram.js` | Arena |
 | Card art (webp) | `card-art/<SET>/<NNN>.webp` | shared folder (official card images) |

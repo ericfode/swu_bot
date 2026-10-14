@@ -1,13 +1,13 @@
 # Replay and tournament format (v1)
 
-What `bot/tournament.js` writes and what the viewer (`studio/`) reads. A replay holds the decisions plus a compact board snapshot
+What `bot/tournament.js` writes and what the viewer (Holotable, `ericfode/holotable`) reads. A replay holds the decisions plus a compact board snapshot
 after every decision, so a viewer never needs the engine; with its deck lists, seed and chosen action indices it can
 also be played again on the engine. Fields marked *(added)* are newer than the original repo's writer; readers that
 predate them ignore them. Machine-checkable versions:
 [`schemas/replay-event.schema.json`](schemas/replay-event.schema.json),
 [`schemas/tournament-index.schema.json`](schemas/tournament-index.schema.json),
 [`schemas/tournament-list.schema.json`](schemas/tournament-list.schema.json). TypeScript types:
-`studio/src/data/types.ts`. Writer: `bot/match.js` (events) and `bot/view.js` (snapshots).
+Holotable's `src/data/types.ts`. Writer: `bot/match.js` (events) and `bot/view.js` (snapshots).
 
 ## Files
 
@@ -142,7 +142,7 @@ It is the bot's board view (protocol.md, `state`) with both hands shown and no `
 Card art for a ref: `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png` from `s`, with `-b` before `.png` for a
 deployed leader. Tokens and unreleased sets have no art.
 
-## HTTP (studio's dev and preview server)
+## HTTP (Holotable's dev and preview server)
 
 | Request | Response |
 |---|---|
@@ -154,7 +154,7 @@ deployed leader. Tokens and unreleased sets have no art.
 
 A game file is appended line by line while it is played, and `index.json` lists the game with `outcome: "running"` from
 its first move. A reader following a live game must drop an unfinished last line (no trailing newline) and treat a
-file with a header but no `end` as in progress. `studio/src/data/source.ts` (`parseGame(text, allowPartial)`) does this, and the viewer
+file with a header but no `end` as in progress. Holotable's `src/data/source.ts` (`parseGame(text, allowPartial)`) does this, and the viewer
 re-polls.
 
 ## Compatibility rules
@@ -176,14 +176,14 @@ With `decks`, `seed` and each step's `action.i` and `split`, a replay can be re-
 `env.newGame({ seed: <engine seed>, deck1: decks.p1, deck2: decks.p2 })`, then for each step apply
 `legalActions(<seat's pid>)[action.i]` with its `split` (card ids, mapped to engine uuids with `game.uuidOf`). The
 engine seed is `String(seed)` for a run without a key; with one it is `gameStreams(seed, key).engine` from
-`bot/rng.js`, with the game's own `key`. `node bot/protocol-test.js` checks that this
+`bot/rng.js`, with the game's own `key`. `bot/protocol-test.js` (in this repo's history) checked that this
 reproduces every recorded board. Deck order and face-down resources come back this way too, for "perfect information"
 analysis.
 
 ## Gaps worth knowing
 
 - Snapshots do not list deck order or resource cards; re-run the replay (above) to get them.
-- Games imported from human play (`importer/`, see `importer/README.md`) use this format as one player saw the game,
+- Games imported from human play (holocron's `karabast/importer/`, see its README) use this format as one player saw the game,
   or both players when two captures are merged (`header.source.pov`). They have no card ids, no legal actions
   (`legal: 1`), no `decks` (known deck lists are in `source.decklists`) and no engine seed, and show the cards that
   view could not see as `{ "n": "Hidden card", "s": null, "hid": 1 }`. They cannot be played again.

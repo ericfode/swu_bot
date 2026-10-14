@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {fullState,phaseStats}=require('../omni/rs/state');
+const {fullState,phaseStats}=require('../sims/state');
 require('../../forceteki/build/server/game/core/Game');
 const {NonLeaderUnitCard}=require('../../forceteki/build/server/game/core/card/NonLeaderUnitCard');
 test('versioned snapshots export pinned watcher evidence for all units before Hidden exists',()=>{

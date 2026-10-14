@@ -5,9 +5,10 @@ over a pipe to a program in any language, as plain objects to a JavaScript objec
 server API such as the arena's. Only the transport differs. Bots that drive the engine object directly are a special
 case for JavaScript search code ([bot-interface.md](bot-interface.md#native-bots)).
 
-Schema: [`schemas/protocol.schema.json`](schemas/protocol.schema.json). Reference clients: `bot/examples/random_bot.py`
-(Python, standard library), `bot/examples/random-bot.js` and `bot/examples/search-bot.js` (JavaScript, in process or as
-a program; the second searches with simulations). Conformance checks: `node bot/protocol-test.js`.
+Schema: [`schemas/protocol.schema.json`](schemas/protocol.schema.json). Reference clients, in holocron's `bots/examples/`:
+`random_bot.py` (Python, standard library), `random-bot.js` and `search-bot.js` (JavaScript, in process or as a program;
+the second searches with simulations). This repo's tests play copies of the two JavaScript ones
+(`bot/test/fixtures/`).
 
 ## Conversation
 
@@ -165,7 +166,8 @@ A legal split names only listed targets, each at most once, with integer amounts
 Some legal actions change nothing. Mystic Monastery's action, used while you already have the Force, leaves the board
 as it was, and when the opponent is out for the phase you get the same decision again. A bot that ranks such an action
 above passing repeats it until the step cap (`STEP_CAP`, nobody wins). Guard against it, for example by never making
-the same choice twice for the same `state`, `prompt` and `actions`, as `bot/examples/search-bot.js` does.
+the same choice twice for the same `state`, `prompt` and `actions`, as the example search bot does
+(`bot/test/fixtures/search-bot.js`).
 
 ### `sim` → `simulated`
 
@@ -201,11 +203,12 @@ out exactly the same with or without them.
 
 #### Simulations on the Rust engine
 
-A bot that sends `"simEngine": "rust"` in `ready` gets its simulations from the Rust simulator (`bot/omni-rs`, run as
-WebAssembly) for every decision where it knows every card in the game, and forceteki simulations otherwise; `decide`
-says which with `simEngine`. The real game always runs on forceteki. The Rust simulator knows a subset of the cards
-(the pool in `bot/omni/rs/pool.json`, or `$SWU_RUST_POOL`) and is checked move for move against forceteki
-(`bot/omni/rs/stress.js`), but it is a second implementation: treat a disagreement as possible.
+A bot that sends `"simEngine": "rust"` in `ready` gets its simulations from the Rust simulator (Kessel, run as
+WebAssembly from `vendor/kessel` by `bot/sims/rust-sims.js`) for every decision where it knows every card in the game,
+and forceteki simulations otherwise; `decide` says which with `simEngine`. The real game always runs on forceteki. The
+Rust simulator knows a subset of the cards (the pool in `bot/sims/pool.json`, or `$SWU_RUST_POOL`) and is checked move
+for move against forceteki (holocron's `bots/omni/rs/stress.js`), but it is a second implementation: treat a
+disagreement as possible.
 
 Requests, replies, deals and errors are the same, with these differences:
 
@@ -253,8 +256,8 @@ in `node bot/tournament.js --bots ...` like any other bot.
 
 ```json
 {
-  "rust-mcts": { "cmd": "target/release/swu-bot-rs", "args": ["mcts"], "lang": "rust" },
-  "py-random": { "cmd": "python3", "args": ["bot/examples/random_bot.py"], "stderr": "ignore", "lang": "python" }
+  "my-rust-bot": { "cmd": "../my-bot/target/release/my-bot", "args": ["mcts"], "lang": "rust" },
+  "py-random": { "cmd": "python3", "args": ["bots/examples/random_bot.py"], "cwd": "../holocron", "stderr": "ignore", "lang": "python" }
 }
 ```
 

@@ -1,0 +1,46 @@
+{
+  "name": "kessel",
+  "repo": "https://github.com/ericfode/kessel",
+  "commit": "0e3ea9a0b81545114b6a34b0397ad0f66e62e7f3",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "wasmBindgen": "0.2.129",
+  "profile": "release",
+  "built": "RUSTFLAGS='--remap-path-prefix=<src>=/kessel --remap-path-prefix=<cargo home>=/cargo' node crates/kessel-wasm/build.js --target node --install-tools",
+  "files": {
+    "js/adapter.mjs": {
+      "from": "crates/kessel-wasm/js/adapter.mjs",
+      "bytes": 6261,
+      "sha256": "5922cd5661f70b4fa64681ba18c59b20e7c273f3af62bf90121fb5584ebf3c38"
+    },
+    "js/node.js": {
+      "from": "crates/kessel-wasm/js/node.js",
+      "bytes": 1975,
+      "sha256": "704bb9b7d6c78db879030edc8e77f91b704247057652e304284082b2c52484fd"
+    },
+    "pkg/node/kessel_wasm.d.ts": {
+      "from": "crates/kessel-wasm/pkg/node/kessel_wasm.d.ts",
+      "bytes": 2907,
+      "sha256": "3989112530c992f34fb60b3366426ff3df304f64a8a592ce2546d6605c74974c"
+    },
+    "pkg/node/kessel_wasm.js": {
+      "from": "crates/kessel-wasm/pkg/node/kessel_wasm.js",
+      "bytes": 17689,
+      "sha256": "6afa8b67eedea354c7f397e2dcf0408078ef9656d52d907f9fa28937e363cd35"
+    },
+    "pkg/node/kessel_wasm_bg.wasm": {
+      "from": "crates/kessel-wasm/pkg/node/kessel_wasm_bg.wasm",
+      "bytes": 4084240,
+      "sha256": "b0f14630fcb0b4a79348e149ed046e0151faad7c94f240a7b0989bfc9e752d3c"
+    },
+    "pkg/node/kessel_wasm_bg.wasm.d.ts": {
+      "from": "crates/kessel-wasm/pkg/node/kessel_wasm_bg.wasm.d.ts",
+      "bytes": 2420,
+      "sha256": "be0da24f056ab170012fed908da96ce9c14cb0e14bfc4f4f6404a3014fff89b7"
+    },
+    "pkg/node/package.json": {
+      "from": "crates/kessel-wasm/pkg/node/package.json",
+      "bytes": 215,
+      "sha256": "344f4a060b59dbde1976f2b5386446f8dc865890c096567bab9ac98174d892f1"
+    }
+  }
+}

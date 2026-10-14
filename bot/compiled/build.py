@@ -3,13 +3,13 @@
 Build compiled bot bundles (bot/compiled/README.md): one folder per bot in build/compiled/<name>/ with arena.json
 (schema swu-arena-bot/1) and its files, plus build/compiled/index.json with each bundle's id and sizes.
 
-    python3 bot/compiled/build.py                    # every bot in BOTS
-    python3 bot/compiled/build.py rust-search c-clock
+    python3 bot/compiled/build.py                    # every bot in BOTS (node-random, the sandbox's test bot)
+    python3 bot/compiled/build.py node-random
     python3 bot/compiled/build.py --list
     python3 bot/compiled/build.py --tools            # only the tools the arena's intake packs submissions with
 
-Needs: Python packages wasmtime and ziglang (versions in toolchain.json), rustc with the wasm32-wasip1 target, and
-network access the first time, to fetch Javy and python.wasm (checked against their sha256) into build/compiled/.tools.
+Needs: the Python package wasmtime (version in toolchain.json), and network access the first time, to fetch Javy and
+python.wasm (checked against their sha256) into build/compiled/.tools.
 """
 import argparse
 import gzip
@@ -30,19 +30,12 @@ import bundle  # noqa: E402
 
 TOOLCHAIN = json.load(open(os.path.join(HERE, "toolchain.json")))
 
-# name -> how to build it. The names are the bots' names in bot/external-bots.json; each bundle registers as <name>-wasm.
+# name -> how to build it. Each bundle registers as <name>-wasm in bot/external-bots.json. The bots people play are
+# submitted on the arena window and packed by its intake (bot/arena/intake.js); the project's own bots and their
+# sources live in ericfode/holocron. What is left here is the protocol random bot the sandbox's tests play.
 BOTS = {
-    "rust-random": {"lang": "rust", "args": ["random"]},
-    "rust-greedy": {"lang": "rust", "args": ["greedy"]},
-    "rust-greedy2": {"lang": "rust", "args": ["greedy2"]},
-    "rust-search": {"lang": "rust", "args": ["search"]},
-    "c-clock": {"lang": "c", "protocol": 1},
-    "py-random": {"lang": "python", "files": ["bot/examples/random_bot.py"], "cards": False, "protocol": 2},
-    "py-clock": {"lang": "python", "dir": "bot/python", "entry": "swu_clock.py", "cards": True, "protocol": 1},
-    "node-random": {"lang": "js", "entry": "bot/examples/random-bot.js", "args": ["node-random"]},
-    "node-search": {"lang": "js", "entry": "bot/examples/search-bot.js", "args": ["node-search"]},
+    "node-random": {"lang": "js", "entry": "bot/test/fixtures/random-bot.js", "args": ["node-random"]},
 }
-SOURCE = {"rust": "bot/rust", "c": "bot/c"}
 
 
 def log(msg):
@@ -132,29 +125,6 @@ def card_snapshot():
     return "forceteki-card-data sha256:" + open(p).read().strip() if os.path.exists(p) else None
 
 
-def build_rust(cache):
-    if "rust" in cache:
-        return cache["rust"]
-    target = os.path.join(OUT, ".cargo")
-    cargo_home = os.environ.get("CARGO_HOME") or os.path.expanduser("~/.cargo")
-    # strip symbols, and drop this machine's paths from panic messages so the wasm is the same on any machine
-    flags = "-C strip=symbols --remap-path-prefix=%s=. --remap-path-prefix=%s=/cargo" % (ROOT, cargo_home)
-    env = dict(os.environ, CARGO_TARGET_DIR=target, RUSTFLAGS=flags)
-    run(["cargo", "build", "--release", "--target", "wasm32-wasip1", "--manifest-path", os.path.join(ROOT, "bot/rust/Cargo.toml")], env=env)
-    rustc = subprocess.run(["rustc", "--version"], capture_output=True, text=True).stdout.strip()
-    cache["rust"] = (os.path.join(target, "wasm32-wasip1", "release", "swu-bot-rs.wasm"),
-                     "RUSTFLAGS='%s' cargo build --release --target wasm32-wasip1" % flags.replace(ROOT, "<repo>").replace(cargo_home, "<cargo>"), rustc)
-    return cache["rust"]
-
-
-def build_c(work):
-    src = os.path.join(ROOT, "bot", "c")
-    out = os.path.join(work, "c-clock.wasm")
-    cmd = [sys.executable, "-m", "ziglang", "cc", "--target=wasm32-wasi", "-O2", "-std=gnu11", "-s", "-o", out, "bot.c", "cards.c", "json.c", "-lm"]
-    run(cmd, cwd=src)
-    return out, "zig cc --target=wasm32-wasi -O2 -std=gnu11 -s -o bot.wasm bot.c cards.c json.c -lm", "zig %s (pip ziglang)" % TOOLCHAIN["python"]["ziglang"]
-
-
 def build_js(spec, work, name):
     sys_js = os.path.join(work, name + ".bundle.js")
     with open(sys_js, "w") as f:
@@ -179,7 +149,7 @@ def manifest(name, spec, entry_path, runtime_name, run_spec, prov, cards):
     return m
 
 
-def build_one(name, cache):
+def build_one(name):
     spec = BOTS[name]
     folder = os.path.join(OUT, name)
     work = os.path.join(OUT, ".work")
@@ -188,21 +158,12 @@ def build_one(name, cache):
         shutil.rmtree(folder)
     os.makedirs(folder)
     lang = spec["lang"]
-    if lang in ("rust", "c", "js"):
-        if lang == "rust":
-            wasm, recipe, tool = build_rust(cache)
-            path = SOURCE["rust"]
-        elif lang == "c":
-            wasm, recipe, tool = build_c(work)
-            path = SOURCE["c"]
-        else:
-            wasm, recipe, tool = build_js(spec, work, name)
-            path = spec["entry"]
+    if lang == "js":
+        wasm, recipe, tool = build_js(spec, work, name)
         entry = os.path.join(folder, "bot.wasm")
         shutil.copyfile(wasm, entry)
-        args = spec.get("args", []) if lang == "rust" else []
-        m = manifest(name, spec, entry, "wasi-p1", {"cmd": "./bot.wasm", "args": args, "env": {}},
-                     provenance(path, recipe, tool), cards=lang in ("rust", "c"))
+        m = manifest(name, spec, entry, "wasi-p1", {"cmd": "./bot.wasm", "args": [], "env": {}},
+                     provenance(spec["entry"], recipe, tool), cards=False)
     else:
         runtime("python-3.14-wasi")
         files = spec.get("files") or sorted(
@@ -257,9 +218,8 @@ def main():
     check_python_packages()
     index_path = os.path.join(OUT, "index.json")
     index = json.load(open(index_path)) if os.path.exists(index_path) else {}
-    cache = {}
     for name in o.bots or list(BOTS):
-        index[name] = build_one(name, cache)
+        index[name] = build_one(name)
     with open(index_path, "w") as f:
         json.dump(dict(sorted(index.items())), f, indent=2)
         f.write("\n")

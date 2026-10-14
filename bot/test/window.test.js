@@ -429,7 +429,7 @@ test('a feed token writes only what carries its name, and reads like a friend', 
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: 12, games: [] }))).status, 400, 'createdAt is a date string');
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', games: [] }))).status, 400, 'and is required, since runs are ordered by it');
         assert.strictEqual((await doc('runs', 'karabast', 'PUT', JSON.stringify({ id: 'karabast', createdAt: '2026-10-11T21:00:00Z', games: [row, row] }))).status, 400, 'game ids are distinct');
-        // the shape bot/karabast/feed.js sends; the window keeps only the fields the app reads
+        // the shape a Karabast feed sends (bot/karabast/feed.js before the split); the window keeps only the fields the app reads
         const sent = { id: 'karabast', createdAt: '2026-10-11T21:00:00Z', engine: null, bots: ['c-clock'], gamesPerPairing: 1, games: [
             { ...row, seed: 0, winner: null, winnerSeat: null, rounds: 2, steps: 40, error: null, ms: 0, timing: { p1: { n: 1, ms: 5 } } },
             { id: 'karabast-2', seed: 0, p1: 'opponent', p2: 'c-clock', winner: 'c-clock', winnerSeat: 'p2', rounds: 7, steps: 300, outcome: 'won', error: null, ms: 0 },

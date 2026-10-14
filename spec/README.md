@@ -24,7 +24,8 @@ outside their own file.
 
 Examples in [`examples/`](examples/), from a real keyed game (engine `2be4fcd`, real card data):
 
-- `transcript-v2.jsonl`: messages between the referee and `bot/examples/search-bot.js` running as a program (against
+- `transcript-v2.jsonl`: messages between the referee and the example search bot (holocron's
+  `bots/examples/search-bot.js`; a copy is this repo's `bot/test/fixtures/search-bot.js`) running as a program (against
   the Python bot), in order: `hello`, the first decision, a decision with simulations (one simulation, cut after its
   first move), and `over`. The referee sends `hello`, `decide`, `simulated` and `over`; the bot sends the rest.
 - `tournament-index.json`: the index of a 6-game run (the learned Rust bot, the Rust search bot and a JavaScript
@@ -42,10 +43,11 @@ Real replays: `/mnt/project-files/games/demo/` (v1 fields) and `/mnt/project-fil
 
 ## Checking a bot
 
-`node bot/protocol-test.js` runs the conformance checks (determinism, keyed seeds, time budgets, stdio/in-process
-parity, simulations leave no trace, numbered deals, replays play again, v1 bots, splits, simulation mistakes, bot
-failures and forfeits, untimed limits). To try your own program, register it in `bot/external-bots.json` and play it:
-`node bot/tournament.js --bots my-bot,node-random --games 4 --out replays/try`, then validate the replays and check
+The conformance checks (determinism, keyed seeds, time budgets, stdio/in-process parity, simulations leave no trace,
+numbered deals, replays play again, v1 bots, splits, simulation mistakes, bot failures and forfeits, untimed limits)
+were `bot/protocol-test.js`, which is in this repo's history only; `npm test` covers part of them. To try your own
+program, register it in `bot/external-bots.json` and play it:
+`node bot/tournament.js --bots my-bot,random --games 4 --out replays/try`, then validate the replays and check
 `index.json` for `ERROR` games and their `by`.
 
 ## Verified against real games

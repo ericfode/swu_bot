@@ -267,7 +267,7 @@ function reader(summarize, ROOT) {
                 }
             }
         }
-        const rust = fs.existsSync('/app/bot/omni-wasm/pkg/node/omni_wasm.js');
+        const rust = fs.existsSync('/app/vendor/kessel/pkg/node/kessel_wasm.js'); // Kessel, vendored (bot/sims/rust-sims.js)
         process.stdout.write(JSON.stringify({ t: Date.now(), rust, slots }) + '\n');
     };
     tick();

@@ -8,8 +8,8 @@ case "${1:-}" in
     --skip-cards) cards=false ;;
     --help|-h)
         echo 'Usage: npm run setup -- [--skip-cards]'
-        echo 'Install locked dependencies and build the engine and the viewer (studio).'
-        echo '--skip-cards leaves real games unavailable; fixture viewers and non-animation unit tests still work.'
+        echo 'Install locked dependencies and build the engine.'
+        echo '--skip-cards leaves real games unavailable; the unit tests that need no card data still run.'
         exit 0
         ;;
     '') ;;
@@ -35,11 +35,10 @@ if [ ! -f forceteki/package-lock.json ]; then
     git submodule update --init --recursive
 fi
 
-for dir in . forceteki analysis studio; do
+for dir in . forceteki; do
     npm --prefix "$dir" ci --no-audit --no-fund
 done
 npm --prefix forceteki run build
-npm --prefix studio run build
 
 if [ "$cards" = true ]; then
     npm --prefix forceteki run get-cards
@@ -55,6 +54,6 @@ if [ "$cards" = true ]; then
     '
     echo 'Setup complete. Run npm run smoke, then npm run gate to check real games.'
 else
-    echo 'Setup complete without card data. See README.md for fixture checks; full smoke requires card data.'
+    echo 'Setup complete without card data. npm test runs; real games and npm run gate need card data.'
 fi
 echo 'For a source snapshot without Git history, use npm run smoke:source instead of npm run smoke.'

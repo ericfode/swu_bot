@@ -16,7 +16,8 @@ const { seatFor, Shadow, BotError } = require('./protocol');
  * `key` (a secret string) makes every random stream unpredictable from the seed (rng.js gameStreams); without it a
  * bot that knows the seed could rebuild the hidden cards. `limits` overrides the reply budgets of protocol.js LIMITS.
  * `watch` ({ pre(eg, pid, actions, step), post(eg, pid, action, split), end(eg, res), sim?(eg, pid) }) observes every
- * real move, and with `sim` every simulation (sim returns the same three hooks for one, or null): bot/omni/rs/stress.js.
+ * real move, and with `sim` every simulation (sim returns the same three hooks for one, or null): holocron's
+ * bots/omni/rs/stress.js.
  * It only reads the engine and must not throw.
  * `engine` adds options to env.newGame for the real game and its lookahead copy, such as { selectionToggles: true }.
  * playGame closes no bot: whoever started a bot program closes it.
@@ -65,7 +66,7 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         // every lookahead runs on a copy of the game (protocol.js Shadow) that follows every real move
         const shadow = seats.some((s) => s.wantsSims || s.needsUndo) ? new Shadow(env, setup) : null;
         seats.forEach((s) => (s.shadow = shadow));
-        // a checker (bot/omni/rs/mirror.js) may follow the real moves and every simulation; it never changes them
+        // a checker (holocron's bots/omni/rs/mirror.js) may follow the real moves and every simulation; it never changes them
         if (shadow && watch?.sim) {
             shadow.watch = watch.sim;
         }
