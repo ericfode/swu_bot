@@ -15,6 +15,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
 header { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
 #stars { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -36,6 +37,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #join[data-on="1"] { background: transparent; color: var(--ink); border-color: var(--line); }
 .stepper { display: inline-flex; align-items: center; gap: 10px; font: 600 14px var(--mono); }
 .stepper button { padding: 8px 12px; background: #1a2240; color: var(--ink); border-color: var(--line); }
+.stepper button:disabled { opacity: .35; cursor: default; }
 .stepper output { min-width: 2ch; text-align: center; font-size: 18px; }
 .cpu { display: grid; gap: 6px; min-width: 220px; flex: 1; }
 .cpu .bar { height: 8px; border-radius: 5px; background: #1a2240; position: relative; overflow: hidden; }
@@ -56,8 +58,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .side .hp { font-variant-numeric: tabular-nums; color: var(--ink); }
 .side .bar { grid-column: 1 / -1; height: 7px; border-radius: 4px; background: #1a2240; overflow: hidden; }
 .side .bar b { display: block; height: 100%; border-radius: 4px; transition: width .5s ease, background-color .3s; }
-.side .bar b.hit { animation: hit .6s; }
-@keyframes hit { 0%, 60% { filter: brightness(2.4); } 100% { filter: none; } }
+.side .bar b.hit { animation: hit .45s ease-out; }
+@keyframes hit { 0% { filter: brightness(1.9); } 100% { filter: none; } }
 .side .units { grid-column: 1 / -1; font: 500 11px var(--mono); color: var(--muted); min-height: 1.4em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .win { font: 700 14px var(--mono); color: var(--gold); text-shadow: 0 0 12px rgba(255, 209, 102, .45); }
 .idle { color: var(--faint); font: 500 13px var(--mono); padding: 18px 0; text-align: center; }
@@ -66,7 +68,8 @@ table { border-collapse: collapse; width: 100%; font: 500 13px var(--mono); font
 td, th { padding: 9px 14px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 tr:last-child td { border-bottom: 0; }
-td.w { color: var(--gold); }
+td .w { color: var(--gold); font-weight: 700; }
+td .f { color: var(--warn); }
 td.f { color: var(--bad); white-space: normal; }
 .empty { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) { .side .bar b { transition: none; } .side .bar b.hit { animation: none; } }
@@ -147,37 +150,94 @@ function side(p) {
 const hpColor = (f) => (f > 0.6 ? 'var(--good)' : f > 0.3 ? 'var(--warn)' : 'var(--bad)');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-function gameHtml(g) {
+// Each seed is an element made once and then updated, so bars ease from one hp to the next.
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function sideEl(k) {
+  const root = el('div', `side ${k}`);
+  const name = el('span', 'name'), hp = el('span', 'hp'), bar = el('div', 'bar'), fill = el('b'), units = el('div', 'units');
+  bar.append(fill);
+  root.append(name, hp, bar, units);
+  return { root, name, hp, fill, units };
+}
+function gameEl(g) {
+  const root = el('div', 'game');
+  const meta = el('div', 'meta'), left = el('span'), right = el('span');
+  meta.append(left, right);
+  const p1 = sideEl('p1'), p2 = sideEl('p2'), win = el('div', 'win');
+  root.append(meta, p1.root, p2.root, win);
+  g.dom = { root, left, right, p1, p2, win };
+  return root;
+}
+function updateGame(g) {
+  const d = g.dom;
   if (g.result) {
     const w = g.result.winner;
-    return `<div class="game"><div class="meta"><span>${esc(g.bots[0])} vs ${esc(g.bots[1])}</span><span>R${g.result.round} · ${g.result.steps} steps</span></div>
-      <div class="win">${w && w !== 'draw' ? `★ ${esc(w)} wins` : esc(g.result.outcome)}</div></div>`;
+    d.left.textContent = `${g.bots[0]} vs ${g.bots[1]}`;
+    d.right.textContent = `R${g.result.round} · ${g.result.steps} steps`;
+    d.p1.root.hidden = d.p2.root.hidden = true;
+    d.win.hidden = false;
+    d.win.textContent = w && w !== 'draw' ? `★ ${w} wins` : g.result.outcome;
+    return;
   }
+  d.win.hidden = true;
   if (!g.last) {
-    return `<div class="game"><div class="meta"><span>${esc(g.bots[0])} vs ${esc(g.bots[1])}</span><span>loading the bots…</span></div></div>`;
+    d.left.textContent = `${g.bots[0]} vs ${g.bots[1]}`;
+    d.right.textContent = 'loading the bots…';
+    d.p1.root.hidden = d.p2.root.hidden = true;
+    return;
   }
   const s = g.last;
-  const row = (k, name) => {
-    const p = s[k];
+  d.left.textContent = `Round ${s.round}`;
+  d.right.textContent = `step ${s.n}`;
+  for (const [k, i] of [['p1', 0], ['p2', 1]]) {
+    const v = d[k], p = s[k];
+    v.root.hidden = false;
+    v.name.textContent = `${s.actor === k ? '◆ ' : ''}${g.bots[i]}`;
     const f = p && p.hp ? Math.max(0, p.hp - p.d) / p.hp : 1;
-    const hit = g.hit?.[k] && Date.now() - g.hit[k] < 700 ? 'hit' : '';
-    return `<div class="side ${k}"><span class="name">${s.actor === k ? '◆ ' : ''}${esc(name)}</span><span class="hp">${p ? Math.max(0, p.hp - p.d) : '?'}</span>
-      <div class="bar"><b class="${hit}" style="width:${(f * 100).toFixed(1)}%;background:${hpColor(f)}"></b></div>
-      <div class="units">${p ? `${esc(p.leader)} · ${p.hand} in hand · ${p.ready}/${p.total} ready · ${esc(p.units.join(' ')) || 'no units'}` : ''}</div></div>`;
-  };
-  return `<div class="game"><div class="meta"><span>Round ${s.round}</span><span>step ${s.n}</span></div>${row('p1', g.bots[0])}${row('p2', g.bots[1])}</div>`;
+    v.hp.textContent = p ? Math.max(0, p.hp - p.d) : '?';
+    v.fill.style.width = `${(f * 100).toFixed(1)}%`;
+    v.fill.style.backgroundColor = hpColor(f);
+    if (g.hit?.[k] && g.hit[k] !== v.seenHit) {
+      v.seenHit = g.hit[k];
+      v.fill.classList.remove('hit');
+      void v.fill.offsetWidth;
+      v.fill.classList.add('hit');
+    }
+    v.units.textContent = p ? `${p.leader} · ${p.hand} in hand · ${p.ready}/${p.total} ready · ${p.units.join(' ') || 'no units'}` : '';
+  }
 }
 function renderLive() {
   const live = $('live');
   if (!leases.size) {
-    live.innerHTML = `<div class="slot"><div class="idle">${joined ? 'Waiting for the games machine to hand out a seed…' : 'Join to play seeds of the next round in this tab.'}</div></div>`;
+    live.replaceChildren(Object.assign(el('div', 'slot'), {}));
+    live.firstChild.append(el('div', 'idle', joined ? 'Waiting for the games machine to hand out a seed…' : 'Join to play seeds of the next round in this tab.'));
     return;
   }
-  live.innerHTML = [...leases.values()].map((l) => `<article class="slot"><header><b>Seed ${esc(l.seed)}</b><span>${Math.round((Date.now() - l.at) / 1000)} s</span></header>
-    ${[...l.games.values()].map(gameHtml).join('')}</article>`).join('');
+  if (live.querySelector('.idle')) live.replaceChildren();
+  for (const [id, l] of leases) {
+    if (!l.dom) {
+      const root = el('article', 'slot');
+      const head = el('header'), title = el('b', null, `Seed ${l.seed}`), age = el('span');
+      head.append(title, age);
+      root.append(head);
+      for (const g of l.games.values()) root.append(gameEl(g));
+      l.dom = { root, age };
+      live.append(root);
+    }
+    l.dom.age.textContent = `${Math.round((Date.now() - l.at) / 1000)} s`;
+    for (const g of l.games.values()) updateGame(g);
+  }
+  for (const child of [...live.children]) {
+    if (![...leases.values()].some((l) => l.dom?.root === child)) child.remove();
+  }
 }
 let dirty = true;
-setInterval(() => { if (dirty) { dirty = false; renderLive(); } }, 250);
+setInterval(() => { if (dirty) { dirty = false; renderLive(); } }, 200);
 setInterval(() => { dirty = true; const h = Math.max(1 / 60, (Date.now() - started) / 3600000); $('sRate').textContent = Math.round(S.games / h); }, 1000);
 
 function addDone(row) {
@@ -218,8 +278,11 @@ function onMessage(m) {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     if (m.t === 'done') {
       S.seeds++; S.games += m.results.length;
-      const score = m.results.map((r) => `${esc(r.winner ?? r.outcome)}`).join(' · ');
-      addDone(`<td>${time}</td><td>${esc(l?.seed ?? '')}</td><td class="w">${score}</td><td>${m.secs} s</td>`);
+      // both seats as one score: the first game's p1 against its p2
+      const [a, b] = l ? [...l.games.values()][0].bots : ['?', '?'];
+      const wa = m.results.filter((r) => r.winner === a).length, wb = m.results.filter((r) => r.winner === b).length;
+      const odd = m.results.filter((r) => r.outcome !== 'won').map((r) => esc(r.outcome)).join(', ');
+      addDone(`<td>${time}</td><td>${esc(l?.seed ?? '')}</td><td><span class="${wa > wb ? 'w' : ''}">${esc(a)}</span> ${wa} – ${wb} <span class="${wb > wa ? 'w' : ''}">${esc(b)}</span>${odd ? ` <span class="f">${odd}</span>` : ''}</td><td>${m.secs} s</td>`);
     } else {
       S.failed++;
       addDone(`<td>${time}</td><td>${esc(l?.seed ?? '')}</td><td class="f">Handed back: ${esc(m.why)}</td><td></td>`);
@@ -238,6 +301,7 @@ async function join() {
     const w = worker;
     setTimeout(() => w?.terminate(), 4000);
     worker = null; joined = false; leases.clear();
+    $('minus').disabled = $('plus').disabled = false;
     $('join').textContent = 'Join the swarm'; $('join').dataset.on = '0';
     setPhase('stopped', 'Not playing. Seeds this tab held go back to the games machine.');
     dirty = true;
@@ -245,6 +309,7 @@ async function join() {
   }
   if (!self.crossOriginIsolated) { setPhase('error', 'This browser did not isolate the page, which the bots need (SharedArrayBuffer).'); return; }
   joined = true;
+  $('minus').disabled = $('plus').disabled = true;
   $('join').textContent = 'Leave the swarm'; $('join').dataset.on = '1';
   worker = new Worker(info.files.executor);
   worker.onmessage = (e) => onMessage(e.data);
