@@ -69,6 +69,16 @@ six from the Luke deck holds such a unit 91% of the time. `c-clock2m` is c-clock
 deck test [+0.8, +4.2] (8 games changed, all to wins), +0.8 on the standard test [−0.7, +2.2] (52.0% against c-clock2's
 51.2%).
 
+## c-clock2me (`--v2 --mull --epic`)
+
+`--epic`: a leader deploys once a game (an Epic Action), so once it has deployed the bot never clicks it "to deploy"
+again. After Luke's leader unit was defeated, c-clock2 kept clicking Luke to deploy at the start of every action window.
+The click only offers Luke's action ("If you attacked with a Fighter unit this phase, deal 1 damage to a unit"), which
+does nothing before a Fighter has attacked, so it was cancelled and banned for the round. On Karabast it then pinged in
+9 of 247 such rounds, against 94% of the rounds before Luke deployed. Now the action comes after the attacks, as before
+the deploy. Bot games rarely get there: the Luke deck test changed no game, and the standard test gives +0.3 over
+c-clock2m [−0.5, +1.1] (52.4%).
+
 ## Files
 
 - `bot.c`: protocol loop, observation parsing, the strategy.
