@@ -12,6 +12,8 @@
  *   browsers         GET  /, /arena, /api/app (the app's model), /api/status, /api/standings, /api/report, /api/games,
  *                         /api/versions, /api/panel (the arena's own read methods, same shapes), /api/replays/<run>/<game>
  *   Eric's Share page     GET, POST /api/share                 who is invited; {add} or {remove} one GitHub login
+ *   Eric's settings  GET, POST /api/arena-settings        games per pair, time limit, games at once, wait between rounds;
+ *                                                          the games machine reads them (coord/lib/coord/settings.ex)
  *   MCP clients      POST /mcp                             each person's own app (Claude, Claude Code...), signed in
  *                                                          with GitHub through OAuth (oauth.js, /oauth/*); it reads
  *   Build a bot page GET, POST /api/apps                   a person's connected apps; {disconnect: id}
@@ -54,6 +56,14 @@ const SUBMIT_BYTES = 3e6;
 const SUBMIT_PENDING = 3; // waiting at once, per competitor name
 const SUBMIT_PER_DAY = 20; // per competitor name
 const SUBMIT_PER_DAY_PERSON = 60; // per person, over all their names
+// Eric's arena settings (/api/arena-settings): each is an integer in its range, or absent for the games machine's own
+// default (coord Coord.Config, roster.thinkCapMs). gamesPerPair is even: every seed is played from both seats.
+const SETTINGS = {
+    gamesPerPair: { min: 2, max: 10, even: true }, // arena: games each pair plays in a round
+    thinkCapSec: { min: 10, max: 600 }, // arena: thinking time per bot per game; past it, that bot loses the game
+    workers: { min: 1, max: 16 }, // compute: games the games machine plays at once
+    roundGapMin: { min: 0, max: 240 } // compute: minutes from one round's end to the next round's start
+};
 // keys a friend never sees (builder and thread names, Eric's pick 6), at any depth of a document
 const PRIVATE_KEYS = new Set(['owner', 'thread', 'threadId', 'session', 'sessionId', 'tokenHash', 'token']);
 
@@ -77,6 +87,10 @@ function need(cond, code, msg) {
  * break the model build. Games are objects with ids <feed>-<id>; seat names are plain words that are never an
  * Object.prototype key (the model indexes plain objects by them). Returns null for a document that does not fit.
  */
+const okSetting = (k, v) => {
+    const r = SETTINGS[k];
+    return Number.isInteger(v) && v >= r.min && v <= r.max && (!r.even || v % 2 === 0);
+};
 const isName = (x) => typeof x === 'string' && /^[A-Za-z0-9][\w .@#+()-]{0,63}$/.test(x) && !(x in Object.prototype);
 const FEED_OUTCOMES = new Set(['running', 'won', 'draw', 'abandoned']);
 // a game's error text could name the person, so a people run keeps only that there was one
@@ -990,6 +1004,54 @@ function createWindow(opts = {}) {
         return sendJson(res, 200, { result: shared() }, req);
     }
 
+    /** The settings Eric set, without anything a doc might carry besides them. */
+    const settingsDoc = () => {
+        const d = parseOr(store.getDoc('admin', 'arena-settings'), null);
+        const set = d && typeof d.settings === 'object' && d.settings ? d.settings : {};
+        const settings = Object.fromEntries(Object.keys(SETTINGS).filter((k) => okSetting(k, set[k])).map((k) => [k, set[k]]));
+        return { settings, updatedAt: typeof d?.updatedAt === 'string' ? d.updatedAt : null, by: typeof d?.by === 'string' ? d.by : null };
+    };
+    /**
+     * Eric's arena settings (SETTINGS): GET for an admin and for the games machine's own token, which reads them every
+     * minute; POST {set: {name: value | null}} changes some of them (null: back to the machine's default), for an admin
+     * only and, from a browser, only from this site's own pages and as JSON, as on the Share page.
+     */
+    async function arenaSettings(req, res, who) {
+        const machine = who.via === 'bearer' && who.games === true;
+        need(who.role === 'admin' || (machine && req.method === 'GET'), 'forbidden', 'only an admin changes the arena settings');
+        if (req.method === 'GET') {
+            return sendJson(res, 200, { result: settingsDoc() }, req);
+        }
+        need(req.method === 'POST', 'bad_request', 'GET, or POST {"set": {"<name>": <value> or null}}');
+        if (who.via === 'cookie') {
+            need(req.headers.origin === auth.origin, 'forbidden', "the arena settings change only from this site's own pages");
+            need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
+        }
+        let q;
+        try {
+            q = JSON.parse((await readBody(req, 4096)).toString('utf8'));
+        } catch (e) {
+            throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
+        }
+        const set = q?.set;
+        need(set && typeof set === 'object' && !Array.isArray(set) && Object.keys(set).length > 0, 'bad_request', 'send {"set": {"<name>": <value> or null}}');
+        for (const [k, v] of Object.entries(set)) {
+            const rule = Object.hasOwn(SETTINGS, k) ? SETTINGS[k] : null;
+            need(rule, 'bad_request', `${k}: not a setting (${Object.keys(SETTINGS).join(', ')})`);
+            need(v === null || okSetting(k, v), 'bad_request', `${k}: ${rule.even ? 'an even' : 'a whole'} number from ${rule.min} to ${rule.max}, or null for the default`);
+        }
+        const next = { ...settingsDoc().settings };
+        for (const [k, v] of Object.entries(set)) {
+            if (v === null) {
+                delete next[k];
+            } else {
+                next[k] = v;
+            }
+        }
+        store.putDoc('admin', 'arena-settings', JSON.stringify({ settings: next, updatedAt: new Date().toISOString(), by: who.login ?? 'admin token' }));
+        return sendJson(res, 200, { result: settingsDoc() }, req);
+    }
+
     async function api(req, res, url, who) {
         const parts = url.pathname.split('/').slice(2).map((s) => {
             try {
@@ -1005,6 +1067,9 @@ function createWindow(opts = {}) {
         }
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);
+        }
+        if (parts[0] === 'arena-settings' && parts.length === 1) {
+            return arenaSettings(req, res, who);
         }
         if (parts[0] === 'apps' && parts.length === 1) {
             return apps(req, res, who);

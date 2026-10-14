@@ -5,8 +5,8 @@ defmodule Coord.Application do
 
   The tree stops in reverse order: the Endpoint (no more wakes), Coord.Shutdown (TERM to every child group but a
   push, then wait), the Scheduler, Oban, the FLAME pool, the helper API and relay with Coord.Remote when the helper
-  node is on (1 s each at most), the Pusher (its last push, after the round stopped), the window proxy, ProcSup
-  (KILL to anything left), the Repo. That takes about 24 s at most, inside Fly's 30 s.
+  node is on (1 s each at most), Coord.Settings (1 s at most), the Pusher (its last push, after the round stopped), the window
+  proxy, ProcSup (KILL to anything left), the Repo. That takes about 25 s at most, inside Fly's 30 s.
 
   With COORD_ROLE=helper the same release is a helper (Coord.Helper): ProcSup and the helper only.
   """
@@ -52,7 +52,8 @@ defmodule Coord.Application do
       Coord.Boot,
       Coord.ProcSup,
       proxy_spec(Coord.Config.get(:proxy_port)),
-      Coord.Pusher
+      Coord.Pusher,
+      Coord.Settings
     ] ++
       remote_specs(Coord.Remote.enabled?()) ++
       [

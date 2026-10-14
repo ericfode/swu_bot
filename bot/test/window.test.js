@@ -14,7 +14,7 @@ Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RES
 const { createWindow, wakeGamesAt, Store, storeReader, scrub } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 
-const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
+const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_GAMES_TOKEN: 'games-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_FEED_TOKEN_KARABAST: 'feed-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
 
 async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
@@ -286,6 +286,51 @@ test('share: an admin invites and removes people from the Share page, and no one
         assert.strictEqual((await go('/api/share', { method: 'POST', token: 'admin-secret', body: '{"add":"kim-b"}' })).status, 200);
         assert.strictEqual((await go('/api/share', { method: 'POST', token: 'push-secret', body: '{"add":"x"}' })).status, 403, 'the project token cannot');
         assert.deepStrictEqual(JSON.parse(w.store.getDoc('admin', 'invites')).logins, ['kim-b']);
+    } finally {
+        await close();
+    }
+});
+
+test('arena settings: an admin sets them from the site or with the admin token, the games machine reads them', async () => {
+    const w = makeWindow('w-settings');
+    const { go, close } = await serve(w);
+    try {
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const post = (body, opts = {}) => go('/api/arena-settings', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
+        const read = async (opts) => (await (await go('/api/arena-settings', opts)).json()).result;
+        assert.deepStrictEqual(await read({ cookie: eric }), { settings: {}, updatedAt: null, by: null }, 'nothing set: the machine\'s defaults');
+        assert.deepStrictEqual((await read({ token: 'games-secret' })).settings, {});
+
+        const r = await (await post({ set: { workers: 3, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 } })).json();
+        assert.deepStrictEqual(r.result.settings, { workers: 3, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 });
+        assert.strictEqual(r.result.by, 'ericfode');
+        assert.deepStrictEqual((await read({ token: 'games-secret' })).settings, { workers: 3, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 });
+        // null goes back to the default; the others stay
+        assert.deepStrictEqual((await (await post({ set: { workers: null } })).json()).result.settings, { gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 });
+        assert.strictEqual((await go('/api/arena-settings', { method: 'POST', token: 'admin-secret', body: '{"set":{"workers":2}}' })).status, 200, 'the admin token, from a program');
+
+        for (const bad of [{}, { set: {} }, { set: [] }, { set: { workers: 0 } }, { set: { workers: 17 } }, { set: { workers: 2.5 } }, { set: { workers: '3' } },
+            { set: { gamesPerPair: 3 } }, { set: { gamesPerPair: 12 } }, { set: { thinkCapSec: 5 } }, { set: { roundGapMin: -1 } }, { set: { idleMin: 5 } },
+            { set: { workers: 3, constructor: 1 } }, { set: { __proto__: 1 } }]) {
+            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
+        }
+        assert.deepStrictEqual((await read({ cookie: eric })).settings, { workers: 2, gamesPerPair: 4, thinkCapSec: 90, roundGapMin: 0 }, 'a refused change changes nothing');
+
+        // only an admin changes them, and a browser only from this site's pages and as JSON
+        assert.strictEqual((await post({ set: { workers: 4 } }, { origin: null })).status, 403);
+        assert.strictEqual((await post({ set: { workers: 4 } }, { origin: 'https://evil.fly.dev' })).status, 403);
+        assert.strictEqual((await post({ set: { workers: 4 } }, { type: 'text/plain' })).status, 400);
+        assert.strictEqual((await post({ set: { workers: 4 } }, { cookie: pal })).status, 403, 'a friend cannot');
+        assert.strictEqual((await go('/api/arena-settings', { cookie: pal })).status, 403, 'nor read them');
+        assert.strictEqual((await go('/api/arena-settings', { method: 'POST', token: 'games-secret', body: '{"set":{"workers":4}}' })).status, 403, 'the games machine only reads');
+        assert.strictEqual((await go('/api/arena-settings', { token: 'push-secret' })).status, 403, 'the project token cannot read them');
+        assert.strictEqual((await read({ token: 'admin-secret' })).settings.workers, 2);
+
+        // a doc with something else in it (an older shape, a hand edit) gives only the valid settings
+        w.store.putDoc('admin', 'arena-settings', JSON.stringify({ settings: { workers: 99, gamesPerPair: 6, junk: 1 }, updatedAt: 7 }));
+        assert.deepStrictEqual(await read({ token: 'games-secret' }), { settings: { gamesPerPair: 6 }, updatedAt: null, by: null });
     } finally {
         await close();
     }

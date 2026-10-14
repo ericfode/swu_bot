@@ -14,6 +14,7 @@ defmodule Coord.ApplicationTest do
              Coord.ProcSup,
              CoordWeb.WindowProxy,
              Coord.Pusher,
+             Coord.Settings,
              {FLAME.Pool, Coord.RoundRunner},
              Oban,
              Coord.Scheduler,
@@ -24,6 +25,7 @@ defmodule Coord.ApplicationTest do
     shutdowns = Map.new(children, &{Supervisor.child_spec(&1, []).id, Supervisor.child_spec(&1, [])[:shutdown]})
     assert shutdowns[Coord.Shutdown] == 11_000
     assert shutdowns[Coord.Pusher] == 9_000
+    assert shutdowns[Coord.Settings] == 1_000
   end
 
   test "with the helper node on, Coord.Remote, the relay and the helper API come right before the FLAME pool" do
@@ -37,6 +39,7 @@ defmodule Coord.ApplicationTest do
              Coord.ProcSup,
              CoordWeb.WindowProxy,
              Coord.Pusher,
+             Coord.Settings,
              Coord.Remote,
              CoordWeb.RemoteRelay,
              CoordWeb.HelperAPI,

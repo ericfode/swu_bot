@@ -26,6 +26,13 @@ defmodule Coord.Scheduler.Policy do
   end
 
   @doc """
+  How long a new round still waits after the last round's end (wall clock ms; nil when no round has finished) for
+  Eric's wait between rounds: 0 when it may start, and never more than the wait itself (a clock set back).
+  """
+  def round_wait(nil, _gap_ms, _now), do: 0
+  def round_wait(ended_at, gap_ms, now), do: ended_at |> Kernel.+(gap_ms - now) |> min(gap_ms) |> max(0)
+
+  @doc """
   What an intake pass changes: busy when submissions are still open, settled when one was accepted. An unknown
   open count (nil: the window is down or the toolchain missing) does not keep the machine up.
   """

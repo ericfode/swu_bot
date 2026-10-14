@@ -73,8 +73,11 @@ defmodule Coord.Gamesctl do
   def referee_cmd(arena, k) when is_integer(k) do
     args = ["referee-cmd", "--arena", arena, "--round", Integer.to_string(k)]
 
+    # Eric's settings (Coord.Settings); a round a stop cut short keeps its own games and time limit (gamesctl.js)
     args =
-      args ++ ["--games", Integer.to_string(Config.get(:games)), "--workers", Integer.to_string(Config.get(:workers))]
+      args ++
+        ["--games", Integer.to_string(Coord.Settings.games()), "--workers", Integer.to_string(Coord.Settings.workers())] ++
+        ["--cap-ms", Integer.to_string(Coord.Settings.think_cap_ms())]
 
     with {:ok, out} <- call(:referee_cmd, args, as: :root, timeout: 30_000),
          :ok <- check_referee_cmd(out, k, Coord.Proc.isolate?()) do

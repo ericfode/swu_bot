@@ -12,7 +12,8 @@ defmodule Coord.Config do
   | GAMES_IDLE_MIN | idle_ms | 10 minutes |
   | GAMES_REPLAY_HOURS | replay_hours | 24 |
   | GAMES_ROUND_HOURS | round_cap_ms | 6 hours |
-  | GAMES_GAMES, GAMES_WORKERS | games, workers | 2, 2 |
+  | GAMES_GAMES, GAMES_WORKERS | games, workers (Eric's settings on the window come first: Coord.Settings) | 2, 2 |
+  | GAMES_THINK_CAP_SEC | think_cap_sec (each bot's thinking per game; Eric's settings come first) | 60 |
   | GAMES_REQUIRE_MOUNT=1 | require_mount | off |
   | SWU_WINDOW | window | required in prod |
   | ARENA_RESIDENTS, SWU_CARD_JSON | passed on to the children when set | unset |

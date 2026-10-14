@@ -9,7 +9,7 @@ console.log = console.error;
  *   node bot/arena/gamesctl.js setup                                                   (root)
  *   node bot/arena/gamesctl.js warm                                                    (as arena)
  *   node bot/arena/gamesctl.js plan --arena open --settled-since <ms> [--replay-hours 24]   (as arena)
- *   node bot/arena/gamesctl.js referee-cmd --arena open --round K [--games 2] [--workers 2]   (root)
+ *   node bot/arena/gamesctl.js referee-cmd --arena open --round K [--games 2] [--workers 2] [--cap-ms 60000]   (root)
  *   node bot/arena/gamesctl.js intake --state <file> --boot <id>                       (root)
  *   node bot/arena/gamesctl.js push --arena open --state <file> --boot <id>            (as arena)
  *
@@ -21,6 +21,7 @@ console.log = console.error;
  *     warm         the resident bundles compiled into the cache: {"ok":true,"warmed":[..],"failed":[{"name","error"}]}
  *     plan         planRound: {"round":K,"resume":bool,"why":".."} or {"round":null,"why":".."}
  *     referee-cmd  the command that plays round K, run by the coordinator: {"cmd":[..],"env":{..},"cwd":".."}
+ *                  (a new round's --cap-ms becomes the roster's time limit; a round cut short keeps its own rules)
  *     intake       one pass over the window's submissions: {"open":N|null,"accepted":N,"done":N[,"error":".."]}
  *     push         the arena's state and round replays to the window: {"ok":bool}
  *
@@ -199,8 +200,9 @@ function planRound({ replayMs, settledSince }) {
  * environment. Only one referee runs here at a time, so a lock the last one left (a stop, a crash) is stale: removing
  * it spares the next one the wait for it to go stale.
  */
-function refereeCommand(k, { games, workers }) {
+function refereeCommand(k, { games, workers, capMs = null }) {
     const { ladderIdOf } = require('./referee');
+    ({ games } = roundRules(k, { games, capMs }));
     // only in a real folder: the results folder is the bots' user's, who could put a link in its place
     const dir = path.join(home.RESULTS, ladderIdOf(k));
     if (fs.lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
@@ -211,6 +213,23 @@ function refereeCommand(k, { games, workers }) {
         : [];
     const cmd = [...isolate, process.execPath, path.join(__dirname, 'referee.js'), '--round', String(k), '--games', String(games), '--workers', String(workers)];
     return { cmd, env: botEnv(), cwd: ROOT };
+}
+
+/**
+ * The rules round K plays under. A round a stop cut short keeps its own games per pair (ladder.js starts a resumed run
+ * over when they change) and the time limit it started with. A new round takes `games`, and `capMs` (Eric's setting,
+ * or the coordinator's default) becomes the roster's time limit, which the referee plays by and the arena's status shows.
+ */
+function roundRules(k, { games, capMs }) {
+    const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] });
+    const cut = st.rounds.find((r) => r.round === k && r.status !== 'done');
+    if (cut) {
+        return { games: Number.isInteger(cut.gamesPerPair) && cut.gamesPerPair > 0 ? cut.gamesPerPair : games };
+    }
+    if (capMs !== null && home.roster().thinkCapMs !== capMs) {
+        home.updateRoster((r) => ({ ...r, thinkCapMs: capMs }));
+    }
+    return { games };
 }
 
 const ARENAS = ['open']; // the No-sims arena comes later (coord/README.md)
@@ -276,7 +295,8 @@ const commands = {
         const k = Number(need(o, 'round', int));
         const n = Number(o.games ?? 2);
         const workers = Number(o.workers ?? 2);
-        return refereeCommand(k, { games: n, workers });
+        const capMs = o['cap-ms'] === undefined ? null : Number(need(o, 'cap-ms', (v) => int(v) && Number(v) >= 1000));
+        return refereeCommand(k, { games: n, workers, capMs });
     },
 
     async intake(o) {

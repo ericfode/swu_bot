@@ -622,6 +622,11 @@ figure.pd { margin: 0; }
 .pd figcaption { font-size: var(--fs-sm); color: var(--muted); margin-top: var(--sp-6); }
 /* share page */
 .searchbtn[hidden] { display: none; }
+.setrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-4) var(--sp-12); align-items: center; padding: var(--sp-8) 0; border-top: 1px solid var(--line); }
+.bh + .setrow { border-top: 0; }
+.setrow label { font-weight: 600; }
+.setrow select { font: inherit; font-size: var(--fs-md); color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: var(--sp-4) var(--sp-8); }
+.setrow p { grid-column: 1 / -1; font-size: var(--fs-md); margin: 0; }
 .sharerow { display: flex; gap: var(--sp-8); align-items: center; flex-wrap: wrap; }
 .sharerow input { flex: 1 1 220px; min-width: 0; font: inherit; font-family: var(--mono); font-size: var(--fs-md); color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r); padding: var(--sp-6) var(--sp-8); }
 .sharerow button, .invites button { border: 1px solid var(--line-2); background: var(--surface); border-radius: var(--r-sm); padding: var(--sp-6) var(--sp-12); font-size: var(--fs-md); }

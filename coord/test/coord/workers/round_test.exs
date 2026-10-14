@@ -19,7 +19,7 @@ defmodule Coord.Workers.RoundTest do
 
   test "a referee that exits 0 completes the job; it played the round it was given" do
     assert :ok = perform_job(Round, args(4))
-    assert "start referee-cmd --arena open --round 4 --games 2 --workers 2" in fake_events()
+    assert "start referee-cmd --arena open --round 4 --games 2 --workers 2 --cap-ms 60000" in fake_events()
     assert "start referee --round 4 --games 2 --workers 2" in fake_events()
   end
 

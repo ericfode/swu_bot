@@ -18,6 +18,18 @@ defmodule Coord.Scheduler.PolicyTest do
     end
   end
 
+  describe "round_wait" do
+    test "a new round waits out the gap after the last round's end; with no round finished, none" do
+      assert Policy.round_wait(nil, 600_000, 5_000) == 0
+      assert Policy.round_wait(1_000, 600_000, 1_000) == 600_000
+      assert Policy.round_wait(1_000, 600_000, 500_000) == 101_000
+      assert Policy.round_wait(1_000, 600_000, 601_000) == 0
+      assert Policy.round_wait(1_000, 0, 1_000) == 0
+      # a clock set back never makes the wait longer than the wait itself
+      assert Policy.round_wait(900_000, 600_000, 1_000) == 600_000
+    end
+  end
+
   describe "plan?" do
     test "only when ready, with no job incomplete and no plan running" do
       assert Policy.plan?(%{phase: :ready, incomplete: [], planning: false})

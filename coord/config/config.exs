@@ -20,6 +20,10 @@ config :coord, Coord.Config,
   round_cap_ms: 6 * 3_600_000,
   games: 2,
   workers: 2,
+  # each bot's thinking time per game (roster.thinkCapMs) when Eric's settings name none
+  think_cap_sec: 60,
+  # how often Coord.Settings reads Eric's arena settings from the window
+  settings_ms: 60_000,
   require_mount: false,
   require_token: false,
   window: "http://127.0.0.1:8080",

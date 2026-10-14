@@ -159,11 +159,16 @@ defmodule Coord.GamesctlTest do
       assert "term push" in fake_events()
     end
 
-    test "referee-cmd asks for the round and the configured games and workers" do
+    test "referee-cmd asks for the round and the configured games, workers and time limit; Eric's settings come first" do
       put_setting(:games, 3)
       put_setting(:workers, 1)
       assert {:ok, spec} = Gamesctl.referee_cmd("open", 9)
-      assert "start referee-cmd --arena open --round 9 --games 3 --workers 1" in fake_events()
+      assert "start referee-cmd --arena open --round 9 --games 3 --workers 1 --cap-ms 60000" in fake_events()
+
+      :persistent_term.put({Coord.Settings, :settings}, %{games: 4, workers: 3, think_cap_sec: 90})
+      on_exit(fn -> :persistent_term.erase({Coord.Settings, :settings}) end)
+      assert {:ok, _spec} = Gamesctl.referee_cmd("open", 9)
+      assert "start referee-cmd --arena open --round 9 --games 4 --workers 3 --cap-ms 90000" in fake_events()
       assert %Coord.Round.Spec{arena: "open", round: 9, cap_ms: 21_600_000} = spec
       assert ["--round", "9"] in Enum.chunk_every(spec.cmd, 2, 1)
     end

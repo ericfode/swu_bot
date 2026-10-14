@@ -10,7 +10,7 @@ const pref = {
   set(k, v) { try { localStorage.setItem('swuapp.' + k, JSON.stringify(v)); } catch {} },
 };
 // audience is fixed at build time: 'project' (Eric and the threads, with Lab) or 'public' (friends: no Lab, no thread names)
-const S = { aud: DATA.audience === 'public' ? 'public' : 'project', seen: pref.get('seen', null), live: false, api: false, apiVersion: null, files: null, reader: null, prefix: '', syncedAt: null, botSort: ['rating', -1], botFam: new Set(), botQ: '', botAll: false, botStyle: new Set(), gamesPage: 0, gamesF: { bot: '', run: '', res: 'all', replay: false }, peopleF: 'all', peoplePage: 0, cmp: null, me: null, share: null };
+const S = { aud: DATA.audience === 'public' ? 'public' : 'project', seen: pref.get('seen', null), live: false, api: false, apiVersion: null, files: null, reader: null, prefix: '', syncedAt: null, botSort: ['rating', -1], botFam: new Set(), botQ: '', botAll: false, botStyle: new Set(), gamesPage: 0, gamesF: { bot: '', run: '', res: 'all', replay: false }, peopleF: 'all', peoplePage: 0, cmp: null, me: null, share: null, settings: null };
 // live mode reads the project's shared folder through the files capability; the public build never does (pick 6)
 const CAN_LIVE = S.aud === 'project';
 // served by the arena web server (app at /, the arena's own page with its forms at /arena), not as a file or a Claude artifact
@@ -312,6 +312,7 @@ const PAGES = {
   runs: r => r.parts[1] ? pageRun(r) : pageRuns(r),
   people: pagePeople,
   share: pageShare,
+  settings: pageSettings,
   help: pageHelp,
   research: r => ({ '': pageResearch, evaluators: pageEvaluators, atlas: atlasMoved, spots: atlasMoved, analysis: pageAnalysis, experiments: r.parts[2] ? pageExperiment : pageExperiments, lines: r.parts[2] ? pageLine : pageLines, speed: pageSpeed }[r.parts[1] || ''] || pageResearch)(r),
   lab: r => S.aud === 'public' ? `<div class="notice">Lab is only in the project build.</div>` : ({ '': pageLab, waiting: pageWaiting, health: pageHealth }[r.parts[1] || ''] || pageLab)(r),
@@ -372,7 +373,7 @@ function render(keepScroll) {
   const same = key === lastRouteKey; lastRouteKey = key;
   // the window's page is a shell with an empty model until /api/app answers; drawn from that, pages would say wrong
   // things (an arena that "has not started"), so they wait for the data
-  if (HOSTED && !S.live && !M.runs.length && r.parts[0] !== 'share') {
+  if (HOSTED && !S.live && !M.runs.length && r.parts[0] !== 'share' && r.parts[0] !== 'settings') {
     $('main').innerHTML = S.offline ? `<div class="notice"><b>Could not reach the arena.</b> ${esc(S.offline)}. Reload the page to try again.</div>` : '<p class="muted" style="padding:32px 0">Loading the arena…</p>';
     document.title = 'SWU Arena'; return;
   }
@@ -389,7 +390,7 @@ function render(keepScroll) {
   else if (same) keepReader(anchor);
   readAt = readerAnchor(); sizes = sizesNow();
 }
-function pageTitle(r) { const s = SECTIONS.find(x => x.id === r.sec); if (r.parts[0] === 'help') return 'Help'; return r.parts[1] && r.parts[0] !== 'research' && r.parts[0] !== 'arena' ? r.parts.slice(-1)[0] : s?.label || (r.parts[0] === 'share' ? 'Share' : 'Home'); }
+function pageTitle(r) { const s = SECTIONS.find(x => x.id === r.sec); if (r.parts[0] === 'help') return 'Help'; if (r.parts[0] === 'settings') return 'Arena settings'; return r.parts[1] && r.parts[0] !== 'research' && r.parts[0] !== 'arena' ? r.parts.slice(-1)[0] : s?.label || (r.parts[0] === 'share' ? 'Share' : 'Home'); }
 function afterRender() {
   for (const tr of document.querySelectorAll('tr[data-href]')) tr.addEventListener('click', e => { if (e.target.closest('a,button')) return; location.hash = tr.dataset.href; });
   for (const el of document.querySelectorAll('[data-strategy]')) { try { const w = JSON.parse(el.dataset.strategy); window.SWUStrategy?.render(el, w); } catch {} }
@@ -401,6 +402,15 @@ function afterRender() {
     const v = $('linklabel').value.replace(/\s+/g, ' ').trim();
     if (!v) { S.share = { ...S.share, linkMsg: 'Write who the link is for, so you can tell the links apart.' }; render(true); return; }
     shareChange({ addLink: v.slice(0, 60) });
+  });
+  // a choice not yet saved is kept as a draft: the page is redrawn while it is open (syncApi, loadPeople)
+  $('settingsform')?.addEventListener('change', e => {
+    const k = e.target.id?.replace(/^set-/, '');
+    if (S.settings && k in SETTINGS_UI) S.settings = { ...S.settings, draft: { ...S.settings.draft, [k]: e.target.value === '' ? null : +e.target.value } };
+  });
+  $('settingsform')?.addEventListener('submit', e => {
+    e.preventDefault();
+    saveSettings(Object.fromEntries(Object.keys(SETTINGS_UI).map(k => { const v = $(`set-${k}`).value; return [k, v === '' ? null : +v]; })));
   });
   $('inviteform')?.addEventListener('submit', e => {
     e.preventDefault();
@@ -742,7 +752,7 @@ async function loadPeople() {
 }
 async function startApi() {
   S.files = apiFiles(); S.reader = apiReader(); S.api = true;
-  fetch('/api/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(j => { if (j?.result) { S.me = j.result; loadPeople(); const p = route().parts; if (p[0] === 'share' || (p[0] === 'arena' && p[1] === 'join')) render(true); } }).catch(() => {});
+  fetch('/api/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(j => { if (j?.result) { S.me = j.result; $('settingsbtn').hidden = S.me.role !== 'admin'; loadPeople(); const p = route().parts; if (p[0] === 'share' || p[0] === 'settings' || (p[0] === 'arena' && p[1] === 'join')) render(true); } }).catch(() => {});
   chipSay('Connecting to the arena…');
   try { await syncApi(); } catch (e) { S.api = false; S.files = null; S.reader = null; S.offline = e?.message || 'error'; chipSay(`Offline (${esc(S.offline)})`); render(true); }
 }
@@ -1490,6 +1500,53 @@ function pageShare(r) {
     <section class="c12 box"><div class="bh"><h3>Who can sign in</h3><span class="sub">changes take effect at once</span></div><form id="inviteform" class="sharerow"><input id="invitelogin" placeholder="GitHub username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="GitHub username"><button type="submit" ${sh.busy ? 'disabled' : ''}>Invite</button></form>${sh.msg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.msg)}</p>` : ''}${list}</section>`
       : `<section class="c12 box"><p>${notAdmin}</p></section>`}
   </div>${S.me?.login ? `<p class="muted" style="margin-top:10px;font-size:var(--fs-md)">Signed in as @${esc(S.me.login)} · <a href="/auth/logout">Sign out</a></p>` : ''}`;
+}
+
+// ---------- arena settings (an admin): how rounds are played; the games machine reads them every minute ----------
+// each setting: its group, the choices offered, and the games machine's own default (coord/config/config.exs) for
+// when it is left unset; the window takes any whole number in range (bot/arena/window.js SETTINGS)
+const SETTINGS_UI = {
+  gamesPerPair: { group: 'arena', label: 'Games per pair', unit: '', def: 2, values: [2, 4, 6, 8, 10],
+    note: 'Every pair of bots plays this many games in each round, each deal from both seats. More games give steadier ratings and longer rounds.' },
+  thinkCapSec: { group: 'arena', label: 'Thinking time per game', unit: ' s', def: 60, values: [10, 20, 30, 45, 60, 90, 120, 180, 300, 600],
+    note: 'Each bot\'s thinking time in one game. A bot that goes over it loses that game.' },
+  workers: { group: 'compute', label: 'Games at once', unit: '', def: 2, values: [1, 2, 3, 4, 5, 6, 8],
+    note: 'Games the games machine plays side by side. It has 2 CPUs, and 2 games at once already keep them busy: more games at once mostly give each bot less CPU for the same thinking time.' },
+  roundGapMin: { group: 'compute', label: 'Wait between rounds', unit: ' min', def: 0, values: [0, 5, 10, 15, 30, 60, 120, 240],
+    note: 'From the end of one round to the start of the next. Versions sent meanwhile join the next round. The machine stays awake while it waits.' },
+};
+async function loadSettings() {
+  S.settings = { busy: true };
+  try { const r = await fetch('/api/arena-settings', { credentials: 'same-origin' }), j = await r.json().catch(() => ({})); S.settings = r.ok ? j.result : { err: j.error?.message || `HTTP ${r.status}` }; }
+  catch (e) { S.settings = { err: e?.message || 'offline' }; }
+  if (route().parts[0] === 'settings') render(true);
+}
+async function saveSettings(set) {
+  const keep = S.settings; S.settings = { ...keep, busy: true, msg: '' }; render(true);
+  try {
+    const r = await fetch('/api/arena-settings', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set }) }), j = await r.json().catch(() => ({}));
+    S.settings = r.ok ? { ...j.result, msg: 'Saved. The games machine reads them within a minute and uses them from its next round.' } : { ...keep, busy: false, msg: j.error?.message || `HTTP ${r.status}` };
+  } catch (e) { S.settings = { ...keep, busy: false, msg: e?.message || 'offline' }; }
+  render(true);
+}
+function pageSettings() {
+  const head = `<div class="phead"><h1>Arena settings</h1><p class="lede">How the arena plays its rounds. A round already running finishes the way it started.</p></div>`;
+  if (!HOSTED) return `${head}<div class="notice">The settings belong to the hosted arena at swu-arena.fly.dev; this copy is a snapshot.</div>`;
+  if (S.me?.role !== 'admin') return `${head}<div class="notice">${S.me ? 'Only Eric changes the arena settings.' : 'Loading…'}</div>`;
+  if (!S.settings) { S.settings = { busy: true }; setTimeout(loadSettings); }
+  const st = S.settings, cur = st.settings;
+  if (st.err) return `${head}<div class="notice"><b>Could not read the settings.</b> ${esc(st.err)}</div>`;
+  if (!cur) return `${head}<p class="muted">Loading…</p>`;
+  const row = k => {
+    const u = SETTINGS_UI[k], v = st.draft && k in st.draft ? st.draft[k] : cur[k];
+    const opts = [`<option value="" ${v == null ? 'selected' : ''}>${u.def}${u.unit} (default)</option>`, ...u.values.filter(x => x !== u.def || v === x).map(x => `<option value="${x}" ${v === x ? 'selected' : ''}>${x}${u.unit}</option>`)];
+    if (v != null && !u.values.includes(v)) opts.push(`<option value="${v}" selected>${v}${u.unit}</option>`);
+    return `<div class="setrow"><label for="set-${k}">${u.label}</label><select id="set-${k}" ${st.busy ? 'disabled' : ''}>${opts.join('')}</select><p class="muted">${esc(u.note)}</p></div>`;
+  };
+  const group = (g, title, sub) => `<section class="c6 box"><div class="bh"><h3>${title}</h3><span class="sub">${sub}</span></div>${Object.keys(SETTINGS_UI).filter(k => SETTINGS_UI[k].group === g).map(row).join('')}</section>`;
+  const when = st.updatedAt ? `Last changed ${ago(st.updatedAt) === 'now' ? 'just now' : `${ago(st.updatedAt)} ago`}${st.by ? ` by ${st.by === 'admin token' ? 'the admin token' : `@${esc(st.by)}`}` : ''}.` : 'Nothing changed yet: every setting is the default.';
+  return `${head}<form id="settingsform"><div class="grid">${group('arena', 'Arena', 'the rules of a round')}${group('compute', 'Games machine', 'how it plays them')}</div>
+    <div class="sharerow" style="margin-top:12px"><button type="submit" ${st.busy ? 'disabled' : ''}>Save</button><span class="muted" style="font-size:var(--fs-md)">${st.msg ? esc(st.msg) : when}</span></div></form>`;
 }
 
 // ---------- pages: research ----------

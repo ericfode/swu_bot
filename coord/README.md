@@ -52,7 +52,8 @@ GAMES_DATA=/srv/x/data GAMES_APP=$PWD/.. PORT=18181 GAMES_PROXY_PORT=18182 GAMES
 | `GAMES_IDLE_MIN` | 10 | stop after this long with nothing to do |
 | `GAMES_REPLAY_HOURS` | 24 | passed to `gamesctl plan` |
 | `GAMES_ROUND_HOURS` | 6 | a round running longer is stopped and cancelled until the next boot |
-| `GAMES_GAMES`, `GAMES_WORKERS` | 2, 2 | passed to `gamesctl referee-cmd` |
+| `GAMES_GAMES`, `GAMES_WORKERS` | 2, 2 | passed to `gamesctl referee-cmd`, unless Eric's arena settings name others |
+| `GAMES_THINK_CAP_SEC` | 60 | each bot's thinking per game in a new round (`--cap-ms`), unless the settings name another |
 | `GAMES_REQUIRE_MOUNT` | unset | `1`: refuse to start unless `GAMES_DATA` is its own file system |
 | `SWU_WINDOW` | required in prod | the window's address |
 | `SWU_WINDOW_TOKEN` | required in prod | taken out of the environment at boot |

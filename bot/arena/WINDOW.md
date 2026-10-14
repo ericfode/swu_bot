@@ -16,7 +16,7 @@ asks the same API.
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
-| Browsers, the app | the invite list, from Eric's Share page only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` (an admin) |
+| Browsers, the app | the invite list and the arena settings, from Eric's admin pages only | `GET /api/app`, `/api/me`, `/api/status`, `/api/replays/<run>/<game>`; `GET`, `POST /api/share` and `/api/arena-settings` (an admin) |
 
 ## The API
 
@@ -62,6 +62,12 @@ except an admin changing the invite list from the app's Share page (below):
   typed OK, 2026-10-12 04:30): it sets a 30-day guest session tied to that link and sends the browser to `/`, which
   keeps the link's `#/page`. A guest reads like a friend and never writes; removing the link locks its guests out on
   their next request. Someone already signed in keeps their own session when they open a link.
+- `GET /api/arena-settings` gives Eric's arena settings, `{settings, updatedAt, by}`: `gamesPerPair` (even, 2 to 10)
+  and `thinkCapSec` (10 to 600, each bot's thinking per game) for the arena, `workers` (games at once, 1 to 16) and
+  `roundGapMin` (0 to 240, from one round's end to the next round's start) for the games machine. A setting left out
+  is the machine's default (`coord/README.md`). `POST /api/arena-settings` with `{"set": {"<name>": <value> or null}}`
+  changes some of them, null going back to the default; admins only, from the app's own pages as for `/api/share`.
+  The games machine reads them every minute with its own token (`coord/lib/coord/settings.ex`), which may only read.
 - `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
   the invite list and the view links to admins.
 

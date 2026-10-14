@@ -76,6 +76,7 @@ if config_env() != :test do
       round_cap_ms: hours_ms.("GAMES_ROUND_HOURS", 6),
       games: int.("GAMES_GAMES", 2),
       workers: int.("GAMES_WORKERS", 2),
+      think_cap_sec: int.("GAMES_THINK_CAP_SEC", 60),
       require_mount: System.get_env("GAMES_REQUIRE_MOUNT") == "1",
       require_token: prod?,
       window: window,
