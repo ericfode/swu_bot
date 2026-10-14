@@ -347,7 +347,7 @@ async function main() {
         writeJson(path.join(out, 'index.json'), tIndex);
         return doc;
     };
-    // tournament.js-format index (TournamentIndex in viewer/src/core/types.ts)
+    // tournament.js-format index (TournamentIndex in studio/src/data/types.ts)
     const tIndex = { id, createdAt, engine, bots: names, gamesPerPairing: config.gamesPerPair, games: [] };
     let queue = schedule.map((s) => ({ ...s, id: `${s.p1}-vs-${s.p2}-${s.seed}` }));
     if (prev) {

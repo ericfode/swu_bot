@@ -24,7 +24,7 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 - `match.js` — `playGame(env, {seed, bots, record, snapshot, key, limits})` plays one game; `view.js` — the board snapshots replays record (`recorder.js` is an alias).
 - `node bot/tournament.js --bots a,b,c --games 10 --out replays/my-run [--seed 1] [--key K|none]` writes `index.json` + `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
 - `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording. Run it after touching `view.js` or `match.js`.
-- View results with `npm run viewer` (see viewer/ in the repo CLAUDE.md).
+- View results with `npm run studio:dev` (Holotable, `studio/`).
 
 ## Bots
 Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, over stdio for a program in any language or as plain objects in process.

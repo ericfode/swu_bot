@@ -1,6 +1,6 @@
 # Holotable
 
-A second tournament and replay viewer for the bot lab. It reads the **same files** as `viewer/` (`replays/<id>/index.json` and `games/<id>.jsonl`, written by `bot/tournament.js` and `bot/recorder.js`) and uses the same deep links (`#/t/<tournament>/g/<game>?step=300`), so the two viewers are interchangeable on any replays folder.
+The tournament and replay viewer. It reads `replays/<id>/index.json` and `games/<id>.jsonl` (written by `bot/tournament.js` and `bot/recorder.js`, format in `spec/replay-format.md`) and opens deep links like `#/t/<tournament>/g/<game>?step=300`.
 
 Stack: Vite + React 19 + TypeScript, Tailwind CSS v4, Motion (board transitions), Anime.js (card choreography), Recharts, cmdk (command palette), Zustand, Lucide icons.
 
@@ -34,8 +34,6 @@ Both static builds also stage the printed card data (`CARD_TEXT`, same default a
 
 A single-file page has to stay under 16 MB, which holds about 28 games. With `STATIC_DATA=files` the page is ~1 MB and fetches `data/manifest.json`, `data/<tournament>/…` and `data/_evals|_lens/<gameId>.json` relative to itself when opened, so a preview can carry over a hundred games. Pair it with an art pack (`scripts/art-pack.py`, split into parts when big) published as `art-pack.json` beside the page.
 
-The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/replays node viewer/server.cjs`.
-
 ## What's in it
 
 - **Card effects** (`#/effects`, also in the navigation): a growing catalogue of bespoke animations. Select a card, replay it, or play the collection on a clearly labeled staged board. Modal examples name their choices; shared ability filters and a visual legend explain the mechanics. The [batch ledger](../docs/card-animation-batches.md) distinguishes authored scenes from independently accepted examples and the remaining imported catalogue.
@@ -43,7 +41,7 @@ The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/r
 - **Sound effects**: enable Sound in the showcase or replay viewer, then adjust the volume. Twenty original procedural scores combine card signatures with shared ability sounds. Web Audio starts only from the enable gesture; muting, scrubbing, changing cues, leaving the page, and hiding the tab cancel the active sound. Held inspection frames are silent. Sound starts off for each viewer session. See [the sound language](../docs/card-sound-language.md).
 - **Effects in replays**: the same renderer runs when a supported event's recorded action resolves during forward playback or single stepping. The Effects toggle disables it; Replay effect repeats the current supported action. Playback leaves time for the effect to finish. Backward navigation and large timeline jumps do not animate intervening actions. Reduced motion shows a static caption. Exact targets follow recorded card IDs when available; missing or ambiguous targets fall back to the seat region. The rules engine and recorded state are unchanged.
 
-- **Tournaments**: standings with Elo (same K=24 sequential rules as `viewer/`), recent form, the Elo race over the tournament, a head-to-head heat map, first-seat win rate, and a filterable game list. Indexes with running games refresh every 2 s.
+- **Tournaments**: standings with Elo (K=24, sequential in play order), recent form, the Elo race over the tournament, a head-to-head heat map, first-seat win rate, and a filterable game list. Indexes with running games refresh every 2 s.
 - **Replay**: the table laid out as in SWU (ground arena, base and leader, space arena per seat), units animated in and out, damage and healing pop-ups, base HP rings, the initiative token sliding between seats, exhausted cards turned, hidden hands per perspective.
 - **Momentum timeline**: base HP, board power, hand size and the chosen score (from player 1's side) for every decision, with round bands; position evaluations add four P(p1 wins) curves. A score with a fitted or its own chance is drawn on the 0-100% axis; a rough or uncalibrated one is dashed on its own axis. Click or drag it to seek.
 - **Scores** (`src/data/score.ts`): each lens file is one score (swu-lens/1, format in `/mnt/project-files/omni/LENS.md` plus `/mnt/project-files/viewer-kit/LENS-proposal.md`). The viewer reads its label, unit, chance, weights per step and parts from the file, never from built-in constants; the only built-in score is Omni v1 (`src/data/omniV1.ts`), used for old omni files and, estimated from the board, for games with no file. Files live at `lens/<gameId>.json` (the default path) and `lens/<dir>/<gameId>.json`, listed in `lens/evaluators.json`. With two or more for a game a **Score** picker appears (`?score=<dir>` deep links one; the pick is saved), and the board, chips, breakdown, inspector, timeline and swings all follow the chosen score.
@@ -58,13 +56,13 @@ The original viewer reads the same fixtures: `REPLAYS_DIR=$PWD/studio/fixtures/r
 
 ## Layout
 
-- `src/data/` — format types (copied from `viewer/src/core/types.ts`), loading (`source.ts`, `staticSource.ts`), derived metrics and unit tracking (`derive.ts`), standings (`stats.ts`), action classes (`actions.ts`), evaluations (`evals.ts`), lens files and scores (`lensFile.ts` reads a file, `score.ts` resolves a score over a game, `calibrate.ts` chance maps, `terms.ts` rows, `omniV1.ts` the built-in Omni v1).
+- `src/data/` — format types (`types.ts`, from `spec/replay-format.md`), loading (`source.ts`, `staticSource.ts`), derived metrics and unit tracking (`derive.ts`), standings (`stats.ts`), action classes (`actions.ts`), evaluations (`evals.ts`), lens files and scores (`lensFile.ts` reads a file, `score.ts` resolves a score over a game, `calibrate.ts` chance maps, `terms.ts` rows, `omniV1.ts` the built-in Omni v1).
 - `src/components/` — `Board`, `Card`, `CardZoom` (inspector and floating zoom), `Momentum`, `Log`, `Shell` (nav and command palette).
 - `src/kit/` — the embeddable viewer (`GameViewer`) and the `SWUViewer` bundle (`npm run build:kit`).
 - `src/effects/` — verified card catalogue, ability grammar, observed replay outcomes, Anime.js timeline, SVG primitives and card choreography, and staged showcase data. `npm test` checks identity, replay detection, outcomes, and example semantics; the root smoke commands include these tests. See [the animation language](../docs/card-animation-language.md).
 - `src/pages/` — home, tournament and game pages.
 - `vite.atlas.ts` — `virtual:atlas-kit`: the Atlas kit (`meta/atlas-kit.js`, or `ATLAS_KIT`) as a module, without touching `window.AtlasKit`; no file means no spots.
-- `vite.config.ts` — includes a small plugin that serves `/api/tournaments` and `/replays/*` exactly like `viewer/server.cjs`.
+- `vite.config.ts` — includes a small plugin that serves `/api/tournaments` and `/replays/*` as `spec/replay-format.md` describes.
 
 ## Visual review captures
 

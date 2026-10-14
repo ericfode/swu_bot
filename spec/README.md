@@ -1,7 +1,7 @@
 # swu_bot interface spec
 
 Language-neutral description of the contracts other tools build against: how a bot plays the engine, and what a
-recorded game looks like. Engine: `forceteki` pinned at `2be4fcd`.
+recorded game looks like. Engine: `forceteki` pinned at `2ebed8ca2`.
 
 | Document | What it covers | Who builds on it |
 |---|---|---|

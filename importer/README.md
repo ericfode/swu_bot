@@ -12,7 +12,7 @@ stream. The importer reads the saved stream; it needs no engine and no card data
 
 ```bash
 node importer/import.js <capture file or dir>... --out replays/human [--names Alice,Bob] [--source karabuddy] [--keep-file-names]
-npm run viewer    # REPLAYS_DIR defaults to replays/, so replays/human shows up as a tournament
+npm run studio:dev    # REPLAYS_DIR defaults to replays/, so replays/human shows up as a tournament
 node analysis/analyze.js replays/human --evaluator heuristic
 node bot/omni/lens.js replays/human --out replays/human/lens   # omni lens (bot/omni is not on main yet)
 ```
