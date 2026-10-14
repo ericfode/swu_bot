@@ -104,7 +104,7 @@ npm run typecheck
 ARENA_ADMIN_TOKEN=a ARENA_READ_TOKEN=r npm start   # http://127.0.0.1:8787, data in ./data (ARENA_DATA)
 ```
 
-The Server workflow (`.github/workflows/server.yml`) runs the tests and the typecheck when `server/` changes.
+The CI workflow (`.github/workflows/ci.yml`) runs the tests and the typecheck when `server/` changes.
 
 `npm start` plays real games only where the engine is built (`forceteki/build`, card data); `ARENA_ROOT` points at
 another checkout that has it. A round's bots must be versions in the record:

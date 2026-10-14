@@ -68,11 +68,12 @@ async function rustSimulator(eg, pid, deals, ms) {
     if (!rust) return null;
     const you = eg.seatOf(pid);
     const opp = you === 'p1' ? 'p2' : 'p1';
-    const start = fullState(eg, pid);
+    let start;
     try {
+        start = fullState(eg, pid);
         rust.simulator.loadState(start).free();
     } catch {
-        return null; // a card outside the Rust pool
+        return null; // a card outside the Rust pool, or an effect its state cannot express
     }
     const deadline = ms === null ? null : Date.now() + ms;
     let game = null,
