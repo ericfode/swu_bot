@@ -165,11 +165,11 @@ test('plan lists the in-scope files for scan and coverage, and keeps other comma
 });
 
 test('the repo scope reads the shared core and leaves the bots out', () => {
-  for (const file of ['bot/env.js', 'bot/match.js', 'bot/ladder.js', 'bot/players/index.js', 'bot/sims/rust-sims.js', 'spec/schemas/x.json', 'app/build.mjs', 'meta/atlas-kit.js', 'tools/bin/perch', 'bot/arena/referee.js', 'bot/arena/web/strategy-diagram.js', 'bot/compiled/js/bundle.js']) {
+  for (const file of ['bot/env.js', 'bot/match.js', 'bot/ladder.js', 'bot/players/index.js', 'spec/schemas/x.json', 'app/build.mjs', 'meta/atlas-kit.js', 'tools/bin/perch', 'bot/arena/referee.js', 'bot/arena/web/strategy-diagram.js', 'bot/compiled/js/bundle.js']) {
     assert.ok(inScope(file, scopes.repo), file);
   }
   for (const file of ['bot/players/heuristic.js', 'bot/players/rush.js', 'bot/players/guard.js', 'bot/test/bots.test.js', 'bot/test/ratings.test.js', 'bot/test/fixtures/search-bot.js', 'app/test/model.test.js', 'forceteki/server/game/Game.ts', 'README.md',
-    'bot/arena/starters/rush.js', 'vendor/kessel/js/node.js', 'vendor/holotable/swu-viewer-kit.js', 'vendor/refresh.js', 'coord/lib/coord.ex', 'bot/newbot/bot.js']) {
+    'bot/arena/starters/rush.js', 'bot/sims/rust-sims.js', 'vendor/kessel/js/node.js', 'vendor/holotable/swu-viewer-kit.js', 'vendor/refresh.js', 'coord/lib/coord.ex', 'bot/newbot/bot.js']) {
     assert.ok(!inScope(file, scopes.repo), file);
   }
 });

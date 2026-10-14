@@ -15,7 +15,6 @@ module.exports = {
     include: [
       'bot/*.js', // engine wrapper, match, ladder and tournament runners, recorder, ratings, stdio tools
       'bot/players/index.js', // the bot registry
-      'bot/sims/**', // the referee's simulations on the Rust engine (Kessel, vendored)
       'bot/arena/**', // the arena: API, MCP and HTTP servers, referee, registry, dashboard writer
       'bot/compiled/**', // builds any bot as a sandboxed WebAssembly bundle, and runs it
       'spec/**',
