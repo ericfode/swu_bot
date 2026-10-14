@@ -15,7 +15,7 @@ process.env.ARENA_SECRET_FILE = path.join(tmp, 'secret');
 fs.mkdirSync(process.env.ARENA_DASH, { recursive: true });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const { scoreRound, globalElo, lineup, anchorsOf, residentName } = require('../arena/referee');
+const { scoreRound, globalElo, allRoundAnchors, lineup, anchorsOf, residentName } = require('../arena/referee');
 const { planRound } = require('../arena/gamesctl');
 const { HOME, writeJson, readJson, versionsOf } = require('../arena/home');
 const { houseDoc } = require('../arena/ops/house-submit');
@@ -52,6 +52,24 @@ test('lineup: a resident with a version takes the place of the built-in bot it r
     assert.deepStrictEqual(lineup(), ['heuristic-v1'], 'an image with no built-in bots');
 });
 
+test('lineup: a resident whose versions are all withdrawn gives its place back to the built-in bot', () => {
+    setRoster([{ name: 'heuristic', owner: 'arena', resident: true, withdrawn: [2] }, { name: 'rush', owner: 'arena', resident: true, withdrawn: [1] }]);
+    version('heuristic-v1');
+    version('heuristic-v2');
+    version('rush-v1');
+    assert.deepStrictEqual(lineup(), ['heuristic-v1', 'rush', 'c-clock-wasm', 'py-clock-wasm']);
+    const { ownBots } = require('../arena/home');
+    assert.deepStrictEqual(ownBots(), lineup(), 'status names the same bots');
+});
+
+test('a built-in bot whose name only starts like an entry\'s versions is not that entry\'s', () => {
+    setRoster([{ name: 'ismcts', owner: 'arena', resident: true }, { name: 'kim', owner: 'github:kim' }], ['ismcts-vlinear-deck', 'kim-vs']);
+    const rd = scoreRound(5, ladderOf(['ismcts-v3', 'ismcts-vlinear-deck', 'kim-v1', 'kim-vs'], [won('g1', 'kim-v1', 'kim-vs', 'kim-v1'), won('g2', 'ismcts-v3', 'ismcts-vlinear-deck', 'ismcts-v3')]));
+    assert.deepStrictEqual(Object.fromEntries(rd.bots.map((b) => [b.name, [b.agent, b.resident ?? null]])),
+        { 'ismcts-v3': [null, 'ismcts'], 'ismcts-vlinear-deck': [null, null], 'kim-v1': ['kim', null], 'kim-vs': [null, null] });
+    assert.strictEqual(rd.leader, 'kim-v1');
+});
+
 test('scoreRound: a resident is no builder (never the leader) and anchors the round with the built-in bots left', () => {
     setRoster([{ name: 'kim_b', owner: 'github:kim-b' }, { name: 'heuristic', owner: 'arena', resident: true }]);
     const bots = ['kim_b-v1', 'heuristic-v1', 'rush'];
@@ -69,17 +87,24 @@ test('scoreRound: a resident is no builder (never the leader) and anchors the ro
     assert.ok(Math.abs((row('heuristic-v1').btElo + row('rush').btElo) / 2 - 1500) <= 1, 'the arena\'s own bots average 1500');
 });
 
-test('globalElo: old rounds keep their built-in anchors after the image drops them; new rounds anchor on their own', () => {
+test('globalElo: the bots built into the image anchor every round, so a resident\'s new version moves no one', () => {
     setRoster([{ name: 'kim_b', owner: 'github:kim-b' }, { name: 'heuristic', owner: 'arena', resident: true }], []);
     const g = (a, b, score) => ({ a, b, score });
-    // a round from before rounds recorded anchors: its bots with no builder anchored it
+    // a round from before rounds recorded anchors: its bots with no builder are the built-in ones
     const old = { round: 1, bots: [{ name: 'kim_b-v1', agent: 'kim_b' }, { name: 'heuristic', agent: null }, { name: 'rush', agent: null }],
         results: [g('kim_b-v1', 'heuristic', 1), g('heuristic', 'kim_b-v1', 1), g('kim_b-v1', 'rush', 1), g('rush', 'kim_b-v1', 0), g('heuristic', 'rush', 1), g('rush', 'heuristic', 0)] };
     const now = { round: 2, anchors: ['heuristic-v1'], bots: [{ name: 'kim_b-v1', agent: 'kim_b' }, { name: 'heuristic-v1', agent: null, resident: 'heuristic' }],
         results: [g('kim_b-v1', 'heuristic-v1', 1), g('heuristic-v1', 'kim_b-v1', 1)] };
+    const next = { round: 3, anchors: ['heuristic-v2'], bots: [{ name: 'kim_b-v1', agent: 'kim_b' }, { name: 'heuristic-v2', agent: null, resident: 'heuristic' }],
+        results: [g('kim_b-v1', 'heuristic-v2', 0), g('heuristic-v2', 'kim_b-v1', 1)] };
+    assert.deepStrictEqual(allRoundAnchors([old, now, next], []), ['heuristic', 'rush'], 'with roster.baselines empty');
     const elo = globalElo([old, now]);
-    assert.ok(Math.abs((elo.heuristic + elo.rush + elo['heuristic-v1']) / 3 - 1500) <= 1, JSON.stringify(elo));
-    assert.ok(Math.abs((globalElo([old]).heuristic + globalElo([old]).rush) / 2 - 1500) <= 1, 'with roster.baselines empty');
+    assert.ok(Math.abs((elo.heuristic + elo.rush) / 2 - 1500) <= 1, JSON.stringify(elo));
+    const later = globalElo([old, now, next]);
+    assert.ok(Math.abs((later.heuristic + later.rush) / 2 - 1500) <= 1, JSON.stringify(later));
+    // an arena that never had bots built in: its first round's own bots, whatever versions come later
+    assert.deepStrictEqual(allRoundAnchors([now, next], []), ['heuristic-v1']);
+    assert.deepStrictEqual(allRoundAnchors([], ['rush']), ['rush']);
 });
 
 test('planRound: the arena\'s own bots alone are no reason to play', () => {
@@ -106,6 +131,8 @@ test('register resident: admin only on a hosted arena, no starter, first version
     const st = api.status();
     assert.deepStrictEqual(st.competitors.map((c) => [c.name, !!c.resident]), [['heuristic', true], ['kim_b', false]]);
     assert.deepStrictEqual(api.panels().panels.map((p) => p.id), ['arena-kim_b'], 'a resident has no panel');
+    assert.throws(() => api.panel({ name: 'heuristic' }), (e) => e.code === 'not_found');
+    assert.deepStrictEqual(st.baselines, ['heuristic-v2', 'rush', 'c-clock-wasm', 'py-clock-wasm'], 'status lists the arena\'s own bots in play');
     assert.throws(() => api.register({ name: 'heuristic', owner: 'arena', resident: true }), (e) => e.code === 'conflict');
     assert.throws(() => api.register({ name: 'heuristic', start: 'rush' }), 'a builder cannot take it either');
 

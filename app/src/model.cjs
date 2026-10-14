@@ -99,15 +99,16 @@
     }
 
     // The arena's all-round rating after each round: Bradley-Terry over every rated game of that round and the ones before
-    // it, the mean of the arena's own bots (`baselines` and every round's anchors, its resident entries) pinned at 1500,
-    // as the referee rates all rounds (bot/arena/referee.js globalElo); held-out rounds are left out there too. After the
+    // it, with the anchors the referee uses for all rounds (bot/arena/referee.js globalElo, allRoundAnchors): the mean of
+    // the bots built into the image that ever played (else the first round's own bots) pinned at 1500, so a resident's new
+    // version does not move the scale; held-out rounds are left out there too. After the
     // newest round it is the standings' own rating. Rounds already rated are cached by their games, since the window
     // rebuilds the model every few seconds while a round plays.
     const HISTORY = new Map();
     function arenaHistory(st, baselines) {
         const out = [], results = [];
-        // a round from before rounds recorded their anchors: its bots with no builder (the built-in baselines)
-        const anchors = [...new Set([...(baselines || []), ...(st?.rounds || []).flatMap(r => r.anchors || (r.bots || []).filter(b => !b.agent).map(b => b.name))])];
+        const builtIn = [...new Set([...(baselines || []), ...(st?.rounds || []).flatMap(r => (r.bots || []).filter(b => !b.agent && !b.resident).map(b => b.name))])];
+        const anchors = builtIn.length ? builtIn : (st?.rounds || []).find(r => r.anchors?.length)?.anchors || [];
         let key = anchors.join();
         for (const rd of (st?.rounds || []).filter(r => r.pool !== 'holdout')) {
             const rs = rd.results || [];
@@ -237,10 +238,11 @@
         const phase = hosted ? S.phase : !T ? 'idle' : T.state === 'done' ? 'done' : cur?.ladderStart && !cur?.ladderEnd ? 'ladder' : 'work';
         // benched builders (arena withdraw) stay listed, marked, with their versions and panels; rejoin brings them back
         // the arena's own bots (resident entries) are no builders: they show as baselines, each in the place of the
-        // built-in baseline it replaces once it has a version, as in the referee's lineup
-        const residents = (A.roster?.agents || []).filter(a => a.resident && (A.versions?.[a.name] || []).length);
+        // built-in baseline it replaces once it has a version it has not withdrawn, as in the referee's lineup
+        const live = a => (A.versions?.[a.name] || []).filter(v => !(a.withdrawn || []).includes(v.v));
+        const residents = (A.roster?.agents || []).filter(a => a.resident && live(a).length);
         const fielded = new Set(residents.map(a => a.name));
-        const ownBots = [...residents.map(a => A.versions[a.name].at(-1).name), ...(A.roster?.baselines || []).filter(b => !fielded.has(b.replace(/-wasm$/, '').replace(/-/g, '_')))];
+        const ownBots = [...residents.map(a => live(a).at(-1).name), ...(A.roster?.baselines || []).filter(b => !fielded.has(b.replace(/-wasm$/, '').replace(/-/g, '_')))];
         const competitors = [...(A.roster?.agents || []), ...(A.roster?.bench || []).map(a => ({ ...a, benched: true }))].filter(a => !a.resident).map(a => {
             const vs = A.versions?.[a.name] || [];
             const panel = (src.panels || []).find(p => p.id === `arena-${a.name}`) || null;

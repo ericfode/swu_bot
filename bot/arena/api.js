@@ -200,7 +200,8 @@ const api = {
         return {
             ...clock(),
             thinkCapMs: r.thinkCapMs,
-            baselines: r.baselines,
+            // the arena's own bots in play: resident entries' versions and the built-in bots none has replaced yet
+            baselines: home.ownBots(r),
             // benched competitors too (api.withdraw): still registered, with their versions and ratings, and may rejoin
             competitors: [...r.agents.map((a) => [a, false]), ...(r.bench ?? []).map((a) => [a, true])].map(([a, benched]) => ({
                 name: a.name, title: a.title, harness: a.harness ?? null, owner: a.owner ?? null, philosophy: a.philosophy ?? '', ...(a.resident ? { resident: true } : {}),
@@ -427,7 +428,7 @@ const api = {
     },
 
     panel({ name } = {}) {
-        competitor(name, { benched: true });
+        need(!competitor(name, { benched: true }).resident, 'not_found', `"${name}" is one of the arena's own bots: it has no panel`);
         // composed from the halves kept in ARENA_HOME, so it works without the research dashboard folder
         return dash.composePanel(name);
     },

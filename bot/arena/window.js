@@ -717,10 +717,14 @@ function createWindow(opts = {}) {
     const schema = (props, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
     const pick = (a, keys) => Object.fromEntries(keys.filter((k) => a[k] !== undefined && a[k] !== null).map((k) => [k, a[k]]));
     const REPLAY_SLICE = 100000;
-    // GitHub logins ignore case; the arena names an owner github:<login> in lowercase
-    const mySubmissions = (login) => store.listDocs('submissions').filter((d) => d.id.startsWith(`${String(login).toLowerCase()}.`))
-        .map((d) => parseOr(store.getDoc('submissions', d.id), null)).filter(Boolean)
-        .sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+    // GitHub logins ignore case; the arena names an owner github:<login> in lowercase. The owner decides, not the id
+    // alone: the arena's own (house) submissions are house.<name>.<t>, and house is a GitHub login too.
+    const mySubmissions = (login) => {
+        const me = String(login).toLowerCase();
+        return store.listDocs('submissions').filter((d) => d.id.startsWith(`${me}.`))
+            .map((d) => parseOr(store.getDoc('submissions', d.id), null)).filter((x) => x && String(x.owner).toLowerCase() === me)
+            .sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+    };
     /**
      * Why @login may not submit as competitor n, or null: a name is its builder's (their builder name, or it with _ and
      * a suffix), never another person's builder name (bob may not take bob_x while @bob-x can sign in), and never

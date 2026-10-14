@@ -27,7 +27,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 const { bradleyTerry } = require('../ratings');
-const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, writeAtomic, roster: loadRoster, versionsOf } = require('./home');
+const { HOME, RESULTS, PUBLIC_RESULTS, readJson, writeJson, writeAtomic, roster: loadRoster, versionsOf, residentName } = require('./home');
 const dash = require('./dash');
 const { resolveArena } = require('./registry');
 
@@ -44,8 +44,9 @@ function arg(name, dflt) {
 
 let roster = loadRoster();
 // benched competitors too: one withdrawn while its last round's ladder runs still owns that round's games
-// a resident only by its versions' names: a resident may share a name with the bot built into the image it replaces
-const entryOf = (bot) => [...roster.agents, ...(roster.bench ?? [])].find((a) => bot.startsWith(`${a.name}-v`) || (bot === a.name && !a.resident)) ?? null;
+// a resident only by its versions' names (<name>-v<N>): a resident may share a name with the bot built into the image it
+// replaces, and a built-in bot such as ismcts-vlinear-deck is no version of an entry named ismcts
+const entryOf = (bot) => [...roster.agents, ...(roster.bench ?? [])].find((a) => (bot.startsWith(`${a.name}-v`) && /^\d+$/.test(bot.slice(a.name.length + 2))) || (bot === a.name && !a.resident)) ?? null;
 /** The builder whose bot this is, or null for the arena's own bots (a resident entry, or a bot built into the image). */
 const agentOf = (bot) => {
     const a = entryOf(bot);
@@ -58,8 +59,6 @@ const residentOf = (bot) => {
 };
 /** The bots among `names` that anchor the ratings: the arena's own, resident entries and built-in baselines. */
 const anchorsOf = (names) => names.filter((n) => roster.baselines.includes(n) || residentOf(n) !== null);
-/** The resident entry that takes the place of a built-in baseline: c-clock-wasm is c_clock, heuristic is heuristic. */
-const residentName = (baseline) => baseline.replace(/-wasm$/, '').replace(/-/g, '_');
 
 /**
  * Score of a finished game for p1, or null (unrated). A game a bot broke (outcome ERROR, `by` = the seat whose bot
@@ -227,21 +226,26 @@ function helpersLine(remote) {
 
 /**
  * All-round Elo of every bot with at least one rated game. Held-out rounds (the old holdout tournaments' last ladders,
- * on another card pool) are left out. The anchors are the arena's own bots of every round (a round from before rounds
- * recorded them: its bots with no builder, the built-in baselines), so the bots that anchored old rounds keep anchoring
- * them once the residents are entries and the image has no baselines.
+ * on another card pool) are left out. The anchors stay the same as rounds go by, so a new version of a resident does not
+ * move everyone's rating: the bots built into the image that ever played (rows with no builder and no resident entry),
+ * which keep anchoring the old rounds once the image has none, else the first round's own bots.
  */
 function globalElo(rounds) {
     const results = rounds.filter((rd) => rd.pool !== 'holdout').flatMap((rd) => rd.results);
     const names = [...new Set(results.flatMap((x) => [x.a, x.b]))];
-    const anchors = [...new Set([...roster.baselines, ...rounds.flatMap((rd) => rd.anchors ?? (rd.bots ?? []).filter((b) => !b.agent).map((b) => b.name))])];
-    return Object.fromEntries(Object.entries(anchoredBT(names, results, anchors)).map(([k, v]) => [k, Math.round(v)]));
+    return Object.fromEntries(Object.entries(anchoredBT(names, results, allRoundAnchors(rounds, roster.baselines))).map(([k, v]) => [k, Math.round(v)]));
+}
+
+/** globalElo's anchors (app/src/model.cjs arenaHistory picks the same). */
+function allRoundAnchors(rounds, baselines) {
+    const builtIn = [...new Set([...baselines, ...rounds.flatMap((rd) => (rd.bots ?? []).filter((b) => !b.agent && !b.resident).map((b) => b.name))])];
+    return builtIn.length ? builtIn : rounds.find((rd) => rd.anchors?.length)?.anchors ?? [];
 }
 
 function report(rd, g) {
     const cap = roster.thinkCapMs ? `${roster.thinkCapMs / 1000}s of thinking per game` : 'none';
     const L = [`# Arena round ${rd.round} results`, '', `Ladder \`${rd.ladderId}\`: ${rd.games}/${rd.scheduled} games, ${rd.gamesPerPair} per pair (seeds from ${rd.seed}, each from both seats). Status: ${rd.status}.`,
-        `Elo = Bradley-Terry, baselines' mean pinned to 1500. "All rounds" rates every game played so far, so it compares across rounds. Time cap: ${cap}. A bot that goes over it, throws, hangs or fails to load forfeits the game (a loss).`, ''];
+        `Elo = Bradley-Terry, the mean of the arena's own bots pinned to 1500. "All rounds" rates every game played so far, so it compares across rounds. Time cap: ${cap}. A bot that goes over it, throws, hangs or fails to load forfeits the game (a loss).`, ''];
     if (!rd.bots.some((b) => b.rank !== null)) {
         L.push(`No rated games yet${rd.games ? ` (${rd.games} finished, none rated)` : ''}.`, '');
     }
@@ -532,4 +536,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };
+module.exports = { cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

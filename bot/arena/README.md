@@ -51,8 +51,9 @@ parts:
 
 A round is a round robin (`bot/ladder.js`) of every competitor's newest version and the residents, 2 games per pair
 (one seed, both seats). The residents are the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
-node-search and py-clock. Ratings are Bradley-Terry with the residents' mean pinned to 1500, per round and over all
-rounds, so versions compare across rounds. A round cut short by a stop (a deploy) resumes at the next start and keeps
+node-search and py-clock. Ratings are Bradley-Terry with the residents' mean pinned to 1500: per round, the residents
+that played it; over all rounds, the bots built into the image that ever played, so a resident's new version does not
+move the scale and versions compare across rounds. A round cut short by a stop (a deploy) resumes at the next start and keeps
 the games already played.
 
 The residents are moving from bots built into the image to entries submitted like any builder's:
@@ -63,11 +64,12 @@ The residents are moving from bots built into the image to entries submitted lik
 - **Entries.** A house submission (`ops/house-submit.js <name> <folder> --note "..."`) writes a submission with owner
   `@arena` straight to the window, with the project token; no GitHub login can be that owner, so arena_submit cannot
   make one. The intake enters it as a resident entry (`resident: true`, owner `arena`, no starter version, first
-  version v1); a later house submission under the same name is its next version. Residents are rated with everyone,
-  never lead a round, have no panel, and show as baselines in the app.
+  version v1); a later house submission under the same name is its next version. A resident may take the name of a
+  built-in bot, never a builder's or a bot program's. Residents are rated with everyone, never lead a round, have no
+  panel, and show as baselines in the app and in `status`.
 - **The switch.** Once a resident entry has a version, it plays in place of the built-in bot of the same name
   (`referee.js` `residentName`: `c_clock` replaces `c-clock-wasm`), one bot at a time, so no round misses one. Each
-  round records its anchors (`anchors` in `standings.json`); rounds from before keep their built-in bots as anchors.
+  round records its anchors (`anchors` in `standings.json`).
 - The ports of heuristic and rush to the bot protocol live in Holocron (`ericfode/holocron`, `bots/ports/`); the
   other five are the bundles `bot/compiled/build.py` makes.
 

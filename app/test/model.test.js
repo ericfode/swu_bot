@@ -182,17 +182,23 @@ test('buildModel: the arena\'s own bots (resident entries) are no builders; each
     const a = model.buildModel(tinySources(), { arena: { roster, versions } }, null).arena;
     assert.deepEqual(a.competitors.map(c => c.name), ['kim_b']);
     assert.deepEqual(a.baselines, ['heuristic-v2', 'c_clock-v1', 'rush', 'py-clock-wasm'], 'rush has no version yet: the built-in one still plays');
+    const off = { ...roster, agents: [{ name: 'heuristic', resident: true, withdrawn: [2] }, { name: 'c_clock', resident: true, withdrawn: [1] }] };
+    assert.deepEqual(model.buildModel(tinySources(), { arena: { roster: off, versions } }, null).arena.baselines, ['heuristic-v1', 'rush', 'c-clock-wasm', 'py-clock-wasm'],
+        'a withdrawn version is not in play; a resident with none left gives its place back to the built-in bot');
 });
 
-test('arenaHistory: a round\'s own anchors pin it, and an old round without them is pinned by its bots with no builder', () => {
+test('arenaHistory: the bots built into the image anchor every round, as in the referee, so a resident\'s new version moves no one', () => {
     const g = (a, b, score) => ({ a, b, score });
     const rounds = [
         { round: 0, bots: [{ name: 'x-v1', agent: 'x' }, { name: 'base1', agent: null }], results: [g('x-v1', 'base1', 1), g('base1', 'x-v1', 1), g('x-v1', 'base1', 1)] },
-        { round: 1, anchors: ['base1-v1'], bots: [{ name: 'x-v1', agent: 'x' }, { name: 'base1-v1', agent: null }], results: [g('x-v1', 'base1-v1', 0), g('base1-v1', 'x-v1', 1)] },
+        { round: 1, anchors: ['base1-v1'], bots: [{ name: 'x-v1', agent: 'x' }, { name: 'base1-v1', agent: null, resident: 'base1' }], results: [g('x-v1', 'base1-v1', 0), g('base1-v1', 'x-v1', 1)] },
+        { round: 2, anchors: ['base1-v2'], bots: [{ name: 'x-v1', agent: 'x' }, { name: 'base1-v2', agent: null, resident: 'base1' }], results: [g('x-v1', 'base1-v2', 1), g('base1-v2', 'x-v1', 1)] },
     ];
     const h = model.arenaHistory({ rounds }, []);
-    assert.equal(Math.round(h[0].ratings.base1), 1500, 'only the built-in bot anchors the old round');
-    assert.ok(Math.abs((h[1].ratings.base1 + h[1].ratings['base1-v1']) / 2 - 1500) <= 1);
+    assert.deepEqual(h.map(x => Math.round(x.ratings.base1)), [1500, 1500, 1500], 'the built-in bot anchors the old round and the ones after');
+    // an arena that never had bots built in: its first round's own bots
+    const fresh = model.arenaHistory({ rounds: rounds.slice(1) }, []);
+    assert.deepEqual(fresh.map(x => Math.round(x.ratings['base1-v1'])), [1500, 1500]);
 });
 
 test('buildModel: the hosted arena takes its phase and round from arena status, and an old tournament is only an archive', () => {

@@ -130,6 +130,24 @@ function versionsOf(agent) {
         .sort((a, b) => a - b);
 }
 
+/** The resident entry that replaces a bot built into the image: the same bot, entered as a submission (c-clock-wasm: c_clock). */
+const residentName = (baseline) => baseline.replace(/-wasm$/, '').replace(/-/g, '_');
+
+/**
+ * The arena's own bots in play: each resident entry's newest version it has not withdrawn, then the built-in baselines
+ * that no such version replaces. referee.js lineup fields the same bots (and skips a version it cannot load).
+ */
+function ownBots(r = roster()) {
+    const fielded = new Map();
+    for (const a of r.agents.filter((x) => x.resident)) {
+        const v = versionsOf(a.name).filter((n) => !(a.withdrawn ?? []).includes(n)).pop();
+        if (v !== undefined) {
+            fielded.set(a.name, `${a.name}-v${v}`);
+        }
+    }
+    return [...fielded.values(), ...r.baselines.filter((b) => !fielded.has(residentName(b)))];
+}
+
 const exists = (file) => fs.existsSync(file);
 
 /** Creates dir; false when it already exists (a cheap claim on a name, e.g. a new competitor's folder). */
@@ -262,6 +280,6 @@ function readJsonl(file) {
 }
 
 module.exports = {
-    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeAtomic, writeJson, readJson, roster, updateRoster, versionsOf,
+    HOME, AGENTS, VERSIONS, ROSTER, RESULTS, PUBLIC_RESULTS, writeAtomic, writeJson, readJson, roster, updateRoster, versionsOf, residentName, ownBots,
     exists, claimDir, writeFiles, mirror, removeDir, removeTree, stagingDir, copyBot, promote, appendJsonl, readJsonl, withLock
 };

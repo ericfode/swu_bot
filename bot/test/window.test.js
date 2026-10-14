@@ -852,7 +852,7 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
     const w = makeWindow('w-submit', { wakeGames: () => wakes++ });
     const { go, close } = await serve(w);
     try {
-        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['Kim-B', 'lee', 'kim-b-x'] }));
+        w.store.putDoc('admin', 'invites', JSON.stringify({ logins: ['Kim-B', 'lee', 'kim-b-x', 'house'] }));
         w.store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'duel_opus', owner: null }, { name: 'kim_b_two', owner: 'github:kim-b' }, { name: 'kim_b_old', owner: 'github:someone' }] }));
         const kim = await mcpToken(w, go, 'Kim-B');
         const lee = await mcpToken(w, go, 'lee');
@@ -922,6 +922,8 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
         assert.strictEqual((await go(`/api/docs/submissions/${house.id}`, { method: 'PUT', token: 'push-secret', body: JSON.stringify({ ...house, state: 'checking' }) })).status, 200);
         assert.strictEqual(wakes, woken + 1, 'only a new one');
         assert.deepStrictEqual((await call(kim, 'arena_my_submissions')).value.map((x) => x.id).includes(house.id), false, 'no login is @arena');
+        const houseLogin = await mcpToken(w, go, 'house');
+        assert.deepStrictEqual((await call(houseLogin, 'arena_my_submissions')).value, [], 'nor @house, whose ids would match');
     } finally {
         await close();
     }

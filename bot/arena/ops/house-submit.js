@@ -112,6 +112,12 @@ async function main(argv) {
 
 module.exports = { houseDoc };
 if (require.main === module) {
+    const env = require('../push').proxyEnv(process.env);
+    if (env !== process.env) {
+        // Node's fetch only uses HTTPS_PROXY when NODE_USE_ENV_PROXY is set at start: run again with it (as push.js does)
+        const r = require('child_process').spawnSync(process.execPath, process.argv.slice(1), { stdio: 'inherit', env });
+        process.exit(r.status ?? 1);
+    }
     main(process.argv.slice(2)).catch((e) => {
         console.error(`house-submit: ${e.message}`);
         process.exit(1);
