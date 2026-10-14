@@ -104,8 +104,12 @@ def stop_features(msg):
 
 class ResourcePolicy:
     def __init__(self, path, meta=None):
-        with open(path) as fh:
-            self.m = json.load(fh)
+        # "rule": bot/players/heuristic.js instead of a fitted model (resource every time, lowest keepScore first)
+        if path == "rule":
+            self.m = {"w": [0.0] * len(FEATS), "card": {}, "stop": [-10.0, 0.0, 0.0, 0.0], "rule": True}
+        else:
+            with open(path) as fh:
+                self.m = json.load(fh)
         self.meta = meta if meta is not None else load_card_meta()
         self.w = np.asarray(self.m["w"], np.float64)
         self.stop_w = np.asarray(self.m["stop"], np.float64)
@@ -114,7 +118,10 @@ class ResourcePolicy:
         aspects = my_aspects(msg, self.meta)
         me = ((msg.get("state") or {}).get("players") or {}).get(msg.get("you")) or {}
         hand = [c.get("s") for c in me.get("hand") or []]
-        return [float(np.dot(self.w, card_features(s, self.meta, aspects, hand))) + self.m["card"].get(s, 0.0) for _, s in cards]
+        xs = [card_features(s, self.meta, aspects, hand) for _, s in cards]
+        if self.m.get("rule"):
+            return [x[7] * 3 - x[4] * 1.5 - float(x[0] * 8 <= 3) + x[0] * 8 * 0.3 for x in xs]
+        return [float(np.dot(self.w, x)) + self.m["card"].get(s, 0.0) for x, (_, s) in zip(xs, cards)]
 
     def choose(self, msg):
         prompt = msg.get("prompt") or {}
