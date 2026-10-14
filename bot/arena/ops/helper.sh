@@ -249,6 +249,18 @@ run() {
             platform="--platform linux/amd64"
         fi
         echo "playing with $slots slots; Ctrl-C stops (games held go back to the machine within 90 s)"
+        # A container left by an earlier run (its terminal closed, which ends `docker run` but not the container) would
+        # take the name: docker stop lets it hand its seeds back first
+        if docker container inspect swu-helper >/dev/null 2>&1; then
+            echo "stopping the helper container an earlier run left behind"
+            docker stop -t 30 swu-helper >/dev/null 2>&1 || true
+            n=0
+            while docker container inspect swu-helper >/dev/null 2>&1 && [ "$n" -lt 30 ]; do
+                sleep 1
+                n=$((n + 1))
+            done
+            docker rm -f swu-helper >/dev/null 2>&1 || true
+        fi
         code=0
         # shellcheck disable=SC2086
         $awake docker run --rm --name swu-helper $platform $net \
