@@ -20,6 +20,28 @@ test('bradleyTerry: a bot with no games stays at the mean (prior)', () => {
     assert.ok(Math.abs(r.c.rating - 1500) < 5);
 });
 
+test('arenaHistory: the rating after each round matches the referee (all rounds so far, baselines pinned at 1500)', () => {
+    // the referee's all-round rating (bot/arena/referee.js anchoredBT and globalElo): bot/ratings.js, then the baselines'
+    // mean moved to 1500
+    const { bradleyTerry } = require('../../bot/ratings');
+    const referee = results => {
+        const names = [...new Set(results.flatMap(x => [x.a, x.b]))], bt = bradleyTerry(names, results), shift = 1500 - (bt.base1 + bt.base2) / 2;
+        return Object.fromEntries(names.map(n => [n, Math.round(bt[n] + shift)]));
+    };
+    const g = (a, b, score) => ({ a, b, score });
+    const rounds = [
+        { round: 0, ladderId: 'arena-r0', results: [g('x-v1', 'base1', 1), g('base2', 'x-v1', 1), g('base1', 'base2', 1), g('x-v1', 'base2', 0)] },
+        { round: 1, ladderId: 'arena-r1', results: [g('x-v2', 'base1', 1), g('base2', 'x-v2', 0), g('x-v2', 'base2', 1), g('base1', 'base2', 0)] },
+        { round: 2, ladderId: 'arena-h', pool: 'holdout', results: [g('x-v2', 'base1', 0)] },
+    ];
+    const h = model.arenaHistory({ rounds }, ['base1', 'base2']);
+    assert.deepEqual(h.map(x => x.round), [0, 1], 'the held-out round is left out');
+    assert.equal(h[0].ratings['x-v2'], undefined, 'a version has no rating before its first round');
+    assert.deepEqual(h[0].ratings, referee(rounds[0].results));
+    assert.deepEqual(h[1].ratings, referee([...rounds[0].results, ...rounds[1].results]), 'after the newest round it is the standings rating');
+    assert.ok(Math.abs((h[1].ratings.base1 + h[1].ratings.base2) / 2 - 1500) <= 1);
+});
+
 test('canonical: the Atlas naming rule', () => {
     assert.equal(model.canonical('random-a', false), 'random');
     assert.equal(model.canonical('random', true), 'random');

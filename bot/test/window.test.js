@@ -416,6 +416,30 @@ test('a feed token writes only what carries its name, and reads like a friend', 
     }
 });
 
+test('a feed\'s person names go to admin/people, which only an admin reads; the run keeps "opponent"', async () => {
+    const w = makeWindow('w-names');
+    const { go, close } = await serve(w);
+    try {
+        const friend = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const put = (games) => go('/api/docs/runs/karabast', { method: 'PUT', token: 'feed-secret', body: JSON.stringify({ id: 'karabast', createdAt: '2026-10-14T00:00:00Z', bots: ['c-clock'], games }) });
+        const g = (id, person) => ({ id, p1: 'c-clock', p2: 'opponent', outcome: 'won', winnerSeat: 'p1', person });
+        assert.strictEqual((await put([g('karabast-1', 'Zed Example'), g('karabast-2', 'x'.repeat(65)), g('karabast-3', 'a\nb'), g('karabast-4', '  '), g('karabast-5', 7)])).status, 200, 'a bad name is dropped, never the run');
+        assert.ok(!w.store.getDoc('runs', 'karabast').includes('Zed'), 'the run document never holds a name');
+        const names = async (who) => { const r = await go('/api/docs/admin/people', who); return r.status === 200 ? (await r.json()).result.names : r.status; };
+        assert.deepStrictEqual(await names({ cookie: eric }), { 'karabast-1': 'Zed Example' }, "Eric's sign-in reads them");
+        assert.deepStrictEqual(await names({ token: 'admin-secret' }), { 'karabast-1': 'Zed Example' });
+        for (const who of [{ cookie: friend }, { token: 'push-secret' }, { token: 'feed-secret' }]) {
+            assert.strictEqual(await names(who), 403, JSON.stringify(who));
+        }
+        // a later list keeps the names it no longer carries, and adds new ones
+        assert.strictEqual((await put([g('karabast-6', 'Yan Example')])).status, 200);
+        assert.deepStrictEqual(await names({ cookie: eric }), { 'karabast-1': 'Zed Example', 'karabast-6': 'Yan Example' });
+    } finally {
+        await close();
+    }
+});
+
 test('people are never named to readers: writers read back their own bytes, everyone else reads "a person"', async () => {
     const w = makeWindow('w-people');
     const { go, close } = await serve(w);
@@ -1025,6 +1049,11 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
         const listed = (await (await go('/api/apps', { cookie: session('kim-b') })).json()).result;
         assert.strictEqual(listed.mcp, `${site}/mcp`);
         assert.deepStrictEqual(listed.apps.map((a) => [a.app, a.site]), [['Claude', 'claude.ai']]);
+        // the Build a bot page lists what an app can do from the server's own tools: every one, and only submit writes
+        const mcpList = (await rpc(tok3.access_token, 'tools/list')).result.tools;
+        assert.deepStrictEqual(listed.tools.map((t) => t.name), mcpList.map((t) => t.name));
+        assert.deepStrictEqual(listed.tools.filter((t) => !t.readOnly).map((t) => t.name), ['arena_submit']);
+        assert.ok(listed.tools.every((t) => t.does && !/\n/.test(t.does)));
         assert.deepStrictEqual((await (await go('/api/apps', { cookie: session('ericfode') })).json()).result.apps, [], 'only your own');
         const drop = (cookie, id, origin = site) => go('/api/apps', { method: 'POST', cookie, origin, body: JSON.stringify({ disconnect: id }) });
         assert.strictEqual((await drop(session('kim-b'), listed.apps[0].id, 'https://evil.example')).status, 403);

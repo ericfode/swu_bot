@@ -109,6 +109,31 @@ function feedRun(doc, feed, id) {
 }
 
 /**
+ * A feed's game row may carry the person's name on karabast.net (`person`). It never goes into the run document: the
+ * window keeps it in admin/people, {names: {<game id>: name}}, which only an admin reads (Eric's sign-in shows it on the
+ * Vs people page). Friends, view links, apps, the project token and the app's model still see "opponent".
+ */
+const PEOPLE_MAX = 20000;
+const personName = (x) => (typeof x === 'string' && x.length <= 64 && !/[\u0000-\u001f\u007f]/.test(x) && x.trim() ? x.trim() : null);
+function keepPeopleNames(store, games) {
+    const prev = parseOr(store.getDoc('admin', 'people'), null)?.names;
+    const names = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {};
+    let changed = false;
+    for (const g of games) {
+        const name = personName(g?.person);
+        if (name && names[g.id] !== name) {
+            delete names[g.id]; // a renamed game moves to the end, so the oldest names are the ones dropped
+            names[g.id] = name;
+            changed = true;
+        }
+    }
+    if (changed) {
+        const ids = Object.keys(names).slice(-PEOPLE_MAX);
+        store.putDoc('admin', 'people', JSON.stringify({ names: Object.fromEntries(ids.map((k) => [k, names[k]])), updatedAt: new Date().toISOString() }));
+    }
+}
+
+/**
  * Writes come from programs with a bearer token; a session cookie only ever reads, whatever its role (the one exception
  * is an admin's change to the invite list, share() in createWindow). A feed token
  * (an outside machine, auth.js) writes only run documents, lens documents and replays named after it: <feed> or
@@ -853,7 +878,9 @@ function createWindow(opts = {}) {
         } else {
             need(req.method === 'GET', 'bad_request', 'GET, or POST {disconnect: id}');
         }
-        return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login) } }, req);
+        // the tools a connected app gets, from the server's own list, so the Build a bot page cannot drift from it
+        const tools = mcpTools.map((t) => ({ name: t.name, does: String(t.description).split(/(?<=\.)\s/)[0], readOnly: t.annotations?.readOnlyHint === true }));
+        return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login), tools } }, req);
     }
 
     function sendJson(res, code, body, req) {
@@ -1027,6 +1054,7 @@ function createWindow(opts = {}) {
                     need(run, 'bad_request', `a run document needs games: [{id: "${who.feed}-<id>", p1, p2, outcome: running|won|draw|abandoned, winnerSeat, rounds, steps, error}] with distinct ids, a createdAt date, and seats (and bots, if any) named in plain words (WINDOW.md, "Outside machines")`);
                     // the run keeps which feed sent it, so the app never rates its games (model.cjs)
                     text = JSON.stringify(run);
+                    keepPeopleNames(store, doc.games);
                 } else if (ns === 'runs' && doc && typeof doc === 'object' && peopleRun(id, doc)) {
                     // a run against people sent with the project token: it must name our bots, and is stored with every
                     // other seat as "opponent", like a feed's run, so no read path (the app's model included) sees a name

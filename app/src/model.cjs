@@ -70,7 +70,7 @@
 
     // ---------- ratings ----------
     // Bradley-Terry on the Elo scale (MM algorithm, prior 1, as bot/ratings.js), plus a standard error per bot.
-    function bradleyTerry(names, results, { prior = 1, iters = 500, mean = 1500 } = {}) {
+    function bradleyTerry(names, results, { prior = 1, iters = 500, mean = 1500, anchor = null } = {}) {
         const n = names.length, idx = new Map(names.map((x, i) => [x, i]));
         const wins = new Array(n).fill(prior / 2), pair = new Map();
         for (const g of results) {
@@ -86,13 +86,39 @@
             let delta = 0; for (let i = 0; i < n; i++) delta = Math.max(delta, Math.abs(next[i] - gamma[i]));
             gamma = next; if (delta < 1e-10) break;
         }
-        const S = 400 / Math.LN10, lg = gamma.map(g => S * Math.log(g)), shift = mean - lg.reduce((a, x) => a + x, 0) / (n || 1);
+        // anchor: names whose mean is pinned at `mean` (the arena pins its baselines), else every name's
+        const S = 400 / Math.LN10, lg = gamma.map(g => S * Math.log(g)), pin = (anchor || []).filter(x => idx.has(x)).map(x => lg[idx.get(x)]);
+        const shift = mean - (pin.length ? pin.reduce((a, x) => a + x, 0) / pin.length : lg.reduce((a, x) => a + x, 0) / (n || 1));
         const out = {};
         names.forEach((name, i) => {
             let info = prior * gamma[i] / (gamma[i] + 1) ** 2;
             for (const [j, c] of opp[i]) info += c * gamma[i] * gamma[j] / (gamma[i] + gamma[j]) ** 2;
             out[name] = { rating: Math.round(lg[i] + shift), se: Math.round(S / Math.sqrt(info || 1e-9)) };
         });
+        return out;
+    }
+
+    // The arena's all-round rating after each round: Bradley-Terry over every rated game of that round and the ones before
+    // it, the baselines' mean pinned at 1500, as the referee rates all rounds (bot/arena/referee.js globalElo); held-out
+    // rounds are left out there too. After the newest round it is the standings' own rating. Rounds already rated are
+    // cached by their games, since the window rebuilds the model every few seconds while a round plays.
+    const HISTORY = new Map();
+    function arenaHistory(st, baselines) {
+        const out = [], results = [];
+        let key = (baselines || []).join();
+        for (const rd of (st?.rounds || []).filter(r => r.pool !== 'holdout')) {
+            const rs = rd.results || [];
+            results.push(...rs);
+            key += `|${rd.ladderId ?? rd.round}:${rs.length}:${rs.reduce((a, x) => a + x.score, 0)}`;
+            if (!results.length) continue;
+            const names = [...new Set(results.flatMap(x => [x.a, x.b]))];
+            if (!HISTORY.has(key)) {
+                const bt = bradleyTerry(names, results, { anchor: baselines });
+                HISTORY.set(key, Object.fromEntries(names.map(x => [x, bt[x].rating])));
+                if (HISTORY.size > 400) HISTORY.delete(HISTORY.keys().next().value);
+            }
+            out.push({ round: rd.round, ratings: HISTORY.get(key) });
+        }
         return out;
     }
 
@@ -231,7 +257,7 @@
             phase, hosted, tournament: T ? { id: T.id, title: T.title, task: T.task, plannedRounds: T.plannedRounds, roundMinutes: T.roundMinutes, rounds: T.rounds, rules: T.rules ?? A.standings?.tournament?.rules ?? null } : null,
             current: cur, deadline: phase === 'work' ? cur?.workEnd : null,
             competitors, baselines: A.roster?.baselines || [], thinkCapMs: A.roster?.thinkCapMs ?? null,
-            standings: A.standings || null, archived: A.archived || null, reports: A.rounds || {}, runs: runInfo.filter(r => r.kind === 'arena').map(r => r.id),
+            standings: A.standings || null, history: arenaHistory(A.standings, A.roster?.baselines || []), archived: A.archived || null, reports: A.rounds || {}, runs: runInfo.filter(r => r.kind === 'arena').map(r => r.id),
         };
 
         // research: Lean findings and the Atlas
@@ -358,6 +384,6 @@
         };
     }
 
-    const api = { loadExtra, buildModel, bradleyTerry, guessFamily, canonical, FAMILIES, evName, slimState, fullState, publicModel, publicPanel };
+    const api = { loadExtra, buildModel, bradleyTerry, arenaHistory, guessFamily, canonical, FAMILIES, evName, slimState, fullState, publicModel, publicPanel };
     if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SWUApp = api;
 })(typeof window !== 'undefined' ? window : globalThis);
