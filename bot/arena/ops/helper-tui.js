@@ -14,7 +14,7 @@
  * Keys: q quit, + and - choose the slots (Enter restarts the helper with them, and helper.sh keeps the choice in
  * ~/.config/swu-helper/slots), l the log, ? help. No packages: Node 18 or later.
  */
-const { spawn, spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -1110,10 +1110,12 @@ function main(argv) {
             startHelper();
         }
     });
+    // The terminal closed (or someone stopped the view): `docker stop` runs on its own, detached, since this process may
+    // be killed before it would finish, and a container outlives the `docker run` that started it.
     for (const sig of ['SIGTERM', 'SIGHUP']) {
         process.on(sig, () => {
             if (mode === 'run' && helper) {
-                spawnSync('docker', ['stop', '-t', '30', CONTAINER], { stdio: 'ignore' });
+                spawn('docker', ['stop', '-t', '30', CONTAINER], { stdio: 'ignore', detached: true }).unref();
                 try {
                     process.kill(-helper.pid, 'SIGINT');
                 } catch {

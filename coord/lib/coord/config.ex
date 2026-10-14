@@ -39,6 +39,8 @@ defmodule Coord.Config do
   def gamesctl, do: Path.join(app(), "bot/arena/gamesctl.js")
   def play_seed, do: Path.join(app(), "bot/arena/play-seed.js")
   def helper_dir, do: Path.join(data(), "helper")
+  @doc "The browser swarm's files, built with this image (Dockerfile.games: bot/swarm/pack.js and build.js)."
+  def swarm_dir, do: Path.join(app(), "build/swarm")
 
   @doc """
   The build this release runs (Dockerfile.games writes the commit to /app/BUILD_SHA): GAMES_BUILD when set, else
