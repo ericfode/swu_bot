@@ -25,6 +25,8 @@ const all = (k) => argv.flatMap((a, i) => (a === k ? [argv[i + 1]] : []));
 const PORT = Number(arg('--port', process.env.PORT || 5190));
 const FILES = path.resolve(arg('--files', path.join(__dirname, '..', '..', 'build', 'swarm')));
 const SEEDS = Number(arg('--seeds', 4));
+// --asleep S: the stand-in machine does not answer for its first S seconds, as a games machine between rounds
+const AWAKE_AT = Date.now() + Number(arg('--asleep', 0)) * 1000;
 const manifest = JSON.parse(fs.readFileSync(path.join(FILES, 'manifest.json'), 'utf8'));
 // each start of the dev server is its own build, so a browser never keeps files from an earlier start (the window's
 // URLs name the build and browsers keep their files)
@@ -66,6 +68,10 @@ const readAll = (req) => new Promise((resolve) => {
     req.on('end', () => resolve(Buffer.concat(c)));
 });
 async function machine(req, res, url) {
+    if (Date.now() < AWAKE_AT) {
+        req.socket.destroy(); // asleep: no address, the connection fails
+        return undefined;
+    }
     if (req.headers.authorization !== 'Bearer dev') {
         return json(res, 401, { error: { code: 'unauthorized' } });
     }

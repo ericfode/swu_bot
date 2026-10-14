@@ -114,11 +114,12 @@ image() {
     fi
 }
 
-# Pulls the machine's amd64 image $1. A new build can be on the machine a little before the registry serves it (seen
-# 2026-10-14: "not found" right after a deploy, fine a minute later), so it tries 6 times, 30 s apart.
+# Pulls the machine's amd64 image $1, 6 tries 30 s apart. Each try logs in to Fly's registry again first: the login
+# `fly auth docker` leaves expires within hours, and then the registry answers "not found" for every image (seen
+# 2026-10-14: a helper that had run for hours could pull no new build until it logged in again).
 pull() {
     tries=1
-    until docker pull --quiet --platform linux/amd64 "$1" >/dev/null; do
+    until fly auth docker >/dev/null 2>&1; docker pull --quiet --platform linux/amd64 "$1" >/dev/null; do
         [ "$tries" -lt 6 ] || return 1
         tries=$((tries + 1))
         echo "could not pull $1 yet; trying again in 30 s ($tries of 6)"
