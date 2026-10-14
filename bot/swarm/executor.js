@@ -7,7 +7,8 @@
  * From the page: {t: 'start', api: '/api/swarm', files: {referee, bot, pack, pythonLib, pythonWasm}, build, cards, slots},
  * {t: 'stop'}, {t: 'hidden', hidden}. To the page: {t: 'state', phase, note}, {t: 'hello', name, slots},
  * {t: 'lease', slot, lease, seed, games}, {t: 'step', lease, game, step}, {t: 'game', lease, game, result},
- * {t: 'done', lease, secs, results} and {t: 'failed', lease, why}, {t: 'log', level, text}.
+ * {t: 'done', lease, secs, results} and {t: 'failed', lease, why}, {t: 'log', level, text}, and {t: 'xfer', what, up,
+ * down, ms} for each request that moved something (seed, bot, heartbeat, result, hello, engine), for the page's picture.
  *
  * A seed ends in a result only when the browser had nothing to do with how it ended: a bot that ran out of time or
  * hung, a sleep of the computer (the wall clock moved more than the monotonic one), or a game past the lease's gameMs
@@ -25,22 +26,32 @@
     async function call(method, path, body, { timeoutMs = 60000, raw = false } = {}) {
         const ctl = new AbortController();
         const timer = setTimeout(() => ctl.abort(), timeoutMs);
+        const sent = body === undefined ? undefined : JSON.stringify(body);
+        const t0 = performance.now();
         try {
             const r = await fetch(`${cfg.api}${path}`, {
                 method, credentials: 'same-origin', signal: ctl.signal,
                 headers: { 'x-swarm-build': cfg.build, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-                body: body === undefined ? undefined : JSON.stringify(body)
+                body: sent
             });
             const out = { status: r.status };
+            let down = 0;
             if (raw) {
                 out.bytes = r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
+                down = out.bytes?.length ?? 0;
             } else {
                 const text = await r.text();
+                down = text.length;
                 try {
                     out.body = text ? JSON.parse(text) : null;
                 } catch {
                     out.body = null;
                 }
+            }
+            // what went over the wire, for the page's picture of it (a claim that waited and got nothing is not shown)
+            const what = /\/bundle\//.test(path) ? 'bot' : /\/result$/.test(path) ? 'result' : /\/heartbeat$/.test(path) ? 'heartbeat' : /\/claim$/.test(path) ? (r.status === 200 ? 'seed' : null) : /\/hello$/.test(path) ? 'hello' : null;
+            if (what) {
+                post({ t: 'xfer', what, up: sent ? sent.length : 0, down, ms: Math.round(performance.now() - t0) });
             }
             return out;
         } catch (e) {
@@ -82,7 +93,10 @@
             if (!r.ok) {
                 throw new Error(`the engine pack did not load (${r.status})`);
             }
-            return r.arrayBuffer();
+            return r.arrayBuffer().then((b) => {
+                post({ t: 'xfer', what: 'engine', up: 0, down: b.byteLength, ms: 0 });
+                return b;
+            });
         });
         packBytes.then((bytes) => w.postMessage({ t: 'init', packBytes: bytes, botWorker: cfg.files.bot, pythonLib: cfg.files.pythonLib, pythonWasm: cfg.files.pythonWasm }), (e) => {
             w.onerror?.({ message: e.message });
@@ -152,6 +166,7 @@
     const slept = (a, b) => Math.abs(b.wall - a.wall - (b.mono - a.mono)) > SLEPT_MS;
 
     const active = new Set();
+    const bundleCache = new Map();
 
     async function runLease(slot, lease) {
         const t0 = performance.now();
@@ -200,11 +215,19 @@
                 throw new Error('the lease names a bundle this tab cannot read');
             }
             for (const hex of hexes) {
-                const r = await call('GET', `/bundle/${hex}`, undefined, { raw: true, timeoutMs: 120000 });
-                if (!r.bytes) {
-                    throw new Error(`bundle ${hex.slice(0, 12)} did not download (${r.status || r.error})`);
+                // a bundle's id is its sha256, so one fetched for an earlier seed is the same bytes
+                if (!bundleCache.has(hex)) {
+                    const r = await call('GET', `/bundle/${hex}`, undefined, { raw: true, timeoutMs: 120000 });
+                    if (!r.bytes) {
+                        throw new Error(`bundle ${hex.slice(0, 12)} did not download (${r.status || r.error})`);
+                    }
+                    bundleCache.set(hex, r.bytes);
+                    // the newest 64 bundles at most (each at most 64 MB, most well under 1 MB)
+                    if (bundleCache.size > 64) {
+                        bundleCache.delete(bundleCache.keys().next().value);
+                    }
                 }
-                bundles[hex] = r.bytes;
+                bundles[hex] = bundleCache.get(hex);
             }
             const deadline = Date.now() + (job.gameMs || 1800000);
             const played = await Promise.all(job.games.map((g) => playGame(lease.lease, job, g, bundles, deadline).then((x) => {
