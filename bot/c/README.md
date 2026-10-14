@@ -60,6 +60,15 @@ Maneuver picks the unit with the most On Attack abilities; and an event whose co
 upgrade or token on an enemy unit, Air Superiority without more space units) is not played. `--events` turns on only
 this fix.
 
+## c-clock2m (`--v2 --mull`)
+
+`--mull` mulligans a hand with no unit it can play in round 1 (cost 2 or less after the aspect penalty); before, a unit of
+cost 3 was enough to keep. Against people on Karabast c-clock2 kept such a hand in 8% of its games and won 13% of them,
+against 32% of the rest, while it mulliganed 2% of its hands and the people 37%. The mulligan costs nothing, and a new
+six from the Luke deck holds such a unit 91% of the time. `c-clock2m` is c-clock2 with this fix: +2.5 points on the Luke
+deck test [+0.8, +4.2] (8 games changed, all to wins), +0.8 on the standard test [−0.7, +2.2] (52.0% against c-clock2's
+51.2%).
+
 ## Files
 
 - `bot.c`: protocol loop, observation parsing, the strategy.
