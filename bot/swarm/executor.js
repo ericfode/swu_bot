@@ -28,7 +28,7 @@
         try {
             const r = await fetch(`${cfg.api}${path}`, {
                 method, credentials: 'same-origin', signal: ctl.signal,
-                headers: body === undefined ? {} : { 'content-type': 'application/json' },
+                headers: { 'x-swarm-build': cfg.build, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
                 body: body === undefined ? undefined : JSON.stringify(body)
             });
             const out = { status: r.status };
@@ -55,6 +55,7 @@
     const idle = [];
     const waiting = [];
     let made = 0;
+    let packBytes = null;
     function newReferee() {
         const w = new Worker(cfg.files.referee);
         made++;
@@ -76,7 +77,16 @@
                 ref.job?.({ t: 'error', message: err.message });
             };
         });
-        w.postMessage({ t: 'init', pack: cfg.files.pack, botWorker: cfg.files.bot, pythonLib: cfg.files.pythonLib, pythonWasm: cfg.files.pythonWasm });
+        // the pack is fetched once per tab, and each referee gets a copy of its bytes
+        packBytes ??= fetch(cfg.files.pack).then((r) => {
+            if (!r.ok) {
+                throw new Error(`the engine pack did not load (${r.status})`);
+            }
+            return r.arrayBuffer();
+        });
+        packBytes.then((bytes) => w.postMessage({ t: 'init', packBytes: bytes, botWorker: cfg.files.bot, pythonLib: cfg.files.pythonLib, pythonWasm: cfg.files.pythonWasm }), (e) => {
+            w.onerror?.({ message: e.message });
+        });
         return ref;
     }
     function takeReferee() {

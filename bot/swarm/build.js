@@ -41,7 +41,7 @@ ${entry}
 `;
 }
 
-// The referee worker's entry. Messages in: {t: 'init', pack, botWorker, pythonLib, pythonWasm} (URLs), then
+// The referee worker's entry. Messages in: {t: 'init', packBytes (or pack, its URL), botWorker, pythonLib, pythonWasm}, then
 // {t: 'play', job, game, bundles} (bundles: {hex: Uint8Array}). Out: {t: 'ready', ms, build, cards}, {t: 'step', step}
 // (the replay's step lines, for the page's live view), {t: 'result', result, replay}, {t: 'error', message}.
 const REFEREE_ENTRY = `
@@ -60,7 +60,7 @@ const filesOf = (doc) => {
 async function init(msg) {
     const t0 = performance.now();
     cfg = msg;
-    const doc = await (await fetch(msg.pack)).json();
+    const doc = msg.packBytes ? JSON.parse(new TextDecoder().decode(msg.packBytes)) : await (await fetch(msg.pack)).json();
     host = createRefereeHost({ files: filesOf(doc), makeWorker: () => new Worker(msg.botWorker), cpus: navigator.hardwareConcurrency || 1, log: { log: () => undefined, error: (...a) => console.warn('[swarm]', ...a) } });
     self.postMessage({ t: 'ready', ms: Math.round(performance.now() - t0), build: doc.build, cards: doc.cards });
 }

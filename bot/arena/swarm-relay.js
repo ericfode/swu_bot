@@ -37,6 +37,7 @@ const RESULT_MAX = 48 << 20;
 function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, machine = process.env.SWARM_GAMES_URL || 'http://swu-arena-games.internal:8090', cacheDir = null, page = path.join(__dirname, 'web', 'swarm.html'), fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const leases = new Map(); // lease id -> {login, bundles, at}
     let manifest = null; // {build, cards, at}
+    const memory = new Map(); // swarm files when there is no cache folder (tests, the dev server)
 
     const forget = () => {
         for (const [id, l] of leases) {
@@ -46,7 +47,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
     };
 
-    async function toMachine(method, p, { body = null, build = manifest?.build ?? null, timeoutMs = 60000, raw = false } = {}) {
+    async function toMachine(method, p, { body = null, build = null, timeoutMs = 60000, raw = false } = {}) {
         const headers = { authorization: `Bearer ${token}` };
         if (build) {
             headers['x-helper-build'] = build;
@@ -82,29 +83,52 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         return null;
     }
 
-    /** A swarm file of `build`, from the window's disk or else the machine (then kept). */
-    async function swarmFile(build, name) {
+    /**
+     * A swarm file of `build` and its gzip: {raw, gz} (paths on the window's disk, or buffers when there is no disk), or
+     * null. It is fetched from the machine only when `build` is the machine's build now, so one build's bytes are never
+     * kept under another's name; an older build's files are served while the window still has them. Only the newest
+     * build is kept. A fetch in progress is shared by the requests that wait for it.
+     */
+    const pending = new Map();
+    function swarmFile(build, name, current) {
         const dir = cacheDir && path.join(cacheDir, build);
-        const file = dir && path.join(dir, name);
-        if (file && fs.existsSync(file)) {
-            return fs.readFileSync(file);
+        if (dir && fs.existsSync(path.join(dir, `${name}.gz`)) && fs.existsSync(path.join(dir, name))) {
+            return Promise.resolve({ raw: path.join(dir, name), gz: path.join(dir, `${name}.gz`) });
         }
-        const r = await toMachine('GET', `/v1/swarm/${name}`, { build: null, timeoutMs: 120000, raw: true });
-        if (r.status !== 200) {
-            return null;
+        if (!dir && memory.has(`${build}/${name}`)) {
+            return Promise.resolve(memory.get(`${build}/${name}`));
         }
-        if (dir) {
-            fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(`${file}.tmp`, r.bytes);
-            fs.renameSync(`${file}.tmp`, file);
-            // keep only this build's files
-            for (const old of fs.readdirSync(cacheDir)) {
-                if (old !== build) {
-                    fs.rmSync(path.join(cacheDir, old), { recursive: true, force: true });
+        if (build !== current) {
+            return Promise.resolve(null);
+        }
+        const key = `${build}/${name}`;
+        if (!pending.has(key)) {
+            pending.set(key, (async () => {
+                const r = await toMachine('GET', `/v1/swarm/${name}`, { build: null, timeoutMs: 120000, raw: true });
+                if (r.status !== 200) {
+                    return null;
                 }
-            }
+                // made once per build, off the event loop (zlib's thread pool), not on every request
+                const gz = await new Promise((resolve, reject) => zlib.gzip(r.bytes, { level: 6 }, (e, b) => (e ? reject(e) : resolve(b))));
+                if (!dir) {
+                    const v = { raw: r.bytes, gz };
+                    memory.set(key, v);
+                    return v;
+                }
+                fs.mkdirSync(dir, { recursive: true });
+                for (const [f, bytes] of [[name, r.bytes], [`${name}.gz`, gz]]) {
+                    fs.writeFileSync(path.join(dir, `${f}.tmp`), bytes);
+                    fs.renameSync(path.join(dir, `${f}.tmp`), path.join(dir, f));
+                }
+                for (const old of fs.readdirSync(cacheDir)) {
+                    if (old !== build) {
+                        fs.rmSync(path.join(cacheDir, old), { recursive: true, force: true });
+                    }
+                }
+                return { raw: path.join(dir, name), gz: path.join(dir, `${name}.gz`) };
+            })().finally(() => pending.delete(key)));
         }
-        return r.bytes;
+        return pending.get(key);
     }
 
     const slotOf = (login, slot) => `${String(login).toLowerCase().replace(/[^a-z0-9_-]/g, '')}-${String(slot).replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 32);
@@ -118,6 +142,9 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         const person = who.via === 'cookie' && who.login && !who.guest && (who.role === 'friend' || who.role === 'admin') ? who.login : null;
         const fail = (code, status, message) => sendJson(res, status, { error: { code, message } }, req);
         if (!person) {
+            if (p === '/swarm' && !who.login && !who.guest) {
+                return false; // the window's sign-in page
+            }
             if (p === '/swarm') {
                 sendText(res, req, 403, 'text/plain; charset=utf-8', 'The swarm is for people signed in with GitHub and invited to the arena.');
                 return true;
@@ -145,15 +172,21 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
                 fail('unavailable', 503, 'the games machine is asleep: the swarm starts with the next round');
                 return true;
             }
-            const bytes = await swarmFile(build, file[1]).catch(() => null);
-            if (!bytes) {
-                fail('unavailable', 503, 'the games machine is asleep: the swarm starts with the next round');
+            const f = await swarmFile(build, file[1], m?.build ?? null).catch(() => null);
+            if (!f) {
+                // an older build than the machine's (reload the page), or a machine that does not answer
+                fail(m && build !== m.build ? 'build' : 'unavailable', m && build !== m.build ? 409 : 503, m && build !== m.build ? 'the games machine runs a newer build: reload the page' : 'the games machine is asleep: the swarm starts with the next round');
                 return true;
             }
             // the URL names the build, so a file never changes: browsers keep it
-            const gzip = /gzip/.test(req.headers['accept-encoding'] || '') && FILES[file[1]] !== 'application/wasm';
+            const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
+            const body = gzip ? f.gz : f.raw;
             res.writeHead(200, { 'content-type': FILES[file[1]], 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-            res.end(gzip ? zlib.gzipSync(bytes) : bytes);
+            if (typeof body === 'string') {
+                fs.createReadStream(body).pipe(res);
+            } else {
+                res.end(body);
+            }
             return true;
         }
         const api = /^\/api\/swarm\/(info|hello|claim|bundle\/([0-9a-f]{64})|lease\/([A-Za-z0-9_-]{1,64})\/(heartbeat|result))$/.exec(p);
@@ -162,6 +195,13 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             return true;
         }
         forget();
+        // the build the tab loaded, which the machine checks as it checks a helper's: a tab left open across a deploy is
+        // refused (409) and reloads, rather than playing with the old engine
+        const tabBuild = String(req.headers['x-swarm-build'] ?? '');
+        if (api[1] !== 'info' && !/^[0-9a-zA-Z._-]{1,64}$/.test(tabBuild)) {
+            fail('bad_request', 400, 'every swarm request names the build the tab loaded (x-swarm-build)');
+            return true;
+        }
         try {
             if (api[1] === 'info') {
                 const m = await currentManifest();
@@ -177,12 +217,12 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             }
             if (api[1] === 'hello') {
                 const body = await readBody(req, 4096);
-                const r = await toMachine('POST', '/v1/hello', { body, build: safeJson(body)?.build ?? manifest?.build });
+                const r = await toMachine('POST', '/v1/hello', { body, build: tabBuild });
                 return pass(res, req, r, sendText);
             }
             if (api[1] === 'claim') {
                 const body = safeJson(await readBody(req, 4096));
-                const r = await toMachine('POST', '/v1/claim', { body: JSON.stringify({ slot: slotOf(person, body?.slot ?? '1') }), timeoutMs: 70000 });
+                const r = await toMachine('POST', '/v1/claim', { body: JSON.stringify({ slot: slotOf(person, body?.slot ?? '1') }), build: tabBuild, timeoutMs: 70000 });
                 if (r.status === 200 && r.json && LEASE.test(String(r.json.lease))) {
                     leases.set(String(r.json.lease), { login: person, bundles: new Set((r.json.bundles ?? []).filter((h) => HEX.test(h))), at: now() });
                 }
@@ -194,7 +234,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
                     fail('not_found', 404, 'not a bundle of a seed you hold');
                     return true;
                 }
-                const r = await toMachine('GET', `/v1/bundle/${api[2]}`, { raw: true, timeoutMs: 120000 });
+                const r = await toMachine('GET', `/v1/bundle/${api[2]}`, { build: tabBuild, raw: true, timeoutMs: 120000 });
                 res.writeHead(r.status, { 'content-type': r.type, ...ISOLATED });
                 res.end(r.bytes);
                 return true;
@@ -206,7 +246,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
                 return true;
             }
             const body = await readBody(req, api[4] === 'result' ? RESULT_MAX : 4096);
-            const r = await toMachine('POST', `/v1/lease/${id}/${api[4]}`, { body: body.length ? body : '{}', timeoutMs: api[4] === 'result' ? 180000 : 30000 });
+            const r = await toMachine('POST', `/v1/lease/${id}/${api[4]}`, { body: body.length ? body : '{}', build: tabBuild, timeoutMs: api[4] === 'result' ? 180000 : 30000 });
             if (api[4] === 'result' || r.status === 410) {
                 leases.delete(id);
             } else {

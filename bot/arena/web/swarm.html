@@ -254,7 +254,7 @@ function onMessage(m) {
     setPhase(m.phase === 'connected' && leases.size ? 'playing' : m.phase, m.note ?? '');
     if (m.phase === 'stale') { $('join').disabled = true; }
   } else if (m.t === 'hello') {
-    setPhase('connected', `Connected as ${info.login}. Keep this tab open; you can hide it.`);
+    setPhase('connected', `Connected as ${info.login}. Keep this tab open while it plays.`);
   } else if (m.t === 'lease') {
     leases.set(m.lease, { seed: m.seed, at: Date.now(), games: new Map(m.games.map((g) => [g.id, { bots: [g.p1, g.p2], last: null }])) });
     setPhase('playing');

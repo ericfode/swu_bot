@@ -26,6 +26,9 @@ const PORT = Number(arg('--port', process.env.PORT || 5190));
 const FILES = path.resolve(arg('--files', path.join(__dirname, '..', '..', 'build', 'swarm')));
 const SEEDS = Number(arg('--seeds', 4));
 const manifest = JSON.parse(fs.readFileSync(path.join(FILES, 'manifest.json'), 'utf8'));
+// each start of the dev server is its own build, so a browser never keeps files from an earlier start (the window's
+// URLs name the build and browsers keep their files)
+manifest.build = `${manifest.build.slice(0, 12)}.dev${Date.now().toString(36)}`;
 
 // --- the stand-in games machine (/v1)
 const bundles = new Map(all('--bundle').map((s, i) => {
@@ -65,6 +68,9 @@ async function machine(req, res, url) {
         return json(res, 401, { error: { code: 'unauthorized' } });
     }
     const p = url.pathname.split('/').filter(Boolean);
+    if (p[1] === 'swarm' && p[2] === 'manifest.json') {
+        return json(res, 200, manifest);
+    }
     if (p[1] === 'swarm') {
         const f = path.join(FILES, path.basename(p[2] ?? ''));
         if (!fs.existsSync(f)) {
@@ -124,7 +130,8 @@ async function machine(req, res, url) {
 }
 
 // --- the window: the relay and page, signed in as one person
-const relay = createSwarmRelay({ token: 'dev', machine: `http://localhost:${PORT}`, cacheDir: null });
+// the window keeps the files on disk by build, as on Fly (WINDOW_HOME/swarm)
+const relay = createSwarmRelay({ token: 'dev', machine: `http://localhost:${PORT}`, cacheDir: path.resolve(arg('--cache', path.join(require('os').tmpdir(), 'swarm-window-cache'))) });
 const who = { via: 'cookie', login: 'devuser', role: 'admin' };
 const helpers = {
     sendJson: (res, code, body) => json(res, code, body),

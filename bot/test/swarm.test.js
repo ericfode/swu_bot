@@ -164,6 +164,13 @@ function fakeMachine() {
         if (u.pathname === '/v1/swarm/manifest.json') {
             return reply(200, { build: 'b1', cards: 'c1' });
         }
+        if (u.pathname.startsWith('/v1/swarm/')) {
+            return { status: 200, headers: { get: () => 'text/javascript' }, arrayBuffer: async () => Buffer.from(`// ${u.pathname}`) };
+        }
+        // as the helper API: every other request must run the machine's build
+        if (opts.headers['x-helper-build'] !== 'b1') {
+            return reply(409, { error: { code: 'build', want: { build: 'b1' } } });
+        }
         if (u.pathname === '/v1/claim') {
             return body.slot.endsWith('-2') ? reply(204) : reply(200, { lease: 'L1', job: { seed: 1 }, bundles: ['a'.repeat(64)], deadlineMs: 1 });
         }
@@ -190,9 +197,9 @@ function fakeRes() {
     return res;
 }
 
-async function ask(relay, method, p, who, body = '') {
+async function ask(relay, method, p, who, body = '', build = 'b1') {
     const res = fakeRes();
-    const req = { method, headers: {} };
+    const req = { method, headers: build ? { 'x-swarm-build': build } : {} };
     const helpers = {
         sendJson: (r, code, json) => r.writeHead(code) || r.end(JSON.stringify(json)),
         sendText: (r, _req, code, type, text, headers = {}) => r.writeHead(code, { 'content-type': type, ...headers }) || r.end(text),
@@ -234,6 +241,13 @@ test('the window relays a signed-in person\'s seeds, and only theirs', async () 
     assert.strictEqual((await ask(relay, 'POST', '/api/swarm/lease/L1/result', eric, '{"failed":"x"}')).status, 200);
     // a result ends the lease on the window too
     assert.strictEqual((await ask(relay, 'POST', '/api/swarm/lease/L1/heartbeat', eric)).status, 410);
+    // a tab left open across a deploy is refused by the machine, and one that names no build by the window
+    assert.strictEqual((await ask(relay, 'POST', '/api/swarm/claim', eric, '{"slot":"1"}', 'b0')).status, 409);
+    assert.strictEqual((await ask(relay, 'POST', '/api/swarm/claim', eric, '{"slot":"1"}', null)).status, 400);
+    // an anonymous visitor gets the window's sign-in page; files come only for the machine's build
+    assert.strictEqual((await ask(relay, 'GET', '/swarm', { via: 'cookie', role: 'anon' })).handled, false);
+    assert.strictEqual((await ask(relay, 'GET', '/swarm/bot-worker.js?b=b1', eric)).status, 200);
+    assert.strictEqual((await ask(relay, 'GET', '/swarm/bot-worker.js?b=b0', eric)).status, 409);
 });
 
 test('without a token the swarm is off', async () => {
