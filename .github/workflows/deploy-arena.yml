@@ -1,10 +1,11 @@
 # Builds the arena image (Dockerfile) on Fly's builders and rolls it out to swu-arena (fly.toml) after the window's
-# tests pass. Needs the repository secret FLY_API_TOKEN (`fly tokens create deploy -a swu-arena`).
+# tests pass. Pull requests that touch the same files run the tests only. Needs the repository secret FLY_API_TOKEN
+# (`fly tokens create deploy -a swu-arena`).
 name: Deploy the arena
 on:
   push:
     branches: [main]
-    paths:
+    paths: &arena-paths
       - 'bot/arena/**'
       - 'app/**'
       - 'studio/**'
@@ -15,25 +16,36 @@ on:
       - '.dockerignore'
       - 'fly.toml'
       - '.github/workflows/deploy-arena.yml'
+  pull_request:
+    paths: *arena-paths
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: deploy-arena
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('arena-test-{0}', github.ref) || 'deploy-arena' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+          package-manager-cache: false
       - run: node --test bot/test/window.test.js app/test/*.test.js
 
   deploy:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
@@ -41,7 +53,9 @@ jobs:
       - if: env.FLY_API_TOKEN == ''
         run: echo "::notice::FLY_API_TOKEN is not set, so nothing was deployed"
       - if: env.FLY_API_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - if: env.FLY_API_TOKEN != ''
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
       - if: env.FLY_API_TOKEN != ''
