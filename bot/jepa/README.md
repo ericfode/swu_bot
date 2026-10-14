@@ -283,6 +283,28 @@ Standard bot test (`npm run realdeck:test -- --bot jepa-plan-r`, 702 games vs c-
 35.2% [31.7, 38.8], Elo −106; between lisp (37.7%) and h@linear-deck-g4 (33.2%). Its deals overlap the
 gauntlets the resource model learned from, so the fresh-deal number above is the cleaner one.
 
+In 60 recorded games against c-clock (`--record`, 30 per bot), jepa-plan had 3.4 resources when round 3's action
+phase started and 4.3 at round 5, where c-clock had 4.0 and 6.0; jepa-plan-r had 4.0 and 6.0.
+
+Random decks (`results/jepa-plan-r-1`, 20 games per pair, seats alternate):
+
+```bash
+node bot/ladder.js --bots jepa-plan-r,jepa-plan,rush,rust-greedy2,h@linear-deck-g4 --games 20 --workers 4 --seed 870000 --id jepa-plan-r-1
+```
+
+| Bot | W-L | BT Elo | jepa-plan-r vs it |
+|---|---|---|---|
+| h@linear-deck-g4 | 55-25 | 1613 | 7-13 |
+| rust-greedy2 | 48-32 | 1559 | 11-9 |
+| **jepa-plan-r** | 44-36 | 1529 | |
+| rush | 27-53 | 1403 | 13-7 |
+| jepa-plan | 26-54 | 1395 | 13-7 |
+
+So the resource picker learned on real decks carries over to random decks (about +130 Elo over jepa-plan).
+
 So resourcing at all is most of the gain (12% to 36%), and learned picks add about 3 points over the hand rule.
 The new value head trained on strong-bot games (v4) plays worse than v1 with the same resource model, although it
 predicts the winner better. jepa-plan-r is the JEPA entry.
+
+`jepa-plan-reval` (registered) is jepa-plan-r with linear-deck-g4 scoring the planner's settled positions: run on the
+same deals, it says whether the value head is now the main limit.
