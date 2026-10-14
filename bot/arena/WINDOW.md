@@ -12,7 +12,7 @@ asks the same API.
 
 | Part | Sends | Through |
 |---|---|---|
-| Arena (referee + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
+| Arena (referee + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s, and the playing round's replays every 3 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (`meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
@@ -203,7 +203,8 @@ The window stores submissions; the games machine plays them. It is the Fly app `
   newest version and the residents (the roster's baselines: heuristic, rush, and c-clock, rust-greedy2, rust-search,
   node-search and py-clock built to WebAssembly in the image; `ARENA_RESIDENTS` overrides), 2 games a pair.
 - It pushes the arena's state and the round replays to the window every 20 s, like the old uplink, into the same
-  `arena`, `runs` and `ladders` collections the app reads.
+  `arena`, `runs` and `ladders` collections the app reads; while a round plays, that round's index and replays also
+  go every 3 s, and the app's Live board follows a game that is playing.
 - With nothing to do for 10 minutes (`GAMES_IDLE_MIN`) it exits, and the machine stays stopped until the next wake-up.
   A round runs at most 6 hours (`GAMES_ROUND_HOURS`).
 - Only the coordinator (the BEAM) holds the window token; its Node children reach the window through a loopback proxy

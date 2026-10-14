@@ -46,7 +46,8 @@ parts:
    joins the same round) or the last round is a day old.
 3. The push (`push.js` `arenaPusher`), every 20 s: status, standings, roster (without tokens), round reports,
    versions and panels, and the replays of the newest two rounds, into the window's `arena`, `panels`, `experiments`,
-   `runs` and `ladders` collections.
+   `runs` and `ladders` collections. While a round plays, the playing round's index and replays also go every 3 s
+   (`gamesctl push --only round`), so a viewer follows each game move by move.
 
 A round is a round robin (`bot/ladder.js`) of every competitor's newest version and the residents, 2 games per pair
 (one seed, both seats). The residents are the roster's baselines, the project's own bots: heuristic, rush, and

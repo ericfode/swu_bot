@@ -15,7 +15,8 @@ config :coord, Coord.Config,
   window_req: [plug: {Req.Test, CoordWeb.WindowProxy}],
   # no isolate.sh in the tests, root or not (its argv is tested as data)
   isolate: false,
-  tick_ms: 3_600_000
+  tick_ms: 3_600_000,
+  round_tick_ms: 3_600_000
 
 config :coord, Coord.Repo,
   database: Path.join(data, "coord.db"),

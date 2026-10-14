@@ -675,6 +675,44 @@ test('push: the arena uplink sends the roster without token hashes, the bench in
     }
 });
 
+test('push: the arena uplink\'s round pass sends only the playing round, and none of the arena\'s documents', async () => {
+    const home = process.env.ARENA_HOME, results = process.env.ARENA_RESULTS;
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'roster.json'), JSON.stringify({ thinkCapMs: 60000, baselines: ['rush'], agents: [{ name: 'aa', title: 'aa', philosophy: '', start: 'rush' }] }));
+    fs.writeFileSync(path.join(home, 'standings.json'), JSON.stringify({ rounds: [{ round: 1, ladderId: 'arena-r1' }] }));
+    for (const [id, outcome] of [['arena-r1', 'won'], ['arena-r2', 'running']]) {
+        fs.mkdirSync(path.join(results, id, 'games'), { recursive: true });
+        fs.writeFileSync(path.join(results, id, 'index.json'), JSON.stringify({ id, games: [{ id: 'g1', p1: 'aa', p2: 'rush', outcome }] }));
+        fs.writeFileSync(path.join(results, id, 'games', 'g1.jsonl'), '{"t":"header"}\n{"t":"step"}\n');
+    }
+    const w = makeWindow('w8');
+    const { srv, close } = await serve(w);
+    try {
+        process.env.SWU_WINDOW = `http://127.0.0.1:${srv.address().port}`;
+        process.env.SWU_WINDOW_TOKEN = 'push-secret';
+        delete require.cache[require.resolve('../arena/push')];
+        const pusher = require('../arena/push').arenaPusher();
+        assert.strictEqual(await pusher.once({ only: 'round' }), true);
+        assert.strictEqual(w.store.getDoc('arena', 'status'), null, 'no status');
+        assert.strictEqual(w.store.getDoc('arena', 'roster'), null, 'no roster');
+        assert.strictEqual(w.store.getDoc('runs', 'arena-r1'), null, 'not the round before');
+        assert.strictEqual(JSON.parse(w.store.getDoc('runs', 'arena-r2')).games[0].outcome, 'running');
+        fs.appendFileSync(path.join(results, 'arena-r2', 'games', 'g1.jsonl'), '{"t":"step"}\n');
+        assert.strictEqual(await pusher.once({ only: 'round' }), true);
+        assert.deepStrictEqual(w.store.listReplays('arena-r2'), ['g1']);
+        // a full pass sends the rest, the round before included
+        assert.strictEqual(await pusher.once(), true);
+        assert.ok(w.store.getDoc('arena', 'roster') && w.store.getDoc('runs', 'arena-r1'));
+    } finally {
+        delete process.env.SWU_WINDOW;
+        delete process.env.SWU_WINDOW_TOKEN;
+        fs.rmSync(path.join(results, 'arena-r1'), { recursive: true, force: true });
+        fs.rmSync(path.join(results, 'arena-r2'), { recursive: true, force: true });
+        fs.rmSync(path.join(home, 'standings.json'), { force: true });
+        await close();
+    }
+});
+
 /** Runs bot/arena/mcp.js with these arguments and answers each JSON-RPC request in turn. */
 async function mcpSession(args, env = {}) {
     const { spawn } = require('child_process');

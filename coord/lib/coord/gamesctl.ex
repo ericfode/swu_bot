@@ -177,12 +177,14 @@ defmodule Coord.Gamesctl do
 
   @doc """
   Sends the arena's documents and replays to the window through the proxy's push nonce: {:ok, true | false}
-  (arena, 2 min by default; the last push of a shutdown passes a shorter timeout).
+  (arena, 2 min by default; the last push of a shutdown passes a shorter timeout). `only: :round` sends just the
+  playing round's index and replays.
   """
   def push(arena, opts \\ []) do
     dir = Path.join([Config.data(), "tmp", "push"])
     File.mkdir_p(dir)
     args = ["push", "--arena", arena, "--state", Path.join(dir, "state.json"), "--boot", Coord.Boot.id()]
+    args = if opts[:only] == :round, do: args ++ ["--only", "round"], else: args
     timeout = Keyword.get(opts, :timeout, 120_000)
 
     case call(:push, args, as: :arena, timeout: timeout, grace: Keyword.get(opts, :grace, 2_000)) do
