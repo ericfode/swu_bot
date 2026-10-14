@@ -36,6 +36,7 @@ const RESULT_MAX = 48 << 20;
 
 function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, machine = process.env.SWARM_GAMES_URL || 'http://swu-arena-games.internal:8090', cacheDir = null, page = path.join(__dirname, 'web', 'swarm.html'), fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const leases = new Map(); // lease id -> {login, bundles, at}
+    const tabs = new Map(); // login -> {at, slots: Set}: who asked for seeds lately, for the page's picture of the swarm
     let manifest = null; // {build, cards, at}
     const memory = new Map(); // swarm files when there is no cache folder (tests, the dev server)
 
@@ -206,7 +207,19 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             if (api[1] === 'info') {
                 const m = await currentManifest();
                 const q = m ? `?b=${encodeURIComponent(m.build)}` : '';
-                sendJson(res, 200, { on: true, ready: !!m, build: m?.build ?? null, cards: m?.cards ?? null, login: person,
+                // the swarm now: people whose tabs asked for a seed in the last 90 s, and their slots
+                let people = 0;
+                let slots = 0;
+                for (const [login, t] of tabs) {
+                    const live = [...t.slots.values()].filter((at) => now() - at < 90000).length;
+                    if (live) {
+                        people++;
+                        slots += live;
+                    } else if (now() - t.at > 3600000) {
+                        tabs.delete(login);
+                    }
+                }
+                sendJson(res, 200, { on: true, ready: !!m, build: m?.build ?? null, cards: m?.cards ?? null, login: person, swarm: { people, slots },
                     files: { pack: `/swarm/engine.json${q}`, referee: `/swarm/referee-worker.js${q}`, bot: `/swarm/bot-worker.js${q}`, executor: `/swarm/executor-worker.js${q}`, pythonLib: `/swarm/python-lib.json${q}`, pythonWasm: `/swarm/python.wasm${q}` },
                     ...(m ? {} : { why: 'the games machine is asleep: the swarm starts with the next round' }) }, req);
                 return true;
@@ -222,11 +235,15 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             }
             if (api[1] === 'claim') {
                 const body = safeJson(await readBody(req, 4096));
+                const t = tabs.get(person) ?? { at: 0, slots: new Map() };
+                t.at = now();
+                t.slots.set(slotOf(person, body?.slot ?? '1'), now());
+                tabs.set(person, t);
                 const r = await toMachine('POST', '/v1/claim', { body: JSON.stringify({ slot: slotOf(person, body?.slot ?? '1') }), build: tabBuild, timeoutMs: 70000 });
                 if (r.status === 200 && r.json && LEASE.test(String(r.json.lease))) {
                     // the machine lists bundles as {id, bytes}
                     const ids = (r.json.bundles ?? []).map((b) => (typeof b === 'string' ? b : b?.id)).filter((h) => HEX.test(String(h)));
-                    leases.set(String(r.json.lease), { login: person, bundles: new Set(ids), at: now() });
+                    leases.set(String(r.json.lease), { login: person, slot: slotOf(person, body?.slot ?? '1'), bundles: new Set(ids), at: now() });
                 }
                 return pass(res, req, r, sendText);
             }
@@ -247,6 +264,8 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
                 fail('gone', 410, 'not a seed you hold');
                 return true;
             }
+            // a slot that plays a seed is still part of the swarm, though it asks for nothing meanwhile
+            tabs.get(person)?.slots.set(l.slot, now());
             const body = await readBody(req, api[4] === 'result' ? RESULT_MAX : 4096);
             const r = await toMachine('POST', `/v1/lease/${id}/${api[4]}`, { body: body.length ? body : '{}', build: tabBuild, timeoutMs: api[4] === 'result' ? 180000 : 30000 });
             if (api[4] === 'result' || r.status === 410) {

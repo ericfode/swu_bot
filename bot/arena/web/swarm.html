@@ -73,6 +73,23 @@ td .w { color: var(--gold); font-weight: 700; }
 td .f { color: var(--warn); }
 td.f { color: var(--bad); white-space: normal; }
 .empty { color: var(--faint); }
+/* what moves: the games machine, the window and this tab, with every transfer as particles along the wires */
+.flow { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 14px; display: grid; gap: 10px; }
+.flow canvas { width: 100%; height: 150px; display: block; }
+.xfer { display: flex; flex-wrap: wrap; gap: 6px 22px; font: 500 12px var(--mono); color: var(--muted); }
+.xfer b { color: var(--ink); font-size: 15px; margin-right: 5px; font-variant-numeric: tabular-nums; }
+.xfer i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.cap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 22px; align-items: center; }
+@media (max-width: 720px) { .cap { grid-template-columns: 1fr; } }
+.cap .big { font: 700 30px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.cap .big small { font: 500 12px var(--mono); color: var(--muted); margin-left: 8px; letter-spacing: .04em; }
+.stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #1a2240; margin-top: 8px; }
+.stack b { display: block; height: 100%; transition: width .8s ease; }
+.stack b.m { background: var(--accent); } .stack b.h { background: #b07cff; } .stack b.s { background: var(--gold); }
+.cap canvas { width: 100%; height: 54px; display: block; }
+.leds { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.leds span { width: 14px; height: 14px; border-radius: 4px; background: #1a2240; transition: background .3s, box-shadow .3s; }
+.leds span.on { background: var(--good); box-shadow: 0 0 10px var(--good); }
 /* the round: one cell per game, colored by who played it */
 .round { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 12px; }
 .round > header { border: 0; overflow: visible; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; justify-content: space-between; }
@@ -142,6 +159,30 @@ td.f { color: var(--bad); white-space: normal; }
     <span><b id="sSeeds">0</b>seeds</span>
     <span><b id="sRate">0</b>games per hour</span>
     <span><b id="sFailed">0</b>handed back</span>
+  </section>
+  <section class="flow" aria-label="What moves between the games machine, the window and this tab">
+    <canvas id="flow" aria-hidden="true"></canvas>
+    <div class="xfer">
+      <span><i style="background:var(--accent)"></i><b id="xEngine">0 B</b>engine</span>
+      <span><i style="background:var(--gold)"></i><b id="xSeeds">0</b>seeds handed out</span>
+      <span><i style="background:#b07cff"></i><b id="xBots">0 B</b>bots</span>
+      <span><i style="background:var(--p2)"></i><b id="xResults">0 B</b>replays sent back</span>
+      <span><i style="background:var(--ink)"></i><b id="xBeats">0</b>heartbeats</span>
+    </div>
+    <div class="cap">
+      <div>
+        <div class="label">Playing right now, across the arena</div>
+        <div class="big" id="capNow">0<small>games at once</small></div>
+        <div class="stack"><b class="m" id="capM" style="width:0%"></b><b class="h" id="capH" style="width:0%"></b><b class="s" id="capS" style="width:0%"></b></div>
+        <div class="note" id="capText">Waiting for the round's numbers…</div>
+      </div>
+      <div>
+        <div class="label">Games finished per minute (last 10 minutes)</div>
+        <canvas id="rate" aria-hidden="true"></canvas>
+        <div class="label" style="margin-top:8px">This tab's referee workers</div>
+        <div class="leds" id="leds"></div>
+      </div>
+    </div>
   </section>
   <section class="round" aria-labelledby="roundTitle">
     <header><h2 id="roundTitle">The round</h2><div class="legend" id="legend"></div></header>
@@ -321,6 +362,128 @@ function finCard(l, m, time) {
   return card;
 }
 
+// --- what moves: every transfer the executor reports becomes particles on the wires, its bytes on the counters
+const fmtBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const XF = { engine: 0, bots: 0, results: 0, seeds: 0, beats: 0 };
+const COLORS = { engine: '#8fa8ff', seed: '#ffd166', bot: '#b07cff', result: '#ff8ac9', heartbeat: '#e3e7f3', hello: '#4fd08f' };
+const particles = [];
+// from the machine's end to the tab's (down) or back (up); one dot per doubling of the bytes, a few for a heartbeat
+function spawn(kind, bytes, up) {
+  const n = kind === 'heartbeat' || kind === 'hello' ? 1 : Math.max(1, Math.min(28, Math.round(Math.log2(Math.max(1, bytes / 2048))) + 1));
+  for (let i = 0; i < n; i++) {
+    particles.push({ kind, up, t0: performance.now() + i * 70, dur: 1600 + Math.random() * 500, size: kind === 'heartbeat' ? 1.6 : 2.4 + Math.min(2.2, Math.log10(Math.max(10, bytes)) / 3), jitter: (Math.random() - 0.5) * 10 });
+  }
+}
+function onXfer(m) {
+  if (m.what === 'engine') XF.engine += m.down;
+  else if (m.what === 'bot') XF.bots += m.down;
+  else if (m.what === 'result') XF.results += m.up;
+  else if (m.what === 'seed') XF.seeds++;
+  else if (m.what === 'heartbeat') XF.beats++;
+  if (m.down > 0 && m.what !== 'heartbeat') spawn(m.what, m.down, false);
+  if (m.up > 0 && (m.what === 'result' || m.what === 'heartbeat')) spawn(m.what, m.up, true);
+  $('xEngine').textContent = fmtBytes(XF.engine);
+  $('xBots').textContent = fmtBytes(XF.bots);
+  $('xResults').textContent = fmtBytes(XF.results);
+  $('xSeeds').textContent = XF.seeds;
+  $('xBeats').textContent = XF.beats;
+}
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+(() => {
+  const c = $('flow');
+  const g = c.getContext('2d');
+  const size = () => { c.width = c.offsetWidth * devicePixelRatio; c.height = c.offsetHeight * devicePixelRatio; };
+  size(); addEventListener('resize', size);
+  const node = (x, y, w, h, title, sub, color) => {
+    g.fillStyle = '#0d1222'; g.strokeStyle = color; g.lineWidth = 1.5 * devicePixelRatio;
+    g.beginPath(); g.roundRect(x - w / 2, y - h / 2, w, h, 10 * devicePixelRatio); g.fill(); g.stroke();
+    g.fillStyle = '#e3e7f3'; g.font = `600 ${12 * devicePixelRatio}px ui-monospace, Menlo, monospace`; g.textAlign = 'center';
+    g.fillText(title, x, y - 2 * devicePixelRatio);
+    g.fillStyle = '#8b94ad'; g.font = `500 ${10 * devicePixelRatio}px ui-monospace, Menlo, monospace`;
+    g.fillText(sub, x, y + 13 * devicePixelRatio);
+  };
+  const frame = (now) => {
+    const W = c.width, H = c.height, d = devicePixelRatio;
+    g.clearRect(0, 0, W, H);
+    const y = H / 2, w = Math.min(190 * d, W * 0.28), h = 46 * d;
+    const xs = [w / 2 + 2 * d, W / 2, W - w / 2 - 2 * d];
+    // the wires, their dashes running while the tab plays
+    g.lineWidth = 2 * d; g.setLineDash([6 * d, 8 * d]); g.lineDashOffset = still ? 0 : -(now / 40) * (joined ? 1 : 0.2);
+    g.strokeStyle = '#2a3558';
+    g.beginPath(); g.moveTo(xs[0] + w / 2, y); g.lineTo(xs[2] - w / 2, y); g.stroke();
+    g.setLineDash([]);
+    const a = xs[0] + w / 2, b = xs[2] - w / 2;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      const f = (now - p.t0) / p.dur;
+      if (f < 0) continue;
+      if (f >= 1) { particles.splice(i, 1); continue; }
+      const e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+      const x = p.up ? b - (b - a) * e : a + (b - a) * e;
+      g.fillStyle = COLORS[p.kind] ?? '#fff';
+      g.globalAlpha = Math.min(1, 4 * Math.min(f, 1 - f) + 0.2);
+      g.beginPath(); g.arc(x, y + p.jitter * d * Math.sin(f * Math.PI), p.size * d, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = 1;
+    }
+    // the nodes over the wires: what passes the window goes through it
+    const r = ROUND.k == null ? 'no round' : `round ${ROUND.k} · ${ROUND.done ?? 0}/${ROUND.scheduled ?? '?'}`;
+    node(xs[0], y, w, h, 'Games machine', r, '#8fa8ff');
+    node(xs[1], y, w, h, 'Window', info?.swarm ? `${info.swarm.people} in the swarm · ${info.swarm.slots} slots` : 'relay', '#4fd08f');
+    node(xs[2], y, w, h, 'This tab', `${leasesPlaying()} games · ${slots * 2} workers`, '#ffd166');
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+})();
+function leasesPlaying() {
+  let n = 0;
+  for (const l of leases.values()) for (const g of l.games.values()) if (!g.result) n++;
+  return n;
+}
+
+// --- capacity: the round's index says who plays what right now, and how fast games finish, by who played them
+const RATE = []; // {t, m, h, s}: finished games so far, by host, at each poll
+function drawCapacity(doc) {
+  const run = { m: 0, h: 0, s: 0 }, fin = { m: 0, h: 0, s: 0 };
+  for (const g of doc.games) {
+    const k = !g.host ? 'm' : g.host === 'swarm' ? 's' : 'h';
+    (g.outcome === 'running' ? run : fin)[k]++;
+  }
+  const total = run.m + run.h + run.s;
+  $('capNow').firstChild.nodeValue = String(total);
+  for (const k of ['m', 'h', 's']) $(`cap${k.toUpperCase()}`).style.width = `${total ? (run[k] / total) * 100 : 0}%`;
+  $('capText').textContent = `games machine ${run.m} · helpers ${run.h} · swarm ${run.s}${leasesPlaying() ? ` (this tab ${leasesPlaying()})` : ''}`;
+  const t = Date.now();
+  RATE.push({ t, ...fin });
+  while (RATE.length && t - RATE[0].t > 11 * 60000) RATE.shift();
+  // games per minute for each of the last 10 minutes, stacked by host
+  const c = $('rate');
+  c.width = c.offsetWidth * devicePixelRatio; c.height = c.offsetHeight * devicePixelRatio;
+  const g = c.getContext('2d');
+  const at = (when) => { let best = RATE[0]; for (const x of RATE) if (x.t <= when) best = x; return best; };
+  const bars = [];
+  for (let i = 9; i >= 0; i--) {
+    const end = at(t - i * 60000), start = at(t - (i + 1) * 60000);
+    bars.push(['m', 'h', 's'].map((k) => Math.max(0, (end?.[k] ?? 0) - (start?.[k] ?? 0))));
+  }
+  const top = Math.max(4, ...bars.map((b) => b[0] + b[1] + b[2]));
+  const bw = c.width / 10;
+  bars.forEach((b, i) => {
+    let y = c.height;
+    [['m', '#8fa8ff'], ['h', '#b07cff'], ['s', '#ffd166']].forEach(([, color], j) => {
+      const hgt = (b[j] / top) * (c.height - 4);
+      g.fillStyle = color; g.fillRect(i * bw + 2, y - hgt, bw - 4, hgt); y -= hgt;
+    });
+  });
+}
+function drawLeds() {
+  const n = joined ? slots * 2 : 0, on = leasesPlaying();
+  const box = $('leds');
+  if (box.children.length !== n) box.replaceChildren(...Array.from({ length: n }, () => document.createElement('span')));
+  [...box.children].forEach((x, i) => x.classList.toggle('on', i < on));
+}
+setInterval(drawLeds, 500);
+setInterval(async () => { if (!document.hidden && joined) { const ok = await refresh(); if (ok) dirty = true; } }, 15000);
+
 // --- the round: every game, from the round's own index on the window (sent by the games machine every 3 s)
 const ROUND = { k: null, sig: '', seen: new Set(), mine: new Set() };
 const api = async (u) => {
@@ -350,6 +513,7 @@ function drawRound(k, doc) {
   const scheduled = Math.max(doc.games.length, Number(doc.scheduled) || (n > 1 && doc.gamesPerPairing ? (n * (n - 1) / 2) * doc.gamesPerPairing : 0));
   const kind = (g) => (g.outcome === 'running' ? 'run' : g.outcome === 'ERROR' && !g.winner ? 'x' : !g.host ? 'm' : g.host === 'swarm' ? 's' : 'h');
   const sig = `${k}|${scheduled}|${doc.games.map((g) => `${g.id}:${kind(g)}`).join(',')}|${[...ROUND.mine].length}`;
+  drawCapacity(doc);
   if (sig === ROUND.sig) return;
   ROUND.sig = sig;
   if (ROUND.k !== k) { ROUND.k = k; ROUND.seen = new Set(doc.games.filter((g) => g.outcome !== 'running').map((g) => g.id)); }
@@ -368,6 +532,8 @@ function drawRound(k, doc) {
   for (let i = doc.games.length; i < scheduled; i++) cells.push(document.createElement('span'));
   $('cells').replaceChildren(...cells);
   const done = doc.games.length - count.run;
+  ROUND.done = done;
+  ROUND.scheduled = scheduled || doc.games.length;
   $('roundTitle').innerHTML = '';
   $('roundTitle').append(`Round ${k}`, el('small', null, `${done} of ${scheduled || doc.games.length} games done`));
   const chip = (cls, text) => { const x = el('span'); x.append(el('i', cls), text); return x; };
@@ -377,6 +543,10 @@ pollRound();
 setInterval(() => { if (!document.hidden) pollRound(); }, 4000);
 
 function onMessage(m) {
+  if (m.t === 'xfer') {
+    onXfer(m);
+    return;
+  }
   if (m.t === 'state') {
     if (m.phase === 'nomachine' && joined) {
       // the round ended and the machine went to sleep: the tab keeps trying, and plays when the next round starts
