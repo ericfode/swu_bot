@@ -238,7 +238,7 @@ async function main([mode, ...args]) {
             writeTrace(file, r.events);
         }
         bad += r.ok ? 0 : 1;
-        console.log(JSON.stringify({ file: path.basename(file), ok: r.ok, steps: r.steps, ms, ...(r.diff ? { diff: r.diff } : {}), ...(r.note ? { note: r.note } : {}) }));
+        console.log(JSON.stringify({ file, ok: r.ok, steps: r.steps, ms, ...(r.diff ? { diff: r.diff } : {}), ...(r.note ? { note: r.note } : {}) }));
     }
     return bad ? 1 : 0;
 }

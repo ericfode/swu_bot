@@ -8,7 +8,7 @@ Nothing deploys it yet; switching the live site over is stage 6.
 ## The record
 
 One SQLite file (`<ARENA_DATA>/arena.db`) and a replay folder next to it (`<ARENA_DATA>/replays/<round>/<game>.jsonl.gz`).
-The schema is one migration in `src/Db.ts`.
+The schema is two migrations in `src/Db.ts`.
 
 | Table | Holds |
 | --- | --- |
@@ -22,6 +22,7 @@ The schema is one migration in `src/Db.ts`.
 | `ratings` | After each round, two ratings per version: on that round's games, and on every game of the season so far. |
 | `spots` | A version's edge in each of the Strategy Atlas's 9 spots (empty until stage 5 fills it). |
 | `settings` | Eric's arena settings. |
+| `traces` | Each game played again from its replay: whether it came out the same, the first difference, and the build that checked it. |
 
 **Ratings** (`src/Ratings.ts`) are today's referee math, in one place: Bradley-Terry by the MM algorithm on the Elo
 scale (`bot/ratings.js`), shifted so the house versions in the lineup average 1500, with a standard error per
@@ -72,12 +73,13 @@ names it. The OpenAPI document is `/api/v1/openapi.json`, with a browsable page 
 | `GET /api/v1/games?arena=&season=&round=&version=&since=&before=&limit=` | Games, newest first, a page at a time (`next` is the `before` for the next page). |
 | `GET /api/v1/games/:id`, `/games/:id/replay` | One game, and its replay as JSON lines (gzipped when the client accepts it). |
 | `GET /api/v1/export/games.jsonl?arena=&season=&after=&since=` | Every game, oldest first, one per line. Pass the last `seq` read as `after` to resume. |
+| `GET /api/v1/traces?differs=&limit=` | The nightly trace checks: counts, then each game's verdict, newest first. |
 | `POST /api/v1/rounds`, `GET/POST /api/v1/settings` | Admin only: start a rated round of versions; read or change the settings. |
 
 The MCP server at `/mcp` has the same reads as tools, built from the same schemas, so an agent and an HTTP client get
 the same records and the same refusals: `arena_arenas`, `arena_standings`, `arena_competitors`, `arena_versions`,
-`arena_version_stats`, `arena_rounds`, `arena_round`, `arena_games`, `arena_game` and `arena_replay` (a slice of a
-replay's lines). All are marked read-only.
+`arena_version_stats`, `arena_rounds`, `arena_round`, `arena_games`, `arena_game`, `arena_replay` (a slice of a
+replay's lines) and `arena_traces`. All are marked read-only.
 
 Auth is two bearer tokens from the environment (`ARENA_ADMIN_TOKEN`, `ARENA_READ_TOKEN`) for now; sign-in (GitHub,
 MCP OAuth) replaces them in stage 6.
@@ -93,13 +95,27 @@ The game player (`src/Player.ts`) runs `node bot/arena/play-seed.js` per job and
 before anything is recorded. It still asks for each bot as a resident built into the games image; stage 5 sends it
 the submitted bundle instead.
 
+## Trace checks
+
+Every night at 04:00 UTC (a cluster cron, `src/Traces.ts`) the server plays its newest 1,000 unchecked games again
+from their replays with `node bot/trace.js check`, 100 games to a process, and stores each verdict in the `traces`
+table: did every recorded move stay legal and every board come out the same, and if not, the first step that differs.
+A game is a function of its decks, seed, key and chosen moves, so a difference points at the engine, the referee or
+the recorder. Each game is checked once. The checker runs at the lowest CPU priority and stops for the night when a
+round starts, since bots are timed. On the 2,862 games of today's window, every one played out the same (about 0.5 s a
+game).
+
+`GET /api/v1/traces?differs=&limit=` and the MCP tool `arena_traces` give the counts (checked, came out differently,
+not checked yet) and the verdicts, newest games first. `npm run traces -- --limit 1000` runs the same check by hand on
+the record in `ARENA_DATA`; it needs the engine built in `ARENA_ROOT`.
+
 ## Run it
 
 Node 22.18 or newer runs the TypeScript directly (type stripping), so there is no build step.
 
 ```bash
 cd server && npm ci
-npm test                      # 16 tests: settings, ratings, the import, export API = MCP, rounds, a restart mid-round
+npm test                      # 18 tests: settings, ratings, the import, export API = MCP, rounds, a restart mid-round, trace checks
 npm run typecheck
 ARENA_ADMIN_TOKEN=a ARENA_READ_TOKEN=r npm start   # http://127.0.0.1:8787, data in ./data (ARENA_DATA)
 ```

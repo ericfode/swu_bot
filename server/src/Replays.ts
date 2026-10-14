@@ -24,6 +24,8 @@ export class Replays extends Context.Service<Replays, {
   readonly put: (round: string, game: string, text: Uint8Array) => Effect.Effect<Stored>
   /** The gzipped file, or null when it is missing. */
   readonly get: (stored: string) => Effect.Effect<Uint8Array | null>
+  /** Where a stored replay's file is, for a process that reads it (bot/trace.js); null for a path that is not one. */
+  readonly pathOf: (stored: string) => string | null
 }>()("arena/Replays") {
   static readonly layerAt = (root: string) =>
     Layer.sync(Replays, () => {
@@ -38,17 +40,21 @@ export class Replays extends Context.Service<Replays, {
         })
         return { path: rel, bytes: text.length, sha256: createHash("sha256").update(text).digest("hex") }
       })
+      const pathOf = (stored: string) => {
+        const [round, name] = stored.split("/")
+        return stored.split("/").length === 2 && SAFE.test(round) && SAFE.test(name) ? path.join(root, stored) : null
+      }
       const get = (stored: string) =>
         Effect.sync(() => {
-          const [round, name] = stored.split("/")
-          if (stored.split("/").length !== 2 || !SAFE.test(round) || !SAFE.test(name)) return null
+          const file = pathOf(stored)
+          if (file === null) return null
           try {
-            return new Uint8Array(readFileSync(path.join(root, stored)))
+            return new Uint8Array(readFileSync(file))
           } catch {
             return null
           }
         })
-      return Replays.of({ put, get })
+      return Replays.of({ put, get, pathOf })
     })
 
   /** ARENA_DATA/replays. */
