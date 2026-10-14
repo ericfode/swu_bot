@@ -173,8 +173,9 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 
 ## Deploys
 
-Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests, then
-`flyctl deploy --remote-only` builds the `Dockerfile` on Fly's builders and updates the one machine (`fly.toml`).
+Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests (pull requests
+that touch the image run them too), then on main `flyctl deploy --remote-only` builds the `Dockerfile` on Fly's
+builders and updates the one machine (`fly.toml`).
 Data lives on the volume `arena_data` at `/data/window` (documents, and replays gzipped: about 30 MB for every
 replay recorded so far).
 
