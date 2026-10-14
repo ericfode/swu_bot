@@ -41,6 +41,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import features as F  # noqa: E402
 import model as M  # noqa: E402
+import resource_policy as R  # noqa: E402
 
 
 def log(*a):
@@ -68,7 +69,7 @@ WAIT_PROMPT = {"type": "actionWindow", "actionWindow": True, "selectCardMode": N
 
 class JepaPlayer:
     def __init__(self, model_path, db, mix=0.5, temp=0.0, seed=0, score="imagined", evaluator=None, deals=1, log=None, judge="round", window_model=None,
-                 plan=None):
+                 plan=None, resource=None):
         w, self.meta = M.load_safetensors(model_path)
         self.net = M.NumpyJepa(w)
         # optional second model used only in action windows (e.g. a predictor fine-tuned on branches, which only cover windows)
@@ -90,6 +91,7 @@ class JepaPlayer:
         # wall-clock seconds per decision, and the time left (ms) below which no more simulation requests are sent
         self.plan_cfg = {"roots": 16, "follow": 6, "follow2": 3, "depth": 2, "lines": 150, "secs": 5.0, "floor": 2500, **(plan or {})}
         self.plan = []  # my remaining follow-up choices from the chosen line: [(labels_key, action_key)]
+        self.resource = R.ResourcePolicy(resource) if resource else None  # resource prompts copied from strong bots
         self.new_game(seed)
 
     def new_game(self, seed, hello=None):
@@ -394,7 +396,11 @@ class JepaPlayer:
                     pos.append({"you": me, "prompt": r.get("prompt"), "state": r.get("state"), "actions": r.get("actions")})
                 else:
                     pos.append({"you": me, "prompt": WAIT_PROMPT, "state": r.get("state"), "actions": acts})
-        if live:
+        if live and self.plan_cfg.get("scorer") == "eval":
+            # the fitted bot/eval evaluator in place of the value head (a yardstick for the value head)
+            to_act = [leaves[k][2].get("actor") if (leaves[k][2].get("prompt") or {}).get("actionWindow") else None for k in live]
+            vals[live] = M.sigmoid(np.asarray(self.evaluator.logits(me, self.decks, [m["state"] for m in pos], to_act)))
+        elif live:
             es = [F.encode(m, self.db) for m in pos]
             z = self.net.encode(np.stack([e["state"] for e in es]), np.stack([e["tok_ids"] for e in es]).astype(np.int64),
                                 np.stack([e["tok_feats"] for e in es]), np.stack([e["tok_mask"] for e in es]))
@@ -429,6 +435,10 @@ class JepaPlayer:
         if n <= 1:
             return 0, None
         t = self.think(msg)
+        if self.resource is not None:
+            j = self.resource.choose(msg)
+            if j is not None:
+                return j, t
         score = t["score"].astype(np.float64)
         self.fail = None
         window = bool((msg.get("prompt") or {}).get("actionWindow"))
@@ -535,6 +545,9 @@ def main():
                     help="what ranks the moves: the imagined next latent (the bot), the real next position from a simulation, "
                          "or the planner (whole moves with their follow-up choices, simulated)")
     ap.add_argument("--plan", default="", help="planner settings as k=v,... (roots, follow, follow2, depth, lines, secs, floor)")
+    ap.add_argument("--resource", default=None, help="answer resource prompts with this model (bot/jepa/resource_policy.py)")
+    ap.add_argument("--plan-scorer", choices=["v", "eval"], default="v",
+                    help="what scores the planner's settled positions: the value head, or the --evaluator (a yardstick)")
     ap.add_argument("--evaluator", default="linear-deck-g4", help="bot/eval evaluator for sim-eval and --log")
     ap.add_argument("--deals", type=int, default=1, help="deals of the hidden cards per move in sim modes")
     ap.add_argument("--judge", choices=["round", "window"], default="round",
@@ -546,10 +559,10 @@ def main():
     db = F.load_cards()
     log(f"{len(db)} card codes, model {a.model}, score {a.score}")
     logf = open(a.log, "a") if a.log else None
-    helper = EvalHelper(a.evaluator) if (a.score == "sim-eval" or logf) else None
+    helper = EvalHelper(a.evaluator) if (a.score == "sim-eval" or logf or (a.score == "plan" and a.plan_scorer == "eval")) else None
     plan = {k: float(v) for k, v in (kv.split("=") for kv in a.plan.split(",") if kv)}
     player = JepaPlayer(a.model, db, a.mix, a.temp, score=a.score, evaluator=helper, deals=a.deals, log=logf, judge=a.judge, window_model=a.window_model,
-                        plan={k: (v if k == "secs" else int(v)) for k, v in plan.items()})
+                        plan={**{k: (v if k == "secs" else int(v)) for k, v in plan.items()}, "scorer": a.plan_scorer}, resource=a.resource)
     thoughts = os.environ.get("SWU_JEPA_THOUGHTS")
     stdin = sys.stdin
 

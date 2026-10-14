@@ -225,4 +225,86 @@ choices, judged where the move settles, `bot/players/heuristic.js`) and answers 
 rules; it also runs inside the engine, so its lookahead sees the real hidden cards. The remaining gap (about 250 Elo)
 therefore sits in the scorer (value head against the fitted linear-deck evaluator) and the unplanned prompts, mostly
 resources, which simulations cannot reach (sims are allowed only in action windows). A run of the same planner scored
-by the linear-deck evaluator would measure the scorer's share. jepa-plan is now the JEPA entry.
+by the linear-deck evaluator would measure the scorer's share. jepa-plan was then the JEPA entry (now jepa-plan-r, below).
+
+## Learning from recorded games (jepa-plan-r)
+
+The real-deck gauntlets left thousands of recorded games between strong bots. `from_replays.js` turns them into
+training rows: each game is played again on the engine from its header (decks, seed, key), and at every recorded
+decision with more than one legal action the acting seat's view, prompt and legal actions are written as
+`collect.js` writes them for live games, with the recorded choice. A game that drifts from its recording is dropped
+(none did).
+
+```bash
+R=/mnt/project-files/human-meta/realdeck; L=/mnt/project-files/results
+node bot/jepa/from_replays.js --out data/traj/replays --workers 4 $R/ash-gauntlet-cclock-1 $R/ash-gauntlet-cclock-2 \
+  $R/ash-gauntlet-ismcts-1 $R/ash-heuristic-1 $R/ash-h4-1 $R/ash-learned-vh-1 $R/ash-rust-search-1 $R/ash-ismcts-1 \
+  $L/atlas-map-1 $L/eval-ladder-6 $L/eval-ladder-7 $L/eval-ladder-8
+python3 bot/jepa/data.py --out data/jepa/replays.npz data/traj/replays
+python3 bot/jepa/resource_policy.py fit --out bot/jepa/models/resource-v1.json data/traj/replays
+```
+
+Data: 7,840 games (1,003,147 decisions, 687 distinct deals) from 12 runs, mostly the real-deck gauntlets of c-clock,
+heuristic, h4, learned-vh, rust-search and ismcts.
+
+**Better value heads did not play better.** On held-out games of the new data:
+
+| Model | Recipe | Brier | Accuracy |
+|---|---|---|---|
+| v1 | as before (3,480 random-deck games) | 0.203 | – |
+| v1r | v1, value head refit on the new data (`--init`, `--steps 0`) | 0.171 | 0.733 |
+| v4 | trained from scratch on the new data (8,000 + 6,000 steps) | 0.146 | 0.786 |
+
+Played as the planner's scorer, none of them moved: jepa-plan 12.1%, with v1r 13.7%, and with the fitted
+linear-deck-g4 evaluator as scorer 16.4% (all against c-clock, below).
+
+**The leak was resourcing.** The planner only plans action windows; the resource prompts used the imagined score,
+which often skipped resourcing. In sample games jepa-plan had 4.3 resources at round 5, c-clock 6.0.
+`resource_policy.py` copies the resource choices of c-clock and rust-search in the recorded games: a conditional
+logit over the offered hand cards (cost bands, card type, off-aspect, second copy, space, and a weight per card seen
+at least 30 times) and a logistic model for "resource nothing" in the regroup phase. On held-out games it picks the
+teacher's card 66% of the time (features only 64%, a hand rule 64%, chance 22%) and the stop choice 97.5%.
+`--resource <model.json>` uses it at every resource prompt; `--resource rule` uses the hand rule (heuristic.js's
+keep score, resource every time) as an ablation.
+
+Fresh deals against c-clock (27 real decks from `bot/decks/ash-meta-2026-09.json`, seats alternate, one secret key
+for every run, so each bot plays the same deals; these deals are outside the gauntlets the models learned from):
+
+| Bot | Wins | Paired with jepa-plan-r (same deals) |
+|---|---|---|
+| **jepa-plan-r** (v1 + resource-v1) | 266/694 = 38.3% ± 3.6 | |
+| jepa-plan-rr (v1 + hand rule) | 247/693 = 35.6% ± 3.6 | r alone won 71, rr alone 53 |
+| jepa-plan-r4 (v4 + resource-v1) | 149/458 = 32.5% ± 4.3 (stopped) | r alone won 68, r4 alone 50 |
+| jepa-plan-eval (scorer linear-deck-g4) | 28/171 = 16.4% ± 5.5 (stopped) | |
+| jepa-plan-v1r (v1r) | 39/284 = 13.7% ± 4.0 (stopped) | |
+| jepa-plan (v1) | 32/264 = 12.1% ± 3.9 (stopped) | r alone won 82, jepa-plan alone 6 |
+
+Standard bot test (`npm run realdeck:test -- --bot jepa-plan-r`, 702 games vs c-clock):
+35.2% [31.7, 38.8], Elo −106; between lisp (37.7%) and h@linear-deck-g4 (33.2%). Its deals overlap the
+gauntlets the resource model learned from, so the fresh-deal number above is the cleaner one.
+
+In 60 recorded games against c-clock (`--record`, 30 per bot), jepa-plan had 3.4 resources when round 3's action
+phase started and 4.3 at round 5, where c-clock had 4.0 and 6.0; jepa-plan-r had 4.0 and 6.0.
+
+Random decks (`results/jepa-plan-r-1`, 20 games per pair, seats alternate):
+
+```bash
+node bot/ladder.js --bots jepa-plan-r,jepa-plan,rush,rust-greedy2,h@linear-deck-g4 --games 20 --workers 4 --seed 870000 --id jepa-plan-r-1
+```
+
+| Bot | W-L | BT Elo | jepa-plan-r vs it |
+|---|---|---|---|
+| h@linear-deck-g4 | 55-25 | 1613 | 7-13 |
+| rust-greedy2 | 48-32 | 1559 | 11-9 |
+| **jepa-plan-r** | 44-36 | 1529 | |
+| rush | 27-53 | 1403 | 13-7 |
+| jepa-plan | 26-54 | 1395 | 13-7 |
+
+So the resource picker learned on real decks carries over to random decks (about +130 Elo over jepa-plan).
+
+So resourcing at all is most of the gain (12% to 36%), and learned picks add about 3 points over the hand rule.
+The new value head trained on strong-bot games (v4) plays worse than v1 with the same resource model, although it
+predicts the winner better. jepa-plan-r is the JEPA entry.
+
+`jepa-plan-reval` (registered) is jepa-plan-r with linear-deck-g4 scoring the planner's settled positions: run on the
+same deals, it says whether the value head is now the main limit.
