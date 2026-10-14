@@ -37,7 +37,7 @@ function options(args) {
 /** Parse literal declarations without executing renderer code or guessing identities from titles. */
 function authoredCatalogue(cataloguePath) {
     let ts;
-    for (const location of ['studio/node_modules/typescript', 'viewer/node_modules/typescript', 'node_modules/typescript']) {
+    for (const location of ['studio/node_modules/typescript5']) {
         try { ts = require(path.join(repository, location)); break; } catch (error) {
             if (error.code !== 'MODULE_NOT_FOUND') throw error;
         }

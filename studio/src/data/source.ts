@@ -4,7 +4,7 @@ import type { CardTextFile } from '../lib/cardText';
 import type { End, Game, Header, Step, TournamentIndex, TournamentSummary } from './types';
 import { resultText } from './result';
 
-/** Where replays come from: the replays server (same routes as viewer/server.cjs) or fixtures baked into the build. */
+/** Where replays come from: the replays server (GET /api/tournaments and /replays/*, spec/replay-format.md) or fixtures baked into the build. */
 export interface DataSource {
     kind: 'http' | 'static';
     listTournaments(): Promise<TournamentSummary[]>;
@@ -81,7 +81,7 @@ const httpSource: DataSource = {
             const r = await fetch('/card-text.json');
             return r.ok ? await r.json() : null;
         } catch {
-            // a server without the route (viewer/server.cjs) may answer with the app's HTML
+            // a server without the route may answer with the app's HTML
             return null;
         }
     }

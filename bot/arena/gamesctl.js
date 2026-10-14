@@ -168,18 +168,19 @@ function botEnv() {
  * The round to play now: {round: K, resume, why}, or {round: null, why}. resume: round K is the last one and a stop cut
  * it short. Otherwise K is the next round, played when the lineup changed (a new or withdrawn version) or the last
  * round is older than replayMs, and only once settledSince (when the last version came in) is SETTLE_MS old. A round
- * needs at least one competitor.
+ * needs at least one competitor besides the arena's own bots.
  */
 function planRound({ replayMs, settledSince }) {
-    const { lineup } = require('./referee');
+    const { lineup, anchorsOf } = require('./referee');
     const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] });
     const last = st.rounds.at(-1);
     if (last && last.status !== 'done') {
         return { round: last.round, resume: true, why: 'resume' };
     }
     const bots = lineup();
-    const baselines = home.roster().baselines ?? [];
-    if (!bots.some((b) => !baselines.includes(b))) {
+    // the arena's own bots (residents, baselines) alone are no reason to play
+    const own = anchorsOf(bots);
+    if (!bots.some((b) => !own.includes(b))) {
         return { round: null, why: 'no-competitor' };
     }
     const before = (last?.bots ?? []).map((b) => b.name);

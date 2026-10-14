@@ -157,7 +157,7 @@ never in a thread. `<NAME>` is letters and digits only, so one feed's names neve
 hyphen. A feed token reads like a friend and writes only what carries its name, `<name>` or `<name>-<id>`:
 
 - `PUT /api/docs/runs/karabast`: the game list with `"id": "karabast"`, in the tournament index shape (`TournamentIndex`,
-  viewer/src/core/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
+  studio/src/data/types.ts), with game ids `karabast-<id>`. A game with `outcome: "running"` shows in the app's grid of
   running games; a finished one has `outcome` `"won"` (with `winnerSeat` `p1` or `p2`), `"draw"` or `"abandoned"`. The
   window keeps only the fields the app reads, each checked for its type: on the run `createdAt` (required), `bots` and
   `gamesPerPairing`; on each game `id` (distinct), `p1`, `p2`, `outcome`, `winnerSeat` (set from the outcome), `rounds`,
@@ -173,8 +173,9 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 
 ## Deploys
 
-Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests, then
-`flyctl deploy --remote-only` builds the `Dockerfile` on Fly's builders and updates the one machine (`fly.toml`).
+Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests (pull requests
+that touch the image run them too), then on main `flyctl deploy --remote-only` builds the `Dockerfile` on Fly's
+builders and updates the one machine (`fly.toml`).
 Data lives on the volume `arena_data` at `/data/window` (documents, and replays gzipped: about 30 MB for every
 replay recorded so far).
 
@@ -200,8 +201,11 @@ The window stores submissions; the games machine plays them. It is the Fly app `
   on every submission and every 6 hours; Fly's proxy starts the stopped machine for that request.
 - Every minute it runs the intake, then starts a round when the lineup changed (90 s after the last version came in,
   so a quick fix joins the same round) or the last round is a day old. Rounds are round robins of every competitor's
-  newest version and the residents (the roster's baselines: heuristic, rush, and c-clock, rust-greedy2, rust-search,
-  node-search and py-clock built to WebAssembly in the image; `ARENA_RESIDENTS` overrides), 2 games a pair.
+  newest version and the residents (the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
+  node-search and py-clock), 2 games a pair. A resident is an entry made by a house submission or, until one replaces
+  it, a bot built into the image (README.md, "The games machine").
+- A submission written straight to the `submissions` collection with the project token (`ops/house-submit.js`, the
+  arena's own bots) wakes the machine like arena_submit's, when it is new and pending.
 - It pushes the arena's state and the round replays to the window every 20 s, like the old uplink, into the same
   `arena`, `runs` and `ladders` collections the app reads; while a round plays, that round's index and replays also
   go every 3 s, and the app's Live board follows a game that is playing.

@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives the real forceteki rules engine headlessly (no web client, lobby or socket layer). Planned bot ladder: random -> heuristic -> search -> (maybe) learned policy. `bot/HANDOFF.md` has the full state, measurements and next steps; read it first (note: its layout section predates the submodule move below).
+A single-player Star Wars Unlimited (SWU) client with an AI opponent. It drives the real forceteki rules engine headlessly (no web client, lobby or socket layer). Planned bot ladder: random -> heuristic -> search -> (maybe) learned policy. `README.md` has setup and daily commands; `bot/README.md` lists the bots.
 
 ## Repo layout (tiered git repos)
 
 - `forceteki/` — **git submodule** of `ericfode/forceteki`, pinned to `2ebed8ca2` (upstream `SWU-Karabast/forceteki` plus the search-engine optimizations). It has its own `CLAUDE.md` describing the engine; that file applies when working inside it.
 - `bot/` — headless environment, recorder, bots and tournament runner (plain CommonJS JS, no build step).
-- `viewer/` — replay and tournament viewer (Vite + React + TypeScript, own `package.json`) plus a dependency-free `server.cjs`.
+- `studio/` — Holotable, the replay and tournament viewer (Vite + React + TypeScript, own `package.json`). It also builds the viewer kit (`npm --prefix studio run build:kit`) that the app and the window embed.
 - `coord/` — the games machine's Elixir coordinator (Phoenix, Oban on SQLite, FLAME): it decides when the hosted arena takes submissions, plays rounds and pushes results; `bot/arena/gamesctl.js` does that work in Node. It is the only program the games machine runs (`Dockerfile.games`, `fly.games.toml`); see `coord/README.md`.
 - `app/` — the SWU Arena app (watch the arena, read the research): one HTML file built from the shared project folder by `app/build.mjs`; see `app/README.md` and `app/DESIGN.md`.
 - `importer/` — turns captures of human games on karabast.net (KaraBuddy, SWU Forge Battle Log, socket dumps) into the replay format; see `importer/README.md` for what a one-seat capture lacks.
@@ -41,9 +41,8 @@ node bot/debug-seed.js <seed>                           # replay one seed, dump 
 
 ```bash
 npm run demo                 # 3 random bots, 4 games per pairing -> replays/demo
-npm run viewer               # build viewer/, serve on http://localhost:5180 (PORT, REPLAYS_DIR to override)
+npm run studio:dev           # Holotable on http://localhost:5190, serving replays/ itself (REPLAYS_DIR to override)
 npm run app                  # SWU Arena app -> app/dist/app.html (--public for the friends build, --data DIR)
-npm run viewer:dev           # Vite dev server; proxies /api and /replays to :5180 (run server.cjs too)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 npm run ladder -- --bots rush,aggro,tempo,control,heuristic,random --games 10   # round robin -> results JSON (see bot/README.md)
 npm run realdeck:test -- --bot <bot>   # standard bot test: 702 games vs c-clock on 27 real decks, same deals as every bot (analysis/realdeck/README.md)
@@ -53,8 +52,8 @@ npm run lint                 # Perch semantic lint with Jev (see "Linting" below
 python3 bot/compiled/build.py   # 9 bots as sandboxed WebAssembly bundles in build/compiled, played as <name>-wasm (bot/compiled/README.md)
 ```
 
-- Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format: `spec/replay-format.md`; snapshot fields: `bot/view.js`, types in `viewer/src/core/types.ts`.
-- `viewer/src/core/` (Board, CardView, Replay, api, stats) is shared by the tournament page and the single-game page; both embed the same `<Replay game={...} />`.
+- Replay format is decisions plus a compact board snapshot per step, so the viewer never needs the engine. Files are ~0.6-1.4 MB each but ~25 KB gzipped on the wire. Format: `spec/replay-format.md`; snapshot fields: `bot/view.js`, types in `studio/src/data/types.ts`.
+- `studio/src/kit/` holds the embeddable viewer (`GameViewer`); Holotable's pages and the viewer kit bundle both use it.
 - Card art comes from `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png` (`-b` suffix = deployed leader side). Tokens and unreleased sets (e.g. TS26) have no art and fall back to stat tiles automatically; Card art can also be toggled off.
 - Deep link to a step: `#/t/<tournament>/g/<game>?step=300`.
 
@@ -95,7 +94,7 @@ Usage rule for every thread. Perch (semantic lint with Jev) is advisory, never a
 - "Who must act" = whichever player has at least one legal action; the waiting player's prompt has no buttons and no selectable cards.
 - Game over is `game.winnerNames.length > 0`.
 - The bot RNG (`seededRng`) and engine RNG (`game.setRandomSeed`) are separate; seed both for reproducibility.
-- Undo/snapshots are off by default; `newGame({ undo: true })` enables `UndoMode.Full` (needed for rollback-based search).
+- Undo/snapshots are off by default; `newGame({ undo: true })` enables `UndoMode.Free` (needed for rollback-based search).
 
 Engine input is always followed by `game.continue()`. Prompt-handling rules already encoded in `env.js` that are easy to get wrong:
 
@@ -111,7 +110,7 @@ Engine input is always followed by `game.continue()`. Prompt-handling rules alre
 3. `TriggerWindowBase.js:141`: a null contract failure on "Resolve all" when both players have triggers and an Advantage token was defeated (seen in a simulation: Han Solo, It'll Work attacks Mandalorian Scout, then Opponent, then Resolve all).
 4. Sundari Palace: its "resource up to 1 card from your hand" prompt also offers the opponent's hand cards. The referee sends those to bots as hidden cards (`bot/view.js` `hiddenFrom`). Repro: `playGame` seed 22, key `6f7edba65b86e374e9df5b8ba5ca3719eb57dc9d1fb10f09301d213e5e8dce6c`, bots `heuristic` vs `py-clock`, p2's decision 59.
 5. Mystic Monastery: its action stays legal while the player already has the Force; used then, it changes nothing and does not count toward its 3 uses. When the opponent is out for the phase, the player gets the same action window again, so a bot that prefers the action over passing loops until the step cap (found by `bot/examples/search-bot.js` before its loop guard).
-6. Rollback (`UndoMode.Full`) does not restore everything: the order of simultaneous triggers, token ids made in one step, and whether an action ability "will have no effect" can come out differently after a rollback than in a game never rolled back. So the referee never rolls back the real game: every lookahead runs on a copy (`Shadow` in `bot/protocol.js`) that is rebuilt when it drifts. Seen in an ISMCTS game (seed 3005, rust-search vs ismcts-vlinear-deck). Also seen as which of several Shield tokens a hit defeats: forceteki keeps the first Shield trigger it collected, so a fresh game defeats the first Shield, and after a rollback it can defeat another one (`/mnt/project-files/omni/stress/r5-pool972/shield-probe.js`).
+6. Rollback (undo on, `UndoMode.Free`) does not restore everything: the order of simultaneous triggers, token ids made in one step, and whether an action ability "will have no effect" can come out differently after a rollback than in a game never rolled back. So the referee never rolls back the real game: every lookahead runs on a copy (`Shadow` in `bot/protocol.js`) that is rebuilt when it drifts. Seen in an ISMCTS game (seed 3005, rust-search vs ismcts-vlinear-deck). Also seen as which of several Shield tokens a hit defeats: forceteki keeps the first Shield trigger it collected, so a fresh game defeats the first Shield, and after a rollback it can defeat another one (`/mnt/project-files/omni/stress/r5-pool972/shield-probe.js`).
 7. `ItBindsAllThings.ts`: its `then` reads `thenContext.events[0].totalDistributed`, which throws `Cannot read properties of undefined (reading 'totalDistributed')` when the heal made no event, also during playability checks (`hasAnyLegalEffects`). Same shape as #1. Seen once: seed 1, key `e1540cffc63f5e63cc6cd8dad8a8f96a77f8ee3dd05da42d6c5c45747e82afc7`, a Jev look test bot vs `node-search`, step 22.
 8. `BarrissOffeeRedeemingHerself.ts` (ASH_044): its "if you do" step reads `individualEvents[0].card` before checking that anything was healed, so playing her when the heal resolves on nothing throws `Cannot read properties of undefined (reading 'card')`. It ends 36% of the real-deck games of `lando-calrissian_law_blue` (the only list in `bot/decks/` that runs her). Repro: `playGame` seed 19, decks `lando-calrissian_law_blue` vs `admiral-piett_jtl_blue`, bots `c-clock#b` vs `c-clock#a`, key `e0976551196cb25b019af62563b83e2e05c3f13d7dedaa334e7a30a0bc8ee9b3`.
 9. `JustifierRelentless.ts`: its `ifYouDoCondition` reads `.willDefeat` from an undefined event (5 of 7,020 real-deck games).

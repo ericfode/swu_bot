@@ -40,6 +40,12 @@ static int v3, eventsFix;
    it mulliganed 2% of its hands, the people 37%. The mulligan is free: a new six from this deck holds such a unit 91%
    of the time. */
 static int mullFix;
+/* --epic: a leader deploys once a game (an Epic Action), so once it has deployed it is never clicked to deploy again.
+   After its leader unit was defeated, c-clock2 kept clicking Luke Skywalker "to deploy" at the start of every action
+   window; the click only offers Luke's action ("If you attacked with a Fighter unit this phase, deal 1 damage to a
+   unit"), which does nothing before a Fighter has attacked, so it was cancelled and banned for the round. On Karabast it
+   then pinged in 9 of 247 such rounds, against 94% of the rounds before Luke deployed. */
+static int epicFix;
 
 /* ---------- observation ---------- */
 
@@ -111,6 +117,7 @@ static struct {
     char lastKey[KEYLEN];
     char banned[64][KEYLEN];
     int nbanned, bannedRound;
+    int deployedOnce; /* --epic: my leader has used its deploy */
     /* what the last action-window click was for */
     char intent[16];
     char attacker[64];
@@ -761,7 +768,11 @@ static const Act *choose_window(State *st, const Act *acts, int n) {
     }
 
     /* 2. deploy the leader as soon as it is allowed: a free unit that arrives ready */
-    if (!pick && leader && me->leaderCard && me->resTotal >= me->leaderCard->cost && !me->leaderX) {
+    if (me->leaderDep) {
+        G.deployedOnce = 1;
+    }
+    if (!pick && leader && me->leaderCard && me->resTotal >= me->leaderCard->cost && !me->leaderX &&
+        !(epicFix && G.deployedOnce)) {
         pick = leader;
         why = "deploy";
         snprintf(G.intent, sizeof G.intent, "deploy");
@@ -1443,7 +1454,12 @@ static const Act *choose_buttons(State *st, const Prompt *pr, const Act *acts, i
         if (!dep) {
             dep = find_button(acts, n, "deploy");
         }
-        if (dep && strcmp(G.intent, "ability")) return dep;
+        if (dep && strcmp(G.intent, "ability")) {
+            if (!strcmp(G.intent, "deploy")) {
+                G.deployedOnce = 1;
+            }
+            return dep;
+        }
         if (!dep && !strcmp(G.intent, "deploy")) {
             /* this leader has no deploy now: back out and keep the resources for the hand (its ability comes last) */
             const Act *c = find_button(acts, n, "cancel");
@@ -1616,6 +1632,8 @@ int main(int argc, char **argv) {
             v2 = v3 = pilotFix = uniqueFix = eventsFix = 1;
         } else if (!strcmp(argv[i], "--mull")) {
             mullFix = 1;
+        } else if (!strcmp(argv[i], "--epic")) {
+            epicFix = 1;
         } else if (!strcmp(argv[i], "--events")) {
             eventsFix = 1;
         } else if (!strcmp(argv[i], "--pilot")) {

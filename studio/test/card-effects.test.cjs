@@ -3,9 +3,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const { createRequire } = require('node:module');
-const ts = require('../../viewer/node_modules/typescript');
+const ts = require('typescript5');
 
-// Use the viewer's existing compiler to exercise the actual TS modules on Node 22, without a browser or new dependency.
+// Use TypeScript 5's compiler API (TypeScript 7 has no transpileModule) to exercise the actual TS modules on Node 22, without a browser.
 const modules = new Map();
 function loadTS(filename) {
     filename = path.resolve(filename);

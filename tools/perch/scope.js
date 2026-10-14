@@ -24,7 +24,6 @@ module.exports = {
       'bot/karabast/**', // Karabast socket client, frame reader and spectate recorder (any bot, any game)
       'bot/compiled/**', // builds any bot as a sandboxed WebAssembly bundle, and runs it
       'spec/**',
-      'viewer/**',
       'app/**', // the SWU Arena app: one page to watch the arena and read the research
       'studio/**',
       'analysis/**',
