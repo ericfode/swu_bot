@@ -35,6 +35,11 @@ static int v2, pilotFix, uniqueFix; /* --v2 = both fixes; --pilot and --unique t
    abilities, and an event whose condition fails (no enemy upgrade to defeat, not more space units) is not played.
    --events turns on only this. */
 static int v3, eventsFix;
+/* --mull: mulligan a hand with no unit I can play in round 1 (cost 2 or less). Against people on Karabast c-clock2 kept
+   such a hand in 8% of its games (it asked only for a unit of cost 3) and won 13% of them, against 32% of the rest;
+   it mulliganed 2% of its hands, the people 37%. The mulligan is free: a new six from this deck holds such a unit 91%
+   of the time. */
+static int mullFix;
 
 /* ---------- observation ---------- */
 
@@ -1228,14 +1233,15 @@ static void learn_aspects(const State *st) {
 }
 
 static const Act *choose_mulligan(const State *st, const Act *acts, int n) {
-    int cheapUnits = 0, cheap = 0;
+    int cheapUnits = 0, cheap = 0, roundOne = 0;
     for (int i = 0; i < st->s[0].nhand; i++) {
         const Card *c = st->s[0].hand[i].c;
         int ec = eff_cost(c);
         if (ec <= 3 && c && (c->types & T_UNIT)) cheapUnits++;
+        if (ec <= 2 && c && (c->types & T_UNIT)) roundOne++;
         if (ec <= 4) cheap++;
     }
-    int keep = cheapUnits >= 1 && cheap >= 2;
+    int keep = (mullFix ? roundOne : cheapUnits) >= 1 && cheap >= 2;
     const Act *b = find_button(acts, n, keep ? "keep" : "mulligan");
     return b ? b : &acts[0];
 }
@@ -1608,6 +1614,8 @@ int main(int argc, char **argv) {
             v2 = pilotFix = uniqueFix = 1;
         } else if (!strcmp(argv[i], "--v3")) {
             v2 = v3 = pilotFix = uniqueFix = eventsFix = 1;
+        } else if (!strcmp(argv[i], "--mull")) {
+            mullFix = 1;
         } else if (!strcmp(argv[i], "--events")) {
             eventsFix = 1;
         } else if (!strcmp(argv[i], "--pilot")) {
