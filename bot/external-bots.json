@@ -23,6 +23,7 @@
     "c-clock": { "cmd": "bot/c/swu-c", "args": [], "lang": "c" },
     "c-clock2": { "cmd": "bot/c/swu-c", "args": ["--v2"], "lang": "c" },
     "c-clock3": { "cmd": "bot/c/swu-c", "args": ["--v3"], "lang": "c" },
+    "c-clock2m": { "cmd": "bot/c/swu-c", "args": ["--v2", "--mull"], "lang": "c" },
     "py-clock": { "cmd": "python3", "args": ["bot/python/swu_clock.py"], "lang": "python" },
     "node-random": { "cmd": "node", "args": ["bot/examples/random-bot.js", "node-random"], "lang": "js" },
     "node-search": { "cmd": "node", "args": ["bot/examples/search-bot.js", "node-search"], "lang": "js" },
