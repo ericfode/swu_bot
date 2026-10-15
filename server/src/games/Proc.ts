@@ -29,6 +29,8 @@ export interface RunOptions {
   readonly isolate: boolean
   /** isolate.sh --tmp (default <data>/tmp/<kind>) */
   readonly tmp?: string
+  /** more paths this child must not see, on top of the config's hide list (isolated children only) */
+  readonly hide?: ReadonlyArray<string>
   readonly cwd?: string
   readonly timeoutMs?: number
   readonly graceMs?: number
@@ -154,7 +156,7 @@ export const makeProc = (c: GamesConfig): ProcService => {
         "bash", scripts(c).isolate,
         ...(o.as === "arena" ? ["--user", c.arenaUser] : []),
         "--tmp", tmp,
-        ...c.hide.flatMap((h) => ["--hide", h]),
+        ...[...c.hide, ...(o.hide ?? [])].flatMap((h) => ["--hide", h]),
         "--", ...o.argv
       ]
     }
@@ -189,14 +191,25 @@ export const makeProc = (c: GamesConfig): ProcService => {
       done({ kind: "stopped", reason: `could not start ${argv[0]}`, stdout: "" })
       return null
     }
-    const proc = spawn(exe, argv.slice(1), {
-      cwd: o.cwd ?? c.app,
-      env: { ...o.env },
-      detached: true,
-      stdio: ["ignore", "pipe", "inherit"]
-    })
+    let proc: ReturnType<typeof spawn>
+    try {
+      proc = spawn(exe, argv.slice(1), {
+        cwd: o.cwd ?? c.app,
+        env: { ...o.env },
+        detached: true,
+        stdio: ["ignore", "pipe", "inherit"]
+      })
+    } catch (e) {
+      // Node throws for some spawn failures (ENOMEM, E2BIG) and reports others as an 'error' event (below)
+      Log.error(`[${o.kind}] could not start ${argv[0]}: ${(e as Error).message}`)
+      done({ kind: "stopped", reason: "could not start", stdout: "" })
+      return null
+    }
     const pgid = proc.pid
     if (pgid === undefined) {
+      // EMFILE, ENOENT and the like come as an 'error' event on the next tick: with no listener it would crash the
+      // server, where only this child failed
+      proc.once("error", (e) => Log.error(`[${o.kind}] could not start ${argv[0]}: ${e.message}`))
       done({ kind: "stopped", reason: "could not start", stdout: "" })
       return null
     }

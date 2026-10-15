@@ -84,10 +84,28 @@ const home = path.join(data, 'arena');
 const standings = (rounds) => writeJson(path.join(home, 'standings.json'), { rounds, updatedAt: new Date().toISOString() });
 
 /**
- * A games volume of its own: a roster of `agents` (a builder, or a resident when the name starts with res), each with
- * version v1, a WebAssembly one (node-random's bundle) unless `js` names it. Returns the volume's folder.
+ * Version `name` (<agent>-v<N>) in the arena folder `arena`: a WebAssembly one, the only kind the games machine plays
+ * (SUBMISSION.json bot.kind wasm, and bundle/ with its arena.json: node-random's bundle, or with `stub` an arena.json
+ * alone, which plan reads and nothing plays), or with `js` a JS one such as the starter v0 api.register makes.
  */
-function volume(agents, { js = [] } = {}) {
+function addVersion(arena, name, { js = false, stub = false } = {}) {
+    const dir = path.join(arena, 'versions', name);
+    writeJson(path.join(dir, 'SUBMISSION.json'), { name, bot: { kind: js ? 'js' : 'wasm' }, submittedAt: new Date().toISOString() });
+    if (js) {
+        fs.writeFileSync(path.join(dir, 'bot.js'), 'module.exports = { createBot: () => ({ choose: () => 0 }) };');
+    } else if (stub) {
+        writeJson(path.join(dir, 'bundle', 'arena.json'), {});
+    } else {
+        fs.cpSync(NODE_RANDOM, path.join(dir, 'bundle'), { recursive: true });
+    }
+}
+
+/**
+ * A games volume of its own: a roster of `agents` (a builder, or a resident when the name starts with res), each with
+ * version v1, a WebAssembly one (node-random's bundle); a builder also has the JS starter v0 that api.register makes,
+ * which the games machine never plays. No baselines (setup). Returns the volume's folder.
+ */
+function volume(agents) {
     const vol = fs.mkdtempSync(path.join(tmp, 'vol-'));
     fs.chmodSync(vol, 0o755);
     const arena = path.join(vol, 'arena');
@@ -96,14 +114,10 @@ function volume(agents, { js = [] } = {}) {
         agents: agents.map((name) => (name.startsWith('res') ? { name, owner: 'arena', resident: true } : { name, owner: `github:${name}` }))
     });
     for (const name of agents) {
-        const dir = path.join(arena, 'versions', `${name}-v1`);
-        if (js.includes(name)) {
-            writeJson(path.join(dir, 'SUBMISSION.json'), { name: `${name}-v1`, bot: { kind: 'js' }, submittedAt: new Date().toISOString() });
-            fs.writeFileSync(path.join(dir, 'bot.js'), 'module.exports = { createBot: () => ({ choose: () => 0 }) };');
-        } else {
-            writeJson(path.join(dir, 'SUBMISSION.json'), { name: `${name}-v1`, bot: { kind: 'wasm' }, submittedAt: new Date().toISOString() });
-            fs.cpSync(NODE_RANDOM, path.join(dir, 'bundle'), { recursive: true });
+        if (!name.startsWith('res')) {
+            addVersion(arena, `${name}-v0`, { js: true });
         }
+        addVersion(arena, `${name}-v1`);
     }
     return vol;
 }
@@ -134,19 +148,20 @@ test('gamesctl: a usage error exits 2, and every answer is one JSON line even wh
 });
 
 test('gamesctl plan: the next round by number once a new version settles; a round cut short is finished', async () => {
-    const roster = { thinkCapMs: 60000, baselines: ['heuristic'], agents: [{ name: 'lee', owner: 'github:lee' }] };
+    const roster = { thinkCapMs: 60000, baselines: [], agents: [{ name: 'res_rush', owner: 'arena', resident: true }, { name: 'lee', owner: 'github:lee' }] };
     writeJson(path.join(home, 'roster.json'), roster);
     fs.rmSync(path.join(home, 'versions'), { recursive: true, force: true });
-    // a JS version (bot.js) is one the registry can load
-    writeJson(path.join(home, 'versions', 'lee-v1', 'SUBMISSION.json'), { submittedAt: new Date().toISOString() });
-    fs.writeFileSync(path.join(home, 'versions', 'lee-v1', 'bot.js'), 'module.exports = {};');
-    standings([{ round: 3, status: 'done', bots: [{ name: 'heuristic' }] }]);
+    // round 3 played the resident alone; lee's WebAssembly v1 comes in (its starter v0, a JS one, plays nowhere here)
+    addVersion(home, 'res_rush-v1', { stub: true });
+    addVersion(home, 'lee-v0', { js: true });
+    addVersion(home, 'lee-v1', { stub: true });
+    standings([{ round: 3, status: 'done', bots: [{ name: 'res_rush-v1' }] }]);
     const now = Date.now();
     let r = await ctl(['plan', '--arena', 'open', '--settled-since', String(now)]);
     assert.deepStrictEqual(r.json, { round: null, why: 'settling' }, r.err);
     r = await ctl(['plan', '--arena', 'open', '--settled-since', String(now - 120000)]);
     assert.deepStrictEqual(r.json, { round: 4, resume: false, why: 'changed' }, r.err);
-    standings([{ round: 4, status: 'running', bots: [{ name: 'lee-v1' }, { name: 'heuristic' }] }]);
+    standings([{ round: 4, status: 'running', bots: [{ name: 'res_rush-v1' }, { name: 'lee-v1' }] }]);
     r = await ctl(['plan', '--arena', 'open', '--settled-since', String(now)]);
     assert.deepStrictEqual(r.json, { round: 4, resume: true, why: 'resume' });
 });
@@ -298,17 +313,43 @@ test('gamesctl round: a new round takes the games and time limit it is given, a 
     assert.strictEqual(rosterOf(vol).thinkCapMs, 90000);
 });
 
-test('gamesctl round: a version that is not a WebAssembly one stops the round, and nothing changes', { skip: ROUNDS }, async () => {
-    for (const [agents, js, bad] of [[['kim', 'lee', 'res_clock'], ['lee'], 'lee-v1'], [['kim', 'random_x'], [], 'random_x-v1']]) {
-        const vol = volume(agents, { js });
-        const r = await ctl(['round', '--arena', 'open', '--round', '0', '--cap-ms', '30000'], { GAMES_DATA: vol });
-        assert.strictEqual(r.code, 1, r.err);
-        assert.strictEqual(r.out, '');
-        // a JS bot.js version, or one a built-in bot's name takes (random...): never left out quietly
-        assert.match(r.err, new RegExp(`${bad} is not a WebAssembly version`));
-        assert.strictEqual(rosterOf(vol).thinkCapMs, 60000, 'the roster keeps its limit');
-        assert.ok(!fs.existsSync(path.join(vol, 'bundles')) || !fs.readdirSync(path.join(vol, 'bundles')).length, 'no tar written');
-    }
+test('gamesctl round: each agent fields its newest WebAssembly version or nothing, at plan and round alike; a built-in baseline never plays', { skip: ROUNDS }, async () => {
+    // lee has its JS starter v0 and a WebAssembly v1 (a bundle of its own); the roster still names bots built into the
+    // image, as an older one did
+    const vol = volume(['kim', 'lee', 'res_clock']);
+    fs.writeFileSync(path.join(vol, 'arena', 'versions', 'lee-v1', 'bundle', 'NOTES.md'), 'lee\n');
+    const roster = path.join(vol, 'arena', 'roster.json');
+    writeJson(roster, { ...rosterOf(vol), baselines: ['heuristic', 'rush'] });
+    const env = { GAMES_DATA: vol };
+    const plan = () => ctl(['plan', '--arena', 'open', '--settled-since', '0'], env);
+    const round = (k) => ctl(['round', '--arena', 'open', '--round', String(k)], env);
+    const played = (k, bots) => writeJson(path.join(vol, 'arena', 'standings.json'), { rounds: [{ round: k, status: 'done', bots: bots.map((name) => ({ name })) }], updatedAt: new Date().toISOString() });
+    const tars = () => fs.readdirSync(path.join(vol, 'bundles')).sort();
+
+    let r = await plan();
+    assert.deepStrictEqual(r.json, { round: 0, resume: false, why: 'changed' }, r.err);
+    r = await round(0);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.deepStrictEqual(r.json.bots, ['kim-v1', 'lee-v1', 'res_clock-v1'], 'lee fields v1, not its starter; no baseline');
+    const lee = r.json.bundles['lee-v1'];
+    assert.notStrictEqual(lee, r.json.bundles['kim-v1']);
+    assert.deepStrictEqual(tars(), [`${lee}.tar`, `${r.json.bundles['kim-v1']}.tar`].sort());
+    played(0, r.json.bots);
+    assert.deepStrictEqual((await plan()).json, { round: null, why: 'same' });
+
+    // lee withdraws v1: its v0 is a JS one, so lee fields nothing (never its starter, which no round here could play)
+    writeJson(roster, { ...rosterOf(vol), agents: rosterOf(vol).agents.map((a) => (a.name === 'lee' ? { ...a, withdrawn: [1] } : a)) });
+    r = await plan();
+    assert.deepStrictEqual(r.json, { round: 1, resume: false, why: 'changed' }, `${r.err}: one change`);
+    fs.rmSync(path.join(vol, 'bundles'), { recursive: true });
+    r = await round(1);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.deepStrictEqual([r.json.round, r.json.bots], [1, ['kim-v1', 'res_clock-v1']], 'the round plays without lee');
+    assert.deepStrictEqual([Object.keys(r.json.bundles), Object.keys(r.json.botInfo)], [['kim-v1', 'res_clock-v1'], ['kim-v1', 'res_clock-v1']]);
+    assert.deepStrictEqual(tars(), [`${r.json.bundles['kim-v1']}.tar`], 'nothing written for lee');
+    played(1, r.json.bots);
+    assert.deepStrictEqual((await plan()).json, { round: null, why: 'same' }, 'then the same lineup at every look');
+    assert.deepStrictEqual(rosterOf(vol).baselines, ['heuristic', 'rush'], 'the roster still names them; they are only not fielded');
 });
 
 test('gamesctl publish: standings, the report and the panels from the ladder.json the server wrote', async () => {

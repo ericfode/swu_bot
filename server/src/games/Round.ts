@@ -77,7 +77,15 @@ const badEntry = (g: ScheduledGame, r: GameResult): string | null => {
 
 interface Imported {
   readonly createdAt: string
-  readonly games: ReadonlyArray<{ readonly game: ScheduledGame; readonly result: GameResult; readonly host: Host; readonly key: string | null; readonly endedAt: string }>
+  readonly games: ReadonlyArray<{
+    readonly game: ScheduledGame
+    readonly result: GameResult
+    readonly host: Host
+    readonly key: string | null
+    readonly endedAt: string
+    /** its place in the old ladder.json's list, which is the order the games started */
+    readonly started: number
+  }>
 }
 
 /**
@@ -121,7 +129,8 @@ const importLadder = (file: string, k: number, config: Record<string, unknown>, 
       result: r.key ? r : { ...r, key: js.gameKey(key, g.seed) },
       host: typeof e.host === "string" ? e.host : null,
       key: typeof e.key === "string" ? e.key : null,
-      endedAt: new Date(base + i).toISOString()
+      endedAt: new Date(base + i).toISOString(),
+      started: i
     })
   }
   return { createdAt: typeof doc.createdAt === "string" ? doc.createdAt : new Date().toISOString(), games: kept }
@@ -176,7 +185,7 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       const kept = new Map((old?.games ?? []).map((x) => [x.game.id, x]))
       yield* store.createRound(fresh(createdAt), todoRows().map((g) => {
         const x = kept.get(g.id)
-        return x ? { ...g, state: "done" as const, host: x.host, result: x.result, key: x.key, endedAt: x.endedAt } : g
+        return x ? { ...g, state: "done" as const, host: x.host, result: x.result, key: x.key, endedAt: x.endedAt, started: x.started } : g
       }))
       if (kept.size) Log.info(`${id}: ${kept.size} games the old coordinator's ladder finished are kept`)
     }
@@ -193,11 +202,12 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       return doc
     }
 
-    // what was played before: entries in the order the games ended, and the seeds' keys
+    // what was played before: entries in the order the games started (ladder.js keeps that order through a resume), and
+    // the seeds' keys
     const byId = new Map(schedule.map((g) => [g.id, g]))
     const stored = (yield* store.games(k))
       .filter((r) => r.state === "done" && r.result !== null && byId.has(r.id))
-      .sort((a, b) => (a.endedAt ?? "").localeCompare(b.endedAt ?? "") || a.ord - b.ord)
+      .sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || (a.endedAt ?? "").localeCompare(b.endedAt ?? "") || a.ord - b.ord)
     for (const r of stored) {
       const g = byId.get(r.id)!
       files.start(g)
@@ -282,8 +292,9 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       play: (job, tag) => play(job, tag, { onLines }),
       tag: (seed) => `r${k}-${seed}-${++jobs}`,
       onStart: (games) =>
-        Effect.sync(() => {
+        Effect.gen(function*() {
           for (const g of games) files.start(g)
+          yield* store.startGames(k, games.map((g) => g.id))
           save()
         }),
       onResults: record,

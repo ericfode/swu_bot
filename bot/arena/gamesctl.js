@@ -242,7 +242,7 @@ function worldReadable(top, { root }) {
  */
 function warmLineup() {
     const out = { warmed: [], failed: [] };
-    for (const name of require('./referee').lineup()) {
+    for (const name of machineLineup()) {
         const dir = path.join(home.VERSIONS, name, 'bundle');
         if (!fs.existsSync(path.join(dir, 'arena.json'))) {
             continue; // not a WebAssembly version (an older bot.js one): nothing to compile
@@ -278,13 +278,13 @@ function botEnv() {
  * needs at least one competitor besides the arena's own bots, and two bots in all.
  */
 function planRound({ replayMs, settledSince }) {
-    const { lineup, anchorsOf } = require('./referee');
+    const { anchorsOf } = require('./referee');
     const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] });
     const last = st.rounds.at(-1);
     if (last && last.status !== 'done') {
         return { round: last.round, resume: true, why: 'resume' };
     }
-    const bots = lineup();
+    const bots = machineLineup();
     // the arena's own bots (residents, baselines) alone are no reason to play
     const own = anchorsOf(bots);
     if (!bots.some((b) => !own.includes(b))) {
@@ -378,6 +378,16 @@ function deckLists(file, skip) {
     return { file: name, sha256: set.sha256, names: lists.map((d) => d.metadata.name), skipped: [...skip], lists };
 }
 
+/**
+ * The lineup the games machine plays, the same for plan, round and warm: each agent's newest version that is a
+ * WebAssembly one (an agent whose newest playable version was withdrawn plays its newest earlier one; its JS starter v0,
+ * which register makes, never plays here). Agents with none are left out at every look, so plan sees one change.
+ */
+function machineLineup() {
+    const { describeBot } = require('../players');
+    return require('./referee').lineup(null, { playable: (n) => wasmVersion(n, describeBot) });
+}
+
 /** True when `name` is a version that plays as a WebAssembly bundle (what play-seed.js plays, and nothing else). */
 function wasmVersion(name, describeBot) {
     const d = VERSION.test(name) ? describeBot(name) : null;
@@ -451,11 +461,11 @@ function storeBundle(name) {
  * this answers, so a referee.lock left in the round's folder (a stop, a crash) is stale and goes.
  */
 function roundSpec(k, { games, capMs = null }) {
-    const { lineup, ladderIdOf, ROUND_DECKS } = require('./referee');
+    const { ladderIdOf, ROUND_DECKS } = require('./referee');
     const { describeBot } = require('../players');
-    const bots = lineup();
-    // the games machine plays only WebAssembly versions (play-seed.js). One that is not stops the round here: left out,
-    // the lineup would look changed to plan at every look and no round would end
+    const bots = machineLineup();
+    // machineLineup fields only WebAssembly versions, so this does not happen; if it did, the round stops here (a
+    // version left out here alone would make the lineup look changed to plan at every look, and no round would end)
     const other = bots.filter((n) => !wasmVersion(n, describeBot));
     if (other.length) {
         throw new Error(`round ${k}: ${other.join(', ')} ${other.length === 1 ? 'is not a WebAssembly version' : 'are not WebAssembly versions'}`

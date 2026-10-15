@@ -31,7 +31,8 @@ file (pick 2A), with games played by Node (pick 1A). It has two parts:
 No child gets a token: the server builds each child's environment from nothing (`src/games/Proc.ts`), and gamesctl's
 `intake` and `push` reach the window through a loopback proxy that adds the token (`127.0.0.1:GAMES_PROXY_PORT`, a
 new nonce each boot). Game jobs run as the user `arena` with no capabilities, in their own PID and mount namespaces
-(`bot/arena/ops/isolate.sh`), with `/.fly`, `/data/secret` and `/data/server` hidden. The Node work that serves the
+(`bot/arena/ops/isolate.sh`), with `/.fly`, `/data/secret`, `/data/server` and `/data/coord` hidden (and, from game
+jobs, `/data/arena`, `/data/dash`, `/data/intake` and `/data/results` too). The Node work that serves the
 old window's contract stays in `bot/arena/gamesctl.js` until stage 6, one JSON line per command: `setup`, `warm`,
 `plan`, `round` (a round's rules, lineup, deck lists and version tars), `publish` (standings, the round's report,
 panels), `decks`, `intake` and `push`.
@@ -40,9 +41,10 @@ The volume (`GAMES_DATA`, `/data`):
 
 | Path | Owner | Holds |
 | --- | --- | --- |
-| `server/` | root, 0700 | `games.db` (rounds and their games), `procs/` (a pidfile per child), `settings.json` (Eric's last settings), `round_end` |
+| `server/` | root, 0700 | `games.db` (rounds and their games, and the last round's end), `procs/` (a pidfile per child), `settings.json` (Eric's last settings), `intake.json` (the intake's state) |
 | `secret/arena-secret` | root, 0600 | the round-seed secret |
-| `arena/`, `results/`, `dash/` | root, readable by all | roster, versions, standings, round reports, panels; each round's `arena-r<K>/`; panel copies |
+| `results/` | root, readable by all | each round's `arena-r<K>/` (`index.json`, `ladder.json`, `games/`), written by the server |
+| `arena/`, `dash/` | arena | roster, versions, standings, round reports, panels; panel copies. The bots' user's because the intake's checker registers and submits there; root's `round` reads them without following links, and game jobs do not see them |
 | `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
 | `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
 | `home/`, `wasm-cache/` | arena | the bots' HOME, wasmtime's compiled modules |

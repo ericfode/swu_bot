@@ -43,8 +43,9 @@ const main = async (argv: ReadonlyArray<string>): Promise<number> => {
     const secrets = takeSecrets(process.env, Log.warn)
     const proc = makeProc(c)
     const stop = new AbortController()
-    process.once("SIGTERM", () => stop.abort())
-    process.once("SIGINT", () => stop.abort())
+    // the signal's name is the reason: runHelper logs "SIGTERM received - shutting down", which helper-tui.js reads
+    process.once("SIGTERM", () => stop.abort("SIGTERM"))
+    process.once("SIGINT", () => stop.abort("SIGINT"))
     return runHelper(c, secrets, proc, { signal: stop.signal })
   }
 

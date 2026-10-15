@@ -8,9 +8,9 @@
  * No NODE_ENV for the child: the engine words its prompts by it (bot/env.js makes an unset one 'test'), so a replay
  * matches the rounds played so far only under 'test' (and production logs every rollback a searching bot makes).
  */
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import {
-  chmodSync, chownSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, rmSync, writeFileSync
+  chmodSync, chownSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeFileSync
 } from "node:fs"
 import path from "node:path"
 import { Effect } from "effect"
@@ -116,10 +116,20 @@ const readRange = (fd: number, from: number, to: number) => {
   return buf.subarray(0, at)
 }
 
+/**
+ * Removes a folder the bots' user can write into (home.js removeTree). GNU rm walks it with fts and never follows a
+ * link it meets inside; Node's rmSync resolves each path again, so a bots' process could swap a subfolder for a link
+ * between two steps and have root remove what the link points at (games.db, the round-seed secret).
+ */
+export const removeTree = (dir: string) => {
+  spawnSync("rm", ["-rf", "--", dir], { stdio: "ignore" })
+  if (existsSync(dir)) Log.warn(`could not remove ${dir}; the next round's start or setup clears it`)
+}
+
 /** The folder, the job file and the child's two folders, each with its owner and mode. */
 const prepare = (c: GamesConfig, dir: string, job: PlaySeedJob) => {
   const ids = arenaIds(c)
-  rmSync(dir, { recursive: true, force: true })
+  removeTree(dir)
   mkdirSync(c.paths.work, { recursive: true })
   mkdirSync(dir, { mode: 0o755 })
   chmodSync(dir, 0o755)
@@ -253,6 +263,9 @@ export const playLocal = (c: GamesConfig, proc: ProcService, job: PlaySeedJob, t
         isolate: true,
         // its own /tmp, gone with the folder
         tmp: path.join(dir, "tmp"),
+        // play-seed keeps its own arena home in the work folder: the real one, the window's panels, the intake's checks
+        // and other rounds' results are none of a game's business (and the bots' user can write the first three)
+        hide: [c.paths.arena, path.join(c.data, "dash"), path.join(c.data, "intake"), c.paths.results],
         ...(job.gameMs > 0 ? { timeoutMs: job.gameMs + SLACK_MS } : {}),
         stdout: "capture",
         maxStdout: MAX_ANSWER_BYTES
@@ -266,7 +279,7 @@ export const playLocal = (c: GamesConfig, proc: ProcService, job: PlaySeedJob, t
         )
       )
     },
-    () => Effect.sync(() => rmSync(dir, { recursive: true, force: true }))
+    () => Effect.sync(() => removeTree(dir))
   )
 }
 
@@ -284,7 +297,7 @@ export const clearWork = (c: GamesConfig, which: RegExp) => {
     const p = path.join(c.paths.work, name)
     // rm does not follow links: a link left here goes, not what it points at
     if (lstatSync(p, { throwIfNoEntry: false })) {
-      rmSync(p, { recursive: true, force: true })
+      removeTree(p)
       n++
     }
   }

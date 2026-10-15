@@ -54,6 +54,11 @@ const migrations = SqliteMigrator.fromRecord({
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`
+  }),
+  // the order games started in: ladder.json lists them so (sequential Elo, eloHistory), and a resume keeps it
+  "0002_started": Effect.gen(function*() {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`ALTER TABLE round_games ADD COLUMN started INTEGER`
   })
 })
 
@@ -84,6 +89,8 @@ export interface GameRow {
   readonly result: GameResult | null
   readonly key: string | null
   readonly endedAt: string | null
+  /** its place in the order the round's games started (null until it starts) */
+  readonly started?: number | null
 }
 
 const rowOfRound = (r: any): RoundRow => ({ ...r, spec: JSON.parse(r.spec) })
@@ -92,7 +99,7 @@ const rowOfGame = (r: any): GameRow => ({
   decks: r.decks === null ? null : JSON.parse(r.decks),
   state: r.state, host: r.host ?? null,
   result: r.result === null ? null : JSON.parse(r.result),
-  key: r.key ?? null, endedAt: r.endedAt ?? null
+  key: r.key ?? null, endedAt: r.endedAt ?? null, started: r.started ?? null
 })
 
 export interface StoreService {
@@ -104,6 +111,8 @@ export interface StoreService {
   readonly replaceRound: (row: RoundRow, games: ReadonlyArray<GameRow>) => Effect.Effect<void>
   readonly updateRound: (k: number, set: Partial<Pick<RoundRow, "state" | "boot" | "attempts" | "why" | "endedAt" | "workers">>) => Effect.Effect<void>
   readonly games: (k: number) => Effect.Effect<ReadonlyArray<GameRow>>
+  /** these games start now, in this order (a game started again, after a cut, goes to the end) */
+  readonly startGames: (k: number, ids: ReadonlyArray<string>) => Effect.Effect<void>
   readonly finishGame: (k: number, id: string, host: Host, result: GameResult, endedAt: string) => Effect.Effect<void>
   readonly setKey: (k: number, ids: ReadonlyArray<string>, key: string) => Effect.Effect<void>
   readonly get: (name: string) => Effect.Effect<string | null>
@@ -130,7 +139,7 @@ export class Store extends Context.Service<Store, StoreService>()("games/Store")
             k: row.k, id: g.id, ord: g.ord, seed: g.seed, p1: g.p1, p2: g.p2,
             decks: g.decks === null ? null : JSON.stringify(g.decks),
             state: g.state, host: g.host, result: g.result === null ? null : JSON.stringify(g.result),
-            key: g.key, endedAt: g.endedAt
+            key: g.key, endedAt: g.endedAt, started: g.started ?? null
           })}`
         }
       })
@@ -150,6 +159,15 @@ export class Store extends Context.Service<Store, StoreService>()("games/Store")
     const games = (k: number) =>
       orDie(sql`SELECT * FROM round_games WHERE k = ${k} ORDER BY ord`).pipe(Effect.map((rows) => rows.map(rowOfGame)))
 
+    const startGames = (k: number, ids: ReadonlyArray<string>) =>
+      ids.length
+        ? orDie(sql.withTransaction(Effect.gen(function*() {
+          const rows = yield* sql`SELECT COALESCE(MAX(started), -1) AS n FROM round_games WHERE k = ${k}`
+          let n = Number((rows[0] as any)?.n ?? -1)
+          for (const id of ids) yield* sql`UPDATE round_games SET started = ${++n} WHERE k = ${k} AND id = ${id}`
+        })))
+        : Effect.void
+
     const finishGame = (k: number, id: string, host: Host, result: GameResult, endedAt: string) =>
       orDie(sql`UPDATE round_games SET state = 'done', host = ${host}, result = ${JSON.stringify(result)}, ended_at = ${endedAt}
                 WHERE k = ${k} AND id = ${id}`).pipe(Effect.asVoid)
@@ -164,7 +182,7 @@ export class Store extends Context.Service<Store, StoreService>()("games/Store")
       orDie(sql`INSERT INTO kv (name, value, updated_at) VALUES (${name}, ${value}, ${new Date().toISOString()})
                 ON CONFLICT (name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).pipe(Effect.asVoid)
 
-    return Store.of({ round, lastRound, createRound, replaceRound, updateRound, games, finishGame, setKey, get, set })
+    return Store.of({ round, lastRound, createRound, replaceRound, updateRound, games, startGames, finishGame, setKey, get, set })
   })
 
   /** The store on `filename` (its folder made), migrated. */

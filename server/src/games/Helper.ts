@@ -41,6 +41,7 @@ import path from "node:path"
 import { Effect, Exit, Fiber } from "effect"
 import type { GamesConfig } from "./Config.ts"
 import { scripts } from "./Config.ts"
+import { removeTree } from "./Executor.ts"
 import * as Log from "./Log.ts"
 import type { ProcService, Result, RunOptions } from "./Proc.ts"
 import { childEnv } from "./Proc.ts"
@@ -607,7 +608,7 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
       // a fresh folder; job.json goes in while it is still root's (written once, never through a link), then the
       // folder becomes the bots' (play-seed writes out/ and arena/ in it)
       try {
-        rmSync(dir, { recursive: true, force: true })
+        removeTree(dir)
         mkdirSync(dir, { recursive: true })
         chmodSync(dir, 0o700)
       } catch (e) {
@@ -755,7 +756,7 @@ const runLease = async (h: Ctx, slot: string, timing: HelloTiming, lease: Lease)
   } finally {
     // whatever ended the lease, its play is gone before its folder goes (a no-op when it ended by itself)
     await play.stop()
-    rmSync(dir, { recursive: true, force: true })
+    removeTree(dir)
   }
 }
 
@@ -893,7 +894,7 @@ const prepare = (c: GamesConfig, proc: ProcService): { readonly ids: Ids | null;
   const ids = process.getuid?.() === 0 ? botIds(c.arenaUser) : null
   // the plays of a run that crashed are gone (reaped), and so are their work folders
   const helperDir = path.join(c.data, "helper")
-  rmSync(helperDir, { recursive: true, force: true })
+  removeTree(helperDir)
   mkdirSync(helperDir, { recursive: true })
   chmodSync(helperDir, ids ? 0o711 : 0o700)
   for (const dir of [c.paths.home, c.paths.wasmCache]) {

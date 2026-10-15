@@ -70,6 +70,18 @@ test("proc: a child gets exactly its environment, its stdout is kept, and a time
   assert.equal(readdirSync(c.paths.procs).length, 0)
 })
 
+test("proc: a child that cannot start fails alone, and the server goes on", async () => {
+  const c = config(data())
+  const proc = makeProc(c)
+  // a folder that is not there: Node reports the failed spawn as an 'error' event a tick later, which must not go uncaught
+  const r = await Effect.runPromise(proc.run({
+    kind: "plan", argv: ["/bin/true"], env: childEnv(c, c.paths.home), as: "root", isolate: false, cwd: "/no/such/folder", stdout: "capture"
+  }))
+  assert.equal(r.kind, "stopped")
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.deepEqual(proc.running(), [])
+})
+
 test("proc: interrupting a run stops the child; once stopping, only pushes start", async () => {
   const c = config(data())
   const proc = makeProc(c)
