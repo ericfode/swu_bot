@@ -15,6 +15,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const notices = require('./notices');
 
 const VENDOR = __dirname;
 const ROOT = path.join(VENDOR, '..');
@@ -75,6 +76,7 @@ function main([name, clone, commit]) {
     try {
         execFileSync('sh', ['-c', 'git -C "$1" archive "$2" | tar -x -C "$3"', 'sh', clone, full, src]);
         const { files, about } = target.build(src);
+        const notice = notices.render(name, target.repo, full, notices[name](src, ROOT));
         const out = path.join(VENDOR, name);
         fs.rmSync(out, { recursive: true, force: true });
         const version = { name, repo: target.repo, commit: full, ...about, files: {} };
@@ -84,6 +86,9 @@ function main([name, clone, commit]) {
             version.files[to] = { from, bytes: fs.statSync(path.join(out, to)).size, sha256: sha256(path.join(out, to)) };
         }
         fs.writeFileSync(path.join(out, 'VERSION.json'), `${JSON.stringify(version, null, 2)}\n`);
+        // outside vendor/<name>/, so a change to the notices alone deploys nothing
+        fs.mkdirSync(path.join(VENDOR, 'notices'), { recursive: true });
+        fs.writeFileSync(path.join(VENDOR, 'notices', `${name}.md`), notice);
         console.log(`vendor/${name}: ${Object.keys(files).length} files from ${name} ${full.slice(0, 7)}`);
     } finally {
         fs.rmSync(src, { recursive: true, force: true });
