@@ -99,3 +99,33 @@ test("round: a resumed round keeps its finished games in the order they started"
   assert.equal(after.games.length, 6)
   assert.deepEqual(after.games.slice(0, 3).map((g: any) => g.id), kept)
 })
+
+test("round: a game that played again after a failure keeps its first place when the round resumes", async () => {
+  const ladder = () => JSON.parse(readFileSync(path.join(c.paths.results, "arena-r4", "ladder.json"), "utf8"))
+  const calls = new Map<number, number>()
+  let first: number | null = null
+  let second: number | null = null
+  // the first seed fails once and plays again after the second seed's first game ended; the rest meet a stop
+  const retried = (job: PlaySeedJob) =>
+    Effect.suspend(() => {
+      const n = (calls.get(job.seed) ?? 0) + 1
+      calls.set(job.seed, n)
+      first ??= job.seed
+      if (job.seed === first) {
+        return n === 1 ? Effect.sleep(200).pipe(Effect.andThen(Effect.fail(new PlayFailed(job.seed, "the bot crashed")))) : Effect.succeed(played(job))
+      }
+      if (second === null) {
+        second = job.seed
+        return Effect.succeed(played(job))
+      }
+      return Effect.sleep(900).pipe(Effect.andThen(Effect.fail(new PlayFailed(job.seed, "shutdown", true))))
+    })
+  assert.deepEqual(await withStore((store) => playRound(deps(store, retried), 4, "changed", false)), { kind: "stopped" })
+  const kept = ladder().games.filter((g: any) => g.outcome !== "running").map((g: any) => g.id)
+  assert.equal(kept.length, 3)
+  assert.equal(calls.get(first!), 2, "the first seed played twice")
+
+  const rest = (job: PlaySeedJob) => Effect.succeed(played(job))
+  assert.deepEqual(await withStore((store) => playRound(deps(store, rest), 4, "resume", true)), { kind: "done" })
+  assert.deepEqual(ladder().games.slice(0, 3).map((g: any) => g.id), kept)
+})

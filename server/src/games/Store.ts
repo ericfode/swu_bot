@@ -111,7 +111,7 @@ export interface StoreService {
   readonly replaceRound: (row: RoundRow, games: ReadonlyArray<GameRow>) => Effect.Effect<void>
   readonly updateRound: (k: number, set: Partial<Pick<RoundRow, "state" | "boot" | "attempts" | "why" | "endedAt" | "workers">>) => Effect.Effect<void>
   readonly games: (k: number) => Effect.Effect<ReadonlyArray<GameRow>>
-  /** these games start now, in this order (a game started again, after a cut, goes to the end) */
+  /** these games start now, in this order (the round names a game once per run; one started again after a cut goes to the end) */
   readonly startGames: (k: number, ids: ReadonlyArray<string>) => Effect.Effect<void>
   readonly finishGame: (k: number, id: string, host: Host, result: GameResult, endedAt: string) => Effect.Effect<void>
   readonly setKey: (k: number, ids: ReadonlyArray<string>, key: string) => Effect.Effect<void>

@@ -281,6 +281,9 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
     }
     const play = deps.play ?? ((job: PlaySeedJob, tag: string, opts: PlayOptions) => playLocal(c, deps.proc, job, tag, opts))
     let jobs = 0
+    // a game that plays again after a failure keeps the place it took when it first started in this run, as files.start
+    // keeps its entry in place; a game cut by an earlier stop starts again after the kept ones, as ladder.js --resume did
+    const startedHere = new Set<string>()
     const lane = makeLane({
       js: deps.js,
       spec,
@@ -294,7 +297,9 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       onStart: (games) =>
         Effect.gen(function*() {
           for (const g of games) files.start(g)
-          yield* store.startGames(k, games.map((g) => g.id))
+          const fresh = games.filter((g) => !startedHere.has(g.id))
+          for (const g of fresh) startedHere.add(g.id)
+          yield* store.startGames(k, fresh.map((g) => g.id))
           save()
         }),
       onResults: record,
