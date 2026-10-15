@@ -1,7 +1,8 @@
 # The checks every change must pass before it merges (stage 3 of the spec): the unit tests, the trace checks (recorded
 # arena games must play out the same again, bot/trace.js), the determinism gate, and the arena server's tests. One job,
 # so it can be the one required check. Most unit tests load the engine, so the job always has it: restored from the
-# cache by engine commit, built only when the pin moves. The server's checks run only when server/ changes.
+# cache by engine commit, built only when the pin moves. The server's checks (typecheck and tests) run when server/,
+# bot/ or the engine pin changes: the server's games role runs the games machine on bot/'s code and the engine.
 name: CI
 on:
   push:
@@ -34,7 +35,7 @@ jobs:
       - name: What the change touches
         id: changed
         run: |
-          if [ "${{ github.event_name }}" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -qE '^(server/|\.github/workflows/ci\.yml$)'; then
+          if [ "${{ github.event_name }}" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -qE '^(server/|bot/|forceteki$|\.github/workflows/ci\.yml$)'; then
             echo "server=true" >> "$GITHUB_OUTPUT"
           else
             echo "server=false" >> "$GITHUB_OUTPUT"

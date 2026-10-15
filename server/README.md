@@ -1,9 +1,90 @@
-# Arena server (stage 4: the record)
+# Arena server
 
 The TypeScript rewrite of the arena server (Eric's pick 9B) on [Effect 4](https://effect.website), over one SQLite
-file (pick 2A), with games played by Node (pick 1A). Stage 4 builds the record: every rated game, round, version
-and rating in one place, the one-time import of today's arena into it, and export API v1 with its MCP tools.
-Nothing deploys it yet; switching the live site over is stage 6.
+file (pick 2A), with games played by Node (pick 1A). It has two parts:
+
+- **The games machine** (stage 5, `src/main-games.ts`, `src/games/`): the program the Fly app `swu-arena-games` runs.
+  It replaced the Elixir coordinator (`coord/`, in this repo's history). See "The games machine" below.
+- **The record** (stage 4): every rated game, round, version and rating in one place, the one-time import of today's
+  arena into it, and export API v1 with its MCP tools. Nothing deploys it yet; switching the live site over is stage 6.
+
+## The games machine
+
+`node src/main-games.ts` is the only program the games machine runs (`Dockerfile.games`, as root; `fly.games.toml`).
+`COORD_ROLE` picks its role, and a first argument `replay` makes it the replay check:
+
+- **games** (the default). It boots (checks the volume, takes the tokens out of its environment, runs `gamesctl
+  setup`, stops process groups a crashed run left, warms the bundles), then ticks every 20 s, and at once on
+  `POST /wake`: the intake about every minute, then `gamesctl plan`, then the round plan names. It plays the round
+  itself: seeds and keys from the round-seed secret (never in a child), the round robin and the deck deal as
+  `bot/ladder.js` dealt them, some games at once on the machine (`workers` in Eric's settings) and whole seeds leased
+  to helpers, each seed's games one `bot/arena/play-seed.js` job. It writes `results/arena-r<K>/` as the ladder did
+  (`index.json`, `ladder.json`, replays), keeps each game in `games.db` so a round cut by a deploy resumes with its
+  finished games, and pushes to the window every 20 s (every 3 s while a round plays). With nothing to do for
+  `GAMES_IDLE_MIN` minutes it exits 0, and Fly leaves the machine stopped until the next wake.
+- **helper** (`COORD_ROLE=helper`): plays seeds the machine leases out, on a computer of Eric's
+  ([bot/arena/HELPER.md](../bot/arena/HELPER.md)).
+- **replay**: `node src/main-games.ts replay --results <arena-rK folder> --bundles <folder of tars> --names <file>
+  --out <folder> [--only a,b] [--decks-dir <folder>]` plays a recorded round again from its seeds and compares every
+  game and replay with the record (the stage 5 done check). It exits 0 only when every game came out the same.
+
+No child gets a token: the server builds each child's environment from nothing (`src/games/Proc.ts`), and gamesctl's
+`intake` and `push` reach the window through a loopback proxy that adds the token (`127.0.0.1:GAMES_PROXY_PORT`, a
+new nonce each boot). Game jobs run as the user `arena` with no capabilities, in their own PID and mount namespaces
+(`bot/arena/ops/isolate.sh`), with `/.fly`, `/data/secret`, `/data/server` and `/data/coord` hidden (and, from game
+jobs, `/data/arena`, `/data/dash`, `/data/intake` and `/data/results` too). The Node work that serves the
+old window's contract stays in `bot/arena/gamesctl.js` until stage 6, one JSON line per command: `setup`, `warm`,
+`plan`, `round` (a round's rules, lineup, deck lists and version tars), `publish` (standings, the round's report,
+panels), `decks`, `intake` and `push`.
+
+The volume (`GAMES_DATA`, `/data`):
+
+| Path | Owner | Holds |
+| --- | --- | --- |
+| `server/` | root, 0700 | `games.db` (rounds and their games, and the last round's end), `procs/` (a pidfile per child), `settings.json` (Eric's last settings), `intake.json` (the intake's state) |
+| `secret/arena-secret` | root, 0600 | the round-seed secret |
+| `results/` | root, readable by all | each round's `arena-r<K>/` (`index.json`, `ladder.json`, `games/`), written by the server |
+| `arena/`, `dash/` | arena | roster, versions, standings, round reports, panels; panel copies. The bots' user's because the intake's checker registers and submits there; root's `round` reads them without following links, and game jobs do not see them |
+| `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
+| `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
+| `home/`, `wasm-cache/` | arena | the bots' HOME, wasmtime's compiled modules |
+| `intake/`, `tmp/<kind>/` | root (`tmp/<kind>/` 1777) | the intake's checks; each isolated child's `/tmp` |
+| `coord/` | root | the Elixir coordinator's state: its settings and round end are read once; hidden from children |
+
+| Variable | Default | |
+| --- | --- | --- |
+| `COORD_ROLE` | games | `helper` makes it a helper |
+| `GAMES_DATA` | `/data` | the volume |
+| `GAMES_APP` | `/app` | the checkout with `bot/` and `forceteki/` |
+| `PORT`, `GAMES_LISTEN` | 8080, `::` | `POST /wake` (202), `GET /healthz` (200), Fly's flycast service |
+| `GAMES_PROXY_PORT` | 8081 | the window proxy, 127.0.0.1 only |
+| `SWU_WINDOW` | | the window's address |
+| `SWU_WINDOW_TOKEN` | | secret: taken out of the environment at boot |
+| `GAMES_IDLE_MIN` | 10 | stop after this long with nothing to do |
+| `GAMES_REPLAY_HOURS` | 24 | a round with an unchanged lineup plays again after this long (`gamesctl plan`) |
+| `GAMES_ROUND_HOURS` | 6 | a longer round is stopped and held until the next boot (fractions allowed) |
+| `GAMES_GAMES`, `GAMES_WORKERS`, `GAMES_THINK_CAP_SEC` | 2, 2, 60 | games per pair, games at once, each bot's thinking per game; Eric's arena settings win |
+| `GAMES_REQUIRE_MOUNT` | unset | `1`: refuse to start unless `GAMES_DATA` is its own file system |
+| `SWU_CARD_JSON` | unset | passed on to the children |
+| `GAMES_HELPER_PORT`, `GAMES_HELPER_LISTEN` | unset, `FLY_PRIVATE_IP` | the helper API; on only with a port and a `GAMES_HELPER_TOKENS` entry |
+| `GAMES_HELPER_TOKENS` | unset | secret: `name:sha256-of-token`, comma separated |
+| `GAMES_HELPER_IMAGE` | `registry.fly.io/swu-arena-games` | the image a helper of another build is told to run |
+| `GAMES_BUILD`, `GAMES_CARDS` | `/app/BUILD_SHA`, `/app/CARDS_SHA` | what a helper must match; set them only in rehearsals |
+| `GAMES_HIDE`, `ARENA_USER` | unset, `arena` | more paths hidden from children (`:`-separated); the bots' user |
+| `GAMES_HELPER_URL`, `GAMES_HELPER_SLOTS`, `GAMES_HELPER_TOKEN` | | helper only: the machine (through `fly proxy`), 1 to 16 slots (1), the token |
+
+Exit codes: the games role 0 when idle or stopped (SIGTERM; Fly then leaves the machine stopped), 1 when it cannot
+run (setup failed, no volume with `GAMES_REQUIRE_MOUNT=1`, no token, a bad setting: Fly restarts it up to 3 times).
+The helper 0 when stopped, 1 when its token is refused or its setup is broken, 3 when the machine runs another build
+(helper.sh then pulls it).
+
+Locally, against a local window (unset `SWU_WINDOW` in your shell first, since cloud sessions point it at the live
+window; keep the data outside `/tmp`, since isolate.sh gives each child its own `/tmp`; as root for the isolation):
+
+```bash
+GAMES_DATA=/srv/x/data GAMES_APP=$PWD/.. PORT=18181 GAMES_PROXY_PORT=18182 GAMES_LISTEN=127.0.0.1 \
+  SWU_WINDOW=http://127.0.0.1:18080 SWU_WINDOW_TOKEN=t node src/main-games.ts
+```
 
 ## The record
 
@@ -86,14 +167,14 @@ MCP OAuth) replaces them in stage 6.
 
 ## Rounds
 
-A rated round is a durable workflow (`src/Rounds.ts`): each job (one seed's games, at most 8) is an activity whose
-result is stored in SQLite, and a last activity rates the round. Each job's games and replays are recorded as soon as
-it finishes. Kill the server mid-round and start it again: the round carries on, and finished jobs are not played
-again.
+In the record, a rated round is a durable workflow (`src/Rounds.ts`): each job (one seed's games, at most 8) is an
+activity whose result is stored in SQLite, and a last activity rates the round. Each job's games and replays are
+recorded as soon as it finishes. Kill the server mid-round and start it again: the round carries on, and finished jobs
+are not played again.
 
 The game player (`src/Player.ts`) runs `node bot/arena/play-seed.js` per job and checks its output against a schema
-before anything is recorded. It still asks for each bot as a resident built into the games image; stage 5 sends it
-the submitted bundle instead.
+before anything is recorded. It still asks for each bot as a resident built into the games image; the games
+machine's rounds (above) send each version's bundle instead.
 
 ## Trace checks
 
@@ -115,12 +196,13 @@ Node 22.18 or newer runs the TypeScript directly (type stripping), so there is n
 
 ```bash
 cd server && npm ci
-npm test                      # 18 tests: settings, ratings, the import, export API = MCP, rounds, a restart mid-round, trace checks
+npm test                      # the record's and the games machine's tests; real games skip without the engine
 npm run typecheck
-ARENA_ADMIN_TOKEN=a ARENA_READ_TOKEN=r npm start   # http://127.0.0.1:8787, data in ./data (ARENA_DATA)
+ARENA_ADMIN_TOKEN=a ARENA_READ_TOKEN=r npm start   # the record: http://127.0.0.1:8787, data in ./data (ARENA_DATA)
 ```
 
-The CI workflow (`.github/workflows/ci.yml`) runs the tests and the typecheck when `server/` changes.
+The CI workflow (`.github/workflows/ci.yml`) runs the tests and the typecheck when `server/`, `bot/` or the engine pin
+changes, and `deploy-games.yml` runs them before every deploy of the games machine.
 
 `npm start` plays real games only where the engine is built (`forceteki/build`, card data); `ARENA_ROOT` points at
 another checkout that has it. A round's bots must be versions in the record:

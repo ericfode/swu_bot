@@ -1,8 +1,0 @@
-/_build/
-/deps/
-/cover/
-erl_crash.dump
-*.ez
-*.db
-*.db-shm
-*.db-wal

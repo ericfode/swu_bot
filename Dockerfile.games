@@ -1,9 +1,11 @@
 # The games machine: what the Fly app swu-arena-games runs (fly.games.toml). It takes the bots people submit on the
 # window (swu-arena.fly.dev), plays them against each other and the arena's own bots (also submitted, as resident
-# entries: bot/arena/README.md), and sends the results back to the window. It builds no bot of its own. The Elixir coordinator (coord/) runs it and calls Node's bot/arena/gamesctl.js for the game work. Built from the
-# repo, forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
+# entries: bot/arena/README.md), and sends the results back to the window. It builds no bot of its own. The arena
+# server's games role runs it (server/src/main-games.ts, server/README.md "The games machine"): it plays every game with
+# bot/arena/play-seed.js and calls Node's bot/arena/gamesctl.js for the rest of the arena's work. Built from the repo,
+# forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
 # container). The build context is filtered by Dockerfile.games.dockerignore.
-# No stage installs system packages: each takes what it needs from an official image (node, python, rust, Hex's elixir).
+# No stage installs system packages: each takes what it needs from an official image (node, python).
 # The Rust simulator that serves Rust simulations (Kessel, "simEngine": "rust" in spec/protocol.md) comes prebuilt from
 # vendor/kessel (vendor/README.md), so no stage builds it.
 
@@ -28,25 +30,14 @@ WORKDIR /src
 COPY bot/compiled bot/compiled
 RUN python3 bot/compiled/build.py --tools && rm -rf build/compiled/.tools/downloads
 
-# the Elixir coordinator as a release (coord/): Erlang and Elixir from Hex's official image, built on the rust image
-# because it has gcc (exqlite's SQLite is compiled from source, config :exqlite, force_build: true). All three images
-# are Debian bookworm, so the release runs on the final image's glibc.
-FROM hexpm/elixir:1.19.6-erlang-28.5.0.7-debian-bookworm-20260918-slim AS beam
-FROM rust:1.97-bookworm AS coord
-COPY --from=beam /usr/local/lib/erlang /usr/local/lib/erlang
-COPY --from=beam /usr/local/lib/elixir /usr/local/lib/elixir
-RUN for b in erl erlc escript; do ln -s ../lib/erlang/bin/$b /usr/local/bin/$b; done \
- && for b in elixir elixirc mix; do ln -s ../lib/elixir/bin/$b /usr/local/bin/$b; done
-ENV LANG=C.UTF-8 MIX_ENV=prod
-WORKDIR /src/coord
-RUN mix local.hex --force && mix local.rebar --force
-COPY coord/mix.exs coord/mix.lock ./
-COPY coord/config config
-RUN mix deps.get --only prod && mix deps.compile
-COPY coord/lib lib
-COPY coord/priv priv
-COPY coord/rel rel
-RUN mix release --path /opt/coord && chmod 600 /opt/coord/releases/COOKIE
+# the arena server (server/): its runtime packages only, from its lockfile. Node runs the TypeScript as it is (type
+# stripping), so there is nothing to build; TypeScript itself is a dev package, checked in CI. The final image has no
+# npm, hence this stage. The packages are plain JavaScript (node:sqlite is Node's own), so the files work on any CPU.
+FROM node:22-bookworm-slim AS server
+WORKDIR /src/server
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY server/src src
 
 # python3 runs bundles under wasmtime (bot/compiled/run.py); bash, unshare and setpriv run isolate.sh; the bots and the
 # intake's checker run as the user arena
@@ -54,6 +45,9 @@ FROM python:3.12-slim-bookworm
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
 RUN useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin arena
+# NODE_ENV=production is for the server and the build steps below: the server builds each child's environment from
+# nothing, and the games themselves (play-seed) get no NODE_ENV, as every hosted game did (the engine's text depends
+# on it)
 ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
 WORKDIR /app
 COPY package.json ./
@@ -66,9 +60,14 @@ COPY --from=engine /src/forceteki/build forceteki/build
 COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
 COPY --from=engine /src/forceteki/test/json forceteki/test/json
 COPY --from=tools /src/build/compiled build/compiled
-COPY --from=coord /opt/coord /app/coord
-# the release starts here: crypto, SQLite and the CA store load (runtime.exs needs a window address to load)
-RUN SWU_WINDOW=http://window.invalid /app/coord/bin/coord eval 'true = byte_size(:crypto.strong_rand_bytes(8)) == 8; {:ok, _} = Exqlite.Sqlite3.open(":memory:"); true = :public_key.cacerts_get() != []'
+COPY --from=server /src/server server
+# The Elixir coordinator's entry point, kept for one release: a helper.sh from before the TypeScript server runs
+# `docker run ... /app/coord/bin/coord start`, and this starts the same server (COORD_ROLE says which role)
+RUN mkdir -p /app/coord/bin \
+ && printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/node --disable-warning=ExperimentalWarning /app/server/src/main-games.ts "$@"' > /app/coord/bin/coord \
+ && chmod 755 /app/coord/bin/coord
+# the server starts here: Node strips its types, its packages resolve, node:sqlite (games.db) loads
+RUN cd /app/server && node --disable-warning=ExperimentalWarning --input-type=module -e 'await import("node:sqlite"); await import("@effect/platform-node"); await import("@effect/sql-sqlite-node"); await import("./src/games/Config.ts"); await import("./src/games/Store.ts")'
 # What a helper must match to play this machine's games (bot/arena/HELPER.md): the commit the image was built from
 # (deploy-games.yml passes it) and a hash of the card data fetched above. Last, so a new commit rebuilds only this.
 ARG GIT_SHA=unknown
@@ -79,4 +78,4 @@ RUN printf '%s\n' "$GIT_SHA" > /app/BUILD_SHA \
 # through the helper API (GET /v1/swarm/<file>).
 RUN node bot/swarm/pack.js --root /app --out /app/build/swarm && node bot/swarm/build.js --out /app/build/swarm
 EXPOSE 8080
-CMD ["/app/coord/bin/coord", "start"]
+CMD ["node", "--disable-warning=ExperimentalWarning", "/app/server/src/main-games.ts"]

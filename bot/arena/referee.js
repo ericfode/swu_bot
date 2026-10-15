@@ -1,7 +1,8 @@
 'use strict';
 /**
  * Arena referee: rates the newest submitted version of every competitor against each other and the baselines, one
- * round per run. The games machine starts it for the round to play (gamesctl.js plan and referee-cmd).
+ * round per run. The games machine no longer runs it (its server plays the rounds, server/src/games): there it is a
+ * library for gamesctl.js (lineup, the deck lists, publish), and its main plays a round by hand (local rehearsals).
  *
  *   node bot/arena/referee.js [--round K] [--games 4] [--workers 3]           play rated round K (default: the next one)
  *
@@ -320,9 +321,11 @@ function publish(round, id = ladderIdOf(round)) {
  * Newest version of every roster agent that has one, resident entries included, plus the built-in baselines that no
  * resident with a version has replaced (residentName: the same bot, entered as a submission), so the arena's own bots
  * move out of the image one by one and no round misses one. With a cutoff (ISO time) only versions submitted at or
- * before it count (versions without submittedAt always do); later ones wait for the next round.
+ * before it count (versions without submittedAt always do); later ones wait for the next round. `playable` narrows the
+ * versions that count (the games machine plays only WebAssembly ones): an agent whose newest one is not playable
+ * fields its newest one that is, or nothing.
  */
-function lineup(cutoff = null) {
+function lineup(cutoff = null, { playable = () => true } = {}) {
     roster = loadRoster();
     const until = cutoff ? Date.parse(cutoff) : Infinity;
     const agents = [];
@@ -333,17 +336,17 @@ function lineup(cutoff = null) {
         if (ok.length < all.length) {
             console.log(`${a.name}: ${all.filter((v) => !ok.includes(v)).map((v) => `v${v}`).join(', ')} came in after ${cutoff}, rated next round`);
         }
-        // newest version that the registry can resolve (a folder without bot.js would stop the ladder)
-        const v = [...ok].reverse().find((n) => resolveArena(`${a.name}-v${n}`));
+        // newest version that the registry can resolve (a folder without bot.js would stop the ladder) and that plays here
+        const v = [...ok].reverse().find((n) => resolveArena(`${a.name}-v${n}`) && playable(`${a.name}-v${n}`));
         if (v !== undefined) {
             agents.push(`${a.name}-v${v}`);
         }
         if (ok.length && v !== ok[ok.length - 1]) {
-            console.log(`${a.name}: v${ok[ok.length - 1]} cannot be loaded (no bot.js), using ${v === undefined ? 'nothing' : `v${v}`}`);
+            console.log(`${a.name}: v${ok[ok.length - 1]} cannot be loaded or played here, using ${v === undefined ? 'nothing' : `v${v}`}`);
         }
     }
     const fielded = new Set(agents.map(residentOf).filter(Boolean));
-    return [...agents, ...roster.baselines.filter((b) => !fielded.has(residentName(b)))];
+    return [...agents, ...roster.baselines.filter((b) => !fielded.has(residentName(b)) && playable(b))];
 }
 
 // child processes (the ladder) die with the referee
@@ -544,4 +547,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { ROUND_DECKS, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };
+module.exports = { ROUND_DECKS, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, publish, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

@@ -24,11 +24,10 @@ const BASELINES = ['heuristic', 'rush', 'c-clock-wasm', 'py-clock-wasm'];
 const t = { p1: { ms: 5, n: 10, p95: 1 }, p2: { ms: 5, n: 10, p95: 1 } };
 const won = (id, p1, p2, winner) => ({ id, p1, p2, outcome: 'won', winner, winnerSeat: winner === p1 ? 'p1' : 'p2', timing: t, rounds: 5 });
 const ladderOf = (bots, games) => ({ id: 'arena-r1', status: 'done', config: { bots, firstSeed: 1, gamesPerPair: 2 }, progress: { scheduled: games.length }, games });
-const version = (name, code = true) => {
-    writeJson(path.join(HOME, 'versions', name, 'SUBMISSION.json'), { name, note: 'n', submittedAt: '2026-10-14T06:00:00.000Z' });
-    if (code) {
-        fs.writeFileSync(path.join(HOME, 'versions', name, 'bot.js'), 'module.exports = {};\n');
-    }
+// a WebAssembly version, as the games machine plays them: SUBMISSION.json bot.kind wasm and a bundle/ with its arena.json
+const version = (name) => {
+    writeJson(path.join(HOME, 'versions', name, 'SUBMISSION.json'), { name, note: 'n', bot: { kind: 'wasm' }, submittedAt: '2026-10-14T06:00:00.000Z' });
+    writeJson(path.join(HOME, 'versions', name, 'bundle', 'arena.json'), {});
 };
 function setRoster(agents, baselines = BASELINES) {
     fs.rmSync(path.join(HOME, 'versions'), { recursive: true, force: true });
