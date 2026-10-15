@@ -3,7 +3,8 @@
  * The JEPA bot in JavaScript: jepa_bot.py's player (the imagined score, the planner with its gate, c-clock's resource
  * rule), features.py, the transformer JEPA's forward pass (tx_model.py) and resource_policy.py's choices, ported line
  * by line so it plays the moves the Python bot plays. It needs no Node built-ins, so a browser runs it as is (the
- * arena's play page runs it next to the referee, in the person's browser). `main.js` is its command line.
+ * arena's play page runs it next to the referee, in the person's browser): a plain <script> tag puts the exports on
+ * globalThis.SWUJepa. `main.js` is its command line.
  *
  *   const bot = new JepaBot({ model, windowModel, planModel, cards });   // models: loadModel(bytes); cards: cardTables(...)
  *   bot.hello(msg); await bot.decide(msg, sim); bot.over(msg);         // an in-process protocol v2 client (stdio.js answer)
@@ -1336,4 +1337,10 @@ class JepaBot {
     }
 }
 
-module.exports = { JepaBot, TxModel, ResourcePolicy, PyRandom, loadModel, cardTables, encode, hashId, canon, actionKey, STATE_DIM, ACTION_DIM, TOKEN_DIM };
+const api = { JepaBot, TxModel, ResourcePolicy, PyRandom, loadModel, cardTables, encode, hashId, canon, actionKey, STATE_DIM, ACTION_DIM, TOKEN_DIM };
+// CommonJS (Node, the arena's bundles); loaded by a plain <script> tag, the same names are on globalThis.SWUJepa
+if (typeof module === 'object' && module.exports) {
+    module.exports = api;
+} else {
+    globalThis.SWUJepa = api;
+}
