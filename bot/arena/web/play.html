@@ -82,6 +82,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   const $ = (id) => document.getElementById(id);
   const BOT = 'jepa-tx-gate';
   let info = null;
+  let saving = 0; // replays being sent to the arena: leaving the page now would cancel the request
 
   function status(text, tone = 'idle') {
     $('status').dataset.tone = tone;
@@ -236,7 +237,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     };
     worker.postMessage({ t: 'init', pack: files.pack });
     window.addEventListener('beforeunload', (e) => {
-      if (playing) {
+      if (playing || saving) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -279,6 +280,15 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   }
 
   async function save(replay) {
+    saving++;
+    try {
+      await send(replay);
+    } finally {
+      saving--;
+    }
+  }
+
+  async function send(replay) {
     status('Saving the game to the arena…', 'busy');
     for (let i = 0; i < 5; i++) {
       try {
