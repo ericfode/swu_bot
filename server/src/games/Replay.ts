@@ -31,6 +31,7 @@ import { createRequire } from "node:module"
 import { lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { parseArgs } from "node:util"
+import { gunzipSync } from "node:zlib"
 import { Cause, Effect, Option } from "effect"
 import { readConfig } from "./Config.ts"
 import { playLocal } from "./Executor.ts"
@@ -394,6 +395,20 @@ const hasRecorded = (file: string): boolean => {
   return true
 }
 
+/**
+ * The round's replay of a game: games/<id>.jsonl, or games/<id>.jsonl.gz once the games machine gzipped an older
+ * round (Compact.ts); null when it has neither.
+ */
+const recordedFile = (games: string, id: string): string | null => {
+  const plain = path.join(games, `${id}.jsonl`)
+  if (hasRecorded(plain)) return plain
+  const gz = `${plain}.gz`
+  return hasRecorded(gz) ? gz : null
+}
+
+const readRecorded = (file: string): string =>
+  file.endsWith(".gz") ? gunzipSync(readFileSync(file), { maxOutputLength: MAX_REPLAY_BYTES }).toString("utf8") : readFileSync(file, "utf8")
+
 interface Prepared {
   readonly round: RecordedRound
   readonly schedule: ReadonlyArray<ScheduledGame>
@@ -449,10 +464,7 @@ const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNulla
     gameMs: 4 * round.capMs + 600000
   }
   const jobs = [...bySeed(toPlay).values()].map((games) => ({ job: jobFor(js, { bundles, decks }, round.key, games, limits), games }))
-  const replays = new Map(toPlay.map((g) => {
-    const file = path.join(args.results, "games", `${g.id}.jsonl`)
-    return [g.id, hasRecorded(file) ? file : null] as const
-  }))
+  const replays = new Map(toPlay.map((g) => [g.id, recordedFile(path.join(args.results, "games"), g.id)] as const))
   return { round, schedule, decks, jobs, missing, replays }
 }
 
@@ -474,7 +486,7 @@ const compareJob = (args: ReplayArgs, p: Prepared, job: PlaySeedJob, games: Read
     const text = typeof played.replays[g.id] === "string" ? withKey(played.replays[g.id]!, job.key) : null
     if (text !== null) writeAtomic(path.join(args.out, "games", `${g.id}.jsonl`), text)
     const file = p.replays.get(g.id) ?? null
-    out.push(...compareGame(g.id, entry, r as Record<string, any>, file === null ? null : readFileSync(file, "utf8"), text, job.key))
+    out.push(...compareGame(g.id, entry, r as Record<string, any>, file === null ? null : readRecorded(file), text, job.key))
   }
   return { out, results }
 }

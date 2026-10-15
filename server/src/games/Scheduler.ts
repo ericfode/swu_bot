@@ -13,6 +13,9 @@
  *   3. stops the machine with 0 when it is idle (`idle`); when a plan runs, that check waits for its answer, so a
  *      round about to be queued never meets an idle stop.
  *
+ * Once warm is done, and after each round that finished, the compactor gzips older rounds' replays (Compact.ts); the
+ * machine does not idle out while it runs.
+ *
  * Rounds keep Oban's rules: a round is queued once per boot (whatever became of it); a failed round is tried once
  * more 30 s later; two failures, or a round that runs past GAMES_ROUND_HOURS, hold it until the next boot (plan keeps
  * naming it, this warns once, and the machine may idle). A round cut by a stop is not an attempt: the next boot
@@ -55,15 +58,18 @@ export interface IdleFacts {
   readonly settledAt: number | null
   readonly idleMs: number
   readonly settleMs: number
+  /** the compactor runs a pass */
+  readonly compacting?: boolean
 }
 
 /**
  * The machine may stop: ready, nothing unfinished, no plan waiting for its answer, no child running but a push, no
- * wake, open submission or round end for idleMs, and no version accepted for settleMs. Helpers never keep it up.
+ * compaction pass, no wake, open submission or round end for idleMs, and no version accepted for settleMs. Helpers
+ * never keep it up.
  */
 export const idle = (f: IdleFacts, now: number) =>
   f.phase === "ready" && f.incomplete.length === 0 && !f.planning && f.children.every((k) => k === "push") &&
-  now - f.busyAt > f.idleMs && (f.settledAt === null || now - f.settledAt > f.settleMs)
+  !f.compacting && now - f.busyAt > f.idleMs && (f.settledAt === null || now - f.settledAt > f.settleMs)
 
 /**
  * How long a new round still waits after the last round's end (wall ms; null when none finished) for Eric's wait
@@ -97,6 +103,8 @@ export interface SchedulerOptions {
   readonly board: Pick<LeaseBoard, "reset"> | null
   /** stops the machine with this exit code (the machine's orderly stop) */
   readonly stop: (code: number) => void
+  /** gzips older rounds' replays: poked once warm is done and after each round that finished (Compact.ts) */
+  readonly compactor?: { readonly poke: () => void; readonly running: () => boolean }
   /** the wait before a failed round's second attempt (Oban backoff: 30 s) */
   readonly retryMs?: number
   readonly now?: () => number
@@ -235,7 +243,8 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       busyAt,
       settledAt,
       idleMs: c.idleMs,
-      settleMs: c.timing.settleMs
+      settleMs: c.timing.settleMs,
+      compacting: o.compactor?.running() ?? false
     }
     const t = now()
     if (idle(facts, t)) {
@@ -307,6 +316,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
         }
         // no tick here: the first plan comes with the next tick, as it always did
         phase = "ready"
+        if (!stopping) o.compactor?.poke()
       })
     }
   }
@@ -462,6 +472,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
     if (kind === "done") {
       job = null
       void store(`could not count round ${j.k}'s attempts`, o.store.updateRound(j.k, { attempts: j.attempts }))
+      o.compactor?.poke()
     } else if (kind === "cap") {
       job = null
       hold(j, `it ran past ${capHours()} h`)
