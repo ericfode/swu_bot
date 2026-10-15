@@ -1,18 +1,15 @@
 # check=skip=InvalidDefaultArgInFrom,FromPlatformFlagConstDisallowed
 # A games helper image for the computer that builds it (bot/arena/HELPER.md), for ARM computers such as Macs with Apple
-# chips. The games machine's image (Dockerfile.games) is built for amd64 only, and under Rosetta its Erlang stops at
-# start: the JIT cannot set up the emulator's own functions ("prim_tty:isatty ... undef", then "nouser").
+# chips. The games machine's image (Dockerfile.games) is built for amd64 only, and amd64 code runs there under
+# emulation (Rosetta), which is slower and stopped the Elixir helper of earlier images at start.
 # `sh bot/arena/ops/helper.sh build` makes it; it is never deployed.
 #
-# Everything a game runs on comes unchanged from the machine's image (MACHINE_IMAGE, read as files only, never run): the
-# bot code, Kessel for Rust simulations (vendor/), the engine and its card data, build/compiled (the intake's tools),
-# BUILD_SHA and CARDS_SHA, so the helper still matches the machine's build. Only the native parts are built for this
-# computer: Node and Python with wasmtime from their official images, and the coordinator release from Dockerfile.games's
-# own coord stage at the machine's commit (COORD_IMAGE, which helper.sh builds first).
+# Everything comes unchanged from the machine's image (MACHINE_IMAGE, read as files only, never run): the bot code,
+# Kessel for Rust simulations (vendor/), the engine and its card data, build/ (the intake's tools, the swarm's files),
+# the arena server with its packages (server/, plain JavaScript), BUILD_SHA and CARDS_SHA, so the helper still matches
+# the machine's build. Only Node and Python with wasmtime are this computer's own, from their official images.
 ARG MACHINE_IMAGE
-ARG COORD_IMAGE
 FROM --platform=linux/amd64 ${MACHINE_IMAGE} AS machine
-FROM ${COORD_IMAGE} AS coord
 
 # wasmtime at the version bot/compiled/toolchain.json pins (the machine's copy of it)
 FROM python:3.12-slim-bookworm AS pydeps
@@ -26,13 +23,11 @@ COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
 RUN useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin arena
 ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
 WORKDIR /app
-COPY --from=machine /app/package.json /app/BUILD_SHA /app/CARDS_SHA ./
-COPY --from=machine /app/bot bot
-COPY --from=machine /app/vendor vendor
-COPY --from=machine /app/forceteki forceteki
-COPY --from=machine /app/build build
-COPY --from=coord /opt/coord /app/coord
-RUN SWU_WINDOW=http://window.invalid /app/coord/bin/coord eval 'true = byte_size(:crypto.strong_rand_bytes(8)) == 8; {:ok, _} = Exqlite.Sqlite3.open(":memory:"); true = :public_key.cacerts_get() != []' \
+COPY --from=machine /app /app
+# a machine image from before the TypeScript server has an Elixir coordinator for amd64 instead, which this cannot run
+RUN test -f /app/server/src/main-games.ts \
+      || { echo "this games image has no server/src/main-games.ts: build its helper with the helper.sh of its own commit"; exit 1; } \
  && node -e 'require("/app/forceteki/build/server/game/core/Game")' \
+ && (cd /app/server && node --disable-warning=ExperimentalWarning --input-type=module -e 'await import("node:sqlite"); await import("@effect/platform-node"); await import("@effect/sql-sqlite-node"); await import("./src/games/Config.ts")') \
  && python3 -c 'import wasmtime'
-CMD ["/app/coord/bin/coord", "start"]
+CMD ["node", "--disable-warning=ExperimentalWarning", "/app/server/src/main-games.ts"]

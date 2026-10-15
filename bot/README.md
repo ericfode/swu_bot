@@ -70,7 +70,8 @@ language or as plain objects in process.
   - `name#tag` enters the same bot twice (`aggro#1,aggro#2`) as a sanity check.
   - Every other bot (ISMCTS, omni, learned, Jev, the bots in other languages) is in holocron with its own registry.
 - `node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10 [--workers 3] [--seed 1] [--record] [--key K|none]`
-  runs a round robin on worker threads. The arena plays its rounds with it (`arena/referee.js`). Each seed is played
+  runs a round robin on worker threads. The arena played its rounds with it until stage 5; the games machine now deals
+  them the same way and plays each seed with `arena/play-seed.js` (`server/README.md`). Each seed is played
   once from each seat (random decks follow the seat, so deck luck cancels). Decks come from a random run key, as in
   `tournament.js`; it is saved in `ladder.json` (`config.key`) when the run is done. Pass it as `--key` to give a
   second run the same games, or use `--key none` to deal from the seed alone. After every game it rewrites

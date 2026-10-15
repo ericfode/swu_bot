@@ -1,5 +1,7 @@
 # Builds the games image (Dockerfile.games) on Fly's builders and rolls it out to swu-arena-games (fly.games.toml) after
-# the arena tests pass. Pull requests that touch the same files run the tests only. Needs the repository secret FLY_GAMES_TOKEN (`fly tokens create deploy -a swu-arena-games`).
+# the arena's and the server's tests pass (the arena server's games role runs the machine: server/README.md). Pull
+# requests that touch the same files run the tests, and build the image when they change how it is built; they never
+# deploy. Needs the repository secret FLY_GAMES_TOKEN (`fly tokens create deploy -a swu-arena-games`).
 # The image builds forceteki from the submodule: when that repository is private, FORCETEKI_TOKEN (a token that can
 # read it) checks it out; otherwise the workflow's own token does.
 name: Deploy the games machine
@@ -8,7 +10,7 @@ on:
     branches: [main]
     paths:
       - 'bot/**'
-      - 'coord/**'
+      - 'server/**'
       - 'forceteki'
       - 'vendor/kessel/**'
       - 'Dockerfile.games'
@@ -25,6 +27,7 @@ on:
       - 'bot/test/play-seed.test.js'
       - 'bot/test/bundle.test.js'
       - 'bot/test/sims.test.js'
+      - 'bot/test/helper-sh.test.js'
       - 'bot/sims/**'
       - 'vendor/kessel/**'
       - 'bot/remote-lane.js'
@@ -32,8 +35,9 @@ on:
       - 'bot/ladder-worker.js'
       - 'bot/game-pool.js'
       - 'bot/compiled/bundle.py'
-      - 'coord/**'
+      - 'server/**'
       - 'Dockerfile.games'
+      - 'Dockerfile.games.dockerignore'
       - 'fly.games.toml'
       - '.github/workflows/deploy-games.yml'
   workflow_dispatch:
@@ -59,17 +63,16 @@ jobs:
           package-manager-cache: false
       # play-seed's and sims' games need the engine, which this job does not build: those tests skip, the job checks and
       # the vendored Kessel package's checks stay
-      - run: node --test bot/test/gamesctl-plan.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js bot/test/sims.test.js
+      - run: node --test bot/test/gamesctl-plan.test.js bot/test/gamesctl.test.js bot/test/arena-hardening.test.js bot/test/window.test.js bot/test/remote-lane.test.js bot/test/play-seed.test.js bot/test/bundle.test.js bot/test/sims.test.js bot/test/helper-sh.test.js
 
-  # the Elixir coordinator (coord/): the versions Dockerfile.games builds with; the :node tests call the real gamesctl.js
-  test-coord:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+  # the arena server, whose games role runs the machine (server/src/main-games.ts): its typecheck and tests. Their real
+  # games need the engine, which this job does not build either: those skip, as in the test job above
+  test-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
-        working-directory: coord
-    env:
-      MIX_ENV: test
+        working-directory: server
     steps:
       - uses: actions/checkout@v7
         with:
@@ -78,24 +81,42 @@ jobs:
         with:
           node-version: 22
           package-manager-cache: false
-      - uses: erlef/setup-beam@v1
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+
+  # The image itself, on a pull request that changes how it is built, so a Dockerfile that does not build shows before
+  # the merge and not in the deploy. Built on the runner and thrown away; the deploy builds its own on Fly's builders.
+  image:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
         with:
-          otp-version: '28.5.0.7'
-          elixir-version: '1.19.6'
-          version-type: strict
-      - uses: actions/cache@v5
-        with:
-          path: |
-            coord/deps
-            coord/_build
-          key: coord-${{ runner.os }}-28.5.0.7-1.19.6-${{ hashFiles('coord/mix.lock') }}
-      - run: mix deps.get
-      - run: mix compile --warnings-as-errors
-      - run: mix format --check-formatted
-      - run: mix test --include node
+          # the merge commit and its parents, to see what the pull request changes
+          fetch-depth: 2
+          persist-credentials: false
+      - name: What the change touches
+        id: changed
+        run: |
+          if git diff --name-only HEAD^1 HEAD | grep -qE '^(Dockerfile\.games(\.dockerignore)?|fly\.games\.toml|server/package(-lock)?\.json|\.github/workflows/deploy-games\.yml)$'; then
+            echo "image=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "image=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.image == 'true'
+        env:
+          TOKEN: ${{ secrets.FORCETEKI_TOKEN || github.token }}
+        run: |
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c 'http.https://github.com/.extraheader=' -c "http.https://github.com/.extraheader=$auth" submodule update --init --depth 1 forceteki \
+            || git -c 'http.https://github.com/.extraheader=' -c "http.https://github.com/.extraheader=$auth" submodule update --init forceteki
+      - if: steps.changed.outputs.image == 'true'
+        run: docker build -f Dockerfile.games -t swu-arena-games:check .
 
   deploy:
-    needs: [test, test-coord]
+    needs: [test, test-server]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45

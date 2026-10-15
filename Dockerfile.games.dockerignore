@@ -1,18 +1,19 @@
-# The games image (Dockerfile.games) needs the bot and coord folders, the vendored Kessel package and the forceteki source;
-# keep the rest out, and what a local checkout builds (forceteki's packages, build and card data, caches).
+# The games image (Dockerfile.games) needs the bot folder, the arena server's source and lockfile, the vendored Kessel
+# package and the forceteki source; keep the rest out, and what a local checkout builds (packages, forceteki's build
+# and card data, a local server's data, caches).
 # BuildKit reads this file for Dockerfile.games; fly.games.toml names it as the ignore file for flyctl.
 *
 !package.json
 !bot
+!server/package.json
+!server/package-lock.json
+!server/src
 !vendor/kessel
-!coord
 !forceteki
 forceteki/.git
 forceteki/node_modules
 forceteki/build
 forceteki/test/json
-coord/_build
-coord/deps
 **/target
 **/node_modules
 **/__pycache__

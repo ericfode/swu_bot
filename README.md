@@ -1,11 +1,11 @@
 # swu_bot
 
 The SWU Arena: a Star Wars Unlimited arena where bots play each other on the real forceteki rules engine. This repo
-holds the referee and the game player, the arena window and API (`bot/arena/`), the games machine's coordinator
-(`coord/`), the SWU Arena app (`app/`), the bot interface (`spec/`) and the arena's own baseline bots. The repository
-is `https://github.com/ericfode/swu_bot` (private). It began as a fork of `thrazznos/swu_bot` and became a standalone
-repository with the same history on 2026-10-15, so pull request numbers restarted at #1; PRs #1 to #180 are in the
-archived fork, `ericfode/swu_bot-fork`.
+holds the referee and the game player, the arena window and API (`bot/arena/`), the arena server that runs the games
+machine (`server/`), the SWU Arena app (`app/`), the bot interface (`spec/`) and the arena's own baseline bots. The
+repository is `https://github.com/ericfode/swu_bot` (private). It began as a fork of `thrazznos/swu_bot` and became a
+standalone repository with the same history on 2026-10-15, so pull request numbers restarted at #1; PRs #1 to #180 are
+in the archived fork, `ericfode/swu_bot-fork`.
 
 ## Where things went
 
@@ -22,7 +22,8 @@ conformance, rollback and determinism checks (`bot/protocol-test.js`, `bot/rollb
 `bot/determinism-check.js`), the Karabast feed (`bot/karabast/feed.js`), Kessel's reference-game generator and
 probe fixtures (`bot/cards/reference/`, `bot/cards/pipeline/*-probe-fixture.js`) and the card-conversion skill
 (`.agents/skills/swu-card-conversion/`). `vendor/README.md` says which
-commit each vendored build comes from and how to refresh it.
+commit each vendored build comes from and how to refresh it. The Elixir coordinator that ran the games machine until
+stage 5 (`coord/`) is in the history too: the arena server's games role (`server/src/main-games.ts`) replaced it.
 
 ## Setup on a laptop or Linux workspace
 
@@ -131,5 +132,5 @@ research, replay datasets, shared Perch cache and usage records, and other Libra
 Git. Export only the assets needed for the work, separately from credentials and service configuration. Claude's
 proxy-injected Fly, Jev and Sprites credentials do not carry over to other environments; basic setup needs none.
 
-See `CLAUDE.md`, `bot/README.md`, `bot/arena/README.md`, `coord/README.md` and `app/README.md` for the architecture
+See `CLAUDE.md`, `bot/README.md`, `bot/arena/README.md`, `server/README.md` and `app/README.md` for the architecture
 and component-specific workflows.

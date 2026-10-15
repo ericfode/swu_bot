@@ -12,7 +12,7 @@ asks the same API.
 
 | Part | Sends | Through |
 |---|---|---|
-| Arena (referee + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s, and the playing round's replays every 3 s (`push.js` `arenaPusher`; see "The games machine" below); never the referee itself, whose bots must not get the proxy |
+| Arena (games machine + api.js) | status, standings, roster (no tokens), round reports, versions, panels | the games machine, every 20 s, and the playing round's replays every 3 s (`push.js` `arenaPusher`; see "The games machine" below); never a game job, whose bots must not get the proxy |
 | Ladders (`bot/ladder.js`) | each run's index and report, each game's replay as it is played | started by ladder.js itself when `SWU_WINDOW` is set; it outlives the ladder to send the run's last state. Cloud sessions set `SWU_WINDOW`, so their ladders show on the live window: unset it for a test run |
 | Meta analyzer (holocron's `lab/meta/analyze.js`) | the Atlas model and the ratings | at the end of each run when `SWU_WINDOW` is set |
 | Research lines and the dashboard | panels, experiments, evals, bot cards, league, lens, threads | `node bot/arena/push.js dir <collection> <folder>` |
@@ -65,9 +65,10 @@ except an admin changing the invite list from the app's Share page (below):
 - `GET /api/arena-settings` gives Eric's arena settings, `{settings, updatedAt, by}`: `gamesPerPair` (even, 2 to 10)
   and `thinkCapSec` (10 to 600, each bot's thinking per game) for the arena, `workers` (games at once, 1 to 16) and
   `roundGapMin` (0 to 240, from one round's end to the next round's start) for the games machine. A setting left out
-  is the machine's default (`coord/README.md`). `POST /api/arena-settings` with `{"set": {"<name>": <value> or null}}`
-  changes some of them, null going back to the default; admins only, from the app's own pages as for `/api/share`.
-  The games machine reads them every minute with its own token (`coord/lib/coord/settings.ex`), which may only read.
+  is the machine's default (`server/README.md`, "The games machine"). `POST /api/arena-settings` with
+  `{"set": {"<name>": <value> or null}}` changes some of them, null going back to the default; admins only, from the
+  app's own pages as for `/api/share`. The games machine reads them every minute with its own token, which may only
+  read.
 - `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
   the invite list and the view links to admins.
 
@@ -189,13 +190,14 @@ run the tests and deploy nothing). Threads send data when `SWU_WINDOW=https://sw
 ## The games machine (swu-arena-games)
 
 The window stores submissions; the games machine plays them. It is the Fly app `swu-arena-games` (`fly.games.toml`,
-`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running the Elixir coordinator (`coord/`,
-[coord/README.md](../../coord/README.md)), which calls `node bot/arena/gamesctl.js` for the game work:
+`Dockerfile.games`), one machine with 2 dedicated CPUs and a 3 GB volume, running the arena server's games role
+(`server/src/main-games.ts`, [server/README.md](../../server/README.md)), which plays the rounds and calls
+`node bot/arena/gamesctl.js` for the Node work:
 
 ```
- window ──POST /wake──▶ coord ──gamesctl intake──▶ versions/ ──gamesctl referee-cmd──▶ referee ──▶ ladder (bots as arena)
+ window ──POST /wake──▶ server ──gamesctl intake──▶ versions/ ──gamesctl round──▶ round ──▶ play-seed (bots as arena)
    ▲      (flycast)       │
-   └── submissions, standings, round replays: gamesctl push through coord's loopback proxy (its token) ──┘
+   └── submissions, standings, round replays: gamesctl push through the server's loopback proxy (its token) ──┘
 ```
 
 - It has a private address only (flycast). The window calls `http://swu-arena-games.flycast/wake` (`ARENA_GAMES_WAKE`)
@@ -212,16 +214,16 @@ The window stores submissions; the games machine plays them. It is the Fly app `
   go every 3 s, and the app's Live board follows a game that is playing.
 - With nothing to do for 10 minutes (`GAMES_IDLE_MIN`) it exits, and the machine stays stopped until the next wake-up.
   A round runs at most 6 hours (`GAMES_ROUND_HOURS`).
-- Only the coordinator (the BEAM) holds the window token; its Node children reach the window through a loopback proxy
-  with a nonce. The referee runs with a minimal environment in its own namespaces with `/.fly` hidden, and the ladders
-  and the intake's checker run as the user arena (`ops/isolate.sh`, `referee.js spawnBots`).
+- Only the server holds the window token; its Node children reach the window through a loopback proxy with a nonce.
+  Every child gets an environment built from nothing; the game jobs and the intake's checker run as the user arena in
+  their own namespaces, with `/.fly`, the server's folder and the round-seed secret hidden (`ops/isolate.sh`).
 - Helpers: a computer of Eric's can play some of a round's seeds through `fly proxy` ([HELPER.md](HELPER.md)). The
   machine listens on `GAMES_HELPER_PORT`; helpers stay off until the `GAMES_HELPER_TOKENS` secret names one.
 
-Deploys: `.github/workflows/deploy-games.yml` on every merge that touches `bot/`, the engine pin or the image, with the
-repository secret `FLY_GAMES_TOKEN` (`fly tokens create deploy -a swu-arena-games`). It checks out forceteki with
-`FORCETEKI_TOKEN` when that secret exists. Locally, the coordinator's release plays against a local window ("Building
-and running the release" in coord/README.md; GAMES_DATA outside /tmp, since isolate.sh gives the referee its own /tmp).
+Deploys: `.github/workflows/deploy-games.yml` on every merge that touches `bot/`, `server/`, the engine pin or the
+image, with the repository secret `FLY_GAMES_TOKEN` (`fly tokens create deploy -a swu-arena-games`). It checks out
+forceteki with `FORCETEKI_TOKEN` when that secret exists. Locally, the server's games role plays against a local window
+(server/README.md, "The games machine").
 
 ## Run it locally
 

@@ -6,7 +6,7 @@ the project's own bots, and sends the results back to the window, where friends 
 
 ```
 builder ──/mcp arena_submit──▶ window (swu-arena) ──POST /wake──▶ games machine (swu-arena-games)
-                                 ▲                                  intake ─▶ versions ─▶ referee ─▶ ladder
+                                 ▲                                  intake ─▶ versions ─▶ round ─▶ play-seed
                                  └──── status, standings, panels, round replays (push.js) ───┘
 ```
 
@@ -33,31 +33,34 @@ which the window does not answer, so it shows no data there.
 
 One Fly machine (`fly.games.toml`, `Dockerfile.games`) with a private address only. The window wakes it with
 `POST /wake` on every submission and every 6 hours. With nothing to do for 10 minutes it stops until the next wake.
-The Elixir coordinator in `coord/` (`coord/README.md`) runs it: it runs `node bot/arena/gamesctl.js <command>` for each
-step (setup, warm, plan, referee-cmd, intake, push) and keeps the window token in its own process. Each cycle has three
-parts:
+The arena server's games role runs it (`server/src/main-games.ts`, `server/README.md`): it keeps the window token in
+its own process, plays the rounds, and runs `node bot/arena/gamesctl.js <command>` for the Node steps (setup, warm,
+plan, round, publish, decks, intake, push). Each cycle has three parts:
 
 1. The intake, every minute and right after a wake (`intake.js` `intakeOnce`). It reads the window's pending
    submissions and packs each bot into a bundle (JavaScript through Javy, Python with CPython for WASI, a ready
    bundle as it is; `bot/compiled/README.md`). It registers the builder's competitor the first time (owner
    `github:<login>`) and submits the bundle as its next version (`api.js` `submit`, kind `wasm`). The window gets the
    version or the error lines back.
-2. A round (`referee.js --round K`), when the lineup changed (90 s after the last version came in, so a quick fix
-   joins the same round) or the last round is a day old.
+2. A round, when the lineup changed (90 s after the last version came in, so a quick fix joins the same round) or
+   the last round is a day old. `gamesctl round` gives its rules, lineup, deck lists and each version's bundle as a
+   tar; the server plays each seed's games as one `play-seed.js` job, some at once on the machine and some on
+   helpers ([HELPER.md](HELPER.md)), writes the round's files and has `gamesctl publish` write the standings.
 3. The push (`push.js` `arenaPusher`), every 20 s: status, standings, roster (without tokens), round reports,
    versions and panels, and the replays of the newest two rounds, into the window's `arena`, `panels`, `experiments`,
    `runs` and `ladders` collections. While a round plays, the playing round's index and replays also go every 3 s
    (`gamesctl push --only round`), so a viewer follows each game move by move.
 
-A round is a round robin (`bot/ladder.js`) of every competitor's newest version and the residents, 2 games per pair
-(one seed, both seats). Since 2026-10-15 its games deal the tournament deck lists (`bot/decks/ash-meta-2026-09.json`,
-less `lando-calrissian_law_blue`, which an engine bug breaks: `referee.js` ROUND_DECKS) by seat: seed s plays deck pair
-s mod P, and each deck stays with its seat, so in the two games of a seed each bot plays both decks on the same
-shuffles (`decklists.js`). Helpers and the browser swarm get the seed's two lists with its job. The residents are the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
+A round is a round robin (dealt as `bot/ladder.js` deals one) of every competitor's newest version and the
+residents, 2 games per pair (one seed, both seats). Since 2026-10-15 its games deal the tournament deck lists
+(`bot/decks/ash-meta-2026-09.json`, less `lando-calrissian_law_blue`, which an engine bug breaks: `referee.js`
+ROUND_DECKS) by seat: seed s plays deck pair s mod P, and each deck stays with its seat, so in the two games of a seed
+each bot plays both decks on the same shuffles (`decklists.js`). Helpers and the browser swarm get the seed's two
+lists with its job. The residents are the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
 node-search and py-clock. Ratings are Bradley-Terry with the residents' mean pinned to 1500: per round, the residents
 that played it; over all rounds, the bots built into the image that ever played, so a resident's new version does not
-move the scale and versions compare across rounds. A round cut short by a stop (a deploy) resumes at the next start and keeps
-the games already played.
+move the scale and versions compare across rounds. A round cut short by a stop (a deploy) resumes at the next start
+and keeps the games already played.
 
 The residents are entries submitted like any builder's bot; the image builds no bot of its own:
 
@@ -81,19 +84,23 @@ The residents are entries submitted like any builder's bot; the image builds no 
 
 Isolation: submitted code runs only in the wasmtime sandbox (`bot/compiled/run.py`): no network, no files but its own
 and the card data, no other programs. Packing and checking a submission run in a child process without the token, in
-its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`. The referee runs as root in its own
-namespaces, with a minimal environment and `/.fly` hidden, and it alone reads the round-seed secret. The ladders it
-starts, where bot code runs, run as `arena` with no capabilities (`referee.js` `spawnBots`). The network is shared.
+its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`. The server alone reads the round-seed
+secret. Each game job (`play-seed.js`), where bot code runs, runs the same way: as `arena` with no capabilities, with
+a minimal environment and the server's folder, the secret and `/.fly` hidden. The network is shared.
 
 Its data is on the volume (`GAMES_DATA`, `/data`): `arena/` (`ARENA_HOME`: `roster.json`, `versions/<name>-v<N>/`,
-`standings.json`, `rounds/r<K>.md`, `panels/`), `results/arena-r<K>/` (each round's ladder and replays), `intake/`,
-`wasm-cache/`, `home/` (the bots' HOME), `dash/` and `secret/` (root's only). Without `ARENA_HOME`, `home.js` uses
+`standings.json`, `rounds/r<K>.md`, `panels/`), `results/arena-r<K>/` (each round's ladder and replays), `bundles/`
+(each version's bundle as a tar), `intake/`, `wasm-cache/`, `home/` (the bots' HOME), `dash/`, and `secret/` and
+`server/` (root's only); `server/README.md` has the whole layout. Without `ARENA_HOME`, `home.js` uses
 `/mnt/project-files/arena` when that folder exists (the old arena's data, which the project build of the app still
 reads), else `arena-home/` in the repo.
 
 The code, besides `gamesctl.js` and `intake.js`:
 
-- `referee.js`: plays one rated round per run and writes `standings.json`, `rounds/r<K>.md` and the panels.
+- `play-seed.js`: plays one seed's games (a job: bots, decks, seed, key, limits) and answers their results and
+  replays; the only way the games machine and its helpers play a game.
+- `referee.js`: a round's rules, lineup and deck lists (`gamesctl round`) and its standings, `rounds/r<K>.md` and
+  panels (`gamesctl publish`). Run by hand, it still plays a whole round through `bot/ladder.js` (local rehearsals).
 - `api.js`: competitors, versions and results (below).
 - `registry.js`: resolves `<name>-v<N>` to its version folder for `bot/players/index.js`. A `wasm` version runs from
   its `bundle/` folder under `bot/compiled/run.py`.
@@ -101,7 +108,7 @@ The code, besides `gamesctl.js` and `intake.js`:
 - `dash.js`: the competitor panels, the leaderboard and the experiment (Elo over rounds) that the window shows.
 - `starters/`: the bots `api.js` `register` copies into a new competitor (its v0; a builder's own bot is v1).
 
-Deploys, secrets and a local run of the games machine: `WINDOW.md` ("The games machine") and `coord/README.md`.
+Deploys, secrets and a local run of the games machine: `WINDOW.md` ("The games machine") and `server/README.md`.
 
 ## Rules for bots
 
@@ -122,8 +129,8 @@ only their own code. Every bot, the residents included, also plays under these r
 - **Determinism.** Use the seed from `hello` (or the `rng` an in-process bot gets), never a clock or other randomness.
   Prefer count-based search budgets over wall-clock ones.
 - **Secret seeds.** Each round's seeds and its key (which deals every game, so a seed alone says nothing about hidden
-  cards) come from the round-seed secret, which only the referee reads. A game's key is published once every game
-  dealt from it has ended.
+  cards) come from the round-seed secret, which only the games machine's server reads. A game's key is published once
+  every game dealt from it has ended.
 
 ## One API
 

@@ -2,23 +2,23 @@
 
 The games machine (Fly app `swu-arena-games`, [WINDOW.md](WINDOW.md)) plays every rated round. A helper is a computer
 of yours that takes some of those games while a round runs, plays them, and sends the results back. It runs the
-machine's own image in Docker, in a helper role of the Elixir coordinator ([coord/README.md](../../coord/README.md)).
+machine's own image in Docker, in the helper role of the arena server ([server/README.md](../../server/README.md)).
 
 ```
 your computer                                       the games machine (private address only)
 ┌────────────────────────────────┐                  ┌──────────────────────────────────────────────┐
-│ Docker: the games image        │  fly proxy       │ coordinator ──ARENA_REMOTE──▶ referee ─▶ ladder│
-│  coord (helper role)           │──18090 ─▶ 8090──▶│ helper API :8090    relay 127.0.0.1:8082 ◀────┘│
-│   └─ play-seed.js ─▶ 2 games   │  (your Fly login)│  leases, bundles     (offers, results)        │
+│ Docker: the games image        │  fly proxy       │ server: rounds, play-seed jobs here          │
+│  server (helper role)          │──18090 ─▶ 8090──▶│ helper API :8090 ◀─▶ leases (offers, results)│
+│   └─ play-seed.js ─▶ 2 games   │  (your Fly login)│ bundles: /data/bundles/<sha256>.tar          │
 └────────────────────────────────┘                  └──────────────────────────────────────────────┘
 ```
 
-- The ladder on the machine stays the owner of the round. While a helper waits for work, the ladder offers it one
-  seed: both games of that seed (the same deal, one from each seat), so seat luck still cancels out. It hands out the
-  seed whose bots have the fewest helper games so far.
+- The round on the machine stays its owner. While a helper waits for work, the round offers it one seed: both games
+  of that seed (the same deal, one from each seat), so seat luck still cancels out. It hands out the seed whose bots
+  have the fewest helper games so far.
 - The helper plays the seed under the same rules (time cap, watchdog, step cap), sends both results and replays back,
-  and the ladder checks them (ids, outcomes, the game key, the replays' first and last lines) before it records them
-  as it records its own games. Anything off, and the ladder plays the seed itself.
+  and the machine checks them (ids, outcomes, the game key, the replays' first and last lines) before it records them
+  as it records its own games. Anything off, and the machine plays the seed itself.
 - A helper that stops answering for 90 s loses its seed, and the machine plays it. A seed a helper holds too long
   (twice the machine's median game time, once nothing else is left) is taken back the same way.
 - Every game records where it ran: `host` in the round's index (null on the machine), and the round's results say
@@ -27,15 +27,15 @@ your computer                                       the games machine (private a
 
 ## What it can and cannot reach
 
-- No Erlang cluster. The helper only asks for work and sends results over HTTP. Nodes in a cluster can run any code
-  on each other, and the games machine runs strangers' bots next to the window token.
+- No cluster. The helper only asks for work and sends results over HTTP. Nodes in a cluster can run any code on each
+  other, and the games machine runs strangers' bots next to the window token.
 - `fly proxy` runs on your computer under your own Fly login, outside the container. It dials the machine's private
   address (`swu-arena-games.internal`), which only exists while the machine runs, so a helper never wakes or keeps up
   the machine. Port 8090 is not a public service; it is reachable only inside the Fly organization, and only with a
   helper token.
 - Fly holds only the token's sha256 (`GAMES_HELPER_TOKENS`, `name:hash`). The token stays on your computer in
-  `~/.config/swu-helper/env` and goes into the container as an env file. The helper keeps it inside the coordinator;
-  the processes that play games never get it.
+  `~/.config/swu-helper/env` and goes into the container as an env file. The helper keeps it inside the server's
+  process; the processes that play games never get it.
 - The helper plays only WebAssembly bots (submitted bundles, the arena's own resident entries included) and the
   in-process heuristic and rush. Bot code runs as the image's `arena` user with no capabilities; the container gets
   no folder of yours, only a Docker volume.
@@ -70,16 +70,20 @@ Needs Docker running (on a Mac, Docker Desktop open: `open -a Docker`) and flyct
    machine still runs the image the helper just ran (its build or card data differ for another reason, such as an image
    built without `GIT_SHA`), the script stops and says so.
 
-The machine's image is built for Intel CPUs (`linux/amd64`). Under Rosetta, on a Mac with an Apple chip, its Erlang
-stops at start (`prim_tty:isatty ... undef`, then `Kernel pid terminated ... nouser`), so on an ARM computer the script
-builds an image for the computer's own CPU and runs that instead (`sh bot/arena/ops/helper.sh build` does only the
-build). `bot/arena/ops/Dockerfile.helper` takes everything a game runs on from the machine's image unchanged (bot code,
-engine, card data, the intake's tools, `BUILD_SHA`, `CARDS_SHA`), so the build still matches, and builds only the native
-parts: Node, Python with wasmtime, and the coordinator from `Dockerfile.games`'s coord stage at the machine's commit,
-read from the checkout the script is in (fetched from origin when missing). The first build takes a few minutes; later
-ones reuse Docker's cache, and a new machine build means a new image (older ones are removed). It needs the default
-Docker Desktop builder, which sees local images. `SWU_HELPER_NATIVE=1` builds on any computer, `SWU_HELPER_NATIVE=0`
-pulls the amd64 image even on ARM.
+The machine's image is built for Intel CPUs (`linux/amd64`). On a Mac with an Apple chip it would run under Rosetta
+(slower; the Elixir helper of images before stage 5 did not start at all), so on an ARM computer the script builds an
+image for the computer's own CPU and runs that instead (`sh bot/arena/ops/helper.sh build` does only the build).
+`bot/arena/ops/Dockerfile.helper` takes all of `/app` from the machine's image unchanged (bot code, engine, card data,
+the arena server and its packages, `BUILD_SHA`, `CARDS_SHA`), so the build still matches, and adds only the native
+parts: Node, and Python with wasmtime. The first build takes a minute or two; later ones reuse Docker's cache, and a
+new machine build means a new image (older ones are removed). It needs the default Docker Desktop builder, which sees
+local images. `SWU_HELPER_NATIVE=1` builds on any computer, `SWU_HELPER_NATIVE=0` pulls the amd64 image even on ARM.
+
+After the switch to the TypeScript server (stage 5), `git pull` the checkout helper.sh runs from, then start it as
+before. An older helper.sh cannot build the native image of the new machine (it builds the Elixir coordinator from
+`coord/`, which is gone); on the pulled amd64 path it still works for one release, since the image keeps
+`/app/coord/bin/coord` as a way into the same server. The new helper.sh runs the image's own command, so it also runs
+an older machine image on the pulled path; its native build needs a machine image from stage 5 on.
 
 ## Protocol
 
@@ -94,17 +98,17 @@ Helper to machine, HTTP on the machine's port 8090 (`GAMES_HELPER_PORT`), every 
 | `POST /v1/lease/<id>/heartbeat` | at once, then every 30 s: 200 `{continue: true}`, or 410 when the seed was taken back; without the first one within 15 s the seed goes back |
 | `POST /v1/lease/<id>/result` | `{results, replays}` or `{failed}`; 410 when taken back |
 
-Ladder to coordinator, loopback only (`ARENA_REMOTE` = `http://127.0.0.1:8082/r/<nonce>`, a new nonce each boot):
-`GET status` (helpers waiting), `PUT bundle/<sha256>`, `POST offer` (200 lease or 204 nobody waiting), `GET lease/<id>`
-(running, done with the results, or lost with a reason), `DELETE lease/<id>` (take back).
+On the machine the round and the helper API share one process: the round offers a seed to the claim that has waited
+longest and reads its lease's results directly (`server/src/games/Lane.ts`, `Leases.ts`), and the bundles a helper
+fetches are the tars the round wrote to `/data/bundles`.
 
-The machine and the helper must run the same image: the coordinator compares the commit (`/app/BUILD_SHA`, from
+The machine and the helper must run the same image: the machine compares the commit (`/app/BUILD_SHA`, from
 deploy-games.yml) and a hash of the card data (`/app/CARDS_SHA`). The seed's game key goes to the helper; the round's
 run key never does.
 
 ## Turning it on
 
 All of it is off until the games machine has both `GAMES_HELPER_PORT = "8090"` in fly.games.toml and a
-`GAMES_HELPER_TOKENS` secret. Off, the machine plays exactly as before: no listener, no relay, and the ladder plays
-every game itself. The port is set since 2026-10-13, so the secret is the one step left: `sh helper.sh init`, then
+`GAMES_HELPER_TOKENS` secret. Off, the machine has no listener on that port and plays every game itself. The port is
+set since 2026-10-13, so the secret is the one step left: `sh helper.sh init`, then
 `fly secrets deploy -a swu-arena-games` (or the next games deploy).

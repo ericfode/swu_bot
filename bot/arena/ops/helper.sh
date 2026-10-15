@@ -5,21 +5,23 @@
 #   sh helper.sh init          make the helper token (once) and stage its hash on Fly; the next games deploy takes it
 #   sh helper.sh [--slots N]   pull the image the machine runs, forward the port, play games until Ctrl-C (or q)
 #   sh helper.sh watch         the live view of a helper that already runs (helper-tui.js watch)
-#   sh helper.sh build         build the helper image for this computer's CPU at the machine's commit (Dockerfile.helper)
+#   sh helper.sh build         build the helper image for this computer's CPU from the machine's image
+#                              (Dockerfile.helper)
 #   sh helper.sh revoke        remove every helper token from Fly (helpers are refused after the next deploy)
 #
 # On a terminal, with Node 18 or later, the helper runs under its live view (helper-tui.js): the games in play with
 # their boards, the seeds it finished, and its share of the computer's CPU. SWU_HELPER_PLAIN=1 prints the plain lines.
-# The machine's image is built for amd64 only. On an ARM computer (a Mac with an Apple chip) its Erlang stops at start
-# under Rosetta, so there the script builds a native image instead (Dockerfile.helper: the machine's game files, the
-# coordinator built from this checkout at the machine's commit) and runs that; SWU_HELPER_NATIVE=1 or 0 overrides.
+# The machine's image is built for amd64 only. On an ARM computer (a Mac with an Apple chip) it would run under
+# emulation, so there the script builds a native image instead (Dockerfile.helper: the machine's files on this
+# computer's own Node and Python) and runs that; SWU_HELPER_NATIVE=1 or 0 overrides. The container runs the image's own
+# command, the arena server (server/src/main-games.ts), which COORD_ROLE=helper makes a helper.
 #
 # The token stays in ~/.config/swu-helper/env (mode 600) and goes to the container as an env file; only its sha256 is
 # set on Fly. Your Fly login stays outside the container: this script runs `fly proxy` and `fly auth docker` itself.
 # The container gets no folder of yours, only a Docker volume (swu-helper-data) for its work and its compiled-module
 # cache. Each slot plays one seed (two games at once) and keeps about one core busy (3 slots averaged 2.8 cores on an
 # Apple M5 Max). --slots N chooses; else the number in ~/.config/swu-helper/slots (the view's + and - write it); else
-# (CPUs - 1) / 2 of Docker's CPUs, at most one per 2 GB of Docker's memory. At most 16 (what the coordinator accepts).
+# (CPUs - 1) / 2 of Docker's CPUs, at most one per 2 GB of Docker's memory. At most 16 (what the machine accepts).
 # When the machine moves to a new build, the helper stops with exit code 3 and this script pulls the new image.
 set -eu
 
@@ -30,7 +32,7 @@ ENVFILE=$DIR/env
 SLOTSFILE=$DIR/slots
 NAME=${SWU_HELPER_NAME:-eric}
 HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
-# the swu_bot checkout this script is in (it builds the native image from it)
+# the swu_bot checkout this script is in (its Dockerfile.helper builds the native image)
 REPO=${SWU_REPO:-$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)}
 
 die() {
@@ -57,7 +59,7 @@ tui() {
 }
 
 # whether to build the image for this computer instead of pulling the machine's amd64 one: on ARM (Apple chips, where
-# Rosetta stops the machine's Erlang at start), unless SWU_HELPER_NATIVE says otherwise
+# amd64 code runs under emulation), unless SWU_HELPER_NATIVE says otherwise
 native() {
     case ${SWU_HELPER_NATIVE:-} in
     1) return 0 ;;
@@ -128,9 +130,8 @@ pull() {
 }
 
 # Builds swu-helper:<commit> for this computer's CPU from the machine's image $1, unless it is there already, and sets
-# $tag to it. Two builds: Dockerfile.games's coord stage at the machine's commit (read from this checkout, fetched when
-# missing), then Dockerfile.helper, which adds the machine's game files to native Node, Python and that coordinator.
-# Images of other commits are removed afterwards.
+# $tag to it: Dockerfile.helper puts the machine's files on native Node and Python, so it needs nothing but that image.
+# Images of other commits (and the coordinator images older versions of this script built) are removed afterwards.
 build_native() {
     img=$1
     sha=${img##*:}
@@ -140,29 +141,17 @@ build_native() {
         echo "using $tag (built before)"
         return 0
     fi
-    need git "on a Mac: xcode-select --install"
-    { git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 && [ -f "$REPO/bot/arena/ops/Dockerfile.helper" ]; } ||
+    [ -f "$REPO/bot/arena/ops/Dockerfile.helper" ] ||
         die "$REPO is not a swu_bot checkout with bot/arena/ops/Dockerfile.helper: run this script from one (or set SWU_REPO)"
-    if ! git -C "$REPO" cat-file -e "$sha^{commit}" 2>/dev/null; then
-        echo "fetching commit $sha"
-        git -C "$REPO" fetch --quiet origin "$sha" 2>/dev/null || git -C "$REPO" fetch --quiet origin || true
-        git -C "$REPO" cat-file -e "$sha^{commit}" 2>/dev/null ||
-            die "commit $sha (what the games machine runs) is not in $REPO or its origin"
-    fi
-    ctx=$(mktemp -d "${TMPDIR:-/tmp}/swu-helper.XXXXXX") || die "could not make a build folder"
-    git -C "$REPO" archive "$sha" coord Dockerfile.games Dockerfile.games.dockerignore | tar -x -C "$ctx" ||
-        { rm -rf "$ctx"; die "could not read commit $sha from $REPO"; }
-    echo "building the coordinator for this computer at $sha (a few minutes the first time)"
-    docker build -f "$ctx/Dockerfile.games" --target coord -t "swu-helper-coord:$sha" "$ctx" ||
-        { rm -rf "$ctx"; die "the coordinator did not build (the lines above say why)"; }
-    echo "pulling $img for its game files (it does not run here)"
+    echo "pulling $img for its files (it does not run here)"
     if ! pull "$img"; then
-        rm -rf "$ctx"
         echo "could not pull $img" >&2
         return 2
     fi
-    docker build -f "$REPO/bot/arena/ops/Dockerfile.helper" --build-arg "MACHINE_IMAGE=$img" \
-        --build-arg "COORD_IMAGE=swu-helper-coord:$sha" -t "$tag" "$ctx" ||
+    # Dockerfile.helper copies everything from the machine's image, so the build context is an empty folder
+    ctx=$(mktemp -d "${TMPDIR:-/tmp}/swu-helper.XXXXXX") || die "could not make a build folder"
+    echo "building the helper image for this computer at $sha"
+    docker build -f "$REPO/bot/arena/ops/Dockerfile.helper" --build-arg "MACHINE_IMAGE=$img" -t "$tag" "$ctx" ||
         { rm -rf "$ctx"; die "the helper image did not build (the lines above say why)"; }
     rm -rf "$ctx"
     docker image ls --format '{{.Repository}}:{{.Tag}}' |
@@ -282,11 +271,13 @@ run() {
             docker rm -f swu-helper >/dev/null 2>&1 || true
         fi
         code=0
+        # the image's own command: the arena server, which COORD_ROLE=helper makes a helper (on the pulled path, an
+        # image from before the TypeScript server starts its Elixir coordinator the same way)
         # shellcheck disable=SC2086
         $awake docker run --rm --name swu-helper $platform $net \
-            --env-file "$ENVFILE" -e COORD_ROLE=helper -e "GAMES_HELPER_SLOTS=$slots" -e RELEASE_TMP=/tmp \
+            --env-file "$ENVFILE" -e COORD_ROLE=helper -e "GAMES_HELPER_SLOTS=$slots" \
             -v swu-helper-data:/data --security-opt no-new-privileges --cap-drop NET_RAW --cap-drop MKNOD \
-            "$tag" /app/coord/bin/coord start || code=$?
+            "$tag" || code=$?
         [ "$code" = 3 ] || exit "$code"
         echo "the games machine runs another build: reading its image"
     done
