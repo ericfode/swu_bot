@@ -100,6 +100,8 @@ export interface StoreService {
   readonly lastRound: Effect.Effect<RoundRow | null>
   /** a new round with its whole schedule, all todo (games already done can be passed done: an import) */
   readonly createRound: (row: RoundRow, games: ReadonlyArray<GameRow>) => Effect.Effect<void>
+  /** round k from nothing again (its rules or lineup changed since it started): its row and games replaced in one go */
+  readonly replaceRound: (row: RoundRow, games: ReadonlyArray<GameRow>) => Effect.Effect<void>
   readonly updateRound: (k: number, set: Partial<Pick<RoundRow, "state" | "boot" | "attempts" | "why" | "endedAt" | "workers">>) => Effect.Effect<void>
   readonly games: (k: number) => Effect.Effect<ReadonlyArray<GameRow>>
   readonly finishGame: (k: number, id: string, host: Host, result: GameResult, endedAt: string) => Effect.Effect<void>
@@ -120,8 +122,8 @@ export class Store extends Context.Service<Store, StoreService>()("games/Store")
       Effect.map((rows) => (rows[0] ? rowOfRound(rows[0]) : null))
     )
 
-    const createRound = (row: RoundRow, games: ReadonlyArray<GameRow>) =>
-      orDie(sql.withTransaction(Effect.gen(function*() {
+    const insertRound = (row: RoundRow, games: ReadonlyArray<GameRow>) =>
+      Effect.gen(function*() {
         yield* sql`INSERT INTO rounds ${sql.insert({ ...row, spec: JSON.stringify(row.spec) })}`
         for (const g of games) {
           yield* sql`INSERT INTO round_games ${sql.insert({
@@ -131,6 +133,15 @@ export class Store extends Context.Service<Store, StoreService>()("games/Store")
             key: g.key, endedAt: g.endedAt
           })}`
         }
+      })
+
+    const createRound = (row: RoundRow, games: ReadonlyArray<GameRow>) => orDie(sql.withTransaction(insertRound(row, games)))
+
+    const replaceRound = (row: RoundRow, games: ReadonlyArray<GameRow>) =>
+      orDie(sql.withTransaction(Effect.gen(function*() {
+        yield* sql`DELETE FROM round_games WHERE k = ${row.k}`
+        yield* sql`DELETE FROM rounds WHERE k = ${row.k}`
+        yield* insertRound(row, games)
       })))
 
     const updateRound = (k: number, set: Partial<Pick<RoundRow, "state" | "boot" | "attempts" | "why" | "endedAt" | "workers">>) =>
@@ -153,7 +164,7 @@ export class Store extends Context.Service<Store, StoreService>()("games/Store")
       orDie(sql`INSERT INTO kv (name, value, updated_at) VALUES (${name}, ${value}, ${new Date().toISOString()})
                 ON CONFLICT (name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).pipe(Effect.asVoid)
 
-    return Store.of({ round, lastRound, createRound, updateRound, games, finishGame, setKey, get, set })
+    return Store.of({ round, lastRound, createRound, replaceRound, updateRound, games, finishGame, setKey, get, set })
   })
 
   /** The store on `filename` (its folder made), migrated. */
