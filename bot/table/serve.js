@@ -37,6 +37,8 @@ const { playTable } = require('./table');
 const REPO = path.resolve(__dirname, '..', '..');
 const ID = /^[a-z0-9-]{1,80}$/;
 const MAX_BODY = 64 << 10;
+// a finished game stays here this long for its page (the end, the replay link); its replay stays on disk after
+const KEEP_MS = 60 * 60000;
 // printed card data for Holotable's text faces (swu-card-text/1), served as /card-text.json
 const CARD_TEXT = '/mnt/project-files/viewer-kit/card-text.json';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.jsonl': 'application/x-ndjson' };
@@ -45,11 +47,16 @@ function parseArgs(argv) {
     const o = { port: 8790, host: '127.0.0.1', site: null, cardText: fs.existsSync(CARD_TEXT) ? CARD_TEXT : null, decks: path.join(REPO, 'bot/decks/ash-meta-2026-09.json'), out: path.join(REPO, 'replays/table'), botsFile: null, botsRoot: null, offer: null, botDeck: 'luke-skywalker_jtl_data-vault', idleMin: 30 };
     for (let i = 0; i < argv.length; i++) {
         const k = argv[i];
-        const v = () => argv[++i];
+        const v = () => {
+            if (i + 1 >= argv.length) {
+                throw new Error(`${k} needs a value`);
+            }
+            return argv[++i];
+        };
         if (k === '--port') o.port = Number(v());
         else if (k === '--host') o.host = v();
         else if (k === '--site') o.site = path.resolve(v());
-        else if (k === '--card-text') o.cardText = v() ? path.resolve(argv[i]) : null;
+        else if (k === '--card-text') o.cardText = path.resolve(v());
         else if (k === '--decks') o.decks = path.resolve(v());
         else if (k === '--out') o.out = path.resolve(v());
         else if (k === '--bots-file') o.botsFile = path.resolve(v());
@@ -134,7 +141,8 @@ function main() {
     };
     const games = new Map();
 
-    function start({ bot: botName, deck, botDeck }) {
+    function start(body) {
+        const { bot: botName, deck, botDeck } = body && typeof body === 'object' ? body : {};
         if (!offer.includes(botName)) {
             throw Object.assign(new Error(`no bot ${botName}`), { status: 400 });
         }
@@ -143,8 +151,12 @@ function main() {
         if (!mine || !theirs) {
             throw Object.assign(new Error('unknown deck'), { status: 400 });
         }
-        const seed = crypto.randomInt(0, 2 ** 32);
-        const id = `you-vs-${botName}-${seed}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+        let seed;
+        let id;
+        do {
+            seed = crypto.randomInt(0, 2 ** 32);
+            id = `you-vs-${botName}-${seed}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+        } while (games.has(id) || index.games.some((e) => e.id === id));
         const g = { id, events: [], clients: new Set(), replay: null, done: false };
         const push = (msg) => {
             // a person who walks away concedes: no decision stays open longer than --idle-min
@@ -158,6 +170,13 @@ function main() {
                 g.replay = replay;
                 rest.replay = `/table/api/games/${id}/replay.jsonl`;
                 g.done = true;
+                // forget the game after a while, and hang up on pages still listening
+                setTimeout(() => {
+                    games.delete(id);
+                    for (const c of g.clients) {
+                        c.end();
+                    }
+                }, KEEP_MS).unref?.();
             }
             g.events.push(rest);
             const k = g.events.length;
