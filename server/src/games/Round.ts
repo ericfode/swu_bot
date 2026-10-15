@@ -1,7 +1,7 @@
 /**
  * STUB (part D replaces this file): one rated round, from its rules to its result files.
  */
-import type { Effect } from "effect"
+import { Effect } from "effect"
 import type { GamesConfig } from "./Config.ts"
 import type { GamesctlService } from "./Gamesctl.ts"
 import type { ArenaJs } from "./Js.ts"
@@ -32,9 +32,6 @@ export type RoundOutcome =
   | { readonly kind: "stopped" }
 
 /** Plays round k (resuming its finished games) until every game has a result, or it fails or is interrupted. */
-export declare const playRound: (deps: RoundDeps, k: number, why: PlanWhy, resume: boolean) => Effect.Effect<RoundOutcome>
+export const playRound = (_deps: RoundDeps, _k: number, _why: PlanWhy, _resume: boolean): Effect.Effect<RoundOutcome> =>
+  Effect.die(new Error("not built yet (part D)"))
 
-/** referee.js roundSeed(secret, 'watch', k) */
-export declare const roundSeed: (secret: string, k: number) => number
-/** referee.js roundKey(secret, 'watch', k) */
-export declare const runKey: (secret: string, k: number) => string
