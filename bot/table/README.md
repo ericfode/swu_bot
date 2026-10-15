@@ -24,9 +24,33 @@ node bot/table/serve.js --site ../holotable/dist \
   --bots-file ../holocron/bots/external-bots.json --offer c-clock3me-s,heuristic,rush   # then open http://127.0.0.1:8790/#/play
 ```
 
-`--bots-file` takes holocron's program list (build the C bots first: `make -C bots/c` there). Tests:
-`node --test bot/test/table.test.js` (split checks, refused answers, conceding, and whole games a scripted person plays,
-checking that the bot's hidden cards never reach the person's screen).
+`--bots-file` takes holocron's program list (build the C bots first: `make -C bots/c` there); `serve.js` offers the
+JEPA bot too. Tests: `node --test bot/test/table.test.js` (split checks, refused answers, conceding, and whole games a
+scripted person plays, checking that the bot's hidden cards never reach the person's screen, one of them through
+`host.js` against the JEPA bot), `bot/test/swarm-engine.test.js` (the play worker plays the same game as Node) and
+`bot/test/play.test.js` (the window's side).
 
-Not here yet: the hosted table. Where it runs (in the person's browser like the swarm, on the games machine, or on a
-small machine of its own) and who may sit down are Eric's call.
+## The hosted table: /play on the arena window
+
+Eric's picks (2026-10-15): the game runs in the person's browser, against his JEPA bot only, the person picks their
+deck, and finished games go back to the arena.
+
+```
+window /play ── play.html + Holotable's kit (SWUViewer.mountPlay) ── worker: play-worker.js
+                                                                     referee (forceteki) ◀─▶ jepa-tx-gate (vendor/jepa)
+           ◀── POST /api/play/games {replay} at the end ──┘
+```
+
+- `jepa.js`: the JEPA bot (`jepa-tx-gate`: holocron's JavaScript port in `vendor/jepa`, with its two models) as an
+  in-process protocol client. Its planner asks the referee for simulations, which re-deal the person's hidden cards.
+- `host.js`: `createTableHost`, one game at a time in the tab: `options()`, `start({deck, botDeck, seed, key})`,
+  `act()`, `concede()`, and `cardText()` (card text for the lists' cards and the tokens). The bot's deck is one of
+  the lists picked by the game's seed unless the person names one.
+- `bot/swarm/build.js` bundles it as `play-worker.js` on the swarm's engine pack (`bot/swarm/pack.js` adds this folder,
+  `vendor/jepa` and the deck lists); the games machine serves both, and the window keeps them on its disk.
+- `bot/arena/play.js`: the window's side. `ARENA_PLAY` says who may play: `invited` (the default), `github` (anyone
+  signed in with GitHub) or `off`. Games are kept in the run `play` as a people run, unrated, with who played each
+  one in `admin/people`; `bot/arena/WINDOW.md` has the routes.
+
+The bot runs in the person's tab, so a person who opens the browser's developer tools could read the bot's hand. That
+is why these games are unrated.

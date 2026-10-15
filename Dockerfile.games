@@ -55,6 +55,8 @@ COPY bot bot
 # Kessel's adapter and its WebAssembly package for Node (bot/sims/rust-sims.js loads them); without them a bot that
 # asks for Rust simulations silently gets forceteki ones
 COPY vendor/kessel vendor/kessel
+# the JEPA bot in JavaScript and its models (bot/table/jepa.js): the play page's bot, packed for the browser below
+COPY vendor/jepa vendor/jepa
 COPY --from=engine /src/forceteki/package.json forceteki/package.json
 COPY --from=engine /src/forceteki/build forceteki/build
 COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
@@ -74,8 +76,8 @@ ARG GIT_SHA=unknown
 RUN printf '%s\n' "$GIT_SHA" > /app/BUILD_SHA \
  && (cd /app/forceteki/test/json && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1) > /app/CARDS_SHA
 # The browser swarm's files (bot/swarm, spec/executor.md), made from this image as it is so they carry its BUILD_SHA
-# and CARDS_SHA: the engine and bots as one pack, Python's interpreter, the tab's workers. The window serves them
-# through the helper API (GET /v1/swarm/<file>).
+# and CARDS_SHA: the engine and bots as one pack, Python's interpreter, the tab's workers (the play page's too). The
+# window serves them through the helper API (GET /v1/swarm/<file>).
 RUN node bot/swarm/pack.js --root /app --out /app/build/swarm && node bot/swarm/build.js --out /app/build/swarm
 EXPOSE 8080
 CMD ["node", "--disable-warning=ExperimentalWarning", "/app/server/src/main-games.ts"]

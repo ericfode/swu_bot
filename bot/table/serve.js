@@ -10,8 +10,10 @@
  * printed card data it draws text faces from (default the shared folder's viewer-kit/card-text.json when it exists). --bots-file adds
  * programs from an external-bots.json (holocron's bots/external-bots.json: cmd and args relative to --bots-root,
  * default the folder above the file's folder); --offer lists the bots people may pick (default: rush, heuristic,
- * random and every bot in --bots-file). Every game is written to --out (default replays/table) in the replay format,
- * so Holotable lists it as the tournament "table". A person who leaves a decision open for --idle-min minutes concedes.
+ * random, jepa-tx-gate (jepa.js, in this process) and every bot in --bots-file). --bot-deck names the bot's list, or
+ * "random" (the default) for one picked by each game's seed. Every game is written to --out (default replays/table)
+ * in the replay format, so Holotable lists it as the tournament "table". A person who leaves a decision open for
+ * --idle-min minutes concedes.
  *
  * API (JSON; the person's messages are protocol v2, spec/protocol.md, plus table.js `move` and `end`):
  *   GET  /table/api/options                 {bots, decks, botDeck}
@@ -33,6 +35,8 @@ const { makeBot } = require('../players');
 const { loadDecks } = require('../decklists');
 const { PersonSeat } = require('./person');
 const { playTable } = require('./table');
+const { jepaMaker, JEPA_NAME } = require('./jepa');
+const { deckOptions, pickDecks, RANDOM } = require('./host');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const ID = /^[a-z0-9-]{1,80}$/;
@@ -44,7 +48,7 @@ const CARD_TEXT = '/mnt/project-files/viewer-kit/card-text.json';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.jsonl': 'application/x-ndjson' };
 
 function parseArgs(argv) {
-    const o = { port: 8790, host: '127.0.0.1', site: null, cardText: fs.existsSync(CARD_TEXT) ? CARD_TEXT : null, decks: path.join(REPO, 'bot/decks/ash-meta-2026-09.json'), out: path.join(REPO, 'replays/table'), botsFile: null, botsRoot: null, offer: null, botDeck: 'luke-skywalker_jtl_data-vault', idleMin: 30 };
+    const o = { port: 8790, host: '127.0.0.1', site: null, cardText: fs.existsSync(CARD_TEXT) ? CARD_TEXT : null, decks: path.join(REPO, 'bot/decks/ash-meta-2026-09.json'), out: path.join(REPO, 'replays/table'), botsFile: null, botsRoot: null, offer: null, botDeck: RANDOM, idleMin: 30 };
     for (let i = 0; i < argv.length; i++) {
         const k = argv[i];
         const v = () => {
@@ -75,6 +79,9 @@ function botMakers(o) {
     for (const name of ['rush', 'heuristic', 'random']) {
         makers.set(name, () => makeBot(name));
     }
+    // the JEPA bot in JavaScript (vendor/jepa), as the hosted table plays it; its models and card data load at its first game
+    let jepa = null;
+    makers.set(JEPA_NAME, () => (jepa ??= jepaMaker())());
     if (o.botsFile) {
         const root = o.botsRoot ?? path.dirname(path.dirname(o.botsFile));
         const cards = path.join(REPO, 'forceteki/test/json');
@@ -127,9 +134,8 @@ function main() {
     console.log('loading the engine and card data ...');
     const env = new Env();
     const { decks } = loadDecks(o.decks, env);
-    const deckByName = new Map(decks.map((d) => [d.metadata.name, d]));
-    if (!deckByName.has(o.botDeck)) {
-        o.botDeck = decks[0].metadata.name;
+    if (o.botDeck !== RANDOM && !decks.some((d) => d.metadata.name === o.botDeck)) {
+        o.botDeck = RANDOM;
     }
     fs.mkdirSync(path.join(o.out, 'games'), { recursive: true });
     const indexFile = path.join(o.out, 'index.json');
@@ -146,17 +152,19 @@ function main() {
         if (!offer.includes(botName)) {
             throw Object.assign(new Error(`no bot ${botName}`), { status: 400 });
         }
-        const mine = deckByName.get(deck);
-        const theirs = deckByName.get(botDeck || o.botDeck);
-        if (!mine || !theirs) {
-            throw Object.assign(new Error('unknown deck'), { status: 400 });
-        }
         let seed;
         let id;
         do {
             seed = crypto.randomInt(0, 2 ** 32);
             id = `you-vs-${botName}-${seed}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
         } while (games.has(id) || index.games.some((e) => e.id === id));
+        let mine;
+        let theirs;
+        try {
+            ({ mine, theirs } = pickDecks(decks, deck, botDeck || o.botDeck, seed));
+        } catch (e) {
+            throw Object.assign(e, { status: 400 });
+        }
         const g = { id, events: [], clients: new Set(), replay: null, done: false };
         const push = (msg) => {
             // a person who walks away concedes: no decision stays open longer than --idle-min
@@ -251,7 +259,7 @@ function main() {
                 return serveStatic(req, res);
             }
             if (req.method === 'GET' && parts[2] === 'options') {
-                return json(res, 200, { bots: offer, decks: decks.map((d) => ({ name: d.metadata.name, leader: d.leader.id, base: d.base.id, style: d.metadata.style ?? null })), botDeck: o.botDeck });
+                return json(res, 200, { bots: offer, decks: deckOptions(decks), botDeck: o.botDeck });
             }
             if (req.method === 'POST' && parts[2] === 'games' && parts.length === 3) {
                 return json(res, 200, start(await readBody(req)));

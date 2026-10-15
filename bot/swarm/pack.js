@@ -22,8 +22,9 @@ const { spawnSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..', '..');
 // folders whose code the swarm may need although the trace does not load it (lazy requires): the referee's Rust
-// simulations and Kessel's adapter (vendor/kessel, without its WebAssembly package)
-const BOT_DIRS = ['bot/players', 'bot/sims', 'vendor/kessel/js'];
+// simulations and Kessel's adapter (vendor/kessel, without its WebAssembly package), and the play page's table
+// (bot/table: host.js plays a person against the JEPA bot in the person's tab)
+const BOT_DIRS = ['bot/players', 'bot/sims', 'vendor/kessel/js', 'bot/table'];
 const SKIP = /(^|\/)(test|tests|__pycache__|target)(\/|$)|\.(map|md|ts|py|rs|c|h|o)$/;
 // the engine's logger and what it pulls in: the runtime gives the engine a silent logger instead (runtime.js aliases)
 const LOGGING = /\/node_modules\/(winston|winston-transport|logform|@colors|triple-beam|readable-stream|async|@dabh|colorspace|color|color-string|color-convert|color-name|simple-swizzle|is-arrayish|text-hex|kuler|enabled|one-time|fn\.name|stack-trace|safe-stable-stringify|fecha|is-stream|util-deprecate|process|inherits|string_decoder|safe-buffer|ms)\//;
@@ -129,6 +130,10 @@ function pack({ root, out }) {
     }
     // the swarm's own code that runs inside the runtime, and the resident WebAssembly bots (bundles, not the tools)
     for (const f of ['bot/swarm/referee.js', 'bot/compiled/toolchain.json', 'bot/players/guard.js', 'bot/arena/play-seed.js', 'bot/decklists.js', 'bot/arena/registry.js', 'bot/arena/home.js', 'bot/game-pool.js']) {
+        add(path.join(root, f));
+    }
+    // the play page's JEPA bot (vendor/jepa: the player and its two models) and the deck lists people pick from
+    for (const f of ['vendor/jepa/jepa.js', 'vendor/jepa/tx-t10.safetensors', 'vendor/jepa/tx-t10-e.safetensors', 'vendor/jepa/VERSION.json', 'bot/decks/ash-meta-2026-09.json']) {
         add(path.join(root, f));
     }
     const compiled = path.join(root, 'build/compiled');

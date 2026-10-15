@@ -74,7 +74,8 @@ const SWARM_FILES: Readonly<Record<string, string>> = {
   "python.wasm": "application/wasm",
   "referee-worker.js": "text/javascript",
   "bot-worker.js": "text/javascript",
-  "executor-worker.js": "text/javascript"
+  "executor-worker.js": "text/javascript",
+  "play-worker.js": "text/javascript"
 }
 
 type Req = IncomingMessage
