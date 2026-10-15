@@ -91,6 +91,12 @@ describe("policy", () => {
     assert.ok(!idle({ ...base, phase: "setup" }, now))
   })
 
+  test("not while the compactor runs a pass", () => {
+    const now = M10 + 1
+    assert.ok(!idle({ ...base, compacting: true }, now))
+    assert.ok(idle({ ...base, compacting: false }, now))
+  })
+
   test("not within 90 s of an accepted version, so its round can start", () => {
     const now = M10 + 1
     assert.ok(!idle({ ...base, settledAt: now - 90_000 }, now))
@@ -136,6 +142,9 @@ interface Harness {
   resets: number
   settings: WindowSettings
   running: Array<string>
+  /** the compactor's pokes, and whether it runs a pass */
+  compacts: number
+  compacting: boolean
 }
 
 const harness = (o: { env?: Record<string, string>; timing?: Partial<typeof TIMING>; retryMs?: number; data?: string } = {}): Harness => {
@@ -178,6 +187,8 @@ const harness = (o: { env?: Record<string, string>; timing?: Partial<typeof TIMI
     resets: 0,
     settings: { gamesPerPair: 2, thinkCapSec: 60, workers: 2, roundGapMin: 0 },
     running: [],
+    compacts: 0,
+    compacting: false,
     s: undefined as unknown as Harness["s"]
   }
   ;(h as { s: Harness["s"] }).s = makeScheduler({
@@ -204,6 +215,7 @@ const harness = (o: { env?: Record<string, string>; timing?: Partial<typeof TIMI
     },
     board: { reset: () => void h.resets++ },
     stop: (code) => void stops.push(code),
+    compactor: { poke: () => void h.compacts++, running: () => h.compacting },
     retryMs: o.retryMs ?? 100,
     now: () => clock.mono,
     wall: () => clock.wall
@@ -483,6 +495,40 @@ test("idle: with nothing to do for GAMES_IDLE_MIN it stops the machine with 0", 
   // stopped: ticks do nothing more
   h.s.tick()
   await sleep(30)
+  assert.deepEqual(h.stops, [0])
+  await h.s.stop()
+})
+
+test("the compactor is poked once warm is done and after each round that finished; a failed round does not poke it", async () => {
+  const h = harness()
+  h.control.plan = { round: 4, resume: false, why: "changed" }
+  await ready(h)
+  assert.equal(h.compacts, 1)
+  await settle(h)
+  await tickUntil(h, () => h.plays.length === 1)
+  await eventually(() => h.s.snapshot().round === null)
+  assert.equal(h.compacts, 2)
+  h.control.plan = { round: 5, resume: false, why: "changed" }
+  h.control.play = { kind: "failed", why: "it broke" }
+  await tickUntil(h, () => h.plays.length === 2)
+  await eventually(() => h.s.snapshot().round?.attempts === 1 && !h.s.playing())
+  assert.equal(h.compacts, 2)
+  await h.s.stop()
+})
+
+test("idle waits for a compaction pass to end", async () => {
+  const h = harness({ env: { GAMES_IDLE_MIN: "0" }, timing: { settleMs: 0 } })
+  h.compacting = true
+  await ready(h)
+  await settle(h)
+  h.clock.mono += 1
+  for (let i = 0; i < 3; i++) {
+    h.s.tick()
+    await settle(h)
+  }
+  assert.deepEqual(h.stops, [])
+  h.compacting = false
+  await tickUntil(h, () => h.stops.length === 1)
   assert.deepEqual(h.stops, [0])
   await h.s.stop()
 })

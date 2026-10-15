@@ -20,8 +20,9 @@ file (pick 2A), with games played by Node (pick 1A). It has two parts:
   `bot/ladder.js` dealt them, some games at once on the machine (`workers` in Eric's settings) and whole seeds leased
   to helpers, each seed's games one `bot/arena/play-seed.js` job. It writes `results/arena-r<K>/` as the ladder did
   (`index.json`, `ladder.json`, replays), keeps each game in `games.db` so a round cut by a deploy resumes with its
-  finished games, and pushes to the window every 20 s (every 3 s while a round plays). With nothing to do for
-  `GAMES_IDLE_MIN` minutes it exits 0, and Fly leaves the machine stopped until the next wake.
+  finished games, and pushes to the window every 20 s (every 3 s while a round plays). After warm and after each
+  finished round it gzips the replays of older rounds in place (`src/games/Compact.ts`, below). With nothing to do
+  for `GAMES_IDLE_MIN` minutes it exits 0, and Fly leaves the machine stopped until the next wake.
 - **helper** (`COORD_ROLE=helper`): plays seeds the machine leases out, on a computer of Eric's
   ([bot/arena/HELPER.md](../bot/arena/HELPER.md)).
 - **replay**: `node src/main-games.ts replay --results <arena-rK folder> --bundles <folder of tars> --names <file>
@@ -43,13 +44,21 @@ The volume (`GAMES_DATA`, `/data`):
 | --- | --- | --- |
 | `server/` | root, 0700 | `games.db` (rounds and their games, and the last round's end), `procs/` (a pidfile per child), `settings.json` (Eric's last settings), `intake.json` (the intake's state) |
 | `secret/arena-secret` | root, 0600 | the round-seed secret |
-| `results/` | root, readable by all | each round's `arena-r<K>/` (`index.json`, `ladder.json`, `games/`), written by the server |
+| `results/` | root, readable by all | each round's `arena-r<K>/` (`index.json`, `ladder.json`, `games/`), written by the server; replays of rounds older than the newest two are `games/<id>.jsonl.gz` |
 | `arena/`, `dash/` | arena | roster, versions, standings, round reports, panels; panel copies. The bots' user's because the intake's checker registers and submits there; root's `round` reads them without following links, and game jobs do not see them |
 | `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
 | `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
 | `home/`, `wasm-cache/` | arena | the bots' HOME, wasmtime's compiled modules |
 | `intake/`, `tmp/<kind>/` | root (`tmp/<kind>/` 1777) | the intake's checks; each isolated child's `/tmp` |
 | `coord/` | root | the Elixir coordinator's state: its settings and round end are read once; hidden from children |
+
+A round leaves about 160 MB of raw replays and the volume holds about 3 GB, so the server gzips the replays of
+older rounds (to about a 25th): a round folder older than the newest two, with no `referee.lock`, its `ladder.json`
+done and `games.db` saying done, has each `games/<id>.jsonl` replaced by `<id>.jsonl.gz` once the window holds the
+same replay at the same size (`GET /api/replays/<run>?sizes=1`). A replay the window lacks stays plain, and nothing is
+deleted that is not kept gzipped. A pass runs only while no round is queued or playing, stops between two replays when
+one starts, and keeps the machine from idling out until it ends. The replay check and `bot/trace.js` read `.jsonl.gz`
+too; `gamesctl push` sends only the newest two rounds, which stay plain.
 
 | Variable | Default | |
 | --- | --- | --- |

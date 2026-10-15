@@ -7,6 +7,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { Effect } from "effect"
+import { gzipReplay } from "../../src/games/Compact.ts"
 import { PlayFailed } from "../../src/games/Executor.ts"
 import { loadArenaJs } from "../../src/games/Js.ts"
 import { compareReplays, parseReplayArgs, readRound, replayLines, runReplay, withKey } from "../../src/games/Replay.ts"
@@ -156,6 +157,35 @@ test("replay: a round played again the same way comes out the same, one play-see
   assert.equal(one.at(-1).key, js.gameKey(RUN_KEY, one[0].seed))
   assert.deepEqual(Object.keys(JSON.parse(readFileSync(path.join(r.out, "results.json"), "utf8"))), r.schedule.map((g) => g.id))
   assert.deepEqual(JSON.parse(readFileSync(path.join(r.out, "summary.json"), "utf8")), doc)
+})
+
+test("replay: a round the games machine gzipped, before the check or while it plays, is read from <id>.jsonl.gz", async () => {
+  const gzipAll = async (r: ReturnType<typeof recordRound>) => {
+    for (const f of readdirSync(path.join(r.results, "games"))) {
+      const file = path.join(r.results, "games", f)
+      await gzipReplay(file, readFileSync(file))
+    }
+  }
+  const before = recordRound()
+  await gzipAll(before)
+  const a = await replay(argsOf(before), { play: fakePlay(before.bundles) })
+  assert.deepEqual(a.doc, { ok: true, games: 6, same: 6, different: [], missing: [] })
+  // a compaction pass during the first seed's job, after the check named <id>.jsonl for every game
+  const during = recordRound()
+  const base = fakePlay(during.bundles)
+  let gzipped = false
+  const play = (job: PlaySeedJob, tag: string) =>
+    Effect.gen(function*() {
+      if (!gzipped) {
+        gzipped = true
+        yield* Effect.promise(() => gzipAll(during))
+      }
+      return yield* base(job, tag)
+    })
+  const b = await replay(argsOf(during), { play })
+  assert.ok(gzipped)
+  assert.deepEqual(b.doc, { ok: true, games: 6, same: 6, different: [], missing: [] })
+  assert.equal(b.code, 0)
 })
 
 test("replay: a round of random decks plays the same way, its jobs without deck lists", async () => {
