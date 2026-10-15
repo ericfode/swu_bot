@@ -38,7 +38,7 @@ Real replays: `/mnt/project-files/games/demo/` (v1 fields) and `/mnt/project-fil
 - Every bot is a protocol client; the hello envelope (`protocol`, `v: 1`, `bot`) never changes, so any bot can read
   it, and the bot picks its version in `ready`. v1 bots keep working.
 - Replay readers ignore unknown fields and event types; writers add, never rename (see replay-format.md).
-- Without a key, games are the same as upstream `thrazznos/swu_bot`: `npm run gate` gives 594/342/486 steps, p2 wins.
+- Without a key, games are the same as in the original `thrazznos/swu_bot`: `npm run gate` gives 594/342/486 steps, p2 wins.
 - Bump `header.v` (replays) or add a protocol version only for a breaking change.
 
 ## Checking a bot

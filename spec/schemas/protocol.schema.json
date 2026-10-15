@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/protocol.schema.json",
+  "$id": "https://github.com/ericfode/swu_bot/spec/schemas/protocol.schema.json",
   "title": "SWU bot protocol v2 (and v1), one message",
   "description": "Referee -> bot: hello, decide, simulated, over, bye. Bot -> referee: ready, act, sim, ok, error. Unknown fields must be ignored. See spec/protocol.md.",
   "oneOf": [

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/tournament-index.schema.json",
+  "$id": "https://github.com/ericfode/swu_bot/spec/schemas/tournament-index.schema.json",
   "title": "SWU bot tournament index (replays/<id>/index.json), format v1",
   "description": "Rewritten whole after every game starts and finishes. Unknown fields must be ignored. See spec/replay-format.md.",
   "type": "object",
