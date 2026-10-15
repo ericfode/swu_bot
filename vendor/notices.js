@@ -53,6 +53,11 @@ function kessel(src, root) {
     return [forceteki, ...crates];
 }
 
+// Holocron's JEPA bot: its own player file (no imports) and its own two models, so nothing third-party.
+function jepa() {
+    return [];
+}
+
 function render(name, repo, commit, packages) {
     const texts = [];
     const rows = [...packages].sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version)).map((p) => {
@@ -65,10 +70,12 @@ function render(name, repo, commit, packages) {
         });
         return `| [${p.name}](${p.url}) | ${p.version} | ${p.license || 'see its page'} | ${refs.join(' ') || 'none shipped'} |`;
     });
+    const head = [`# Third-party notices: vendor/${name}`, '', `The built files in \`vendor/${name}/\` come from ${repo} at \`${commit.slice(0, 7)}\`.`];
+    if (!packages.length) {
+        return [...head, 'They bundle no third-party packages.', '`vendor/refresh.js` writes this file with every refresh; never edit it by hand.', ''].join('\n');
+    }
     return [
-        `# Third-party notices: vendor/${name}`,
-        '',
-        `The built files in \`vendor/${name}/\` come from ${repo} at \`${commit.slice(0, 7)}\`.`,
+        ...head,
         'They bundle the packages below, each under its own license. The license texts the packages ship follow the table,',
         'each text once. `vendor/refresh.js` writes this file with every refresh; never edit it by hand.',
         '',
@@ -82,4 +89,13 @@ function render(name, repo, commit, packages) {
     ].join('\n');
 }
 
-module.exports = { holotable, kessel, render };
+// What the build of vendor/<name> bundles; every target in refresh.js needs an entry here (an empty list for none).
+function list(name, src, root) {
+    const of = { holotable, kessel, jepa }[name];
+    if (!of) {
+        throw new Error(`vendor/notices.js has no entry for ${name}: add one that lists what its build bundles`);
+    }
+    return of(src, root);
+}
+
+module.exports = { list, render };

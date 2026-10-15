@@ -63,7 +63,7 @@ function main([name, clone, commit]) {
     try {
         execFileSync('sh', ['-c', 'git -C "$1" archive "$2" | tar -x -C "$3"', 'sh', clone, full, src]);
         const { files, about } = target.build(src);
-        const notice = notices.render(name, target.repo, full, notices[name](src, ROOT));
+        const notice = notices.render(name, target.repo, full, notices.list(name, src, ROOT));
         const out = path.join(VENDOR, name);
         fs.rmSync(out, { recursive: true, force: true });
         const version = { name, repo: target.repo, commit: full, ...about, files: {} };
