@@ -1,5 +1,5 @@
-# The arena image needs bot/arena, app, meta/atlas-kit.js, dashboard/site, the vendored viewer kit and spec/protocol.md
-# (Dockerfile, for arena_guide); keep the rest out
+# The arena image needs bot/arena, app, meta/atlas-kit.js, dashboard/site, the vendored viewer kit with its license list
+# and spec/protocol.md (Dockerfile, for arena_guide); keep the rest out
 *
 !package.json
 !bot/arena
@@ -7,5 +7,6 @@
 !meta/atlas-kit.js
 !dashboard/site
 !vendor/holotable/swu-viewer-kit.js
+!vendor/holotable/swu-viewer-kit.licenses.txt
 !spec/protocol.md
 app/dist
