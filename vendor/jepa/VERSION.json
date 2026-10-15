@@ -1,14 +1,14 @@
 {
   "name": "jepa",
   "repo": "https://github.com/ericfode/holocron",
-  "commit": "8bc79cc9637ea722ced814916e71150a5efa4e60",
+  "commit": "57e9585f2714741cf639d3475dbb62256761c4e6",
   "bot": "jepa-tx-gate",
   "built": "copied as they are",
   "files": {
     "jepa.js": {
       "from": "bots/jepa/js/jepa.js",
-      "bytes": 52096,
-      "sha256": "282c6f1c0fd64ed359af518fad9a08bc4e1d37bb55a10b90bfb806ec1bf2ad2f"
+      "bytes": 52238,
+      "sha256": "6a9eedb9fd482888a9bf2274e64e093971107a4f8e98e05434bfcfce01b85743"
     },
     "tx-t10-e.safetensors": {
       "from": "bots/jepa/models/tx-t10-e.safetensors",

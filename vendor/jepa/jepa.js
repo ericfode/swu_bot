@@ -12,7 +12,8 @@
  *
  * Numbers: the weights are float32 as in the Python, the arithmetic is float64 (numpy runs float32), so scores agree to
  * about 1e-6; a pick can differ only between moves whose scores tie that closely (two copies of one card in hand).
- * Not ported: round tiers, the sim-v and sim-eval oracle scores, --log, --temp above 0, thoughts for the dashboard.
+ * Not ported: round tiers, the sim-v and sim-eval oracle scores, --log, --temp above 0, --plan reply=1, several
+ * --plan-model models, thoughts for the dashboard.
  */
 
 // ---------------------------------------------------------------- features.py
@@ -952,6 +953,9 @@ class JepaBot {
         }
         if (!['imagined', 'plan'].includes(score)) {
             throw new Error(`score ${score} is not ported (imagined or plan)`);
+        }
+        if (plan?.reply) {
+            throw new Error('plan reply is not ported');
         }
         this.name = name;
         this.net = new TxModel(model);
