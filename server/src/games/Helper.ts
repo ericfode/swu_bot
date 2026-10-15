@@ -596,6 +596,7 @@ const playFailed = (r: Result | null, timeoutMs: number): string => {
     case "exit": return `play-seed exited with ${r.code}`
     case "timeout": return `play-seed ran past ${Math.floor(timeoutMs / 1000)} s`
     case "stopped": return `play-seed was stopped (${r.reason.slice(0, 100)})`
+    case "failed": return `play-seed ${r.reason.slice(0, 100)}`
   }
 }
 

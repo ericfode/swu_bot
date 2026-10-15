@@ -36,6 +36,7 @@ const count = (x: unknown): x is number => Number.isSafeInteger(x) && (x as numb
 const answer = (command: string, r: Result): unknown => {
   if (r.kind === "timeout") throw new GamesctlFailed(command, "took too long")
   if (r.kind === "stopped") throw new GamesctlFailed(command, r.reason, true)
+  if (r.kind === "failed") throw new GamesctlFailed(command, r.reason)
   if (r.code === 143) throw new GamesctlFailed(command, "stopped", true)
   if (r.code !== 0) throw new GamesctlFailed(command, `exit ${r.code}`)
   try {

@@ -196,6 +196,7 @@ const readAnswer = (job: PlaySeedJob, out: string, owner: number | null, r: Resu
     throw new PlayFailed(job.seed, why, stopped)
   }
   if (r.kind === "stopped") fail(r.reason, true)
+  if (r.kind === "failed") fail(r.reason)
   if (r.kind === "timeout") fail("it ran past its time")
   if (r.kind === "exit" && r.code !== 0) fail(`play-seed exited ${r.code}`, stopping || r.code === 143)
   let doc: unknown

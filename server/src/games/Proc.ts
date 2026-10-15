@@ -38,10 +38,16 @@ export interface RunOptions {
   readonly maxStdout?: number
 }
 
+/**
+ * How a child ended. `stopped`: the machine is stopping, or something stopped the child (a stop, an interrupt, a
+ * signal). `failed`: it never started (no such program or folder, or the system refused the spawn); a failure of that
+ * one child, which its caller treats like any other failed step, never as the machine stopping.
+ */
 export type Result =
   | { readonly kind: "exit"; readonly code: number; readonly stdout: string }
   | { readonly kind: "timeout"; readonly stdout: string }
   | { readonly kind: "stopped"; readonly reason: string; readonly stdout: string }
+  | { readonly kind: "failed"; readonly reason: string; readonly stdout: string }
 
 export const lastLine = (stdout: string) => stdout.trim().split("\n").at(-1) ?? ""
 
@@ -182,13 +188,13 @@ export const makeProc = (c: GamesConfig): ProcService => {
       argv = [...(choom ? [choom, "-n", "300", "--"] : []), ...wrap(o)]
     } catch (e) {
       Log.error(`[${o.kind}] could not start: ${(e as Error).message}`)
-      done({ kind: "stopped", reason: `could not start (${(e as Error).message})`, stdout: "" })
+      done({ kind: "failed", reason: `could not start (${(e as Error).message})`, stdout: "" })
       return null
     }
     const exe = findExe(argv[0]!, o.env.PATH ?? BASE_PATH)
     if (!exe) {
       Log.error(`[${o.kind}] could not start ${argv[0]}: not found`)
-      done({ kind: "stopped", reason: `could not start ${argv[0]}`, stdout: "" })
+      done({ kind: "failed", reason: `could not start ${argv[0]}`, stdout: "" })
       return null
     }
     let proc: ReturnType<typeof spawn>
@@ -202,7 +208,7 @@ export const makeProc = (c: GamesConfig): ProcService => {
     } catch (e) {
       // Node throws for some spawn failures (ENOMEM, E2BIG) and reports others as an 'error' event (below)
       Log.error(`[${o.kind}] could not start ${argv[0]}: ${(e as Error).message}`)
-      done({ kind: "stopped", reason: "could not start", stdout: "" })
+      done({ kind: "failed", reason: "could not start", stdout: "" })
       return null
     }
     const pgid = proc.pid
@@ -210,7 +216,7 @@ export const makeProc = (c: GamesConfig): ProcService => {
       // EMFILE, ENOENT and the like come as an 'error' event on the next tick: with no listener it would crash the
       // server, where only this child failed
       proc.once("error", (e) => Log.error(`[${o.kind}] could not start ${argv[0]}: ${e.message}`))
-      done({ kind: "stopped", reason: "could not start", stdout: "" })
+      done({ kind: "failed", reason: "could not start", stdout: "" })
       return null
     }
     try {

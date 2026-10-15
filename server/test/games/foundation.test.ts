@@ -5,6 +5,7 @@ import path from "node:path"
 import { test } from "node:test"
 import { Effect, Fiber } from "effect"
 import { readConfig } from "../../src/games/Config.ts"
+import { makeGamesctl } from "../../src/games/Gamesctl.ts"
 import { childEnv, makeProc } from "../../src/games/Proc.ts"
 import { parseHelperTokens, takeSecrets } from "../../src/games/Secrets.ts"
 import { Store } from "../../src/games/Store.ts"
@@ -77,9 +78,14 @@ test("proc: a child that cannot start fails alone, and the server goes on", asyn
   const r = await Effect.runPromise(proc.run({
     kind: "plan", argv: ["/bin/true"], env: childEnv(c, c.paths.home), as: "root", isolate: false, cwd: "/no/such/folder", stdout: "capture"
   }))
-  assert.equal(r.kind, "stopped")
+  assert.equal(r.kind, "failed")
   await new Promise((resolve) => setTimeout(resolve, 100))
   assert.deepEqual(proc.running(), [])
+  // a failed start is that step's failure, never the machine stopping (a stop would end the round's publishing quietly)
+  const app = { ...c, app: "/no/such/folder" }
+  const published = await Effect.runPromise(Effect.result(makeGamesctl(app, makeProc(app), "boot1").publish(3)))
+  assert.equal(published._tag, "Failure")
+  assert.deepEqual(published._tag === "Failure" ? [published.failure.stopped, published.failure.why] : null, [false, "could not start"])
 })
 
 test("proc: interrupting a run stops the child; once stopping, only pushes start", async () => {
