@@ -20,6 +20,8 @@ replays/                          (REPLAYS_DIR; gitignored)
 ```
 
 - `<tournament-id>` is the basename of `--out` (e.g. `replays/demo` -> `demo`).
+- The games machine gzips the game files of arena rounds older than its newest two in place, as
+  `<game-id>.jsonl.gz` (the same bytes gzipped), once the window holds them (`server/README.md`).
 - `<game-id>` is `<p1 bot>-vs-<p2 bot>-<seed>`, e.g. `random-a-vs-random-b-3`.
 - Pairings are round-robin over `--bots`; each pairing plays `--games` games; seeds count up from `--seed` across the
   whole tournament; the first seat alternates (odd games within a pairing swap seats).

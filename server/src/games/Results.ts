@@ -4,7 +4,8 @@
  *   index.json        {id, createdAt, engine, bots, gamesPerPairing, games}: each game as it starts and ends, no think
  *                     or botStats (tournament.js's index, Holotable's TournamentIndex)
  *   ladder.json       ladder-report.js summarize(...) of the same games with think and botStats, plus `remote` (helpers)
- *   games/<id>.jsonl  each game's replay; while a game plays here its lines come in as play-seed writes them
+ *   games/<id>.jsonl  each game's replay; while a game plays here its lines come in as play-seed writes them (once
+ *                     the round is two rounds old and the window holds it, Compact.ts gzips it to <id>.jsonl.gz)
  *   referee.lock      {pid, host, pidns, startedAt}, touched while the round plays (api.js tells the window's phase by
  *                     its age)
  * A seed's key goes into its games' entries and replays' end lines only once every game of the seed has ended (the
@@ -240,6 +241,9 @@ export const openRoundFiles = (o: RoundFilesOptions): RoundFiles => {
   const replay = (gid: string, text: string | null) => {
     if (text === null) rmSync(replayFile(gid), { force: true })
     else writeAtomic(replayFile(gid), text)
+    // a gzipped copy (Compact.ts) of an earlier play would disagree with this one; only old rounds are gzipped, so
+    // this is a guard
+    rmSync(`${replayFile(gid)}.gz`, { force: true })
   }
 
   const lines = (gid: string, from: number, text: string) => {
