@@ -45,11 +45,11 @@ The volume (`GAMES_DATA`, `/data`):
 | `server/` | root, 0700 | `games.db` (rounds and their games, and the last round's end), `procs/` (a pidfile per child), `settings.json` (Eric's last settings), `intake.json` (the intake's state) |
 | `secret/arena-secret` | root, 0600 | the round-seed secret |
 | `results/` | root, readable by all | each round's `arena-r<K>/` (`index.json`, `ladder.json`, `games/`), written by the server; replays of rounds older than the newest two are `games/<id>.jsonl.gz` |
-| `arena/`, `dash/` | arena | roster, versions, standings, round reports, panels; panel copies. The bots' user's because the intake's checker registers and submits there; root's `round` reads them without following links, and game jobs do not see them |
+| `arena/`, `dash/` | root, readable by all | roster, versions, standings, round reports, panels; panel copies. Only root writes them: the intake's checker (the bots' user) packs and start-checks a submission in its job folder, and root enters the tar it leaves. Setup makes them root's on every start without following a link (`bot/arena/ops/own-tree.py`: links, pipes and extra hard links go). The checker and game jobs do not see them |
 | `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
 | `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
 | `home/`, `wasm-cache/` | arena | the bots' HOME, wasmtime's compiled modules |
-| `intake/`, `tmp/<kind>/` | root (`tmp/<kind>/` 1777) | the intake's checks; each isolated child's `/tmp` |
+| `intake/`, `tmp/<kind>/` | root (`intake/` 0711, `tmp/<kind>/` 1777) | the intake's checks (a job's `home/` the bots' user's while it runs; hidden from every other command and game job); each isolated child's `/tmp` |
 | `coord/` | root | the Elixir coordinator's state: its settings and round end are read once; hidden from children |
 
 A round leaves about 160 MB of raw replays and the volume holds about 3 GB, so the server gzips the replays of

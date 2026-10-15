@@ -72,8 +72,8 @@ async function putChanged(seen, ns, id, doc) {
 
 /**
  * A file's bytes and stat, only when it is a regular file reached without a symlink at its last step; null otherwise.
- * On the games machine the arena's folders belong to the bots' user, so a link planted there must not make the pusher
- * publish what it points at (a secret, another process's environment). `want(stat)` false: the stat only (buf null).
+ * The pusher runs as the bots' user and reads folders other processes write, so a link there must not make it publish
+ * what it points at (a secret, another process's environment). `want(stat)` false: the stat only (buf null).
  */
 function readRegular(file, want = () => true) {
     let fd;

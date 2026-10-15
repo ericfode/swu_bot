@@ -2,16 +2,17 @@
 'use strict';
 /**
  * Bots that people submit on the arena window (its /mcp, tool arena_submit) enter the arena here. The games machine
- * runs one pass at a time (intakeOnce): its Elixir coordinator through `node bot/arena/gamesctl.js intake`.
+ * runs one pass at a time (intakeOnce): the arena server's games role through `node bot/arena/gamesctl.js intake`.
  *
  *   node bot/arena/intake.js --check <job.json> -      the checker for one submission (checkIsolated starts it)
  *
  * Reads the window's `submissions` collection with the project token (SWU_WINDOW and the token as for push.js). For each
- * pending submission it packs a WebAssembly bundle (bot/compiled/README.md): JavaScript through Javy, Python with the
- * pinned CPython for WASI, a ready bundle as it is. It registers the builder's competitor the first time (owner
- * github:<login>), then submits the bundle as that competitor's next version (api.submit kind 'wasm', which starts it
- * once in the sandbox and expects ready). The outcome goes back to the window: the version, or the error lines, which
- * the builder reads with arena_my_submissions. The source is then dropped from the window; the arena keeps the bundle.
+ * pending submission a checker packs a WebAssembly bundle (bot/compiled/README.md): JavaScript through Javy, Python
+ * with the pinned CPython for WASI, a ready bundle as it is, and starts it once in the sandbox (hello, expect ready).
+ * Then the intake (root on the games machine) registers the builder's competitor the first time (owner
+ * github:<login>) and enters the bundle as that competitor's next version (api.submit kind 'wasm'). The outcome goes
+ * back to the window: the version, or the error lines, which the builder reads with arena_my_submissions. The source
+ * is then dropped from the window; the arena keeps the bundle.
  * A house submission (owner HOUSE, which no GitHub login can be, so only a project or admin token can write one:
  * ops/house-submit.js) enters one of the arena's own bots: a resident entry under any free name, owner 'arena'
  * (api.js register resident), rated with everyone and anchoring the ratings.
@@ -19,7 +20,9 @@
  * Submitted code never runs outside the wasmtime sandbox, which has no network, no files but its own and the card data,
  * and no other programs. On top of that, packing and checking run in a child process (--check) that gets no token and,
  * where it can (root, unshare), its own PID and mount namespace (ops/isolate.sh), as the user ARENA_USER when set (no
- * capabilities, so it cannot undo the hiding), like the referee.
+ * capabilities, so it cannot undo the hiding), like the referee. It reads and writes only its job folder, never the
+ * arena's (ARENA_HIDE hides them on the games machine): it leaves the bundle there as a canonical tar, which root
+ * unpacks (bundle.py unpack, no links) and enters without running anything (enter).
  * A builder's later versions go to wherever the competitor is: on the bench (api.js withdraw), they wait for rejoin.
  * The toolchain (Javy, CPython for WASI) must be in build/compiled/.tools: Dockerfile.games builds it, or
  * `python3 -c "import sys; sys.path.insert(0, 'bot/compiled'); import build; build.javy(); build.runtime('python-3.14-wasi')"`.
@@ -41,6 +44,8 @@ const STUCK_MS = 15 * 60000; // a submission left 'checking' this long (an intak
 const RETRIES = 3; // a check that ends with no result (the arena's fault) is tried this often before it is rejected
 const RETRY_MS = 5 * 60000; // and waits this much longer before each new try
 const ERROR_CHARS = 2000;
+// the canonical tar a check leaves: bundle.py unpack's own limit (64 MiB of files) plus headers and padding
+const MAX_TAR_BYTES = (64 << 20) + (4 << 20);
 // the checker's working folders, outside /tmp: the checker gets a /tmp of its own (isolate.sh --tmp)
 const WORK = process.env.ARENA_INTAKE_WORK || path.join(ROOT, 'build', 'intake');
 
@@ -155,11 +160,11 @@ function bundleFiles(folder) {
 }
 
 /**
- * The checker (a child process without the token): packs one submission and enters it. Returns {version, name} or
- * throws. job = {id, owner, name, note, kind, files, base64?, entry?}.
+ * Root's half before a check, and again before the entry (no submitted code runs here): the submission's fields, the
+ * builder's right to the name, and a version already entered for this submission (an intake that died before it could
+ * say so). Throws IntakeError. job = {id, owner, name, note, kind, files, base64?, entry?}, as the window holds it.
  */
-function check(job, { work }) {
-    const { api } = require('./api');
+function admit(job) {
     const home = require('./home');
     const house = job.owner === HOUSE;
     need(house || LOGIN.test(job.owner ?? ''), 'no owner');
@@ -172,51 +177,147 @@ function check(job, { work }) {
     const r = home.roster();
     const entry = [...r.agents, ...(r.bench ?? [])].find((a) => a.name === job.name);
     need(!entry || entry.owner === owner, `the name "${job.name}" belongs to another competitor; submit under another name`);
-    const benched = () => !!home.roster().bench?.some((a) => a.name === job.name);
-    // entered already (an intake that died, or could not write the result back, before it said so): that version
     const ref = `window:${job.id}`;
-    const before = !entry ? undefined : home.versionsOf(job.name).find((n) => home.readJson(path.join(home.VERSIONS, `${job.name}-v${n}`, 'SUBMISSION.json'), {}).ref === ref);
-    if (before !== undefined) {
-        return { name: job.name, version: `${job.name}-v${before}`, benched: benched() };
-    }
+    const versions = entry ? home.versionsOf(job.name) : [];
+    const before = versions.find((n) => home.readJson(path.join(home.VERSIONS, `${job.name}-v${n}`, 'SUBMISSION.json'), {}).ref === ref);
+    // the version this submission becomes unless another comes first: a builder's first bot is v1 (after the starter
+    // v0), as is a resident's first
+    const next = entry ? (versions.at(-1) ?? (entry.resident ? 0 : -1)) + 1 : 1;
+    return { house, owner, entry, ref, before, next };
+}
+
+/**
+ * The checker's half (a child process, as the bots' user and isolated on the games machine, with no token and none of
+ * the arena's folders): packs the submission, checks the bundle's manifest and files (bundle.py), starts it once in the
+ * sandbox (hello, expect ready), and leaves its canonical tar as <work>/bundle.tar for root to enter. Returns
+ * {sha256} or throws. job.checkAs names the version in the hello.
+ */
+function packAndCheck(job, { work }) {
+    const { startCheck } = require('./api');
     const folder = pack(job, work);
+    const bundlePy = path.join(COMPILED, 'bundle.py');
+    // every kind, Python packs too: what is entered must pass what play-seed and the round's packing will ask of it
+    const ok = spawnSync('python3', ['-I', bundlePy, folder], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
+    need(ok.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(ok.stderr || ok.stdout || ok.error?.message, work)}`);
+    startCheck(work, job.checkAs, require('./registry').WASM_BOT, job.name);
+    const tar = spawnSync('python3', ['-I', bundlePy, 'tar', folder], { timeout: 60000, env: toolEnv(), maxBuffer: MAX_TAR_BYTES });
+    need(tar.status === 0, `the bundle cannot be packed:\n${tail(String(tar.stderr ?? '') || tar.error?.message, work)}`);
+    fs.writeFileSync(path.join(work, 'bundle.tar'), tar.stdout, { flag: 'wx' });
+    return { sha256: require('crypto').createHash('sha256').update(tar.stdout).digest('hex') };
+}
+
+/** A file the checker left, read without following a link: a plain file with no other names, of at most max bytes. */
+function readLeft(file, max) {
+    const { O_RDONLY, O_NOFOLLOW, O_NONBLOCK } = fs.constants;
+    let fd;
+    try {
+        fd = fs.openSync(file, O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+    } catch {
+        return null;
+    }
+    try {
+        const st = fs.fstatSync(fd);
+        return st.isFile() && st.nlink === 1 && st.size <= max ? fs.readFileSync(fd) : null;
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+/**
+ * Root's half after a check that passed (no submitted code runs here): unpacks the tar the checker left in the job's
+ * home folder with bundle.py unpack (which trusts nothing in it, follows no link and makes a fresh folder) into a
+ * folder only root can reach, checks its manifest, and enters it: the builder's competitor the first time, then the
+ * bundle as its next version (api.submit, told the start check was made). Name, owner and note come from the window's
+ * submission, never from the checker. sha256: the tar's hash as the checker printed it, so a tar another process of the
+ * bots' user changed after the check is not entered. Returns {ok, name, version, benched} or throws.
+ */
+function enter(job, work, sha256) {
+    const home = require('./home');
+    const { api } = require('./api');
+    const benched = () => !!home.roster().bench?.some((a) => a.name === job.name);
+    // the roster as it is now (the check took a while)
+    const { house, owner, entry, ref, before } = admit(job);
+    if (before !== undefined) {
+        return { ok: true, name: job.name, version: `${job.name}-v${before}`, benched: benched() };
+    }
+    // the checker and everything it started are gone (its process group was killed, and on the games machine its PID
+    // namespace with it), and its home folder's place in work/ is root's: the file read here stays what it is
+    const tar = readLeft(path.join(work, 'home', 'bundle.tar'), MAX_TAR_BYTES);
+    need(tar, 'the check left no bundle');
+    const hex = require('crypto').createHash('sha256').update(tar).digest('hex');
+    need(hex === sha256, 'the bundle changed after its check');
+    const mine = path.join(work, 'enter');
+    fs.mkdirSync(mine, { mode: 0o700 });
+    fs.writeFileSync(path.join(mine, 'bundle.tar'), tar, { flag: 'wx', mode: 0o600 });
+    const bundlePy = path.join(COMPILED, 'bundle.py');
+    const folder = path.join(mine, 'bundle');
+    const unpacked = spawnSync('python3', ['-I', bundlePy, 'unpack', path.join(mine, 'bundle.tar'), folder, hex], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
+    need(unpacked.status === 0, `the bundle did not unpack:\n${tail(unpacked.stderr || unpacked.error?.message, work)}`);
+    const ok = spawnSync('python3', ['-I', bundlePy, folder], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
+    need(ok.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(ok.stderr || ok.error?.message, work)}`);
+    const files = bundleFiles(folder);
     const token = process.env.ARENA_ADMIN_TOKEN; // a hosted arena (ARENA_AUTH=1) takes the admin token for this
+    // the checker made the start check; nothing here runs a bot (a builder's starter v0 is not loaded either)
+    const checked = { checked: true };
     if (!entry) {
-        // a builder's first bot must start before a competitor is made for it (api.submit checks it again)
-        const { startCheck } = require('./api');
-        startCheck(path.dirname(folder), `${job.name}-v1`, require('./registry').WASM_BOT, job.name);
         api.register(house
             ? { name: job.name, title: job.name, owner, resident: true, token, philosophy: 'One of the arena\'s own bots, played in every round with the builders\' bots.' }
-            : { name: job.name, title: job.name, owner, harness: { kind: 'builder', selfRun: true }, token, philosophy: `Submitted on the arena window by @${job.owner}.` });
+            : { name: job.name, title: job.name, owner, harness: { kind: 'builder', selfRun: true }, token, philosophy: `Submitted on the arena window by @${job.owner}.` }, checked);
     }
     let v;
     try {
-        v = api.submit({ name: job.name, note: job.note.trim().slice(0, 300), bot: { kind: 'wasm', files: bundleFiles(folder) }, token, ref });
+        v = api.submit({ name: job.name, note: job.note.trim().slice(0, 300), bot: { kind: 'wasm', files }, token, ref }, checked);
     } catch (e) {
         if (!entry) {
-            // the starter version register made is not the builder's bot: no competitor until one of theirs starts
+            // the starter version register made is not the builder's bot: no competitor until one of theirs is entered
             home.updateRoster((ro) => ({ ...ro, agents: ro.agents.filter((a) => a.name !== job.name), ...(ro.bench ? { bench: ro.bench.filter((a) => a.name !== job.name) } : {}) }));
             for (const n of home.versionsOf(job.name)) {
                 home.removeDir(path.join(home.VERSIONS, `${job.name}-v${n}`));
             }
             home.removeDir(path.join(home.AGENTS, job.name));
+            const dash = require('./dash');
+            fs.rmSync(path.join(home.HOME, 'panels', `${job.name}.say.json`), { force: true });
+            if (dash.enabled()) {
+                fs.rmSync(path.join(dash.DASH, 'panels', `arena-${job.name}.json`), { force: true });
+            }
         }
         throw e;
     }
-    return { name: job.name, version: v.version, benched: benched() };
+    return { ok: true, name: job.name, version: v.version, benched: benched() };
+}
+
+/** Root's halves around the check: a submission refused before or after it, as the window reads it. */
+function refused(e) {
+    if (!(e instanceof IntakeError) && !e.code) {
+        throw e; // a bug of ours
+    }
+    return { ok: false, error: String(e.message).slice(0, ERROR_CHARS) };
 }
 
 /**
- * Runs check() for one submission in a child process, isolated when possible; returns {ok, ...} for the window.
+ * One submission: root admits it, a child process packs and start-checks it (isolated when possible), and root enters
+ * what the child left; returns {ok, ...} for the window.
  *
  *     WORK/job-XXXX/        root's (0755): the checker cannot swap what is in it
  *         tmp/              root's (1777): the checker's /tmp (isolate.sh --tmp)
- *         home/             the checker's user's (0700): job.json, its HOME, the packing, the bundle's compiled code
+ *         home/             the checker's user's (0700): job.json, its HOME, the packing, bundle.tar
+ *         enter/            root's (0700), made after the check: the tar and the bundle root enters
  *
- * The result comes back as the last line the checker prints, so the parent never opens a file the checker could have
- * replaced with a link.
+ * The checker's result comes back as the last line it prints, so the parent never opens a file the checker could
+ * have replaced with a link; the one file it reads there (bundle.tar) it opens without following one.
  */
 async function checkIsolated(job) {
+    let admitted;
+    try {
+        admitted = admit(job);
+    } catch (e) {
+        return refused(e);
+    }
+    if (admitted.before !== undefined) {
+        // entered already (an intake that died, or could not write the result back, before it said so): that version
+        return { ok: true, name: job.name, version: `${job.name}-v${admitted.before}`, benched: !!require('./home').roster().bench?.some((a) => a.name === job.name) };
+    }
+    reapOrphan();
     fs.mkdirSync(WORK, { recursive: true });
     const work = fs.mkdtempSync(path.join(WORK, 'job-'));
     try {
@@ -226,10 +327,10 @@ async function checkIsolated(job) {
         const jobHome = path.join(work, 'home');
         fs.mkdirSync(jobHome, { mode: 0o700 });
         const jobFile = path.join(jobHome, 'job.json');
-        fs.writeFileSync(jobFile, JSON.stringify(job), { flag: 'wx' });
-        // only what the checker needs: no token, no proxy (the toolchain is fetched beforehand)
-        // (a hosted arena's register and submit take the admin token; the tools that read submitted files never get it)
-        const keep = ['PATH', 'HOME', 'LANG', 'TZ', 'ARENA_HOME', 'ARENA_DASH', 'ARENA_RESULTS', 'SWU_CARD_JSON', 'ARENA_ADMIN_TOKEN', 'ARENA_AUTH'];
+        fs.writeFileSync(jobFile, JSON.stringify({ ...job, checkAs: `${job.name}-v${admitted.next}` }), { flag: 'wx' });
+        // only what the checker needs: no token, no proxy (the toolchain is fetched beforehand), none of the arena's
+        // folders (it reads and writes only its job folder)
+        const keep = ['PATH', 'HOME', 'LANG', 'TZ', 'SWU_CARD_JSON'];
         const env = Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
         // compiled code of a bot that may be rejected stays with the job and goes with it; the ladders compile their own
         env.SWU_WASM_CACHE = path.join(jobHome, 'wasm-cache');
@@ -260,7 +361,7 @@ async function checkIsolated(job) {
         // the group a stopped intake must take down with it: in memory for its own signal handler, and in a file, the
         // only trace of an orphaned check should the intake be killed before it can
         checkers.add(child.pid);
-        fs.writeFileSync(CHECKER_PID, String(child.pid));
+        fs.writeFileSync(CHECKER_PID, [child.pid, procStat(child.pid)?.start, bootId()].join(' '));
         let err = '';
         let out = '';
         child.stdout.on('data', (d) => {
@@ -270,7 +371,9 @@ async function checkIsolated(job) {
             err = (err + d).slice(-20000);
         });
         // past its time it is stopped, and killed if it does not stop (a checker that never ends would hold the intake)
+        let late = false;
         const timer = setTimeout(() => {
+            late = true;
             stop('SIGTERM');
             setTimeout(() => stop('SIGKILL'), 10000).unref();
         }, CHECK_MS);
@@ -280,14 +383,25 @@ async function checkIsolated(job) {
         checkers.delete(child.pid);
         fs.rmSync(CHECKER_PID, { force: true });
         const res = lastResult(out);
-        if (res) {
-            return res;
+        if (!res) {
+            log(`check of ${job.id} ended with ${code} and no result:\n${err}`);
+            // stopped at its time limit: the bot's doing (Javy on a huge file, a bot that never answers). Any other end
+            // with no result is the arena's (isolation, a bug of ours): the submission is tried again later
+            return late ? { ok: false, error: `the check took more than ${CHECK_MS / 60000} minutes` }
+                : { ok: false, retry: true, error: 'the arena could not check it (its error is in the intake log)' };
         }
-        log(`check of ${job.id} ended with ${code} and no result:\n${err}`);
-        // stopped at its time limit: the bot's doing (Javy on a huge file, a bot that never answers). Any other end with
-        // no result is the arena's (isolation, a bug of ours): the submission is tried again later
-        return code === null ? { ok: false, error: `the check took more than ${CHECK_MS / 60000} minutes` }
-            : { ok: false, retry: true, error: 'the arena could not check it (its error is in the intake log)' };
+        if (!res.ok) {
+            // only its words: whether to try again is root's call
+            return { ok: false, error: String(res.error ?? 'the check failed').slice(0, ERROR_CHARS) };
+        }
+        if (stopping) {
+            return { ok: false, retry: true, error: 'the intake stopped' };
+        }
+        try {
+            return enter(job, work, res.sha256);
+        } catch (e) {
+            return refused(e);
+        }
     } finally {
         require('./home').removeTree(work);
     }
@@ -310,8 +424,61 @@ const checkers = new Set(); // process groups of the checks running now
 // stopCheckers ran: the intake is stopping. A check it killed is no result (not the bot's doing), and nothing more is
 // claimed or written: release() puts the submission back, or the stuck rule picks it up later
 let stopping = false;
-// next to WORK, never in it: WORK belongs to the checker's user, who could put a link there for us to write through
+// next to WORK, never in it: the checker's user may write in WORK's job folders, and could put a link there for us to
+// write through. It holds "<pid> <start time> <boot id>" of the check running now.
 const CHECKER_PID = `${WORK}.checker.pid`;
+
+/** A process's state letter and start time (/proc/<pid>/stat fields 3 and 22), or null when there is none (or no /proc). */
+function procStat(pid) {
+    try {
+        const text = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        const fields = text.slice(text.lastIndexOf(')') + 2).split(' ');
+        return { state: fields[0], start: fields[19] };
+    } catch {
+        return null;
+    }
+}
+
+const bootId = () => {
+    try {
+        return fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    } catch {
+        return '';
+    }
+};
+
+/**
+ * A check that an intake killed before it could stop it (a SIGKILL, a crash) is still running: its process group is
+ * killed before a new check starts, and on the games machine its PID namespace with it, so it cannot reach the next
+ * job's folder. The pid counts only with the start time and boot it was written with: a new process that got the same
+ * pid is left alone.
+ */
+function reapOrphan() {
+    let words;
+    try {
+        words = fs.readFileSync(CHECKER_PID, 'utf8').trim().split(' ');
+    } catch {
+        return; // none
+    }
+    const pid = Number(words[0]);
+    const was = Number.isSafeInteger(pid) && pid > 1 && words[1] && words[2] === bootId() ? procStat(pid) : null;
+    if (was && was.start === words[1]) {
+        log(`a check left running by an earlier intake (process group ${pid}) is killed`);
+        try {
+            process.kill(-pid, 'SIGKILL');
+        } catch {} // gone already
+        // the group's first process (isolate.sh) gone or dead: its namespace goes with the namespace's first process
+        const wait = new Int32Array(new SharedArrayBuffer(4));
+        for (let i = 0; i < 100; i++) {
+            const now = procStat(pid);
+            if (!now || now.start !== was.start || now.state === 'Z' || now.state === 'X') {
+                break;
+            }
+            Atomics.wait(wait, 0, 0, 50);
+        }
+    }
+    fs.rmSync(CHECKER_PID, { force: true });
+}
 
 /** Kills every running check's process group (the intake is stopping). */
 function stopCheckers() {
@@ -486,7 +653,7 @@ async function main(argv) {
     const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
     let res;
     try {
-        res = { ok: true, ...check(job, { work: path.dirname(jobFile) }) };
+        res = { ok: true, ...packAndCheck(job, { work: path.dirname(jobFile) }) };
     } catch (e) {
         if (!(e instanceof IntakeError) && !e.code) {
             throw e; // a bug of ours: no result, so checkIsolated says to try later and logs this
@@ -497,7 +664,7 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify(res)}\n`);
 }
 
-module.exports = { pack, check, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, lastResult, bundleFiles, writeFiles, RETRIES };
+module.exports = { pack, admit, packAndCheck, enter, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, lastResult, bundleFiles, writeFiles, RETRIES };
 if (require.main === module) {
     main(process.argv.slice(2)).catch((e) => {
         console.error(e.stack ?? e.message);

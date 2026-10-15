@@ -24,8 +24,8 @@ const PUBLIC_RESULTS = path.resolve(process.env.ARENA_PUBLIC_RESULTS ?? RESULTS)
 
 /**
  * Replaces file with text in one step. The temporary file gets a random name and is created with O_EXCL, which never
- * follows a symlink: the arena's folders belong to the bots' user, and a root writer (the referee) must not write
- * through a link planted there.
+ * follows a symlink: in a local arena another user may share the folders, and a root writer (the referee) must not
+ * write through a link planted there. (On the games machine arena/ is root's alone, cleaned on every start.)
  */
 function writeAtomic(file, text) {
     fs.mkdirSync(path.dirname(file), { recursive: true });

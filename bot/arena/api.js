@@ -218,7 +218,7 @@ const api = {
      * the baselines, never counts as a builder, may take a built-in bot's name (its versions are <name>-v<N>, which no
      * built-in name matches), and gets no starter version: its first submitted version is v1.
      */
-    register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, resident = false, token: adminToken } = {}) {
+    register({ name, title, philosophy, start = 'heuristic', harness = null, owner = null, resident = false, token: adminToken } = {}, opts = {}) {
         need(NAME.test(name ?? ''), 'bad_request', 'name: 1-32 chars, lowercase letters, digits, _; starts with a letter');
         need(!resident || !AUTH || (process.env.ARENA_ADMIN_TOKEN && adminToken === process.env.ARENA_ADMIN_TOKEN), 'unauthorized', 'only the admin registers a resident');
         if (resident) {
@@ -252,7 +252,7 @@ const api = {
         home.updateRoster((r) => ({ ...r, agents: [...r.agents.filter((a) => a.name !== name), entry] }));
         let v;
         try {
-            v = api.submit({ name, note: `starting strategy: ${start}`, token });
+            v = api.submit({ name, note: `starting strategy: ${start}`, token }, opts);
         } catch (e) {
             // no token was handed out, so undo the registration: the name can be registered again
             home.updateRoster((r) => ({ ...r, agents: r.agents.filter((a) => a.name !== name) }));
@@ -263,10 +263,12 @@ const api = {
         return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, withdraw and rejoin on a hosted arena.' };
     },
 
-    submit({ name, note, bot = { kind: 'js' }, token, ref } = {}) {
+    submit({ name, note, bot = { kind: 'js' }, token, ref } = {}, { checked = false } = {}) {
         // Atomic: the version is assembled and load-checked in versions/.staging-*, then renamed into place in one step,
         // so the referee never sees a half-copied or unloadable version. A benched competitor may submit too: its newest
-        // version is rated once it rejoins.
+        // version is rated once it rejoins. checked: the caller made the load or start check already, on these files,
+        // so nothing runs the bot here (the games machine's intake enters as root what its checker checked as the bots'
+        // user: intake.js enter). call() passes one argument, so no client can set it.
         const entry = owned(name, token, { benched: true });
         need(typeof note === 'string' && note.trim(), 'bad_request', 'note: one line saying what changed and why');
         need(bot && typeof bot === 'object' && ['js', 'stdio', 'wasm'].includes(bot.kind), 'bad_request', "bot.kind: 'js', 'stdio' or 'wasm'");
@@ -330,6 +332,9 @@ const api = {
             // a resident has no starter v0: its first version is v1, like a builder's first bot
             let n = (home.versionsOf(name).pop() ?? (entry.resident ? 0 : -1)) + 1;
             const check = () => {
+                if (checked) {
+                    return;
+                }
                 if (bot.kind === 'js') {
                     loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
                 } else {

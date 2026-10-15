@@ -265,7 +265,7 @@ export const playLocal = (c: GamesConfig, proc: ProcService, job: PlaySeedJob, t
         // its own /tmp, gone with the folder
         tmp: path.join(dir, "tmp"),
         // play-seed keeps its own arena home in the work folder: the real one, the window's panels, the intake's checks
-        // and other rounds' results are none of a game's business (and the bots' user can write the first three)
+        // and other rounds' results are none of a game's business
         hide: [c.paths.arena, path.join(c.data, "dash"), path.join(c.data, "intake"), c.paths.results],
         ...(job.gameMs > 0 ? { timeoutMs: job.gameMs + SLACK_MS } : {}),
         stdout: "capture",
