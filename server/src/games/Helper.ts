@@ -5,12 +5,14 @@
  * Slot and Play in TypeScript, on the same wire (map-helper-lease.md §7, §13):
  *
  * - boot: the token kept, stale child groups reaped, `<data>/helper` wiped (0711 when the plays run as the bots' user,
- *   who must reach their own folder in it), the bots' HOME and wasm cache theirs;
- * - `play-seed.js --warm` (as the bots' user; a failure is only logged), then hello: 200 starts GAMES_HELPER_SLOTS
+ *   who must reach their own folder in it); as root, the bots' HOME emptied and the wasm cache emptied unless it is
+ *   root's, both root's (the plays only read them: nothing a bot leaves there reaches a later game);
+ * - `play-seed.js --warm` (as root; a failure is only logged), then hello: 200 starts GAMES_HELPER_SLOTS
  *   slots, 409 (another build) stops with 3, 401 (unknown token) with 1, no answer says hello again every 30 s;
- * - a slot claims (a long poll), plays the lease's seed with play-seed.js in `<data>/helper/<slot>/<lease>/`
- *   (job.json, out/; the layout helper-tui.js reads), heartbeats meanwhile (the first at once: the machine's ack),
- *   posts the results and replays, removes the folder and claims again. A seed is never played twice here.
+ * - a slot claims (a long poll), compiles the lease's bundles as root (`play-seed.js --warm --bundles`, each once per
+ *   start), plays the lease's seed with play-seed.js in `<data>/helper/<slot>/<lease>/` (job.json, out/; the layout
+ *   helper-tui.js reads), heartbeats meanwhile (the first at once: the machine's ack), posts the results and replays,
+ *   removes the folder and claims again. A seed is never played twice here.
  * - stopping (SIGTERM: docker stop, Ctrl-C in the live view) gives every seed in play back at once.
  *
  * Bundles (canonical tars, named by their sha256) are fetched once into `<data>/bundles`, which keeps them across
@@ -41,7 +43,7 @@ import path from "node:path"
 import { Effect, Exit, Fiber } from "effect"
 import type { GamesConfig } from "./Config.ts"
 import { scripts } from "./Config.ts"
-import { removeTree } from "./Executor.ts"
+import { notWarmed, removeTree, warmOptions } from "./Executor.ts"
 import * as Log from "./Log.ts"
 import type { ProcService, Result, RunOptions } from "./Proc.ts"
 import { childEnv } from "./Proc.ts"
@@ -558,6 +560,8 @@ interface Ctx {
   readonly proc: ProcService
   readonly client: Client
   readonly cache: BundleCache
+  /** the bundles compiled into the wasm cache since this start, or being compiled (warmLease) */
+  readonly warmed: Map<string, Promise<void>>
   /** the bots' user when the plays run as them (this process is root), else null */
   readonly ids: Ids | null
   readonly helperDir: string
@@ -574,7 +578,8 @@ const playOptions = (h: Ctx, kind: "warm" | "play", args: ReadonlyArray<string>,
   argv: [h.c.node, scripts(h.c).playSeed, ...args],
   // built from nothing: no token, no address of the machine, no NODE_ENV (the engine's default, as on the machine)
   env: childEnv(h.c, h.c.paths.home, { SWU_WASM_CACHE: h.c.paths.wasmCache }),
-  as: "arena",
+  // only root writes the wasm cache, which the plays read; compiling runs nothing of a bot
+  as: kind === "warm" ? "root" : "arena",
   // plain setpriv: isolate.sh needs namespaces a Docker container does not grant; Docker is the helper's boundary
   isolate: false,
   timeoutMs,
@@ -633,6 +638,9 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
       const why = await Promise.race([getting, stopped])
       if (ctl.signal.aborted) return { ok: false, why: "play-seed was stopped (interrupted)" }
       if (why !== null) return { ok: false, why }
+      // compiled before the games start: no bot's clock pays for it (a bundle that failed compiles in its games)
+      await Promise.race([warmLease(h, lease.bundles), stopped])
+      if (ctl.signal.aborted) return { ok: false, why: "play-seed was stopped (interrupted)" }
       child = runChild(h.proc, playOptions(h, "play", ["--job", job, "--bundles", h.c.paths.bundles, "--work", dir], timeoutMs))
       const r = await child.result
       if (r === null || r.kind !== "exit" || r.code !== 0) return { ok: false, why: playFailed(r, timeoutMs) }
@@ -844,6 +852,32 @@ const warm = async (h: Ctx) => {
   else Log.info(`warmed ${names(doc.warmed).length} resident bundles`)
 }
 
+/**
+ * Compiles a lease's bundles into the wasm cache as root (Executor.ts warmOptions), each once per start: a slot whose
+ * bundles another slot is compiling waits for that. One that failed is logged and tried again by the next lease.
+ */
+const warmLease = (h: Ctx, hexes: ReadonlyArray<string>): Promise<unknown> => {
+  const todo = [...new Set(hexes)].filter((x) => !h.warmed.has(x))
+  if (todo.length) {
+    // never rejects: a lease that waits on it plays either way
+    const done = (async () => {
+      let left: ReadonlyArray<string> = todo
+      try {
+        const child = runChild(h.proc, warmOptions(h.c, todo, false))
+        const stopIt = () => void child.stop()
+        h.stopping.addEventListener("abort", stopIt, { once: true })
+        const r = await child.result
+        h.stopping.removeEventListener("abort", stopIt)
+        left = notWarmed(r, todo)
+      } catch {}
+      for (const x of left) h.warmed.delete(x)
+      if (left.length && !h.stopping.aborted) Log.warn(`could not compile ${left.map((x) => x.slice(0, 12)).join(", ")} before their games`)
+    })()
+    for (const x of todo) h.warmed.set(x, done)
+  }
+  return Promise.all(hexes.map((x) => h.warmed.get(x)))
+}
+
 /** hello until the machine answers: its timing, or null when the helper stops (a signal, 409, 401) */
 const hello = async (h: Ctx): Promise<HelloTiming | null> => {
   let failing: string | null = null
@@ -885,7 +919,8 @@ const botIds = (user: string): Ids => {
 /**
  * Before anything plays (Coord.Helper.prepare!): the server's folder for the pidfiles (0700) and the groups a crashed
  * run left reaped, `<data>/helper` wiped (0711 when the plays run as the bots' user, who must reach their own folder in
- * it, else 0700), and the bots' HOME and wasm cache made theirs.
+ * it, else 0700), and as root the bots' HOME and the wasm cache root's (0755): the HOME emptied, the cache emptied when
+ * it was not root's (an older image made it the bots' user's; run.py loads only the entries of the folder's owner).
  */
 const prepare = (c: GamesConfig, proc: ProcService): { readonly ids: Ids | null; readonly helperDir: string } => {
   mkdirSync(c.paths.server, { recursive: true, mode: 0o700 })
@@ -899,8 +934,12 @@ const prepare = (c: GamesConfig, proc: ProcService): { readonly ids: Ids | null;
   mkdirSync(helperDir, { recursive: true })
   chmodSync(helperDir, ids ? 0o711 : 0o700)
   for (const dir of [c.paths.home, c.paths.wasmCache]) {
+    if (ids && (dir === c.paths.home || lstatSync(dir, { throwIfNoEntry: false })?.uid !== 0)) removeTree(dir)
     mkdirSync(dir, { recursive: true })
-    if (ids) chownSync(dir, ids.uid, ids.gid)
+    if (ids) {
+      chownSync(dir, 0, 0)
+      chmodSync(dir, 0o755)
+    }
   }
   return { ids, helperDir }
 }
@@ -942,7 +981,7 @@ export const runHelper = async (c: GamesConfig, secrets: Secrets, proc: ProcServ
       throw e instanceof SetupError ? e : new SetupError(`the helper's folders could not be made (${errorCode(e)})`)
     }
     const h: Ctx = {
-      c, proc, client, cache, ids: setup.ids, helperDir: setup.helperDir,
+      c, proc, client, cache, warmed: new Map(), ids: setup.ids, helperDir: setup.helperDir,
       stopping: stopper.signal, hard: hardStopper.signal, stop, clock: opts.clock ?? defaultClock
     }
     if (!stopper.signal.aborted) await warm(h)

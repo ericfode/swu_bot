@@ -48,7 +48,8 @@ The volume (`GAMES_DATA`, `/data`):
 | `arena/`, `dash/` | root, readable by all | roster, versions, standings, round reports, panels; panel copies. Only root writes them: the intake's checker (the bots' user) packs and start-checks a submission in its job folder, and root enters the tar it leaves. Setup makes them root's on every start without following a link (`bot/arena/ops/own-tree.py`: links, pipes and extra hard links go). The checker and game jobs do not see them |
 | `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
 | `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
-| `home/`, `wasm-cache/` | arena | the bots' HOME, wasmtime's compiled modules |
+| `wasm-cache/` | root, readable by all | wasmtime's compiled modules. Only root compiles into it (warm at a start, each round for its lineup, the replay check, a helper for each lease's bundles; compiling runs nothing of a bot), and the games read it: `run.py` loads only entries of the folder's owner. Emptied at a start when it is not root's |
+| `home/` | root, empty | the HOME of what runs as the bots' user, emptied on every start: Python runs with `-I` and nothing else reads it, so nothing a bot leaves reaches a later game |
 | `intake/`, `tmp/<kind>/` | root (`intake/` 0711, `tmp/<kind>/` 1777) | the intake's checks (a job's `home/` the bots' user's while it runs; hidden from every other command and game job); each isolated child's `/tmp` |
 | `coord/` | root | the Elixir coordinator's state: its settings and round end are read once; hidden from children |
 

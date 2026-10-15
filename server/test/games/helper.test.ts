@@ -82,7 +82,13 @@ const mode = JSON.parse(fs.readFileSync(path.join(app, 'mode.json'), 'utf8'))
 const args = process.argv.slice(2)
 const arg = (k) => args[args.indexOf(k) + 1]
 process.on('SIGTERM', () => { ev({ term: args[0] === '--warm' ? 'warm' : 'play' }); process.exit(143) })
-if (args[0] === '--warm') {
+if (args[0] === '--warm' && args[1] === '--bundles') {
+  // a lease's bundles: each sha256 after the folder, compiled unless mode.bundles names it as failing
+  ev({ start: args, uid: process.getuid() })
+  const hexes = args.slice(3)
+  const bad = new Set(mode.bundles ?? [])
+  setTimeout(() => console.log(JSON.stringify({ ok: true, warmed: hexes.filter((x) => !bad.has(x)), failed: hexes.filter((x) => bad.has(x)).map((name) => ({ name, error: 'x' })) })), 200)
+} else if (args[0] === '--warm') {
   ev({ start: args, uid: process.getuid() })
   if (mode.warm === 'fail') process.exit(1)
   console.log(JSON.stringify({ ok: true, warmed: ['c-clock-wasm'], failed: mode.warm === 'some' ? [{ name: 'py-clock-wasm', error: 'x' }] : [] }))
@@ -114,6 +120,8 @@ interface Mode {
   readonly text?: string
   readonly sleep?: number
   readonly warm?: "ok" | "fail" | "some"
+  /** the bundles a lease's warm fails to compile */
+  readonly bundles?: ReadonlyArray<string>
 }
 
 const fakeApp = (mode: Mode = {}) => {
@@ -122,6 +130,9 @@ const fakeApp = (mode: Mode = {}) => {
   writeFileSync(path.join(app, "bot", "arena", "play-seed.js"), FAKE_PLAY_SEED)
   mkdirSync(path.join(app, "events"))
   chmodSync(path.join(app, "events"), 0o777)
+  // warms run as root and plays as the bots' user: both append to the one log
+  writeFileSync(path.join(app, "events", "log"), "")
+  chmodSync(path.join(app, "events", "log"), 0o666)
   writeFileSync(path.join(app, "mode.json"), JSON.stringify(mode))
   return app
 }
@@ -135,6 +146,8 @@ const events = (app: string): Array<Event> => {
   }
 }
 const plays = (app: string) => events(app).filter((e) => e.start && e.start[0] !== "--warm")
+/** the warms of leases' bundles, each the sha256s it was given */
+const bundleWarms = (app: string) => events(app).filter((e) => e.start?.[0] === "--warm" && e.start[1] === "--bundles")
 
 // --- the fake games machine: the helper API's routes, one name, leases the test offers
 
@@ -610,6 +623,8 @@ test("it warms first, then says hello and its slots claim; a failed warm is only
   const h = await start({ slots: 2 })
   await h.waiting(2)
   assert.deepEqual(events(h.app)[0]!.start, ["--warm"])
+  // as root: only root writes the wasm cache
+  assert.equal(events(h.app)[0]!.uid, process.getuid?.())
   assert.ok(h.log().includes("[info] warmed 1 resident bundles"))
   assert.equal(await h.stop(), 0)
 
@@ -624,9 +639,40 @@ test("it warms first, then says hello and its slots claim; a failed warm is only
   assert.equal(await h3.stop(), 0)
 })
 
-test("boot: old work folders go, the bots' folders are theirs; without a token it stops with 1", async () => {
+test("a lease's bundles are compiled before its play, as root, once per start; one that failed is tried again", async () => {
+  const tars = ["one", "two", "three"].map((t) => Buffer.from(`a tar called ${t}`))
+  const [a, b, c] = tars.map(sha256)
+  const h = await start({ slots: 2, mode: { bundles: [c!] } })
+  for (const [i, t] of tars.entries()) h.machine.m.bundles.set([a, b, c][i]!, t)
+  await h.waiting(2)
+  // two slots with the same bundles at once: one warm, both wait for it
+  const first = [h.machine.offer(job(1), [a!, b!]), h.machine.offer(job(2), [b!, a!])]
+  await Promise.all(first.map((id) => h.machine.ended(id)))
+  assert.deepEqual(bundleWarms(h.app).map((e) => e.start!.slice(3).sort()), [[a, b].sort()])
+  assert.deepEqual(bundleWarms(h.app)[0]!.start!.slice(0, 3), ["--warm", "--bundles", h.c.paths.bundles])
+  assert.equal(bundleWarms(h.app)[0]!.uid, process.getuid?.(), "as root, when the helper is root")
+  // each warm comes before the plays that need it
+  const order = events(h.app).filter((e) => e.start).map((e) => (e.start![1] === "--bundles" ? "warm" : e.start![0] === "--job" ? "play" : "boot"))
+  assert.deepEqual(order, ["boot", "warm", "play", "play"])
+
+  // already compiled: no warm; one that fails is logged, its lease still plays, and the next lease tries it again
+  await h.machine.ended(h.machine.offer(job(3), [a!, c!]))
+  await h.machine.ended(h.machine.offer(job(4), [c!]))
+  assert.deepEqual(bundleWarms(h.app).map((e) => e.start!.slice(3).sort()), [[a, b].sort(), [c], [c]])
+  assert.equal(plays(h.app).length, 4)
+  assert.ok(h.log().includes(`[warning] could not compile ${c!.slice(0, 12)} before their games`))
+  assert.equal(await h.stop(), 0)
+})
+
+test("boot: old work folders go, the bots' HOME and wasm cache are root's (emptied); without a token it stops with 1", async () => {
   const data = folder("helper-data-")
   mkdirSync(path.join(data, "helper", "1", "old-lease"), { recursive: true })
+  // what the bots' user left under an older image: a .pth file in its HOME, compiled code in its cache
+  mkdirSync(path.join(data, "home", ".local"), { recursive: true })
+  writeFileSync(path.join(data, "home", ".local", "x.pth"), "import os")
+  mkdirSync(path.join(data, "wasm-cache"))
+  writeFileSync(path.join(data, "wasm-cache", `${"a".repeat(64)}.cwasm`), "machine code")
+  if (ROOT) assert.equal(spawnSync("chown", ["-R", `${BOTS_USER}:`, path.join(data, "home"), path.join(data, "wasm-cache")]).status, 0)
   mkdirSync(path.join(data, "bundles"))
   writeFileSync(path.join(data, "bundles", ".abc.tmp"), "half a download")
   const app = fakeApp()
@@ -646,9 +692,9 @@ test("boot: old work folders go, the bots' folders are theirs; without a token i
   assert.deepEqual(readdirSync(path.join(data, "bundles")), [])
   assert.equal(statSync(path.join(data, "bundles")).mode & 0o777, 0o755)
   if (ROOT) {
-    const uid = Number(spawnSync("id", ["-u", c.arenaUser], { encoding: "utf8" }).stdout.trim())
-    assert.equal(statSync(c.paths.home).uid, uid)
-    assert.equal(statSync(c.paths.wasmCache).uid, uid)
+    for (const dir of [c.paths.home, c.paths.wasmCache]) {
+      assert.deepEqual([statSync(dir).uid, statSync(dir).mode & 0o777, readdirSync(dir)], [0, 0o755, []], dir)
+    }
   }
   ac.abort("SIGTERM")
   assert.equal(await exit, 0)

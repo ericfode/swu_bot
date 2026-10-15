@@ -4,6 +4,8 @@
  * the child writes) and `arena/` (the versions it unpacks) are the bots' user's. The server reads back only
  * `out/<game id>.jsonl`: opened without following a link and without blocking on a FIFO, checked to be one regular
  * file of the bots' user under the size cap, read as text, copied. The folder goes when the job ends, however it ends.
+ * Nothing else the child can write outlives it: its HOME (`<data>/home`) and the wasm cache are root's, and the cache
+ * holds only what root compiled (warmBundles, gamesctl warm and round).
  *
  * No NODE_ENV for the child: the engine words its prompts by it (bot/env.js makes an unset one 'test'), so a replay
  * matches the rounds played so far only under 'test' (and production logs every rollback a searching bot makes).
@@ -17,7 +19,7 @@ import { Effect } from "effect"
 import type { GamesConfig } from "./Config.ts"
 import { scripts } from "./Config.ts"
 import * as Log from "./Log.ts"
-import type { ProcService, Result } from "./Proc.ts"
+import type { ProcService, Result, RunOptions } from "./Proc.ts"
 import { childEnv, lastLine } from "./Proc.ts"
 import type { GameResult, PlaySeedJob, Played } from "./Types.ts"
 
@@ -281,6 +283,45 @@ export const playLocal = (c: GamesConfig, proc: ProcService, job: PlaySeedJob, t
       )
     },
     () => Effect.sync(() => removeTree(dir))
+  )
+}
+
+/** play-seed.js --warm --bundles: per bundle, at most its own 2 minutes, and the start */
+const warmMs = (n: number) => 60_000 + n * 120_000
+
+/**
+ * How to compile bundles (canonical tars `<c.paths.bundles>/<hex>.tar`) into the wasm cache before games that play them:
+ * `play-seed.js --warm --bundles` as root, which unpacks each where only root reaches and compiles it (run.py --warm runs
+ * nothing of the bot). No bot's clock pays for it, and the games, as the bots' user, only read the code root compiled.
+ */
+export const warmOptions = (c: GamesConfig, hexes: ReadonlyArray<string>, isolate: boolean): RunOptions => ({
+  kind: "warm",
+  argv: [c.node, scripts(c).playSeed, "--warm", "--bundles", c.paths.bundles, ...hexes],
+  env: childEnv(c, c.paths.home, { SWU_WASM_CACHE: c.paths.wasmCache }),
+  as: "root",
+  isolate,
+  timeoutMs: warmMs(hexes.length),
+  stdout: "capture"
+})
+
+/** The bundles of `hexes` that a warm (warmOptions) did not compile: their games compile them, or fail as they would. */
+export const notWarmed = (r: Result | null, hexes: ReadonlyArray<string>): ReadonlyArray<string> => {
+  let doc: unknown = null
+  try {
+    doc = r?.kind === "exit" && r.code === 0 ? JSON.parse(lastLine(r.stdout)) : null
+  } catch {}
+  const warmed = new Set(plain(doc) && doc.ok === true && Array.isArray(doc.warmed) ? doc.warmed.filter((x): x is string => typeof x === "string") : [])
+  return hexes.filter((x) => !warmed.has(x))
+}
+
+/** Compiles the bundles of `hexes` as warmOptions says, in isolate.sh; logs those it could not. */
+export const warmBundles = (c: GamesConfig, proc: ProcService, hexes: ReadonlyArray<string>): Effect.Effect<void> => {
+  if (hexes.length === 0) return Effect.void
+  return proc.run(warmOptions(c, hexes, true)).pipe(
+    Effect.map((r) => notWarmed(r, hexes)),
+    Effect.flatMap((left) => Effect.sync(() => {
+      if (left.length) Log.warn(`could not compile ${left.map((x) => x.slice(0, 12)).join(", ")} before their games`)
+    }))
   )
 }
 

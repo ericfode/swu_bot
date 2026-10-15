@@ -34,7 +34,7 @@ import { parseArgs } from "node:util"
 import { gunzipSync } from "node:zlib"
 import { Cause, Effect, Option } from "effect"
 import { readConfig } from "./Config.ts"
-import { playLocal } from "./Executor.ts"
+import { playLocal, warmBundles } from "./Executor.ts"
 import type { PlayFailed } from "./Executor.ts"
 import type { ArenaJs } from "./Js.ts"
 import { loadArenaJs } from "./Js.ts"
@@ -574,6 +574,7 @@ export const runReplay = (argv: ReadonlyArray<string>, opts: ReplayOptions = {})
     let args: ReplayArgs
     let prepared: Prepared
     let play: NonNullable<ReplayOptions["play"]>
+    let warm: Effect.Effect<void> = Effect.void
     try {
       args = parseReplayArgs(argv)
       const env = opts.env ?? process.env
@@ -588,6 +589,9 @@ export const runReplay = (argv: ReadonlyArray<string>, opts: ReplayOptions = {})
         const c = { ...config, paths: { ...config.paths, bundles: args.bundles } }
         const proc = makeProc(c)
         play = (job, tag) => playLocal(c, proc, job, tag)
+        // compiled as root first, as a round compiles its lineup: the games, as the bots' user, only read the cache
+        const hexes = new Set(prepared.jobs.flatMap(({ job }) => Object.values(job.bots).flatMap((b) => (b.kind === "wasm" ? [b.bundle] : []))))
+        warm = warmBundles(c, proc, [...hexes])
       }
     } catch (e) {
       const why = refuse(e)
@@ -596,6 +600,7 @@ export const runReplay = (argv: ReadonlyArray<string>, opts: ReplayOptions = {})
       return 2
     }
     const p = prepared
+    yield* warm
     note(`${p.round.id}: ${p.jobs.length} seed${p.jobs.length === 1 ? "" : "s"}, ${p.jobs.reduce((n, j) => n + j.games.length, 0)} of ${p.schedule.length} games to play again${p.missing.length ? `, ${p.missing.length} not finished in the round` : ""}`)
     const summary = yield* check(args, p, play, note).pipe(
       // something broke while comparing or writing (not a game that came out differently): no verdict

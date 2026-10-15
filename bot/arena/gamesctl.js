@@ -8,7 +8,7 @@ console.log = console.error;
  * arena's Node code (its folders, the roster, the window's documents):
  *
  *   node bot/arena/gamesctl.js setup                                                   (root)
- *   node bot/arena/gamesctl.js warm                                                    (as arena)
+ *   node bot/arena/gamesctl.js warm                                                    (root)
  *   node bot/arena/gamesctl.js plan --arena open --settled-since <ms> [--replay-hours 24]   (as arena)
  *   node bot/arena/gamesctl.js round --arena open --round K [--games 2] [--cap-ms 60000]    (root)
  *   node bot/arena/gamesctl.js publish --arena open --round K                          (root)
@@ -23,6 +23,7 @@ console.log = console.error;
  *     setup        folders and who owns them, the round-seed secret, the roster:
  *                  {"ok":true,"residents":[..],"toolchain":null|"no .."}
  *     warm         the lineup's bundles compiled into the cache: {"ok":true,"warmed":[..],"failed":[{"name","error"}]}
+ *                  (round compiles its own lineup the same way before it answers)
  *     plan         planRound: {"round":K,"resume":bool,"why":".."} or {"round":null,"why":".."}
  *     round        what round K plays, for the server that plays it:
  *                  {"round":K,"bots":[..],"gamesPerPair":G,"capMs":C,"decks":{..}|null,"bundles":{..},"botInfo":{..}}
@@ -50,7 +51,8 @@ console.log = console.error;
  *
  * Everything lives on the volume (GAMES_DATA, default /data): arena/ (ARENA_HOME: roster, versions, standings),
  * results/ (round ladders and replays), bundles/ (the versions' canonical tars), work/ (the server's game jobs),
- * intake/, wasm-cache/, home/ (the bots' HOME), dash/, secret/ (root's), server/ (the server's own) and coord/ (the old
+ * intake/, wasm-cache/ (wasmtime's compiled code, root's: warm and round compile as root), home/ (the HOME of what
+ * runs as the bots' user: empty, root's), dash/, secret/ (root's), server/ (the server's own) and coord/ (the old
  * coordinator's). setup says who owns which.
  */
 const fs = require('fs');
@@ -81,16 +83,19 @@ const SECRET = path.join(DIRS.secret, 'arena-secret');
 // what nothing started here may see (isolate.sh --hide): Fly's API socket and config, the server's folder, the old
 // Elixir coordinator's folder (its job database and state), or GAMES_HIDE's paths
 const HIDE = (process.env.GAMES_HIDE || ['/.fly', DIRS.server, path.join(DATA, 'coord')].join(':')).split(':').filter(Boolean);
-// Who owns what. The bots' user keeps what code running as that user writes: its HOME and the wasm cache. arena/ and
-// dash/ are root's, readable by everyone and cleaned on every start (ops/own-tree.py root): the intake's checker only
-// packs and start-checks a submission in its own job folder, and root enters it (intake.js enter), so no process of the
-// bots' user writes the arena's records. results/ is root's and everyone may read it: only the server and root's
-// children write rounds now. The rest is root's alone, with these modes (null: left as it is; isolate.sh makes the
-// referee's /tmp 1777 when it runs). intake/ is 0711: a checker reaches its own job folder by name and lists no other.
-const BOTS_TREES = ['cache', 'botHome'];
+// Who owns what. No process of the bots' user writes anything on the volume that outlives it, so nothing a bot that got
+// out of its sandbox leaves behind reaches a later game. arena/ and dash/ are root's, readable by everyone and cleaned
+// on every start (ops/own-tree.py root): the intake's checker only packs and start-checks a submission in its own job
+// folder, and root enters it (intake.js enter). The wasm cache is root's: root compiles into it (warm, round) and the
+// games only read it (bot/compiled/run.py loads root's entries alone); one the bots' user owned (every image before
+// this one) is emptied. home/, the HOME of what runs as the bots' user, is root's and emptied on every start: Python runs
+// with -I and nothing else reads it, so it holds nothing. results/ is root's and everyone may read it: only the server
+// and root's children write rounds now. The rest is root's alone, with these modes (null: left as it is; isolate.sh
+// makes the referee's /tmp 1777 when it runs). intake/ is 0711: a checker reaches its own job folder by name and lists
+// no other.
 const OWN_TREES = ['home', 'dash'];
 const ROOT_TREES = ['results'];
-const ROOT_DIRS = { intake: 0o711, secret: 0o700, tmp: null, bundles: 0o755, work: 0o755, server: 0o700 };
+const ROOT_DIRS = { intake: 0o711, secret: 0o700, tmp: null, bundles: 0o755, work: 0o755, server: 0o700, cache: 0o755, botHome: 0o755 };
 const THINK_CAP_MS = 60000; // per game, the local arena's rule (roster.thinkCapMs)
 const SETTLE_MS = 90000; // a round waits this long after a version comes in, so a quick fix joins the same round
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/; // registry.js
@@ -150,6 +155,18 @@ function setupData() {
     for (const f of fs.readdirSync(DIRS.work)) {
         home.removeTree(path.join(DIRS.work, f));
     }
+    // nothing belongs in the bots' HOME (an older image let them write there)
+    for (const f of fs.readdirSync(DIRS.botHome)) {
+        home.removeTree(path.join(DIRS.botHome, f));
+    }
+    // compiled code the bots' user wrote (the cache was theirs until this image, and an older one gives it back) is not
+    // trusted: it goes whole, and warm compiles the lineup again as root. What rm could not remove stays under root's
+    // folder, where run.py loads only root's entries.
+    if (asRoot() && fs.lstatSync(DIRS.cache).uid !== 0) {
+        log(`${DIRS.cache} was not root's: emptied`);
+        home.removeTree(DIRS.cache);
+        fs.mkdirSync(DIRS.cache, { recursive: true });
+    }
     for (const [k, mode] of Object.entries(ROOT_DIRS)) {
         if (mode !== null) {
             fs.chmodSync(DIRS[k], mode);
@@ -166,9 +183,6 @@ function setupData() {
         // before anything reads them: arena/ and dash/ were the bots' user's until this image, and a rollback to an
         // older one gives them back, so whatever that user left there (links, hard links, ACLs) goes on every start
         ownTree('root', OWN_TREES.map((k) => DIRS[k]));
-        const [uid, gid] = idsOf(BOT_USER);
-        // what could not be given stays root's: only the bots lose by it, so it is logged and the machine starts
-        ownTree(['give', `${uid}:${gid}`], BOTS_TREES.map((k) => DIRS[k]), { fatal: false });
         // once: until the server played rounds, the ladders wrote them as the bots' user
         for (const k of ROOT_TREES) {
             if (fs.lstatSync(DIRS[k]).uid !== 0) {
@@ -190,19 +204,18 @@ function setupData() {
 }
 
 /**
- * ops/own-tree.py over some trees (as root): `root` makes them root's alone, `give uid:gid` the bots' user's, neither
- * through a link. Throws when it could not do all of it (fatal false: logs it): root must not go on writing in a tree it
- * could not take back.
+ * ops/own-tree.py root over some trees (as root): they become root's alone, never through a link. Throws when it could
+ * not do all of it: root must not go on writing in a tree it could not take back.
  */
-function ownTree(how, dirs, { fatal = true } = {}) {
-    const argv = ['-I', path.join(__dirname, 'ops', 'own-tree.py'), ...[how].flat(), ...dirs];
+function ownTree(how, dirs) {
+    const argv = ['-I', path.join(__dirname, 'ops', 'own-tree.py'), how, ...dirs];
     // its summary line stays well under 1 MB (own-tree.py shortens paths); the buffer leaves room
     const r = require('child_process').spawnSync('python3', argv, { encoding: 'utf8', timeout: 4 * 60000, maxBuffer: 16 << 20, env: { PATH: process.env.PATH, LANG: 'C.UTF-8' } });
     let out = null;
     try {
         out = JSON.parse(String(r.stdout).trim().split('\n').pop());
     } catch {} // no summary: the error below says why
-    for (const [k, what] of [['removed', 'removed'], ['kept', 'left as it was (other hard links, or too deep)'], ['failed', 'could not be done']]) {
+    for (const [k, what] of [['removed', 'removed'], ['failed', 'could not be done']]) {
         for (const p of out?.[k] ?? []) {
             log(`${dirs.length === 1 ? dirs[0] : dirs.join(', ')}: ${JSON.stringify(p)} ${what}`); // quoted: any bytes the bots' user chose
         }
@@ -211,11 +224,7 @@ function ownTree(how, dirs, { fatal = true } = {}) {
         log(`${dirs.join(', ')}: dropped ${out.attrs} extended attributes (ACLs)`);
     }
     if (r.status !== 0) {
-        const why = `own-tree.py ${[how].flat()[0]} ${dirs.join(' ')}: ${r.error?.message ?? `exit ${r.status ?? r.signal}`} ${String(r.stderr ?? '').trim().split('\n').pop() ?? ''}`.trim();
-        if (fatal) {
-            throw new Error(why);
-        }
-        log(why);
+        throw new Error(`own-tree.py ${how} ${dirs.join(' ')}: ${r.error?.message ?? `exit ${r.status ?? r.signal}`} ${String(r.stderr ?? '').trim().split('\n').pop() ?? ''}`.trim());
     }
 }
 
@@ -293,20 +302,19 @@ function worldReadable(top, { root }) {
 }
 
 /**
- * Compiles the bundles of the lineup's versions (the residents' and the builders') into the cache, as the bots' user,
- * so their first game after a start does not pay for it. Returns {warmed: [name], failed: [{name, error}]}.
+ * Compiles the bundles of the lineup's versions (the residents' and the builders') into the cache, so no game pays for
+ * it on its clock. As whoever runs this: root on the games machine, whose cache only root writes (the games, as the bots'
+ * user, read it). Compiling does not run the bot. Returns {warmed: [name], failed: [{name, error}]}.
  */
-function warmLineup() {
+function warmLineup(names = machineLineup()) {
     const out = { warmed: [], failed: [] };
-    for (const name of machineLineup()) {
+    for (const name of names) {
         const dir = path.join(home.VERSIONS, name, 'bundle');
         if (!fs.existsSync(path.join(dir, 'arena.json'))) {
             continue; // not a WebAssembly version (an older bot.js one): nothing to compile
         }
-        const cmd = ['python3', path.join(ROOT, 'bot', 'compiled', 'run.py'), '--warm', dir];
-        const run = asRoot() ? asBots(cmd) : cmd;
         try {
-            execFileSync(run[0], run.slice(1), { stdio: ['ignore', 'ignore', 'pipe'], env: botEnv(), timeout: 120000 });
+            execFileSync('python3', ['-I', path.join(ROOT, 'bot', 'compiled', 'run.py'), '--warm', dir], { stdio: ['ignore', 'ignore', 'pipe'], env: botEnv(), timeout: 120000 });
             out.warmed.push(name);
         } catch (e) {
             const error = String(e.stderr ?? e.message).trim().split('\n').pop();
@@ -538,6 +546,9 @@ function roundSpec(k, { games, capMs = null }) {
         throw new Error(`${DIRS.bundles} is not a folder (a link?)`);
     }
     const bundles = Object.fromEntries(bots.map((n) => [n, storeBundle(n)]));
+    // a version that came in after warm compiles here, not on its first games' clocks; one that fails to compile is only
+    // logged (its games fail it as they would)
+    warmLineup(bots);
     // ladder.js's bots rows (summarize): describeBot less the name
     const botInfo = Object.fromEntries(bots.map((n) => {
         const { name, ...info } = describeBot(n);
