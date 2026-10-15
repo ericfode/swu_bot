@@ -128,6 +128,35 @@ test('a scripted person plays whole games against a bot; the bot\'s hidden cards
     }
 });
 
+test('the bot\'s look-ahead deals the person\'s hand, resources and deck again (protocol.js determinize)', { skip: !ENGINE && 'engine or card data not built' }, async () => {
+    const { Env } = require('../env');
+    const { loadDecks } = require('../decklists');
+    const { seededRng } = require('../rng');
+    const { determinize } = require('../protocol');
+    const env = new Env();
+    const { decks } = loadDecks(path.join(ROOT, 'bot/decks/ash-meta-2026-09.json'), env);
+    const byName = (n) => decks.find((d) => d.metadata.name === n);
+    const eg = env.newGame({ seed: 'redeal', deck1: byName('darth-vader_jtl_yellow'), deck2: byName('luke-skywalker_jtl_data-vault') });
+    await eg.start();
+    const rng = seededRng('moves');
+    while (!eg.over && eg.round < 3) {
+        const pid = eg.ids.find((p) => eg.legalActions(p).length);
+        const acts = eg.legalActions(pid);
+        eg.apply(pid, acts[Math.floor(rng() * acts.length)], rng);
+    }
+    const [person, bot] = eg.ids.map((pid) => eg.player(pid));
+    const ids = (cards) => cards.map((c) => eg.cardId(c.uuid));
+    const before = { hand: ids(person.hand), res: ids(person.resources), deck: ids(person.drawDeck), botHand: ids(bot.hand), spent: person.resources.filter((c) => c.exhausted).length };
+    assert.ok(before.hand.length > 2 && before.res.length > 2, 'the person has a hand and resources to deal');
+    determinize(eg, eg.ids[1], seededRng('deal'));
+    const after = { hand: ids(person.hand), res: ids(person.resources), deck: ids(person.drawDeck), botHand: ids(bot.hand), spent: person.resources.filter((c) => c.exhausted).length };
+    // the same sizes and the same cards in all, dealt again: the bot cannot read the real hand from its simulations
+    assert.deepStrictEqual([after.hand.length, after.res.length, after.deck.length, after.spent], [before.hand.length, before.res.length, before.deck.length, before.spent]);
+    assert.deepStrictEqual([...after.hand, ...after.res, ...after.deck].sort(), [...before.hand, ...before.res, ...before.deck].sort());
+    assert.notDeepStrictEqual(after.hand.sort(), before.hand.sort(), 'the person\'s hand is dealt again');
+    assert.deepStrictEqual(after.botHand, before.botHand, 'the bot keeps its own hand');
+});
+
 test('the browser table (host.js): a scripted person plays a whole game against the JEPA bot', { skip: !ENGINE && 'engine or card data not built' }, async () => {
     const { createTableHost, pickDecks } = require('../table/host');
     const { seededRng } = require('../rng');
