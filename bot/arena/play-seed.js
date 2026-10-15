@@ -60,10 +60,16 @@ const plain = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
 const positive = (x) => typeof x === 'number' && Number.isFinite(x) && x > 0;
 const sameKeys = (o, keys) => Object.keys(o).sort().join() === [...keys].sort().join();
 
-/** A deck list exactly as the lane sends it: normalizeDeck leaves it as it is. */
+/** The same JSON value with the keys of every object sorted, as the coordinator writes the job (Elixir's Jason). */
+const sortedKeys = (x) => (Array.isArray(x) ? x.map(sortedKeys) : plain(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sortedKeys(x[k])])) : x);
+
+/**
+ * A deck list as the lane sends it: normalizeDeck changes nothing in it, but maybe the order of its keys (the
+ * helper's coordinator sorts them on the way).
+ */
 function isDeck(d) {
     try {
-        return JSON.stringify(normalizeDeck(d)) === JSON.stringify(d);
+        return JSON.stringify(sortedKeys(normalizeDeck(d))) === JSON.stringify(sortedKeys(d));
     } catch {
         return false;
     }
@@ -209,7 +215,8 @@ async function play(job, { bundles, work }) {
         workers: queue.length,
         hangMs: job.hangMs,
         gameMs: job.gameMs,
-        workerData: { maxSteps: job.maxSteps, engineRev: null, capMs: job.capMs ?? Infinity, key: null, decks: job.decks ?? null, pool: null },
+        // normalizeDeck puts the keys back in the order the games machine's lists have, so the replays match its own
+        workerData: { maxSteps: job.maxSteps, engineRev: null, capMs: job.capMs ?? Infinity, key: null, decks: job.decks ? job.decks.map((d) => normalizeDeck(d)) : null, pool: null },
         onResult: ({ job: g, result }) => results.set(g.id, result)
     });
     const missing = job.games.filter((g) => !results.has(g.id)).map((g) => g.id);
@@ -276,9 +283,12 @@ if (require.main === module) {
     });
 }
 
-/** A checked job's game g's two deck lists as playGame takes them ({p1, p2}, copies), or null for random decks. */
+/**
+ * A checked job's game g's two deck lists as playGame takes them ({p1, p2}: new copies, keys in the games machine's
+ * order), or null for random decks.
+ */
 function gameDecks(job, g) {
-    return g.decks ? { p1: structuredClone(job.decks[g.decks[0]]), p2: structuredClone(job.decks[g.decks[1]]) } : null;
+    return g.decks ? { p1: normalizeDeck(job.decks[g.decks[0]]), p2: normalizeDeck(job.decks[g.decks[1]]) } : null;
 }
 
 module.exports = { RESIDENTS, IN_PROCESS, residentsHere, checkJob, checkResolved, gameDecks, Refused };
