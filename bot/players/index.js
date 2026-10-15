@@ -22,9 +22,6 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { createRandomBot } = require('./random');
-const { createRushBot } = require('./rush');
-const { HeuristicBot } = require('./heuristic');
 const { StdioClient } = require('../stdio');
 const { PROFILES } = require('./profiles');
 const { describeArenaBot, makeArenaBot } = require('../arena/registry');
@@ -106,16 +103,19 @@ function makeBot(name, taken) {
     if (info.kind === 'external') {
         return program(name, Array.isArray(taken) ? taken : []);
     }
+    // the built-in bots load the engine (env.js), so only a makeBot that needs one loads them: describeBot stays cheap
+    // for callers that only read names (gamesctl plan runs every 20 s on the games machine; its tests have no engine)
     if (info.kind === 'search') {
+        const { HeuristicBot } = require('./heuristic');
         return new HeuristicBot(name, { depth: info.depth, profile: PROFILES[info.profile] });
     }
     if (info.kind === 'arena') {
         return makeArenaBot(name);
     }
     if (info.kind === 'rules') {
-        return createRushBot(name);
+        return require('./rush').createRushBot(name);
     }
-    return createRandomBot(name);
+    return require('./random').createRandomBot(name);
 }
 
 module.exports = { makeBot, closeBots, describeBot, programSpec, parseName };
