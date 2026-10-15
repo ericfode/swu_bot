@@ -137,12 +137,14 @@ and component-specific workflows.
 
 ## License and credits
 
-The code is MIT licensed (`LICENSE`). This is an unofficial fan project. It is not made, endorsed or supported by Fantasy Flight Games, Asmodee, Disney or
+This repository's own code is MIT licensed (`LICENSE`). This is an unofficial fan project. It is not made, endorsed or supported by Fantasy Flight Games, Asmodee, Disney or
 Lucasfilm. Star Wars: Unlimited and its card names, card text and art belong to their owners.
 
 - Rules engine: [forceteki](https://github.com/SWU-Karabast/forceteki), Karabast's engine (MIT), as the `forceteki/`
   submodule. Card data comes from the official card database through its `get-cards` download.
 - `vendor/kessel` and `vendor/holotable` are prebuilt from [Kessel](https://github.com/ericfode/kessel) and
   [Holotable](https://github.com/ericfode/holotable) (MIT). Kessel's card catalog is built from forceteki's card code.
+  The built files also bundle other open source packages, each under its own license (MIT, ISC, Apache-2.0 and
+  others): `vendor/notices/` lists every one with its license texts.
 - Tournament deck lists in `bot/decks/`: TCGEngine / SWU Stats (MIT, `bot/decks/LICENSE.TCGEngine`), from public
   melee.gg Premier events.
