@@ -34,6 +34,8 @@ const pair = (a, b, seed = 11) => [{ id: `${a}-vs-${b}-${seed}`, p1: a, p2: b },
 // the tournament lists, as the lane sends them (decklists.js normalizeDeck), and a job that deals two of them by seat
 const LISTS = JSON.parse(fs.readFileSync(path.join(ROOT, 'bot', 'decks', 'ash-meta-2026-09.json'), 'utf8')).map(normalizeDeck);
 const deckJob = (change = {}) => job({ decks: [LISTS[3], LISTS[8]], games: job().games.map((g) => ({ ...g, decks: [0, 1] })), ...change });
+// the job as the helper's coordinator writes it: Elixir's Jason sorts the keys of every object
+const sortedKeys = (x) => (Array.isArray(x) ? x.map(sortedKeys) : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sortedKeys(x[k])])) : x);
 
 /** Runs play-seed.js with the job in a fresh folder: { code, out (stdout), err (stderr lines), work }. */
 function run(doc, { bundles = path.join(tmp, 'no-bundles'), args = null, env = {} } = {}) {
@@ -111,6 +113,7 @@ test('checkJob takes the lane\'s jobs and refuses everything else before anythin
 test('checkJob takes a seed of deck lists only whole: the lists as the lane sends them and two of them per game', () => {
     const bundles = path.join(tmp, 'check-bundles');
     assert.ok(checkJob(deckJob(), bundles));
+    assert.ok(checkJob(sortedKeys(deckJob()), bundles), 'its keys sorted, as the coordinator writes it');
     assert.ok(checkJob(deckJob({ decks: [LISTS[3], LISTS[8], LISTS[9]], games: [{ ...pair('heuristic', 'rush')[0], decks: [2, 0] }] }), bundles), 'any two of the lists');
     const games = deckJob().games;
     const refused = {
@@ -140,6 +143,8 @@ test('checkJob takes a seed of deck lists only whole: the lists as the lane send
     assert.deepStrictEqual(d, { p1: LISTS[3], p2: LISTS[8] });
     d.p1.deck.length = 0;
     assert.ok(j.decks[0].deck.length > 0);
+    const s = sortedKeys(j);
+    assert.strictEqual(JSON.stringify(gameDecks(s, s.games[0])), JSON.stringify({ p1: LISTS[3], p2: LISTS[8] }), 'keys back in the lists\' own order');
     assert.strictEqual(gameDecks(job(), job().games[0]), null);
 });
 
@@ -207,7 +212,8 @@ test('play-seed plays a seed of deck lists by seat, as the games machine plays i
     // the games machine's ladder holds all the lists and indexes into them; the job carries the seed's two
     const machine = [LISTS[0], LISTS[3], LISTS[5], LISTS[8]];
     const at = [1, 3];
-    const r = run(deckJob());
+    // written as the helper's coordinator writes it; the replays still match the games machine's line for line
+    const r = run(sortedKeys(deckJob()));
     assert.strictEqual(r.code, 0, r.err.slice(-5).join('\n'));
     const doc = JSON.parse(r.out);
     const replays = Object.fromEntries(Object.entries(doc.replays).map(([id, f]) => [id, fs.readFileSync(f, 'utf8')]));
