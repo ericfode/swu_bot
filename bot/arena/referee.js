@@ -6,7 +6,8 @@
  *   node bot/arena/referee.js [--round K] [--games 4] [--workers 3]           play rated round K (default: the next one)
  *
  * A round is a round robin (bot/ladder.js) of <agent>-v<latest> for every roster agent: --games per pair, every seed
- * from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live). The arena's own
+ * from both seats, replays recorded to <results>/arena-r<K>/ (the dashboard follows the games live). Its games deal the
+ * tournament deck lists (ROUND_DECKS), by seat: in the two games of a seed each bot plays both decks. The arena's own
  * bots play too: the resident entries (roster agents marked resident, submitted like any other), and the bots built
  * into the image that roster.baselines names until a resident replaces each (lineup).
  * Round K again resumes its ladder: the games already played are kept (ladder.js --resume).
@@ -36,6 +37,9 @@ const LOCK_STALE_MS = 120000; // a lock from another host counts as abandoned on
 // from another PID namespace on this host (isolate.sh gives each referee run its own): two and a half 30 s heartbeats,
 // so a restart after a crash does not wait out the full two minutes
 const LOCK_STALE_NS_MS = 75000;
+// the deck lists rated rounds deal (Eric, 2026-10-15: the tournament lists), by seat (decklists.js dealDecks), less the
+// lists an engine bug ends too many games of (CLAUDE.md "Known engine bugs" 8: Barriss Offee ends 36% of Lando's)
+const ROUND_DECKS = { file: path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'), skip: ['lando-calrissian_law_blue'] };
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -188,7 +192,9 @@ function scoreRound(round, ladder) {
     for (const h of Object.values(hosts)) {
         h.thinkMs = Math.round(h.thinkMs);
     }
+    const decks = ladder.config.decks;
     return { round, ladderId: ladder.id, ...(ladder.config.pool ? { pool: ladder.config.pool.kind, poolCards: ladder.config.pool.cards } : {}),
+             ...(decks ? { decks: { file: decks.file, sha256: decks.sha256, lists: decks.names.length, deal: decks.deal ?? 'bot' } } : {}),
              seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
              status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, anchors, bots, results, hosts,
              remote: ladder.remote ?? null };
@@ -244,7 +250,8 @@ function allRoundAnchors(rounds, baselines) {
 
 function report(rd, g) {
     const cap = roster.thinkCapMs ? `${roster.thinkCapMs / 1000}s of thinking per game` : 'none';
-    const L = [`# Arena round ${rd.round} results`, '', `Ladder \`${rd.ladderId}\`: ${rd.games}/${rd.scheduled} games, ${rd.gamesPerPair} per pair (seeds from ${rd.seed}, each from both seats). Status: ${rd.status}.`,
+    const decks = rd.decks ? `Decks: ${rd.decks.lists} tournament lists (\`${rd.decks.file}\`)${rd.decks.deal === 'seat' ? ', each seed\'s two decks played by both bots' : ''}.` : 'Decks: random.';
+    const L = [`# Arena round ${rd.round} results`, '', `Ladder \`${rd.ladderId}\`: ${rd.games}/${rd.scheduled} games, ${rd.gamesPerPair} per pair (seeds from ${rd.seed}, each from both seats). ${decks} Status: ${rd.status}.`,
         `Elo = Bradley-Terry, the mean of the arena's own bots pinned to 1500. "All rounds" rates every game played so far, so it compares across rounds. Time cap: ${cap}. A bot that goes over it, throws, hangs or fails to load forfeits the game (a loss).`, ''];
     if (!rd.bots.some((b) => b.rank !== null)) {
         L.push(`No rated games yet${rd.games ? ` (${rd.games} finished, none rated)` : ''}.`, '');
@@ -483,7 +490,8 @@ async function runRound(round, bots, { games = Number(arg('games', 4)), seed, ke
     // the watchdog waits 30 s past the wall cap (guard.js: 2 x cap), so a call the guard allows is never taken for a hang
     const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(2 * cap + 30000)] : [];
     const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed), '--key', key,
-        '--id', id, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, '--record', '--resume'];
+        '--id', id, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, '--decks', ROUND_DECKS.file, '--deal', 'seat', '--skip-decks', ROUND_DECKS.skip.join(','),
+        '--record', '--resume'];
     takeLock(dir);
     giveToBots(dir);
     console.log(`round ${round}: ${bots.join(', ')}`);
@@ -536,4 +544,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };
+module.exports = { ROUND_DECKS, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

@@ -17,7 +17,9 @@
  *     <agent>-v<N> of kind 'wasm' with a bundle/ folder, whose canonical tar (bot/compiled/bundle.py tar) is put to
  *     the relay before its first offer. The seed whose bots have had the fewest helper games goes first (then the
  *     lowest seed), so no bot plays much more on helpers than another. The seat-swapped games of a seed always go
- *     together: they share the seed's game key, which the helper gets (never the run key).
+ *     together: they share the seed's game key, which the helper gets (never the run key). In a run of deck lists
+ *     (decks, ladder.js --decks) the job carries the lists its games play (job.decks) and each game the two it
+ *     plays (games[].decks, indices into job.decks, p1's first), the shape ladder-worker.js takes.
  *   - asks after every open lease (GET lease/<id>). A done lease is checked whole (checkDone): its replays are written
  *     where the ladder keeps them and its results go to onResult with the helper's name as host. A lost, unknown or
  *     invalid one puts its games back at the front of the queue, to be played here.
@@ -34,6 +36,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+const { normalizeDeck } = require('./decklists');
 
 const TICK_MS = 2000;
 const UNREACHABLE_MS = 3 * 60000;
@@ -164,8 +167,20 @@ function badResult(game, r, { seed, key }) {
     return null;
 }
 
-/** What is wrong with one game's replay (JSON Lines text, header ... end) from a helper, or null. Absent is fine. */
-function badReplay(game, r, text, { seed, key }) {
+/** A deck list in one canonical form (decklists.js normalizeDeck), or null when it is no deck list. */
+const deckText = (d) => {
+    try {
+        return JSON.stringify(normalizeDeck(d));
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * What is wrong with one game's replay (JSON Lines text, header ... end) from a helper, or null. Absent is fine. A game
+ * of deck lists (decks: the run's lists, game.decks its two) must name them in the header.
+ */
+function badReplay(game, r, text, { seed, key, decks = null }) {
     if (text === undefined) {
         return null;
     }
@@ -191,6 +206,12 @@ function badReplay(game, r, text, { seed, key }) {
     const end = parsed.at(-1);
     if (parsed.length < 2 || head?.t !== 'header' || head.seed !== seed || head.players?.[0]?.bot !== game.p1 || head.players?.[1]?.bot !== game.p2) {
         return 'the replay header is not this game\'s';
+    }
+    if (game.decks) {
+        const want = game.decks.map((i) => decks?.[i]);
+        if (!['p1', 'p2'].every((s, i) => want[i] && deckText(head.decks?.[s]) === deckText(want[i]) && head.players[i].deck === want[i].metadata.name)) {
+            return 'the replay header names other decks';
+        }
     }
     if (end?.t !== 'end' || end.winner !== (r.winnerSeat ?? null) || end.outcome !== r.outcome || (end.by ?? null) !== (r.by ?? null) || (end.faultKind ?? null) !== (r.faultKind ?? null)) {
         return 'the replay ends otherwise than the result says';
@@ -265,7 +286,7 @@ function writeAtomic(file, text) {
 }
 
 function remoteLane({
-    base, queue, keyOf, limits, runPool, onStart, onResult,
+    base, queue, keyOf, limits, decks = null, runPool, onStart, onResult,
     versionsDir = null, residents = null, request: send = request, tarOf: pack = tarOf,
     now = Date.now, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), log = (msg) => console.log(`remote: ${msg}`)
 }) {
@@ -434,6 +455,12 @@ function remoteLane({
         }
         // gameMs is whole milliseconds on the wire (the relay takes an integer), which a fractional --cap-ms could make it not
         const job = { v: 1, seed, key: keyOf(seed), maxSteps, capMs, hangMs, gameMs: Math.round(gameMs), games: games.map((g) => ({ id: g.id, p1: g.p1, p2: g.p2 })), bots };
+        if (games.some((g) => g.decks)) {
+            // the lists this seed plays, each once (a seed's games deal the same two)
+            const used = [...new Set(games.flatMap((g) => g.decks))];
+            job.decks = used.map((i) => decks[i]);
+            job.games.forEach((jg, n) => (jg.decks = games[n].decks.map((i) => used.indexOf(i))));
+        }
         const hexes = Object.values(bots).filter((b) => b.bundle).map((b) => b.bundle);
         let res;
         try {
@@ -498,7 +525,7 @@ function remoteLane({
 
     /** A done lease: its replays and results, unless anything in them is off (then it is lost). */
     function record(lease, answer) {
-        const why = checkDone(lease.games, answer, { seed: lease.seed, key: keyOf(lease.seed) });
+        const why = checkDone(lease.games, answer, { seed: lease.seed, key: keyOf(lease.seed), decks });
         if (why) {
             lose(lease, `invalid result: ${why}`);
             return;

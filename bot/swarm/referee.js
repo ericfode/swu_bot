@@ -8,7 +8,8 @@
  * runs past the lease's gameMs.
  *
  *   const ref = createReferee({ maxSteps, capMs });
- *   const { result, replay } = await ref.play({ id, seed, p1, p2, key });   // replay: the JSON Lines text
+ *   const { result, replay } = await ref.play({ id, seed, p1, p2, key, decks });   // replay: the JSON Lines text
+ * decks: the two deck lists ({p1, p2}, play-seed.js gameDecks), or null for random decks.
  */
 const { Env } = require('../env');
 const { playGame, timingSummary } = require('../match');
@@ -73,7 +74,7 @@ function createReferee({ maxSteps, capMs = Infinity, onStep = null }) {
                 }
             }
         };
-        r = await playGame(env, { seed: job.seed, bots, decks: null, pool: null, key: job.key ?? null, limits, maxSteps, record: true, snapshot, onEvent });
+        r = await playGame(env, { seed: job.seed, bots, decks: job.decks ?? null, pool: null, key: job.key ?? null, limits, maxSteps, record: true, snapshot, onEvent });
         await new Promise((resolve) => setTimeout(resolve, 1));
         delete r.events;
         r.winnerSeat = r.winner;

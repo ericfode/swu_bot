@@ -82,7 +82,8 @@ language or as plain objects in process.
 - `--vs a,b,c` turns the ladder into a gauntlet: each `--bots` entry plays each `--vs` entry on the same seeds (not each
   other).
 - `--decks <file>` plays fixed deck lists instead of random decks (`decklists.js`, whose header says how deck pairs are
-  dealt), and `--pool <file>` deals the random decks from a card pool only (`cardpool.js`).
+  dealt; `--deal seat` deals them as the arena's rated rounds do, `--skip-decks a,b` leaves lists out), and
+  `--pool <file>` deals the random decks from a card pool only (`cardpool.js`).
 - `npm test` — unit tests for ratings, the report, bot logic on mock boards, the arena, the sandbox and the Rust
   simulations (most need `forceteki/build`; the real-game ones need card data).
 

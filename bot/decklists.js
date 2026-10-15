@@ -17,6 +17,11 @@
  * Who gets which deck of a pair: in one pass over the pairs each bot holds each deck in about half of that deck's
  * games, and the next pass gives each bot the other deck of every pair. The deal depends only on s and the file order,
  * not on the run key: deck lists are not secret (bots are told both lists at hello), only the shuffles are.
+ *
+ * The arena's rated rounds deal by seat instead (dealDecks by: 'seat', ladder.js --deal seat): seed s itself (not
+ * counted from --seed) plays pair s mod P, and each deck stays with its seat, so in the two games of a seed each bot
+ * plays both decks from the same seat on the same shuffles, as random decks follow the seat. A round's first seed
+ * comes from the arena's secret (referee.js roundSeed), so each round starts somewhere else in the pairs.
  */
 
 const crypto = require('crypto');
@@ -180,13 +185,24 @@ function deckPairs(n) {
  * plays pair s mod P. The first bot (p1 of the seed's first game: the earlier --bots entry, or the challenger of a
  * gauntlet) gets the pair's first deck on even passes over the pairs and its second deck on odd passes; the other bot
  * gets the other deck and each bot keeps its deck when seats swap within the seed. Returns new schedule entries.
+ * by: 'seat' deals by seat (see the header): seed s plays pair s mod P whatever firstSeed is, p1 gets the pair's first
+ * deck on even passes and its second on odd ones, in every game of the seed.
  */
-function dealDecks(schedule, nDecks, firstSeed = 1) {
+function dealDecks(schedule, nDecks, firstSeed = 1, { by = 'bot' } = {}) {
     if (nDecks < 2) {
         throw new Error('dealDecks needs at least 2 decks');
     }
+    if (!['bot', 'seat'].includes(by)) {
+        throw new Error(`dealDecks deals by bot or by seat, not ${JSON.stringify(by)}`);
+    }
     const pairs = deckPairs(nDecks);
     const P = pairs.length;
+    if (by === 'seat') {
+        return schedule.map((g) => {
+            const [i, j] = pairs[((g.seed % P) + P) % P];
+            return { ...g, decks: Math.floor(g.seed / P) % 2 !== 0 ? [j, i] : [i, j] };
+        });
+    }
     const owner = new Map();
     return schedule.map((g) => {
         const k = `${g.seed}|${[g.p1, g.p2].sort().join('|')}`;
