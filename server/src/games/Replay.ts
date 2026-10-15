@@ -406,8 +406,17 @@ const recordedFile = (games: string, id: string): string | null => {
   return hasRecorded(gz) ? gz : null
 }
 
-const readRecorded = (file: string): string =>
-  file.endsWith(".gz") ? gunzipSync(readFileSync(file), { maxOutputLength: MAX_REPLAY_BYTES }).toString("utf8") : readFileSync(file, "utf8")
+/** Reads a replay recordedFile named; a plain one the games machine gzipped since then is read from its .gz. */
+const readRecorded = (file: string): string => {
+  if (file.endsWith(".gz")) return gunzipSync(readFileSync(file), { maxOutputLength: MAX_REPLAY_BYTES }).toString("utf8")
+  try {
+    return readFileSync(file, "utf8")
+  } catch (e) {
+    // Compact.ts writes <id>.jsonl.gz before it removes <id>.jsonl
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e
+    return readRecorded(`${file}.gz`)
+  }
+}
 
 interface Prepared {
   readonly round: RecordedRound

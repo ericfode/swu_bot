@@ -117,8 +117,11 @@ export interface Compactor {
 
 const errno = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message
 
-/** A regular file read without following a link, or null (gone, a link, another kind of file, too large). */
-const readRegular = (file: string): Buffer | null => {
+/**
+ * A regular file read without following a link, or null (gone, a link, another kind of file, too large, or not `want`
+ * bytes long when `want` is given).
+ */
+const readRegular = (file: string, want?: number): Buffer | null => {
   let fd: number
   try {
     fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
@@ -127,7 +130,7 @@ const readRegular = (file: string): Buffer | null => {
   }
   try {
     const st = fstatSync(fd)
-    if (!st.isFile() || st.size > MAX_REPLAY_BYTES) return null
+    if (!st.isFile() || st.size > MAX_REPLAY_BYTES || (want !== undefined && st.size !== want)) return null
     const buf = readFileSync(fd)
     return buf.length === st.size ? buf : null
   } finally {
@@ -248,8 +251,10 @@ export const makeCompactor = (o: CompactorOptions): Compactor => {
     for (const n of plain) {
       if (halt()) break
       const file = path.join(games, n)
-      const text = readRegular(file)
-      if (text === null || sizes.get(n.slice(0, -".jsonl".length)) !== text.length) {
+      // a replay the window lacks or holds at another size is not even read
+      const want = sizes.get(n.slice(0, -".jsonl".length))
+      const text = want === undefined ? null : readRegular(file, want)
+      if (text === null) {
         report.kept++
         continue
       }
