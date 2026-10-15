@@ -5,9 +5,11 @@
  * server's OOM score, the secrets out of the environment, a boot id, games.db, the child groups an earlier run left
  * behind, then in order: the window proxy, the pusher (idle until setup pokes it), the settings poll, the lease board
  * and the helper API (only with GAMES_HELPER_PORT and at least one helper token), the scheduler (setup, warm, ticks),
- * and last the wake and health endpoint. A problem before the parts run is fatal (exit 1).
+ * the compactor (gzips older rounds' replays), and last the wake and health endpoint. A problem before the parts run is
+ * fatal (exit 1).
  *
- * Stop (SIGTERM, an idle stop, a failed setup), within Fly's 30 s: the wake endpoint closes; from then on only pushes
+ * Stop (SIGTERM, an idle stop, a failed setup), within Fly's 30 s: the wake endpoint closes; a compaction pass stops
+ * after the replay it is gzipping; from then on only pushes
  * may start; every child group but a push gets TERM and KILL 8 s later, and the round, an intake pass and a plan are
  * interrupted (a round cut so is not an attempt: the next boot resumes it at once); the helpers' leases are forgotten
  * and the helper API closes (a waiting claim answers 503); the settings poll stops; the pusher stops its push and
@@ -17,6 +19,8 @@ import { randomBytes } from "node:crypto"
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { Effect, Layer, ManagedRuntime } from "effect"
+import { makeCompactor } from "./Compact.ts"
+import type { Compactor } from "./Compact.ts"
 import type { GamesConfig } from "./Config.ts"
 import { makeGamesctl } from "./Gamesctl.ts"
 import { startHelperApi } from "./HelperApi.ts"
@@ -156,6 +160,7 @@ export const startMachine = async (o: MachineOptions): Promise<Machine> => {
   let scheduler: Scheduler | null = null
   let ops: OpsHttp | null = null
   let proc: ProcService | null = null
+  let compactor: Compactor | null = null
 
   const teardown = async () => {
     const step = async (what: string, f: () => Promise<unknown> | unknown, ms: number) => {
@@ -166,6 +171,7 @@ export const startMachine = async (o: MachineOptions): Promise<Machine> => {
       }
     }
     await step("the wake endpoint", () => ops?.close(), 1_500)
+    await step("the compactor", () => compactor?.stop(), 5_000)
     proc?.setStopping()
     // TERM to every child group but a push, KILL 8 s later; the steps waiting on them are interrupted
     const kill = proc ? run(proc.stopAll(["push"], 8_000)) : Promise.resolve(0)
@@ -224,6 +230,14 @@ export const startMachine = async (o: MachineOptions): Promise<Machine> => {
       return (o.play ?? playRound)(deps, k, why, resume)
     }
     const pu = pusher
+    compactor = makeCompactor({
+      config: c,
+      token: secrets.windowToken,
+      store,
+      busy: () => scheduler?.snapshot().round != null,
+      isStopping: () => stopping
+    })
+    const cp = compactor
     scheduler = makeScheduler({
       config: c,
       gamesctl,
@@ -236,6 +250,7 @@ export const startMachine = async (o: MachineOptions): Promise<Machine> => {
       play,
       board,
       stop: (code) => void stop(code),
+      compactor: cp,
       ...(o.retryMs === undefined ? {} : { retryMs: o.retryMs })
     })
     const sch = scheduler
