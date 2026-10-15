@@ -1,7 +1,8 @@
 'use strict';
 /**
  * Arena referee: rates the newest submitted version of every competitor against each other and the baselines, one
- * round per run. The games machine starts it for the round to play (gamesctl.js plan and referee-cmd).
+ * round per run. The games machine no longer runs it (its server plays the rounds, server/src/games): there it is a
+ * library for gamesctl.js (lineup, the deck lists, publish), and its main plays a round by hand (local rehearsals).
  *
  *   node bot/arena/referee.js [--round K] [--games 4] [--workers 3]           play rated round K (default: the next one)
  *
@@ -544,4 +545,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { ROUND_DECKS, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };
+module.exports = { ROUND_DECKS, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, publish, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

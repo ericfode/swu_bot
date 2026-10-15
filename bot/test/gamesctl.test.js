@@ -1,27 +1,53 @@
 'use strict';
-// What the Elixir coordinator asks Node to do (bot/arena/gamesctl.js): one JSON line on stdout, the exit codes, and
-// the state that push and intake keep between passes. No engine or card data needed.
+// What the games server asks Node to do (bot/arena/gamesctl.js): one JSON line on stdout, the exit codes, what a round
+// is (its rules, lineup, deck lists and bundles), publishing, the folders setup owns, and the state that push and
+// intake keep between passes. The round and decks tests need the engine's card data (they skip without it).
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { spawn } = require('child_process');
+const crypto = require('crypto');
+const { spawn, spawnSync, execFileSync } = require('child_process');
 
+const ROOT = path.join(__dirname, '..', '..');
 const CTL = path.join(__dirname, '..', 'arena', 'gamesctl.js');
+const DECKS = path.join(ROOT, 'bot', 'decks', 'ash-meta-2026-09.json');
+const NODE_RANDOM = path.join(ROOT, 'build', 'compiled', 'node-random');
+const ENGINE = fs.existsSync(path.join(ROOT, 'forceteki', 'build', 'server')) && fs.existsSync(path.join(ROOT, 'forceteki', 'test', 'json'));
+const BUNDLE = fs.existsSync(path.join(NODE_RANDOM, 'arena.json'));
+const ROUNDS = !(ENGINE && BUNDLE) && 'needs the engine, its card data and build/compiled/node-random';
+// the server's own check of a round's answer (server/src/games/Gamesctl.ts), when the server's packages are installed
+const SERVER = fs.existsSync(path.join(ROOT, 'server', 'node_modules', 'effect'));
+const ROOT_USER = process.getuid?.() === 0;
+const BOTS_USER = (() => {
+    try {
+        return ['-u', '-g'].map((f) => Number(execFileSync('id', [f, 'arena'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })));
+    } catch {
+        return null;
+    }
+})();
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gamesctl-test-'));
+// as root, gamesctl packs bundles (and the setup test runs) as the bots' user, who must reach the volumes in here
+fs.chmodSync(tmp, 0o755);
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const data = path.join(tmp, 'data');
 const writeJson = (file, doc) => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(doc));
 };
+const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+const modeOf = (p) => fs.lstatSync(p).mode & 0o7777;
 
 /** Runs gamesctl with a plain environment (GAMES_DATA in the scratch folder); resolves {code, out, err, json}. */
-function ctl(args, env = {}) {
+function ctl(args, env = {}, { as = null } = {}) {
     return new Promise((resolve) => {
-        const child = spawn(process.execPath, [CTL, ...args], {
+        const argv = [process.execPath, CTL, ...args];
+        const [cmd, ...rest] = as ? ['setpriv', `--reuid=${as[0]}`, `--regid=${as[1]}`, '--clear-groups', '--', ...argv] : argv;
+        const child = spawn(cmd, rest, {
             env: { PATH: process.env.PATH, HOME: tmp, LANG: 'C.UTF-8', GAMES_DATA: data, ...env }, stdio: ['ignore', 'pipe', 'pipe']
         });
         let out = '';
@@ -57,8 +83,38 @@ async function fakeWindow(answer = () => null) {
 const home = path.join(data, 'arena');
 const standings = (rounds) => writeJson(path.join(home, 'standings.json'), { rounds, updatedAt: new Date().toISOString() });
 
+/**
+ * A games volume of its own: a roster of `agents` (a builder, or a resident when the name starts with res), each with
+ * version v1, a WebAssembly one (node-random's bundle) unless `js` names it. Returns the volume's folder.
+ */
+function volume(agents, { js = [] } = {}) {
+    const vol = fs.mkdtempSync(path.join(tmp, 'vol-'));
+    fs.chmodSync(vol, 0o755);
+    const arena = path.join(vol, 'arena');
+    writeJson(path.join(arena, 'roster.json'), {
+        thinkCapMs: 60000, baselines: [],
+        agents: agents.map((name) => (name.startsWith('res') ? { name, owner: 'arena', resident: true } : { name, owner: `github:${name}` }))
+    });
+    for (const name of agents) {
+        const dir = path.join(arena, 'versions', `${name}-v1`);
+        if (js.includes(name)) {
+            writeJson(path.join(dir, 'SUBMISSION.json'), { name: `${name}-v1`, bot: { kind: 'js' }, submittedAt: new Date().toISOString() });
+            fs.writeFileSync(path.join(dir, 'bot.js'), 'module.exports = { createBot: () => ({ choose: () => 0 }) };');
+        } else {
+            writeJson(path.join(dir, 'SUBMISSION.json'), { name: `${name}-v1`, bot: { kind: 'wasm' }, submittedAt: new Date().toISOString() });
+            fs.cpSync(NODE_RANDOM, path.join(dir, 'bundle'), { recursive: true });
+        }
+    }
+    return vol;
+}
+const rosterOf = (vol) => readJson(path.join(vol, 'arena', 'roster.json'));
+/** The canonical tar of a version's bundle, as remote-lane.js tarOf packs it. */
+const tarOf = (vol, name) => spawnSync('python3', [path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar', path.join(vol, 'arena', 'versions', name, 'bundle')], { maxBuffer: 80 << 20 }).stdout;
+
 test('gamesctl: a usage error exits 2, and every answer is one JSON line even when the planner logs', async () => {
     assert.strictEqual((await ctl([])).code, 2);
+    assert.strictEqual((await ctl(['toString'])).code, 2, 'only its own commands');
+    assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', '1'])).code, 2, 'the server plays rounds now: no referee command');
     assert.strictEqual((await ctl(['plan', '--arena', 'nosims', '--settled-since', '0'])).code, 2, 'only the Open arena so far');
     assert.strictEqual((await ctl(['plan', '--arena', 'open'])).code, 2, '--settled-since is needed');
 
@@ -95,65 +151,357 @@ test('gamesctl plan: the next round by number once a new version settles; a roun
     assert.deepStrictEqual(r.json, { round: 4, resume: true, why: 'resume' });
 });
 
-test('gamesctl referee-cmd: an explicit round, the minimal environment, and the stale lock gone', async () => {
-    const lock = path.join(data, 'results', 'arena-r7', 'referee.lock');
-    writeJson(lock, { pid: 1, host: 'gone' });
-    const r = await ctl(['referee-cmd', '--arena', 'open', '--round', '7', '--games', '2', '--workers', '2'],
-        { SWU_WINDOW: 'http://127.0.0.1:1/p/nonce', SWU_WINDOW_TOKEN: 'leak', HTTPS_PROXY: 'http://proxy', FLY_API_TOKEN: 'leak' });
-    assert.strictEqual(r.code, 0, r.err);
-    const { cmd, env, cwd } = r.json;
-    assert.deepStrictEqual(cmd.slice(cmd.indexOf('--round'), cmd.indexOf('--round') + 2), ['--round', '7']);
-    assert.ok(cmd.some((a) => a.endsWith(path.join('arena', 'referee.js'))));
-    if (process.getuid?.() === 0) {
-        assert.ok(cmd[1].endsWith('isolate.sh') && cmd.includes('--hide'), cmd.join(' '));
+test('gamesctl round: bad arguments exit 2 before anything is read or written', async () => {
+    const roster = path.join(home, 'roster.json');
+    const before = fs.readFileSync(roster, 'utf8');
+    for (const args of [
+        ['--arena', 'open'], ['--arena', 'open', '--round', 'x'], ['--arena', 'open', '--round', '-1'], ['--arena', 'nosims', '--round', '1'],
+        ['--arena', 'open', '--round', '1', '--cap-ms', '5'], ['--arena', 'open', '--round', '1', '--cap-ms', 'x'],
+        ['--arena', 'open', '--round', '1', '--cap-ms', '1e9'], ['--arena', 'open', '--round', '1', '--games', '0'],
+        ['--arena', 'open', '--round', '1', '--games', 'x'], ['--arena', 'open', '--round', '1', '--games', '101'], ['--arena', 'open', '--round', '1', 'x']
+    ]) {
+        const r = await ctl(['round', ...args]);
+        assert.strictEqual(r.code, 2, `${args.join(' ')}: ${r.err}`);
+        assert.strictEqual(r.out, '');
     }
-    assert.deepStrictEqual(Object.keys(env).filter((k) => /TOKEN|PROXY|FLY|SWU_WINDOW/i.test(k)), []);
-    assert.strictEqual(env.ARENA_HOME, home);
-    assert.strictEqual(cwd, path.join(__dirname, '..', '..'));
-    assert.strictEqual(fs.existsSync(lock), false);
-    assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', 'x'])).code, 2);
+    assert.strictEqual(fs.readFileSync(roster, 'utf8'), before);
+});
 
-    // a ladder folder that is a link (the results folder is the bots' user's): nothing is removed through it
-    const elsewhere = path.join(tmp, 'elsewhere');
+test('gamesctl round: the lineup, its deck lists, each version\'s tar and description, and a stale lock gone', { skip: ROUNDS }, async () => {
+    const vol = volume(['kim', 'res_clock']);
+    const lock = path.join(vol, 'results', 'arena-r7', 'referee.lock');
+    writeJson(lock, { pid: 1, host: 'gone' });
+    const r = await ctl(['round', '--arena', 'open', '--round', '7', '--games', '2', '--cap-ms', '20000'],
+        { GAMES_DATA: vol, NODE_ENV: 'production', SWU_WINDOW_TOKEN: 'leak', ARENA_ADMIN_TOKEN: 'leak' });
+    assert.strictEqual(r.code, 0, r.err);
+    assert.strictEqual(r.out.split('\n').filter(Boolean).length, 1, 'one line');
+    assert.ok(!r.out.includes('leak'));
+    const a = r.json;
+    assert.deepStrictEqual(Object.keys(a), ['round', 'bots', 'gamesPerPair', 'capMs', 'decks', 'bundles', 'botInfo']);
+    assert.deepStrictEqual([a.round, a.bots, a.gamesPerPair, a.capMs], [7, ['kim-v1', 'res_clock-v1'], 2, 20000], 'roster order');
+    assert.strictEqual(fs.existsSync(lock), false, 'the stale lock is gone');
+
+    // the deck lists: ROUND_DECKS less the skipped list, each as play-seed.js takes it in a job
+    const { normalizeDeck } = require('../decklists');
+    const file = JSON.parse(fs.readFileSync(DECKS, 'utf8'));
+    assert.deepStrictEqual(Object.keys(a.decks), ['file', 'sha256', 'names', 'deal', 'skipped', 'lists']);
+    assert.deepStrictEqual([a.decks.file, a.decks.sha256, a.decks.deal, a.decks.skipped], ['ash-meta-2026-09.json', sha256(fs.readFileSync(DECKS)), 'seat', ['lando-calrissian_law_blue']]);
+    assert.strictEqual(a.decks.lists.length, file.length - 1);
+    assert.deepStrictEqual(a.decks.names, a.decks.lists.map((d) => d.metadata.name));
+    assert.ok(!a.decks.names.includes('lando-calrissian_law_blue'));
+    assert.ok(a.decks.lists.every((d) => JSON.stringify(normalizeDeck(d)) === JSON.stringify(d)), 'normalizeDeck form (play-seed.js isDeck)');
+
+    // each version's canonical tar, named by its sha256, readable by everyone
+    const hex = sha256(tarOf(vol, 'kim-v1'));
+    assert.deepStrictEqual(a.bundles, { 'kim-v1': hex, 'res_clock-v1': hex }, 'the same bundle twice: one tar');
+    const tar = path.join(vol, 'bundles', `${hex}.tar`);
+    assert.strictEqual(sha256(fs.readFileSync(tar)), hex);
+    assert.strictEqual(modeOf(tar), 0o644);
+    assert.deepStrictEqual(fs.readdirSync(path.join(vol, 'bundles')), [`${hex}.tar`], 'no temporary file left');
+
+    // as ladder.js puts them in ladder.json's bots rows (describeBot less the name)
+    assert.deepStrictEqual(a.botInfo, {
+        'kim-v1': { kind: 'arena', profile: 'kim', depth: null, lang: 'wasm', version: 1 },
+        'res_clock-v1': { kind: 'arena', profile: 'res_clock', depth: null, lang: 'wasm', version: 1 }
+    });
+
+    if (SERVER) {
+        // the server's own check of the answer takes it as it is
+        const { checkRound } = await import(path.join(ROOT, 'server', 'src', 'games', 'Gamesctl.ts'));
+        const spec = checkRound(7, a);
+        assert.deepStrictEqual([spec.bots, spec.capMs, spec.decks.lists.length, spec.bundles], [a.bots, 20000, a.decks.lists.length, a.bundles]);
+    }
+
+    // a round folder that is a link (once the bots' user's): nothing is removed through it
+    const elsewhere = path.join(vol, 'elsewhere');
     writeJson(path.join(elsewhere, 'referee.lock'), { pid: 1 });
-    fs.symlinkSync(elsewhere, path.join(data, 'results', 'arena-r8'));
-    assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', '8'])).code, 0);
+    fs.symlinkSync(elsewhere, path.join(vol, 'results', 'arena-r8'));
+    assert.strictEqual((await ctl(['round', '--arena', 'open', '--round', '8'], { GAMES_DATA: vol })).code, 0);
     assert.ok(fs.existsSync(path.join(elsewhere, 'referee.lock')));
 });
 
-test('gamesctl referee-cmd: a new round takes the games and time limit it is given, a round cut short keeps its own', async () => {
-    const roster = () => JSON.parse(fs.readFileSync(path.join(home, 'roster.json'), 'utf8'));
-    const games = (cmd) => cmd[cmd.indexOf('--games') + 1];
-    const standings = path.join(home, 'standings.json');
-    const before = fs.existsSync(standings) ? fs.readFileSync(standings) : null;
-    try {
-        writeJson(standings, { rounds: [{ round: 11, status: 'done', gamesPerPair: 2 }] });
-        let r = await ctl(['referee-cmd', '--arena', 'open', '--round', '12', '--games', '4', '--workers', '3', '--cap-ms', '90000']);
-        assert.strictEqual(r.code, 0, r.err);
-        assert.strictEqual(games(r.json.cmd), '4');
-        assert.strictEqual(r.json.cmd[r.json.cmd.indexOf('--workers') + 1], '3');
-        assert.strictEqual(roster().thinkCapMs, 90000, 'the new round plays by the new limit');
+test('gamesctl round: each tar is written once, a damaged one again, and GAMES_BUNDLES says where', { skip: ROUNDS }, async () => {
+    const vol = volume(['kim', 'res_clock']);
+    const round = (env = {}) => ctl(['round', '--arena', 'open', '--round', '0'], { GAMES_DATA: vol, ...env });
+    let r = await round();
+    assert.strictEqual(r.code, 0, r.err);
+    const hex = r.json.bundles['kim-v1'];
+    const tar = path.join(vol, 'bundles', `${hex}.tar`);
+    const first = fs.statSync(tar);
 
-        // round 12 started with 4 games per pair and a stop cut it short: it keeps 4 and the limit it started with
-        writeJson(standings, { rounds: [{ round: 11, status: 'done', gamesPerPair: 2 }, { round: 12, status: 'running', gamesPerPair: 4 }] });
-        r = await ctl(['referee-cmd', '--arena', 'open', '--round', '12', '--games', '2', '--cap-ms', '60000']);
-        assert.strictEqual(r.code, 0, r.err);
-        assert.strictEqual(games(r.json.cmd), '4');
-        assert.strictEqual(roster().thinkCapMs, 90000);
+    r = await round();
+    assert.strictEqual(r.code, 0, r.err);
+    const again = fs.statSync(tar);
+    assert.deepStrictEqual([again.ino, again.mtimeMs], [first.ino, first.mtimeMs], 'a tar already there is not written again');
 
-        // without --cap-ms the roster's limit stays; a limit under a second is refused
-        r = await ctl(['referee-cmd', '--arena', 'open', '--round', '13']);
-        assert.strictEqual(r.code, 0, r.err);
-        assert.strictEqual(roster().thinkCapMs, 90000);
-        assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', '13', '--cap-ms', '5'])).code, 2);
-        assert.strictEqual((await ctl(['referee-cmd', '--arena', 'open', '--round', '13', '--cap-ms', 'x'])).code, 2);
-    } finally {
-        if (before) {
-            fs.writeFileSync(standings, before);
-        } else {
-            fs.rmSync(standings, { force: true });
+    // a tar that does not hold those bytes (a torn write, a hand edit) is written again
+    fs.writeFileSync(tar, 'not a tar');
+    r = await round();
+    assert.strictEqual(r.code, 0, r.err);
+    assert.strictEqual(sha256(fs.readFileSync(tar)), hex);
+    fs.chmodSync(tar, 0o600);
+    assert.strictEqual((await round()).code, 0);
+    assert.strictEqual(modeOf(tar), 0o644, 'play-seed.js reads it as the bots\' user');
+
+    const other = path.join(tmp, 'other-bundles');
+    r = await round({ GAMES_BUNDLES: other });
+    assert.strictEqual(r.code, 0, r.err);
+    assert.strictEqual(sha256(fs.readFileSync(path.join(other, `${hex}.tar`))), hex);
+
+    // a bundle that does not pack (a link in it) stops the round
+    fs.symlinkSync('/etc/hostname', path.join(vol, 'arena', 'versions', 'kim-v1', 'bundle', 'host'));
+    r = await round();
+    assert.strictEqual(r.code, 1);
+    assert.match(r.err, /kim-v1: its bundle cannot be packed/);
+});
+
+test('gamesctl round: as root, a bundle is packed as the bots\' user packed it for every round so far', { skip: (ROUNDS || !(ROOT_USER && BOTS_USER)) && 'needs root, a user arena, the engine and node-random' }, async () => {
+    const vol = volume(['kim', 'res_clock']);
+    // root may execute a 0744 file of root's, the bots' user may not: the tar's mode for it (bundle.py) says which
+    const script = path.join(vol, 'arena', 'versions', 'kim-v1', 'bundle', 'run.sh');
+    fs.writeFileSync(script, '#!/bin/sh\n');
+    fs.chmodSync(script, 0o744);
+    const asBots = spawnSync('setpriv', [`--reuid=${BOTS_USER[0]}`, `--regid=${BOTS_USER[1]}`, '--clear-groups', '--', 'python3', path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar',
+        path.join(vol, 'arena', 'versions', 'kim-v1', 'bundle')], { maxBuffer: 80 << 20 }).stdout;
+    const r = await ctl(['round', '--arena', 'open', '--round', '0'], { GAMES_DATA: vol });
+    assert.strictEqual(r.code, 0, r.err);
+    assert.strictEqual(r.json.bundles['kim-v1'], sha256(asBots));
+    assert.notStrictEqual(r.json.bundles['kim-v1'], sha256(tarOf(vol, 'kim-v1')), 'root would read the execute bit otherwise');
+});
+
+test('gamesctl round: a new round takes the games and time limit it is given, a round cut short keeps its own', { skip: ROUNDS }, async () => {
+    const vol = volume(['kim', 'res_clock']);
+    const st = path.join(vol, 'arena', 'standings.json');
+    const round = (...args) => ctl(['round', '--arena', 'open', ...args], { GAMES_DATA: vol });
+    writeJson(st, { rounds: [{ round: 11, status: 'done', gamesPerPair: 2 }] });
+    let r = await round('--round', '12', '--games', '3', '--cap-ms', '90000');
+    assert.strictEqual(r.code, 0, r.err);
+    assert.deepStrictEqual([r.json.gamesPerPair, r.json.capMs], [4, 90000], 'games per pair rounded up to even, both seats');
+    assert.strictEqual(rosterOf(vol).thinkCapMs, 90000, 'the new round plays by the new limit');
+
+    // round 12 started with 4 games per pair and a stop cut it short: it keeps 4 and the limit it started with
+    writeJson(st, { rounds: [{ round: 11, status: 'done', gamesPerPair: 2 }, { round: 12, status: 'running', gamesPerPair: 4 }] });
+    r = await round('--round', '12', '--games', '2', '--cap-ms', '60000');
+    assert.strictEqual(r.code, 0, r.err);
+    assert.deepStrictEqual([r.json.gamesPerPair, r.json.capMs], [4, 90000]);
+    assert.strictEqual(rosterOf(vol).thinkCapMs, 90000);
+    // its ladder.json says which limit it started with, whatever the roster says now
+    writeJson(path.join(vol, 'results', 'arena-r12', 'ladder.json'), { config: { capMs: 75000, gamesPerPair: 4 } });
+    r = await round('--round', '12', '--games', '2', '--cap-ms', '60000');
+    assert.deepStrictEqual([r.code, r.json?.gamesPerPair, r.json?.capMs], [0, 4, 75000], r.err);
+    assert.strictEqual(rosterOf(vol).thinkCapMs, 90000);
+
+    // without --cap-ms the roster's limit stays, and is the round's
+    writeJson(st, { rounds: [{ round: 12, status: 'done', gamesPerPair: 4 }] });
+    r = await round('--round', '13');
+    assert.deepStrictEqual([r.code, r.json?.gamesPerPair, r.json?.capMs], [0, 2, 90000], r.err);
+    assert.strictEqual(rosterOf(vol).thinkCapMs, 90000);
+});
+
+test('gamesctl round: a version that is not a WebAssembly one stops the round, and nothing changes', { skip: ROUNDS }, async () => {
+    for (const [agents, js, bad] of [[['kim', 'lee', 'res_clock'], ['lee'], 'lee-v1'], [['kim', 'random_x'], [], 'random_x-v1']]) {
+        const vol = volume(agents, { js });
+        const r = await ctl(['round', '--arena', 'open', '--round', '0', '--cap-ms', '30000'], { GAMES_DATA: vol });
+        assert.strictEqual(r.code, 1, r.err);
+        assert.strictEqual(r.out, '');
+        // a JS bot.js version, or one a built-in bot's name takes (random...): never left out quietly
+        assert.match(r.err, new RegExp(`${bad} is not a WebAssembly version`));
+        assert.strictEqual(rosterOf(vol).thinkCapMs, 60000, 'the roster keeps its limit');
+        assert.ok(!fs.existsSync(path.join(vol, 'bundles')) || !fs.readdirSync(path.join(vol, 'bundles')).length, 'no tar written');
+    }
+});
+
+test('gamesctl publish: standings, the report and the panels from the ladder.json the server wrote', async () => {
+    const vol = fs.mkdtempSync(path.join(tmp, 'pub-'));
+    writeJson(path.join(vol, 'arena', 'roster.json'), { thinkCapMs: 20000, baselines: [], agents: [{ name: 'kim', owner: 'github:kim' }, { name: 'res_clock', owner: 'arena', resident: true }] });
+    const publish = (k) => ctl(['publish', '--arena', 'open', '--round', String(k)], { GAMES_DATA: vol });
+    assert.deepStrictEqual((await publish(5)).json, { ok: true, status: null }, 'no ladder.json yet: nothing to publish');
+    assert.strictEqual(fs.existsSync(path.join(vol, 'arena', 'standings.json')), false);
+
+    const { summarize } = require('../ladder-report');
+    const bots = ['kim-v1', 'res_clock-v1'];
+    const config = { bots, gamesPerPair: 2, firstSeed: 100, maxSteps: 6000, workers: 2, capMs: 20000, hangMs: 70000, harness: null, engineDiff: null, programs: null,
+                     keyId: 'abcdef012345', record: true, decks: { file: 'ash-meta-2026-09.json', sha256: 'a'.repeat(64), names: ['x', 'y'], deal: 'seat', skipped: [] } };
+    const game = (p1, p2, winnerSeat) => ({ id: `${p1}-vs-${p2}-100`, seed: 100, p1, p2, winner: winnerSeat === 'p1' ? p1 : p2, winnerSeat, outcome: 'won', rounds: 6, steps: 300, ms: 900,
+                                             error: null, by: null, faultKind: null, host: null, timing: { p1: { n: 10, ms: 50, p50: 5, p95: 9, max: 9 }, p2: { n: 10, ms: 40, p50: 4, p95: 8, max: 8 } } });
+    const games = [game('kim-v1', 'res_clock-v1', 'p1'), game('res_clock-v1', 'kim-v1', 'p2')];
+    const botInfo = Object.fromEntries(bots.map((b) => [b, { kind: 'arena', profile: b.split('-')[0], depth: null, lang: 'wasm', version: 1 }]));
+    const ladder = summarize({ id: 'arena-r5', createdAt: new Date().toISOString(), status: 'done', engine: null, config, botInfo, games, scheduled: 2 });
+    writeJson(path.join(vol, 'results', 'arena-r5', 'ladder.json'), ladder);
+
+    const r = await publish(5);
+    assert.deepStrictEqual(r.json, { ok: true, status: 'done' }, r.err);
+    const st = readJson(path.join(vol, 'arena', 'standings.json'));
+    const rd = st.rounds.find((x) => x.round === 5);
+    assert.deepStrictEqual([rd.status, rd.games, rd.scheduled, rd.leader, rd.ladderId], ['done', 2, 2, 'kim-v1', 'arena-r5']);
+    assert.deepStrictEqual(rd.decks, { file: 'ash-meta-2026-09.json', sha256: 'a'.repeat(64), lists: 2, deal: 'seat' });
+    assert.match(fs.readFileSync(path.join(vol, 'arena', 'rounds', 'r5.md'), 'utf8'), /^# Arena round 5 results\n/);
+    assert.ok(fs.existsSync(path.join(vol, 'arena', 'panels', 'leaderboard.json')), 'the panels');
+
+    // still running: published as running
+    writeJson(path.join(vol, 'results', 'arena-r5', 'ladder.json'), { ...ladder, status: 'running' });
+    assert.deepStrictEqual((await publish(5)).json, { ok: true, status: 'running' });
+
+    // a ladder.json or a round folder that is a link is not read
+    fs.rmSync(path.join(vol, 'results', 'arena-r5', 'ladder.json'));
+    fs.symlinkSync(path.join(tmp, 'nowhere.json'), path.join(vol, 'results', 'arena-r5', 'ladder.json'));
+    assert.strictEqual((await publish(5)).code, 1);
+    fs.symlinkSync(path.join(vol, 'results', 'arena-r5'), path.join(vol, 'results', 'arena-r6'));
+    assert.strictEqual((await publish(6)).code, 1);
+    assert.strictEqual((await ctl(['publish', '--arena', 'open', '--round', 'x'], { GAMES_DATA: vol })).code, 2);
+});
+
+test('gamesctl decks: a deck file of bot/decks as a round loads it; never a path', { skip: !ENGINE && 'needs the engine and its card data' }, async () => {
+    let r = await ctl(['decks', '--file', 'ash-meta-2026-09.json', '--skip', 'lando-calrissian_law_blue']);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.deepStrictEqual(Object.keys(r.json), ['file', 'sha256', 'names', 'skipped', 'lists']);
+    assert.deepStrictEqual([r.json.file, r.json.sha256, r.json.skipped], ['ash-meta-2026-09.json', sha256(fs.readFileSync(DECKS)), ['lando-calrissian_law_blue']]);
+    const all = JSON.parse(fs.readFileSync(DECKS, 'utf8'));
+    assert.strictEqual(r.json.lists.length, all.length - 1);
+    assert.deepStrictEqual(r.json.names, r.json.lists.map((d) => d.metadata.name));
+
+    r = await ctl(['decks', '--file', 'ash-meta-2026-09.json']);
+    assert.deepStrictEqual([r.code, r.json?.lists.length, r.json?.skipped], [0, all.length, []], r.err);
+    assert.strictEqual((await ctl(['decks', '--file', 'ash-meta-2026-09.json', '--skip', 'no-such-deck'])).code, 1, 'a list to skip that is not there');
+
+    for (const file of ['../decks/ash-meta-2026-09.json', DECKS, 'README.md', 'nope.json', '.ash.json', '']) {
+        assert.strictEqual((await ctl(['decks', '--file', file])).code, 2, file);
+    }
+    assert.strictEqual((await ctl(['decks'])).code, 2);
+});
+
+test('gamesctl setup: the mode chmod a+rX gives in a folder only root writes', () => {
+    const { readableMode } = require('../arena/gamesctl');
+    for (const [mode, dir, want] of [
+        [0o700, true, 0o755], [0o777, true, 0o755], [0o2775, true, 0o755], [0o755, true, 0o755],
+        [0o600, false, 0o644], [0o640, false, 0o644], [0o644, false, 0o644], [0o666, false, 0o644], [0o000, false, 0o444],
+        [0o700, false, 0o755], [0o744, false, 0o755], [0o100, false, 0o555], [0o4755, false, 0o755], [0o2711, false, 0o755]
+    ]) {
+        assert.strictEqual(readableMode(mode, dir).toString(8), want.toString(8), `${mode.toString(8)} ${dir ? 'folder' : 'file'}`);
+    }
+});
+
+/** A volume with a round the bots' user's ladder wrote (closed modes), a game job a stop left, and a link out. */
+function oldVolume(owner) {
+    const vol = fs.mkdtempSync(path.join(tmp, 'setup-'));
+    fs.chmodSync(vol, 0o755);
+    const run = path.join(vol, 'results', 'arena-r1');
+    writeJson(path.join(run, 'ladder.json'), { status: 'done' });
+    writeJson(path.join(run, 'games', 'g1.jsonl'), { t: 'header' });
+    fs.chmodSync(path.join(run, 'ladder.json'), 0o640);
+    fs.chmodSync(path.join(run, 'games', 'g1.jsonl'), 0o600);
+    fs.chmodSync(path.join(run, 'games'), 0o700);
+    fs.chmodSync(run, 0o700);
+    const outside = path.join(tmp, `outside-${path.basename(vol)}`);
+    fs.writeFileSync(outside, 'secret', { mode: 0o600 });
+    fs.chmodSync(outside, 0o600);
+    fs.symlinkSync(outside, path.join(run, 'games', 'g2.jsonl'));
+    writeJson(path.join(vol, 'work', 'job-1', 'out', 'g.jsonl'), {});
+    writeJson(path.join(vol, 'arena', 'roster.json'), { thinkCapMs: 60000, baselines: [], agents: [] });
+    if (owner) {
+        execFileSync('chown', ['-R', '-h', `${owner[0]}:${owner[1]}`, vol]);
+    }
+    return { vol, run, outside };
+}
+
+test('gamesctl setup: as another user than root it changes no owner; results are made readable by everyone', { skip: ROOT_USER && !BOTS_USER && 'running as root with no user arena to run it as' }, async () => {
+    // as root here, run it as the bots' user instead (setpriv), in a volume that user owns
+    const as = ROOT_USER ? BOTS_USER : null;
+    const { vol, run, outside } = oldVolume(as);
+    const r = await ctl(['setup'], { GAMES_DATA: vol, HOME: vol }, { as });
+    assert.strictEqual(r.code, 0, r.err);
+    assert.strictEqual(r.json.ok, true);
+    const me = as ? as[0] : process.getuid();
+    for (const p of [vol, path.join(vol, 'results'), run, path.join(run, 'games', 'g1.jsonl'), path.join(vol, 'arena', 'roster.json')]) {
+        assert.strictEqual(fs.lstatSync(p).uid, me, `${p}: no owner changed`);
+    }
+    assert.deepStrictEqual([modeOf(run), modeOf(path.join(run, 'games')), modeOf(path.join(run, 'games', 'g1.jsonl')), modeOf(path.join(run, 'ladder.json'))],
+        [0o755, 0o755, 0o644, 0o644]);
+    assert.strictEqual(modeOf(outside), 0o600, 'a link is never followed');
+    assert.deepStrictEqual(['bundles', 'work', 'server', 'secret', 'intake'].map((d) => modeOf(path.join(vol, d)).toString(8)), ['755', '755', '700', '700', '755']);
+    assert.deepStrictEqual(fs.readdirSync(path.join(vol, 'work')), [], 'game jobs a stop left are gone');
+    assert.match(fs.readFileSync(path.join(vol, 'secret', 'arena-secret'), 'utf8'), /^[0-9a-f]{64}$/);
+});
+
+test('gamesctl setup: as root, results become root\'s once and readable by everyone; the bots\' folders stay theirs', { skip: !(ROOT_USER && BOTS_USER) && 'needs root and a user arena' }, async () => {
+    const { vol, run, outside } = oldVolume(BOTS_USER);
+    for (const d of ['home', 'wasm-cache', 'dash']) {
+        fs.mkdirSync(path.join(vol, d));
+    }
+    let r = await ctl(['setup'], { GAMES_DATA: vol, HOME: vol });
+    assert.strictEqual(r.code, 0, r.err);
+    const owner = (p) => fs.lstatSync(path.join(vol, p)).uid;
+    for (const p of ['results', 'results/arena-r1', 'results/arena-r1/games', 'results/arena-r1/games/g1.jsonl', 'results/arena-r1/ladder.json', 'results/arena-r1/games/g2.jsonl']) {
+        assert.strictEqual(owner(p), 0, `${p} is root's`);
+    }
+    assert.deepStrictEqual([modeOf(run), modeOf(path.join(run, 'games', 'g1.jsonl')), modeOf(path.join(run, 'ladder.json'))], [0o755, 0o644, 0o644]);
+    assert.deepStrictEqual([fs.statSync(outside).uid, modeOf(outside)], [0, 0o600], 'nothing through a link');
+    // the bots' user keeps its HOME and cache, and arena/ and dash/, where the intake's checker writes as that user
+    for (const p of ['home', 'wasm-cache', 'arena', 'arena/roster.json', 'dash']) {
+        assert.strictEqual(owner(p), BOTS_USER[0], `${p} stays the bots' user's`);
+    }
+    for (const [p, mode] of [['bundles', 0o755], ['work', 0o755], ['server', 0o700], ['secret', 0o700], ['intake', 0o755], ['tmp/referee', null]]) {
+        assert.strictEqual(owner(p), 0, `${p} is root's`);
+        if (mode !== null) {
+            assert.strictEqual(modeOf(path.join(vol, p)), mode, p);
         }
     }
+    assert.deepStrictEqual([owner('secret/arena-secret'), modeOf(path.join(vol, 'secret', 'arena-secret'))], [0, 0o600]);
+
+    // the flip happens once (when results/ is not root's): later setups only keep everything readable
+    const g = path.join(run, 'games', 'g1.jsonl');
+    fs.chownSync(g, BOTS_USER[0], BOTS_USER[1]);
+    fs.chmodSync(g, 0o600);
+    r = await ctl(['setup'], { GAMES_DATA: vol, HOME: vol });
+    assert.strictEqual(r.code, 0, r.err);
+    assert.deepStrictEqual([fs.statSync(g).uid, modeOf(g)], [BOTS_USER[0], 0o644]);
+
+    // a link in place of one of its folders stops setup
+    fs.rmSync(path.join(vol, 'work'), { recursive: true });
+    fs.symlinkSync(tmp, path.join(vol, 'work'));
+    r = await ctl(['setup'], { GAMES_DATA: vol, HOME: vol });
+    assert.strictEqual(r.code, 1);
+    assert.match(r.err, /is not a folder/);
+});
+
+test('gamesctl warm, plan and push write nothing into arena/, results/ or dash/', { skip: !BUNDLE && 'no build/compiled/node-random' }, async () => {
+    const vol = volume(['kim', 'res_clock']);
+    const run = path.join(vol, 'results', 'arena-r0');
+    writeJson(path.join(vol, 'arena', 'standings.json'), { rounds: [{ round: 0, status: 'done', ladderId: 'arena-r0', bots: [{ name: 'kim-v1' }, { name: 'res_clock-v1' }] }], updatedAt: new Date().toISOString() });
+    writeJson(path.join(run, 'index.json'), { games: [{ id: 'g1', outcome: 'won' }] });
+    writeJson(path.join(run, 'ladder.json'), { status: 'done' });
+    writeJson(path.join(run, 'games', 'g1.jsonl'), { t: 'header' });
+    writeJson(path.join(vol, 'dash', 'panels', 'arena-leaderboard.json'), {});
+    const snapshot = () => ['arena', 'results', 'dash'].flatMap((top) => {
+        const out = [];
+        const walk = (p) => {
+            const st = fs.lstatSync(p);
+            out.push([path.relative(vol, p), st.mode, st.size, st.mtimeMs, st.uid]);
+            if (st.isDirectory()) {
+                fs.readdirSync(p).sort().forEach((f) => walk(path.join(p, f)));
+            }
+        };
+        walk(path.join(vol, top));
+        return out;
+    });
+    const before = snapshot();
+    const w = await fakeWindow();
+    try {
+        const env = { GAMES_DATA: vol, HOME: path.join(vol, 'home') };
+        const runs = [
+            await ctl(['warm'], env),
+            await ctl(['plan', '--arena', 'open', '--settled-since', '0'], env),
+            await ctl(['push', '--arena', 'open', '--state', path.join(vol, 'tmp', 'push', 'state.json'), '--boot', 'b1'], { ...env, SWU_WINDOW: `${w.url}/p/nonce` })
+        ];
+        for (const r of runs) {
+            assert.strictEqual(r.code, 0, r.err);
+        }
+        assert.deepStrictEqual(runs[2].json, { ok: true });
+        assert.ok(w.calls.length > 0, 'push sent something');
+    } finally {
+        await w.close();
+    }
+    assert.deepStrictEqual(snapshot(), before);
 });
 
 test('gamesctl push: what was sent is not sent again in the same boot; a new boot sends everything', async () => {

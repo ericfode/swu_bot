@@ -73,12 +73,14 @@ test('gamesctl setup: no baselines, whatever the roster had; it names the reside
     assert.deepStrictEqual(home.roster().agents.map((a) => a.name), ['kim_b', 'lee', 'heuristic'], 'the competitors stay');
 });
 
-test('gamesctl: the referee gets the arena folders and the secret path, and no token', () => {
+test('gamesctl: the bot tools it starts (warm\'s run.py) get the arena folders, and no token or secret', () => {
     process.env.SWU_WINDOW_TOKEN = 'leak';
+    process.env.ARENA_SECRET_FILE = path.join(tmp, 'secret', 'arena-secret');
     const env = botEnv();
-    assert.deepStrictEqual(Object.keys(env).filter((k) => /TOKEN|PROXY|FLY/i.test(k)), []);
+    assert.deepStrictEqual(Object.keys(env).filter((k) => /TOKEN|PROXY|FLY|SECRET/i.test(k)), []);
     assert.strictEqual(env.ARENA_HOME, process.env.ARENA_HOME);
-    assert.strictEqual(env.ARENA_SECRET_FILE, path.join(tmp, 'secret', 'arena-secret'));
-    assert.strictEqual(env.ARENA_BOT_USER, 'arena');
+    assert.strictEqual(env.HOME, path.join(tmp, 'home'));
+    assert.strictEqual(env.ARENA_BOT_USER, undefined);
     delete process.env.SWU_WINDOW_TOKEN;
+    delete process.env.ARENA_SECRET_FILE;
 });
