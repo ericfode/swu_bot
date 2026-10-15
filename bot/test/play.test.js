@@ -232,5 +232,6 @@ test('the replay check takes the play worker\'s games and nothing else', () => {
     assert.throws(() => checkReplay(''), /JSON Lines/);
     assert.throws(() => checkReplay(replay({ seed: -1 })), /seed/);
     assert.throws(() => checkReplay(replay().replace('{"t":"step","n":1', '{"t":"header","n":1')), /a step/);
+    assert.throws(() => checkReplay(replay().replace('{"t":"step","n":1', '{"t":"step"not-json,"n":1')), /line 3: not a replay event/);
     assert.throws(() => checkReplay(replay().replace('darth-vader_jtl_yellow"}', '<b>"}')), /deck lists/);
 });

@@ -78,8 +78,8 @@ function checkReplay(text) {
     const header = parse(lines[0], 0);
     const end = parse(lines[lines.length - 1], lines.length - 1);
     for (let i = 1; i < lines.length - 1; i++) {
-        // step lines carry the board; only their kind is checked
-        if (!lines[i].startsWith('{"t":"step"')) {
+        // step lines carry the board; each must parse (the viewer reads every line), only its kind is checked
+        if (!lines[i].startsWith('{"t":"step"') || parse(lines[i], i).t !== 'step') {
             throw new Error(`replay line ${i + 1}: a step`);
         }
     }
