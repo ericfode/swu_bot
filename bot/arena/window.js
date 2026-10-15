@@ -31,6 +31,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
 const { createSwarmRelay } = require('./swarm-relay');
+const { createPlay } = require('./play');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName } = require('./api');
@@ -634,7 +635,8 @@ function createWindow(opts = {}) {
         const d = parseOr(store.getDoc('admin', 'links'), null);
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
-    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks });
+    let play = null;
+    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks, openTo: (next) => !!play?.openTo(next) });
     // the games machine (coord/), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
@@ -642,6 +644,8 @@ function createWindow(opts = {}) {
     const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'vendor', 'holotable', 'swu-viewer-kit.js');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm') });
+    // the play page (play.js): a person against the JEPA bot in their own tab, on the swarm's files; games come back here
+    play = createPlay({ store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
     const arenaMethods = {
@@ -1204,6 +1208,9 @@ function createWindow(opts = {}) {
             const who = auth.who(req);
             if (who.role === 'bad') {
                 return sendJson(res, 401, { error: { code: 'unauthorized', message: 'wrong bearer token' } }, req);
+            }
+            if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) {
+                return undefined;
             }
             if (await swarm.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;

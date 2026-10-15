@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SWU Arena Play</title>
+<style>
+/* The play page (bot/arena/play.js): a bar over Holotable's play screen (SWUViewer.mountPlay). The referee and the bot
+   run in a worker of this tab (play-worker.js); a finished game is sent back to the window. Dark like Holotable. */
+:root {
+  --bg: #060a13; --panel: #0f1829; --line: #1d2a44; --ink: #e6ecf8; --dim: #8494b8;
+  --p1: #56c8ff; --p2: #ff5f6d; --gold: #f6c454; --good: #4fe0a8; --bad: #ff7b72;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --display: "Oxanium", "Eurostile", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+.bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--panel) 88%, transparent); backdrop-filter: blur(8px); }
+.brand { font: 600 12px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); text-decoration: none; }
+.title { font: 650 17px/1.2 var(--display); }
+.grow { flex: 1; }
+.status { display: inline-flex; align-items: center; gap: 8px; font: 500 13px/1.3 var(--mono); color: var(--dim); min-width: 0; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+.status[data-tone="good"] i { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.status[data-tone="busy"] i { background: var(--p1); animation: pulse 1s ease-in-out infinite alternate; }
+.status[data-tone="bad"] i { background: var(--bad); }
+.status[data-tone="bad"] { color: var(--ink); }
+@keyframes pulse { from { opacity: .35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .status[data-tone="busy"] i { animation: none; } }
+button { font: 600 14px/1 var(--sans); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+button:hover { border-color: color-mix(in oklab, var(--p1) 50%, var(--line)); }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.who { font: 500 13px/1 var(--mono); color: var(--dim); }
+#table { min-height: calc(100dvh - 58px); }
+#viewer-wrap { padding: 12px 16px 24px; display: grid; gap: 12px; }
+#viewer { min-height: calc(100dvh - 140px); }
+.panel { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 18px; }
+.panel h2 { margin: 0; font: 650 20px/1.2 var(--display); }
+.panel p { margin: 0; color: var(--dim); }
+.list { display: grid; gap: 8px; }
+.game { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.game .head { font-weight: 600; }
+.game .head.won { color: var(--good); }
+.game .head.lost { color: var(--p2); }
+.game .meta { grid-column: 1; font: 500 12px/1.4 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.game button { grid-row: 1 / span 2; grid-column: 2; }
+.wait { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; display: grid; gap: 10px; }
+.wait h1 { margin: 0; font: 650 26px/1.2 var(--display); }
+.wait p { margin: 0; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a class="brand" href="/play">SWU Arena</a>
+  <span class="title">Play against Eric's bot</span>
+  <span class="grow"></span>
+  <span class="status" id="status" data-tone="busy" role="status" aria-live="polite"><i></i><span>Loading…</span></span>
+  <button id="games-btn" type="button" hidden>Your games</button>
+  <span class="who" id="who"></span>
+</div>
+<div id="wait" class="wait" hidden><h1>Getting the table ready</h1><p id="wait-text"></p></div>
+<div id="table"></div>
+<div id="viewer-wrap" hidden>
+  <div><button id="back" type="button">Back to the table</button></div>
+  <div id="viewer"></div>
+</div>
+<div id="games" class="panel" hidden>
+  <div><button id="games-back" type="button">Back to the table</button></div>
+  <h2>Your games</h2>
+  <p>Every game you finish here is saved to the arena. Games here are unrated.</p>
+  <div class="list" id="mine"></div>
+  <h2 id="all-h" hidden>Every game played here</h2>
+  <div class="list" id="all" hidden></div>
+</div>
+<script src="/play/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const BOT = 'jepa-tx-gate';
+  let info = null;
+
+  function status(text, tone = 'idle') {
+    $('status').dataset.tone = tone;
+    $('status').lastElementChild.textContent = text;
+  }
+
+  // what shows under the bar: the table, a replay, or the list of games
+  function show(which) {
+    $('table').hidden = which !== 'table';
+    $('viewer-wrap').hidden = which !== 'viewer';
+    $('games').hidden = which !== 'games';
+    $('games-btn').hidden = which === 'games' || !info;
+    window.scrollTo(0, 0);
+  }
+
+  let viewer = null;
+  function watch(jsonl) {
+    viewer?.destroy?.();
+    show('viewer');
+    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false });
+  }
+  let backTo = 'table';
+  $('back').onclick = () => {
+    viewer?.destroy?.();
+    viewer = null;
+    show(backTo);
+  };
+  $('games-back').onclick = () => show('table');
+  $('games-btn').onclick = () => {
+    renderGames();
+    show('games');
+  };
+
+  const when = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  };
+  function gameRow(g, withPerson) {
+    const row = document.createElement('div');
+    row.className = 'game';
+    const head = document.createElement('div');
+    const won = g.winner === 'you';
+    const who = withPerson ? (g.person || 'someone') : 'You';
+    head.className = `head ${g.winner === 'you' ? 'won' : g.winner === BOT ? 'lost' : ''}`;
+    head.textContent = g.conceded ? `${who} conceded` : won ? `${who} won` : g.winner === BOT ? `${BOT} won` : g.outcome === 'draw' ? 'A draw' : 'No result';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = `${when(g.playedAt)} · ${g.decks?.p1 ?? '?'} against ${g.decks?.p2 ?? '?'} · round ${g.rounds ?? '?'}, ${g.steps ?? '?'} moves`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Watch';
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await fetch(`/api/play/games/${encodeURIComponent(g.id)}.jsonl`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        backTo = 'games';
+        watch(await r.text());
+      } catch (e) {
+        status(`Could not load that game: ${e.message}`, 'bad');
+      } finally {
+        b.disabled = false;
+      }
+    };
+    row.append(head, b, meta);
+    return row;
+  }
+  function renderGames() {
+    const mine = $('mine');
+    mine.replaceChildren(...(info?.games ?? []).map((g) => gameRow(g, false)));
+    if (!mine.children.length) {
+      const p = document.createElement('p');
+      p.textContent = 'No games yet.';
+      mine.append(p);
+    }
+    const all = info?.admin ? info.all ?? [] : null;
+    $('all-h').hidden = $('all').hidden = !all;
+    if (all) {
+      $('all-h').textContent = `Every game played here (${info.played ?? all.length})`;
+      $('all').replaceChildren(...all.map((g) => gameRow(g, true)));
+    }
+  }
+
+  async function getInfo() {
+    const r = await fetch('/api/play/info', { headers: { accept: 'application/json' } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error?.message || `HTTP ${r.status}`);
+    return j.result;
+  }
+
+  // ---- the table: the play worker, as Holotable's play/client.ts Table ----
+  function makeTable(files) {
+    const worker = new Worker(files.worker);
+    let readyOk, readyNo;
+    const ready = new Promise((ok, no) => { readyOk = ok; readyNo = no; });
+    let starting = null;
+    const acts = [];
+    const games = new Map(); // id -> {msgs, subs, url, over}
+    let current = null;
+    let playing = false;
+
+    const deliver = (g, m) => {
+      g.msgs.push(m);
+      for (const s of g.subs) s.onMsg(m);
+    };
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.t === 'ready') {
+        if (m.cardText) SWUViewer.loadCardText(m.cardText);
+        readyOk(m);
+      } else if (m.t === 'started') {
+        current = m.id;
+        games.set(m.id, { msgs: [], subs: new Set(), url: null });
+        playing = true;
+        starting?.ok({ id: m.id, seat: m.seat });
+        starting = null;
+        status('Playing. The game runs in this tab.', 'good');
+      } else if (m.t === 'refused') {
+        starting?.no(new Error(m.error));
+        starting = null;
+      } else if (m.t === 'acted') {
+        const a = acts.shift();
+        if (a) m.error ? a.no(new Error(m.error)) : a.ok({ ok: true });
+      } else if (m.t === 'msg') {
+        const g = current && games.get(current);
+        if (!g) return;
+        if (m.msg.t === 'end') {
+          playing = false;
+          if (m.msg.replay) {
+            g.url = URL.createObjectURL(new Blob([m.msg.replay], { type: 'application/x-ndjson' }));
+            g.replay = m.msg.replay;
+            save(m.msg.replay);
+          } else {
+            status('The game stopped before it could be saved.', 'bad');
+          }
+        }
+        deliver(g, m.msg);
+      } else if (m.t === 'error') {
+        console.error('[play]', m.message);
+        readyNo(new Error(String(m.message).split('\n')[0]));
+        if (playing) {
+          playing = false;
+          status('The game stopped on an error. Reload the page to play again.', 'bad');
+          const g = current && games.get(current);
+          if (g) for (const s of g.subs) s.onError(true);
+        }
+      }
+    };
+    worker.onerror = (e) => {
+      readyNo(new Error(e.message || 'the game worker did not start'));
+      status('The game could not start in this browser.', 'bad');
+    };
+    worker.postMessage({ t: 'init', pack: files.pack });
+    window.addEventListener('beforeunload', (e) => {
+      if (playing) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    return {
+      ready,
+      table: {
+        options: () => ready.then((r) => r.options),
+        start: (bot, deck, botDeck) => ready.then(() => new Promise((ok, no) => {
+          if (starting) return no(new Error('a game is starting'));
+          starting = { ok, no };
+          worker.postMessage({ t: 'start', bot, deck, botDeck });
+        })),
+        act: (id, act) => new Promise((ok, no) => {
+          acts.push({ ok, no });
+          worker.postMessage({ t: 'act', act });
+        }),
+        concede: () => {
+          worker.postMessage({ t: 'concede' });
+          return Promise.resolve({ ok: true });
+        },
+        follow(id, onMsg, onError) {
+          const g = games.get(id);
+          if (!g) {
+            onError(true);
+            return () => undefined;
+          }
+          const sub = { onMsg, onError };
+          for (const m of g.msgs) onMsg(m);
+          g.subs.add(sub);
+          return () => g.subs.delete(sub);
+        },
+        replayUrl: (id) => games.get(id)?.url ?? null,
+        watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay); } : null),
+        note: "You sit at seat 1 with the real rules engine, which runs in this browser tab. Eric's JEPA bot sees only what its seat sees: your hand and both decks stay hidden from it. When the game ends it is saved to the arena, unrated.",
+        missing: 'Reload the page to try again.'
+      }
+    };
+  }
+
+  async function save(replay) {
+    status('Saving the game to the arena…', 'busy');
+    for (let i = 0; i < 5; i++) {
+      try {
+        const r = await fetch('/api/play/games', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ replay }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok) {
+          status('Saved to the arena.', 'good');
+          getInfo().then((x) => { info = x; renderGames(); }, () => undefined);
+          return;
+        }
+        if (r.status < 500) {
+          status(`Not saved: ${j.error?.message || `HTTP ${r.status}`}. Download the replay to keep it.`, 'bad');
+          return;
+        }
+      } catch {
+        // the arena did not answer: try again
+      }
+      await new Promise((ok) => setTimeout(ok, 2000 * 2 ** i));
+    }
+    status('Not saved: the arena did not answer. Download the replay to keep it.', 'bad');
+  }
+
+  async function main() {
+    if (!window.SWUViewer?.mountPlay) {
+      status('The page did not load completely. Reload it.', 'bad');
+      return;
+    }
+    for (let tries = 0; ; tries++) {
+      try {
+        info = await getInfo();
+      } catch (e) {
+        status(`The arena did not answer: ${e.message}`, 'bad');
+        return;
+      }
+      $('who').textContent = `@${info.login}`;
+      if (info.ready) break;
+      $('wait').hidden = false;
+      $('table').hidden = true;
+      $('wait-text').textContent = info.why || 'The game files are not here yet.';
+      status('Waiting for the game files…', 'busy');
+      if (tries >= 30) {
+        status('The game files did not come. Try again later.', 'bad');
+        return;
+      }
+      await new Promise((ok) => setTimeout(ok, 10000));
+    }
+    $('wait').hidden = true;
+    show('table');
+    status('Loading the rules engine…', 'busy');
+    const { ready, table } = makeTable(info.files);
+    SWUViewer.mountPlay($('table'), { table });
+    ready.then((r) => status(`Ready: ${r.options.decks.length} deck lists. Pick yours.`, 'good'), (e) => status(`The rules engine did not load: ${e.message}`, 'bad'));
+  }
+  main();
+})();
+</script>
+</body>
+</html>

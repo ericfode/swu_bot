@@ -56,10 +56,11 @@ function parseCookies(header) {
 /**
  * opts: dir (where the session key lives), invites() (extra invited logins, e.g. from the admin/invites document),
  * links() (view links [{id, key}], from the admin/links document), bearer(token) (an MCP client's access token ->
- * {login, grant, app} or null; oauth.js lookup), env (default process.env), fetch (for GitHub; tests pass a fake),
- * now() (for tests).
+ * {login, grant, app} or null; oauth.js lookup), openTo(next) (whether a login with no role may still return to the
+ * local path `next` after signing in, e.g. the play page when anyone with GitHub may play; else it goes home), env
+ * (default process.env), fetch (for GitHub; tests pass a fake), now() (for tests).
  */
-function createAuth({ dir, invites = () => [], links = () => [], bearer = () => null, env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+function createAuth({ dir, invites = () => [], links = () => [], bearer = () => null, openTo = () => false, env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const publicUrl = String(env.ARENA_PUBLIC_URL ?? 'https://swu-arena.fly.dev').replace(/\/+$/, '');
     const origin = new URL(publicUrl).origin; // what a browser sends as Origin from this site's own pages
     let lookup = bearer; // the window sets it once its oauth.js exists (useBearer)
@@ -250,7 +251,7 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
                 return true;
             }
             const session = cookie(SESSION, sign({ l: login.toLowerCase(), i: id, exp: now() + SESSION_DAYS * 864e5 }), SESSION_DAYS * 86400);
-            redirect(res, roleOf(login) === 'anon' ? '/' : st.n, [session, cookie(OAUTH, '', 0)]);
+            redirect(res, roleOf(login) === 'anon' && !openTo(st.n) ? '/' : st.n, [session, cookie(OAUTH, '', 0)]);
             return true;
         }
         return false;
