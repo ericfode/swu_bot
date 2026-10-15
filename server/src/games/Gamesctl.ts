@@ -137,6 +137,9 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
       env: childEnv(c, o.home, { ...base, ...o.env }),
       as: o.as,
       isolate: o.isolate,
+      // the intake's job folders: only the intake (and its checker, in its own) works there. Python that a command
+      // starts as the bots' user may load code from their HOME, which game jobs can write
+      ...(o.isolate ? { hide: [path.join(c.data, "intake")] } : {}),
       timeoutMs: o.timeoutMs,
       graceMs: o.graceMs ?? 5000,
       stdout: "capture"

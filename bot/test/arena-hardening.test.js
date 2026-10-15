@@ -1,7 +1,8 @@
 'use strict';
-// On the games machine the arena's folders belong to the bots' user, and root processes (the referee, the pusher, the
-// intake) work in them. These check that a root writer never writes through a link planted there, and that the intake
-// cannot be made to check one submission forever. No engine or card data needed.
+// Root processes (the referee, the intake) write in folders another user may share in a local arena (on the games
+// machine arena/ and dash/ are root's alone, cleaned on every start). These check that a root writer never writes
+// through a link planted there, and that the intake cannot be made to check one submission forever. No engine or card
+// data needed.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -145,7 +146,7 @@ test('dashboard: a roster name that is not a competitor name never becomes part 
 test('intake --check: an error too long for one line is cut, so the result still comes back', () => {
     const job = path.join(tmp, 'check-job', 'job.json');
     fs.mkdirSync(path.dirname(job), { recursive: true });
-    // a bad file path 70 KB long: check() throws it as the bot's error
+    // a bad file path 70 KB long: packAndCheck throws it as the bot's error
     fs.writeFileSync(job, JSON.stringify(sub({ id: 'kim-b.9', files: { [`${'x/'.repeat(35000)}..`]: '1' } })));
     const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'arena', 'intake.js'), '--check', job, '-'],
         { encoding: 'utf8', env: { PATH: process.env.PATH, ARENA_HOME: process.env.ARENA_HOME, ARENA_RESULTS: process.env.ARENA_RESULTS, ARENA_DASH: process.env.ARENA_DASH } });
