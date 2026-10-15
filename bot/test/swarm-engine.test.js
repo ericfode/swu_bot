@@ -21,13 +21,25 @@ async function play(req) {
     return { r, lines };
 }
 
+// one pack of this checkout for every test here, removed when they are done
+let packed = null;
+function packOnce() {
+    if (!packed) {
+        const { pack } = require('../swarm/pack');
+        const out = fs.mkdtempSync(path.join(os.tmpdir(), 'swarm-pack-'));
+        process.on('exit', () => fs.rmSync(out, { recursive: true, force: true }));
+        pack({ root: ROOT, out });
+        packed = out;
+    }
+    return packed;
+}
+
 test('a game under the swarm runtime is the same game as in Node', { skip: !built && 'no engine build here', timeout: 300000 }, async () => {
-    const { pack, filesOf } = require('../swarm/pack');
+    const { filesOf } = require('../swarm/pack');
     const { createEngineRuntime } = require('../swarm/engine');
     const { createRefereeHost } = require('../swarm/referee-host');
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'swarm-pack-'));
-    try {
-        pack({ root: ROOT, out });
+    const out = packOnce();
+    {
         const native = await play((p) => require(path.join(ROOT, p)));
         const files = filesOf(JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8')));
         const rt = createEngineRuntime({ files });
@@ -58,7 +70,78 @@ test('a game under the swarm runtime is the same game as in Node', { skip: !buil
         assert.deepStrictEqual([result.outcome, result.steps, result.winnerSeat], [r.outcome, r.steps, r.winner]);
         assert.deepStrictEqual(replay.trim().split('\n').slice(0, -1), lines.slice(0, -1), 'the same game, board by board');
         host.close();
-    } finally {
-        fs.rmSync(out, { recursive: true, force: true });
     }
+});
+
+/** A person who answers every decision with a pick of `rng`, through `act` (and the referee's own split). */
+function scriptedPerson(act, rng) {
+    return (m) => {
+        if (m.t === 'decide') {
+            setImmediate(() => {
+                const i = Math.floor(rng() * m.actions.length);
+                assert.strictEqual(act({ t: 'act', seq: m.seq, i }), null);
+            });
+        }
+    };
+}
+
+test('the play page\'s worker: a person against the JEPA bot in the browser runtime is the same game as in Node', { skip: !built && 'no engine build here', timeout: 300000 }, async () => {
+    const vm = require('vm');
+    const { webcrypto } = require('crypto');
+    const { build } = require('../swarm/build');
+    const { seededRng } = require('../rng');
+    const out = packOnce();
+    build(out);
+    const deck = 'darth-vader_jtl_yellow';
+    const seed = 7;
+    const key = 'c'.repeat(64);
+    // Node: the table host as serve.js and the tests run it
+    const { createTableHost } = require('../table/host');
+    let node = null;
+    const nodeHost = createTableHost({ send: (m) => node?.(m) });
+    node = scriptedPerson((a) => nodeHost.act(a), seededRng(seed));
+    nodeHost.start({ deck, seed, key });
+    const native = await nodeHost.done;
+    // the worker: play-worker.js as a browser runs it (self, postMessage, fetch of the pack), here in a fresh context
+    // whose seed and key are the ones above
+    const sent = [];
+    let onSent = () => undefined;
+    const self = { postMessage: (m) => (sent.push(m), onSent(m)) };
+    const ctx = vm.createContext({
+        self, console, performance, TextDecoder, TextEncoder, URL, atob, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask, structuredClone,
+        crypto: { getRandomValues: (a) => (a.set(a.length === 1 ? [seed] : Buffer.from(key, 'hex')), a), randomUUID: () => webcrypto.randomUUID() },
+        fetch: async () => ({ json: async () => JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8')) })
+    });
+    vm.runInContext(fs.readFileSync(path.join(out, 'play-worker.js'), 'utf8'), ctx);
+    const next = (t) => new Promise((resolve) => {
+        const hit = sent.find((m) => m.t === t || m.t === 'error');
+        if (hit) {
+            return resolve(hit);
+        }
+        onSent = (m) => (m.t === t || m.t === 'error') && resolve(m);
+    });
+    self.onmessage({ data: { t: 'init', pack: '/play/engine.json' } });
+    const ready = await next('ready');
+    assert.strictEqual(ready.t, 'ready', ready.message);
+    // the worker's objects are another realm's, so they are compared as JSON
+    assert.strictEqual(JSON.stringify(ready.options.bots), '["jepa-tx-gate"]');
+    const person = scriptedPerson((a) => {
+        self.onmessage({ data: { t: 'act', act: a } });
+        return sent.at(-1).t === 'acted' ? sent.at(-1).error : null;
+    }, seededRng(seed));
+    const ended = new Promise((resolve) => {
+        onSent = (m) => {
+            if (m.t === 'msg') {
+                person(m.msg);
+                if (m.msg.t === 'end') {
+                    resolve(m.msg);
+                }
+            }
+        };
+    });
+    self.onmessage({ data: { t: 'start', deck } });
+    assert.strictEqual(JSON.stringify(sent.find((m) => m.t === 'started')), '{"t":"started","id":"play-00000007","seat":"p1"}');
+    const end = await ended;
+    assert.strictEqual(end.outcome, native.result.outcome);
+    assert.strictEqual(end.replay, native.replay, 'the same game, board by board');
 });

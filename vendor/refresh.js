@@ -4,10 +4,12 @@
 //
 //   node vendor/refresh.js kessel <kessel clone> <commit>       # vendor/kessel: the JS adapter and the Node package
 //   node vendor/refresh.js holotable <holotable clone> <commit> # vendor/holotable: the viewer kit
+//   node vendor/refresh.js jepa <holocron clone> <commit>       # vendor/jepa: the JEPA bot in JavaScript and its models
 //
 // The commit is exported with git archive into a temporary folder and built there, so the clone is never touched.
 // Kessel needs cargo, rustup and the wasm32-unknown-unknown target; its build.js installs the wasm-bindgen it pins
-// (or set WASM_BINDGEN to that version). Holotable needs npm and the registry. Run from anywhere; Node 22.
+// (or set WASM_BINDGEN to that version). Holotable needs npm and the registry; the JEPA bot builds nothing. Run from
+// anywhere; Node 22.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -50,13 +52,24 @@ const TARGETS = {
             run('npm', ['run', 'build:kit'], { cwd: src, env: { ...process.env, ATLAS_KIT: path.join(ROOT, 'meta', 'atlas-kit.js') } });
             return { files: { 'swu-viewer-kit.js': 'dist-kit/swu-viewer-kit.js' }, about: { built: 'npm ci && ATLAS_KIT=<swu_bot>/meta/atlas-kit.js npm run build:kit', atlasKitSha256: sha256(path.join(ROOT, 'meta', 'atlas-kit.js')) } };
         }
+    },
+    jepa: {
+        repo: 'https://github.com/ericfode/holocron',
+        build() {
+            // jepa-tx-gate (holocron bots/external-bots.json): the player and its two models, nothing to build
+            const files = { 'jepa.js': 'bots/jepa/js/jepa.js' };
+            for (const m of ['tx-t10.safetensors', 'tx-t10-e.safetensors']) {
+                files[m] = `bots/jepa/models/${m}`;
+            }
+            return { files, about: { bot: 'jepa-tx-gate', built: 'copied as they are' } };
+        }
     }
 };
 
 function main([name, clone, commit]) {
     const target = TARGETS[name];
     if (!target || !clone || !commit) {
-        throw new Error('usage: node vendor/refresh.js kessel|holotable <clone> <commit>');
+        throw new Error('usage: node vendor/refresh.js kessel|holotable|jepa <clone> <commit>');
     }
     const full = execFileSync('git', ['-C', clone, 'rev-parse', '--verify', `${commit}^{commit}`], { encoding: 'utf8' }).trim();
     const src = fs.mkdtempSync(path.join(os.tmpdir(), `vendor-${name}-`));

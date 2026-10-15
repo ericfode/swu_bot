@@ -8,6 +8,8 @@
  *                       sent, one at a time, with referee.js
  *   bot-worker.js       wasi.js and bot-worker.js: one bot bundle under the WASI host
  *   executor-worker.js  executor.js as it is: the tab's lease loop
+ *   play-worker.js      runtime.js and engine.js, plus the entry below: the window's /play page, a person against the
+ *                       JEPA bot (bot/table/host.js) on the same pack, with the referee and the bot in this worker
  *
  * Each module is wrapped as a function of (module, exports, require), as Node wraps it; require() between them uses
  * their file names. No packages, no transpiling: the code is the same code the Node tests run.
@@ -92,6 +94,61 @@ self.onmessage = (e) => {
 };
 `;
 
+// The play worker's entry (bot/table/host.js). Messages in: {t: 'init', pack (its URL) or packBytes}, then
+// {t: 'start', bot, deck, botDeck}, {t: 'act', act} and {t: 'concede'}. Out: {t: 'ready', ms, build, cards, options, cardText},
+// {t: 'started', id, seat} or {t: 'refused', error} for a start, {t: 'acted', error} for an act (error null when taken),
+// {t: 'msg', msg} for every table message (hello, decide, move, over, and end with the replay), {t: 'error', message}.
+// The seed and the key of each game come from the browser's crypto.getRandomValues.
+const PLAY_ENTRY = `
+const { createEngineRuntime } = load('./engine');
+let host = null;
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const filesOf = (doc) => {
+    const files = new Map();
+    for (const [p, v] of Object.entries(doc.files)) {
+        files.set(p, v.startsWith('b64:') ? b64(v.slice(4)) : v);
+    }
+    return files;
+};
+const fail = (e) => self.postMessage({ t: 'error', message: String(e && e.stack || e) });
+async function init(msg) {
+    const t0 = performance.now();
+    const doc = msg.packBytes ? JSON.parse(new TextDecoder().decode(msg.packBytes)) : await (await fetch(msg.pack)).json();
+    const rt = createEngineRuntime({ files: filesOf(doc), log: { log: () => undefined, error: (...a) => console.warn('[play]', ...a) } });
+    const { createTableHost } = rt.require('/app/bot/table/host.js');
+    host = createTableHost({ send: (m) => self.postMessage({ t: 'msg', msg: m }) });
+    self.postMessage({ t: 'ready', ms: Math.round(performance.now() - t0), build: doc.build, cards: doc.cards, options: host.options(), cardText: host.cardText() });
+}
+function start(msg) {
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    const key = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
+    try {
+        const g = host.start({ bot: msg.bot, deck: msg.deck, botDeck: msg.botDeck, seed, key });
+        self.postMessage({ t: 'started', id: g.id, seat: g.seat });
+    } catch (e) {
+        self.postMessage({ t: 'refused', error: String(e && e.message || e) });
+    }
+}
+self.onmessage = (e) => {
+    const msg = e.data;
+    try {
+        if (msg.t === 'init') {
+            init(msg).catch(fail);
+        } else if (!host) {
+            fail('not ready (send init first)');
+        } else if (msg.t === 'start') {
+            start(msg);
+        } else if (msg.t === 'act') {
+            self.postMessage({ t: 'acted', error: host.act(msg.act) });
+        } else if (msg.t === 'concede') {
+            host.concede();
+        }
+    } catch (err) {
+        fail(err);
+    }
+};
+`;
+
 const BOT_ENTRY = `
 self.SwarmWasi = load('./wasi');
 load('./bot-worker');
@@ -102,7 +159,8 @@ function build(out) {
     fs.writeFileSync(path.join(out, 'referee-worker.js'), bundle(['runtime', 'engine', 'wasi', 'processes', 'tar', 'referee-host'], REFEREE_ENTRY));
     fs.writeFileSync(path.join(out, 'bot-worker.js'), bundle(['wasi', 'bot-worker'], BOT_ENTRY));
     fs.copyFileSync(path.join(HERE, 'executor.js'), path.join(out, 'executor-worker.js'));
-    return ['referee-worker.js', 'bot-worker.js', 'executor-worker.js'];
+    fs.writeFileSync(path.join(out, 'play-worker.js'), bundle(['runtime', 'engine'], PLAY_ENTRY));
+    return ['referee-worker.js', 'bot-worker.js', 'executor-worker.js', 'play-worker.js'];
 }
 
 module.exports = { build };

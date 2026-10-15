@@ -17,6 +17,7 @@ module.exports = {
       'bot/players/index.js', // the bot registry
       'bot/arena/**', // the arena: API, MCP and HTTP servers, referee, registry, dashboard writer
       'bot/compiled/**', // builds any bot as a sandboxed WebAssembly bundle, and runs it
+      'bot/table/**', // a person's seat against a bot, for Holotable's play page
       'spec/**',
       'app/**', // the SWU Arena app: one page to watch the arena and read the research
       'server/**', // the arena server on Effect (stage 4): the record, export API v1, MCP, rounds as durable workflows

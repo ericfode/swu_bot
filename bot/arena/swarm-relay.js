@@ -25,7 +25,8 @@ const FILES = {
     'python.wasm': 'application/wasm',
     'referee-worker.js': 'text/javascript',
     'bot-worker.js': 'text/javascript',
-    'executor-worker.js': 'text/javascript'
+    'executor-worker.js': 'text/javascript',
+    'play-worker.js': 'text/javascript'
 };
 // cross-origin isolation, which SharedArrayBuffer needs (a bot blocks on its stdin): the page and its workers
 const ISOLATED = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy': 'same-origin' };
@@ -132,6 +133,58 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         return pending.get(key);
     }
 
+    /** The build whose files the window has on its disk (only the newest is kept), or null: what a page loads while the machine sleeps. */
+    function cachedBuild(names) {
+        if (!cacheDir || !fs.existsSync(cacheDir)) {
+            return null;
+        }
+        const ok = fs.readdirSync(cacheDir).filter((b) => /^[0-9a-zA-Z._-]{1,64}$/.test(b) && names.every((n) => fs.existsSync(path.join(cacheDir, b, `${n}.gz`))));
+        return ok.length === 1 ? ok[0] : null;
+    }
+
+    /**
+     * Sends swarm file `name` of the build in ?b= (default the machine's now) with the headers the swarm's files carry,
+     * or an error: true once it answered. The play page (play.js) loads its files this way too.
+     */
+    async function sendFile(req, res, url, name, { sendJson, sendText }) {
+        const fail = (code, status, message) => sendJson(res, status, { error: { code, message } }, req);
+        if (!Object.hasOwn(FILES, name)) {
+            sendText(res, req, 404, 'text/plain', 'not found');
+            return true;
+        }
+        const m = await currentManifest();
+        const build = url.searchParams.get('b') || m?.build;
+        if (!build || !/^[0-9a-zA-Z._-]{1,64}$/.test(build)) {
+            fail('unavailable', 503, 'the games machine is asleep: the swarm starts with the next round');
+            return true;
+        }
+        const f = await swarmFile(build, name, m?.build ?? null).catch(() => null);
+        if (!f) {
+            // an older build than the machine's (reload the page), or a machine that does not answer
+            fail(m && build !== m.build ? 'build' : 'unavailable', m && build !== m.build ? 409 : 503, m && build !== m.build ? 'the games machine runs a newer build: reload the page' : 'the games machine is asleep: the swarm starts with the next round');
+            return true;
+        }
+        // the URL names the build, so a file never changes: browsers keep it
+        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
+        const body = gzip ? f.gz : f.raw;
+        res.writeHead(200, { 'content-type': FILES[name], 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+        if (typeof body === 'string') {
+            fs.createReadStream(body).pipe(res);
+        } else {
+            res.end(body);
+        }
+        return true;
+    }
+
+    /** Fetches the machine's files `names` of its build now into the window's cache, so they load while it sleeps. */
+    async function keep(names) {
+        const m = await currentManifest();
+        if (m) {
+            await Promise.all(names.map((n) => swarmFile(m.build, n, m.build).catch(() => null)));
+        }
+        return m;
+    }
+
     const slotOf = (login, slot) => `${String(login).toLowerCase().replace(/[^a-z0-9_-]/g, '')}-${String(slot).replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 32);
 
     async function route(req, res, url, who, { sendJson, sendText, readBody }) {
@@ -163,32 +216,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
         const file = /^\/swarm\/([a-z0-9.-]+)$/.exec(p);
         if (file && req.method === 'GET') {
-            if (!Object.hasOwn(FILES, file[1])) {
-                sendText(res, req, 404, 'text/plain', 'not found');
-                return true;
-            }
-            const m = await currentManifest();
-            const build = url.searchParams.get('b') || m?.build;
-            if (!build || !/^[0-9a-zA-Z._-]{1,64}$/.test(build)) {
-                fail('unavailable', 503, 'the games machine is asleep: the swarm starts with the next round');
-                return true;
-            }
-            const f = await swarmFile(build, file[1], m?.build ?? null).catch(() => null);
-            if (!f) {
-                // an older build than the machine's (reload the page), or a machine that does not answer
-                fail(m && build !== m.build ? 'build' : 'unavailable', m && build !== m.build ? 409 : 503, m && build !== m.build ? 'the games machine runs a newer build: reload the page' : 'the games machine is asleep: the swarm starts with the next round');
-                return true;
-            }
-            // the URL names the build, so a file never changes: browsers keep it
-            const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-            const body = gzip ? f.gz : f.raw;
-            res.writeHead(200, { 'content-type': FILES[file[1]], 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-            if (typeof body === 'string') {
-                fs.createReadStream(body).pipe(res);
-            } else {
-                res.end(body);
-            }
-            return true;
+            return sendFile(req, res, url, file[1], { sendJson, sendText });
         }
         const api = /^\/api\/swarm\/(info|hello|claim|bundle\/([0-9a-f]{64})|lease\/([A-Za-z0-9_-]{1,64})\/(heartbeat|result))$/.exec(p);
         if (!api) {
@@ -283,7 +311,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
     }
 
-    return { route, leases, on: () => !!token };
+    return { route, leases, on: () => !!token, sendFile, currentManifest, cachedBuild, keep };
 }
 
 function safeJson(text) {
