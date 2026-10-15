@@ -869,6 +869,73 @@ test('intake: one version per submission, even when the window misses the result
     assert.deepStrictEqual(['ros.2', 'ros.3'].map((id) => [w.docs[id].state, w.docs[id].version ?? w.docs[id].error]), [['accepted', 'ros-v2'], ['accepted', 'ros-v3']]);
 });
 
+/** A job folder as a check leaves it (work/home/bundle.tar), with a bundle whose bot.wasm is no program at all. */
+function leftByCheck(name, { tar = null } = {}) {
+    const { spawnSync } = require('child_process');
+    const work = fs.mkdtempSync(path.join(tmp, 'left-'));
+    const bundle = path.join(work, 'src');
+    fs.mkdirSync(bundle);
+    fs.writeFileSync(path.join(bundle, 'bot.wasm'), 'not a program');
+    const m = { schema: 'swu-arena-bot/1', name, lang: 'wat', protocol: 2, kind: 'wasm', platform: 'wasm32-wasip1', runtime: 'wasi-p1',
+        run: { cmd: './bot.wasm', args: [], env: {} }, resources: { memory_mb: 64 }, cards: { use: 'none' }, network: 'none' };
+    fs.writeFileSync(path.join(bundle, 'arena.json'), JSON.stringify(m));
+    fs.mkdirSync(path.join(work, 'home'));
+    const out = path.join(work, 'home', 'bundle.tar');
+    if (tar) {
+        fs.writeFileSync(out, tar);
+    } else {
+        const r = spawnSync('python3', [path.join(__dirname, '..', 'compiled', 'bundle.py'), 'tar', bundle]);
+        assert.strictEqual(r.status, 0, String(r.stderr));
+        fs.writeFileSync(out, r.stdout);
+    }
+    return { work, tar: out };
+}
+
+test('intake enter: root enters what the check left without running it, with the name, owner and note of the window\'s submission', () => {
+    const { enter } = require('../arena/intake');
+    const { versionsOf } = require('../arena/home');
+    const sub = { id: 'lee.1', owner: 'lee', name: 'lee', kind: 'wasm', note: 'first', files: {} };
+    // bot.wasm here would fail any start check: entering it shows nothing ran it
+    const { work } = leftByCheck('lee');
+    assert.deepStrictEqual(enter(sub, work), { ok: true, name: 'lee', version: 'lee-v1', benched: false });
+    assert.deepStrictEqual(versionsOf('lee'), [0, 1]);
+    const meta = readJson(path.join(HOME, 'versions', 'lee-v1', 'SUBMISSION.json'));
+    assert.deepStrictEqual([meta.note, meta.ref, meta.bot.kind], ['first', 'window:lee.1', 'wasm']);
+    assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', 'lee-v1', 'bundle', 'bot.wasm'), 'utf8'), 'not a program');
+    assert.strictEqual(readJson(path.join(HOME, 'roster.json')).agents.find((a) => a.name === 'lee').owner, 'github:lee');
+    // the same submission again: its version, not a new one
+    assert.strictEqual(enter(sub, leftByCheck('lee').work).version, 'lee-v1');
+    assert.deepStrictEqual(versionsOf('lee'), [0, 1]);
+});
+
+test('intake enter: a bundle.tar that is a link, has another name, or is not a canonical tar is not entered', () => {
+    const { enter } = require('../arena/intake');
+    const sub = (n) => ({ id: `lee.${n}`, owner: 'lee', name: 'lee', kind: 'wasm', note: 'n', files: {} });
+    const victim = path.join(tmp, 'victim.tar');
+    const real = leftByCheck('lee');
+    fs.copyFileSync(real.tar, victim);
+    const linked = leftByCheck('lee');
+    fs.rmSync(linked.tar);
+    fs.symlinkSync(victim, linked.tar);
+    assert.throws(() => enter(sub(2), linked.work), /the check left no bundle/);
+    const twice = leftByCheck('lee');
+    fs.linkSync(twice.tar, path.join(twice.work, 'other-name'));
+    assert.throws(() => enter(sub(3), twice.work), /the check left no bundle/);
+    const gnu = leftByCheck('lee');
+    require('child_process').execFileSync('tar', ['-cf', gnu.tar, '-C', path.join(gnu.work, 'src'), '.']);
+    assert.throws(() => enter(sub(4), gnu.work), /the bundle did not unpack/);
+    assert.deepStrictEqual(require('../arena/home').versionsOf('lee'), [0, 1], 'nothing entered');
+});
+
+test('api submit: checked skips the load and start checks for the caller that made them; no client can ask for that', async () => {
+    const { api, call } = require('../arena/api');
+    setRoster(['chk']);
+    const files = { 'arena.json': JSON.stringify({ schema: 'swu-arena-bot/1', run: { cmd: './bot.wasm' } }), 'bot.wasm': { base64: Buffer.from('nope').toString('base64') } };
+    const r = await call('submit', { name: 'chk', note: 'n', bot: { kind: 'wasm', files }, checked: true });
+    assert.strictEqual(r.error?.code, 'bad_bot', 'call() runs the check whatever the arguments say');
+    assert.strictEqual(api.submit({ name: 'chk', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }).version, 'chk-v0');
+});
+
 test('intake: a check that ends with no result is the arena\'s fault: the submission waits and is tried again, three times at most', async () => {
     const { intakeOnce } = require('../arena/intake');
     const base = { owner: 'kim-b', name: 'kim_b', kind: 'js', note: 'try', state: 'pending', submittedAt: '2026-10-12T06:00:00Z', files: { 'bot.js': '' } };

@@ -81,11 +81,14 @@ const SECRET = path.join(DIRS.secret, 'arena-secret');
 // what nothing started here may see (isolate.sh --hide): Fly's API socket and config, the server's folder, the old
 // Elixir coordinator's folder (its job database and state), or GAMES_HIDE's paths
 const HIDE = (process.env.GAMES_HIDE || ['/.fly', DIRS.server, path.join(DATA, 'coord')].join(':')).split(':').filter(Boolean);
-// Who owns what. The bots' user keeps what code running as that user writes: its HOME, the wasm cache, and arena/ and
-// dash/, where the intake's checker (intake.js check, run as that user) registers competitors and submits their
-// versions. results/ is root's and everyone may read it: only the server and root's children write rounds now. The
-// rest is root's alone, with these modes (null: left as it is; isolate.sh makes the referee's /tmp 1777 when it runs).
-const BOTS_TREES = ['home', 'cache', 'botHome', 'dash'];
+// Who owns what. The bots' user keeps what code running as that user writes: its HOME and the wasm cache. arena/ and
+// dash/ are root's, readable by everyone and cleaned on every start (ops/own-tree.py root): the intake's checker only
+// packs and start-checks a submission in its own job folder, and root enters it (intake.js enter), so no process of the
+// bots' user writes the arena's records. results/ is root's and everyone may read it: only the server and root's
+// children write rounds now. The rest is root's alone, with these modes (null: left as it is; isolate.sh makes the
+// referee's /tmp 1777 when it runs).
+const BOTS_TREES = ['cache', 'botHome'];
+const OWN_TREES = ['home', 'dash'];
 const ROOT_TREES = ['results'];
 const ROOT_DIRS = { intake: 0o755, secret: 0o700, tmp: null, bundles: 0o755, work: 0o755, server: 0o700 };
 const THINK_CAP_MS = 60000; // per game, the local arena's rule (roster.thinkCapMs)
@@ -105,8 +108,10 @@ Object.assign(process.env, {
     ARENA_INTAKE_WORK: process.env.ARENA_INTAKE_WORK || DIRS.intake,
     SWU_WASM_CACHE: process.env.SWU_WASM_CACHE || DIRS.cache,
     ARENA_USER: BOT_USER,
-    // what the intake's checker must not see (intake.js hidden()): the same, and the round-seed secret
-    ARENA_HIDE: [...HIDE, DIRS.secret].join(':')
+    // what the intake's checker must not see (intake.js hidden()): the same, the round-seed secret, and every folder of
+    // the volume but its own job folder in intake/ (it packs and start-checks there, and nothing else)
+    ARENA_HIDE: [...HIDE, DIRS.secret, DIRS.home, DIRS.dash, DIRS.results, DIRS.bundles, DIRS.work, DIRS.cache, DIRS.botHome,
+        path.join(DATA, 'tmp')].join(':')
 });
 // no window token here: intake and push reach the window through the server's proxy, and nothing started from here
 // may inherit one
@@ -155,14 +160,14 @@ function setupData() {
         log('made the round-seed secret');
     }
     fs.chmodSync(SECRET, 0o600);
-    // no baselines: the image has no bots of its own, and the arena's own bots are resident entries; the competitors stay
-    home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: [], agents: r.agents ?? [] }));
     const root = asRoot();
     if (root) {
+        hardenLinks();
+        // before anything reads them: arena/ and dash/ were the bots' user's until this image, and a rollback to an
+        // older one gives them back, so whatever that user left there (links, hard links, ACLs) goes on every start
+        ownTree('root', OWN_TREES.map((k) => DIRS[k]));
         const [uid, gid] = idsOf(BOT_USER);
-        for (const k of BOTS_TREES) {
-            execFileSync('chown', ['-R', `${uid}:${gid}`, DIRS[k]]);
-        }
+        ownTree(['give', `${uid}:${gid}`], BOTS_TREES.map((k) => DIRS[k]));
         // once: until the server played rounds, the ladders wrote them as the bots' user
         for (const k of ROOT_TREES) {
             if (fs.lstatSync(DIRS[k]).uid !== 0) {
@@ -178,7 +183,51 @@ function setupData() {
     for (const k of ROOT_TREES) {
         worldReadable(DIRS[k], { root });
     }
+    // no baselines: the image has no bots of its own, and the arena's own bots are resident entries; the competitors stay
+    home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: [], agents: r.agents ?? [] }));
     return { residents: home.roster().agents.filter((a) => a.resident).map((a) => a.name) };
+}
+
+/**
+ * ops/own-tree.py over some trees (as root): `root` makes them root's alone, `give uid:gid` the bots' user's, neither
+ * through a link. Throws when it could not do all of it: root must not go on writing in a tree it could not take back.
+ */
+function ownTree(how, dirs) {
+    const argv = ['-I', path.join(__dirname, 'ops', 'own-tree.py'), ...[how].flat(), ...dirs];
+    const r = require('child_process').spawnSync('python3', argv, { encoding: 'utf8', timeout: 4 * 60000, env: { PATH: process.env.PATH, LANG: 'C.UTF-8' } });
+    let out = null;
+    try {
+        out = JSON.parse(String(r.stdout).trim().split('\n').pop());
+    } catch {} // no summary: the error below says why
+    for (const [k, what] of [['removed', 'removed'], ['copied', 'copied to a file of its own (it had other hard links)'], ['kept', 'left as it was (it has other hard links)'], ['failed', 'could not be taken back']]) {
+        for (const p of out?.[k] ?? []) {
+            log(`${dirs.length === 1 ? dirs[0] : dirs.join(', ')}: ${p} ${what}`);
+        }
+    }
+    if (out?.attrs) {
+        log(`${dirs.join(', ')}: dropped ${out.attrs} extended attributes (ACLs)`);
+    }
+    if (r.status !== 0) {
+        throw new Error(`own-tree.py ${[how].flat()[0]} ${dirs.join(' ')}: ${r.error?.message ?? `exit ${r.status ?? r.signal}`} ${String(r.stderr ?? '').trim().split('\n').pop() ?? ''}`.trim());
+    }
+}
+
+/**
+ * The kernel's link protections, on (as most distributions set them): no hard link to a file one does not own, and no
+ * following another user's link in a sticky world-writable folder. A setting the machine refuses is only logged.
+ */
+function hardenLinks() {
+    for (const k of ['protected_hardlinks', 'protected_symlinks']) {
+        const f = `/proc/sys/fs/${k}`;
+        try {
+            if (fs.readFileSync(f, 'utf8').trim() !== '1') {
+                fs.writeFileSync(f, '1');
+                log(`turned on fs.${k}`);
+            }
+        } catch (e) {
+            log(`could not turn on fs.${k} (${e.code ?? e.message})`);
+        }
+    }
 }
 
 /**
@@ -418,9 +467,9 @@ function holdsTar(file, hex, size) {
 /**
  * A version's canonical tar (bot/compiled/bundle.py tar of its bundle folder, as remote-lane.js tarOf packs it for a
  * helper) in the bundles folder as <sha256>.tar, mode 0644, written once: a file of that name holding those bytes stays.
- * Returns the sha256, the version's bundle id in a game job. As root it packs as the bots' user, as the ladder did:
- * arena/ is that user's, so root reads nothing there it could not (a link swapped in mid-pack), and a file's
- * execute bit, which the tar keeps, reads the same as it did for every round so far (bundle.py checks os.access).
+ * Returns the sha256, the version's bundle id in a game job. As root it packs as the bots' user, as the ladder did, so a
+ * file's execute bit, which the tar keeps, reads the same as it did for every round so far (bundle.py checks os.access;
+ * setup leaves every file in arena/ readable by everyone, 0755 when it had any execute bit).
  */
 function storeBundle(name) {
     const pack = ['python3', path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar', path.join(home.VERSIONS, name, 'bundle')];

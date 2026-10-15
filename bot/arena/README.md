@@ -39,9 +39,9 @@ plan, round, publish, decks, intake, push). Each cycle has three parts:
 
 1. The intake, every minute and right after a wake (`intake.js` `intakeOnce`). It reads the window's pending
    submissions and packs each bot into a bundle (JavaScript through Javy, Python with CPython for WASI, a ready
-   bundle as it is; `bot/compiled/README.md`). It registers the builder's competitor the first time (owner
-   `github:<login>`) and submits the bundle as its next version (`api.js` `submit`, kind `wasm`). The window gets the
-   version or the error lines back.
+   bundle as it is; `bot/compiled/README.md`) and starts it once in the sandbox. Then root registers the builder's
+   competitor the first time (owner `github:<login>`) and enters the bundle as its next version (`api.js` `submit`,
+   kind `wasm`). The window gets the version or the error lines back.
 2. A round, when the lineup changed (90 s after the last version came in, so a quick fix joins the same round) or
    the last round is a day old. `gamesctl round` gives its rules, lineup, deck lists and each version's bundle as a
    tar; the server plays each seed's games as one `play-seed.js` job, some at once on the machine and some on
@@ -84,9 +84,11 @@ The residents are entries submitted like any builder's bot; the image builds no 
 
 Isolation: submitted code runs only in the wasmtime sandbox (`bot/compiled/run.py`): no network, no files but its own
 and the card data, no other programs. Packing and checking a submission run in a child process without the token, in
-its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`. The server alone reads the round-seed
-secret. Each game job (`play-seed.js`), where bot code runs, runs the same way: as `arena` with no capabilities, with
-a minimal environment and the server's folder, the secret and `/.fly` hidden. The network is shared.
+its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`, with the arena's folders hidden: it leaves a
+canonical tar in its job folder, and root unpacks and enters it without running it. `arena/` and `dash/` are root's
+and cleaned on every start (`ops/own-tree.py`). The server alone reads the round-seed secret. Each game job
+(`play-seed.js`), where bot code runs, runs the same way: as `arena` with no capabilities, with a minimal environment
+and the server's folder, the secret and `/.fly` hidden. The network is shared.
 
 Its data is on the volume (`GAMES_DATA`, `/data`): `arena/` (`ARENA_HOME`: `roster.json`, `versions/<name>-v<N>/`,
 `standings.json`, `rounds/r<K>.md`, `panels/`), `results/arena-r<K>/` (each round's ladder and replays), `bundles/`
@@ -134,8 +136,8 @@ only their own code. Every bot, the residents included, also plays under these r
 
 ## One API
 
-`api.js` is the arena's data layer. The games machine calls it in-process: the intake registers and submits, and
-`push.js` reads what it sends. Methods: `status`, `register`, `submit`, `withdraw`, `rejoin`, `versions`,
+`api.js` is the arena's data layer. The games machine calls it in-process: the intake (as root) registers and
+submits, and `push.js` reads what it sends. Methods: `status`, `register`, `submit`, `withdraw`, `rejoin`, `versions`,
 `standings`, `report`, `panel`, `panels`, `games`, `ladder`; the header of `api.js` lists their arguments. The window
 answers `status`, `standings`, `report`, `games`, `versions` and `panel` with the same JSON shapes, from what the games
 machine sends.

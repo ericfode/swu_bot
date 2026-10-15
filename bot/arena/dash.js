@@ -29,8 +29,8 @@ function enabled() {
     return fs.existsSync(DASH);
 }
 
-// a competitor's name is part of a file name: only names api.js register allows (roster.json is the bots' user's, and
-// the referee writing these runs as root)
+// a competitor's name is part of a file name: only names api.js register allows (roster.json may come from elsewhere,
+// a local arena's folder, and the referee writing these runs as root)
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const named = (agent) => {
     if (!NAME.test(String(agent))) {
