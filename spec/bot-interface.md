@@ -158,7 +158,7 @@ two decks, then per step the coin flip, a native bot's own draws, and a random s
 from it (their random splits come from a stream of their own), so recording, timing and simulations change nothing. A native bot that calls `ctx.rng()` changes every later
 coin flip and split: keep those calls deterministic, or seed a private stream from one call as the heuristic bot does.
 
-Without a key the streams match upstream (`seededRng('bot' + seed)`, engine seed `String(seed)`), and `npm run gate`
+Without a key the streams match the original swu_bot (`seededRng('bot' + seed)`, engine seed `String(seed)`), and `npm run gate`
 checks it: two random bots on seeds 1-3 give 594/342/486 steps, p2 winning each, with and without recording.
 
 ## Search API (needs rollback)

@@ -1,8 +1,8 @@
 # Moving to protocol v2
 
 What changed between the first spec (protocol v1, replay header `v: 1`) and this one, by who is affected. v1 bots,
-old replays and old indexes still work. Without a key, games are the same as upstream's (`npm run gate`: 594/342/486
-steps, p2 wins).
+old replays and old indexes still work. Without a key, games are the same as in the original swu_bot (`npm run gate`:
+594/342/486 steps, p2 wins).
 
 Written before the October 2026 split (`README.md`, "Where things went"): the research paths it names
 (`bot/examples/`, `bot/learn/`, `bot/eval/`, `bot/info/`, `bot/omni/`, `bot/jev/`, `bot/rust/`) are in holocron's
@@ -103,7 +103,7 @@ which brings back deck order and face-down resources; ids come out the same.
 - `node bot/tournament.js --key K|none`, and the same option on `bot/ladder.js`, `bot/learn/eval.js` and
   `bot/learn/collect.js`. By default each run draws a random key; every game gets its own key derived from it,
   written to its index entry and replay when the game ends (`end` lines in collect's output). `--key none` seeds from
-  the seed alone, as upstream. Bot programs can read the referee's command line, so give `--key` only to play a
+  the seed alone, as the original swu_bot does. Bot programs can read the referee's command line, so give `--key` only to play a
   finished run again. The run key is in `ladder.json` (`config.key`) when the run is done, in eval's `summary.json`,
   and in collect's last line.
 - A/B runs: within one run every pairing gets the same decks for the same seed, as before. Two separate runs get the
@@ -116,10 +116,9 @@ which brings back deck order and face-down resources; ids come out the same.
   in [protocol.md](protocol.md#transports): each call carries the bot's message and returns the referee's next one.
   Sessions, authentication and match-making are the server's own.
 
-## For upstream
+## Compatibility with the original swu_bot
 
-The interface stays compatible with `thrazznos/swu_bot`: the `hello` envelope is unchanged, v1 bots still play,
-replays only gain fields, and unkeyed games are identical. The referee is `bot/rng.js`, `bot/view.js`,
+The interface stays compatible with the original `thrazznos/swu_bot`: the `hello` envelope is unchanged, v1 bots
+still play, replays only gain fields, and unkeyed games are identical. The referee is `bot/rng.js`, `bot/view.js`,
 `bot/stdio.js`, `bot/protocol.js` and `bot/match.js`, plus the changes to `bot/env.js` and `bot/recorder.js` (now a
-one-line alias of `view.snapshot`) and the example clients in `bot/examples/`. `bot/tournament.js` here uses the
-fork's bot registry (`bot/players/index.js`); a PR upstream would carry a registry with upstream's bots only.
+one-line alias of `view.snapshot`). The example clients are in Holocron's `bots/examples/`.

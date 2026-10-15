@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/tournament-list.schema.json",
+  "$id": "https://github.com/ericfode/swu_bot/spec/schemas/tournament-list.schema.json",
   "title": "GET /api/tournaments response (Holotable's dev server), format v1",
   "type": "array",
   "items": {

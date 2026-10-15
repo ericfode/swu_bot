@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/thrazznos/swu_bot/spec/schemas/replay-event.schema.json",
+  "$id": "https://github.com/ericfode/swu_bot/spec/schemas/replay-event.schema.json",
   "title": "SWU bot replay event (one line of games/<id>.jsonl), format v1",
   "description": "A game file is JSON Lines: one header, step n=0 (opening board), one step per decision, one end. Unknown fields and unknown event types must be ignored by readers. See spec/replay-format.md.",
   "oneOf": [

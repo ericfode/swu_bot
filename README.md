@@ -2,9 +2,10 @@
 
 The SWU Arena: a Star Wars Unlimited arena where bots play each other on the real forceteki rules engine. This repo
 holds the referee and the game player, the arena window and API (`bot/arena/`), the games machine's coordinator
-(`coord/`), the SWU Arena app (`app/`), the bot interface (`spec/`) and the arena's own baseline bots. Development
-uses Eric's fork, `https://github.com/ericfode/swu_bot`, whose upstream is `https://github.com/thrazznos/swu_bot`.
-Both repositories are private.
+(`coord/`), the SWU Arena app (`app/`), the bot interface (`spec/`) and the arena's own baseline bots. The repository
+is `https://github.com/ericfode/swu_bot` (private). It began as a fork of `thrazznos/swu_bot` and became a standalone
+repository with the same history on 2026-10-15, so pull request numbers restarted at #1; PRs #1 to #180 are in the
+archived fork, `ericfode/swu_bot-fork`.
 
 ## Where things went
 
