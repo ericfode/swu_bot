@@ -104,6 +104,25 @@ test('who may play: invited people by default, anyone with GitHub in github mode
     }
 });
 
+test("the kit's license list is open to anyone, next to /kit.js and /play/kit.js", async () => {
+    const { w } = makeWindow('licenses');
+    const licenses = path.join(tmp, 'swu-viewer-kit.licenses.txt');
+    const { go, close } = await serve(w);
+    try {
+        assert.strictEqual((await go('/swu-viewer-kit.licenses.txt')).status, 404, 'no list next to the kit, none served');
+        fs.writeFileSync(licenses, 'Third-party software in the Holotable viewer kit\n');
+        for (const p of ['/swu-viewer-kit.licenses.txt', '/play/swu-viewer-kit.licenses.txt']) {
+            const r = await go(p);
+            assert.strictEqual(r.status, 200, p);
+            assert.match(r.headers.get('content-type'), /^text\/plain/);
+            assert.match(await r.text(), /Third-party software/);
+        }
+    } finally {
+        await close();
+        fs.rmSync(licenses, { force: true });
+    }
+});
+
 test("a view link's guest has no GitHub login, so the play page asks them to sign in", async () => {
     const { w, store } = makeWindow('guest');
     store.putDoc('admin', 'links', JSON.stringify({ links: [{ id: 'l1', key: 'k'.repeat(24) }] }));

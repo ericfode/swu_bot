@@ -642,6 +642,8 @@ function createWindow(opts = {}) {
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
     const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'vendor', 'holotable', 'swu-viewer-kit.js');
+    // the third-party licenses of the packages bundled into the kit, which Holotable's build writes next to it
+    const kitLicenses = path.join(path.dirname(kitFile), 'swu-viewer-kit.licenses.txt');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm') });
     // the play page (play.js): a person against the JEPA bot in their own tab, on the swarm's files; games come back here
@@ -1195,6 +1197,10 @@ function createWindow(opts = {}) {
         try {
             if (url.pathname === '/healthz') {
                 return sendText(res, req, 200, 'text/plain', 'ok');
+            }
+            // the kit's license list, for anyone: its banner names the file, next to /kit.js and /play/kit.js
+            if (req.method === 'GET' && (url.pathname === '/swu-viewer-kit.licenses.txt' || url.pathname === '/play/swu-viewer-kit.licenses.txt')) {
+                return serveFile(req, res, kitLicenses, 'text/plain; charset=utf-8');
             }
             if (await auth.routes(req, res, url)) {
                 return undefined;

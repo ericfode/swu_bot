@@ -50,7 +50,7 @@ const TARGETS = {
             run('npm', ['ci', '--no-audit', '--no-fund'], { cwd: src });
             // the Strategy Atlas kit stays in this repo (meta/atlas-kit.js); the viewer kit bundles it
             run('npm', ['run', 'build:kit'], { cwd: src, env: { ...process.env, ATLAS_KIT: path.join(ROOT, 'meta', 'atlas-kit.js') } });
-            return { files: { 'swu-viewer-kit.js': 'dist-kit/swu-viewer-kit.js' }, about: { built: 'npm ci && ATLAS_KIT=<swu_bot>/meta/atlas-kit.js npm run build:kit', atlasKitSha256: sha256(path.join(ROOT, 'meta', 'atlas-kit.js')) } };
+            return { files: { 'swu-viewer-kit.js': 'dist-kit/swu-viewer-kit.js', 'swu-viewer-kit.licenses.txt': 'dist-kit/swu-viewer-kit.licenses.txt' }, about: { built: 'npm ci && ATLAS_KIT=<swu_bot>/meta/atlas-kit.js npm run build:kit', atlasKitSha256: sha256(path.join(ROOT, 'meta', 'atlas-kit.js')) } };
         }
     },
     jepa: {

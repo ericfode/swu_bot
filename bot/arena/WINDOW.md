@@ -183,7 +183,8 @@ the games machine play nothing; the window only serves the files and keeps the f
   with GitHub; their sign-in then returns to `/play` though they cannot read the arena) or `off`. A view link's guest has
   no GitHub login, so the page asks them to sign in. The files come through the swarm relay, so the page needs
   `SWARM_HELPER_TOKEN` too.
-- `GET /play`, `/play/kit.js` (the viewer kit), `/play/engine.json?b=` and `/play/play-worker.js?b=` (the games
+- `GET /play`, `/play/kit.js` (the viewer kit; its license list `/play/swu-viewer-kit.licenses.txt`, like
+  `/swu-viewer-kit.licenses.txt`, is open to anyone), `/play/engine.json?b=` and `/play/play-worker.js?b=` (the games
   machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and the
   machine asleep, the page asks for them, which wakes it at most every 15 minutes).
 - `GET /api/play/info`: the files to load and the person's last 20 games; an admin also gets the last 200 games of

@@ -9,7 +9,7 @@ change to it alone deploys nothing). Never edit these files by hand.
 | Folder | From | What uses it |
 |---|---|---|
 | `kessel/` | [ericfode/kessel](https://github.com/ericfode/kessel): `crates/kessel-wasm/js/{node.js,adapter.mjs}` and the Node package `crates/kessel-wasm/pkg/node` | `bot/sims/rust-sims.js`: the referee's simulations on the Rust engine (`"simEngine": "rust"`, `spec/protocol.md`); the games image copies it (`Dockerfile.games`) |
-| `holotable/` | [ericfode/holotable](https://github.com/ericfode/holotable): the viewer kit `dist-kit/swu-viewer-kit.js`, built with this repo's `meta/atlas-kit.js` | the window serves it as `/kit.js` and `/play/kit.js` (`bot/arena/window.js`, `bot/arena/play.js`, `Dockerfile`); `app/build.mjs` embeds it |
+| `holotable/` | [ericfode/holotable](https://github.com/ericfode/holotable): the viewer kit `dist-kit/swu-viewer-kit.js`, built with this repo's `meta/atlas-kit.js`, and its license list `swu-viewer-kit.licenses.txt` (the packages the kit bundles, with their license texts) | the window serves the kit as `/kit.js` and `/play/kit.js` (`bot/arena/window.js`, `bot/arena/play.js`, `Dockerfile`), and the license list next to both for anyone, since the kit's banner names it; `app/build.mjs` embeds the kit |
 | `jepa/` | [ericfode/holocron](https://github.com/ericfode/holocron): the JEPA bot in JavaScript `bots/jepa/js/jepa.js` and its models `bots/jepa/models/tx-t10{,-e}.safetensors`, copied as they are | `bot/table/jepa.js`: jepa-tx-gate at the play page's table; the swarm's pack carries it (`bot/swarm/pack.js`) and the games image copies it (`Dockerfile.games`) |
 
 ## Refresh
