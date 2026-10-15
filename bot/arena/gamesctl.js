@@ -86,11 +86,11 @@ const HIDE = (process.env.GAMES_HIDE || ['/.fly', DIRS.server, path.join(DATA, '
 // packs and start-checks a submission in its own job folder, and root enters it (intake.js enter), so no process of the
 // bots' user writes the arena's records. results/ is root's and everyone may read it: only the server and root's
 // children write rounds now. The rest is root's alone, with these modes (null: left as it is; isolate.sh makes the
-// referee's /tmp 1777 when it runs).
+// referee's /tmp 1777 when it runs). intake/ is 0711: a checker reaches its own job folder by name and lists no other.
 const BOTS_TREES = ['cache', 'botHome'];
 const OWN_TREES = ['home', 'dash'];
 const ROOT_TREES = ['results'];
-const ROOT_DIRS = { intake: 0o755, secret: 0o700, tmp: null, bundles: 0o755, work: 0o755, server: 0o700 };
+const ROOT_DIRS = { intake: 0o711, secret: 0o700, tmp: null, bundles: 0o755, work: 0o755, server: 0o700 };
 const THINK_CAP_MS = 60000; // per game, the local arena's rule (roster.thinkCapMs)
 const SETTLE_MS = 90000; // a round waits this long after a version comes in, so a quick fix joins the same round
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/; // registry.js
@@ -167,7 +167,8 @@ function setupData() {
         // older one gives them back, so whatever that user left there (links, hard links, ACLs) goes on every start
         ownTree('root', OWN_TREES.map((k) => DIRS[k]));
         const [uid, gid] = idsOf(BOT_USER);
-        ownTree(['give', `${uid}:${gid}`], BOTS_TREES.map((k) => DIRS[k]));
+        // what could not be given stays root's: only the bots lose by it, so it is logged and the machine starts
+        ownTree(['give', `${uid}:${gid}`], BOTS_TREES.map((k) => DIRS[k]), { fatal: false });
         // once: until the server played rounds, the ladders wrote them as the bots' user
         for (const k of ROOT_TREES) {
             if (fs.lstatSync(DIRS[k]).uid !== 0) {
@@ -190,25 +191,31 @@ function setupData() {
 
 /**
  * ops/own-tree.py over some trees (as root): `root` makes them root's alone, `give uid:gid` the bots' user's, neither
- * through a link. Throws when it could not do all of it: root must not go on writing in a tree it could not take back.
+ * through a link. Throws when it could not do all of it (fatal false: logs it): root must not go on writing in a tree it
+ * could not take back.
  */
-function ownTree(how, dirs) {
+function ownTree(how, dirs, { fatal = true } = {}) {
     const argv = ['-I', path.join(__dirname, 'ops', 'own-tree.py'), ...[how].flat(), ...dirs];
-    const r = require('child_process').spawnSync('python3', argv, { encoding: 'utf8', timeout: 4 * 60000, env: { PATH: process.env.PATH, LANG: 'C.UTF-8' } });
+    // its summary line stays well under 1 MB (own-tree.py shortens paths); the buffer leaves room
+    const r = require('child_process').spawnSync('python3', argv, { encoding: 'utf8', timeout: 4 * 60000, maxBuffer: 16 << 20, env: { PATH: process.env.PATH, LANG: 'C.UTF-8' } });
     let out = null;
     try {
         out = JSON.parse(String(r.stdout).trim().split('\n').pop());
     } catch {} // no summary: the error below says why
-    for (const [k, what] of [['removed', 'removed'], ['copied', 'copied to a file of its own (it had other hard links)'], ['kept', 'left as it was (it has other hard links)'], ['failed', 'could not be taken back']]) {
+    for (const [k, what] of [['removed', 'removed'], ['kept', 'left as it was (other hard links, or too deep)'], ['failed', 'could not be done']]) {
         for (const p of out?.[k] ?? []) {
-            log(`${dirs.length === 1 ? dirs[0] : dirs.join(', ')}: ${p} ${what}`);
+            log(`${dirs.length === 1 ? dirs[0] : dirs.join(', ')}: ${JSON.stringify(p)} ${what}`); // quoted: any bytes the bots' user chose
         }
     }
     if (out?.attrs) {
         log(`${dirs.join(', ')}: dropped ${out.attrs} extended attributes (ACLs)`);
     }
     if (r.status !== 0) {
-        throw new Error(`own-tree.py ${[how].flat()[0]} ${dirs.join(' ')}: ${r.error?.message ?? `exit ${r.status ?? r.signal}`} ${String(r.stderr ?? '').trim().split('\n').pop() ?? ''}`.trim());
+        const why = `own-tree.py ${[how].flat()[0]} ${dirs.join(' ')}: ${r.error?.message ?? `exit ${r.status ?? r.signal}`} ${String(r.stderr ?? '').trim().split('\n').pop() ?? ''}`.trim();
+        if (fatal) {
+            throw new Error(why);
+        }
+        log(why);
     }
 }
 
@@ -469,10 +476,11 @@ function holdsTar(file, hex, size) {
  * helper) in the bundles folder as <sha256>.tar, mode 0644, written once: a file of that name holding those bytes stays.
  * Returns the sha256, the version's bundle id in a game job. As root it packs as the bots' user, as the ladder did, so a
  * file's execute bit, which the tar keeps, reads the same as it did for every round so far (bundle.py checks os.access;
- * setup leaves every file in arena/ readable by everyone, 0755 when it had any execute bit).
+ * setup leaves every file in arena/ readable by everyone, 0755 when it had any execute bit). python3 -I: nothing from
+ * that user's HOME (a .pth file there) runs, so the tar is the version's own.
  */
 function storeBundle(name) {
-    const pack = ['python3', path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar', path.join(home.VERSIONS, name, 'bundle')];
+    const pack = ['python3', '-I', path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar', path.join(home.VERSIONS, name, 'bundle')];
     const [cmd, ...args] = asRoot() ? asBots(pack) : pack;
     let tar;
     try {

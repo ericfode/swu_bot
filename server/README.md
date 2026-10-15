@@ -49,7 +49,7 @@ The volume (`GAMES_DATA`, `/data`):
 | `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
 | `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
 | `home/`, `wasm-cache/` | arena | the bots' HOME, wasmtime's compiled modules |
-| `intake/`, `tmp/<kind>/` | root (`tmp/<kind>/` 1777) | the intake's checks (a job's `home/` the bots' user's while it runs); each isolated child's `/tmp` |
+| `intake/`, `tmp/<kind>/` | root (`intake/` 0711, `tmp/<kind>/` 1777) | the intake's checks (a job's `home/` the bots' user's while it runs; hidden from every other command and game job); each isolated child's `/tmp` |
 | `coord/` | root | the Elixir coordinator's state: its settings and round end are read once; hidden from children |
 
 A round leaves about 160 MB of raw replays and the volume holds about 3 GB, so the server gzips the replays of

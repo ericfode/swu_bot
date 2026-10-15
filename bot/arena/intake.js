@@ -228,9 +228,10 @@ function readLeft(file, max) {
  * home folder with bundle.py unpack (which trusts nothing in it, follows no link and makes a fresh folder) into a
  * folder only root can reach, checks its manifest, and enters it: the builder's competitor the first time, then the
  * bundle as its next version (api.submit, told the start check was made). Name, owner and note come from the window's
- * submission, never from the checker. Returns {ok, name, version, benched} or throws.
+ * submission, never from the checker. sha256: the tar's hash as the checker printed it, so a tar another process of the
+ * bots' user changed after the check is not entered. Returns {ok, name, version, benched} or throws.
  */
-function enter(job, work) {
+function enter(job, work, sha256) {
     const home = require('./home');
     const { api } = require('./api');
     const benched = () => !!home.roster().bench?.some((a) => a.name === job.name);
@@ -244,6 +245,7 @@ function enter(job, work) {
     const tar = readLeft(path.join(work, 'home', 'bundle.tar'), MAX_TAR_BYTES);
     need(tar, 'the check left no bundle');
     const hex = require('crypto').createHash('sha256').update(tar).digest('hex');
+    need(hex === sha256, 'the bundle changed after its check');
     const mine = path.join(work, 'enter');
     fs.mkdirSync(mine, { mode: 0o700 });
     fs.writeFileSync(path.join(mine, 'bundle.tar'), tar, { flag: 'wx', mode: 0o600 });
@@ -315,6 +317,7 @@ async function checkIsolated(job) {
         // entered already (an intake that died, or could not write the result back, before it said so): that version
         return { ok: true, name: job.name, version: `${job.name}-v${admitted.before}`, benched: !!require('./home').roster().bench?.some((a) => a.name === job.name) };
     }
+    reapOrphan();
     fs.mkdirSync(WORK, { recursive: true });
     const work = fs.mkdtempSync(path.join(WORK, 'job-'));
     try {
@@ -358,7 +361,7 @@ async function checkIsolated(job) {
         // the group a stopped intake must take down with it: in memory for its own signal handler, and in a file, the
         // only trace of an orphaned check should the intake be killed before it can
         checkers.add(child.pid);
-        fs.writeFileSync(CHECKER_PID, String(child.pid));
+        fs.writeFileSync(CHECKER_PID, [child.pid, procStat(child.pid)?.start, bootId()].join(' '));
         let err = '';
         let out = '';
         child.stdout.on('data', (d) => {
@@ -368,7 +371,9 @@ async function checkIsolated(job) {
             err = (err + d).slice(-20000);
         });
         // past its time it is stopped, and killed if it does not stop (a checker that never ends would hold the intake)
+        let late = false;
         const timer = setTimeout(() => {
+            late = true;
             stop('SIGTERM');
             setTimeout(() => stop('SIGKILL'), 10000).unref();
         }, CHECK_MS);
@@ -382,7 +387,7 @@ async function checkIsolated(job) {
             log(`check of ${job.id} ended with ${code} and no result:\n${err}`);
             // stopped at its time limit: the bot's doing (Javy on a huge file, a bot that never answers). Any other end
             // with no result is the arena's (isolation, a bug of ours): the submission is tried again later
-            return code === null ? { ok: false, error: `the check took more than ${CHECK_MS / 60000} minutes` }
+            return late ? { ok: false, error: `the check took more than ${CHECK_MS / 60000} minutes` }
                 : { ok: false, retry: true, error: 'the arena could not check it (its error is in the intake log)' };
         }
         if (!res.ok) {
@@ -393,7 +398,7 @@ async function checkIsolated(job) {
             return { ok: false, retry: true, error: 'the intake stopped' };
         }
         try {
-            return enter(job, work);
+            return enter(job, work, res.sha256);
         } catch (e) {
             return refused(e);
         }
@@ -419,8 +424,61 @@ const checkers = new Set(); // process groups of the checks running now
 // stopCheckers ran: the intake is stopping. A check it killed is no result (not the bot's doing), and nothing more is
 // claimed or written: release() puts the submission back, or the stuck rule picks it up later
 let stopping = false;
-// next to WORK, never in it: WORK belongs to the checker's user, who could put a link there for us to write through
+// next to WORK, never in it: the checker's user may write in WORK's job folders, and could put a link there for us to
+// write through. It holds "<pid> <start time> <boot id>" of the check running now.
 const CHECKER_PID = `${WORK}.checker.pid`;
+
+/** A process's state letter and start time (/proc/<pid>/stat fields 3 and 22), or null when there is none (or no /proc). */
+function procStat(pid) {
+    try {
+        const text = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        const fields = text.slice(text.lastIndexOf(')') + 2).split(' ');
+        return { state: fields[0], start: fields[19] };
+    } catch {
+        return null;
+    }
+}
+
+const bootId = () => {
+    try {
+        return fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    } catch {
+        return '';
+    }
+};
+
+/**
+ * A check that an intake killed before it could stop it (a SIGKILL, a crash) is still running: its process group is
+ * killed before a new check starts, and on the games machine its PID namespace with it, so it cannot reach the next
+ * job's folder. The pid counts only with the start time and boot it was written with: a new process that got the same
+ * pid is left alone.
+ */
+function reapOrphan() {
+    let words;
+    try {
+        words = fs.readFileSync(CHECKER_PID, 'utf8').trim().split(' ');
+    } catch {
+        return; // none
+    }
+    const pid = Number(words[0]);
+    const was = Number.isSafeInteger(pid) && pid > 1 && words[1] && words[2] === bootId() ? procStat(pid) : null;
+    if (was && was.start === words[1]) {
+        log(`a check left running by an earlier intake (process group ${pid}) is killed`);
+        try {
+            process.kill(-pid, 'SIGKILL');
+        } catch {} // gone already
+        // the group's first process (isolate.sh) gone or dead: its namespace goes with the namespace's first process
+        const wait = new Int32Array(new SharedArrayBuffer(4));
+        for (let i = 0; i < 100; i++) {
+            const now = procStat(pid);
+            if (!now || now.start !== was.start || now.state === 'Z' || now.state === 'X') {
+                break;
+            }
+            Atomics.wait(wait, 0, 0, 50);
+        }
+    }
+    fs.rmSync(CHECKER_PID, { force: true });
+}
 
 /** Kills every running check's process group (the intake is stopping). */
 function stopCheckers() {

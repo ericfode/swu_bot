@@ -7,16 +7,18 @@ every start, before anything reads the trees):
 
 root: everything in each tree becomes root's, folders 0755 and files 0644 (0755 when any execute bit was set), so the
 bots' user still reads it all and writes nothing. What the bots' user could have planted while it owned the tree goes:
-links, pipes, sockets and devices are removed; a file that has other hard links is copied to a file of its own (the
-other names keep the old one); ACLs and other extended attributes are dropped; setuid, setgid and sticky bits go.
+links, pipes, sockets and devices are removed, and so is a file with other hard links (nothing of the arena's makes
+one, and a copy could be made to fill the volume); ACLs and other extended attributes are dropped; setuid, setgid and
+sticky bits go.
 give: every folder and file becomes uid:gid's; a link is never followed, and a file with other hard links keeps its
 owner (it may be a name for a file elsewhere on the volume).
 
 Every step works through file descriptors (dir_fd, O_NOFOLLOW), so a name swapped mid-walk is never followed. A folder
-deeper than MAX_DEPTH (no bundle or arena file is) is removed whole with GNU rm, which never follows a link either.
-Prints one JSON line: {"removed": [...], "copied": [...], "attrs": N, "kept": [...], "failed": [...]} (paths relative to
-their tree, at most 100 of each). Exit 0 when nothing failed, 1 when something did (the line says what), 2 on a usage
-error or a top folder that is not a folder.
+deeper than MAX_DEPTH (bundle.py keeps a bundle's paths to 255 bytes, so no entered version comes near it) is removed
+whole with GNU rm in root, which never follows a link either, and left as it is in give.
+Prints one JSON line: {"removed": [...], "attrs": N, "kept": [...], "failed": [...]} (paths relative to their tree, at
+most 100 of each, a long one shortened, so the line stays well under 1 MB). Exit 0 when nothing failed, 1 when
+something did (the line says what), 2 on a usage error or a top folder that is not a folder.
 """
 import errno
 import json
@@ -26,21 +28,21 @@ import subprocess
 import sys
 
 LIMIT = 100
-MAX_DEPTH = 40
+PATH_CHARS = 160  # a path in the summary: longer ones keep their start and end
+MAX_DEPTH = 160
 ATTRS = ("system.posix_acl_access", "system.posix_acl_default")
 
 
 class Walk:
     def __init__(self):
         self.removed = []
-        self.copied = []
         self.kept = []
         self.failed = []
         self.attrs = 0
 
     def note(self, where, rel):
         if len(where) < LIMIT:
-            where.append(rel)
+            where.append(rel if len(rel) <= PATH_CHARS else rel[:60] + "/.../" + rel[-(PATH_CHARS - 65):])
 
     def strip_attrs(self, fd):
         try:
@@ -63,31 +65,6 @@ class Walk:
 
 def file_mode(mode):
     return 0o755 if mode & 0o111 else 0o644
-
-
-def copy_alone(dirfd, name, fd, st):
-    """Replaces dirfd/name (open as fd, st its fstat) with a new file of the same bytes and mode; returns the new fd."""
-    tmp = ".own-tree-%s.tmp" % os.urandom(6).hex()
-    out = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dirfd)
-    try:
-        os.lseek(fd, 0, os.SEEK_SET)
-        while True:
-            chunk = os.read(fd, 1 << 20)
-            if not chunk:
-                break
-            while chunk:
-                chunk = chunk[os.write(out, chunk):]
-        os.fchmod(out, file_mode(st.st_mode))
-        os.rename(tmp, name, src_dir_fd=dirfd, dst_dir_fd=dirfd)
-    except BaseException:
-        os.close(out)
-        try:
-            os.unlink(tmp, dir_fd=dirfd)
-        except OSError:
-            pass
-        raise
-    os.close(fd)
-    return out
 
 
 def remove_deep(dirfd, name):
@@ -130,9 +107,9 @@ def own_root_entry(walk, dirfd, name, path, depth):
         if (now.st_dev, now.st_ino) != (st.st_dev, st.st_ino):
             raise OSError(errno.ESTALE, "changed while it was read")
         if stat.S_ISREG(now.st_mode) and now.st_nlink > 1:
-            fd = copy_alone(dirfd, name, fd, now)
-            now = os.fstat(fd)
-            walk.note(walk.copied, path)
+            os.unlink(name, dir_fd=dirfd)
+            walk.note(walk.removed, path)
+            return
         walk.strip_attrs(fd)
         os.fchown(fd, 0, 0)
         os.fchmod(fd, 0o755 if stat.S_ISDIR(now.st_mode) else file_mode(now.st_mode))
@@ -211,7 +188,7 @@ def main(argv):
                 give(walk, fd, "", uid, gid)
         finally:
             os.close(fd)
-    print(json.dumps({"removed": walk.removed, "copied": walk.copied, "attrs": walk.attrs, "kept": walk.kept, "failed": walk.failed}))
+    print(json.dumps({"removed": walk.removed, "attrs": walk.attrs, "kept": walk.kept, "failed": walk.failed}))
     return 1 if walk.failed else 0
 
 

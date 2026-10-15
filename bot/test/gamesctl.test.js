@@ -459,7 +459,7 @@ test('gamesctl setup: as another user than root it changes no owner; results are
     assert.deepStrictEqual([modeOf(run), modeOf(path.join(run, 'games')), modeOf(path.join(run, 'games', 'g1.jsonl')), modeOf(path.join(run, 'ladder.json'))],
         [0o755, 0o755, 0o644, 0o644]);
     assert.strictEqual(modeOf(outside), 0o600, 'a link is never followed');
-    assert.deepStrictEqual(['bundles', 'work', 'server', 'secret', 'intake'].map((d) => modeOf(path.join(vol, d)).toString(8)), ['755', '755', '700', '700', '755']);
+    assert.deepStrictEqual(['bundles', 'work', 'server', 'secret', 'intake'].map((d) => modeOf(path.join(vol, d)).toString(8)), ['755', '755', '700', '700', '711']);
     assert.deepStrictEqual(fs.readdirSync(path.join(vol, 'work')), [], 'game jobs a stop left are gone');
     assert.match(fs.readFileSync(path.join(vol, 'secret', 'arena-secret'), 'utf8'), /^[0-9a-f]{64}$/);
 });
@@ -486,7 +486,7 @@ test('gamesctl setup: as root, results become root\'s once and readable by every
         assert.strictEqual(owner(p), 0, `${p} is root's`);
     }
     assert.deepStrictEqual([modeOf(path.join(vol, 'arena')), modeOf(path.join(vol, 'arena', 'roster.json')), modeOf(path.join(vol, 'dash'))], [0o755, 0o644, 0o755]);
-    for (const [p, mode] of [['bundles', 0o755], ['work', 0o755], ['server', 0o700], ['secret', 0o700], ['intake', 0o755], ['tmp/referee', null]]) {
+    for (const [p, mode] of [['bundles', 0o755], ['work', 0o755], ['server', 0o700], ['secret', 0o700], ['intake', 0o711], ['tmp/referee', null]]) {
         assert.strictEqual(owner(p), 0, `${p} is root's`);
         if (mode !== null) {
             assert.strictEqual(modeOf(path.join(vol, p)), mode, p);
@@ -561,16 +561,47 @@ test('gamesctl setup: what the bots\' user planted in arena/ and dash/ while it 
     const roster = fs.lstatSync(path.join(arena, 'roster.json'));
     assert.ok(roster.isFile() && roster.uid === 0, 'roster.json is root\'s own file');
     assert.ok(!fs.existsSync(path.join(vol, 'dash', 'panels', 'arena-kim.json')));
-    const st = fs.lstatSync(wasm);
-    assert.deepStrictEqual([st.uid, st.nlink, fs.readFileSync(wasm, 'utf8')], [0, 1, 'the bot'], 'the version keeps its bytes in a file of its own');
-    assert.strictEqual(fs.lstatSync(path.join(vol, 'home', 'bot.wasm')).uid, BOTS_USER[0], 'the other name stays the bots\' user\'s');
+    // nothing of the arena's makes hard links: the name in arena/ goes (a copy could be made to fill the volume), the
+    // other one stays the bots' user's
+    assert.ok(!fs.existsSync(wasm), 'a version\'s file with another name is removed');
+    const other = fs.lstatSync(path.join(vol, 'home', 'bot.wasm'));
+    assert.deepStrictEqual([other.uid, other.nlink, fs.readFileSync(path.join(vol, 'home', 'bot.wasm'), 'utf8')], [BOTS_USER[0], 1, 'the bot']);
     const attrs = execFileSync('python3', ['-c', 'import os, sys; print(os.listxattr(sys.argv[1]))', path.join(arena, 'versions', 'kim-v1', 'bundle', 'arena.json')], { encoding: 'utf8' });
     assert.strictEqual(attrs.trim(), '[]');
     assert.strictEqual(modeOf(path.join(arena, 'run.sh')), 0o755, 'no setuid');
     for (const p of ['versions', 'versions/kim-v1', 'versions/kim-v1/bundle']) {
         assert.deepStrictEqual([fs.lstatSync(path.join(arena, p)).uid, modeOf(path.join(arena, p))], [0, 0o755], p);
     }
-    assert.match(r.err + r.out, /roster\.json removed/);
+    assert.match(r.err + r.out, /"roster\.json" removed/);
+    assert.match(r.err + r.out, /"versions\/kim-v1\/bundle\/bot\.wasm" removed/);
+});
+
+test('own-tree.py: a tree deeper than it walks goes in root and stays in give, and its summary stays short whatever the names', { skip: !ROOT_USER && 'needs root' }, () => {
+    const own = path.join(__dirname, '..', 'arena', 'ops', 'own-tree.py');
+    // 160 folders, each named with 255 bytes that are not UTF-8 (each one 6 characters in JSON), then 100 more in the last
+    const plant = (top) => execFileSync('python3', ['-c', `import os, sys
+os.chdir(sys.argv[1])
+for i in range(160):
+    os.mkdir(b"\\xff" * 255)
+    os.chdir(b"\\xff" * 255)
+for i in range(100):
+    os.mkdir(b"\\xff" * 250 + b"%05d" % i)`, top]);
+    const run = (...args) => require('child_process').spawnSync('python3', ['-I', own, ...args], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    const top = fs.mkdtempSync(path.join(tmp, 'deep-'));
+    plant(top);
+    const given = run('give', '1:1', top);
+    assert.strictEqual(given.status, 0, given.stderr);
+    assert.ok(given.stdout.length < 512 * 1024, `${given.stdout.length} bytes`);
+    const kept = JSON.parse(given.stdout).kept;
+    assert.strictEqual(kept.length, 100, 'the folders past the depth it walks, left as they are');
+    assert.ok(kept.every((p) => p.length <= 160 && p.includes('/.../')));
+    const rooted = run('root', top);
+    assert.strictEqual(rooted.status, 0, rooted.stderr);
+    assert.ok(rooted.stdout.length < 512 * 1024);
+    assert.strictEqual(JSON.parse(rooted.stdout).removed.length, 100);
+    const depth = Number(execFileSync('python3', ['-c', 'import os, sys\nos.chdir(sys.argv[1])\nn = 0\nwhile os.listdir("."):\n    os.chdir(os.listdir(".")[0]); n += 1\nprint(n)', top], { encoding: 'utf8' }));
+    assert.strictEqual(depth, 160, 'what it walks stays');
+    execFileSync('rm', ['-rf', top]);
 });
 
 test('gamesctl warm, plan and push write nothing into arena/, results/ or dash/', { skip: !BUNDLE && 'no build/compiled/node-random' }, async () => {

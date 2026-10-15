@@ -28,7 +28,10 @@ const skip = (() => {
 
 /** Runs checkIsolated for each job in a fresh node process with the games machine's settings; returns the results. */
 function intake(base, jobs) {
-    const script = `const intake = require(${JSON.stringify(path.join(__dirname, '..', 'arena', 'intake.js'))});
+    // every command the intake starts, on stderr, so the test sees how each check ran (intake.js takes spawn at load)
+    const script = `const cp = require('child_process'); const spawn = cp.spawn;
+cp.spawn = (cmd, args, o) => { console.error('SPAWN ' + JSON.stringify([cmd, ...args])); return spawn(cmd, args, o); };
+const intake = require(${JSON.stringify(path.join(__dirname, '..', 'arena', 'intake.js'))});
 (async () => { for (const job of JSON.parse(require('fs').readFileSync(0, 'utf8'))) console.log(JSON.stringify(await intake.checkIsolated(job))); })()
     .catch((e) => { console.error(e); process.exit(1); });`;
     const dirs = { ARENA_HOME: 'arena', ARENA_RESULTS: 'results', ARENA_DASH: 'dash', ARENA_INTAKE_WORK: 'work', HOME: 'root-home' };
@@ -36,7 +39,8 @@ function intake(base, jobs) {
     env.ARENA_HIDE = [env.ARENA_HOME, env.ARENA_DASH, env.ARENA_RESULTS, env.HOME].join(':');
     const r = spawnSync(process.execPath, ['-e', script], { env, input: JSON.stringify(jobs), encoding: 'utf8', timeout: 5 * 60000 });
     assert.strictEqual(r.status, 0, r.error?.message ?? r.stderr);
-    return r.stdout.trim().split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l));
+    const spawned = r.stderr.split('\n').filter((l) => l.startsWith('SPAWN ')).map((l) => JSON.parse(l.slice(6)));
+    return { results: r.stdout.trim().split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)), spawned };
 }
 
 /** Every path under dir whose owner is not root. */
@@ -72,7 +76,12 @@ test('intake, isolated as on the games machine: the bots\' user checks a submiss
         const manifest = { ...JSON.parse(files['arena.json']), entry_sha256: require('crypto').createHash('sha256').update(junk).digest('hex') };
         const bad = { ...job, id: 'lee.1', owner: 'lee', name: 'lee', files: { 'arena.json': JSON.stringify(manifest), 'bot.wasm': junk.toString('base64') } };
 
-        const [first, again, refused] = intake(base, [job, job, bad]);
+        const { results: [first, again, refused], spawned } = intake(base, [job, job, bad]);
+        // two checks (the same submission again is not checked), each in isolate.sh as the bots' user
+        assert.strictEqual(spawned.length, 2, JSON.stringify(spawned));
+        for (const argv of spawned) {
+            assert.ok(argv[1].endsWith('isolate.sh') && argv.some((a, i) => a === '--user' && argv[i + 1] === 'arena'), JSON.stringify(argv));
+        }
         assert.deepStrictEqual(first, { ok: true, name: 'kim_b', version: 'kim_b-v1', benched: false });
         assert.deepStrictEqual(again, first, 'the same submission again is the version it became');
         assert.strictEqual(refused.ok, false);
