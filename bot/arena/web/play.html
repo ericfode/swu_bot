@@ -182,6 +182,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     const acts = [];
     const games = new Map(); // id -> {msgs, subs, url, over}
     let current = null;
+    let early = []; // a game's first messages (hello) come before the worker says it started
     let playing = false;
 
     const deliver = (g, m) => {
@@ -195,7 +196,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
         readyOk(m);
       } else if (m.t === 'started') {
         current = m.id;
-        games.set(m.id, { msgs: [], subs: new Set(), url: null });
+        games.set(m.id, { msgs: early, subs: new Set(), url: null });
+        early = [];
         playing = true;
         starting?.ok({ id: m.id, seat: m.seat });
         starting = null;
@@ -203,12 +205,16 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
       } else if (m.t === 'refused') {
         starting?.no(new Error(m.error));
         starting = null;
+        early = [];
       } else if (m.t === 'acted') {
         const a = acts.shift();
         if (a) m.error ? a.no(new Error(m.error)) : a.ok({ ok: true });
       } else if (m.t === 'msg') {
         const g = current && games.get(current);
-        if (!g) return;
+        if (!g) {
+          early.push(m.msg);
+          return;
+        }
         if (m.msg.t === 'end') {
           playing = false;
           if (m.msg.replay) {
@@ -250,6 +256,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
         start: (bot, deck, botDeck) => ready.then(() => new Promise((ok, no) => {
           if (starting) return no(new Error('a game is starting'));
           starting = { ok, no };
+          current = null;
+          early = [];
           worker.postMessage({ t: 'start', bot, deck, botDeck });
         })),
         act: (id, act) => new Promise((ok, no) => {
