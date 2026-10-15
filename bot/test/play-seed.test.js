@@ -9,9 +9,10 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const { checkJob, residentsHere, Refused } = require('../arena/play-seed');
+const { checkJob, residentsHere, gameDecks, Refused } = require('../arena/play-seed');
 const { gameKey } = require('../rng');
 const { checkDone } = require('../remote-lane');
+const { normalizeDeck } = require('../decklists');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'bot', 'arena', 'play-seed.js');
@@ -30,6 +31,9 @@ const job = (change = {}) => ({
     ...change
 });
 const pair = (a, b, seed = 11) => [{ id: `${a}-vs-${b}-${seed}`, p1: a, p2: b }, { id: `${b}-vs-${a}-${seed}`, p1: b, p2: a }];
+// the tournament lists, as the lane sends them (decklists.js normalizeDeck), and a job that deals two of them by seat
+const LISTS = JSON.parse(fs.readFileSync(path.join(ROOT, 'bot', 'decks', 'ash-meta-2026-09.json'), 'utf8')).map(normalizeDeck);
+const deckJob = (change = {}) => job({ decks: [LISTS[3], LISTS[8]], games: job().games.map((g) => ({ ...g, decks: [0, 1] })), ...change });
 
 /** Runs play-seed.js with the job in a fresh folder: { code, out (stdout), err (stderr lines), work }. */
 function run(doc, { bundles = path.join(tmp, 'no-bundles'), args = null, env = {} } = {}) {
@@ -104,6 +108,41 @@ test('checkJob takes the lane\'s jobs and refuses everything else before anythin
     assert.throws(() => checkJob(null, bundles), Refused, 'null');
 });
 
+test('checkJob takes a seed of deck lists only whole: the lists as the lane sends them and two of them per game', () => {
+    const bundles = path.join(tmp, 'check-bundles');
+    assert.ok(checkJob(deckJob(), bundles));
+    assert.ok(checkJob(deckJob({ decks: [LISTS[3], LISTS[8], LISTS[9]], games: [{ ...pair('heuristic', 'rush')[0], decks: [2, 0] }] }), bundles), 'any two of the lists');
+    const games = deckJob().games;
+    const refused = {
+        'lists without decks on the games': { games: job().games },
+        'decks on the games without lists': { decks: undefined },
+        'one game without its decks': { games: [games[0], job().games[1]] },
+        'an index past the lists': { games: [{ ...games[0], decks: [0, 2] }, games[1]] },
+        'one deck for a game': { games: [{ ...games[0], decks: [0] }, games[1]] },
+        'an index that is not a whole number': { games: [{ ...games[0], decks: [0, 0.5] }, games[1]] },
+        'no lists': { decks: [] },
+        'too many lists': { decks: Array.from({ length: 17 }, () => LISTS[0]) },
+        'a list that is not one': { decks: ['admiral-piett_jtl_blue', LISTS[8]] },
+        'a list with an unpadded id': { decks: [{ ...LISTS[3], base: { id: 'SOR_29', count: 1 } }, LISTS[8]] },
+        'a list with more in its metadata': { decks: [{ ...LISTS[3], metadata: { ...LISTS[3].metadata, author: 'someone' } }, LISTS[8]] },
+        'a list with a sideboard': { decks: [{ ...LISTS[3], sideboard: [] }, LISTS[8]] }
+    };
+    for (const [why, change] of Object.entries(refused)) {
+        const doc = deckJob(change);
+        if (change.decks === undefined && 'decks' in change) {
+            delete doc.decks;
+        }
+        assert.throws(() => checkJob(doc, bundles), Refused, why);
+    }
+    // the decks a game plays are copies: nothing the engine does to them reaches the job
+    const j = deckJob();
+    const d = gameDecks(j, j.games[1]);
+    assert.deepStrictEqual(d, { p1: LISTS[3], p2: LISTS[8] });
+    d.p1.deck.length = 0;
+    assert.ok(j.decks[0].deck.length > 0);
+    assert.strictEqual(gameDecks(job(), job().games[0]), null);
+});
+
 test('play-seed: usage and refused jobs exit 2 with the reason last on stderr and nothing on stdout', () => {
     const usage = run(job(), { args: ['--job'] });
     assert.strictEqual(usage.code, 2);
@@ -162,6 +201,43 @@ test('play-seed plays both games of a seed from the given game key and prints on
     // one deal for the seed: each seat gets the same deck in both games, whichever bot sits there
     const decks = doc.results.map(({ id }) => JSON.parse(fs.readFileSync(doc.replays[id], 'utf8').split('\n')[0]).players.map((p) => p.deck));
     assert.deepStrictEqual(decks[0], decks[1]);
+});
+
+test('play-seed plays a seed of deck lists by seat, as the games machine plays it', { skip: !ENGINE && 'engine or card data not built', timeout: 600000 }, async () => {
+    // the games machine's ladder holds all the lists and indexes into them; the job carries the seed's two
+    const machine = [LISTS[0], LISTS[3], LISTS[5], LISTS[8]];
+    const at = [1, 3];
+    const r = run(deckJob());
+    assert.strictEqual(r.code, 0, r.err.slice(-5).join('\n'));
+    const doc = JSON.parse(r.out);
+    const replays = Object.fromEntries(Object.entries(doc.replays).map(([id, f]) => [id, fs.readFileSync(f, 'utf8')]));
+    const games = job().games.map((g) => ({ ...g, decks: at }));
+    assert.strictEqual(checkDone(games, { results: doc.results, replays }, { seed: 11, key: KEY, decks: machine }), null);
+    for (const { id } of doc.results) {
+        const head = JSON.parse(replays[id].split('\n')[0]);
+        assert.deepStrictEqual(head.decks, { p1: LISTS[3], p2: LISTS[8] }, `${id}: each seat plays its list`);
+        assert.deepStrictEqual(head.players.map((p) => p.deck), [LISTS[3].metadata.name, LISTS[8].metadata.name]);
+    }
+    // a replay that names other decks does not pass, nor does one for a seed of random decks
+    const swapped = { ...LISTS[8], metadata: LISTS[3].metadata };
+    assert.match(checkDone(games, { results: doc.results, replays }, { seed: 11, key: KEY, decks: [LISTS[0], swapped, LISTS[5], LISTS[3]] }), /names other decks/);
+    assert.match(checkDone(games, { results: doc.results, replays }, { seed: 11, key: KEY, decks: null }), /names other decks/);
+    // the same games on the games machine's own workers (ladder.js: the run's lists, indices into them)
+    const { runPool } = require('../game-pool');
+    const here = new Map();
+    const dir = fs.mkdtempSync(path.join(tmp, 'machine-'));
+    await runPool(games.map((g) => ({ ...g, seed: 11, key: KEY, replayFile: path.join(dir, `${g.id}.jsonl`) })), {
+        workers: 2, hangMs: 150000,
+        workerData: { maxSteps: 6000, engineRev: null, capMs: 60000, key: null, decks: machine, pool: null },
+        onResult: ({ job: g, result }) => here.set(g.id, result)
+    });
+    for (const { id, result } of doc.results) {
+        const m = here.get(id);
+        assert.deepStrictEqual([result.outcome, result.winner, result.winnerSeat, result.steps, result.round], [m.outcome, m.winner, m.winnerSeat, m.steps, m.round], id);
+        const lines = (t) => t.trim().split('\n').slice(0, -1);
+        assert.deepStrictEqual(lines(replays[id]), lines(fs.readFileSync(path.join(dir, `${id}.jsonl`), 'utf8')), `${id}: the same game, board by board`);
+    }
+    require('../game-pool').killChildren(null);
 });
 
 test('play-seed unpacks a WebAssembly version and plays it in the sandbox', { skip: (!ENGINE || !WASMTIME || !fs.existsSync(NODE_RANDOM)) && 'needs the engine, wasmtime and build/compiled/node-random' }, () => {

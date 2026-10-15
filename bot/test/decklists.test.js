@@ -257,3 +257,31 @@ test('gauntlet: every challenger meets the same decks on the same seeds', () => 
     const c2 = s.filter((g) => g.p1 === 'c2' || g.p2 === 'c2').map(key);
     assert.deepStrictEqual(c1, c2);
 });
+
+test('deal by seat (rated rounds): each deck stays with its seat, so each bot plays both decks of its seed', () => {
+    const n = 26;
+    const P = deckPairs(n).length;
+    const names = Array.from({ length: 13 }, (_, i) => `b${i}`);
+    const first = 3_000_000_123; // a round's first seed comes from the arena's secret (referee.js roundSeed)
+    const s = dealDecks(roundRobin(names, 6, first), n, first, { by: 'seat' });
+    assert.strictEqual(s.length, 468);
+    for (let i = 0; i < s.length; i += 2) {
+        const [a, b] = [s[i], s[i + 1]];
+        assert.strictEqual(a.seed, b.seed);
+        assert.deepStrictEqual(a.decks, b.decks, 'the seat keeps its deck when the bots swap');
+        assert.notStrictEqual(a.decks[0], a.decks[1]);
+        assert.deepStrictEqual(a.decks, dealDecks([{ seed: a.seed, p1: 'x', p2: 'y' }], n, 0, { by: 'seat' })[0].decks, 'the seed alone decides, not the first seed');
+    }
+    // a round's 234 seeds play 234 different deck pairs, and every pair once in P seeds in a row
+    const pairOf = (g) => [...g.decks].sort((x, y) => x - y).join('-');
+    assert.strictEqual(new Set(s.map(pairOf)).size, 234);
+    const run = dealDecks(Array.from({ length: P }, (_, k) => ({ seed: first + k, p1: 'x', p2: 'y' })), n, first, { by: 'seat' });
+    assert.strictEqual(new Set(run.map(pairOf)).size, P);
+    // the next pass over the pairs puts each pair's decks in the other seats
+    const next = dealDecks(run.map((g) => ({ ...g, seed: g.seed + P })), n, first, { by: 'seat' });
+    next.forEach((g, k) => assert.deepStrictEqual(g.decks, [...run[k].decks].reverse()));
+    // another round's first seed starts somewhere else in the pairs
+    const other = dealDecks(roundRobin(names, 6, 17), n, 17, { by: 'seat' });
+    assert.notDeepStrictEqual(other.map((g) => g.decks), s.map((g) => g.decks));
+    assert.throws(() => dealDecks(s, n, first, { by: 'deck' }), /by bot or by seat/);
+});

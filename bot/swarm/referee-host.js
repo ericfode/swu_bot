@@ -63,7 +63,7 @@ function createRefereeHost({ files, makeWorker, compile, log = console, cpus = 1
         }
         const { createReferee } = rt.require('/app/bot/swarm/referee.js');
         const ref = createReferee({ maxSteps: job.maxSteps, capMs: job.capMs ?? Infinity, onStep });
-        return ref.play({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key });
+        return ref.play({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key, decks: seed.gameDecks(job, g) });
     }
 
     /** The bundle runtimes a checked job's bots need ('wasi-p1', 'python-3.14-wasi'), from their arena.json. */

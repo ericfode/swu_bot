@@ -8,9 +8,12 @@
  *   node bot/arena/play-seed.js --warm
  *
  * The job comes from the ladder's remote lane (bot/remote-lane.js):
- *   { v: 1, seed, key, maxSteps, capMs, hangMs, gameMs, games: [{ id, p1, p2 }], bots: { <name>: { kind, bundle? } } }
- * key is the seed's game key (rng.js gameKey), never the run key; null deals from the seed alone. Only bots that run
- * sandboxed or are the project's own play here: heuristic and rush (in-process), the old WebAssembly residents when
+ *   { v: 1, seed, key, maxSteps, capMs, hangMs, gameMs, games: [{ id, p1, p2, decks? }],
+ *     bots: { <name>: { kind, bundle? } }, decks? }
+ * key is the seed's game key (rng.js gameKey), never the run key; null deals from the seed alone. In a round of deck
+ * lists, decks holds the lists the games play (decklists.js normalizeDeck form) and every game's decks [i, j] the
+ * indices of p1's and p2's (the shape ladder-worker.js takes); without them the games deal random decks. Only bots
+ * that run sandboxed or are the project's own play here: heuristic and rush (in-process), the old WebAssembly residents when
  * this image still builds them (RESIDENTS, kind 'resident'; the arena's own bots are now submitted entries, played as
  * versions), and versions <agent>-v<N> of kind 'wasm' whose bundle, a
  * canonical tar (bot/compiled/bundle.py), is <bundles>/<bundle>.tar. Never another bot program, never a bot.js. The
@@ -29,6 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { normalizeDeck } = require('../decklists');
 
 const ROOT = path.join(__dirname, '..', '..');
 const COMPILED = path.join(ROOT, 'bot', 'compiled');
@@ -41,6 +45,7 @@ const HEX = /^[0-9a-f]{64}$/;
 // a game id names its replay file: no slash, no leading dot
 const GAME_ID = /^[A-Za-z0-9_][A-Za-z0-9_.#-]{0,199}$/;
 const MAX_GAMES = 8;
+const MAX_DECKS = 2 * MAX_GAMES;
 const MAX_JOB_BYTES = 1 << 20;
 const WARM_MS = 120000;
 
@@ -54,6 +59,15 @@ const residentsHere = () => RESIDENTS.filter((n) => fs.existsSync(path.join(resi
 const plain = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
 const positive = (x) => typeof x === 'number' && Number.isFinite(x) && x > 0;
 const sameKeys = (o, keys) => Object.keys(o).sort().join() === [...keys].sort().join();
+
+/** A deck list exactly as the lane sends it: normalizeDeck leaves it as it is. */
+function isDeck(d) {
+    try {
+        return JSON.stringify(normalizeDeck(d)) === JSON.stringify(d);
+    } catch {
+        return false;
+    }
+}
 
 /** Throws Refused unless every part of the job is what the lane sends and every bot in it may play here. */
 function checkJob(job, bundles) {
@@ -87,11 +101,18 @@ function checkJob(job, bundles) {
     if (!Array.isArray(job.games) || job.games.length < 1 || job.games.length > MAX_GAMES) {
         no(`games must list 1 to ${MAX_GAMES} games`);
     }
+    const lists = Object.hasOwn(job, 'decks');
+    if (lists && !(Array.isArray(job.decks) && job.decks.length >= 1 && job.decks.length <= MAX_DECKS && job.decks.every(isDeck))) {
+        no(`decks must list 1 to ${MAX_DECKS} deck lists, each as decklists.js normalizeDeck gives it`);
+    }
     const ids = new Set();
     const names = new Set();
     for (const g of job.games) {
-        if (!plain(g) || !sameKeys(g, ['id', 'p1', 'p2']) || ![g.id, g.p1, g.p2].every((x) => typeof x === 'string')) {
-            no('every game is {id, p1, p2} with strings');
+        if (!plain(g) || !sameKeys(g, lists ? ['id', 'p1', 'p2', 'decks'] : ['id', 'p1', 'p2']) || ![g.id, g.p1, g.p2].every((x) => typeof x === 'string')) {
+            no(lists ? 'every game is {id, p1, p2, decks} with strings and two deck indices' : 'every game is {id, p1, p2} with strings');
+        }
+        if (lists && !(Array.isArray(g.decks) && g.decks.length === 2 && g.decks.every((i) => Number.isSafeInteger(i) && i >= 0 && i < job.decks.length))) {
+            no(`game ${JSON.stringify(g.id)}: decks must be two indices into the job's decks`);
         }
         if (!GAME_ID.test(g.id) || ids.has(g.id)) {
             no(`game id ${JSON.stringify(g.id)} is not a usable file name, or appears twice`);
@@ -182,13 +203,13 @@ async function play(job, { bundles, work }) {
     }
     checkResolved(job);
     const { runPool } = require('../game-pool');
-    const queue = job.games.map((g) => ({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key, replayFile: path.join(out, `${g.id}.jsonl`) }));
+    const queue = job.games.map((g) => ({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key, ...(g.decks ? { decks: g.decks } : {}), replayFile: path.join(out, `${g.id}.jsonl`) }));
     const results = new Map();
     await runPool(queue, {
         workers: queue.length,
         hangMs: job.hangMs,
         gameMs: job.gameMs,
-        workerData: { maxSteps: job.maxSteps, engineRev: null, capMs: job.capMs ?? Infinity, key: null, decks: null, pool: null },
+        workerData: { maxSteps: job.maxSteps, engineRev: null, capMs: job.capMs ?? Infinity, key: null, decks: job.decks ?? null, pool: null },
         onResult: ({ job: g, result }) => results.set(g.id, result)
     });
     const missing = job.games.filter((g) => !results.has(g.id)).map((g) => g.id);
@@ -255,4 +276,9 @@ if (require.main === module) {
     });
 }
 
-module.exports = { RESIDENTS, IN_PROCESS, residentsHere, checkJob, checkResolved, Refused };
+/** A checked job's game g's two deck lists as playGame takes them ({p1, p2}, copies), or null for random decks. */
+function gameDecks(job, g) {
+    return g.decks ? { p1: structuredClone(job.decks[g.decks[0]]), p2: structuredClone(job.decks[g.decks[1]]) } : null;
+}
+
+module.exports = { RESIDENTS, IN_PROCESS, residentsHere, checkJob, checkResolved, gameDecks, Refused };

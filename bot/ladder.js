@@ -4,7 +4,7 @@
  *
  *   node bot/ladder.js --bots rush,aggro,tempo,control,heuristic,random --games 10
  *       [--seed 1] [--workers 3] [--max-steps 6000] [--id my-run] [--out <dir>] [--record] [--vs a,b,c] [--key K|none]
- *       [--resume] [--cap-ms 60000] [--hang-ms 600000]
+ *       [--resume] [--cap-ms 60000] [--hang-ms 600000] [--decks <file> [--deal bot|seat] [--skip-decks a,b]] [--pool <file>]
  * --resume keeps the finished games of an earlier run with the same id and config and plays only the rest (same engine,
  * uncommitted engine source changes included (config.engineDiff), and same bot code and models: config.harness is the
  * git trees of bot/ and vendor/kessel/, plus a hash of uncommitted changes there, of the $SWU_LEARNED_MODEL file and of the
@@ -33,12 +33,15 @@
  * the seed minus --seed, not on the seed alone; both games of a seed give each bot the same deck. Give each bot pair a
  * whole number of passes (--games a multiple of 2P) or some deck pairs play more than others (a warning says so).
  * Each index entry then carries decks {p1, p2} (the deck names). With a mirror (--bots c-clock#a,c-clock#b) the bots
- * cancel out and the ratings that matter are the decks'.
+ * cancel out and the ratings that matter are the decks'. --deal seat deals them as the arena's rated rounds do: seed s
+ * plays pair s mod P and each deck stays with its seat, so each bot plays both decks of its seed (decklists.js).
+ * --skip-decks a,b leaves those lists of the file out (config.decks.skipped names them).
  * --pool <file> deals the random decks from an arena card pool only (cardpool.js: the training or held-out cards of a
  * holdout split); config.pool records its file name, kind and sha256. Not with --decks.
  * With ARENA_REMOTE set (the games machine's relay for helper computers, http://127.0.0.1:<port>/r/<nonce>) and
- * --record, a round robin of random decks also hands whole seeds to helpers (remote-lane.js); their games come back
- * through the same onResult, and every entry says where it ran: host is the helper's name, or null for here.
+ * --record, a round robin (of random decks or of --decks lists) also hands whole seeds to helpers (remote-lane.js);
+ * their games come back through the same onResult, and every entry says where it ran: host is the helper's name, or
+ * null for here.
  */
 // the relay's address, read before anything starts a worker, a bot program or the window pusher, none of which may
 // inherit it (they all get process.env)
@@ -297,9 +300,21 @@ async function main() {
     const record = process.argv.includes('--record');
     const key = runKey(arg('key', null));
     const decksFile = arg('decks', null);
+    const deal = arg('deal', 'bot');
+    const skip = (arg('skip-decks', '') || '').split(',').filter(Boolean);
+    if (!['bot', 'seat'].includes(deal) || ((deal !== 'bot' || skip.length) && !decksFile)) {
+        throw new Error('--deal is bot or seat, and --deal and --skip-decks go with --decks');
+    }
     // the engine loads in this thread only to check the deck lists before any game starts (and before <out> is made)
     const deckSet = decksFile ? loadDecks(decksFile, new (require('./env').Env)()) : null;
-    const decks = deckSet?.decks ?? null;
+    const unknown = skip.filter((n) => !deckSet.decks.some((d) => d.metadata.name === n));
+    if (unknown.length) {
+        throw new Error(`--skip-decks: ${unknown.join(', ')} not in ${decksFile}`);
+    }
+    const decks = deckSet ? deckSet.decks.filter((d) => !skip.includes(d.metadata.name)) : null;
+    if (decks && decks.length < 2) {
+        throw new Error('--skip-decks leaves fewer than 2 decks');
+    }
     const poolFile = arg('pool', null);
     if (poolFile && decksFile) {
         throw new Error('--pool deals random decks from a card pool; --decks plays fixed deck lists: give one of them');
@@ -309,7 +324,8 @@ async function main() {
     if (pool) {
         checkPool(new (require('./env').Env)(), pool);
     }
-    if (decks) {
+    // dealt by seat, a round goes through the pairs as one run of seeds; dealt by bot, each bot pair does
+    if (decks && deal === 'bot') {
         const seeds = (perPair + (perPair % 2)) / 2;
         const P = deckPairs(decks.length).length;
         if (seeds % P !== 0) {
@@ -320,11 +336,11 @@ async function main() {
 
     const engine = engineRev();
     const plain = vs ? gauntlet(challengers, vs, perPair, firstSeed) : roundRobin(names, perPair, firstSeed);
-    const schedule = decks ? dealDecks(plain, decks.length, firstSeed) : plain;
+    const schedule = decks ? dealDecks(plain, decks.length, firstSeed, { by: deal }) : plain;
     // capMs null = no cap (JSON has no Infinity)
     const config = { bots: names, gamesPerPair: perPair + (perPair % 2), firstSeed, maxSteps, workers, capMs: Number.isFinite(capMs) ? capMs : null, hangMs,
                      harness: harnessRev(), engineDiff: engineDiff(), programs: programsRev(names), keyId: keyId(key), record, ...(vs ? { format: 'gauntlet', vs } : {}),
-                     ...(decks ? { decks: { file: path.basename(decksFile), sha256: deckSet.sha256, names: decks.map((d) => d.metadata.name) } } : {}),
+                     ...(decks ? { decks: { file: path.basename(decksFile), sha256: deckSet.sha256, names: decks.map((d) => d.metadata.name), ...(deal !== 'bot' ? { deal } : {}), ...(skip.length ? { skipped: skip } : {}) } } : {}),
                      ...(pool ? { pool: { file: path.basename(poolFile), kind: pool.kind, cards: pool.cards.length, sha256: pool.provenance.sha256 } } : {}) };
     const games = [];
     let status = 'running';
@@ -440,17 +456,18 @@ async function main() {
         }
     };
     const play = (q, h) => runPool(q, { workers, hangMs, workerData: { maxSteps, engineRev: engine, capMs, key, decks, pool: pool ? { cards: pool.cards } : null }, ...h });
-    // helpers play random-deck round robins only, and only recorded ones (a helper's replay is part of what it sends)
+    // helpers play round robins only, and only recorded ones (a helper's replay is part of what it sends), of random
+    // decks or of deck lists (the lists go with each seed's job), never from a card pool
     const base = relayBase(REMOTE);
-    const lane = !!base && record && !decks && !pool && !vs;
+    const lane = !!base && record && !pool && !vs;
     if (REMOTE && !lane) {
-        const why = base ? 'they play recorded round robins of random decks only' : 'ARENA_REMOTE is not a relay address';
+        const why = base ? 'they play recorded round robins without a card pool only' : 'ARENA_REMOTE is not a relay address';
         console.log(`remote: helpers stay out of this run (${why})`);
         remoteInfo = () => ({ lane: false, why });
     }
     if (lane) {
         const limits = { maxSteps, capMs: config.capMs, hangMs, gameMs: DEFAULT_GAME_MS(capMs) };
-        const rl = remoteLane({ base, queue, keyOf: (seed) => (key ? gameKey(key, seed) : null), limits, runPool: play, ...hooks });
+        const rl = remoteLane({ base, queue, keyOf: (seed) => (key ? gameKey(key, seed) : null), limits, decks, runPool: play, ...hooks });
         remoteInfo = () => rl.stats;
         await rl.run();
     } else {

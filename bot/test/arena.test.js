@@ -14,7 +14,7 @@ process.env.ARENA_SECRET_FILE = path.join(tmp, 'secret');
 fs.mkdirSync(process.env.ARENA_DASH, { recursive: true });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const { cappedScore, scoreRound, globalElo, lineup, roundSeed, loadSecret, report, helpersLine } = require('../arena/referee');
+const { ROUND_DECKS, cappedScore, scoreRound, globalElo, lineup, roundSeed, loadSecret, report, helpersLine } = require('../arena/referee');
 const dash = require('../arena/dash');
 const { HOME, writeJson, readJson } = require('../arena/home');
 
@@ -74,6 +74,28 @@ test('the report says what the helper lane did, so a round with no helper games 
     // the helper node off (no ARENA_REMOTE): no line, and older ladders have no remote at all
     assert.strictEqual(scoreRound(4, ladderOf(['x-v0', 'rush'], [g])).remote, null);
     assert.ok(!report(scoreRound(4, ladderOf(['x-v0', 'rush'], [g])), {}).includes('Helpers:'));
+});
+
+test('a round says which deck lists it dealt, and its report tells the competitors', () => {
+    setRoster(['x']);
+    const g = { id: 'g1', p1: 'x-v0', p2: 'rush', outcome: 'won', winner: 'x-v0', winnerSeat: 'p1', timing: t(400, 400), rounds: 5, host: null, decks: { p1: 'a', p2: 'b' } };
+    const lad = ladderOf(['x-v0', 'rush'], [g]);
+    lad.config.decks = { file: 'ash-meta-2026-09.json', sha256: 'f'.repeat(64), names: Array.from({ length: 26 }, (_, i) => `d${i}`), deal: 'seat', skipped: ['lando-calrissian_law_blue'] };
+    const rd = scoreRound(4, lad);
+    assert.deepStrictEqual(rd.decks, { file: 'ash-meta-2026-09.json', sha256: 'f'.repeat(64), lists: 26, deal: 'seat' });
+    assert.match(report(rd, {}), /each from both seats\)\. Decks: 26 tournament lists \(`ash-meta-2026-09\.json`\), each seed's two decks played by both bots\. Status/);
+    // rounds before the switch dealt random decks
+    const old = scoreRound(4, ladderOf(['x-v0', 'rush'], [g]));
+    assert.strictEqual(old.decks, undefined);
+    assert.match(report(old, {}), /Decks: random\. Status/);
+});
+
+test('the round\'s deck lists pass the deck checks, and the lists it leaves out are in the file', { skip: !fs.existsSync(path.join(__dirname, '..', '..', 'forceteki', 'build', 'server')) && 'engine not built' }, () => {
+    const { loadDecks } = require('../decklists');
+    const { decks } = loadDecks(ROUND_DECKS.file, new (require('../env').Env)());
+    const names = decks.map((d) => d.metadata.name);
+    assert.ok(ROUND_DECKS.skip.every((n) => names.includes(n)), ROUND_DECKS.skip.join(', '));
+    assert.ok(names.length - ROUND_DECKS.skip.length >= 2);
 });
 
 test('the cap comes from by, not from timing or error text', () => {

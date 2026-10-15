@@ -50,7 +50,10 @@ parts:
    (`gamesctl push --only round`), so a viewer follows each game move by move.
 
 A round is a round robin (`bot/ladder.js`) of every competitor's newest version and the residents, 2 games per pair
-(one seed, both seats). The residents are the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
+(one seed, both seats). Since 2026-10-15 its games deal the tournament deck lists (`bot/decks/ash-meta-2026-09.json`,
+less `lando-calrissian_law_blue`, which an engine bug breaks: `referee.js` ROUND_DECKS) by seat: seed s plays deck pair
+s mod P, and each deck stays with its seat, so in the two games of a seed each bot plays both decks on the same
+shuffles (`decklists.js`). Helpers and the browser swarm get the seed's two lists with its job. The residents are the arena's own bots: heuristic, rush, c-clock, rust-greedy2, rust-search,
 node-search and py-clock. Ratings are Bradley-Terry with the residents' mean pinned to 1500: per round, the residents
 that played it; over all rounds, the bots built into the image that ever played, so a resident's new version does not
 move the scale and versions compare across rounds. A round cut short by a stop (a deploy) resumes at the next start and keeps

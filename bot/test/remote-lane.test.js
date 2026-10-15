@@ -33,14 +33,14 @@ function schedule(pairs, firstSeed = 1) {
     return q;
 }
 
-/** A finished game's result and replay as play-seed.js sends them (p1 wins). */
-function played(game, seed, { key = keyOf(seed), ms = 1000 } = {}) {
+/** A finished game's result and replay as play-seed.js sends them (p1 wins); decks {p1, p2} go in the header. */
+function played(game, seed, { key = keyOf(seed), ms = 1000, decks = null } = {}) {
     const result = {
         seed, steps: 40, outcome: 'won', winner: game.p1, winnerSeat: 'p1', round: 5, ms, key, by: null, faultKind: null,
         botStats: [null, null], timing: { p1: { n: 20, ms: 100, p50: 1, p95: 9, max: 10 }, p2: { n: 20, ms: 60, p50: 1, p95: 5, max: 6 } }, think: { p1: 90, p2: 50 }
     };
     const replay = [
-        { t: 'header', v: 1, seed, engine: null, players: [{ id: 'p1', bot: game.p1 }, { id: 'p2', bot: game.p2 }] },
+        { t: 'header', v: 1, seed, engine: null, players: [{ id: 'p1', bot: game.p1, ...(decks ? { deck: decks.p1.metadata.name } : {}) }, { id: 'p2', bot: game.p2, ...(decks ? { deck: decks.p2.metadata.name } : {}) }], ...(decks ? { decks } : {}) },
         { t: 'step', n: 0, label: 'Game start' },
         { t: 'end', winner: 'p1', round: 5, steps: 40, outcome: 'won', error: null, by: null, faultKind: null }
     ].map((e) => JSON.stringify(e)).join('\n') + '\n';
@@ -52,7 +52,7 @@ function doneAnswer(job, change = (x) => x) {
     const results = [];
     const replays = {};
     for (const g of job.games) {
-        const p = played(g, job.seed, { key: job.key });
+        const p = played(g, job.seed, { key: job.key, decks: g.decks ? { p1: job.decks[g.decks[0]], p2: job.decks[g.decks[1]] } : null });
         results.push({ id: g.id, result: p.result });
         replays[g.id] = p.replay;
     }
@@ -134,13 +134,13 @@ function fakeRelay() {
  * A lane on `queue` with a fake ladder (records onStart / onResult, sets replayFile as ladder.js does), a fake pool
  * that plays every game here at once, and a fake clock. `each(tick)` runs before every tick after the first.
  */
-function setup(queue, relay, { each = () => {}, residents = ['heuristic', 'rush'], versionsDir = path.join(tmp, 'none'), tarOf, localMs = 1000, hold = false } = {}) {
+function setup(queue, relay, { each = () => {}, residents = ['heuristic', 'rush'], versionsDir = path.join(tmp, 'none'), tarOf, localMs = 1000, hold = false, decks = null } = {}) {
     const dir = fs.mkdtempSync(path.join(tmp, 'games-'));
     const ladder = { started: [], results: [], logs: [], pools: 0, grows: 0, poolOrder: null, callTimes: [] };
     let clock = 0;
     let ticks = 0;
     const lane = remoteLane({
-        base: BASE, queue, keyOf, limits: LIMITS, residents, versionsDir, tarOf,
+        base: BASE, queue, keyOf, limits: LIMITS, residents, versionsDir, tarOf, decks,
         request: (...a) => {
             ladder.callTimes.push(clock);
             return relay.request(...a);
@@ -230,6 +230,32 @@ test('an accepted offer goes to the helper whole; its done lease is checked, wri
     assert.deepStrictEqual({ ...st, looks: 0, claimLooks: 0 }, {
         lane: true, hosts: ['eric'], looks: 0, claimLooks: 0, leased: 1, played: 2, lost: 0, lastLost: null, relayErrors: [], stopped: null
     });
+});
+
+test('a seed of deck lists goes out with its two lists, and comes back only with replays that name them', async () => {
+    // the run's lists, as ladder.js holds them; each seed's games deal two of them by seat (decklists.js)
+    const decks = ['a', 'b', 'c', 'd'].map((n) => ({ metadata: { name: `deck-${n}` }, leader: { id: 'SOR_005', count: 1 }, base: { id: 'SOR_029', count: 1 }, deck: [{ id: `SOR_0${n === 'a' ? 46 : 47}`, count: 3 }] }));
+    const queue = schedule([['heuristic', 'rush'], ['heuristic', 'rush'], ['heuristic', 'rush']]).map((g) => ({ ...g, decks: { 1: [3, 1], 2: [0, 2], 3: [2, 3] }[g.seed] }));
+    const relay = fakeRelay();
+    relay.waiting = 2;
+    const { lane, ladder, dir } = setup(queue, relay, { decks, each: (t) => t === 1 && (relay.finish('L1'), relay.finish('L2', (a) => {
+        // the second seed's helper names the lists the other way round
+        a.replays[Object.keys(a.replays)[0]] = a.replays[Object.keys(a.replays)[0]].replace('deck-a', 'deck-x');
+        return a;
+    })) });
+    await lane.run();
+    assert.deepStrictEqual(relay.offers.map((o) => [o.job.seed, o.job.decks.map((d) => d.metadata.name), o.job.games.map((g) => g.decks)]), [
+        [1, ['deck-d', 'deck-b'], [[0, 1], [0, 1]]],
+        [2, ['deck-a', 'deck-c'], [[0, 1], [0, 1]]]
+    ]);
+    assert.deepStrictEqual(relay.offers[0].job.decks, [decks[3], decks[1]], 'the lists themselves, whole');
+    assert.deepStrictEqual(hostOf(ladder), {
+        'heuristic-vs-rush-1': 'eric', 'rush-vs-heuristic-1': 'eric', 'heuristic-vs-rush-2': null, 'rush-vs-heuristic-2': null, 'heuristic-vs-rush-3': null, 'rush-vs-heuristic-3': null
+    });
+    assert.ok(ladder.logs.some((l) => /lease L2 .* lost: invalid result: heuristic-vs-rush-2: the replay header names other decks/.test(l)), ladder.logs.join('\n'));
+    // what the ladder gets back is its own queue item, with the run's deck indices (ladder.js names the decks from them)
+    assert.ok(fs.readFileSync(path.join(dir, 'heuristic-vs-rush-1.jsonl'), 'utf8').includes('"deck":"deck-d"'));
+    assert.deepStrictEqual(queue.length, 0);
 });
 
 test('the lane\'s stats say when no helper said hello and no claim waited', async () => {
