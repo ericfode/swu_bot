@@ -1,8 +1,11 @@
-# The arena image needs bot/arena, app, meta/atlas-kit.js, dashboard/site, the vendored viewer kit with its license list
-# and spec/protocol.md (Dockerfile, for arena_guide); keep the rest out
+# The arena image needs bot/arena, the deck list reader and the tournament lists (the open tables), app,
+# meta/atlas-kit.js, dashboard/site, the vendored viewer kit with its license list and spec/protocol.md (Dockerfile, for
+# arena_guide); keep the rest out. bot/test/window-image.test.js checks every file the Dockerfile copies is let in.
 *
 !package.json
 !bot/arena
+!bot/decklists.js
+!bot/decks/ash-meta-2026-09.json
 !app
 !meta/atlas-kit.js
 !dashboard/site
