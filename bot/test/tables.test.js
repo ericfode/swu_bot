@@ -57,7 +57,7 @@ function machine() {
     return m;
 }
 
-function makeWindow(name, { mode, deckFetch, swarmOn = true } = {}) {
+function makeWindow(name, { mode, deckFetch, swarmOn = true, limits } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     let tablesOpen = () => false;
@@ -66,7 +66,7 @@ function makeWindow(name, { mode, deckFetch, swarmOn = true } = {}) {
     const swarm = createSwarmRelay({ token: swarmOn ? 'swarm-secret' : null, machine: 'http://games', cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots'), fetchImpl: m.fetchImpl });
     const kit = path.join(tmp, `${name}-kit.js`);
     fs.writeFileSync(kit, 'window.SWUViewer = {};');
-    const w = createWindow({ home, auth, swarm, kit, app: path.join(tmp, 'none.html'), minMs: 0, wakeGames: () => undefined, tables: mode, tablesFetch: deckFetch });
+    const w = createWindow({ home, auth, swarm, kit, app: path.join(tmp, 'none.html'), minMs: 0, wakeGames: () => undefined, tables: mode, tablesFetch: deckFetch, tablesLimits: limits });
     tablesOpen = (n) => w.tables.openTo(n);
     // the arena's documents the bot list reads: who is competing, and each version's submission
     store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'tinybot', title: 'Tiny Bot', owner: 'github:pal2', latest: 'tinybot-v2', elo: 1234.4 }] }));
@@ -396,6 +396,34 @@ test('the queue pairs the two people who waited longest, and the one who waited 
         for (const s of streams) {
             await s.cancel();
         }
+        await close();
+    }
+});
+
+test('uploads sent at once share the day\'s count, and the oldest games go with their replays', async () => {
+    const { w, store } = makeWindow('limits', { limits: { perDay: 2, maxRows: 2 } });
+    const { go, post, close } = await serve(w);
+    try {
+        const pal = session(w, 'pal');
+        const pal2 = session(w, 'pal2');
+        const me = (await result(await go('/api/tables/info', { cookie: pal }))).you;
+        const them = (await result(await go('/api/tables/info', { cookie: pal2 }))).you;
+        const sent = await Promise.all([700, 701, 702].map((seed) => post('/api/tables/games', pal, { replay: replay({ seed, p1: me }), seat: 'p1' })));
+        assert.deepStrictEqual(sent.map((r) => r.status).sort(), [200, 200, 429], 'three at once: two kept');
+        const ids = [];
+        for (const r of sent.filter((x) => x.status === 200)) {
+            ids.push((await r.json()).result.id);
+        }
+        ids.sort((a, b) => a.localeCompare(b)); // same-ms games: the order the run keeps is checked below
+        const kept = JSON.parse(store.getDoc('runs', 'tables')).games.map((g) => g.id);
+        assert.deepStrictEqual([...kept].sort(), ids);
+        assert.ok(kept.every((id) => store.hasReplay('tables', id)));
+        const third = await result(await post('/api/tables/games', pal2, { replay: replay({ seed: 703, p1: them }), seat: 'p1' }));
+        const now = JSON.parse(store.getDoc('runs', 'tables')).games.map((g) => g.id);
+        assert.deepStrictEqual(now, [kept[1], third.id], 'at most two kept');
+        assert.ok(!store.hasReplay('tables', kept[0]), 'the oldest game\'s replay is gone with its row');
+        assert.ok(store.hasReplay('tables', kept[1]) && store.hasReplay('tables', third.id));
+    } finally {
         await close();
     }
 });

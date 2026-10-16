@@ -236,6 +236,10 @@ class Store {
         return path.join(this.dir, 'replays', run, `${game}.jsonl.gz`);
     }
 
+    deleteReplay(run, game) {
+        fs.rmSync(this.replayFile(run, game), { force: true });
+    }
+
     replayRuns() {
         const dir = path.join(this.dir, 'replays');
         return fs.existsSync(dir) ? fs.readdirSync(dir).filter((d) => ID.test(d)).sort() : [];
@@ -656,7 +660,8 @@ function createWindow(opts = {}) {
     tables = createTables({
         store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES,
         arena: { status: () => arenaDoc('status') ?? { competitors: [] }, versions: (name) => (/^[a-z][a-z0-9_]{0,31}$/.test(name) ? arenaDoc(`versions-${name}`) ?? null : null) },
-        ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {})
+        ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
+        ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
     });
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },

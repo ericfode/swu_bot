@@ -482,9 +482,17 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     const down = () => { if (!link.closed) link.onDown('the direct link closed'); };
     dc.onclose = down;
     pc.addEventListener('connectionstatechange', () => { if (['failed', 'closed'].includes(pc.connectionState)) down(); });
-    link.game = framer((s) => { if (dc.readyState === 'open') dc.send(s); }, 16000);
+    // parts wait here while the channel's own buffer holds more than HIGH (a big end message would overflow it)
+    const out = [];
+    const HIGH = 1 << 20;
+    dc.bufferedAmountLowThreshold = HIGH / 2;
+    const flush = () => {
+      while (out.length && dc.readyState === 'open' && dc.bufferedAmount < HIGH) dc.send(out.shift());
+    };
+    dc.onbufferedamountlow = flush;
+    link.game = framer((s) => { out.push(s); flush(); }, 16000);
     link.idle = () => new Promise((ok) => {
-      const check = () => (dc.readyState !== 'open' || dc.bufferedAmount === 0 ? ok() : setTimeout(check, 200));
+      const check = () => (dc.readyState !== 'open' || (!out.length && dc.bufferedAmount === 0) ? ok() : setTimeout(check, 200));
       check();
     });
     link.close = () => { link.closed = true; try { dc.close(); pc.close(); } catch { /* gone */ } };
@@ -786,7 +794,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     };
   }
 
-  /** A promise that rejects when pairing is cancelled, which also closes pc; null once the game started. */
+  /** stopped rejects when pairing is cancelled, which also closes pc; started() turns Cancel off once the game started. */
   function stopper(pc, setCancel) {
     let stop;
     const stopped = new Promise((_, no) => { stop = no; });
@@ -816,9 +824,9 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       if (e.message === 'cancelled') throw e;
       throw new Error('the two browsers could not reach each other directly; use an invite link instead (it can go through the lobby)');
     }
-    started();
     const link = channelLink(pc, dc);
-    const game = await hostGame(link, ans.pid, deck, null);
+    const game = await Promise.race([hostGame(link, ans.pid, deck, null), stopped]);
+    started();
     status(`Playing ${ans.pid}, linked directly.`, 'good');
     return game;
   }
@@ -837,9 +845,9 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     onState({ text: `Send this answer code back to ${offer.pid}. The game starts when they paste it.`, code });
     await Promise.race([got, stopped, new Promise((_, no) => setTimeout(() => no(new Error('your friend did not connect within 5 minutes')), 300000))]);
     await Promise.race([opened(dc, 30000), stopped]);
-    started();
     const link = channelLink(pc, dc);
-    const game = await guestGame(link, offer.pid, deck);
+    const game = await Promise.race([guestGame(link, offer.pid, deck), stopped]);
+    started();
     status(`Playing ${offer.pid}, linked directly.`, 'good');
     return game;
   }

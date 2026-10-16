@@ -222,10 +222,10 @@ const TAR_END = Buffer.alloc(1024);
 function createTables({
     store, swarm, auth, kitFile, arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
     mode = process.env.ARENA_TABLES || 'invited', page = path.join(__dirname, 'web', 'tables.html'), decksFile = DECKS,
-    fetchImpl = globalThis.fetch, now = Date.now, lobby = createLobby({ now })
+    fetchImpl = globalThis.fetch, now = Date.now, lobby = createLobby({ now }), perDay = PER_DAY, maxRows = MAX_ROWS
 } = {}) {
     const on = MODES.has(mode) ? mode : 'invited';
-    const sentGames = new Map(); // login -> times of the games they sent, the last day
+    const sentGames = new Map(); // login -> times of the games they sent, the last day, and a slot per upload under way
     const rate = new Map(); // `${what}:${login}` -> times, the last hour
     const deckCache = new Map(); // SWUDB id -> {at, deck}
     let woke = 0;
@@ -422,10 +422,23 @@ function createTables({
     async function keepGame(req, res, login, { sendJson, readBody }) {
         const fail = (status, code, message) => sendJson(res, status, { error: { code, message } }, req);
         const t = now();
-        const times = (sentGames.get(login) ?? []).filter((x) => t - x < 864e5);
-        if (times.length >= PER_DAY) {
-            return fail(429, 'too_many', `at most ${PER_DAY} games a day; this one was not kept`);
+        const times = (sentGames.get(login) ?? []).filter((x) => typeof x !== 'number' || t - x < 864e5); // objects: uploads under way
+        if (times.length >= perDay) {
+            return fail(429, 'too_many', `at most ${perDay} games a day; this one was not kept`);
         }
+        // this upload's place in the day's count, taken before its body is read and given back unless a new game is kept
+        const slot = {};
+        sentGames.set(login, [...times, slot]);
+        let kept = false;
+        try {
+            return await keepBody(req, res, login, { sendJson, readBody, fail, t, markKept: () => { kept = true; } });
+        } finally {
+            const mine = sentGames.get(login) ?? [];
+            sentGames.set(login, mine.map((x) => (x === slot ? (kept ? t : null) : x)).filter((x) => x !== null));
+        }
+    }
+
+    async function keepBody(req, res, login, { sendJson, readBody, fail, t, markKept }) {
         // the replay comes as a JSON string, where each quote and backslash of its lines takes two bytes
         const q = parseOr((await readBody(req, 2 * MAX_REPLAY + 4096)).toString('utf8'), null);
         const replay = typeof q?.replay === 'string' ? q.replay : null;
@@ -451,15 +464,19 @@ function createTables({
             const id = `open-${game.header.seed.toString(16).padStart(8, '0')}-${sha256.slice(0, 8)}`;
             store.putReplay(RUN, id, Buffer.from(replay, 'utf8'));
             row = rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(t).toISOString() });
-            doc.games = [...doc.games, row].slice(-MAX_ROWS);
+            const all = [...doc.games, row];
+            doc.games = all.slice(-maxRows);
             doc.bots = [...new Set([...doc.bots, ...game.header.players.filter((x) => x.lang !== 'person').map((x) => x.bot)])];
             store.putDoc('runs', RUN, JSON.stringify(doc));
-            sentGames.set(login, [...times, t]);
+            for (const old of all.slice(0, all.length - doc.games.length)) {
+                store.deleteReplay(RUN, old.id); // the oldest games go with their rows
+            }
+            markKept();
         }
         // who played which seat, for admins only
         const all = people();
         all[row.id] = { ...(all[row.id] ?? {}), [seat]: `@${login}` };
-        const keep = Object.keys(all).slice(-MAX_ROWS);
+        const keep = Object.keys(all).slice(-maxRows);
         store.putDoc('admin', 'tables-people', JSON.stringify({ games: Object.fromEntries(keep.map((k) => [k, all[k]])), updatedAt: new Date(t).toISOString() }));
         return sendJson(res, 200, { result: { id: row.id } }, req);
     }
