@@ -293,7 +293,7 @@ function createTables({
     /** The login of a person who may play here (other people, the bots, or both), or null. */
     const player = (who) => {
         const login = github(who);
-        return login && (allows(on, who) || allows(botsOn, who)) ? login : null;
+        return login && !who.blocked && (allows(on, who) || allows(botsOn, who)) ? login : null;
     };
     /** Whether this person may play other people here, not only the bots. */
     const withPeople = (who) => allows(on, who);
@@ -701,7 +701,7 @@ function createTables({
             }
             const bot = /^\/tables\/bot\/([0-9a-f]{64})\.tar$/.exec(p);
             if (bot && req.method === 'GET') {
-                // a bundle the window does not have yet comes from the machine: wake it (as play.js sendBundle does)
+                // a bundle the window does not have yet comes from the machine: wake it
                 if (!swarm.botHere?.(bot[1]) && now() - woke > WAKE_MS) {
                     woke = now();
                     wake();

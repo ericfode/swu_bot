@@ -2,17 +2,23 @@
 /**
  * Who is asking, on the hosted arena (the window now, the whole arena on Fly later). Every request carries one of:
  *   a session cookie   a person who signed in with GitHub: 'admin' when their login is in ARENA_ADMINS, 'friend' when
- *                      invited (ARENA_INVITES, or the admin/invites document {logins: [...]}), else no role; or a
- *                      guest who opened a view link (/v/<key>, from the admin/links document): 'friend' while that
- *                      link exists (Eric, 2026-10-12 04:30: "yes: add view links to the arena window")
+ *                      invited (ARENA_INVITES, or the admin/invites document {logins: [...]}), 'member' when anyone
+ *                      with GitHub may sign in (ARENA_SIGNIN=github; Eric, 2026-10-16: "make it so that anyone with a
+ *                      github can sign up for the arena"), else no role; a login in the admin/blocked document
+ *                      {logins: [...]} has no role whatever else says, unless it is an admin's; or a guest who opened
+ *                      a view link (/v/<key>, from the admin/links document): 'friend' while that link exists (Eric,
+ *                      2026-10-12 04:30: "yes: add view links to the arena window")
+ *                      A member reads what a friend reads and submits their own bots (window.js limits how many);
+ *                      what needs trust stays with friends: the browser swarm, whose games are rated, and the open
+ *                      tables unless ARENA_TABLES=github
  *   a bearer token     a program: ARENA_PUSH_TOKEN is 'project' (the project's threads push and read; the cloud proxy
  *                      adds it to their requests, so no thread holds it), ARENA_GAMES_TOKEN is 'project' too (the games
  *                      machine's own, so it can be replaced alone), ARENA_ADMIN_TOKEN is 'admin' (the same admin
  *                      token api.js accepts); ARENA_FEED_TOKEN_<NAME> is 'feed' for one outside machine (a Sprite
  *                      that streams games, e.g. ARENA_FEED_TOKEN_KARABAST; NAME is letters and digits): it reads like
  *                      a friend and writes only what carries its name (window.js); any other bearer token is refused
- *                      An MCP client's access token (oauth.js) reads as its person: 'friend' while invited, never
- *                      more, with via 'oauth' (so it never writes); an agent's token (the device grant) also carries `agent`,
+ *                      An MCP client's access token (oauth.js) reads as its person: 'friend' while invited, 'member'
+ *                      while a member, never more, with via 'oauth' (so it never writes); an agent's token (the device grant) also carries `agent`,
  *                      the one competitor name it may submit as (window.js arena_submit)
  *   nothing            'anon': the sign-in page and /healthz only
  * The role is worked out on every request, so removing an invite takes effect at once. Cookies grant reading, and
@@ -27,7 +33,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const ROLES = ['anon', 'friend', 'feed', 'project', 'admin'];
+const ROLES = ['anon', 'member', 'friend', 'feed', 'project', 'admin'];
+// who may sign in with GitHub: 'invited' (admins and invited people) or 'github' (anyone with a GitHub account)
+const SIGNIN = new Set(['invited', 'github']);
 const atLeast = (role, min) => ROLES.indexOf(role) >= ROLES.indexOf(min);
 const SESSION = 'swu_session';
 const OAUTH = 'swu_oauth';
@@ -55,13 +63,16 @@ function parseCookies(header) {
 
 /**
  * opts: dir (where the session key lives), invites() (extra invited logins, e.g. from the admin/invites document),
- * links() (view links [{id, key}], from the admin/links document), bearer(token) (an MCP client's access token ->
+ * blocked() (logins that may not sign in, from the admin/blocked document), links() (view links [{id, key}], from
+ * the admin/links document), bearer(token) (an MCP client's access token ->
  * {login, grant, app} or null; oauth.js lookup), openTo(next) (whether a login with no role may still return to the
  * local path `next` after signing in, e.g. the play page when anyone with GitHub may play; else it goes home), env
  * (default process.env), fetch (for GitHub; tests pass a fake), now() (for tests).
  */
-function createAuth({ dir, invites = () => [], links = () => [], bearer = () => null, openTo = () => false, env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+function createAuth({ dir, invites = () => [], blocked = () => [], links = () => [], bearer = () => null, openTo = () => false, env = process.env, fetch: fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const publicUrl = String(env.ARENA_PUBLIC_URL ?? 'https://swu-arena.fly.dev').replace(/\/+$/, '');
+    // anything but a known mode is the closed one
+    const signin = SIGNIN.has(env.ARENA_SIGNIN) ? env.ARENA_SIGNIN : 'invited';
     const origin = new URL(publicUrl).origin; // what a browser sends as Origin from this site's own pages
     let lookup = bearer; // the window sets it once its oauth.js exists (useBearer)
     const secure = publicUrl.startsWith('https:');
@@ -113,20 +124,36 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
         return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure ? '; Secure' : ''}`;
     }
 
+    const listed = (fn) => {
+        try {
+            return (fn() || []).map((x) => String(x).toLowerCase());
+        } catch {
+            return [];
+        }
+    };
+    const isAdmin = (l) => logins(env.ARENA_ADMINS ?? 'ericfode').includes(l);
+    /** True when an admin blocked this login (an admin's own login is never blocked). */
+    const isBlocked = (login) => {
+        const l = String(login ?? '').toLowerCase();
+        return !!l && !isAdmin(l) && listed(blocked).includes(l);
+    };
+
     /** The role of a GitHub login right now. */
     function roleOf(login) {
         const l = String(login ?? '').toLowerCase();
         if (!l) {
             return 'anon';
         }
-        if (logins(env.ARENA_ADMINS ?? 'ericfode').includes(l)) {
+        if (isAdmin(l)) {
             return 'admin';
         }
-        let extra = [];
-        try {
-            extra = (invites() || []).map((x) => String(x).toLowerCase());
-        } catch {}
-        return logins(env.ARENA_INVITES).includes(l) || extra.includes(l) ? 'friend' : 'anon';
+        if (isBlocked(l)) {
+            return 'anon';
+        }
+        if (logins(env.ARENA_INVITES).includes(l) || listed(invites).includes(l)) {
+            return 'friend';
+        }
+        return signin === 'github' && LOGIN.test(l) ? 'member' : 'anon';
     }
 
     const viewLinks = () => {
@@ -138,8 +165,9 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
     };
 
     /**
-     * {role, via, login?, guest?}: `via` is 'bearer' or 'cookie' (writes need 'bearer'); role 'bad' means a bearer
-     * token was sent and is wrong; `guest` is the id of the view link a guest came in by.
+     * {role, via, login?, guest?, blocked?}: `via` is 'bearer' or 'cookie' (writes need 'bearer'); role 'bad' means a
+     * bearer token was sent and is wrong; `guest` is the id of the view link a guest came in by; `blocked`: an admin
+     * blocked this login (its role is then 'anon').
      */
     function who(req) {
         const h = String(req.headers.authorization ?? '');
@@ -163,7 +191,9 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
             }
             const g = lookup(t);
             if (g) {
-                return { role: roleOf(g.login) === 'anon' ? 'anon' : 'friend', login: g.login, grant: g.grant, app: g.app, ...(g.agent ? { agent: g.agent } : {}), via: 'oauth' };
+                // an app reads as its person and never more than a friend: an admin's app is no admin
+                const r = roleOf(g.login);
+                return { role: r === 'anon' || r === 'member' ? r : 'friend', login: g.login, grant: g.grant, app: g.app, ...(g.agent ? { agent: g.agent } : {}), ...(isBlocked(g.login) ? { blocked: true } : {}), via: 'oauth' };
             }
             return { role: 'bad', via: 'bearer' };
         }
@@ -174,7 +204,8 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
             // a guest is let in only while the link they came by exists, so removing it locks them out at once
             return viewLinks().some((l) => l.id === s.v) ? { role: 'friend', guest: s.v, via: 'cookie' } : { role: 'anon', via: 'cookie' };
         }
-        return s ? { role: roleOf(s.l), login: s.l, via: 'cookie' } : { role: 'anon', via: 'cookie' };
+        // blocked: an admin blocked this login, so the play page (tables.js), open to anyone with GitHub, refuses it too
+        return s ? { role: roleOf(s.l), login: s.l, ...(isBlocked(s.l) ? { blocked: true } : {}), via: 'cookie' } : { role: 'anon', via: 'cookie' };
     }
 
     // a local path to return to after signing in; anything else goes home
@@ -196,13 +227,13 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
         if (view) {
             const link = viewLinks().find((l) => same(view[1], l.key));
             if (!link) {
-                page(res, 404, signInPage('/', null, 'That view link was removed, or it never existed. Ask Eric for a new one.'));
+                page(res, 404, signInPage('/', null, 'That view link was removed, or it never existed. Ask Eric for a new one.', mode()));
                 return true;
             }
             // someone signed in and let in (Eric trying his own link) keeps their own session; a guest gets this link's,
             // so their access follows the link they opened last; the browser keeps the #/page
             const cur = who(req);
-            const keep = atLeast(cur.role, 'friend') && cur.via === 'cookie' && cur.login;
+            const keep = atLeast(cur.role, 'member') && cur.via === 'cookie' && cur.login;
             redirect(res, '/', keep ? [] : [cookie(SESSION, sign({ v: link.id, exp: now() + VIEW_DAYS * 864e5 }), VIEW_DAYS * 86400)]);
             return true;
         }
@@ -216,11 +247,12 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
         }
         if (url.pathname === '/auth/github') {
             if (!configured) {
-                page(res, 503, signInPage('/', null, 'GitHub sign-in is not set up on this server yet.'));
+                page(res, 503, signInPage('/', null, 'GitHub sign-in is not set up on this server yet.', mode()));
                 return true;
             }
             const state = b64(crypto.randomBytes(16));
-            const q = new URLSearchParams({ client_id: env.GITHUB_CLIENT_ID, redirect_uri: `${publicUrl}/auth/github/callback`, state, allow_signup: 'false' });
+            // open to anyone with GitHub: someone without an account may make one on the way
+            const q = new URLSearchParams({ client_id: env.GITHUB_CLIENT_ID, redirect_uri: `${publicUrl}/auth/github/callback`, state, allow_signup: signin === 'github' ? 'true' : 'false' });
             redirect(res, `https://github.com/login/oauth/authorize?${q}`, [cookie(OAUTH, sign({ s: state, n: safeNext(url.searchParams.get('next')), exp: now() + 10 * 60000 }), 600)]);
             return true;
         }
@@ -228,7 +260,7 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
             const st = verify(parseCookies(req.headers.cookie)[OAUTH]);
             const code = url.searchParams.get('code');
             if (!configured || !st || !code || !same(url.searchParams.get('state') ?? '', st.s)) {
-                page(res, 400, signInPage('/', null, 'That sign-in link expired or did not come from here. Please try again.'));
+                page(res, 400, signInPage('/', null, 'That sign-in link expired or did not come from here. Please try again.', mode()));
                 return true;
             }
             let login = null;
@@ -247,7 +279,7 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
                 console.error('github sign-in failed:', e.message);
             }
             if (!login) {
-                page(res, 502, signInPage('/', null, 'GitHub did not confirm who you are. Please try again.'));
+                page(res, 502, signInPage('/', null, 'GitHub did not confirm who you are. Please try again.', mode()));
                 return true;
             }
             const session = cookie(SESSION, sign({ l: login.toLowerCase(), i: id, exp: now() + SESSION_DAYS * 864e5 }), SESSION_DAYS * 86400);
@@ -257,22 +289,31 @@ function createAuth({ dir, invites = () => [], links = () => [], bearer = () => 
         return false;
     }
 
-    /** The logins fixed by the environment: admins, and invites that only a deploy changes. */
-    const fixed = () => ({ admins: logins(env.ARENA_ADMINS ?? 'ericfode'), fromEnv: logins(env.ARENA_INVITES) });
+    /** The logins fixed by the environment (admins, and invites that only a deploy changes) and who may sign in. */
+    const fixed = () => ({ admins: logins(env.ARENA_ADMINS ?? 'ericfode'), fromEnv: logins(env.ARENA_INVITES), signin });
+    const mode = (login = null) => ({ open: signin === 'github', blocked: isBlocked(login) });
 
     const useBearer = (fn) => {
         lookup = fn;
     };
 
-    return { who, routes, roleOf, sign, verify, signInPage, origin, publicUrl, fixed, shell, useBearer };
+    return { who, routes, roleOf, isBlocked, sign, verify, signInPage: (next, login, note) => signInPage(next, login, note, mode(login)), origin, publicUrl, fixed, signin, shell, useBearer };
 }
 
-/** The page a visitor without a role sees: sign in, or (signed in, not invited) who to ask. */
-function signInPage(next, login, note) {
+/**
+ * The page a visitor without a role sees: sign in, or (signed in, not let in) why. open: anyone with GitHub may sign
+ * in (ARENA_SIGNIN=github); blocked: an admin blocked this login.
+ */
+function signInPage(next, login, note, { open = false, blocked = false } = {}) {
     const href = `/auth/github?next=${encodeURIComponent(next || '/')}`;
-    const body = login
-        ? `<p>You are signed in to GitHub as <b>@${esc(login)}</b>. The arena is open to invited friends, and <b>@${esc(login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(login)}</b>. Once he has added it, reload this page. Or ask him for a view link: it opens the arena with no sign-in.</p><p><a href="/auth/logout">Sign out</a></p>`
-        : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p><p class="small">Got a view link from Eric? Open it instead; it needs no sign-in.</p>`;
+    const out = `<p><a href="/auth/logout">Sign out</a></p>`;
+    const body = login && blocked
+        ? `<p>You are signed in to GitHub as <b>@${esc(login)}</b>, who may not use the arena.</p>${out}`
+        : login
+            ? `<p>You are signed in to GitHub as <b>@${esc(login)}</b>. The arena is open to invited friends, and <b>@${esc(login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(login)}</b>. Once he has added it, reload this page. Or ask him for a view link: it opens the arena with no sign-in.</p>${out}`
+            : open
+                ? `<p>Watch bots play Star Wars Unlimited, read the research, and enter a bot of your own. Sign in with your GitHub account: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p><p class="small">Got a view link from Eric? Open it instead; it needs no sign-in.</p>`
+                : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p><p class="small">Got a view link from Eric? Open it instead; it needs no sign-in.</p>`;
     // the browser keeps the #/page part of a shared link to itself, so the button adds it to where sign-in returns
     const keepHash = login ? '' : `<script>(()=>{const a=document.querySelector('a.btn');if(a&&location.hash){const u=new URL(a.href,location.href);u.searchParams.set('next',(u.searchParams.get('next')||'/')+location.hash);a.href=u.pathname+u.search}})()</script>`;
     return shell(`<h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}`, keepHash);

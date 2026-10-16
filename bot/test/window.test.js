@@ -20,20 +20,21 @@ async function serve(w) {
     const srv = http.createServer((req, res) => w.handle(req, res)).listen(0, '127.0.0.1');
     await new Promise((r) => srv.once('listening', r));
     const base = () => `http://127.0.0.1:${srv.address().port}`;
-    const go = (p, { method = 'GET', token, cookie, body, type = 'application/json', origin } = {}) => fetch(base() + p, {
+    const go = (p, { method = 'GET', token, cookie, body, type = 'application/json', origin, headers = {} } = {}) => fetch(base() + p, {
         method, redirect: 'manual', body,
-        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}), ...(origin ? { origin } : {}) }
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}), ...(origin ? { origin } : {}), ...headers }
     });
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames, staleMs } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
-    const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
+    const auth = createAuth({ dir: path.join(home, 'auth'), env, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins,
+        blocked: () => JSON.parse(store.getDoc('admin', 'blocked') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -258,7 +259,8 @@ test('share: an admin invites and removes people from the Share page, and no one
         const kim = `swu_session=${w.auth.sign({ l: 'kim-b', exp: Date.now() + 60000 })}`;
         const site = 'https://swu-arena.fly.dev';
         const post = (body, opts = {}) => go('/api/share', { method: 'POST', cookie: eric, origin: site, body: JSON.stringify(body), ...opts });
-        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result, { invites: [], admins: ['ericfode'], fromEnv: ['pal'], links: [] });
+        assert.deepStrictEqual((await (await go('/api/share', { cookie: eric })).json()).result, { invites: [], admins: ['ericfode'], fromEnv: ['pal'], links: [], signin: 'invited', blocked: [],
+            limits: { botsPerPerson: 2, perDay: 10, outsideBots: 20, tables: 'invited' } });
         assert.strictEqual((await go('/api/share', { cookie: pal })).status, 403, 'a friend cannot see the list');
         assert.strictEqual((await go('/api/share', { cookie: kim })).status, 401);
         assert.strictEqual((await go('/', { cookie: kim })).status, 403);
@@ -368,7 +370,7 @@ test('view links: a guest reads with no sign-in while the link exists, and never
         assert.match(open.headers.getSetCookie().join(), /Max-Age=2592000/);
         assert.strictEqual((await go('/', { cookie: guest })).status, 200);
         assert.match(await (await go('/', { cookie: guest })).text(), /<title>app/);
-        assert.deepStrictEqual((await (await go('/api/me', { cookie: guest })).json()).result, { login: null, role: 'friend', guest: true });
+        assert.deepStrictEqual((await (await go('/api/me', { cookie: guest })).json()).result, { login: null, role: 'friend', signin: 'invited', guest: true });
         assert.strictEqual((await go('/api/app', { cookie: guest })).status, 200);
         assert.strictEqual((await go('/api/share', { cookie: guest })).status, 403, 'a guest never sees the links');
         assert.strictEqual((await go('/api/docs/runs/x', { method: 'PUT', cookie: guest, body: '{}' })).status, 403, 'a guest never writes');
@@ -603,6 +605,49 @@ test('the app data stops showing a game as playing once its run goes quiet, with
         assert.notStrictEqual((await app()).version, before, 'a new version, or open browsers (syncApi) would keep the old model');
         const run = (await (await go('/api/app', { token: 'push-secret' })).json()).result.model.runs.find((r) => r.id === 'test-quiet');
         assert.deepStrictEqual([run.running, run.abandoned, run.errors], [0, 1, 0]);
+    } finally {
+        await close();
+    }
+});
+
+test('the app model keeps its ETag while it comes out the same, so the open tabs that ask every 15 s get a 304', { skip: !fs.existsSync(path.join(__dirname, '..', '..', 'dashboard', 'site', 'core.cjs')) }, async () => {
+    const w = makeWindow('w-model-etag');
+    const { go, close } = await serve(w);
+    try {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const game = (id) => ({ id, p1: 'rush', p2: 'random', seed: 1, outcome: 'won', winner: 'rush', winnerSeat: 'p1', rounds: 5 });
+        const put = (games) => go('/api/docs/runs/test-etag', { method: 'PUT', token: 'push-secret', body: JSON.stringify({ id: 'test-etag', createdAt: '2026-10-16T14:00:00Z', bots: ['rush', 'random'], gamesPerPairing: 2, games }) });
+        const get = (headers = {}) => go('/api/app', { token: 'push-secret', headers });
+        // a build until it shows what was sent (a request that finds the build out of date gets the last one meanwhile)
+        const until = async (ok) => {
+            for (let i = 0; i < 40; i++) {
+                const r = await get();
+                const j = await r.json();
+                if (ok(j.result)) {
+                    return { tag: r.headers.get('etag'), version: j.result.version };
+                }
+                await sleep(25);
+            }
+            throw new Error('the model never showed it');
+        };
+        const games = (m) => m.model.runs.find((r) => r.id === 'test-etag')?.n;
+        await put([game('g1')]);
+        const first = await until((m) => games(m) === 1);
+        assert.match(first.tag, /^W\/"/);
+        const same = await get({ 'if-none-match': first.tag });
+        assert.strictEqual(same.status, 304);
+        assert.strictEqual(await same.text(), '');
+        // the same document again (the arena's uplink sends its documents every 20 s): the model is the same, so is the ETag
+        await put([game('g1')]);
+        await get();
+        await sleep(50);
+        assert.strictEqual((await get({ 'if-none-match': first.tag })).status, 304);
+        // a real change is a new ETag and a new version
+        await put([game('g1'), game('g2')]);
+        const next = await until((m) => games(m) === 2);
+        assert.notStrictEqual(next.tag, first.tag);
+        assert.notStrictEqual(next.version, first.version);
+        assert.strictEqual((await get({ 'if-none-match': first.tag })).status, 200);
     } finally {
         await close();
     }
@@ -924,6 +969,149 @@ test('mcp submit: a signed-in person submits a bot, reads only their own submiss
         assert.deepStrictEqual((await call(kim, 'arena_my_submissions')).value.map((x) => x.id).includes(house.id), false, 'no login is @arena');
         const houseLogin = await mcpToken(w, go, 'house');
         assert.deepStrictEqual((await call(houseLogin, 'arena_my_submissions')).value, [], 'nor @house, whose ids would match');
+    } finally {
+        await close();
+    }
+});
+
+test('auth: with ARENA_SIGNIN=github anyone with GitHub is a member, a blocked login is no one, and an admin is never blocked', () => {
+    const dir = path.join(tmp, 'auth-open');
+    const open = createAuth({ dir, env: { ...ENV, ARENA_SIGNIN: 'github' }, blocked: () => ['Bad-Guy', 'ericfode', 'pal'] });
+    assert.deepStrictEqual(['anyone', 'pal', 'bad-guy', 'ericfode', '-bad', ''].map((l) => open.roleOf(l)), ['member', 'anon', 'anon', 'admin', 'anon', 'anon']);
+    assert.deepStrictEqual([open.isBlocked('BAD-GUY'), open.isBlocked('ericfode'), open.isBlocked('anyone')], [true, false, false]);
+    assert.strictEqual(open.fixed().signin, 'github');
+    const cookie = (l) => ({ headers: { cookie: `swu_session=${open.sign({ l, exp: Date.now() + 60000 })}` } });
+    assert.deepStrictEqual(open.who(cookie('anyone')), { role: 'member', login: 'anyone', via: 'cookie' });
+    assert.deepStrictEqual(open.who(cookie('bad-guy')), { role: 'anon', login: 'bad-guy', blocked: true, via: 'cookie' });
+    // an app reads as its person, never more than a friend
+    open.useBearer((t) => ({ anyone: { login: 'anyone' }, eric: { login: 'ericfode' }, bad: { login: 'bad-guy' } })[t] ?? null);
+    const app = (t) => open.who({ headers: { authorization: `Bearer ${t}` } }).role;
+    assert.deepStrictEqual(['anyone', 'eric', 'bad'].map(app), ['member', 'friend', 'anon']);
+    // anything but a known mode is the closed one
+    for (const mode of [undefined, 'invited', 'everyone', 'GITHUB']) {
+        const closed = createAuth({ dir, env: { ...ENV, ARENA_SIGNIN: mode } });
+        assert.deepStrictEqual([closed.roleOf('anyone'), closed.roleOf('pal'), closed.fixed().signin], ['anon', 'friend', 'invited'], String(mode));
+    }
+});
+
+test('open sign-in: a stranger signs in and reads, the swarm and the open tables stay for invited people, and a blocked login is out everywhere', async () => {
+    const fakeGithub = async (url) => ({ json: async () => (url.includes('access_token') ? { access_token: 'gh-token' } : { login: 'Stranger', id: 7 }) });
+    const w = makeWindow('w-open', { env: { ...ENV, ARENA_SIGNIN: 'github' }, fetchImpl: fakeGithub });
+    const { go, close } = await serve(w);
+    try {
+        assert.match(await (await go('/')).text(), /enter a bot of your own.*Sign in with GitHub/s, 'the sign-in page says anyone may');
+        const start = await go('/auth/github?next=%2F%23%2Farena');
+        const to = new URL(start.headers.get('location'));
+        assert.strictEqual(to.searchParams.get('allow_signup'), 'true', 'someone without a GitHub account may make one on the way');
+        const back = await go(`/auth/github/callback?code=c&state=${to.searchParams.get('state')}`, { cookie: start.headers.get('set-cookie').split(';')[0] });
+        assert.strictEqual(back.headers.get('location'), '/#/arena');
+        const stranger = back.headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
+        assert.strictEqual((await go('/', { cookie: stranger })).status, 200);
+        assert.deepStrictEqual((await (await go('/api/me', { cookie: stranger })).json()).result, { login: 'stranger', role: 'member', signin: 'github' });
+        assert.strictEqual((await go('/api/status', { cookie: stranger })).status, 200);
+        assert.strictEqual((await (await go('/api/feedback', { cookie: stranger })).json()).result.may, true);
+        assert.strictEqual((await go('/api/share', { cookie: stranger })).status, 403, 'nor the Share page');
+        // the swarm's games are rated, so it stays for invited people; the open tables follow their own setting
+        assert.strictEqual((await go('/swarm', { cookie: stranger })).status, 403);
+        assert.strictEqual((await go('/api/swarm/info', { cookie: stranger })).status, 403);
+        assert.strictEqual((await go('/api/tables/info', { cookie: stranger })).status, 403);
+
+        // an admin blocks a login from the Share page: it is out at once, and back once unblocked
+        const eric = `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`;
+        const site = 'https://swu-arena.fly.dev';
+        const share = (body, cookie = eric) => go('/api/share', { method: 'POST', cookie, origin: site, body: JSON.stringify(body) });
+        assert.strictEqual((await share({ block: 'someone' }, stranger)).status, 403, 'a member cannot block');
+        assert.strictEqual((await share({ block: 'EricFode' })).status, 409, 'an admin is never blocked');
+        const listed = (await (await share({ block: '@Stranger' })).json()).result;
+        assert.deepStrictEqual([listed.signin, listed.blocked, listed.limits.botsPerPerson], ['github', ['stranger'], 2]);
+        const home = await go('/', { cookie: stranger });
+        assert.strictEqual(home.status, 403);
+        assert.match(await home.text(), /@stranger<\/b>, who may not use the arena/);
+        assert.match((await (await go('/api/status', { cookie: stranger })).json()).error.message, /@stranger may not use the arena/);
+        assert.strictEqual((await (await go('/api/feedback', { cookie: stranger })).json()).result.may, false);
+        assert.strictEqual((await go('/art/SOR/005.png', { cookie: stranger })).status, 401);
+        assert.deepStrictEqual((await (await share({ unblock: 'stranger' })).json()).result.blocked, []);
+        assert.strictEqual((await go('/', { cookie: stranger })).status, 200, 'back at once');
+    } finally {
+        await close();
+    }
+});
+
+test('mcp submit: a person fields 2 bots and sends 10 a day, the arena takes 20 from builders, and a suffix is never another GitHub account\'s builder name', async () => {
+    const asked = [];
+    const githubHas = async (login) => {
+        asked.push(login);
+        return login === 'ana-fast' ? true : login === 'ana-down' ? null : false;
+    };
+    const w = makeWindow('w-limits', { env: { ...ENV, ARENA_SIGNIN: 'github' }, githubHas });
+    const { go, close } = await serve(w);
+    try {
+        const call = async (t, name, args = {}) => {
+            const r = (await (await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result;
+            return { error: !!r.isError, value: r.isError ? r.content[0].text : JSON.parse(r.content[0].text) };
+        };
+        const status = (competitors) => w.store.putDoc('arena', 'status', JSON.stringify({ competitors }));
+        const bot = { kind: 'js', note: 'try', files: { 'bot.js': "require('./stdio').serve({ decide: () => ({ t: 'act', i: 0 }) });" } };
+        status([]);
+        const ana = await mcpToken(w, go, 'ana');
+        assert.strictEqual((await call(ana, 'whoami')).value.role, 'member');
+        assert.strictEqual((await call(ana, 'arena_submit', bot)).value.name, 'ana', 'the builder name asks GitHub nothing');
+        assert.deepStrictEqual(asked, []);
+        assert.match((await call(ana, 'arena_submit', { ...bot, name: 'ana_fast' })).value, /is the builder name of @ana-fast on GitHub/, '@ana-fast exists on GitHub');
+        assert.match((await call(ana, 'arena_submit', { ...bot, name: 'ana_down' })).value, /GitHub did not answer/);
+        assert.strictEqual((await call(ana, 'arena_submit', { ...bot, name: 'ana_two' })).value.name, 'ana_two');
+        assert.deepStrictEqual(asked, ['ana-fast', 'ana-down', 'ana-two']);
+        assert.match((await call(ana, 'arena_submit', { ...bot, name: 'ana_three' })).value, /at most 2 bots each: send new versions to ana_two or ana/);
+        assert.strictEqual((await call(ana, 'arena_submit', bot)).error, false, 'new versions of a bot of theirs are fine');
+        // a bot the arena entered counts while it plays; a benched one does not
+        status([{ name: 'ana', owner: 'github:ana' }, { name: 'ana_old', owner: 'github:ana', benched: true }]);
+        assert.strictEqual((await call(ana, 'arena_submit', { ...bot, name: 'ana_old' })).error, false, 'a new version of a benched bot of theirs');
+        // 10 a day over all their bots: 4 stored so far, and 6 more from earlier today
+        for (let i = 0; i < 6; i++) {
+            w.store.putDoc('submissions', `ana.old${i}`, JSON.stringify({ id: `ana.old${i}`, owner: 'ana', name: 'ana_two', state: 'accepted', submittedAt: new Date().toISOString() }));
+        }
+        assert.match((await call(ana, 'arena_submit', { ...bot, name: 'ana_two' })).value, /at most 10 submissions a day over all your competitors/);
+
+        // the arena takes 20 bots from builders who are not admins: the pending ones count, Eric's and the arena's do not
+        const many = Array.from({ length: 18 }, (_, i) => ({ name: `p${i}`, owner: `github:p${i}` }));
+        const anas = [{ name: 'ana', owner: 'github:ana' }, { name: 'ana_old', owner: 'github:ana', benched: true }];
+        status([...many, ...anas, { name: 'ericfode_x', owner: 'github:ericfode' }, { name: 'rush', owner: 'arena' }]);
+        // ana (playing) and ana_two (waiting, not entered yet) make 20 with the 18; ana_old is benched
+        const zed = await mcpToken(w, go, 'zed');
+        assert.match((await call(zed, 'arena_submit', bot)).value, /the arena is full: it takes 20 bots from builders/);
+        status([...many.map((c, i) => (i === 0 ? { ...c, benched: true } : c)), ...anas]);
+        const z = await call(zed, 'arena_submit', bot);
+        assert.strictEqual(z.value.name, 'zed', `a benched bot leaves room: ${JSON.stringify(z)}`);
+
+        // an admin has none of these limits (Eric's builders send many versions a day)
+        const eric = await mcpToken(w, go, 'ericfode');
+        for (const name of ['ericfode', 'ericfode_a', 'ericfode_b', 'ericfode_c']) {
+            assert.strictEqual((await call(eric, 'arena_submit', { ...bot, name })).value.name, name);
+        }
+        assert.deepStrictEqual(asked, ['ana-fast', 'ana-down', 'ana-two'], 'nor asks GitHub for an admin');
+    } finally {
+        await close();
+    }
+});
+
+test('mcp submit: new names sent at the same time, each waiting on GitHub, still make at most 2 bots', async () => {
+    // GitHub answers slowly, so both submissions are counted before either is stored unless the limits are counted again
+    const githubHas = () => new Promise((resolve) => setTimeout(() => resolve(false), 50));
+    const w = makeWindow('w-limits-race', { env: { ...ENV, ARENA_SIGNIN: 'github' }, githubHas });
+    const { go, close } = await serve(w);
+    try {
+        const call = async (t, name, args = {}) => {
+            const r = (await (await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result;
+            return { error: !!r.isError, value: r.isError ? r.content[0].text : JSON.parse(r.content[0].text) };
+        };
+        w.store.putDoc('arena', 'status', JSON.stringify({ competitors: [] }));
+        const bot = { kind: 'js', note: 'try', files: { 'bot.js': "require('./stdio').serve({ decide: () => ({ t: 'act', i: 0 }) });" } };
+        const bea = await mcpToken(w, go, 'bea');
+        assert.strictEqual((await call(bea, 'arena_submit', bot)).value.name, 'bea');
+        const both = await Promise.all(['bea_a', 'bea_b', 'bea_c'].map((name) => call(bea, 'arena_submit', { ...bot, name })));
+        assert.strictEqual(both.filter((r) => !r.error).length, 1, JSON.stringify(both));
+        assert.strictEqual(both.filter((r) => r.error && /at most 2 bots each/.test(r.value)).length, 2, JSON.stringify(both));
+        assert.deepStrictEqual([...new Set(w.store.listDocs('submissions').map((d) => JSON.parse(w.store.getDoc('submissions', d.id)).name))].sort(), ['bea', both.find((r) => !r.error).value.name].sort());
     } finally {
         await close();
     }

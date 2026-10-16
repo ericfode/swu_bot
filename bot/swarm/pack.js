@@ -28,7 +28,7 @@ const REPO = path.resolve(__dirname, '..', '..');
 // (bot/table: host.js plays a person against the JEPA bot in the person's tab)
 const BOT_DIRS = ['bot/players', 'bot/sims', 'vendor/kessel/js', 'bot/table'];
 // the play page's JEPA bot's models: next to engine.json as they are, each written by the page to its path in the
-// runtime when its first game starts (play-host.js addFiles)
+// runtime when its first game starts (the tables worker's start message, bot/swarm/build.js)
 const MODELS = { 'tx-t10.safetensors': 'vendor/jepa/tx-t10.safetensors', 'tx-t10-e.safetensors': 'vendor/jepa/tx-t10-e.safetensors' };
 const SKIP = /(^|\/)(test|tests|__pycache__|target)(\/|$)|\.(map|md|ts|py|rs|c|h|o)$/;
 // the engine's logger and what it pulls in: the runtime gives the engine a silent logger instead (runtime.js aliases)
