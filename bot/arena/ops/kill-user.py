@@ -6,12 +6,16 @@ next lease.
 
     python3 -I bot/arena/ops/kill-user.py <uid>
 
-It sweeps /proc and sends SIGKILL to each process whose real, effective, saved or filesystem uid is <uid>, again and
-again until a sweep finds none alive (a zombie is dead: it only waits to be reaped). Each process is opened as a pidfd
-before its uids are read, and the signal goes through that pidfd, so a pid that a process of someone else took over
-meanwhile is never signalled. The user's processes cannot stop or signal this one: it is root's.
+The kill is kill(-1, SIGKILL) from a child that drops to real and saved uid nobody (65534) and effective uid <uid>:
+- the kernel walks every process at once, so one that forks, or forks and exits, cannot slip past, and a process
+  whose main thread exited while its other threads run is still reached;
+- it reaches what runs with <uid> as its real or saved uid (and whatever runs as nobody, so nothing may: this refuses
+  to start when something does), and never root's processes;
+- the user's processes cannot signal or trace the killer: its real and saved uid are not theirs.
+Then it checks every thread of every process, and kills again until none of <uid> is alive (a zombie is dead).
 
-Exit 0: none left; 1: some still ran when the time was up (TIMEOUT_S); 2: bad usage, or not root.
+Exit 0: none left; 1: some still ran when the time was up (TIMEOUT_S), or the kill could not run; 2: bad usage, not
+root, or something runs as nobody.
 """
 import os
 import signal
@@ -19,63 +23,77 @@ import sys
 import time
 
 TIMEOUT_S = 10
+NOBODY = 65534
 
 
-def matches(pid, uid):
-    """Whether the process pid is alive and runs with uid as one of its uids."""
-    try:
-        with open("/proc/%d/status" % pid) as f:
-            text = f.read()
-    except OSError:
-        return False
-    state = uids = None
-    for line in text.splitlines():
-        if line.startswith("State:"):
-            state = line.split()[1]
-        elif line.startswith("Uid:"):
-            uids = [int(x) for x in line.split()[1:5]]
-    return uids is not None and uid in uids and state not in ("Z", "X")
-
-
-def sweep(uid):
-    """Sends SIGKILL to every live process of uid; returns how many it found."""
-    found = 0
-    for name in os.listdir("/proc"):
-        if not name.isdigit() or int(name) == os.getpid():
+def live_tasks(uid):
+    """The threads (of every process) that run with uid as one of their uids and are not dead."""
+    tids = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
             continue
         try:
-            fd = os.pidfd_open(int(name))
-        except ProcessLookupError:
+            tasks = os.listdir("/proc/%s/task" % pid)
+        except OSError:
             continue
+        for tid in tasks:
+            try:
+                with open("/proc/%s/task/%s/status" % (pid, tid)) as f:
+                    text = f.read()
+            except OSError:
+                continue
+            state = uids = None
+            for line in text.splitlines():
+                if line.startswith("State:"):
+                    state = line.split()[1]
+                elif line.startswith("Uid:"):
+                    uids = [int(x) for x in line.split()[1:5]]
+            if uids is not None and uid in uids and state not in ("Z", "X"):
+                tids.append(int(tid))
+    return tids
+
+
+def kill_all(uid):
+    """kill(-1, SIGKILL) as real and saved uid nobody, effective uid uid; whether it ran."""
+    child = os.fork()
+    if child == 0:
         try:
-            # read after the pidfd is open: if the pid now names another process, the one the pidfd holds is gone and
-            # the signal below fails
-            if matches(int(name), uid):
-                try:
-                    signal.pidfd_send_signal(fd, signal.SIGKILL)
-                    found += 1
-                except ProcessLookupError:
-                    pass
-        finally:
-            os.close(fd)
-    return found
+            os.setgroups([])
+            os.setresgid(NOBODY, NOBODY, NOBODY)
+            os.setresuid(NOBODY, uid, NOBODY)
+            try:
+                os.kill(-1, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            os._exit(0)
+        except BaseException:
+            os._exit(1)
+    _, status = os.waitpid(child, 0)
+    return os.waitstatus_to_exitcode(status) == 0
 
 
 def main():
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit() or int(sys.argv[1]) == 0:
-        sys.stderr.write("usage: python3 -I kill-user.py <uid other than 0>\n")
+    if len(sys.argv) != 2 or not sys.argv[1].isdigit() or int(sys.argv[1]) in (0, NOBODY):
+        sys.stderr.write("usage: python3 -I kill-user.py <uid other than 0 and %d>\n" % NOBODY)
         return 2
     if os.geteuid() != 0:
         sys.stderr.write("kill-user.py: must run as root\n")
         return 2
+    if live_tasks(NOBODY):
+        sys.stderr.write("kill-user.py: something runs as nobody, which the kill would reach too\n")
+        return 2
     uid = int(sys.argv[1])
     end = time.monotonic() + TIMEOUT_S
-    while sweep(uid):
+    while True:
+        if not kill_all(uid):
+            sys.stderr.write("kill-user.py: the kill could not run\n")
+            return 1
+        if not live_tasks(uid):
+            return 0
         if time.monotonic() > end:
             sys.stderr.write("kill-user.py: processes of uid %d still run after %d s\n" % (uid, TIMEOUT_S))
             return 1
         time.sleep(0.01)
-    return 0
 
 
 if __name__ == "__main__":
