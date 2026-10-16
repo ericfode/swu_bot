@@ -1094,6 +1094,29 @@ test('mcp submit: a person fields 2 bots and sends 10 a day, the arena takes 20 
     }
 });
 
+test('mcp submit: new names sent at the same time, each waiting on GitHub, still make at most 2 bots', async () => {
+    // GitHub answers slowly, so both submissions are counted before either is stored unless the limits are counted again
+    const githubHas = () => new Promise((resolve) => setTimeout(() => resolve(false), 50));
+    const w = makeWindow('w-limits-race', { env: { ...ENV, ARENA_SIGNIN: 'github' }, githubHas });
+    const { go, close } = await serve(w);
+    try {
+        const call = async (t, name, args = {}) => {
+            const r = (await (await go('/mcp', { method: 'POST', token: t, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result;
+            return { error: !!r.isError, value: r.isError ? r.content[0].text : JSON.parse(r.content[0].text) };
+        };
+        w.store.putDoc('arena', 'status', JSON.stringify({ competitors: [] }));
+        const bot = { kind: 'js', note: 'try', files: { 'bot.js': "require('./stdio').serve({ decide: () => ({ t: 'act', i: 0 }) });" } };
+        const bea = await mcpToken(w, go, 'bea');
+        assert.strictEqual((await call(bea, 'arena_submit', bot)).value.name, 'bea');
+        const both = await Promise.all(['bea_a', 'bea_b', 'bea_c'].map((name) => call(bea, 'arena_submit', { ...bot, name })));
+        assert.strictEqual(both.filter((r) => !r.error).length, 1, JSON.stringify(both));
+        assert.strictEqual(both.filter((r) => r.error && /at most 2 bots each/.test(r.value)).length, 2, JSON.stringify(both));
+        assert.deepStrictEqual([...new Set(w.store.listDocs('submissions').map((d) => JSON.parse(w.store.getDoc('submissions', d.id)).name))].sort(), ['bea', both.find((r) => !r.error).value.name].sort());
+    } finally {
+        await close();
+    }
+});
+
 test('mcp agent: a connect link gives an agent with no browser a token that submits as one competitor only', async () => {
     const w = makeWindow('w-agent');
     const { go, close } = await serve(w);

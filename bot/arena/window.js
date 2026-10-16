@@ -871,6 +871,44 @@ function createWindow(opts = {}) {
     }
 
     /** arena_submit: checks the request and stores it for the arena's intake; nothing of it runs here. */
+    /**
+     * Whether `login` may send one more submission to competitor `n` now ({now, fresh}: fresh when `n` is a new
+     * competitor); throws the limit it would pass. Admins have no limit on competitors and 60 submissions a day.
+     */
+    function room(login, n, admin) {
+        const mine = mySubmissions(login);
+        const waiting = (x) => x.state === 'pending' || x.state === 'checking';
+        const forName = mine.filter((x) => x.name === n);
+        need(forName.filter(waiting).length < SUBMIT_PENDING, 'conflict',
+            `${n} has ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
+        const now = Date.now();
+        const today = (xs) => xs.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length;
+        const perDay = admin ? SUBMIT_PER_DAY_PERSON : PERSON_PER_DAY;
+        need(today(forName) < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day for one competitor`);
+        need(today(mine) < perDay, 'conflict', `at most ${perDay} submissions a day over all your competitors`);
+        // a new competitor (a name the arena has not entered yet, nor has waiting): within the person's bots and the
+        // arena's. A bot counts while it plays (a benched one does not), and a waiting name the arena has not entered yet
+        const comps = (arenaMethods.status().competitors ?? []).filter((c) => c && typeof c.name === 'string');
+        const playing = comps.filter((c) => !c.benched);
+        const entered = new Set(comps.map((c) => c.name));
+        const theirs = new Set([...playing.filter((c) => c.owner === `github:${login}`).map((c) => c.name), ...mine.filter((x) => waiting(x) && !entered.has(x.name)).map((x) => x.name)]);
+        const fresh = !theirs.has(n) && !entered.has(n);
+        if (!admin && fresh) {
+            need(theirs.size < BOTS_PER_PERSON, 'conflict', `at most ${BOTS_PER_PERSON} bots each${theirs.size ? `: send new versions to ${[...theirs].join(' or ')}` : ''}`);
+            const { admins } = auth.fixed();
+            const outsider = (owner) => typeof owner === 'string' && !admins.includes(owner.replace(/^github:/, '').toLowerCase());
+            const outside = new Set(playing.filter((c) => /^github:/.test(c.owner ?? '') && outsider(c.owner)).map((c) => c.name));
+            for (const d of store.listDocs('submissions')) {
+                const x = parseOr(store.getDoc('submissions', d.id), null);
+                if (x && waiting(x) && x.owner !== '@arena' && outsider(String(x.owner)) && typeof x.name === 'string' && !entered.has(x.name)) {
+                    outside.add(x.name);
+                }
+            }
+            need(outside.size < OUTSIDE_BOTS, 'conflict', `the arena is full: it takes ${OUTSIDE_BOTS} bots from builders, and has them all. Send a new version to a bot you have, or try again later`);
+        }
+        return { now, fresh };
+    }
+
     async function submit(who, { kind, note, files, base64 = [], entry, name } = {}) {
         need(who.login && LOGIN.test(who.login), 'forbidden', 'submitting takes a GitHub sign-in');
         const login = who.login.toLowerCase();
@@ -883,41 +921,17 @@ function createWindow(opts = {}) {
         need(typeof n === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(n), 'bad_request', 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
         const problem = nameProblem(login, n);
         need(!problem, 'conflict', problem);
-        const mine = mySubmissions(login);
-        const waiting = (x) => x.state === 'pending' || x.state === 'checking';
-        const forName = mine.filter((x) => x.name === n);
-        need(forName.filter(waiting).length < SUBMIT_PENDING, 'conflict',
-            `${n} has ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
-        const now = Date.now();
-        const today = (xs) => xs.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length;
-        const { admins } = auth.fixed();
+        const { admins, signin } = auth.fixed();
         const admin = admins.includes(login);
-        const perDay = admin ? SUBMIT_PER_DAY_PERSON : PERSON_PER_DAY;
-        need(today(forName) < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day for one competitor`);
-        need(today(mine) < perDay, 'conflict', `at most ${perDay} submissions a day over all your competitors`);
-        // a new competitor (a name the arena has not entered yet, nor has waiting): within the person's bots and the
-        // arena's. A bot counts while it plays (a benched one does not), and a waiting name the arena has not entered yet
-        const comps = (arenaMethods.status().competitors ?? []).filter((c) => c && typeof c.name === 'string');
-        const playing = comps.filter((c) => !c.benched);
-        const entered = new Set(comps.map((c) => c.name));
-        const theirs = new Set([...playing.filter((c) => c.owner === `github:${login}`).map((c) => c.name), ...mine.filter((x) => waiting(x) && !entered.has(x.name)).map((x) => x.name)]);
-        if (!admin && !theirs.has(n) && !comps.some((c) => c.name === n)) {
-            need(theirs.size < BOTS_PER_PERSON, 'conflict', `at most ${BOTS_PER_PERSON} bots each${theirs.size ? `: send new versions to ${[...theirs].join(' or ')}` : ''}`);
-            const outsider = (owner) => typeof owner === 'string' && !admins.includes(owner.replace(/^github:/, '').toLowerCase());
-            const outside = new Set(playing.filter((c) => /^github:/.test(c.owner ?? '') && outsider(c.owner)).map((c) => c.name));
-            for (const d of store.listDocs('submissions')) {
-                const x = parseOr(store.getDoc('submissions', d.id), null);
-                if (x && waiting(x) && x.owner !== '@arena' && outsider(String(x.owner)) && typeof x.name === 'string' && !entered.has(x.name)) {
-                    outside.add(x.name);
-                }
-            }
-            need(outside.size < OUTSIDE_BOTS, 'conflict', `the arena is full: it takes ${OUTSIDE_BOTS} bots from builders, and has them all. Send a new version to a bot you have, or try again later`);
-            if (auth.fixed().signin === 'github' && n !== builderName(login)) {
-                const other = await someoneElses(login, n);
-                need(other !== null, 'unavailable', 'GitHub did not answer whether that name is someone else\'s; try again in a minute');
-                need(!other, 'conflict', `"${n}" is the builder name of @${other} on GitHub: give yours another suffix, e.g. ${builderName(login)}_bot`);
-            }
+        // a new competitor with a suffix, while anyone may sign in, must not take another GitHub account's builder name;
+        // GitHub is asked first, and the limits are counted again after that wait, with no other wait before the
+        // submission is stored, so submissions sent at the same time cannot all pass them
+        if (!admin && signin === 'github' && n !== builderName(login) && room(login, n, admin).fresh) {
+            const other = await someoneElses(login, n);
+            need(other !== null, 'unavailable', 'GitHub did not answer whether that name is someone else\'s; try again in a minute');
+            need(!other, 'conflict', `"${n}" is the builder name of @${other} on GitHub: give yours another suffix, e.g. ${builderName(login)}_bot`);
         }
+        const { now } = room(login, n, admin);
         const id = `${login}.${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
         const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
             state: 'pending', submittedAt: new Date(now).toISOString() };
