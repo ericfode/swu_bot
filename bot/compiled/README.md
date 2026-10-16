@@ -57,6 +57,12 @@ the games machine the cache is root's: root compiles into it and the games, as t
 `run.py` with `python3 -I` (the arena does), so wasmtime must be installed where Python finds it without the user's
 site folder or `PYTHONPATH` (`pip install wasmtime` into the interpreter or a virtualenv).
 
+Start-up counts against the bot's clock, so `run.py` keeps it short. wasmtime hands every WASI file call to a thread of
+its own and waits for it, and listing a folder re-reads the whole folder on every call. Reading the card data
+(2,479 files) that way took 4.3 s to a bot's first reply, almost all of it hand-offs between CPUs. So until the first
+reply `run.py` and its threads run on one CPU (1.1 s; `SWU_WASM_PIN=off` turns it off), and then every thread goes
+back on all its CPUs. A browser tab (`bot/swarm/wasi.js`) serves the same files from memory and starts in about 0.2 s.
+
 ## Same games as native?
 
 On 2026-10-11 the bundles of nine of the project's bots (Rust, C, Python and JS; now in holocron) played the same seeds
