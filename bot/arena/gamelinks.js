@@ -7,9 +7,10 @@
  * so copying it gives the decision on screen. The app's game page links here (Share), and a signed-out visitor who
  * opens an app link to a game (/#/games/<run>/<game>) is sent here by the sign-in page (auth.js).
  *
- * A game against people (window.js peopleRun(run, doc): Karabast, /play, /tables) reads as every arena reader gets it,
- * the person as "a person", and opens only once it has ended: watched live, it would show a person the other side's
- * hidden cards. Bot games are watched live with both hands, as in the app: a bot in its sandbox cannot read this page.
+ * A game against people (window.js peopleRun(run, doc): Karabast, and /tables against a bot or a person) reads as
+ * every arena reader gets it, the person as "a person", and opens only once it has ended: watched live, it would show
+ * a person the other side's hidden cards. Bot games are watched live with both hands, as in the app: a bot in its
+ * sandbox cannot read this page.
  * A replay whose run document is gone is not shown, since only that document tells a game against people apart.
  *
  *   const games = createGameLinks({ store, publicUrl, kitFile, statics, replayFor, peopleRun });

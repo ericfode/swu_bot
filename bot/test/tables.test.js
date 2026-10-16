@@ -57,7 +57,7 @@ function machine() {
     return m;
 }
 
-function makeWindow(name, { mode, deckFetch, swarmOn = true, limits } = {}) {
+function makeWindow(name, { mode, play, deckFetch, swarmOn = true, limits } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     let tablesOpen = () => false;
@@ -67,7 +67,7 @@ function makeWindow(name, { mode, deckFetch, swarmOn = true, limits } = {}) {
     const kit = path.join(tmp, `${name}-kit.js`);
     fs.writeFileSync(kit, 'window.SWUViewer = {};');
     const wakes = { n: 0 };
-    const w = createWindow({ home, auth, swarm, kit, app: path.join(tmp, 'none.html'), minMs: 0, wakeGames: () => { wakes.n++; }, tables: mode, tablesFetch: deckFetch, tablesLimits: limits });
+    const w = createWindow({ home, auth, swarm, kit, app: path.join(tmp, 'none.html'), minMs: 0, wakeGames: () => { wakes.n++; }, tables: mode, play, tablesFetch: deckFetch, tablesLimits: limits });
     tablesOpen = (n) => w.tables.openTo(n);
     // the arena's documents the bot list reads: who is competing, and each version's submission
     store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'tinybot', title: 'Tiny Bot', owner: 'github:pal2', latest: 'tinybot-v2', elo: 1234.4 }] }));
@@ -199,7 +199,7 @@ test('SWUDB links and deck lists: the id from any link form, the API answer and 
 
 test('who may play: invited people by default, anyone with GitHub in github mode, no one when off; the logs page for anyone signed in', async () => {
     for (const mode of [undefined, 'github', 'off']) {
-        const { w } = makeWindow(`who-${mode}`, { mode });
+        const { w } = makeWindow(`who-${mode}`, { mode, play: mode });
         const { go, close } = await serve(w);
         try {
             const logs = await go('/tables/logs', { cookie: session(w, 'stranger') });
@@ -236,6 +236,38 @@ test('who may play: invited people by default, anyone with GitHub in github mode
     }
 });
 
+test('one play page: /play goes to /tables; with the bots open to GitHub and people games invited-only, anyone with GitHub plays the bots and only invited people pair', async () => {
+    const { w } = makeWindow('bots-only', { play: 'github' });
+    const { go, post, close } = await serve(w);
+    try {
+        for (const [from, to] of [['/play', '/tables'], ['/play/', '/tables'], ['/play?bot=tinybot-v2', '/tables?bot=tinybot-v2']]) {
+            const r = await go(from);
+            assert.deepStrictEqual([r.status, r.headers.get('location')], [302, to], from);
+        }
+        assert.ok(w.tables.openTo('/tables'), 'sign-in comes back to the play page with no role');
+        assert.match(await (await go('/tables')).text(), /The bots are open to anyone with a GitHub account, games against other people to people Eric invited/);
+        const stranger = session(w, 'stranger');
+        const page = await go('/tables', { cookie: stranger });
+        assert.strictEqual(page.status, 200);
+        assert.match(await page.text(), /mountPlay/);
+        const info = await result(await go('/api/tables/info', { cookie: stranger }));
+        assert.deepStrictEqual([info.mode, info.play, info.people], ['invited', 'github', []], 'the bot screen alone');
+        assert.deepStrictEqual(info.bots.map((b) => b.name), ['jepa-tx-gate', 'tinybot-v2']);
+        for (const p of ['/api/tables/invite', '/api/tables/queue', '/api/tables/join']) {
+            const r = await post(p, stranger, { code: 'ABCDEF' });
+            assert.strictEqual(r.status, 403, p);
+            assert.match((await r.json()).error.message, /games against other people are for people Eric invited/);
+        }
+        assert.strictEqual((await go('/api/tables/stream?room=x&side=host&k=y', { cookie: stranger })).status, 403);
+        assert.strictEqual((await go('/api/tables/games', { cookie: stranger })).status, 200, 'their own games');
+        // an invited person pairs as before
+        assert.deepStrictEqual((await result(await go('/api/tables/info', { cookie: session(w, 'pal') }))).people, ['lobby', 'invite', 'join', 'direct']);
+        assert.strictEqual((await post('/api/tables/invite', session(w, 'pal'))).status, 200);
+    } finally {
+        await close();
+    }
+});
+
 test("the bots come from the arena's latest round, joined with the arena's own documents, and their bundles are kept on the window", async () => {
     const { w, m, home, wakes } = makeWindow('bots');
     const { go, close } = await serve(w);
@@ -245,15 +277,20 @@ test("the bots come from the arena's latest round, joined with the arena's own d
         assert.match(info.you, /^pl_[0-9a-f]{6}$/);
         assert.strictEqual((await result(await go('/api/tables/info', { cookie: pal }))).you, info.you, 'the same id every time');
         assert.notStrictEqual((await result(await go('/api/tables/info', { cookie: session(w, 'pal2') }))).you, info.you);
-        assert.deepStrictEqual([info.ready, info.build, info.files.worker, info.files.pack], [true, 'b1', '/tables/tables-worker.js?b=b1', '/tables/engine.json?b=b1']);
+        assert.deepStrictEqual([info.ready, info.build, info.files.worker.url, info.files.pack.url, info.files.botWorker.url], [true, 'b1', '/tables/tables-worker.js?b=b1', '/tables/engine.json?b=b1', '/tables/bot-worker.js?b=b1']);
         assert.deepStrictEqual(info.people, ['lobby', 'invite', 'join', 'direct']);
+        assert.strictEqual(info.round, 7, "the lineup's round, for the line under each arena bot");
         assert.ok(info.decks.length > 10 && info.decks.every((d) => d.name && d.leader && d.base), 'the tournament lists');
-        assert.deepStrictEqual(info.bots.map((b) => [b.name, b.title, b.owner, b.elo, b.runtime, b.url]), [
-            ['jepa-tx-gate', "Eric's JEPA bot", 'ericfode', null, 'js', null],
-            ['tinybot-v2', 'Tiny Bot', 'pal2', 1234, 'python', `/tables/bot/${HEX}.tar`]
-        ], 'a lineup entry with a bad name is dropped');
+        assert.deepStrictEqual(info.bots.map((b) => [b.name, b.kind, b.title, b.owner, b.elo, b.runtime, b.bundle?.url ?? null, b.bundle?.hex ?? null]), [
+            ['jepa-tx-gate', 'jepa', "Eric's JEPA bot", 'ericfode', null, undefined, null, null],
+            ['tinybot-v2', 'arena', 'Tiny Bot', 'pal2', 1234, 'python-3.14-wasi', `/tables/bot/${HEX}.tar`, HEX]
+        ], 'a lineup entry with a bad name is dropped; a bundle whose arena.json the window has not read runs what its files say');
         assert.strictEqual(info.bots[1].note, 'small and quick');
         assert.strictEqual(info.bots[1].capMs, 30000, "the round's thinking time, which the page sends with the bundle");
+        assert.strictEqual(info.bots[1].bytes, TAR.length);
+        assert.match(info.bots[0].about, /looks ahead/);
+        // Python's files, for a Python bundle: the page downloads them with the first one and sends them to the worker
+        assert.deepStrictEqual(Object.entries(info.runtimes).map(([k, r]) => [k, r.lib.url, r.wasm.url]), [['python-3.14-wasi', '/tables/python-lib.json?b=b1', '/tables/python.wasm?b=b1']]);
 
         await new Promise((r) => setTimeout(r, 50)); // the lineup's bundles are fetched in the background
         assert.ok(fs.existsSync(path.join(home, 'swarm-bots', `${HEX}.tar`)), 'kept on the window');
@@ -262,10 +299,15 @@ test("the bots come from the arena's latest round, joined with the arena's own d
         assert.strictEqual(tar.headers.get('cross-origin-embedder-policy'), 'require-corp');
         assert.deepStrictEqual(Buffer.from(await tar.arrayBuffer()), TAR);
         assert.strictEqual((await go(`/tables/bot/${'0'.repeat(64)}.tar`, { cookie: pal })).status, 404, 'only bundles of the lineup');
-        assert.strictEqual((await go('/tables/play-worker.js?b=b1', { cookie: pal })).status, 404, 'only the tables files');
+        assert.strictEqual((await go('/tables/play-worker.js?b=b1', { cookie: pal })).status, 404, 'only the play page\'s files');
+        // the request above has the relay make the bundle's brotli in the background (written whole, then renamed)
+        const packed = (z) => path.join(home, 'swarm-bots', `${HEX}.tar.${z}`);
+        for (let i = 0; i < 250 && !fs.existsSync(packed('br')); i++) await new Promise((r) => setTimeout(r, 20));
+        const wire = fs.statSync(packed('br')).size;
+        assert.strictEqual((await result(await go('/api/tables/info', { cookie: pal }))).bots[1].wire, wire, 'what it downloads (brotli or gzip), once the window has it');
         assert.strictEqual(await (await go('/tables/tables-worker.js?b=b1', { cookie: pal })).text(), '// /v1/swarm/tables-worker.js');
         // the JEPA bot's models: where the worker puts each, fetched only for a game against it
-        assert.deepStrictEqual(info.files.models.map((f) => [f.url, f.path]), [
+        assert.deepStrictEqual(info.bots[0].files.map((f) => [f.url, f.path]), [
             ['/tables/tx-t10.safetensors?b=b1', '/app/vendor/jepa/tx-t10.safetensors'],
             ['/tables/tx-t10-e.safetensors?b=b1', '/app/vendor/jepa/tx-t10-e.safetensors']
         ]);
@@ -282,6 +324,25 @@ test("the bots come from the arena's latest round, joined with the arena's own d
         for (const f of [`${HEX}.tar`, `${HEX}.tar.gz`]) fs.rmSync(path.join(home, 'swarm-bots', f));
         assert.strictEqual((await go(`/tables/bot/${HEX}.tar`, { cookie: pal })).status, 503);
         assert.strictEqual((await go(`/tables/bot/${HEX}.tar`, { cookie: pal })).status, 503);
+        assert.strictEqual(wakes.n, 1);
+    } finally {
+        await close();
+    }
+});
+
+test('a sleeping games machine with no files on the window is woken, once a while, and the page is told it is waking', async () => {
+    const { w, m, wakes } = makeWindow('asleep');
+    m.awake = false;
+    const { go, close } = await serve(w);
+    try {
+        for (let i = 0; i < 2; i++) {
+            const info = await result(await go('/api/tables/info', { cookie: session(w, 'pal') }));
+            assert.strictEqual(info.ready, false);
+            assert.strictEqual(info.waking, true, 'the page opens anyway and asks again');
+            assert.match(info.why, /starting/);
+            assert.ok(info.decks.length > 10, 'the lists do not wait for the machine');
+            assert.ok(info.bots.length >= 1, 'nor the bots');
+        }
         assert.strictEqual(wakes.n, 1);
     } finally {
         await close();

@@ -1,6 +1,6 @@
 'use strict';
 // Files the window sends as they are (bot/arena/static.js): compressed once, brotli or gzip as the browser takes it,
-// and 304 when it already has them; the app, the kit on /kit.js, /play/kit.js and /tables/kit.js; and the engine pack and
+// and 304 when it already has them; the app, the kit on /kit.js and /tables/kit.js; and the engine pack and
 // bot bundles of the swarm relay, kept a year when their URL names them, with a brotli copy made in the background.
 const test = require('node:test');
 const assert = require('node:assert');
@@ -156,12 +156,12 @@ test('the window sends the app and the kit compressed once, with 304 on a reload
         assert.strictEqual(reload.status, 304);
 
         const stranger = { cookie: `swu_session=${auth.sign({ l: 'stranger', exp: Date.now() + 60000 })}`, 'accept-encoding': 'gzip' };
-        const kits = [await get('/kit.js', pal), await get('/play/kit.js', stranger), await get('/tables/kit.js', stranger)];
-        assert.deepStrictEqual(kits.map((r) => r.status), [200, 200, 200]);
+        const kits = [await get('/kit.js', pal), await get('/tables/kit.js', stranger)];
+        assert.deepStrictEqual(kits.map((r) => r.status), [200, 200]);
         assert.deepStrictEqual(kits.map(decode), kits.map(() => fs.readFileSync(kit, 'utf8')));
         assert.strictEqual(new Set(kits.map((r) => r.headers.etag)).size, 1, 'one kit, one ETag');
-        assert.strictEqual(kits[2].headers['cross-origin-resource-policy'], 'same-origin', 'the open tables page is isolated');
-        assert.strictEqual((await get('/play/kit.js', { ...stranger, 'if-none-match': kits[0].headers.etag })).status, 304);
+        assert.strictEqual(kits[1].headers['cross-origin-resource-policy'], 'same-origin', 'the play page is isolated');
+        assert.strictEqual((await get('/tables/kit.js', { ...stranger, 'if-none-match': kits[0].headers.etag })).status, 304);
         assert.strictEqual((await get('/kit.js', { ...stranger, 'if-none-match': kits[0].headers.etag })).status, 403, 'the arena itself stays for invited people');
     } finally {
         await close();

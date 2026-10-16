@@ -19,8 +19,8 @@
  *                          no refresh). It reads as its person and may also submit bots, under that one name only
  *                          (window.js); a new token for the same name ends the old one.
  * One grant = one person allowing one client (or one agent). Tokens are random and kept only as SHA-256 hashes, in <dir>/oauth.json.
- * A grant reads as its person, as 'friend' while their login is invited (checked on every request, so removing an
- * invite cuts their apps off too) and never more: an app reads the arena and changes nothing. A person sees and ends
+ * A grant reads as its person, as 'friend' while their login is invited, 'member' while anyone with GitHub may sign
+ * in (checked on every request, so removing an invite or blocking a login cuts their apps off too) and never more: an app reads the arena and changes nothing. A person sees and ends
  * their own grants on the app's Build a bot page (window.js /api/apps). Eric's ask, 2026-10-12 04:12: "the user should be able to
  * log in and have the mcp server get oauth"; his OK, 04:31: "add GitHub sign-in for the arena MCP".
  */
@@ -366,7 +366,7 @@ function createOAuth({ dir, auth, checkName = () => 'agents cannot connect to th
                 return html(res, 200, `<h1>Connect ${esc(r.client.name)}</h1><p><b>${esc(r.client.name)}</b> (${esc(r.client.site)}) wants to use SWU Arena as you. Sign in with GitHub first.</p><p><a class="btn" href="${esc(next)}">Sign in with GitHub</a></p>`), true;
             }
             if (me.role === 'anon') {
-                return html(res, 403, `<h1>Connect ${esc(r.client.name)}</h1><p>You are signed in as <b>@${esc(me.login)}</b>, who is not on the invite list yet. Send Eric your GitHub username, <b>${esc(me.login)}</b>, and connect again once he has added it.</p><p><a href="/auth/logout">Sign out</a></p>`), true;
+                return html(res, 403, `<h1>Connect ${esc(r.client.name)}</h1><p>You are signed in as <b>@${esc(me.login)}</b>, ${me.blocked ? 'who may not use the arena.' : `who is not on the invite list yet. Send Eric your GitHub username, <b>${esc(me.login)}</b>, and connect again once he has added it.`}</p><p><a href="/auth/logout">Sign out</a></p>`), true;
             }
             const tx = auth.sign({ p: 'consent', u: me.login, ...r.q, exp: now() + 10 * 60000 });
             return html(res, 200, `<h1>Connect ${esc(r.client.name)}</h1>
@@ -434,7 +434,7 @@ function createOAuth({ dir, auth, checkName = () => 'agents cannot connect to th
                 return html(res, 200, `<h1>Connect an agent</h1><p>An agent wants to submit bots to SWU Arena as you. Sign in with GitHub first.</p><p><a class="btn" href="${esc(next)}">Sign in with GitHub</a></p>`), true;
             }
             if (me.role === 'anon') {
-                return html(res, 403, `<h1>Connect an agent</h1><p>You are signed in as <b>@${esc(me.login)}</b>, who is not on the invite list yet. Send Eric your GitHub username, <b>${esc(me.login)}</b>, and connect again once he has added it.</p><p><a href="/auth/logout">Sign out</a></p>`), true;
+                return html(res, 403, `<h1>Connect an agent</h1><p>You are signed in as <b>@${esc(me.login)}</b>, ${me.blocked ? 'who may not use the arena.' : `who is not on the invite list yet. Send Eric your GitHub username, <b>${esc(me.login)}</b>, and connect again once he has added it.`}</p><p><a href="/auth/logout">Sign out</a></p>`), true;
             }
             prune();
             const [, d] = typed ? byUserCode(typed) : [];
@@ -527,7 +527,7 @@ function createOAuth({ dir, auth, checkName = () => 'agents cannot connect to th
                 }
                 if (auth.roleOf(g.login) === 'anon') {
                     end(g.login, id);
-                    return oauthError(res, 400, 'invalid_grant', 'this person is no longer invited'), true;
+                    return oauthError(res, 400, 'invalid_grant', 'this person may no longer sign in'), true;
                 }
                 return json(res, 200, issue(id, g)), true;
             }
@@ -553,7 +553,7 @@ function createOAuth({ dir, auth, checkName = () => 'agents cannot connect to th
                     return oauthError(res, 400, 'authorization_pending', 'waiting for the person to allow it'), true;
                 }
                 devices.delete(h); // allowed: one token, once
-                const problem = auth.roleOf(d.login) === 'anon' ? 'this person is no longer invited' : checkName(d.login, d.name);
+                const problem = auth.roleOf(d.login) === 'anon' ? 'this person may no longer sign in' : checkName(d.login, d.name);
                 if (problem) {
                     return oauthError(res, 400, 'access_denied', problem), true;
                 }

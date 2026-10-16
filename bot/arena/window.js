@@ -33,10 +33,9 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
 const { createSwarmRelay } = require('./swarm-relay');
-const { createPlay } = require('./play');
 const { createTables } = require('./tables');
 const { createArt } = require('./art');
-const { createStatic } = require('./static');
+const { createStatic, matches } = require('./static');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
@@ -67,6 +66,14 @@ const SUBMIT_BYTES = 3e6;
 const SUBMIT_PENDING = 3; // waiting at once, per competitor name
 const SUBMIT_PER_DAY = 20; // per competitor name
 const SUBMIT_PER_DAY_PERSON = 60; // per person, over all their names
+// Everyone but an admin (whose builders send many versions a day) has smaller limits, so that a round, which plays
+// every pair of bots, stays a few hours long when anyone with GitHub may enter (ARENA_SIGNIN=github): each person
+// fields at most BOTS_PER_PERSON competitors and sends PERSON_PER_DAY submissions a day, and the arena takes at most
+// OUTSIDE_BOTS competitors from people who are not admins. Fly variables of the same names change them.
+const intEnv = (k, dflt) => (/^\d{1,4}$/.test(process.env[k] ?? '') ? Number(process.env[k]) : dflt);
+const BOTS_PER_PERSON = intEnv('ARENA_BOTS_PER_PERSON', 2);
+const OUTSIDE_BOTS = intEnv('ARENA_OUTSIDE_BOTS', 20);
+const PERSON_PER_DAY = intEnv('ARENA_SUBMITS_PER_DAY', 10);
 // Eric's arena settings (/api/arena-settings): each is an integer in its range, or absent for the games machine's own
 // default (coord Coord.Config, roster.thinkCapMs). gamesPerPair is even: every seed is played from both seats.
 const SETTINGS = {
@@ -361,6 +368,11 @@ const parseOr = (text, dflt) => {
         return dflt;
     }
 };
+/** The logins an admin blocked from the Share page (admin/blocked {logins}), lowercase. */
+const blockedLogins = (store) => {
+    const d = parseOr(store.getDoc('admin', 'blocked'), null);
+    return Array.isArray(d?.logins) ? d.logins.filter((x) => typeof x === 'string').map((x) => x.toLowerCase()) : [];
+};
 
 /**
  * A run document as the app reads it. A sender that stops (a ladder killed mid-run, a pusher that died, a feed that went
@@ -590,6 +602,7 @@ function loadAppParts() {
  * The app's data, built here from the window's collections with the app's own loaders. Rebuilt when something it reads
  * changed, at most every `minMs`; a request meanwhile gets the last build.
  */
+const BUILT_AT = 'swu-window-built-at-6f1d2c'; // a string no model holds (appBuilder)
 function appBuilder(store, { minMs = 10000, parts = null, staleMs = STALE_MS } = {}) {
     let cache = null;
     let builtVersion = -1;
@@ -611,9 +624,18 @@ function appBuilder(store, { minMs = 10000, parts = null, staleMs = STALE_MS } =
         const t0panels = parseOr(store.getDoc('arena', 'archive-t0-panels'), []) || [];
         // a game going stale changes the model with no write, so the version a browser compares also counts the stopped games
         const settled = reader.settled();
-        const result = { audience: 'public', model: p.model.publicModel(M), t0panels: t0panels.map(p.model.publicPanel), version: settled ? `${v}.${settled}` : v };
-        const text = JSON.stringify({ result });
-        cache = { text, gz: zlib.gzipSync(text) };
+        // the same model again (a document sent again unchanged, as the arena's uplink does every 20 s while it runs)
+        // keeps the build browsers have, its time, version and ETag too, so they get a 304 and parse nothing; the
+        // build's time alone would make every build new, so it is compared as a placeholder
+        const model = p.model.publicModel(M);
+        const madeAt = model.builtAt;
+        model.builtAt = BUILT_AT;
+        const body = JSON.stringify({ audience: 'public', model, t0panels: t0panels.map(p.model.publicPanel) });
+        if (cache?.body !== body) {
+            const version = settled ? `${v}.${settled}` : v;
+            const text = `{"result":${body.slice(0, -1).replace(JSON.stringify(BUILT_AT), JSON.stringify(madeAt ?? null))},"version":${JSON.stringify(version)}}}`;
+            cache = { text, gz: zlib.gzipSync(text), etag: `W/"${crypto.createHash('sha256').update(text).digest('base64url').slice(0, 27)}"`, body };
+        }
         builtVersion = v;
         builtAt = Date.now();
         staleAt = reader.staleAt();
@@ -666,12 +688,12 @@ function createWindow(opts = {}) {
         const d = parseOr(store.getDoc('admin', 'links'), null);
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
-    let play = null;
     let tables = null;
-    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks, openTo: (next) => !!play?.openTo(next) || !!tables?.openTo(next) });
+    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], blocked: () => blockedLogins(store), links: viewLinks, openTo: (next) => !!tables?.openTo(next) });
     // the games machine (coord/), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
-    const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
+    // the model is built at most every 30 s: each build is a new download for every open tab
+    const appData = appBuilder(store, { minMs: opts.minMs ?? 30000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
     const appFile = opts.app ?? process.env.ARENA_APP ?? path.join(ROOT, 'app', 'dist', 'public.html');
     const kitFile = opts.kit ?? process.env.ARENA_KIT ?? path.join(ROOT, 'vendor', 'holotable', 'swu-viewer-kit.js');
     // the third-party licenses of the packages bundled into the kit, which Holotable's build writes next to it
@@ -680,22 +702,21 @@ function createWindow(opts = {}) {
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
     // files sent as they are (the app, the kit): compressed once, 304 when the browser has them (static.js)
     const statics = createStatic();
-    // the play page (play.js): a person against a bot in their own tab, on the swarm's files; games come back here
-    play = createPlay({ store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
-    // card art for the isolated pages (/play, /tables), which cannot show the CDN's images themselves (art.js); made
-    // smaller (WebP) once and kept on the volume
+    // card art for the isolated play page (/tables), which cannot show the CDN's images itself (art.js); made smaller
+    // (WebP) once and kept on the volume
     const art = opts.art ?? createArt({ dir: path.join(home, 'art') });
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
-    // the open tables (tables.js): people against people or any arena bot, every game in a player's tab
+    // the play page (tables.js, /tables; /play goes there): people against people or any arena bot, every game in a
+    // player's tab; ARENA_TABLES says who may play people, ARENA_PLAY who may play the bots
     tables = createTables({
-        store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES,
+        store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES, play: opts.play ?? process.env.ARENA_PLAY,
         arena: { status: () => arenaDoc('status') ?? { competitors: [] }, versions: (name) => (/^[a-z][a-z0-9_]{0,31}$/.test(name) ? arenaDoc(`versions-${name}`) ?? null : null) },
         ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
         ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
     });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
-    const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => play.mode === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
+    const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => tables.play === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
     // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
     const gameLinks = createGameLinks({ store, publicUrl: auth.publicUrl, kitFile, statics, replayFor, peopleRun });
     const arenaMethods = {
@@ -774,6 +795,21 @@ function createWindow(opts = {}) {
     // ---- /mcp: each person's own MCP client (Claude, Claude Code, Cursor...) signs in with GitHub through OAuth
     // (oauth.js) and reads as that person; the project token stays with bot/arena/mcp.js for pushing ----
     const oauth = createOAuth({ dir: path.join(home, 'auth'), auth, checkName: (login, name) => nameProblem(login, name) });
+    // whether github.com has an account with this login (someoneElses); tests pass their own. With the sign-in app's
+    // client id and secret GitHub allows far more lookups than the 60 an hour it gives an address (Fly's are shared)
+    const githubHas = opts.githubHas ?? (async (login) => {
+        const app = process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET ? { authorization: `Basic ${Buffer.from(`${process.env.GITHUB_CLIENT_ID}:${process.env.GITHUB_CLIENT_SECRET}`).toString('base64')}` } : null;
+        const ask = async (extra) => {
+            const r = await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'swu-arena', ...extra }, signal: AbortSignal.timeout(8000) });
+            await r.body?.cancel?.();
+            return r.status;
+        };
+        let status = await ask(app ?? {});
+        if (app && status === 401) {
+            status = await ask({}); // the app's secret refused: ask as anyone
+        }
+        return status === 200 ? true : status === 404 ? false : null;
+    });
     auth.useBearer(oauth.lookup);
     const { METHODS } = require('./api');
     const RO = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
@@ -812,8 +848,73 @@ function createWindow(opts = {}) {
         return null;
     }
 
+    /**
+     * The GitHub account other than @login whose builder name is n, false for none, or null when GitHub did not answer.
+     * With anyone able to sign in (ARENA_SIGNIN=github), every GitHub login counts as one who can sign in, so bob may
+     * not take bob_x while github.com/bob-x exists (nameProblem asks only of the people it knows).
+     */
+    const ghKnown = new Map(); // login -> {at, exists}
+    async function someoneElses(login, n) {
+        const cands = [n.replace(/_/g, '-'), ...(/^gh_\d/.test(n) ? [n.slice(3).replace(/_/g, '-')] : [])];
+        for (const c of cands.filter((x) => x !== login && LOGIN.test(x) && !x.endsWith('-') && !x.includes('--') && builderName(x) === n)) {
+            const hit = ghKnown.get(c);
+            let exists = hit && Date.now() - hit.at < 3600e3 ? hit.exists : undefined;
+            if (exists === undefined) {
+                exists = await githubHas(c).catch(() => null);
+                if (exists !== null) {
+                    ghKnown.set(c, { at: Date.now(), exists });
+                    if (ghKnown.size > 2000) {
+                        ghKnown.delete(ghKnown.keys().next().value);
+                    }
+                }
+            }
+            if (exists !== false) {
+                return exists && c;
+            }
+        }
+        return false;
+    }
+
     /** arena_submit: checks the request and stores it for the arena's intake; nothing of it runs here. */
-    function submit(who, { kind, note, files, base64 = [], entry, name } = {}) {
+    /**
+     * Whether `login` may send one more submission to competitor `n` now ({now, fresh}: fresh when `n` is a new
+     * competitor); throws the limit it would pass. Admins have no limit on competitors and 60 submissions a day.
+     */
+    function room(login, n, admin) {
+        const mine = mySubmissions(login);
+        const waiting = (x) => x.state === 'pending' || x.state === 'checking';
+        const forName = mine.filter((x) => x.name === n);
+        need(forName.filter(waiting).length < SUBMIT_PENDING, 'conflict',
+            `${n} has ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
+        const now = Date.now();
+        const today = (xs) => xs.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length;
+        const perDay = admin ? SUBMIT_PER_DAY_PERSON : PERSON_PER_DAY;
+        need(today(forName) < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day for one competitor`);
+        need(today(mine) < perDay, 'conflict', `at most ${perDay} submissions a day over all your competitors`);
+        // a new competitor (a name the arena has not entered yet, nor has waiting): within the person's bots and the
+        // arena's. A bot counts while it plays (a benched one does not), and a waiting name the arena has not entered yet
+        const comps = (arenaMethods.status().competitors ?? []).filter((c) => c && typeof c.name === 'string');
+        const playing = comps.filter((c) => !c.benched);
+        const entered = new Set(comps.map((c) => c.name));
+        const theirs = new Set([...playing.filter((c) => c.owner === `github:${login}`).map((c) => c.name), ...mine.filter((x) => waiting(x) && !entered.has(x.name)).map((x) => x.name)]);
+        const fresh = !theirs.has(n) && !entered.has(n);
+        if (!admin && fresh) {
+            need(theirs.size < BOTS_PER_PERSON, 'conflict', `at most ${BOTS_PER_PERSON} bots each${theirs.size ? `: send new versions to ${[...theirs].join(' or ')}` : ''}`);
+            const { admins } = auth.fixed();
+            const outsider = (owner) => typeof owner === 'string' && !admins.includes(owner.replace(/^github:/, '').toLowerCase());
+            const outside = new Set(playing.filter((c) => /^github:/.test(c.owner ?? '') && outsider(c.owner)).map((c) => c.name));
+            for (const d of store.listDocs('submissions')) {
+                const x = parseOr(store.getDoc('submissions', d.id), null);
+                if (x && waiting(x) && x.owner !== '@arena' && outsider(String(x.owner)) && typeof x.name === 'string' && !entered.has(x.name)) {
+                    outside.add(x.name);
+                }
+            }
+            need(outside.size < OUTSIDE_BOTS, 'conflict', `the arena is full: it takes ${OUTSIDE_BOTS} bots from builders, and has them all. Send a new version to a bot you have, or try again later`);
+        }
+        return { now, fresh };
+    }
+
+    async function submit(who, { kind, note, files, base64 = [], entry, name } = {}) {
         need(who.login && LOGIN.test(who.login), 'forbidden', 'submitting takes a GitHub sign-in');
         const login = who.login.toLowerCase();
         // an agent's token (a person's Claude on their Sprite) submits as its one competitor, and only as that one
@@ -825,14 +926,17 @@ function createWindow(opts = {}) {
         need(typeof n === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(n), 'bad_request', 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
         const problem = nameProblem(login, n);
         need(!problem, 'conflict', problem);
-        const mine = mySubmissions(login);
-        const forName = mine.filter((x) => x.name === n);
-        need(forName.filter((x) => x.state === 'pending' || x.state === 'checking').length < SUBMIT_PENDING, 'conflict',
-            `${n} has ${SUBMIT_PENDING} submissions waiting for the arena; arena_my_submissions shows them`);
-        const now = Date.now();
-        const today = (xs) => xs.filter((x) => now - Date.parse(x.submittedAt) < 86400000).length;
-        need(today(forName) < SUBMIT_PER_DAY, 'conflict', `at most ${SUBMIT_PER_DAY} submissions a day for one competitor`);
-        need(today(mine) < SUBMIT_PER_DAY_PERSON, 'conflict', `at most ${SUBMIT_PER_DAY_PERSON} submissions a day over all your competitors`);
+        const { admins, signin } = auth.fixed();
+        const admin = admins.includes(login);
+        // a new competitor with a suffix, while anyone may sign in, must not take another GitHub account's builder name;
+        // GitHub is asked first, and the limits are counted again after that wait, with no other wait before the
+        // submission is stored, so submissions sent at the same time cannot all pass them
+        if (!admin && signin === 'github' && n !== builderName(login) && room(login, n, admin).fresh) {
+            const other = await someoneElses(login, n);
+            need(other !== null, 'unavailable', 'GitHub did not answer whether that name is someone else\'s; try again in a minute');
+            need(!other, 'conflict', `"${n}" is the builder name of @${other} on GitHub: give yours another suffix, e.g. ${builderName(login)}_bot`);
+        }
+        const { now } = room(login, n, admin);
         const id = `${login}.${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
         const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
             state: 'pending', submittedAt: new Date(now).toISOString() };
@@ -894,7 +998,7 @@ function createWindow(opts = {}) {
             } },
         { name: 'arena_submit',
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-            description: `Submit a bot as your next version. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time for each competitor. An agent's token (connected with a link for one competitor) submits only as that competitor.`,
+            description: `Submit a bot as your next version. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time for each competitor; each person has at most ${BOTS_PER_PERSON} competitors and ${PERSON_PER_DAY} submissions a day. An agent's token (connected with a link for one competitor) submits only as that competitor.`,
             inputSchema: schema({
                 kind: { type: 'string', enum: SUBMIT_KINDS }, note: { type: 'string', description: 'one line: what this version changes and why' },
                 files: { type: 'object', description: 'path -> file content, e.g. {"bot.js": "..."}', additionalProperties: { type: 'string' } },
@@ -920,8 +1024,8 @@ function createWindow(opts = {}) {
             return res.end();
         }
         const who = auth.who(req);
-        if (who.via !== 'oauth' || !atLeast(who.role, 'friend')) {
-            const message = who.via === 'oauth' ? `@${who.login} is not on the invite list (any more)`
+        if (who.via !== 'oauth' || !atLeast(who.role, 'member')) {
+            const message = who.via === 'oauth' ? (auth.isBlocked(who.login) ? `@${who.login} may not use the arena` : `@${who.login} is not on the invite list (any more)`)
                 : who.via === 'bearer' && who.role !== 'bad' ? 'this endpoint takes a person\'s own sign-in; the project token works with bot/arena/mcp.js'
                     : 'connect this server in your MCP client: it opens a GitHub sign-in';
             res.writeHead(401, { 'content-type': 'application/json', 'www-authenticate': oauth.challenge(who.via !== 'cookie'), ...MCP_CORS });
@@ -1003,15 +1107,21 @@ function createWindow(opts = {}) {
         const d = parseOr(store.getDoc('admin', 'invites'), null);
         return Array.isArray(d?.logins) ? d.logins.filter((x) => typeof x === 'string').map((x) => x.toLowerCase()) : [];
     };
-    /** The Share page's lists; a login the server already lets in (admins, ARENA_INVITES) shows there, never as an invite. */
+    /**
+     * The Share page's lists; a login the server already lets in (admins, ARENA_INVITES) shows there, never as an invite.
+     * signin: who may sign in with GitHub ('invited', or 'github': anyone); blocked: who may not, whatever else says.
+     */
     const shared = () => {
-        const fixed = auth.fixed(), set = new Set([...fixed.admins, ...fixed.fromEnv]);
-        return { invites: invited().filter((x) => !set.has(x)), ...fixed, links: viewLinks().map(({ id, key, label, createdAt }) => ({ id, key, label, createdAt })) };
+        const { signin, ...fixed } = auth.fixed(), set = new Set([...fixed.admins, ...fixed.fromEnv]);
+        return { invites: invited().filter((x) => !set.has(x)), ...fixed, links: viewLinks().map(({ id, key, label, createdAt }) => ({ id, key, label, createdAt })),
+            signin: signin ?? 'invited', blocked: blockedLogins(store).filter((x) => !fixed.admins.includes(x)),
+            limits: { botsPerPerson: BOTS_PER_PERSON, perDay: PERSON_PER_DAY, outsideBots: OUTSIDE_BOTS, tables: tables.mode } };
     };
     /**
      * Who may look, for Eric's Share page: GET lists the invited GitHub logins and the view links; POST changes one of
-     * them: {add: login} or {remove: login} on the invite document, {addLink: note} or {removeLink: id} on the view
-     * links (admin/links; a view link lets anyone holding it read, with no sign-in). The one write a signed-in browser
+     * them: {add: login} or {remove: login} on the invite document, {block: login} or {unblock: login} on the block list
+     * (admin/blocked: a blocked login may not sign in, invited or not, and its apps stop working), {addLink: note} or
+     * {removeLink: id} on the view links (admin/links; a view link lets anyone holding it read, with no sign-in). The one write a signed-in browser
      * may make: only an admin, only from this site's own pages (the Origin header; a page elsewhere cannot set it), and
      * only as JSON (a plain form cannot send that). A removal takes effect on that person's next request.
      */
@@ -1020,7 +1130,7 @@ function createWindow(opts = {}) {
         if (req.method === 'GET') {
             return sendJson(res, 200, { result: shared() }, req);
         }
-        need(req.method === 'POST', 'bad_request', 'GET, or POST {add}, {remove}, {addLink} or {removeLink}');
+        need(req.method === 'POST', 'bad_request', 'GET, or POST {add}, {remove}, {block}, {unblock}, {addLink} or {removeLink}');
         if (who.via === 'cookie') {
             need(req.headers.origin === auth.origin, 'forbidden', "the invite list changes only from this site's own pages");
             need(/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? ''), 'bad_request', 'send JSON');
@@ -1031,8 +1141,8 @@ function createWindow(opts = {}) {
         } catch (e) {
             throw e instanceof WindowError ? e : new WindowError('bad_request', 'body is not JSON');
         }
-        const ops = ['add', 'remove', 'addLink', 'removeLink'].filter((k) => typeof q?.[k] === 'string');
-        need(ops.length === 1, 'bad_request', 'send one of {"add": "<GitHub login>"}, {"remove": "<GitHub login>"}, {"addLink": "<who it is for>"}, {"removeLink": "<id>"}');
+        const ops = ['add', 'remove', 'block', 'unblock', 'addLink', 'removeLink'].filter((k) => typeof q?.[k] === 'string');
+        need(ops.length === 1, 'bad_request', 'send one of {"add": "<GitHub login>"}, {"remove": "<GitHub login>"}, {"block": "<GitHub login>"}, {"unblock": "<GitHub login>"}, {"addLink": "<who it is for>"}, {"removeLink": "<id>"}');
         const keep = (ns) => {
             const d = parseOr(store.getDoc('admin', ns), null);
             return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
@@ -1047,6 +1157,14 @@ function createWindow(opts = {}) {
             const next = ops[0] === 'add' ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
             need(next.length <= 500, 'too_large', 'at most 500 invites');
             store.putDoc('admin', 'invites', JSON.stringify({ ...keep('invites'), logins: next, updatedAt: new Date().toISOString() }));
+        } else if (ops[0] === 'block' || ops[0] === 'unblock') {
+            const login = q[ops[0]].trim().replace(/^@/, '').toLowerCase();
+            need(LOGIN.test(login), 'bad_request', 'a GitHub login: letters, digits and dashes, up to 39');
+            need(ops[0] !== 'block' || !auth.fixed().admins.includes(login), 'conflict', `${login} is an admin (set by the server)`);
+            const cur = blockedLogins(store);
+            const next = ops[0] === 'block' ? [...new Set([...cur, login])] : cur.filter((x) => x !== login);
+            need(next.length <= 5000, 'too_large', 'at most 5000 blocked logins');
+            store.putDoc('admin', 'blocked', JSON.stringify({ ...keep('blocked'), logins: next, updatedAt: new Date().toISOString() }));
         } else if (ops[0] === 'addLink') {
             // the note says who the link is for; only admins ever see it
             const label = q.addLink.replace(/\s+/g, ' ').trim();
@@ -1121,7 +1239,7 @@ function createWindow(opts = {}) {
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
-            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}) } }, req);
+            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, signin: auth.fixed().signin ?? 'invited', ...(who.guest ? { guest: true } : {}) } }, req);
         }
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);
@@ -1134,8 +1252,14 @@ function createWindow(opts = {}) {
         }
         if (parts[0] === 'app' && parts.length === 1) {
             const out = await appData();
+            const head = { 'content-type': 'application/json', 'cache-control': 'no-cache', vary: 'accept-encoding', etag: out.etag };
+            // every open tab asks every 15 s: one that has this model already gets a 304 and no body
+            if (matches(req.headers['if-none-match'], out.etag)) {
+                res.writeHead(304, head);
+                return res.end();
+            }
             const gzip = acceptsGzip(req);
-            res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache', vary: 'accept-encoding', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+            res.writeHead(200, { ...head, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
             return res.end(gzip ? out.gz : out.text);
         }
         if (parts[0] === 'docs') {
@@ -1243,8 +1367,8 @@ function createWindow(opts = {}) {
             if (url.pathname === '/healthz') {
                 return sendText(res, req, 200, 'text/plain', 'ok');
             }
-            // the kit's license list, for anyone: its banner names the file, next to /kit.js and /play/kit.js
-            if (req.method === 'GET' && (url.pathname === '/swu-viewer-kit.licenses.txt' || url.pathname === '/play/swu-viewer-kit.licenses.txt')) {
+            // the kit's license list, for anyone: its banner names the file, next to /kit.js and /tables/kit.js
+            if (req.method === 'GET' && (url.pathname === '/swu-viewer-kit.licenses.txt' || url.pathname === '/tables/swu-viewer-kit.licenses.txt')) {
                 return serveFile(req, res, kitLicenses, 'text/plain; charset=utf-8');
             }
             if (await auth.routes(req, res, url)) {
@@ -1267,9 +1391,6 @@ function createWindow(opts = {}) {
             if (await art.route(req, res, url, who)) {
                 return undefined;
             }
-            if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) {
-                return undefined;
-            }
             if (await tables.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;
             }
@@ -1285,15 +1406,16 @@ function createWindow(opts = {}) {
                 return undefined;
             }
             if (url.pathname.startsWith('/api')) {
-                if (!atLeast(who.role, 'friend')) {
-                    return sendJson(res, 401, { error: { code: 'unauthorized', message: who.login ? `@${who.login} is not invited yet` : 'sign in at /auth/github, or send the project token' } }, req);
+                if (!atLeast(who.role, 'member')) {
+                    const why = !who.login ? 'sign in at /auth/github, or send the project token' : auth.isBlocked(who.login) ? `@${who.login} may not use the arena` : `@${who.login} is not invited yet`;
+                    return sendJson(res, 401, { error: { code: 'unauthorized', message: why } }, req);
                 }
                 return await api(req, res, url, who);
             }
             if (req.method !== 'GET') {
                 return sendText(res, req, 405, 'text/plain', 'GET only');
             }
-            if (!atLeast(who.role, 'friend')) {
+            if (!atLeast(who.role, 'member')) {
                 return sendText(res, req, who.login ? 403 : 200, 'text/html; charset=utf-8', auth.signInPage(url.pathname + url.search, who.login));
             }
             if (url.pathname === '/' || url.pathname === '/index.html') {
