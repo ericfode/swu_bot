@@ -79,15 +79,14 @@ function botMakers(o) {
     for (const name of ['rush', 'heuristic', 'random']) {
         makers.set(name, () => makeBot(name));
     }
-    // the JEPA bot in JavaScript (vendor/jepa), as the hosted table plays it; its models and card data load at its first game
+    // the JEPA bot in JavaScript (vendor/jepa), as the hosted table plays it; its models load at its first game
     let jepa = null;
     makers.set(JEPA_NAME, () => (jepa ??= jepaMaker())());
     if (o.botsFile) {
         const root = o.botsRoot ?? path.dirname(path.dirname(o.botsFile));
-        const cards = path.join(REPO, 'forceteki/test/json');
         for (const [name, spec] of Object.entries(JSON.parse(fs.readFileSync(o.botsFile, 'utf8')))) {
             const cmd = spec.cmd.includes('/') ? path.resolve(root, spec.cmd) : spec.cmd;
-            makers.set(name, () => new StdioClient(name, { cmd, args: spec.args ?? [], cwd: root, env: { SWU_CARD_JSON: cards }, stderr: 'ignore', lang: spec.lang }));
+            makers.set(name, () => new StdioClient(name, { cmd, args: spec.args ?? [], cwd: root, stderr: 'ignore', lang: spec.lang }));
         }
     }
     const offer = o.offer ?? [...makers.keys()];

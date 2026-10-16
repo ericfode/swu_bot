@@ -8,9 +8,9 @@ The bundle is a folder with arena.json and the files it lists. The runner checks
 then runs the WebAssembly (WASI preview 1) program with:
   - stdin / stdout of this process: protocol v2 JSON lines pass straight through (spec/protocol.md),
   - stderr (dropped with --quiet),
-  - read-only folders only: the bundle at /bot, card data at /cards when the bundle asks for "cards", and for Python
-    bundles the standard library of the pinned python.wasm,
+  - read-only folders only: the bundle at /bot, and for Python bundles the standard library of the pinned python.wasm,
   - the environment it sets here (nothing is inherited), a clock and random numbers.
+The card data comes in the protocol's hello (hello.cards): no card files are mounted, whatever arena.json says.
 No sockets (WASI preview 1 has none), no writable files, no subprocesses.
 
 Limits:
@@ -32,8 +32,9 @@ Run it with python3 -I, so nothing from the user's HOME or the environment loads
 On Linux, until the bot's first reply, this process and the threads wasmtime starts run on one CPU (not with
 SWU_WASM_PIN=off).
 wasmtime hands every WASI file call to a thread of its pool and waits for it, and in a VM a hand-off to another CPU
-costs about eight times one on the same CPU: a bot that reads the card data at start (2,479 files) took 4.3 s to its
-first reply, 1.1 s pinned. Its first reply puts every thread back on all the CPUs it had.
+costs about eight times one on the same CPU. Bots read no card files (the card data is in hello), but a Python bundle
+imports its standard library from /usr/local/lib at start: py-random took 0.50 s to its first reply, 0.44 s pinned. A
+bundle that opens no files at start gains nothing. Its first reply puts every thread back on all the CPUs it had.
 """
 import argparse
 import ctypes
@@ -135,11 +136,6 @@ def main():
     tools = os.path.join(ROOT, "build", "compiled", ".tools")
     preopens = [(folder, "/bot")]
     env = dict(m["run"].get("env", {}))
-    cards = m.get("cards", {"use": "none"})
-    if cards.get("use") == "mount":
-        host = os.environ.get("SWU_CARD_JSON") or os.path.join(ROOT, "forceteki", "test", "json")
-        preopens.append((host, "/cards"))
-        env.update(cards.get("env", {"SWU_CARD_JSON": "/cards"}))
     runtime = m["runtime"]
     if runtime == "wasi-p1":
         wasm_path = os.path.join(folder, bundle.entry_file(m))

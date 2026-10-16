@@ -46,7 +46,7 @@ console.log = console.error;
  * Who holds what: the server alone has the window token and reads the round-seed secret; nothing it starts gets
  * either. Bot code runs only in bot/arena/play-seed.js (the games, started by the server) and in the intake's checker
  * (intake.js), as the user arena with no capabilities, and submitted bots only as WebAssembly (no network, no files but
- * their own and the card data). The residents, the arena's own bots, are submitted entries too (intake.js house
+ * their own; the card data comes in hello). The residents, the arena's own bots, are submitted entries too (intake.js house
  * submissions): the image builds no bot of its own.
  *
  * Everything lives on the volume (GAMES_DATA, default /data): arena/ (ARENA_HOME: roster, versions, standings),
@@ -329,7 +329,7 @@ function warmLineup(names = machineLineup()) {
 /** The environment of the bot tools started here (warm's run.py): the arena's folders and nothing else (no token, no
  *  Fly variables, no secret). */
 function botEnv() {
-    const keep = ['ARENA_HOME', 'ARENA_RESULTS', 'ARENA_PUBLIC_RESULTS', 'ARENA_DASH', 'SWU_WASM_CACHE', 'SWU_CARD_JSON'];
+    const keep = ['ARENA_HOME', 'ARENA_RESULTS', 'ARENA_PUBLIC_RESULTS', 'ARENA_DASH', 'SWU_WASM_CACHE'];
     return {
         PATH: process.env.PATH, HOME: DIRS.botHome, LANG: 'C.UTF-8', TZ: 'UTC',
         ...Object.fromEntries(keep.filter((k) => process.env[k]).map((k) => [k, process.env[k]]))

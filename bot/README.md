@@ -48,6 +48,9 @@ language or as plain objects in process.
   dependency.
 - `protocol.js` — the referee: hello/decide/over, time limits, blame (a bot that breaks a game loses it), simulations
   (`sim` requests) on a separate copy of the engine with hidden cards dealt again.
+- `game-cards.js` — the card data every protocol bot gets in `hello.cards`: the engine's card objects for both deck
+  lists and the tokens, built once per game by `match.js`. It is the only card data a protocol bot gets; nothing hands
+  a bot a card folder. Native bots (in process, no `hello`) read the engine's card objects.
 - `sims/` — simulations on Kessel's Rust engine for a bot that asks for them (`"simEngine": "rust"`):
   `rust-sims.js` runs the vendored Kessel package (`vendor/kessel`, see `vendor/README.md`) when every card of the
   game is in its pool (`sims/pool.json`, checked by `pool.js`) and deals the hidden cards again, and the referee falls

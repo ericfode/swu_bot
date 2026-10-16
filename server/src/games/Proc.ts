@@ -70,7 +70,6 @@ export const childEnv = (c: GamesConfig, home: string, extra: Readonly<Record<st
     LANG: "C.UTF-8",
     TZ: "UTC",
     HOME: home,
-    ...(c.cardJson ? { SWU_CARD_JSON: c.cardJson } : {}),
     ...extra
   }
   for (const k of Object.keys(env)) {

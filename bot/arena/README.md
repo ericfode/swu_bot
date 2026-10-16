@@ -79,16 +79,22 @@ The residents are entries submitted like any builder's bot; the image builds no 
 - **A new volume.** The residents live on the games machine's volume like every entry. A new or replaced volume
   has none until the house submissions run again (`ops/house-submit.js`, once per resident); until then a builder
   alone plays no round (`gamesctl.js` plan says `no-opponent`).
+- **Card data (2026-10-16).** Bots get the card data only in `hello.cards`; the sandbox mounts no `/cards`. The
+  resident versions of c-clock, py-clock, rust-greedy2 and rust-search entered before then were built to read
+  `/cards`: they still run, but play without card data (other moves, no error) until a version that reads
+  `hello.cards` is house submitted. A bundle whose `arena.json` still has `"cards": {"use": "mount"}` is refused, so
+  build them from a holocron whose bots read `hello.cards` and whose bundles have no `cards` key, and submit them
+  right after the deploy that brings this change.
 - The ports of heuristic and rush to the bot protocol live in Holocron (`ericfode/holocron`, `bots/ports/`); the
   other five are the bundles `bot/compiled/build.py` makes.
 
 Isolation: submitted code runs only in the wasmtime sandbox (`bot/compiled/run.py`): no network, no files but its own
-and the card data, no other programs. Packing and checking a submission run in a child process without the token, in
-its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`, with the arena's folders hidden: it leaves a
-canonical tar in its job folder, and root unpacks and enters it without running it. `arena/` and `dash/` are root's
-and cleaned on every start (`ops/own-tree.py`). The server alone reads the round-seed secret. Each game job
-(`play-seed.js`), where bot code runs, runs the same way: as `arena` with no capabilities, with a minimal environment
-and the server's folder, the secret and `/.fly` hidden. The network is shared.
+(the card data comes in `hello.cards`), no other programs. Packing and checking a submission run in a child process
+without the token, in its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`, with the arena's folders
+hidden: it leaves a canonical tar in its job folder, and root unpacks and enters it without running it. `arena/` and
+`dash/` are root's and cleaned on every start (`ops/own-tree.py`). The server alone reads the round-seed secret. Each
+game job (`play-seed.js`), where bot code runs, runs the same way: as `arena` with no capabilities, with a minimal
+environment and the server's folder, the secret and `/.fly` hidden. The network is shared.
 
 Its data is on the volume (`GAMES_DATA`, `/data`): `arena/` (`ARENA_HOME`: `roster.json`, `versions/<name>-v<N>/`,
 `standings.json`, `rounds/r<K>.md`, `panels/`), `results/arena-r<K>/` (each round's ladder and replays), `bundles/`

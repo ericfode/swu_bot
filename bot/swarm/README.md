@@ -28,9 +28,9 @@ browser tab (/swarm on the window)                        window (swu-arena)    
   before it is unpacked (`tar.js`).
 - **Each bot in its own worker under WASI** (`wasi.js`, `bot-worker.js`, `processes.js`): the referee's
   `python3 bot/compiled/run.py <bundle>` becomes a worker that runs the bundle as `run.py` does under wasmtime (argv, env,
-  read-only `/bot` and `/cards`, Python's library for Python bundles). The bot blocks on its stdin, a
-  SharedArrayBuffer pipe, which is why the page is cross-origin isolated (COOP and COEP). A bot gets no network, no
-  files of the person's, no cookies: it can only call what the host gives it.
+  read-only `/bot`, Python's library for Python bundles; no card files: the card data comes in `hello.cards`). The bot
+  blocks on its stdin, a SharedArrayBuffer pipe, which is why the page is cross-origin isolated (COOP and COEP). A bot
+  gets no network, no files of the person's, no cookies: it can only call what the host gives it.
 - **The executor** (`executor.js`), a worker so hidden tabs do not throttle its timers: hello, one claim per slot,
   heartbeats, results. A seed ends as `{failed}`, and the machine plays it itself, when a bot ran out of time or hung,
   the computer slept, or the game ran past the lease's `gameMs`.

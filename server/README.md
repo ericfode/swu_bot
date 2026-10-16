@@ -77,7 +77,6 @@ too; `gamesctl push` sends only the newest two rounds, which stay plain.
 | `GAMES_ROUND_HOURS` | 6 | a longer round is stopped and held until the next boot (fractions allowed) |
 | `GAMES_GAMES`, `GAMES_WORKERS`, `GAMES_THINK_CAP_SEC` | 2, 2, 60 | games per pair, games at once, each bot's thinking per game; Eric's arena settings win |
 | `GAMES_REQUIRE_MOUNT` | unset | `1`: refuse to start unless `GAMES_DATA` is its own file system |
-| `SWU_CARD_JSON` | unset | passed on to the children |
 | `GAMES_HELPER_PORT`, `GAMES_HELPER_LISTEN` | unset, `FLY_PRIVATE_IP` | the helper API; on only with a port and a `GAMES_HELPER_TOKENS` entry |
 | `GAMES_HELPER_TOKENS` | unset | secret: `name:sha256-of-token`, comma separated |
 | `GAMES_HELPER_IMAGE` | `registry.fly.io/swu-arena-games` | the image a helper of another build is told to run |

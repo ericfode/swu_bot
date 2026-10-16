@@ -27,7 +27,8 @@ Examples in [`examples/`](examples/), from a real keyed game (engine `2be4fcd`, 
 - `transcript-v2.jsonl`: messages between the referee and the example search bot (holocron's
   `bots/examples/search-bot.js`; a copy is this repo's `bot/test/fixtures/search-bot.js`) running as a program (against
   the Python bot), in order: `hello`, the first decision, a decision with simulations (one simulation, cut after its
-  first move), and `over`. The referee sends `hello`, `decide`, `simulated` and `over`; the bot sends the rest.
+  first move), and `over`. The referee sends `hello`, `decide`, `simulated` and `over`; the bot sends the rest. Its
+  `hello.cards` was added on 2026-10-16, built from that day's card data as the referee builds it (`bot/game-cards.js`).
 - `tournament-index.json`: the index of a 6-game run (the learned Rust bot, the Rust search bot and a JavaScript
   random program), with per-game `timing` and `key`.
 
