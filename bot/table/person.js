@@ -15,6 +15,8 @@
  * so a slip never loses the game; only concede() ends it early.
  */
 
+const { lookAhead, withPreviews } = require('./preview');
+
 const ACT = new Set(['act']);
 
 /**
@@ -58,31 +60,40 @@ function splitProblem(d, split) {
 }
 
 class PersonSeat {
-    constructor({ name = 'person', send }) {
+    /** previews: work out what the answers to a move's questions would do (preview.js); off, the seat asks no sims */
+    constructor({ name = 'person', send, previews = true }) {
         this.name = name;
         this.lang = 'person';
         this.timeoutMs = Infinity;
         this.startTimeoutMs = Infinity;
         this.send = send;
-        this.pending = null; // { msg, resolve }
+        this.pending = null; // { msg, resolve, sim }
         this.conceded = false;
+        this.previews = previews;
+        this.ahead = null; // the previews after the last action window's move (preview.js lookAhead)
+        this.path = []; // the person's answers since that move
     }
 
     hello(msg) {
         // the card data is for programs (Holotable draws cards from its own card text), and 24-75 KB a game
         const { cards, ...screen } = msg;
         this.send(screen);
-        // noEffect: card moves that would change nothing come marked, so the screen can grey them
-        return { t: 'ready', v: 2, name: this.name, noEffect: true };
+        // noEffect: card moves that would change nothing come marked, so the screen can grey them; sim: the copy of the
+        // game the result previews are played on (a bot's simulations, under the same rules)
+        return { t: 'ready', v: 2, name: this.name, noEffect: true, ...(this.previews ? { sim: true } : {}) };
     }
 
-    decide(msg) {
+    decide(msg, sim) {
         if (this.conceded) {
             return { t: 'error', error: 'conceded' };
         }
+        if (msg.prompt?.actionWindow) {
+            this.ahead = null;
+        }
+        const shown = this.ahead ? withPreviews(msg, this.ahead.get(this.path.join(' '))) : msg;
         return new Promise((resolve) => {
-            this.pending = { msg, resolve };
-            this.send(msg);
+            this.pending = { msg, resolve, sim: msg.sim && typeof sim === 'function' ? sim : null };
+            this.send(shown);
         });
     }
 
@@ -108,7 +119,16 @@ class PersonSeat {
             out.split = reply.split.map((e) => ({ id: e.id, amount: e.amount }));
         }
         this.pending = null;
-        p.resolve(out);
+        if (p.sim && p.msg.prompt?.actionWindow && a.kind === 'card') {
+            // the move's questions are played out on the copy first; the move goes once that is done, failed or not
+            lookAhead(p.sim, reply.i).then((tree) => {
+                this.ahead = tree.size ? tree : null;
+                this.path = [];
+            }, () => (this.ahead = null)).finally(() => p.resolve(this.conceded ? { t: 'error', error: 'conceded' } : out));
+        } else {
+            this.path.push(reply.i);
+            p.resolve(out);
+        }
         return null;
     }
 
