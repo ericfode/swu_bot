@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SWU Arena Play</title>
 <style>
-/* The play page (bot/arena/play.js): pick an opponent, watch it transfer to this tab, then play it on Holotable's play
-   screen (SWUViewer.mountPlay). The referee and the bot run in a worker of this tab (play-worker.js); a finished game is
-   sent back to the window. Dark like Holotable. */
+/* The play page (bot/arena/play.js): Holotable's versus screen (SWUViewer.mountPlay) opens at once with every bot the
+   person may play and the deck lists; the rules engine downloads while they choose, and so does the bot they look at.
+   The referee and the bot run in a worker of this tab (play-worker.js); a finished game is sent back to the window. */
 :root {
   --bg: #060a13; --panel: #0f1829; --line: #1d2a44; --ink: #e6ecf8; --dim: #8494b8;
   --p1: #56c8ff; --p2: #ff5f6d; --gold: #f6c454; --good: #4fe0a8; --bad: #ff7b72;
@@ -51,75 +51,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .wait h1 { margin: 0; font: 650 26px/1.2 var(--display); }
 .wait p { margin: 0; color: var(--dim); }
 
-/* ---- picking an opponent ---- */
-.pick { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 14px; }
-.pick h1 { margin: 0; font: 650 26px/1.2 var(--display); }
-.pick .lede { margin: 0; color: var(--dim); max-width: 68ch; }
-.engine { margin: 0; font: 500 13px/1.4 var(--mono); color: var(--dim); }
-.engine b { color: var(--ink); font-weight: 600; }
-.engine.have b { color: var(--good); }
-.bots { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; margin-top: 4px; }
-.bot { display: grid; gap: 8px; align-content: start; text-align: left; padding: 14px 16px; font: inherit; border-radius: 12px; background: var(--panel); position: relative; overflow: hidden; transition: border-color .15s, transform .15s, box-shadow .15s; }
-.bot:hover:not([disabled]) { border-color: color-mix(in oklab, var(--p1) 60%, var(--line)); transform: translateY(-1px); box-shadow: 0 10px 30px -14px color-mix(in oklab, var(--p1) 70%, transparent); }
-.bot[disabled] { cursor: not-allowed; opacity: .55; }
-.bot.eric { border-color: color-mix(in oklab, var(--gold) 45%, var(--line)); }
-.bot .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.bot .t { font: 650 17px/1.2 var(--display); overflow-wrap: anywhere; }
-.bot .elo { font: 600 12px/1 var(--mono); color: var(--gold); white-space: nowrap; }
-.bot .n { font: 500 12px/1.3 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
-.bot .about { font: 400 13px/1.45 var(--sans); color: var(--dim); }
-.bot .size { display: grid; gap: 5px; font: 500 12px/1 var(--mono); color: var(--dim); }
-.bot .size .row { display: flex; justify-content: space-between; gap: 8px; }
-.bot .size .row b { color: var(--ink); font-weight: 600; }
-.bot .size .row b.have { color: var(--good); }
-.bot .meter { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.bot .meter i { display: block; height: 100%; min-width: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--p1), var(--gold)); }
-.bot .why { font: 500 12px/1.4 var(--sans); color: var(--bad); }
-.pick .foot { margin: 0; font-size: 13px; color: var(--dim); }
-
-/* ---- the transfer: a starfield that speeds up with the download, a beam, a progress bar ---- */
-.transfer { position: relative; min-height: calc(100dvh - 58px); display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse at center, #0c1830 0%, var(--bg) 72%); }
-.transfer canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.tx { position: relative; width: min(560px, calc(100% - 32px)); margin: 24px 0; padding: 22px 22px 18px; display: grid; gap: 14px; border: 1px solid color-mix(in oklab, var(--p1) 32%, var(--line)); border-radius: 16px; background: color-mix(in oklab, var(--panel) 84%, transparent); backdrop-filter: blur(6px); box-shadow: 0 0 70px -24px color-mix(in oklab, var(--p1) 70%, transparent); }
-.tx .kick { font: 600 11px/1 var(--mono); letter-spacing: .24em; text-transform: uppercase; color: var(--p1); }
-.tx h1 { margin: -6px 0 0; font: 650 24px/1.2 var(--display); overflow-wrap: anywhere; }
-.route { display: grid; grid-template-columns: auto minmax(40px, 1fr) auto; align-items: center; gap: 10px; font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
-.route span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.route span b { width: 10px; height: 10px; border-radius: 50%; background: var(--p1); box-shadow: 0 0 10px var(--p1); }
-.route span.to b { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
-.beam { position: relative; height: 2px; border-radius: 1px; background: linear-gradient(90deg, color-mix(in oklab, var(--p1) 55%, transparent), color-mix(in oklab, var(--gold) 55%, transparent)); }
-.beam i { position: absolute; top: -3px; left: 0; width: 18px; height: 8px; border-radius: 4px; background: radial-gradient(closest-side, #fff, var(--p1) 55%, transparent); opacity: 0; animation: packet 1.1s linear infinite; }
-.beam i:nth-child(2) { animation-delay: .37s; }
-.beam i:nth-child(3) { animation-delay: .74s; }
-@keyframes packet { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: calc(100% - 18px); opacity: 0; } }
-.transfer[data-phase="wait"] .beam i, .transfer[data-phase="fail"] .beam i { animation-play-state: paused; visibility: hidden; }
-.meter2 { position: relative; height: 14px; border-radius: 7px; background: #0a1222; border: 1px solid var(--line); overflow: hidden; }
-.meter2 .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 7px; background: linear-gradient(90deg, var(--p1), color-mix(in oklab, var(--p1) 45%, var(--gold)), var(--gold)); box-shadow: 0 0 14px color-mix(in oklab, var(--p1) 70%, transparent); transition: width .25s ease-out; }
-.meter2 .fill::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, .5) 50%, transparent 65%); background-size: 220% 100%; animation: sheen 1.3s linear infinite; }
-.transfer[data-phase="fail"] .meter2 .fill { background: var(--bad); box-shadow: none; }
-.transfer[data-phase="fail"] .meter2 .fill::after, .transfer[data-phase="wait"] .meter2 .fill::after { animation: none; background: none; }
-@keyframes sheen { from { background-position: 120% 0; } to { background-position: -120% 0; } }
-.nums { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font: 500 13px/1.2 var(--mono); color: var(--dim); }
-.nums b { font: 650 30px/1 var(--display); color: var(--ink); font-variant-numeric: tabular-nums; }
-.nums .rate { flex-basis: 100%; text-align: right; }
-.parts { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font: 500 13px/1.3 var(--mono); }
-.parts li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: center; color: var(--dim); }
-.parts li span:nth-child(2) { overflow-wrap: anywhere; }
-.parts .ic { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font: 700 9px/1 var(--sans); color: var(--bg); }
-.parts li[data-state="active"] { color: var(--ink); }
-.parts li[data-state="active"] .ic { border-color: var(--p1); border-right-color: transparent; animation: spin .8s linear infinite; }
-.parts li[data-state="done"] .ic { border-color: var(--good); background: var(--good); }
-.parts li[data-state="fail"] .ic { border-color: var(--bad); background: var(--bad); }
-@keyframes spin { to { transform: rotate(360deg); } }
-.tx .note { margin: 0; font-size: 13px; color: var(--dim); min-height: 1.4em; }
-.tx .note.bad { color: var(--bad); }
-.tx .act { display: flex; justify-content: flex-end; }
-
+/* a phone: the bar keeps the brand, the status and Your games, so the versus screen's Play button stays in sight */
+@media (max-width: 560px) {
+  .bar { padding: 8px 12px; gap: 4px 10px; }
+  .title, .who { display: none; }
+  .bar .status { order: 5; flex-basis: 100%; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .status[data-tone="busy"] i, .beam i, .meter2 .fill::after, .parts li[data-state="active"] .ic { animation: none; }
-  .beam i { visibility: hidden; }
-  .meter2 .fill, .bot { transition: none; }
-  .bot:hover:not([disabled]) { transform: none; }
+  .status[data-tone="busy"] i { animation: none; }
 }
 </style>
 </head>
@@ -130,31 +69,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   <span data-feedback-slot=""></span>
   <span class="grow"></span>
   <span class="status" id="status" data-tone="busy" role="status" aria-live="polite"><i></i><span>Loading…</span></span>
-  <button id="change-btn" type="button" hidden>Change opponent</button>
   <button id="games-btn" type="button" hidden>Your games</button>
   <span class="who" id="who"></span>
 </div>
 <div id="wait" class="wait" hidden><h1>Getting the table ready</h1><p id="wait-text"></p></div>
-<div id="pick" class="pick" hidden>
-  <h1>Pick your opponent</h1>
-  <p class="lede">The game runs in this browser, so your opponent downloads to it first. Smaller bots start sooner, and your browser keeps what it downloaded for next time. The bot sees only what its seat sees: your hand and both decks stay hidden from it.</p>
-  <div class="engine" id="engine"></div>
-  <div class="bots" id="bots"></div>
-  <p class="foot" id="pick-foot"></p>
-</div>
-<div id="transfer" class="transfer" data-phase="run" hidden>
-  <canvas id="stars" aria-hidden="true"></canvas>
-  <div class="tx">
-    <div class="kick" id="tx-kick">Transferring to this browser</div>
-    <h1 id="tx-title"></h1>
-    <div class="route" aria-hidden="true"><span><b></b>SWU Arena</span><div class="beam"><i></i><i></i><i></i></div><span class="to">This browser<b></b></span></div>
-    <div class="meter2" id="tx-meter" role="progressbar" aria-label="Download" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="tx-fill"></div></div>
-    <div class="nums"><b id="tx-pct">0%</b><span id="tx-bytes"></span><span class="rate" id="tx-rate"></span></div>
-    <ol class="parts" id="tx-parts"></ol>
-    <p class="note" id="tx-note"></p>
-    <div class="act"><button id="tx-cancel" type="button">Cancel</button></div>
-  </div>
-</div>
 <div id="table" hidden></div>
 <div id="viewer-wrap" hidden>
   <div><button id="back" type="button">Back</button></div>
@@ -178,7 +96,6 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     const m = /^([A-Z0-9]{2,6})_(\d{3})$/.exec(code);
     return m ? `/art/${m[1]}/${m[2]}${back ? '-b' : ''}.png` : null;
   });
-  const STILL = matchMedia('(prefers-reduced-motion: reduce)');
   const size = (n) => (n == null ? '?' : n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(n < 104857600 ? 1 : 0)} MB`);
   const sleep = (ms, signal) => new Promise((ok, no) => {
     const t = setTimeout(ok, ms);
@@ -188,6 +105,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   let lineup = null; // /api/play/bots: the bots a person may pick
   let saving = 0; // replays being sent to the arena: leaving the page now would cancel the request
   let view = 'wait';
+  const RANDOM = 'random'; // the bot's deck when the person picks none: one of the lists, by each game's seed
 
   function status(text, tone = 'idle') {
     $('status').dataset.tone = tone;
@@ -198,28 +116,26 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   const tab = {
     worker: null,
     ready: null, // the worker's ready message
+    up: false, // the worker said ready
     fetched: new Set(), // URLs downloaded in this tab
     bytes: new Map(), // URL -> bytes downloaded and not yet given to the worker
     sent: new Set() // what the worker has: 'jepa' (its models), a bundle's sha256, 'python'
   };
   let mounted = null; // Holotable's play screen
-  let opponent = null; // the bot it plays
   let playing = false;
-  let transfer = null; // the download in progress: its AbortController
 
   // what shows under the bar
   function show(which) {
     view = which;
-    for (const id of ['wait', 'pick', 'transfer', 'table', 'games']) $(id).hidden = which !== id;
+    for (const id of ['wait', 'table', 'games']) $(id).hidden = which !== id;
     $('viewer-wrap').hidden = which !== 'viewer';
     chrome();
     window.scrollTo(0, 0);
   }
   function chrome() {
-    $('games-btn').hidden = !info || view === 'games' || view === 'transfer';
-    $('change-btn').hidden = view !== 'table' || !mounted || playing || !!starting;
+    $('games-btn').hidden = !info || view === 'games';
   }
-  const home = () => (mounted ? 'table' : 'pick');
+  const home = () => (mounted ? 'table' : 'wait');
 
   let viewer = null;
   let backTo = 'table';
@@ -239,28 +155,22 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     renderGames();
     show('games');
   };
-  $('change-btn').onclick = () => {
-    mounted?.destroy();
-    mounted = null;
-    opponent = null;
-    renderPick();
-    show('pick');
-    status('Pick your opponent.', 'idle');
-  };
 
   // ---- the opponents
   // an interpreter an arena bot needs (null: none, or not known yet: bot.runtime is null until the window has its bundle)
   const runtimeOf = (bot) => (bot.kind === 'arena' && bot.runtime && bot.runtime !== 'wasi-p1' ? lineup?.runtimes?.[bot.runtime] ?? null : null);
   const titleOf = (bot) => bot.title || bot.name;
+  const byName = (name) => lineup?.bots.find((b) => b.name === name) ?? null;
 
   /**
-   * What a bot needs that this tab has not downloaded: [{group, url, bytes, wire, keep}]. bytes: the file as the page
-   * reads it (unzipped); wire: about what it downloads (gzipped); keep: the bytes go to the worker.
+   * What a game against this bot needs that the worker does not have yet: [{group, url, bytes, wire, keep}], downloaded
+   * in this tab or not. bytes: the file as the page reads it (unzipped); wire: about what it downloads (gzipped); keep:
+   * the bytes go to the worker. The engine's files leave the list once the worker is made.
    */
-  function needs(bot) {
+  function filesOf(bot) {
     const out = [];
     const add = (group, f, keep) => {
-      if (!tab.fetched.has(f.url) && !out.some((x) => x.url === f.url)) out.push({ group, url: f.url, bytes: f.bytes ?? null, wire: f.wire ?? f.bytes ?? null, keep });
+      if (!out.some((x) => x.url === f.url)) out.push({ group, url: f.url, bytes: f.bytes ?? null, wire: f.wire ?? f.bytes ?? null, keep });
     };
     if (!tab.worker) {
       add('Rules engine', info.files.pack, true);
@@ -280,6 +190,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     }
     return out;
   }
+  // the files every game shares: they keep downloading whoever stops looking
+  const shared = (url) => url === info.files.pack.url || url === info.files.worker.url || url === info.files.botWorker.url;
   // what a list of files downloads
   const sum = (items) => items.reduce((a, x) => a + (x.wire ?? x.bytes ?? 0), 0);
 
@@ -291,259 +203,74 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     return null;
   }
 
-  function renderPick() {
-    const bots = lineup?.bots ?? [];
-    const own = (b) => sum(needs(b).filter((x) => x.group !== 'Rules engine'));
-    const most = Math.max(1, ...bots.map(own));
-    const engine = sum(tab.worker ? [] : [info.files.pack, info.files.worker]);
-    $('engine').className = `engine${tab.worker ? ' have' : ''}`;
-    $('engine').replaceChildren(...(tab.worker
-      ? [Object.assign(document.createElement('b'), { textContent: 'The rules engine is loaded in this tab.' })]
-      : [document.createTextNode('Every opponent also needs the rules engine: '), Object.assign(document.createElement('b'), { textContent: size(engine) }), document.createTextNode(' the first time.')]));
-    const cards = bots.map((bot) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `bot${bot.kind === 'jepa' ? ' eric' : ''}`;
-      b.dataset.bot = bot.name;
-      const top = document.createElement('span');
-      top.className = 'top';
-      const t = Object.assign(document.createElement('span'), { className: 't', textContent: titleOf(bot) });
-      top.append(t);
-      if (Number.isFinite(bot.elo)) top.append(Object.assign(document.createElement('span'), { className: 'elo', textContent: `Elo ${bot.elo}` }));
-      const n = Object.assign(document.createElement('span'), { className: 'n', textContent: bot.name });
-      const about = Object.assign(document.createElement('span'), { className: 'about' });
-      about.textContent = bot.kind === 'jepa' ? bot.about || '' : `A bot of the arena${lineup.round != null ? `'s round ${lineup.round}` : ''}${bot.runtime === 'wasi-p1' ? ', in WebAssembly' : bot.runtime ? ', in Python' : ''}. It thinks for up to ${Math.round((bot.capMs ?? 0) / 1000)} s a game, as in the arena.`;
-      const bytes = own(bot);
-      const sz = Object.assign(document.createElement('span'), { className: 'size' });
-      const row = Object.assign(document.createElement('span'), { className: 'row' });
-      const got = !needs(bot).some((x) => x.group !== 'Rules engine');
-      row.append(Object.assign(document.createElement('span'), { textContent: got ? 'Download' : 'Downloads' }), Object.assign(document.createElement('b'), { className: got ? 'have' : '', textContent: got ? 'in this tab' : size(bytes) }));
-      const meter = Object.assign(document.createElement('span'), { className: 'meter' });
-      const bar = document.createElement('i');
-      bar.style.width = `${got ? 0 : Math.max(2, (100 * bytes) / most)}%`;
-      meter.append(bar);
-      sz.append(row, meter);
-      b.append(top, n, about, sz);
-      const why = unavailable(bot);
-      if (why) {
-        b.disabled = true;
-        b.append(Object.assign(document.createElement('span'), { className: 'why', textContent: why }));
+  // the line under a bot's name on the versus screen
+  function noteOf(bot) {
+    if (bot.kind === 'jepa') return bot.about || null;
+    const parts = [lineup.round != null ? `round ${lineup.round}` : null, bot.runtime === 'wasi-p1' ? 'WebAssembly' : bot.runtime ? 'Python' : null, bot.capMs ? `${Math.round(bot.capMs / 1000)} s a game` : null];
+    return parts.filter(Boolean).join(' · ') || null;
+  }
+
+  // ---- downloads: each file once, shared by every bot that needs it. A bot's own files stop when nobody wants them
+  // (the person looked at another bot and has not pressed Play), so swiping through the bots does not fetch them all.
+  const loads = new Map(); // url -> {it, got, raw, wire, waiting, error, ctl, want, promise}
+  const watchers = new Set(); // functions that report progress (Table.prepare)
+  let pinged = false;
+  function ping() {
+    if (pinged) return;
+    pinged = true;
+    setTimeout(() => {
+      pinged = false;
+      for (const w of watchers) w();
+    }, 150);
+  }
+  /** Starts a file's download, or joins the one under way; {promise} settles when the tab has it. */
+  function load(it) {
+    if (tab.fetched.has(it.url)) return { promise: Promise.resolve() };
+    const had = loads.get(it.url);
+    if (had && !had.error) return had;
+    const l = { it, got: 0, raw: it.bytes, wire: it.wire, waiting: false, error: null, ctl: new AbortController(), want: had?.want ?? 0, promise: null };
+    loads.set(it.url, l);
+    l.promise = download(l).then(() => {
+      loads.delete(it.url);
+      ping();
+    }, (e) => {
+      if (l.ctl.signal.aborted) {
+        if (loads.get(it.url) === l) loads.delete(it.url);
+      } else {
+        l.error = String(e?.message || e);
+        console.error('[play]', l.error);
       }
-      b.onclick = () => choose(bot);
-      return b;
+      ping();
+      throw e;
     });
-    $('bots').replaceChildren(...cards);
-    const arena = bots.filter((b) => b.kind === 'arena').length;
-    $('pick-foot').textContent = arena
-      ? `Eric's JEPA bot, then ${arena === 1 ? 'the bot' : `the ${arena} bots`} of the arena's latest round, best rated first. Games here are unrated.`
-      : 'The arena\'s own bots show up here once a round has played. Games here are unrated.';
+    l.promise.catch(() => undefined);
+    return l;
   }
-
-  // ---- the transfer screen
-  function starfield(canvas) {
-    const ctx = canvas.getContext('2d');
-    const fresh = (s, z) => Object.assign(s, { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z, gold: Math.random() < 0.12 });
-    const stars = Array.from({ length: 260 }, () => fresh({}, 0.05 + Math.random() * 0.95));
-    let speed = 0.05;
-    let want = 0.05;
-    let raf = 0;
-    let last = 0;
-    let w = 0;
-    let h = 0;
-    function draw(dt) {
-      speed += (want - speed) * Math.min(1, dt * 2.5);
-      ctx.clearRect(0, 0, w, h);
-      const cx = w / 2;
-      const cy = h / 2;
-      const f = Math.max(w, h) * 0.55;
-      ctx.lineCap = 'round';
-      for (const s of stars) {
-        s.z -= speed * dt;
-        if (s.z <= 0.03) fresh(s, 1);
-        const x = cx + (s.x / s.z) * f;
-        const y = cy + (s.y / s.z) * f;
-        if (x < -60 || x > w + 60 || y < -60 || y > h + 60) {
-          fresh(s, 1);
-          continue;
-        }
-        // the tail: where the star was a moment ago, longer the faster the jump
-        const tz = Math.min(1.2, s.z + 0.012 + speed * 0.1);
-        const a = Math.min(1, (1.05 - s.z) * 1.3);
-        ctx.strokeStyle = s.gold ? `rgba(246,196,84,${a})` : `rgba(176,222,255,${a})`;
-        ctx.lineWidth = 0.6 + (1 - s.z) * 2.2;
-        ctx.beginPath();
-        ctx.moveTo(cx + (s.x / tz) * f, cy + (s.y / tz) * f);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-      }
+  /** Keeps a bot's own files downloading while someone wants them: the returned function lets go. */
+  function want(bot) {
+    const urls = filesOf(bot).filter((it) => !shared(it.url)).map((it) => it.url);
+    for (const it of filesOf(bot)) {
+      const l = load(it);
+      if (!shared(it.url) && l.ctl) l.want++;
     }
-    const fit = () => {
-      const d = Math.min(2, window.devicePixelRatio || 1);
-      w = canvas.clientWidth;
-      h = canvas.clientHeight;
-      canvas.width = Math.max(1, Math.round(w * d));
-      canvas.height = Math.max(1, Math.round(h * d));
-      ctx.setTransform(d, 0, 0, d, 0, 0);
-      if (!raf) draw(0);
-    };
-    const loop = (t) => {
-      const dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016;
-      last = t;
-      draw(dt);
-      raf = requestAnimationFrame(loop);
-    };
-    return {
-      start() {
-        fit();
-        window.addEventListener('resize', fit);
-        if (!STILL.matches) {
-          last = 0;
-          raf = requestAnimationFrame(loop);
-        }
-      },
-      speed(v) {
-        want = v;
-      },
-      stop() {
-        cancelAnimationFrame(raf);
-        raf = 0;
-        window.removeEventListener('resize', fit);
-      }
-    };
-  }
-  const stars = starfield($('stars'));
-
-  /** The transfer screen for one opponent's downloads: parts grouped by what they are, one bar for all of them. */
-  function transferScreen(bot, items) {
-    const groups = new Map();
-    for (const it of items) {
-      if (!groups.has(it.group)) groups.set(it.group, { items: [], li: null, state: 'wait' });
-      groups.get(it.group).items.push(it);
-      it.got = 0;
-    }
-    $('transfer').dataset.phase = 'run';
-    $('tx-kick').textContent = 'Transferring to this browser';
-    $('tx-title').textContent = titleOf(bot);
-    $('tx-note').textContent = '';
-    $('tx-note').className = 'note';
-    $('tx-cancel').textContent = 'Cancel';
-    const parts = [];
-    for (const [name, g] of groups) {
-      g.li = document.createElement('li');
-      g.li.append(Object.assign(document.createElement('span'), { className: 'ic' }), Object.assign(document.createElement('span'), { textContent: name }), document.createElement('span'));
-      parts.push(g.li);
-    }
-    const startLi = document.createElement('li');
-    startLi.append(Object.assign(document.createElement('span'), { className: 'ic' }), Object.assign(document.createElement('span'), { textContent: tab.worker ? 'Sitting it at the table' : 'Starting the rules engine' }), document.createElement('span'));
-    startLi.dataset.state = 'wait';
-    $('tx-parts').replaceChildren(...parts, startLi);
-    let dirty = false;
-    let rate = 0;
-    let lastGot = 0;
-    let lastAt = performance.now();
-    // the page counts unzipped bytes; what it shows is downloaded bytes, each file's share of its download
-    const raw = (x) => Math.max(x.bytes ?? 0, x.got);
-    const wire = (x) => x.wire ?? raw(x);
-    const wireGot = (x) => (raw(x) ? wire(x) * Math.min(1, x.got / raw(x)) : 0);
-    const timer = setInterval(() => {
-      const got = items.reduce((a, x) => a + wireGot(x), 0);
-      const t = performance.now();
-      const r = ((got - lastGot) * 1000) / Math.max(1, t - lastAt);
-      rate = rate ? rate * 0.6 + r * 0.4 : r;
-      lastGot = got;
-      lastAt = t;
-      paint();
-    }, 400);
-    function paint() {
-      dirty = false;
-      const total = items.reduce((a, x) => a + wire(x), 0);
-      const got = items.reduce((a, x) => a + wireGot(x), 0);
-      const frac = total ? Math.min(1, got / total) : items.length ? 0 : 1;
-      $('tx-fill').style.width = `${(frac * 100).toFixed(1)}%`;
-      $('tx-meter').setAttribute('aria-valuenow', String(Math.round(frac * 100)));
-      $('tx-pct').textContent = `${Math.floor(frac * 100)}%`;
-      $('tx-bytes').textContent = `${size(got)} of ${size(total)}`;
-      const left = total - got;
-      $('tx-rate').textContent = rate > 1024 && left > 0 ? `${size(rate)}/s, about ${Math.max(1, Math.ceil(left / rate))} s left` : '';
-      for (const g of groups.values()) {
-        const gt = g.items.reduce((a, x) => a + wire(x), 0);
-        const gg = g.items.reduce((a, x) => a + wireGot(x), 0);
-        g.li.dataset.state = g.state;
-        g.li.firstChild.textContent = g.state === 'done' ? '✓' : '';
-        g.li.lastChild.textContent = g.state === 'done' ? size(gt) : `${size(gg)} / ${size(gt)}`;
-      }
-      if ($('transfer').dataset.phase === 'run') stars.speed(0.12 + frac * 0.9);
-    }
-    const later = () => {
-      if (!dirty) {
-        dirty = true;
-        requestAnimationFrame(paint);
-      }
-    };
-    const groupOf = (it) => groups.get(it.group);
-    stars.start();
-    paint();
-    return {
-      total(it, n, wireBytes) {
-        it.bytes = n;
-        if (wireBytes) it.wire = wireBytes;
-        later();
-      },
-      got(it, n) {
-        it.got = n;
-        if (groupOf(it).state === 'wait') groupOf(it).state = 'active';
-        later();
-      },
-      finished(it) {
-        it.bytes = it.got;
-        const g = groupOf(it);
-        g.state = g.items.every((x) => tab.fetched.has(x.url)) ? 'done' : 'active';
-        later();
-      },
-      waiting(on) {
-        $('transfer').dataset.phase = on ? 'wait' : 'run';
-        $('tx-note').textContent = on ? 'This bot comes from the arena\'s games machine, which is starting. Trying again every 10 seconds…' : '';
-        if (on) stars.speed(0.03);
-      },
-      starting() {
-        startLi.dataset.state = 'active';
-        $('tx-kick').textContent = 'Arriving';
-        paint();
-      },
-      /** the jump to the table: the stars stretch into lines, then the table shows */
-      async jump() {
-        startLi.dataset.state = 'done';
-        startLi.firstChild.textContent = '✓';
-        $('tx-kick').textContent = 'Ready';
-        if (STILL.matches) return;
-        stars.speed(5);
-        await sleep(700);
-      },
-      fail(message) {
-        $('transfer').dataset.phase = 'fail';
-        $('tx-kick').textContent = 'Transfer stopped';
-        $('tx-note').textContent = message;
-        $('tx-note').className = 'note bad';
-        $('tx-cancel').textContent = 'Back to the opponents';
-        for (const g of groups.values()) if (g.state !== 'done') g.state = 'fail';
-        if (startLi.dataset.state === 'active') startLi.dataset.state = 'fail';
-        stars.speed(0.02);
-        paint();
-      },
-      stop() {
-        clearInterval(timer);
-        stars.stop();
+    return () => {
+      for (const u of urls) {
+        const l = loads.get(u);
+        if (l && --l.want <= 0 && !l.error) l.ctl.abort();
       }
     };
   }
 
   /** Downloads one file, counting its bytes as they come (unzipped: x-raw-length is the total). */
-  async function download(it, screen, signal) {
+  async function download(l) {
+    const it = l.it;
+    const signal = l.ctl.signal;
     for (let tries = 0; ; tries++) {
       const r = await fetch(it.url, { signal });
       if (r.status === 503 && tries < 18) {
         // a bundle the window has not kept yet comes from the games machine, which may be asleep
-        screen.waiting(true);
+        l.waiting = true;
+        ping();
         await sleep(10000, signal);
         continue;
       }
@@ -551,10 +278,13 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
         const j = await r.json().catch(() => null);
         throw new Error(`${it.group}: ${j?.error?.message || `HTTP ${r.status}`}`);
       }
-      screen.waiting(false);
+      l.waiting = false;
       // x-raw-length: the file unzipped, what the body gives; content-length: what comes down the line
       const raw = Number(r.headers.get('x-raw-length'));
-      if (raw > 0) screen.total(it, raw, Number(r.headers.get('content-length')) || null);
+      if (raw > 0) {
+        l.raw = raw;
+        l.wire = Number(r.headers.get('content-length')) || l.wire;
+      }
       const chunks = [];
       let n = 0;
       if (r.body?.getReader) {
@@ -564,13 +294,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
           if (done) break;
           chunks.push(value);
           n += value.length;
-          screen.got(it, n);
+          l.got = n;
+          ping();
         }
       } else {
         const b = new Uint8Array(await r.arrayBuffer());
         chunks.push(b);
         n = b.length;
-        screen.got(it, n);
+        l.got = n;
       }
       if (raw > 0 && n !== raw) throw new Error(`${it.group}: the download was cut off (${size(n)} of ${size(raw)})`);
       if (it.keep) {
@@ -583,51 +314,54 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
         tab.bytes.set(it.url, out);
       }
       tab.fetched.add(it.url);
-      screen.finished(it);
       return;
     }
   }
 
-  async function choose(bot) {
-    if (transfer) return;
-    const items = needs(bot);
-    const ctl = new AbortController();
-    transfer = ctl;
-    show('transfer');
-    status(`Transferring ${titleOf(bot)}…`, 'busy');
-    const screen = transferScreen(bot, items);
-    $('tx-cancel').onclick = () => {
-      if ($('transfer').dataset.phase === 'fail') {
-        renderPick();
-        show('pick');
-        status('Pick your opponent.', 'idle');
-      } else {
-        ctl.abort();
+  /** Where a bot's files are, as Holotable's Prep: all here and the engine started, or what is left of the total. */
+  function prepOf(bot) {
+    let total = 0;
+    let got = 0;
+    let known = true;
+    let waiting = false;
+    let error = null;
+    for (const it of filesOf(bot)) {
+      const l = loads.get(it.url);
+      const wire = l?.wire ?? it.wire;
+      if (wire == null) {
+        known = false;
+        continue;
       }
-    };
-    $('tx-cancel').focus({ preventScroll: true });
-    try {
-      // the engine first: it is the biggest part and every opponent needs it; the bot's own files come with it
-      await Promise.all(items.map((it) => download(it, screen, ctl.signal)));
-      screen.starting();
-      await (tab.worker ? tab.ready : startWorker());
-      await screen.jump();
-      screen.stop();
-      transfer = null;
-      mount(bot);
-    } catch (e) {
-      screen.stop();
-      transfer = null;
-      if (ctl.signal.aborted) {
-        renderPick();
-        show('pick');
-        status('Pick your opponent.', 'idle');
-        return;
-      }
-      console.error('[play]', e);
-      screen.fail(String(e?.message || e));
-      status('The transfer stopped.', 'bad');
+      const raw = l?.raw ?? it.bytes;
+      total += wire;
+      got += tab.fetched.has(it.url) ? wire : l && raw ? wire * Math.min(1, l.got / raw) : 0;
+      waiting = waiting || !!l?.waiting;
+      error = error || l?.error || null;
     }
+    const ready = tab.up && filesOf(bot).every((it) => tab.fetched.has(it.url));
+    return { ready, left: known ? Math.max(0, Math.round(total - got)) : null, total: known ? Math.round(total) : null, waiting, error: error || engineError };
+  }
+
+  // the engine: fetched as soon as the page has its file list, since every bot needs it; then the worker starts
+  let engine = null;
+  let engineError = null;
+  function loadEngine() {
+    if (!engine) {
+      engineError = null;
+      engine = (async () => {
+        if (!tab.worker) {
+          await Promise.all([info.files.pack, info.files.worker].map((f) => load({ group: 'Rules engine', url: f.url, bytes: f.bytes ?? null, wire: f.wire ?? f.bytes ?? null, keep: f === info.files.pack }).promise));
+          startWorker();
+        }
+        await tab.ready;
+      })();
+      engine.catch((e) => {
+        engine = null;
+        engineError = String(e?.message || e);
+        ping();
+      });
+    }
+    return engine;
   }
 
   // ---- the table: the play worker, as Holotable's play/client.ts Table
@@ -665,6 +399,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     const m = e.data;
     if (m.t === 'ready') {
       if (m.cardText) SWUViewer.loadCardText(m.cardText);
+      tab.up = true;
+      ping();
       readyOk(m);
     } else if (m.t === 'started') {
       current = m.id;
@@ -714,7 +450,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     }
   }
   window.addEventListener('beforeunload', (e) => {
-    if (playing || saving || transfer) {
+    if (playing || saving) {
       e.preventDefault();
       e.returnValue = '';
     }
@@ -752,53 +488,92 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     };
   }
 
-  function tableFor(bot) {
-    const name = bot.kind === 'jepa' ? "Eric's JEPA bot" : bot.name;
-    return {
-      options: () => tab.ready.then((r) => ({ ...r.options, bots: [bot.name] })),
-      start: (_bot, deck, botDeck) => tab.ready.then(() => new Promise((ok, no) => {
-        if (starting) return no(new Error('a game is starting'));
-        const extra = extrasFor(bot);
-        starting = { ok: (g) => { extra.given(); ok(g); }, no };
-        current = null;
-        early = [];
-        chrome();
-        tab.worker.postMessage({ t: 'start', bot: bot.name, deck, botDeck, ...extra.msg });
-      })),
-      act: (id, act) => new Promise((ok, no) => {
-        acts.push({ ok, no });
-        tab.worker.postMessage({ t: 'act', act });
-      }),
-      concede: () => {
-        tab.worker.postMessage({ t: 'concede' });
-        return Promise.resolve({ ok: true });
-      },
-      follow(id, onMsg, onError) {
-        const g = games.get(id);
-        if (!g) {
-          onError(true);
-          return () => undefined;
-        }
-        const sub = { onMsg, onError };
-        for (const m of g.msgs) onMsg(m);
-        g.subs.add(sub);
-        return () => g.subs.delete(sub);
-      },
-      replayUrl: (id) => games.get(id)?.url ?? null,
-      watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay); } : null),
-      note: `You sit at seat 1 with the real rules engine, which runs in this browser tab. ${name} sees only what its seat sees: your hand and both decks stay hidden from it. When the game ends it is saved to the arena, unrated.`,
-      missing: 'Reload the page to try again.'
-    };
-  }
-
-  function mount(bot) {
-    mounted?.destroy();
-    opponent = bot;
-    show('table');
-    mounted = SWUViewer.mountPlay($('table'), { table: tableFor(bot) });
-    chrome();
-    tab.ready.then((r) => status(`Ready: ${titleOf(bot)}, ${r.options.decks.length} deck lists. Pick yours.`, 'good'), (e) => status(`The rules engine did not load: ${e.message}`, 'bad'));
-  }
+  // the table Holotable's play screen talks to (play/client.ts Table): every bot of the lineup, any deck list
+  const table = {
+    options: async () => {
+      // the lists come with the page's info; a window that does not send them yet leaves the engine to name them
+      const decks = info.decks?.length ? info.decks : (await loadEngine().then(() => tab.ready)).options.decks;
+      const want = new URLSearchParams(location.search).get('bot');
+      return {
+        bots: lineup.bots.map((b) => b.name),
+        botInfo: Object.fromEntries(lineup.bots.map((b) => [b.name, {
+          title: titleOf(b), elo: b.elo, note: noteOf(b), bytes: sum(filesOf(b).filter((x) => !shared(x.url))) || null, unavailable: unavailable(b), featured: b.kind === 'jepa'
+        }])),
+        decks,
+        botDeck: RANDOM,
+        // /play?bot=<name> opens on that opponent
+        bot: want && byName(want) ? want : null,
+        notice: lineup.bots.some((b) => b.kind === 'arena') ? null : 'The arena\'s own bots show up here once a round has played.'
+      };
+    },
+    prepare(name, onPrep) {
+      const bot = byName(name);
+      if (!bot || unavailable(bot)) {
+        onPrep({ ready: false, left: null, total: null });
+        return () => undefined;
+      }
+      loadEngine().catch(() => undefined);
+      const release = want(bot);
+      const tell = () => onPrep(prepOf(bot));
+      watchers.add(tell);
+      tell();
+      return () => {
+        watchers.delete(tell);
+        release();
+      };
+    },
+    start: async (name, deck, botDeck) => {
+      const bot = byName(name);
+      const why = bot ? unavailable(bot) : `no bot named ${name}`;
+      if (why) throw new Error(why);
+      if (starting) throw new Error('a game is starting');
+      // its files keep coming while it starts, whatever the screen stops looking at
+      const release = want(bot);
+      try {
+        status(`Getting ${titleOf(bot)} ready…`, 'busy');
+        await loadEngine();
+        await Promise.all(filesOf(bot).map((it) => load(it).promise));
+        return await new Promise((ok, no) => {
+          if (starting) return no(new Error('a game is starting'));
+          const extra = extrasFor(bot);
+          starting = { ok: (g) => { extra.given(); ok(g); }, no };
+          current = null;
+          early = [];
+          chrome();
+          tab.worker.postMessage({ t: 'start', bot: bot.name, deck, botDeck, ...extra.msg });
+        });
+      } catch (e) {
+        status(`${titleOf(bot)} did not start: ${String(e?.message || e)}`, 'bad');
+        throw e;
+      } finally {
+        release();
+      }
+    },
+    act: (id, act) => new Promise((ok, no) => {
+      acts.push({ ok, no });
+      tab.worker.postMessage({ t: 'act', act });
+    }),
+    concede: () => {
+      tab.worker.postMessage({ t: 'concede' });
+      return Promise.resolve({ ok: true });
+    },
+    follow(id, onMsg, onError) {
+      const g = games.get(id);
+      if (!g) {
+        onError(true);
+        return () => undefined;
+      }
+      const sub = { onMsg, onError };
+      for (const m of g.msgs) onMsg(m);
+      g.subs.add(sub);
+      return () => g.subs.delete(sub);
+    },
+    replayUrl: (id) => games.get(id)?.url ?? null,
+    watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay); } : null),
+    resumable: false,
+    note: 'You sit at seat 1 with the real rules engine, which runs in this browser tab and downloads while you choose. The bot sees only what its seat sees: your hand and both decks stay hidden from it. Finished games are saved to the arena, unrated.',
+    missing: 'Reload the page to try again.'
+  };
 
   // ---- the person's games
   const when = (iso) => {
@@ -920,13 +695,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
       status(`The arena did not list its bots: ${e.message}`, 'bad');
       return;
     }
-    renderPick();
-    show('pick');
-    status('Pick your opponent.', 'idle');
-    // /play?bot=<name> goes straight to that opponent
-    const want = new URLSearchParams(location.search).get('bot');
-    const bot = want && lineup.bots.find((b) => b.name === want);
-    if (bot && !unavailable(bot)) choose(bot);
+    show('table');
+    mounted = SWUViewer.mountPlay($('table'), { table });
+    chrome();
+    status('Pick your opponent and your deck.', 'idle');
+    // every bot needs the engine: it downloads while the person chooses
+    loadEngine().then(() => {
+      if (!playing && !starting) status('Pick your opponent and your deck. The rules engine is loaded.', 'good');
+    }, (e) => status(`The rules engine did not load: ${String(e?.message || e)}`, 'bad'));
   }
   main();
 })();

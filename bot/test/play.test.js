@@ -198,6 +198,10 @@ test("the page's files come from the games machine and stay on the window's disk
         const info = (await (await go('/api/play/info', { cookie: pal })).json()).result;
         assert.deepStrictEqual([info.ready, info.build], [true, 'b1']);
         assert.deepStrictEqual(Object.fromEntries(Object.entries(info.files).map(([k, f]) => [k, f.url])), { pack: '/play/engine.json?b=b1', worker: '/play/play-worker.js?b=b1', botWorker: '/play/bot-worker.js?b=b1' });
+        // the versus screen shows the deck lists before the engine is in the tab: the engine pack's own file
+        const lists = require('../decks/ash-meta-2026-09.json');
+        assert.strictEqual(info.decks.length, lists.length);
+        assert.deepStrictEqual(info.decks[0], { name: lists[0].metadata.name, leader: lists[0].leader.id, base: lists[0].base.id, style: lists[0].metadata.style ?? null });
         const worker = await go('/play/play-worker.js?b=b1', { cookie: pal });
         assert.strictEqual(worker.status, 200);
         assert.strictEqual(worker.headers.get('x-raw-length'), String('// /v1/swarm/play-worker.js'.length), 'the unzipped size, for the progress bar');
@@ -309,6 +313,7 @@ test('a sleeping games machine with no files on the window is woken, once, and t
             const info = (await (await go('/api/play/info', { cookie: session(w, 'pal') })).json()).result;
             assert.strictEqual(info.ready, false);
             assert.match(info.why, /starting/);
+            assert.ok(info.decks.length > 20, 'the lists do not wait for the machine');
         }
         assert.strictEqual(woke, 1);
     } finally {
