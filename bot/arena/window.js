@@ -36,7 +36,7 @@ const { createSwarmRelay } = require('./swarm-relay');
 const { createPlay } = require('./play');
 const { createTables } = require('./tables');
 const { createArt } = require('./art');
-const { createStatic } = require('./static');
+const { createStatic, matches } = require('./static');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
@@ -44,12 +44,6 @@ const { createFeedback } = require('./feedback');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
-// whether the request's If-None-Match names this ETag (weak comparison: a list, or *)
-const hasTag = (req, etag) => {
-    const h = String(req.headers['if-none-match'] ?? '').trim();
-    const bare = (t) => t.trim().replace(/^W\//, '');
-    return !!h && !!etag && (h === '*' || h.split(',').some((t) => bare(t) === bare(etag)));
-};
 
 const ROOT = path.join(__dirname, '..', '..');
 // the collections a part may push; a friend reads the FRIEND ones raw, and the rest only through the app's public model
@@ -1253,7 +1247,7 @@ function createWindow(opts = {}) {
             const out = await appData();
             const head = { 'content-type': 'application/json', 'cache-control': 'no-cache', vary: 'accept-encoding', etag: out.etag };
             // every open tab asks every 15 s: one that has this model already gets a 304 and no body
-            if (hasTag(req, out.etag)) {
+            if (matches(req.headers['if-none-match'], out.etag)) {
                 res.writeHead(304, head);
                 return res.end();
             }
