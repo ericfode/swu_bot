@@ -834,6 +834,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     onState({ text: side === 'host' ? `Linked ${how} with ${peer}. Dealing…` : `Linked ${how} with ${peer}. Waiting for the host's table…` });
     let move = null;
     let id = null;
+    let viaRoom = c.link === c.room; // the game goes through the room (from the start, or since the direct link dropped)
     const starting = side === 'host' ? hostGame(c.link, peer, deck, (fn) => { move = fn; }, () => !halted) : guestGame(c.link, peer, deck, (fn) => { move = fn; });
     // the room stays as the way back: a direct link that drops goes on through the lobby, on both sides, from the start
     // (after the end too on the host's side: the end and its replay may still be on their way to the guest)
@@ -843,13 +844,19 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         if (over && side === 'guest') return;
         if (!over) status('The direct link dropped: going on through the lobby.', 'busy');
         c.room.onSignal = () => undefined;
+        viaRoom = true;
         move(c.room);
       };
     }
     c.room.onRoom = (d) => {
       if (d.room !== 'left') return;
       if (!id) stop(new Error('the other player left'));
-      else if (!games.get(id)?.over) status(`${peer} left the table.`, 'bad');
+      else if (!games.get(id)?.over) {
+        // the other player closed its links for good (a tab leaves only once its game is over there), so nothing
+        // more can come: the room ends the game as any link that cannot come back does
+        if (!viaRoom) { viaRoom = true; move(c.room); }
+        c.room.onDown(`${peer} left the table`);
+      }
     };
     const game = await Promise.race([starting, stopped]).catch(async (e) => {
       await Promise.race([c.link.idle?.(), new Promise((ok) => setTimeout(ok, 5000))]);
