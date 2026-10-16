@@ -1,5 +1,5 @@
 'use strict';
-// Card art through the window (bot/arena/art.js), for the isolated /play and /tables pages: who may ask, what the CDN is
+// Card art through the window (bot/arena/art.js), for the isolated play page (/tables): who may ask, what the CDN is
 // asked and how often, the headers that let a require-corp page show the image, and the smaller WebPs it makes once.
 const test = require('node:test');
 const assert = require('node:assert');

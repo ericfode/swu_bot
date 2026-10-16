@@ -85,34 +85,34 @@ function scriptedPerson(act, rng) {
     };
 }
 
-test('the play page\'s worker: a person against the JEPA bot in the browser runtime is the same game as in Node', { skip: !built && 'no engine build here', timeout: 300000 }, async () => {
+test("the play page's worker (tables-worker.js): a person against the JEPA bot in the browser runtime is the same game as in Node", { skip: !built && 'no engine build here', timeout: 300000 }, async () => {
     const vm = require('vm');
     const { webcrypto } = require('crypto');
     const { build } = require('../swarm/build');
     const { seededRng } = require('../rng');
     const out = packOnce();
     build(out);
-    const deck = 'darth-vader_jtl_yellow';
     const seed = 7;
     const key = 'c'.repeat(64);
-    // Node: the table host as serve.js and the tests run it
-    const { createTableHost } = require('../table/host');
+    const game = { mode: 'bot', bot: 'jepa-tx-gate', deck: 'darth-vader_jtl_yellow', you: 'pl_aaaaaa' };
+    // Node: the open host as bot/test/open-table.test.js runs it
+    const { createOpenHost } = require('../table/open');
     let node = null;
-    const nodeHost = createTableHost({ send: (m) => node?.(m) });
+    const nodeHost = createOpenHost({ send: (m) => node?.(m) });
     node = scriptedPerson((a) => nodeHost.act(a), seededRng(seed));
-    nodeHost.start({ deck, seed, key });
+    nodeHost.start({ ...game, seed, key });
     const native = await nodeHost.done;
-    // the worker: play-worker.js as a browser runs it (self, postMessage, fetch of the pack), here in a fresh context
+    // the worker: tables-worker.js as a browser runs it (self, postMessage, fetch of the pack), here in a fresh context
     // whose seed and key are the ones above
     const sent = [];
     let onSent = () => undefined;
     const self = { postMessage: (m) => (sent.push(m), onSent(m)) };
     const ctx = vm.createContext({
-        self, console, performance, TextDecoder, TextEncoder, URL, atob, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask, structuredClone,
+        self, navigator: { hardwareConcurrency: 2 }, console, performance, TextDecoder, TextEncoder, URL, atob, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask, structuredClone,
         crypto: { getRandomValues: (a) => (a.set(a.length === 1 ? [seed] : Buffer.from(key, 'hex')), a), randomUUID: () => webcrypto.randomUUID() },
         fetch: async () => ({ json: async () => JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8')) })
     });
-    vm.runInContext(fs.readFileSync(path.join(out, 'play-worker.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(path.join(out, 'tables-worker.js'), 'utf8'), ctx);
     const next = (t) => new Promise((resolve) => {
         const hit = sent.find((m) => m.t === t || m.t === 'error');
         if (hit) {
@@ -120,20 +120,16 @@ test('the play page\'s worker: a person against the JEPA bot in the browser runt
         }
         onSent = (m) => (m.t === t || m.t === 'error') && resolve(m);
     });
-    self.onmessage({ data: { t: 'init', pack: '/play/engine.json', botWorker: '/play/bot-worker.js' } });
+    self.onmessage({ data: { t: 'init', pack: '/tables/engine.json', botWorker: '/tables/bot-worker.js' } });
     const ready = await next('ready');
     assert.strictEqual(ready.t, 'ready', ready.message);
-    // the worker's objects are another realm's, so they are compared as JSON
-    assert.strictEqual(JSON.stringify(ready.options.bots), '["jepa-tx-gate"]');
     assert.strictEqual(ready.isolated, false, 'no SharedArrayBuffer here: only the JEPA bot can play');
     // the JEPA bot's models are not in the pack: the page sends them with the first game
     const manifest = JSON.parse(fs.readFileSync(path.join(out, 'manifest.json'), 'utf8'));
     assert.deepStrictEqual(Object.keys(manifest.models).sort(), ['tx-t10-e.safetensors', 'tx-t10.safetensors']);
     assert.ok(!Object.keys(JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8')).files).some((f) => f.endsWith('.safetensors')));
-    assert.ok(manifest.sizes['engine.json'] > 0 && manifest.sizes['tx-t10.safetensors'] > 0, 'every file\'s size, for the progress bar');
-    self.onmessage({ data: { t: 'start', deck } });
-    const refused = await next('refused');
-    assert.match(refused.error, /tx-t10|ENOENT|no such file/i, 'no models, no JEPA bot');
+    assert.ok(manifest.sizes['engine.json'] > 0 && manifest.sizes['tx-t10.safetensors'] > 0 && manifest.gz['tables-worker.js'] > 0, "every file's size, for the progress bars");
+    assert.ok(!('play-worker.js' in manifest.sizes), 'one play page, one page worker');
     const files = Object.entries(manifest.models).map(([name, p]) => [p, new Uint8Array(fs.readFileSync(path.join(out, name)))]);
     const person = scriptedPerson((a) => {
         self.onmessage({ data: { t: 'act', act: a } });
@@ -149,8 +145,9 @@ test('the play page\'s worker: a person against the JEPA bot in the browser runt
             }
         };
     });
-    self.onmessage({ data: { t: 'start', deck, files } });
-    assert.strictEqual(JSON.stringify(sent.find((m) => m.t === 'started')), '{"t":"started","id":"play-00000007","seat":"p1"}');
+    self.onmessage({ data: { t: 'start', game, files } });
+    const started = sent.find((m) => m.t === 'started' || m.t === 'refused');
+    assert.strictEqual(started.t, 'started', started.error);
     const end = await ended;
     assert.strictEqual(end.outcome, native.result.outcome);
     assert.strictEqual(end.replay, native.replay, 'the same game, board by board');
@@ -234,41 +231,96 @@ test("the open tables' worker: two people in the browser runtime play the same g
     assert.strictEqual(end.theirs.replay, native.replay, 'the guest gets the same replay');
 });
 
-const RANDOM_BUNDLE = path.join(ROOT, 'build', 'compiled', 'node-random');
-test('the play page\'s worker plays an arena version: a WebAssembly bundle in its own worker, against a person', { skip: (!built || !fs.existsSync(path.join(RANDOM_BUNDLE, 'arena.json'))) && 'no engine build, or no node-random bundle (python3 bot/compiled/build.py)', timeout: 300000 }, async () => {
+const COMPILED = path.join(ROOT, 'build', 'compiled');
+test("the play page's worker plays arena versions: a WebAssembly and a Python bundle in their own workers, against a person, with the files the page sends", { skip: (!built || !fs.existsSync(path.join(COMPILED, 'node-random', 'arena.json')) || !fs.existsSync(path.join(COMPILED, 'py-random', 'arena.json'))) && 'no engine build, or no test bundles (python3 bot/compiled/build.py)', timeout: 300000 }, async () => {
+    const vm = require('vm');
     const crypto = require('crypto');
     const { Worker } = require('worker_threads');
     const { execFileSync } = require('child_process');
-    const { filesOf } = require('../swarm/pack');
-    const { createPlayHost } = require('../swarm/play-host');
-    const { checkReplay } = require('../arena/play');
+    const { build } = require('../swarm/build');
+    const { checkReplay } = require('../arena/tables');
     const { seededRng } = require('../rng');
     const out = packOnce();
-    // the bundle as the games machine keeps it: its canonical tar, named by its sha256
-    const tar = new Uint8Array(execFileSync('python3', [path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar', RANDOM_BUNDLE], { maxBuffer: 256 << 20 }));
-    const hex = crypto.createHash('sha256').update(tar).digest('hex');
-    let onMsg = () => undefined;
-    const host = createPlayHost({
-        files: filesOf(JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8'))),
-        makeWorker: () => new Worker(path.join(ROOT, 'bot', 'swarm', 'bot-worker.js')),
-        send: (m) => onMsg(m),
-        log: { log: () => undefined, error: () => undefined }
+    build(out);
+    if (!fs.existsSync(path.join(out, 'python.wasm'))) {
+        assert.fail('the pack has no Python (build/compiled/.tools): python3 bot/compiled/build.py installs it');
+    }
+    // a bundle as the games machine keeps it: its canonical tar, named by its sha256
+    const tarOf = (dir) => new Uint8Array(execFileSync('python3', [path.join(ROOT, 'bot', 'compiled', 'bundle.py'), 'tar', path.join(COMPILED, dir)], { maxBuffer: 256 << 20 }));
+    const workers = [];
+    const sent = [];
+    let onSent = () => undefined;
+    const fetched = [];
+    // an isolated page's worker: bundles run in bot workers (here Node's), the pack is fetched, nothing else is
+    const self = { postMessage: (m) => (sent.push(m), onSent(m)), crossOriginIsolated: true };
+    const ctx = vm.createContext({
+        self, navigator: { hardwareConcurrency: 2 }, console, performance, TextDecoder, TextEncoder, URL, atob, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask, structuredClone,
+        Worker: function BotWorker() {
+            const w = new Worker(path.join(ROOT, 'bot', 'swarm', 'bot-worker.js'));
+            workers.push(w);
+            return w;
+        },
+        crypto: { getRandomValues: (a) => crypto.webcrypto.getRandomValues(a), randomUUID: () => crypto.randomUUID() },
+        fetch: async (url) => {
+            fetched.push(url);
+            return { json: async () => JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8')) };
+        }
+    });
+    vm.runInContext(fs.readFileSync(path.join(out, 'tables-worker.js'), 'utf8'), ctx);
+    const next = (t) => new Promise((resolve) => {
+        const hit = sent.find((m) => m.t === t || m.t === 'error');
+        if (hit) {
+            sent.splice(sent.indexOf(hit), 1);
+            return resolve(hit);
+        }
+        onSent = (m) => {
+            if (m.t === t || m.t === 'error') {
+                sent.splice(sent.indexOf(m), 1);
+                resolve(m);
+            }
+        };
     });
     try {
-        const deck = 'darth-vader_jtl_yellow';
-        assert.throws(() => host.addBundle('Node Random', hex, tar, 60000), /not an arena version/);
-        assert.throws(() => host.addBundle('node_random-v1', hex, tar, 10), /1000 ms or more/);
-        assert.throws(() => host.addBundle('node_random-v1', 'f'.repeat(64), tar, 60000), /sha256 is not/);
-        assert.throws(() => host.table.start({ bot: 'node_random-v1', deck, seed: 5 }), /no bot node_random-v1 in this tab/);
-        assert.strictEqual(host.addBundle('node_random-v1', hex, tar, 60000), 'wasi-p1');
-        assert.strictEqual(host.addBundle('node_random-v1', hex, tar, 60000), 'wasi-p1', 'the same bundle again is a no-op');
-        onMsg = scriptedPerson((a) => host.table.act(a), seededRng(5));
-        assert.deepStrictEqual(host.table.start({ bot: 'node_random-v1', deck, seed: 5, key: 'd'.repeat(64) }), { id: 'play-00000005', seat: 'p1' });
-        const { result, replay } = await host.table.done;
-        assert.strictEqual(result.outcome, 'won', result.error);
-        assert.deepStrictEqual(JSON.parse(replay.split('\n')[0]).players.map((p) => p.bot), ['person', 'node_random-v1']);
-        assert.strictEqual(checkReplay(replay).bot, 'node_random-v1', 'the window keeps the game');
+        self.onmessage({ data: { t: 'init', pack: '/tables/engine.json', botWorker: '/tables/bot-worker.js', pythonLib: '/tables/python-lib.json', pythonWasm: '/tables/python.wasm' } });
+        const ready = await next('ready');
+        assert.strictEqual(ready.t, 'ready', ready.message);
+        assert.strictEqual(ready.isolated, true);
+        const python = { lib: new Uint8Array(fs.readFileSync(path.join(out, 'python-lib.json'))), wasm: new Uint8Array(fs.readFileSync(path.join(out, 'python.wasm'))) };
+        for (const [dir, name, seed] of [['node-random', 'node_random-v1', 5], ['py-random', 'py_random-v1', 6]]) {
+            const tar = tarOf(dir);
+            const hex = crypto.createHash('sha256').update(tar).digest('hex');
+            self.onmessage({ data: { t: 'bot', name, hex: 'f'.repeat(64), tar: tar.slice(), capMs: 60000 } });
+            assert.match((await next('botReady')).error, /sha256/i, 'a bundle is checked against its id');
+            self.onmessage({ data: { t: 'bot', name, hex, tar, capMs: 60000, ...(dir === 'py-random' ? { python } : {}) } });
+            const added = await next('botReady');
+            assert.strictEqual(added.error, null);
+            const person = scriptedPerson((a) => {
+                self.onmessage({ data: { t: 'act', act: a } });
+                const r = sent.findLast((m) => m.t === 'acted');
+                sent.splice(sent.indexOf(r), 1);
+                return r.error;
+            }, seededRng(seed));
+            const ended = new Promise((resolve) => {
+                onSent = (m) => {
+                    if (m.t === 'msg') {
+                        sent.splice(sent.indexOf(m), 1);
+                        person(m.msg);
+                        if (m.msg.t === 'end') {
+                            resolve(m.msg);
+                        }
+                    }
+                };
+            });
+            self.onmessage({ data: { t: 'start', game: { mode: 'bot', bot: name, deck: 'darth-vader_jtl_yellow', you: 'pl_aaaaaa' } } });
+            const started = await next('started');
+            assert.strictEqual(started.t, 'started', started.error);
+            const end = await ended;
+            assert.strictEqual(end.outcome, 'won', end.error);
+            const { header } = checkReplay(end.replay);
+            assert.deepStrictEqual(header.players.map((p) => p.bot).sort(), ['pl_aaaaaa', name].sort(), 'the window keeps the game');
+        }
+        assert.deepStrictEqual(fetched, ['/tables/engine.json'], 'Python came with the bot, as the page downloaded it');
     } finally {
-        host.close();
+        await Promise.all(workers.map((w) => w.terminate()));
     }
 });

@@ -204,7 +204,7 @@ function createAuth({ dir, invites = () => [], blocked = () => [], links = () =>
             // a guest is let in only while the link they came by exists, so removing it locks them out at once
             return viewLinks().some((l) => l.id === s.v) ? { role: 'friend', guest: s.v, via: 'cookie' } : { role: 'anon', via: 'cookie' };
         }
-        // blocked: an admin blocked this login, so the pages open to anyone with GitHub (play.js, tables.js) refuse it too
+        // blocked: an admin blocked this login, so the play page (tables.js), open to anyone with GitHub, refuses it too
         return s ? { role: roleOf(s.l), login: s.l, ...(isBlocked(s.l) ? { blocked: true } : {}), via: 'cookie' } : { role: 'anon', via: 'cookie' };
     }
 

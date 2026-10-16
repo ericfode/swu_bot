@@ -1,29 +1,13 @@
 'use strict';
 /**
- * A table in a browser tab (the window's /play page with Holotable's play screen): the person against a bot, one game
- * at a time, with the referee and the bot in the same worker (bot/swarm/build.js play-worker.js) and the engine from
- * the swarm's pack. serve.js plays the same games on one computer over HTTP.
+ * What the tables share: the deck lists as the play screen lists them, the two lists of one game, and the card text
+ * Holotable needs to draw cards with no art. serve.js (a table on one computer) and open.js (the window's play page,
+ * /tables) use them.
  *
- *   const host = createTableHost({ send });          // send(msg): every message for the page (table.js), in order
- *   createTableHost({ send, makeBot, bots })         // makeBot(name): a fresh bot for one game (default: the JEPA bot
- *                                                    // only, its models read when its first game starts)
- *   host.options()                                   // {bots, decks, botDeck}, as serve.js's GET /table/api/options
- *   await host.start({ bot, deck, botDeck, seed, key })   // {id, seat}; the game's last message is table.js's end, with
- *                                                    // the replay; host.done resolves to {result, replay} then
- *   host.act({ t: 'act', seq, i, split? })           // null when taken, else why not (the decision stays open)
- *   host.concede()
- *   host.cardText()                                  // swu-card-text/1 for the lists' cards and the tokens, so the page
- *                                                    // names and draws cards with no art (Holotable's loadCardText)
- *
- * botDeck 'random' (the default) deals the bot one of the lists, picked by the game's seed.
+ *   deckOptions(decks)                          // [{name, leader, base, style}]
+ *   pickDecks(decks, deck, botDeck, seed)       // {mine, theirs}; botDeck 'random' (RANDOM) picks by the seed
+ *   cardTextOf(env, decks)                      // swu-card-text/1 for the lists' cards and the tokens
  */
-const { Env } = require('../env');
-const { loadDecks } = require('../decklists');
-const { PersonSeat } = require('./person');
-const { playTable } = require('./table');
-const { jepaMaker, JEPA_NAME } = require('./jepa');
-
-const DECKS = require('path').join(__dirname, '..', 'decks', 'ash-meta-2026-09.json');
 const RANDOM = 'random';
 
 /** The deck lists as the play page lists them. */
@@ -86,54 +70,4 @@ function cardTextOf(env, decks) {
     return { schema: 'swu-card-text/1', source: 'forceteki card data', cards };
 }
 
-/** The JEPA bot and no other; its two models are read when its first game starts, so the play page sends them then. */
-function jepaOnly() {
-    let make = null;
-    return (name) => {
-        if (name !== JEPA_NAME) {
-            throw new Error(`no bot ${name}`);
-        }
-        make ??= jepaMaker();
-        return make();
-    };
-}
-
-function createTableHost({ send, env = new Env(), decksFile = DECKS, makeBot = jepaOnly(), bots = [JEPA_NAME] }) {
-    const { decks } = loadDecks(decksFile, env);
-    let game = null;
-    let text = null;
-
-    const host = {
-        done: null,
-        options: () => ({ bots: [...bots], decks: deckOptions(decks), botDeck: RANDOM }),
-        start({ bot = JEPA_NAME, deck, botDeck = RANDOM, seed, key = null } = {}) {
-            if (game && !game.over) {
-                throw new Error('a game is being played at this table');
-            }
-            if (!Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32) {
-                throw new Error('seed: a whole number from 0 to 2^32 - 1');
-            }
-            const { mine, theirs } = pickDecks(decks, deck, botDeck, seed);
-            const opponent = makeBot(bot);
-            const id = `play-${seed.toString(16).padStart(8, '0')}`;
-            const person = new PersonSeat({ name: 'person', send });
-            game = { id, person, over: false };
-            const g = game;
-            host.done = playTable({ env, person, personSeat: 'p1', bot: opponent, decks: { p1: mine, p2: theirs }, seed, key, send })
-                .catch((e) => {
-                    send({ t: 'end', winner: null, outcome: 'ERROR', round: 0, steps: 0, error: String(e?.message ?? e).slice(0, 200), by: null, conceded: false, replay: null });
-                    return { result: null, replay: null };
-                })
-                .finally(() => {
-                    g.over = true;
-                });
-            return { id, seat: 'p1' };
-        },
-        act: (reply) => (game && !game.over ? game.person.answer(reply) : 'no game is being played'),
-        concede: () => game?.person.concede(),
-        cardText: () => (text ??= cardTextOf(env, decks))
-    };
-    return host;
-}
-
-module.exports = { createTableHost, jepaOnly, deckOptions, pickDecks, cardTextOf, RANDOM };
+module.exports = { deckOptions, pickDecks, cardTextOf, RANDOM };

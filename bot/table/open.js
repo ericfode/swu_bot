@@ -114,7 +114,8 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
             const mine = deckOf(deck, 'your deck');
             const [seat, other] = seatsOf(seed);
             const id = `open-${seed.toString(16).padStart(8, '0')}`;
-            const person = new PersonSeat({ name: you, send });
+            // result previews against a bot; a game of two people keeps this tab to one engine
+            const person = new PersonSeat({ name: you, send, previews: mode === 'bot' });
             let theirs;
             let opponent;
             let guest = null;
@@ -123,7 +124,7 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
                 opponent = botOf(bot);
             } else {
                 theirs = deckOf(peerDeck, "the other player's deck");
-                guest = new PersonSeat({ name: peer, send: sendPeer });
+                guest = new PersonSeat({ name: peer, send: sendPeer, previews: false });
                 opponent = guest;
             }
             let leave = null;
