@@ -27,6 +27,7 @@ const { setCodeToString } = b('Util.js');
 const { UndoMode } = b('game/core/snapshot/SnapshotManager.js');
 const { cards: implementedCards, overrideNotImplementedCards } = b('game/cards/Index.js');
 const { Card } = b('game/core/card/Card.js');
+const { RelativePlayer, SubStepCheck } = b('game/core/Constants.js');
 
 const scheduler = {
     setTimeout: () => ({ cancel: () => undefined }),
@@ -36,6 +37,32 @@ const scheduler = {
 };
 
 class EngineError extends Error {}
+
+/** One legal action of a card that would change nothing, by the engine's own checks (EnvGame.wouldDoNothing). */
+function actionDoesNothing(a, player) {
+    const ctx = a.createContext(player);
+    if (a.isActionAbility?.()) {
+        // ActionAbility.resolveEarlyTargets: no requirement fails, and no costs (not epic) or something it would do
+        return !(a.meetsRequirements(ctx, [], true) === '' && ((a.getCosts(ctx).length === 0 && !a.isEpicAction) || a.hasAnyLegalEffects(ctx, SubStepCheck.ThenIfYouDo)));
+    }
+    if (typeof a.generateEventAbilityContext === 'function') {
+        // PlayEventAction.resolveEarlyTargets: a blank or unimplemented event, or one whose ability can't resolve
+        const card = ctx.source;
+        if (card.isBlank() || !card.isImplemented) {
+            return true;
+        }
+        const ea = card.getEventAbility();
+        // the engine does not check these before they are played: never marked
+        if (ea.playerChoosingOptional === RelativePlayer.Opponent || ea.optional || ea.cannotTargetFirst || a.usesExploit?.(ctx)) {
+            return false;
+        }
+        const ectx = a.generateEventAbilityContext(ea, player);
+        ectx.playType = ctx.playType;
+        return ea.meetsRequirements(ectx, ['player', 'zone'], true) !== '';
+    }
+    // the menu ActionWindow shows for a card with several actions marks "(No effect)" this way
+    return !a.hasAnyLegalEffects(ctx, SubStepCheck.All);
+}
 
 function makeRouter(sink) {
     const noop = () => undefined;
@@ -344,6 +371,23 @@ class EnvGame {
     /** True when pid is at the top-level "choose an action" prompt of the action phase (the only place rollback is exact). */
     isActionWindow(pid) {
         return this.phase === 'action' && this.promptSignature(pid).startsWith('actionWindow');
+    }
+
+    /**
+     * Whether clicking `card` in pid's action window would change nothing: every action the engine would offer for it
+     * (its legal actions, as ActionWindow lists them) is one it would mark "(No effect)" or ask "will have no effect,
+     * play it anyway?" about. The same read-only checks the engine makes when the card is clicked; a check that throws
+     * (known engine bugs 1, 7, 8) counts as "has an effect", so a card is never marked by mistake. False for a card with
+     * no legal action.
+     */
+    wouldDoNothing(pid, card) {
+        try {
+            const player = this.player(pid);
+            const legal = card.getActions().filter((a) => a.meetsRequirements(a.createContext(player)) === '');
+            return legal.length > 0 && legal.every((a) => actionDoesNothing(a, player));
+        } catch {
+            return false;
+        }
     }
 
     /** Take a manual snapshot to roll back to (needs newGame({undo: true})). Returns an id, or -1 when undo is off. */

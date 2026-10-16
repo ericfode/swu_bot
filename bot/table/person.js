@@ -72,7 +72,8 @@ class PersonSeat {
         // the card data is for programs (Holotable draws cards from its own card text), and 24-75 KB a game
         const { cards, ...screen } = msg;
         this.send(screen);
-        return { t: 'ready', v: 2, name: this.name };
+        // noEffect: card moves that would change nothing come marked, so the screen can grey them
+        return { t: 'ready', v: 2, name: this.name, noEffect: true };
     }
 
     decide(msg) {

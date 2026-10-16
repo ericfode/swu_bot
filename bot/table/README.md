@@ -12,7 +12,8 @@ Holotable #/play  ──decide/act──▶  referee (forceteki)  ◀──decid
 
 - `person.js`: `PersonSeat`, the person's protocol client. No clock (the referee sends `ms: null`). A wrong answer (an
   old decision, an index out of range, a split that does not add up) is refused and the decision stays open, so a slip
-  never loses the game; `concede()` ends it.
+  never loses the game; `concede()` ends it. Its `ready` asks for `noEffect` marks (spec/protocol.md), so the screen
+  greys a card whose move would change nothing.
 - `table.js`: `playTable` plays one game and also tells the screen every move from either seat (`move`, with the
   board from the person's seat; a card the person cannot see is "a hidden card") and the end (`end`, with the replay).
 - `serve.js`: a table on one computer, for trying it out. People pick a bot and two of the tournament deck lists;

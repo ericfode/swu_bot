@@ -132,6 +132,7 @@ class ClientSeat {
         this.shadow = null;
         this.v = 1;
         this.wantsSims = false;
+        this.wantsNoEffect = false;
         this.simEngine = null;
         this.seq = 0;
         this.times = [];
@@ -188,6 +189,8 @@ class ClientSeat {
         this.wantsSims = v === 2 && r.sim === true;
         // simulations on the Rust engine when it knows every card (bot/sims/rust-sims.js); forceteki otherwise
         this.simEngine = this.wantsSims && r.simEngine === 'rust' ? 'rust' : null;
+        // card actions that would change nothing marked noEffect (a person's screen greys them)
+        this.wantsNoEffect = v === 2 && r.noEffect === true;
         // the build that plays this game, recorded with the result (informational, any version)
         this.version = typeof r.version === 'string' && r.version ? r.version.slice(0, 200) : null;
     }
@@ -207,9 +210,16 @@ class ClientSeat {
             const copy = sim ? null : await this.shadow.sync(eg, pid);
             sim ??= copy ? simulator(this.shadow, pid, deals, ms === null ? null : Date.now() + ms) : null;
         }
+        const marks = this.wantsNoEffect && eg.isActionWindow(pid);
         const msg = {
             t: 'decide', seq, you: this.seat, sim: !!sim, ...(sim?.engine ? { simEngine: sim.engine } : {}), ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
-            actions: actions.map((a, i) => actionView(eg, a, i, pid)), revealed: this.revealed.splice(0)
+            actions: actions.map((a, i) => {
+                const out = actionView(eg, a, i, pid);
+                if (marks && a.kind === 'card' && out.card?.id !== 'hidden' && eg.wouldDoNothing(pid, a.card)) {
+                    out.noEffect = true;
+                }
+                return out;
+            }), revealed: this.revealed.splice(0)
         };
         const t = now();
         let r;

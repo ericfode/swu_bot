@@ -121,6 +121,10 @@ run them on). `name` is informational. Reset any per-game state here: one progra
 `simEngine` (optional, with `sim: true`): `"rust"` asks for simulations on the Rust simulator, which is far faster
 (see [Simulations on the Rust engine](#simulations-on-the-rust-engine)). Leave it out for forceteki simulations.
 
+`noEffect` (optional, `true`): in the action window, mark each `card` action whose every move would change nothing
+(below). Made for screens that grey such moves (a person's seat asks for it); it costs a fraction of a millisecond per
+card action.
+
 `version` (optional, a string of at most 200 characters, for example a git commit or a bundle id `sha256:...`) names
 the build of the bot that plays this game. The referee records it with the game result (`versions` by seat). It
 matters for a bot that changes between games, such as one an agent updates between rounds on a server it runs
@@ -202,6 +206,11 @@ Some legal actions change nothing. Mystic Monastery's action, used while you alr
 as it was, and when the opponent is out for the phase you get the same decision again. A bot that ranks such an action
 above passing repeats it until the step cap (`STEP_CAP`, nobody wins). Guard against it, for example by never making
 the same choice twice for the same `state`, `prompt` and `actions`.
+
+A client that sent `noEffect: true` in `ready` gets `noEffect: true` on such a `card` action in the action window: every
+move the engine offers for that card (playing an event, using an ability) would change nothing now, by the engine's own
+checks (the ones behind its "(No effect)" menu choices and its "will have no effect, play it anyway?" question). The
+action stays legal. A check that fails counts as "has an effect", so a mark is never a guess.
 
 ### `sim` → `simulated`
 
