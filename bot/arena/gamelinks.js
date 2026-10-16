@@ -11,14 +11,14 @@
  * as "a person", and opens only once it has ended: watched live, it would show a person the other side's hidden cards.
  * Bot games are watched live with both hands, as in the app: a bot in its sandbox cannot read this page.
  *
- *   const games = createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun });
+ *   const games = createGameLinks({ store, publicUrl, kitFile, statics, replayFor, peopleRun });
  *   if (await games.route(req, res, url, { sendJson, sendText })) return;
  *
  *   GET  /g/<run>/<game>                  the page (web/game.html), with its title and preview from the replay
  *   GET  /g/<run>/<game>/game.jsonl       the replay as a reader gets it; ?from=<byte> gives what came after (x-size: the
  *                                         whole size), so a live page fetches only new lines; x-gen changes when the
  *                                         replay is replaced whole, and the page then starts over
- *   GET  /g/kit.js                        the viewer kit (ETag, so a browser keeps it)
+ *   GET  /g/kit.js                        the viewer kit, as the window's /kit.js (static.js)
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -54,9 +54,8 @@ function gameFacts(buf) {
     return { p1: seat('p1'), p2: seat('p2'), winner, draw: done && end.winner === 'draw', round: done && Number.isInteger(end.round) ? end.round : null, done };
 }
 
-function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
+function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
     const base = String(publicUrl ?? '').replace(/\/+$/, '');
-    let kit = null; // {mtimeMs, raw, gz, etag, etagGz}
     // the last few games read here (at most 16 and 48 MB), oldest first: run/game -> {sig, gen, bytes, buf, gz}
     const hot = new Map();
     let hotBytes = 0;
@@ -129,34 +128,6 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
         return Array.isArray(d?.games) && d.games.some((g) => g?.id === game);
     };
 
-    function sendKit(req, res) {
-        let st;
-        try {
-            st = fs.statSync(kitFile);
-        } catch {
-            res.writeHead(404, { 'content-type': 'text/plain' });
-            res.end('not found');
-            return;
-        }
-        if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            const raw = fs.readFileSync(kitFile);
-            const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
-            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw), etag: `"${hash}"`, etagGz: `"${hash}-gz"` };
-        }
-        // q values, as the window's own answers (required on use: server.js requires the window); each encoding has its
-        // own ETag, so a browser never revalidates one with the other
-        const gzip = require('./server').acceptsGzip(req.headers['accept-encoding']);
-        const etag = gzip ? kit.etagGz : kit.etag;
-        const head = { 'cache-control': 'no-cache', etag, vary: 'accept-encoding' };
-        if (String(req.headers['if-none-match'] ?? '').split(/\s*,\s*/).map((t) => t.replace(/^W\//, '')).includes(etag)) {
-            res.writeHead(304, head);
-            res.end();
-            return;
-        }
-        res.writeHead(200, { 'content-type': 'text/javascript', ...head, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        res.end(gzip ? kit.gz : kit.raw);
-    }
-
     function sendMessage(req, res, code, text, sendText) {
         const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SWU Arena</title>
 <style>:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#060a13;color:#e6ecf8;font:16px/1.5 system-ui,sans-serif;padding:16px;box-sizing:border-box}main{max-width:420px}h1{font-size:22px;margin:0 0 8px}p{color:#8494b8}</style></head>
@@ -193,7 +164,10 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
             return true;
         }
         if (p === '/g/kit.js') {
-            sendKit(req, res);
+            // as the window sends /kit.js (static.js): compressed once, 304 when the browser has it
+            if (!(await statics.send(req, res, kitFile, 'text/javascript'))) {
+                sendText(res, req, 404, 'text/plain', 'not found');
+            }
             return true;
         }
         const m = /^\/g\/([^/]+)\/([^/]+)(\/game\.jsonl)?\/?$/.exec(p);

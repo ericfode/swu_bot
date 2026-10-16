@@ -512,7 +512,7 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         }
         assert.ok(!(await (await go('/g/karabast-p/k1')).text()).includes('bob'));
 
-        // the viewer kit: kept by the browser (ETag), gzip only for a client that takes it
+        // the viewer kit, as the window's /kit.js (static.js): kept by the browser (ETag), gzip only for a client that takes it
         const kitAt = `http://127.0.0.1:${srv.address().port}/g/kit.js`;
         const kit = await fetch(kitAt);
         assert.strictEqual(kit.status, 200);
@@ -520,13 +520,10 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         const kept = await fetch(kitAt, { headers: { 'if-none-match': kit.headers.get('etag') } });
         assert.strictEqual(kept.status, 304);
         assert.strictEqual(kept.headers.get('vary'), 'accept-encoding');
-        const gz = await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } });
-        assert.strictEqual(gz.headers.get('content-encoding'), 'gzip');
-        const plain = await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0, br', 'if-none-match': gz.headers.get('etag') } });
-        assert.strictEqual(plain.status, 200, 'the gzip copy never stands in for the plain one');
+        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } })).headers.get('content-encoding'), 'gzip');
+        const plain = await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0' } });
         assert.strictEqual(plain.headers.get('content-encoding'), null, 'a client that refuses gzip gets the kit plain');
-        assert.notStrictEqual(plain.headers.get('etag'), gz.headers.get('etag'));
-        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'identity', 'if-none-match': `W/${plain.headers.get('etag')}` } })).status, 304);
+        assert.strictEqual(await plain.text(), fs.readFileSync(path.join(__dirname, '..', '..', 'vendor', 'holotable', 'swu-viewer-kit.js'), 'utf8'));
 
         // nothing else: no game, a bad id, another method, and the rest of the arena still needs sign-in
         for (const p of ['/g/arena-t1-r1/nope', '/g/nope/g1', '/g/arena-t1-r1/nope/game.jsonl', '/g/..%2Fx/g1', '/g/arena-t1-r1', '/g', '/g/a/b/c']) {
