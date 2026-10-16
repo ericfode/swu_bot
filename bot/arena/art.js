@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { atLeast } = require('./auth');
+const { accepts } = require('./static');
 
 const CDN = 'https://cdn.swu-db.com/images/cards';
 // set codes as the card data has them (SOR, TS26, IC27, ...), three-digit numbers
@@ -334,7 +335,8 @@ function createArt({ fetchImpl = fetch, maxBytes = MAX_BYTES, now = Date.now, ti
         const key = `${m[1]}/${m[2]}${m[3] ?? ''}.png`;
         // the answer depends on what the browser takes, once WebPs are made
         const vary = webpOn ? { vary: 'accept' } : {};
-        const wants = webpOn && /\bimage\/webp\b/i.test(String(req.headers?.accept ?? ''));
+        // named with a q above 0: a wildcard alone never gets one, so a browser that cannot show WebP never does
+        const wants = webpOn && accepts(req.headers?.accept, ['image/webp'], false);
         const small = wants ? await webp(key) : null;
         if (small) {
             res.writeHead(200, { ...WEBP, ...vary, 'content-length': String(small.length) });

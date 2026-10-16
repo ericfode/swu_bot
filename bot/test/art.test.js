@@ -209,7 +209,9 @@ test('a browser that takes WebP gets the CDN image first, then the WebP made onc
 
     const old = await ask(art, '/art/SOR/010.png', { accept: 'image/png,image/*;q=0.8,*/*;q=0.5' });
     assert.strictEqual(old.headers['content-type'], 'image/png', 'a browser that does not name WebP gets the CDN image');
+    assert.strictEqual((await ask(art, '/art/SOR/010.png', { accept: 'image/webp;q=0, image/png' })).headers['content-type'], 'image/png', 'nor one that refuses it');
     assert.deepStrictEqual(c.asked, ['SOR/010.png', 'SOR/010.png']);
+    assert.strictEqual((await ask(art, '/art/SOR/010.png', { accept: 'image/png, IMAGE/WEBP;q=0.9' })).headers['content-type'], 'image/webp');
 
     // a new window process: the WebP comes from the disk, with no CDN request and nothing made again
     const next = createArt({ fetchImpl: c.fetchImpl, dir, toWebp: w.toWebp });
