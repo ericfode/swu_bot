@@ -17,7 +17,7 @@ COPY --from=build /src/app/src app/src
 COPY --from=build /src/app/dist/public.html app/dist/public.html
 COPY --from=build /src/meta/atlas-kit.js meta/atlas-kit.js
 COPY --from=build /src/dashboard/site dashboard/site
-COPY --from=build /src/vendor/holotable/swu-viewer-kit.js vendor/holotable/swu-viewer-kit.js
+COPY --from=build /src/vendor/holotable/swu-viewer-kit.js /src/vendor/holotable/swu-viewer-kit.licenses.txt vendor/holotable/
 # the bot protocol, which the window's arena_guide tool hands to people building bots
 COPY --from=build /src/spec/protocol.md spec/protocol.md
 EXPOSE 8080

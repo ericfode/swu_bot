@@ -35,6 +35,10 @@ browser tab (/swarm on the window)                        window (swu-arena)    
   heartbeats, results. A seed ends as `{failed}`, and the machine plays it itself, when a bot ran out of time or hung,
   the computer slept, or the game ran past the lease's `gameMs`.
 
+The window's play page (`/play`, `bot/arena/play.js`) loads the same `engine.json` with a worker of its own,
+`play-worker.js`: the referee and the JEPA bot (`bot/table/host.js`) in one worker, a person at the other seat. That
+page plays no arena games and needs no cross-origin isolation (the bot runs in the worker, with no stdin pipe).
+
 Not the same as a helper: no memory cap per bot (a browser cannot cap a memory the module defines itself), and thinking
 time is the tab's wall clock, so a slow or busy computer gives clock bots less search (the report's ms/decision shows
 it, as it does for helpers). Nobody checks a swarm result twice: the swarm is for people Eric trusts (spec/executor.md).
@@ -43,7 +47,8 @@ it, as it does for helpers). Nobody checks a swarm result twice: the swarm is fo
 
 - `node --test bot/test/swarm.test.js`: hashes, paths, modules, the stdin pipe, the WASI host's folders, bundle tars, and
   the window's relay (who may, slot names, only your own seeds).
-- `node --test bot/test/swarm-engine.test.js`: a game under the runtime is the same game as in Node (needs the engine).
+- `node --test bot/test/swarm-engine.test.js`: a game under the runtime is the same game as in Node, and so is a game
+  the play worker plays (needs the engine).
 - On one computer, with the games image (`docker run ... swu-helper:<sha>`), end to end:
 
 ```bash

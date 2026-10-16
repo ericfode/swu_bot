@@ -270,7 +270,7 @@ function route() {
 function renderNav(r) {
   const secs = SECTIONS.filter(s => !(s.lab && S.aud === 'public'));
   $('nav').innerHTML = secs.map(s => `<a href="${s.id ? href(s.id) : '#/'}" class="${s.lab ? 'lab' : ''}" ${s.id === r.sec ? 'aria-current="page"' : ''}>${s.label}</a>`).join('');
-  $('tabbar').innerHTML = secs.filter(s => !s.lab).map(s => `<a href="${s.id ? href(s.id) : '#/'}" ${s.id === r.sec ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${s.icon}"/></svg>${s.label}</a>`).join('');
+  $('tabbar').innerHTML = secs.filter(s => !s.lab).map(s => `<a href="${s.id ? href(s.id) : '#/'}" ${s.id === r.sec ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${s.icon}"/></svg>${s.label}</a>`).join('') + (HOSTED ? '<a href="/play" class="tab-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4L19 12z"/></svg>Play</a>' : '');
   const sec = secs.find(s => s.id === r.sec), cur = r.parts[0] === 'runs' ? 'runs' : r.parts[1] || '';
   const sub = sec?.sub && !(r.sec === 'games' && r.parts[0] === 'games' && r.parts.length > 2) ? sec.sub : null;
   $('subnav').innerHTML = sub ? sub.map(([k, l]) => `<a href="${href(sec.id, k)}" ${k === cur || (k === 'builders' && cur === 'competitors') ? 'aria-current="page"' : ''}>${l}</a>`).join('') : '';
@@ -797,7 +797,7 @@ function waitingBox() {
 function pageHome() {
   const k = M.totals;
   const kpis = `<div class="kpis"><div><div class="v">${int(k.rated)}</div><div class="k">games rated</div></div><div><div class="v">${k.runs}</div><div class="k">ladders and rounds</div></div><div><div class="v">${k.bots}</div><div class="k">rated bots</div></div><div><div class="v">${ATL()?.mapped.length ?? '-'}</div><div class="k">bots with a spot map</div></div><div><div class="v">${M.arena.competitors.length}</div><div class="k">arena competitors</div></div></div>`;
-  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${waitingBox()}${arenaCard()}${topBots(8)}${joinCard()}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c12">${feedBox(12)}</div></div>${kpis}`;
+  return `<div class="grid"><div class="c8">${heroBox()}</div><div class="c4 stack">${playCard()}${waitingBox()}${arenaCard()}${topBots(8)}${joinCard()}</div><div class="c12">${moreGamesBox()}</div><div class="c12">${betBox()}</div><div class="c12">${feedBox(12)}</div></div>${kpis}`;
 }
 
 // ---------- the builder arena: systems that build bots compete ----------
@@ -1203,6 +1203,10 @@ function appRights(A) {
     <div class="eyebrow" style="margin-top:10px">Cannot</div><ul class="plain tools"><li>send a result, a rating or a game: the arena plays every game itself, in a sandbox</li><li>submit under another person's name: only your builder name, or it with _ and a suffix</li><li>read other people's submissions, the invite list or the settings</li></ul>`;
 }
 /** Home's pointer to the Join page: the one place a signed-in person learns they can bring their own Claude. */
+function playCard() {
+  if (!HOSTED) return '';
+  return `<section class="box join-card"><div class="bh"><h3>Play a bot</h3><a class="more" href="/play">Play</a></div><p style="font-size:var(--fs-base)">Play Star Wars Unlimited against Eric's JEPA bot, in your browser with the real rules engine. Anyone with a GitHub account can play; games are saved here, unrated.</p><p style="margin-top:8px"><a class="btn-link" href="/play">Play now →</a></p></section>`;
+}
 function joinCard() {
   if (!HOSTED) return '';
   return `<section class="box join-card"><div class="bh"><h3>Build a bot</h3><a class="more" href="${href('arena', 'join')}">How</a></div><p style="font-size:var(--fs-base)">Connect your own Claude to the arena: it signs in as you, reads every game and replay here to help you write a bot, and submits it for you.</p><p style="margin-top:8px"><a class="btn-link" href="${href('arena', 'join')}">Connect your Claude →</a></p></section>`;
@@ -1758,6 +1762,7 @@ render(false);
 if (window.claude?.use) setTimeout(() => startLive(false), 400);
 else if (HOSTED) startApi();
 if (HOSTED) {
+  $('playbtn').hidden = false;
   const b = $('sharebtn'); b.hidden = false; b.innerHTML = SHARE_ICON;
   b.addEventListener('click', () => { const r = route(); if (r.parts[0] !== 'share') location.hash = `#/share?from=${encodeURIComponent(location.hash || '#/')}`; });
 }

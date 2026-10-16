@@ -173,6 +173,29 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 - `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how
   the viewer finds it.
 
+## The play page (play.js)
+
+`/play` seats a person against Eric's JEPA bot (jepa-tx-gate) on Holotable's play screen. The referee and the bot run
+in a worker of the person's tab (`play-worker.js` on the swarm's engine pack, `bot/table/README.md`), so the window and
+the games machine play nothing; the window only serves the files and keeps the finished games.
+
+- `ARENA_PLAY` says who may play: `invited` (the default: signed in with GitHub and invited), `github` (anyone signed in
+  with GitHub; their sign-in then returns to `/play` though they cannot read the arena) or `off`. A view link's guest has
+  no GitHub login, so the page asks them to sign in. The files come through the swarm relay, so the page needs
+  `SWARM_HELPER_TOKEN` too.
+- `GET /play`, `/play/kit.js` (the viewer kit; its license list `/play/swu-viewer-kit.licenses.txt`, like
+  `/swu-viewer-kit.licenses.txt`, is open to anyone), `/play/engine.json?b=` and `/play/play-worker.js?b=` (the games
+  machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and the
+  machine asleep, the page asks for them, which wakes it at most every 15 minutes).
+- `GET /api/play/info`: the files to load and the person's last 20 games; an admin also gets the last 200 games of
+  everyone, with who played them.
+- `POST /api/play/games {replay}`: the tab sends the finished game. Only from this site's own page (Origin) and as JSON;
+  the header must seat `person` in seat 1 and `jepa-tx-gate` in seat 2, with step lines and an end line; at most 16 MB
+  and 40 games a day per person. The same replay again gives the same id. It goes into the run `play`
+  (`feed: "play"`, so a people run: readers see "opponent", and the app leaves it out), with who played it in
+  `admin/people` as `@<login>`. The games are unrated: the person's tab played them.
+- `GET /api/play/games/<id>.jsonl`: a game's replay, for the person who played it and admins.
+
 ## Deploys
 
 Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests (pull requests

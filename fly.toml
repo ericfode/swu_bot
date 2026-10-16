@@ -15,6 +15,8 @@ primary_region = "dfw"
   WINDOW_HOME = "/data/window"
   ARENA_PUBLIC_URL = "https://swu-arena.fly.dev"
   ARENA_ADMINS = "ericfode"
+  # /play (bot/arena/play.js): anyone signed in with GitHub may play Eric's JEPA bot (Eric 23:02 2026-10-15)
+  ARENA_PLAY = "github"
   # the games machine (fly.games.toml): woken over Fly's private network on every submission and every 6 hours
   ARENA_GAMES_WAKE = "http://swu-arena-games.flycast/wake"
 
