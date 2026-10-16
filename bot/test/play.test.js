@@ -119,9 +119,11 @@ test('who may play: invited people by default, anyone with GitHub in github mode
             const [palStatus, pal] = await page(session(w, 'pal'));
             assert.strictEqual(palStatus, 200);
             assert.match(pal, /SWUViewer\.mountPlay/);
-            // isolated, so an arena bot's stdin (a SharedArrayBuffer) works; credentialless, so the card art still loads
+            // isolated, so an arena bot's stdin (a SharedArrayBuffer) works; require-corp, which Safari has (it has no
+            // credentialless), with the card art through the window
             const headers = (await go('/play', { cookie: session(w, 'pal') })).headers;
-            assert.deepStrictEqual([headers.get('cross-origin-opener-policy'), headers.get('cross-origin-embedder-policy')], ['same-origin', 'credentialless']);
+            assert.deepStrictEqual([headers.get('cross-origin-opener-policy'), headers.get('cross-origin-embedder-policy')], ['same-origin', 'require-corp']);
+            assert.match(pal, /setArtResolver\?\.\(\(code, back\) =>[^]*`\/art\//, 'the page shows the card art through the window');
             const [strangerStatus, stranger] = await page(session(w, 'stranger'));
             assert.strictEqual(strangerStatus, mode === 'github' ? 200 : 403);
             assert.match(stranger, mode === 'github' ? /mountPlay/ : /stranger.*is not on the list yet/s);

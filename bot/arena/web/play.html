@@ -173,6 +173,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
+  // card art through the window (bot/arena/art.js): this page is isolated with require-corp, which blocks the CDN's images
+  SWUViewer.setArtResolver?.((code, back) => {
+    const m = /^([A-Z0-9]{2,6})_(\d{3})$/.exec(code);
+    return m ? `/art/${m[1]}/${m[2]}${back ? '-b' : ''}.png` : null;
+  });
   const STILL = matchMedia('(prefers-reduced-motion: reduce)');
   const size = (n) => (n == null ? '?' : n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(n < 104857600 ? 1 : 0)} MB`);
   const sleep = (ms, signal) => new Promise((ok, no) => {
@@ -280,7 +285,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
   function unavailable(bot) {
     if (bot.kind !== 'arena') return null;
-    if (!window.crossOriginIsolated) return 'This browser cannot run arena bots on this page. Chrome, Edge and Firefox can.';
+    if (!window.crossOriginIsolated) return 'This browser cannot run arena bots on this page. Recent Chrome, Edge, Firefox and Safari can.';
     if (!bot.runtime) return 'This bot is still on its way from the arena to this site. Reload the page in a minute.';
     if (bot.runtime !== 'wasi-p1' && !runtimeOf(bot)) return `It needs the ${bot.runtime} runtime, which this arena does not have yet.`;
     return null;

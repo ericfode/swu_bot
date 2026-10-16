@@ -218,8 +218,10 @@ test('who may play: invited people by default, anyone with GitHub in github mode
             const pal = await go('/tables', { cookie: session(w, 'pal') });
             assert.strictEqual(pal.status, 200);
             assert.strictEqual(pal.headers.get('cross-origin-opener-policy'), 'same-origin');
-            assert.strictEqual(pal.headers.get('cross-origin-embedder-policy'), 'credentialless', 'isolated, and the CDN card art still loads');
-            assert.match(await pal.text(), /mountPlay/);
+            assert.strictEqual(pal.headers.get('cross-origin-embedder-policy'), 'require-corp', 'isolated, in the mode Safari has too');
+            const palPage = await pal.text();
+            assert.match(palPage, /mountPlay/);
+            assert.match(palPage, /setArtResolver\?\.\(\(code, back\) =>[^]*`\/art\//, 'the card art comes through the window');
             const stranger = await go('/tables', { cookie: session(w, 'stranger') });
             assert.strictEqual(stranger.status, mode === 'github' ? 200 : 403);
             if (mode !== 'github') {

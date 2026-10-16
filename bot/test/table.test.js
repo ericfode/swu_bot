@@ -29,7 +29,7 @@ test('a split must name listed targets once, stay under each cap and add up', ()
 test('a person\'s wrong answer is refused and the decision stays open; a right one is taken once', async () => {
     const sent = [];
     const seat = new PersonSeat({ send: (m) => sent.push(m) });
-    assert.deepEqual(seat.hello({ t: 'hello' }), { t: 'ready', v: 2, name: 'person' });
+    assert.deepEqual(seat.hello({ t: 'hello' }), { t: 'ready', v: 2, name: 'person', noEffect: true });
     assert.equal(seat.answer({ t: 'act', seq: 1, i: 0 }), 'nothing to answer now');
     const reply = seat.decide(decide(1, [{ i: 0, kind: 'button', label: 'Pass' }, { i: 1, kind: 'distribute', label: 'distribute 3', distribute: dist }]));
     assert.equal(sent.at(-1).t, 'decide');
@@ -45,7 +45,7 @@ test('a person\'s screen gets hello without the card data, and the referee\'s me
     const sent = [];
     const seat = new PersonSeat({ send: (m) => sent.push(m) });
     const hello = { t: 'hello', you: 'p1', deck: { leader: { id: 'SOR_010', count: 1 } }, ms: null, cards: [{ internalName: 'shield', title: 'Shield' }] };
-    assert.deepEqual(seat.hello(hello), { t: 'ready', v: 2, name: 'person' });
+    assert.deepEqual(seat.hello(hello), { t: 'ready', v: 2, name: 'person', noEffect: true });
     assert.deepStrictEqual(sent, [{ t: 'hello', you: 'p1', deck: { leader: { id: 'SOR_010', count: 1 } }, ms: null }]);
     assert.strictEqual(hello.cards.length, 1);
 });
@@ -135,6 +135,61 @@ test('a scripted person plays whole games against a bot; the bot\'s hidden cards
             }
         }
     }
+});
+
+test('a person\'s card moves that would change nothing come marked noEffect, and the engine agrees; a bot that does not ask gets no marks', { skip: !ENGINE && 'engine or card data not built' }, async () => {
+    const { Env } = require('../env');
+    const { loadDecks } = require('../decklists');
+    const { seededRng } = require('../rng');
+    const { playTable } = require('../table/table');
+    const env = new Env();
+    const { decks } = loadDecks(path.join(ROOT, 'bot/decks/ash-meta-2026-09.json'), env);
+    const byName = (n) => decks.find((d) => d.metadata.name === n);
+    const seed = 20;
+    const rng = seededRng(`person-${seed}`);
+    const marks = { shown: 0, clicked: 0, asked: 0, bot: 0, elsewhere: 0 };
+    let seat;
+    let clickedMark = false;
+    const send = (m) => {
+        if (m.t !== 'decide') {
+            return;
+        }
+        const marked = m.actions.filter((a) => a.noEffect);
+        marks.shown += marked.length;
+        marks.elsewhere += marked.filter((a) => a.kind !== 'card' || !m.prompt.actionWindow).length;
+        // the engine's own question: "Playing X will have no effect. Are you sure...?" or "The ability ... will have no effect"
+        const question = /will have no effect/i.test(JSON.stringify(m.prompt));
+        if (clickedMark) {
+            marks.asked += question ? 1 : 0;
+        }
+        clickedMark = false;
+        setImmediate(() => {
+            let a = marked.length && marks.clicked < 4 ? marked[0] : m.actions[Math.floor(rng() * m.actions.length)];
+            if (question) {
+                a = m.actions.find((x) => /cancel/i.test(x.label)) ?? a;
+            }
+            if (a.noEffect) {
+                marks.clicked++;
+                clickedMark = true;
+            }
+            assert.equal(seat.answer({ t: 'act', seq: m.seq, i: a.i }), null);
+        });
+    };
+    seat = new PersonSeat({ name: 'you', send });
+    const brng = seededRng(`bot-${seed}`);
+    const bot = {
+        name: 'plain', hello: () => ({ t: 'ready', v: 2 }),
+        decide: (m) => {
+            marks.bot += m.actions.filter((a) => 'noEffect' in a).length;
+            return { t: 'act', i: Math.floor(brng() * m.actions.length) };
+        }
+    };
+    const { result } = await playTable({ env, person: seat, personSeat: 'p1', bot, decks: { p1: byName('admiral-piett_jtl_blue'), p2: byName('ahsoka-tano_ash_yellow') }, seed, key: 'no-effect-test', send });
+    assert.equal(result.outcome, 'won', result.error);
+    assert.ok(marks.clicked >= 3, `the person clicked marked cards: ${JSON.stringify(marks)}`);
+    assert.equal(marks.asked, marks.clicked, `every marked card the person clicked made the engine ask "will have no effect": ${JSON.stringify(marks)}`);
+    assert.equal(marks.elsewhere, 0, 'only card moves in the action window are marked');
+    assert.equal(marks.bot, 0, 'a client that does not ask gets no marks');
 });
 
 test('the bot\'s look-ahead deals the person\'s hand, resources and deck again (protocol.js determinize)', { skip: !ENGINE && 'engine or card data not built' }, async () => {

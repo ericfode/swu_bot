@@ -63,10 +63,10 @@ const MODELS = { 'tx-t10.safetensors': '/app/vendor/jepa/tx-t10.safetensors', 't
 const FILES = ['engine.json', 'tables-worker.js', 'bot-worker.js', 'python-lib.json', 'python.wasm', ...Object.keys(MODELS)];
 const NEEDED = ['engine.json', 'tables-worker.js', 'bot-worker.js'];
 const PEOPLE = ['lobby', 'invite', 'join', 'direct'];
-// the page and the worker scripts: SharedArrayBuffer (a bot blocks on its stdin) needs cross-origin isolation, and
-// credentialless lets the card art from swu-db's CDN load without the CDN's say-so (browsers without it get no
-// arena bots, only the JEPA bot)
-const ISOLATED_PAGE = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'credentialless' };
+// the page: SharedArrayBuffer (a bot blocks on its stdin) needs cross-origin isolation, with require-corp since Safari
+// has no credentialless; the card art comes through the window (art.js), as the CDN's own would be blocked (browsers
+// that do not isolate the page get no arena bots, only the JEPA bot)
+const ISOLATED_PAGE = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' };
 const PID = /^pl_[0-9a-f]{6}$/;
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/;
 const GAME = /^open-[0-9a-f]{8}-[0-9a-f]{8}$/;

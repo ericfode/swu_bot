@@ -180,8 +180,9 @@ version of the arena's latest round. The person picks the opponent first, and th
 needs, with a progress bar (`/play?bot=<name>` goes straight to one). The referee and the bot run in the person's tab
 (`play-worker.js` on the swarm's engine pack, `bot/table/README.md`), so the window and the games machine play
 nothing; the window only serves the files and keeps the finished games. The page is cross-origin isolated (an arena
-bot's stdin is a SharedArrayBuffer) with `credentialless`, so card art from its CDN still loads; a browser that does
-not isolate it (Safari) can play only the JEPA bot.
+bot's stdin is a SharedArrayBuffer) with `require-corp`, as the swarm's pages are, because Safari (every iPhone browser)
+has no `credentialless`. Under `require-corp` the CDN's card art is blocked, so the page shows it through the window's
+`/art/` (below). A browser that does not isolate the page can play only the JEPA bot.
 
 - `ARENA_PLAY` says who may play: `invited` (the default: signed in with GitHub and invited), `github` (anyone signed in
   with GitHub; their sign-in then returns to `/play` though they cannot read the arena) or `off`. A view link's guest has
@@ -216,6 +217,15 @@ not isolate it (Safari) can play only the JEPA bot.
   `admin/people` as `@<login>`. The games are unrated: the person's tab played them.
 - `GET /api/play/games/<id>.jsonl`: a game's replay, for the person who played it and admins.
 
+## Card art for the isolated pages (art.js)
+
+`GET /art/<SET>/<NNN>.png` (and `<NNN>-b.png`, a leader's deployed side) is the image of
+`https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png`, fetched by the window. `/play` and `/tables` point the viewer
+kit's art here (`SWUViewer.setArtResolver`) because their isolation (`require-corp`) blocks images from a site that
+does not allow it, and the CDN sends no CORP or CORS header. It answers anyone signed in with GitHub, a view link's
+guest or a token. Browsers keep each image a year; the window keeps about 48 MB of them in memory and none on disk,
+and remembers for an hour that a card has no art (404).
+
 ## The open tables (tables.js)
 
 `/tables` lets people play each other or any arena bot on Holotable's play screen (`bot/table/README.md`). Every game
@@ -224,8 +234,8 @@ keeps the finished games, readable by anyone signed in with GitHub (`spec/open-t
 
 - `ARENA_TABLES` says who may play: `invited` (the default), `github` or `off`, as `ARENA_PLAY` does. The logs page and
   reader tokens are for anyone signed in with GitHub whatever the mode. The page is cross-origin isolated (COOP
-  same-origin, COEP credentialless, so the CDN's card art still loads) because arena bots block on a SharedArrayBuffer
-  stdin; a browser without that (Safari) gets only the JEPA bot.
+  same-origin, COEP require-corp, as `/play`; card art through `/art/`) because arena bots block on a SharedArrayBuffer
+  stdin; a browser without that gets only the JEPA bot.
 - `GET /tables`, `/tables/kit.js`, `/tables/<file>?b=` (`engine.json`, `tables-worker.js`, `bot-worker.js`,
   `python-lib.json`, `python.wasm`), `/tables/bot/<sha256>.tar` (an arena bundle of the games machine's latest round,
   `swarm-relay.js` `lineup()` and `sendBot()`, kept on the window's disk in `swarm-bots/`), `/tables/logs`.

@@ -1,14 +1,14 @@
 {
   "name": "holotable",
   "repo": "https://github.com/ericfode/holotable",
-  "commit": "510bc065490cd0b6929a20e36f4f9f251e7ff6b8",
+  "commit": "c54fead4c556ddee8d46234b24d4d4306d2017a4",
   "built": "npm ci && ATLAS_KIT=<swu_bot>/meta/atlas-kit.js npm run build:kit",
   "atlasKitSha256": "85513c895400772f61295ce993a6e319e3081407c8696660cf81e5b7d990e702",
   "files": {
     "swu-viewer-kit.js": {
       "from": "dist-kit/swu-viewer-kit.js",
-      "bytes": 2385432,
-      "sha256": "9a51a183a5a19acd31b64a6faf695df2ae8c5be24e0e536721df3b0505bc5b42"
+      "bytes": 2401617,
+      "sha256": "8d95a2c07d66e688cd250f2e632f20e64f92b00cde3d3841ec77fff03b921f04"
     },
     "swu-viewer-kit.licenses.txt": {
       "from": "dist-kit/swu-viewer-kit.licenses.txt",
