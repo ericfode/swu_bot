@@ -102,7 +102,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   function watch(jsonl) {
     viewer?.destroy?.();
     show('viewer');
-    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false });
+    // the replay is all this page shows now, so its keys (? lists them) work anywhere on the page
+    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false, keyboard: 'window' });
   }
   let backTo = 'table';
   $('back').onclick = () => {
