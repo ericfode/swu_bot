@@ -119,6 +119,9 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
                 trim();
             }
             return gz;
+        }, (err) => {
+            e.gz = null; // the next request tries again
+            throw err;
         });
         return e.gz;
     }
