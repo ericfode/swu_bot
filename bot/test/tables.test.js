@@ -82,7 +82,7 @@ async function serve(w) {
         method, redirect: 'manual', body, signal, headers: { ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': type } : {}), ...(origin ? { origin } : {}), ...headers }
     });
     const post = (p, cookie, body = {}) => go(p, { method: 'POST', cookie, origin: ORIGIN, body: JSON.stringify(body) });
-    return { go, post, close: () => new Promise((r) => { srv.closeAllConnections?.(); srv.close(r); }) };
+    return { base, go, post, close: () => new Promise((r) => { srv.closeAllConnections?.(); srv.close(r); }) };
 }
 
 const session = (w, login) => `swu_session=${w.auth.sign({ l: login, exp: Date.now() + 60000 })}`;
@@ -423,6 +423,31 @@ test('uploads sent at once share the day\'s count, and the oldest games go with 
         assert.deepStrictEqual(now, [kept[1], third.id], 'at most two kept');
         assert.ok(!store.hasReplay('tables', kept[0]), 'the oldest game\'s replay is gone with its row');
         assert.ok(store.hasReplay('tables', kept[1]) && store.hasReplay('tables', third.id));
+    } finally {
+        await close();
+    }
+});
+
+test('a slow upload is stamped when it is kept, so the kept list stays in playedAt order', async () => {
+    const { w, store } = makeWindow('order');
+    const { base, go, post, close } = await serve(w);
+    try {
+        const pal = session(w, 'pal');
+        const me = (await result(await go('/api/tables/info', { cookie: pal }))).you;
+        const body = new TextEncoder().encode(JSON.stringify({ replay: replay({ seed: 800, p1: me }), seat: 'p1' }));
+        let push;
+        const stream = new ReadableStream({ start: (c) => { push = c; } });
+        const slow = fetch(`${base}/api/tables/games`, { method: 'POST', duplex: 'half', body: stream, headers: { cookie: pal, origin: ORIGIN, 'content-type': 'application/json' } });
+        push.enqueue(body.slice(0, 100));
+        await new Promise((r) => setTimeout(r, 50));
+        await result(await post('/api/tables/games', pal, { replay: replay({ seed: 801, p1: me }), seat: 'p1' }));
+        await new Promise((r) => setTimeout(r, 20));
+        push.enqueue(body.slice(100));
+        push.close();
+        const late = await result(await slow);
+        const rows = JSON.parse(store.getDoc('runs', 'tables')).games;
+        assert.strictEqual(rows.at(-1).id, late.id, 'the slow upload is kept last');
+        assert.ok(rows[0].playedAt < rows[1].playedAt, `${rows[0].playedAt} before ${rows[1].playedAt}`);
     } finally {
         await close();
     }

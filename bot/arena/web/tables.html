@@ -789,7 +789,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           if (req.botAfterMs) {
             timer = setTimeout(() => { es.close(); ok(null); }, req.botAfterMs);
           }
-          cancel = () => { es.close(); clearTimeout(timer); no(new Error('cancelled')); };
+          setCancel(() => { es.close(); clearTimeout(timer); no(new Error('cancelled')); });
           es.onmessage = (e) => {
             const d = JSON.parse(e.data);
             if (d.t === 'waiting') onState({ text: d.people > 1 ? 'Looking for another player…' : 'Nobody else is waiting yet. Looking…' });

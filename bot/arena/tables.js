@@ -463,7 +463,8 @@ function createTables({
         if (!row) {
             const id = `open-${game.header.seed.toString(16).padStart(8, '0')}-${sha256.slice(0, 8)}`;
             store.putReplay(RUN, id, Buffer.from(replay, 'utf8'));
-            row = rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(t).toISOString() });
+            // stamped as it joins the list, so the list stays in playedAt order when uploads overlap
+            row = rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(now()).toISOString() });
             const all = [...doc.games, row];
             doc.games = all.slice(-maxRows);
             doc.bots = [...new Set([...doc.bots, ...game.header.players.filter((x) => x.lang !== 'person').map((x) => x.bot)])];
