@@ -123,6 +123,7 @@ test('native: builds the helper image from the machine image alone and runs its 
     assert.strictEqual(d.at(-1), `swu-helper:${SHA}`, 'no command after the image: its CMD starts the server');
     assert.ok(d.includes('COORD_ROLE=helper') && d.includes('GAMES_HELPER_SLOTS=2'));
     assert.ok(d.includes('swu-helper-data:/data') && d.includes('no-new-privileges'));
+    assert.ok(d.includes('--init'), 'an init reaps what the server kills after a play');
     assert.ok(!d.some((a) => /RELEASE_TMP|coord\/bin/.test(a)));
     assert.ok(!d.includes('--platform'), 'a native image runs as built');
 

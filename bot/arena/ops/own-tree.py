@@ -1,24 +1,21 @@
 """
-Who owns a folder tree on the games volume, set as root without ever following a link (gamesctl.js setup runs it on
-every start, before anything reads the trees):
+Makes folder trees on the games volume root's alone, as root, without ever following a link (gamesctl.js setup runs it
+on every start, before anything reads the trees):
 
-    python3 -I bot/arena/ops/own-tree.py root <dir>...           arena/ and dash/: root's alone
-    python3 -I bot/arena/ops/own-tree.py give <uid>:<gid> <dir>... the bots' trees (their HOME, the wasm cache)
+    python3 -I bot/arena/ops/own-tree.py root <dir>...           arena/ and dash/
 
-root: everything in each tree becomes root's, folders 0755 and files 0644 (0755 when any execute bit was set), so the
-bots' user still reads it all and writes nothing. What the bots' user could have planted while it owned the tree goes:
+Everything in each tree becomes root's, folders 0755 and files 0644 (0755 when any execute bit was set), so the bots'
+user still reads it all and writes nothing. What the bots' user could have planted while it owned the tree goes:
 links, pipes, sockets and devices are removed, and so is a file with other hard links (nothing of the arena's makes
 one, and a copy could be made to fill the volume); ACLs and other extended attributes are dropped; setuid, setgid and
 sticky bits go.
-give: every folder and file becomes uid:gid's; a link is never followed, and a file with other hard links keeps its
-owner (it may be a name for a file elsewhere on the volume).
 
 Every step works through file descriptors (dir_fd, O_NOFOLLOW), so a name swapped mid-walk is never followed. A folder
 deeper than MAX_DEPTH (bundle.py keeps a bundle's paths to 255 bytes, so no entered version comes near it) is removed
-whole with GNU rm in root, which never follows a link either, and left as it is in give.
-Prints one JSON line: {"removed": [...], "attrs": N, "kept": [...], "failed": [...]} (paths relative to their tree, at
-most 100 of each, a long one shortened, so the line stays well under 1 MB). Exit 0 when nothing failed, 1 when
-something did (the line says what), 2 on a usage error or a top folder that is not a folder.
+whole with GNU rm, which never follows a link either.
+Prints one JSON line: {"removed": [...], "attrs": N, "failed": [...]} (paths relative to their tree, at most 100 of
+each, a long one shortened, so the line stays well under 1 MB). Exit 0 when nothing failed, 1 when something did (the
+line says what), 2 on a usage error or a top folder that is not a folder.
 """
 import errno
 import json
@@ -36,7 +33,6 @@ ATTRS = ("system.posix_acl_access", "system.posix_acl_default")
 class Walk:
     def __init__(self):
         self.removed = []
-        self.kept = []
         self.failed = []
         self.attrs = 0
 
@@ -119,57 +115,11 @@ def own_root_entry(walk, dirfd, name, path, depth):
         os.close(fd)
 
 
-def give(walk, dirfd, rel, uid, gid, depth=1):
-    """Gives everything inside the folder open as dirfd to uid:gid, never through a link."""
-    for name in sorted(os.listdir(dirfd)):
-        path = rel + "/" + name if rel else name
-        try:
-            give_entry(walk, dirfd, name, path, uid, gid, depth)
-        except OSError as e:
-            walk.note(walk.failed, "%s: %s" % (path, e.strerror or e))
-
-
-def give_entry(walk, dirfd, name, path, uid, gid, depth):
-    st = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
-    if stat.S_ISLNK(st.st_mode):
-        os.chown(name, uid, gid, dir_fd=dirfd, follow_symlinks=False)
-        return
-    if not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
-        return
-    if (stat.S_ISREG(st.st_mode) and st.st_nlink > 1) or (stat.S_ISDIR(st.st_mode) and depth > MAX_DEPTH):
-        walk.note(walk.kept, path)
-        return
-    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | (os.O_DIRECTORY if stat.S_ISDIR(st.st_mode) else 0)
-    try:
-        fd = os.open(name, flags, dir_fd=dirfd)
-    except OSError as e:
-        if e.errno in (errno.ELOOP, errno.ENOENT, errno.ENOTDIR, errno.ENXIO):
-            return  # gone or swapped for a link since: the bots' own business
-        raise
-    try:
-        now = os.fstat(fd)
-        if (now.st_dev, now.st_ino) != (st.st_dev, st.st_ino) or (stat.S_ISREG(now.st_mode) and now.st_nlink > 1):
-            return
-        os.fchown(fd, uid, gid)
-        if stat.S_ISDIR(now.st_mode):
-            give(walk, fd, path, uid, gid, depth + 1)
-    finally:
-        os.close(fd)
-
-
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ("root", "give") or (argv[0] == "give" and len(argv) < 3):
-        print("usage: own-tree.py root <dir>... | own-tree.py give <uid>:<gid> <dir>...", file=sys.stderr)
+    if len(argv) < 2 or argv[0] != "root":
+        print("usage: own-tree.py root <dir>...", file=sys.stderr)
         return 2
-    if argv[0] == "give":
-        try:
-            uid, gid = (int(x) for x in argv[1].split(":"))
-        except ValueError:
-            print("own-tree.py: give takes <uid>:<gid>", file=sys.stderr)
-            return 2
-        tops = argv[2:]
-    else:
-        tops = argv[1:]
+    tops = argv[1:]
     walk = Walk()
     for top in tops:
         try:
@@ -178,17 +128,13 @@ def main(argv):
             print("own-tree.py: %s is not a folder (%s)" % (top, e.strerror), file=sys.stderr)
             return 2
         try:
-            if argv[0] == "root":
-                walk.strip_attrs(fd)
-                os.fchown(fd, 0, 0)
-                os.fchmod(fd, 0o755)
-                own_root(walk, fd, "")
-            else:
-                os.fchown(fd, uid, gid)
-                give(walk, fd, "", uid, gid)
+            walk.strip_attrs(fd)
+            os.fchown(fd, 0, 0)
+            os.fchmod(fd, 0o755)
+            own_root(walk, fd, "")
         finally:
             os.close(fd)
-    print(json.dumps({"removed": walk.removed, "attrs": walk.attrs, "kept": walk.kept, "failed": walk.failed}))
+    print(json.dumps({"removed": walk.removed, "attrs": walk.attrs, "failed": walk.failed}))
     return 1 if walk.failed else 0
 
 

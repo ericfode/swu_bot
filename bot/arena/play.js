@@ -1,10 +1,11 @@
 'use strict';
 /**
- * The window's /play page: a person against Eric's JEPA bot (jepa-tx-gate) on Holotable's play screen. The referee and
- * the bot run in a worker of the person's tab (bot/swarm/build.js play-worker.js, on the swarm's engine pack, served by
- * the swarm relay), so neither the window nor the games machine plays the game. When it ends, the tab sends the replay
- * here, and the window keeps it in the run "play" (Eric, 2026-10-15: "post game histories back to my system").
- * Games are unrated: the person's own tab played them and could have changed them.
+ * The window's /play page: a person against a bot on Holotable's play screen, Eric's JEPA bot (jepa-tx-gate) or a bot of
+ * the arena's latest round (Eric, 2026-10-16: "you should be able to chose what bot you want so it doesnt have to
+ * download as much"). The referee and the bot run in a worker of the person's tab (bot/swarm/build.js play-worker.js,
+ * on the swarm's engine pack, served by the swarm relay), so neither the window nor the games machine plays the game.
+ * When it ends, the tab sends the replay here, and the window keeps it in the run "play" (Eric, 2026-10-15: "post game
+ * histories back to my system"). Games are unrated: the person's own tab played them and could have changed them.
  *
  *   const play = createPlay({ store, swarm, auth, kitFile, wake });
  *   if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) return;
@@ -13,17 +14,34 @@
  * ARENA_PLAY says who may play: 'invited' (the default: people signed in with GitHub and invited to the arena),
  * 'github' (anyone signed in with GitHub), or 'off'. A view link's guest has no GitHub login, so it may not play.
  *
- *   GET  /play                        the page (play.html), the sign-in page, or why not
+ *   GET  /play                        the page (play.html), the sign-in page, or why not; cross-origin isolated
+ *                                     (credentialless, so card art from its CDN still loads): a bundle's stdin is a
+ *                                     SharedArrayBuffer
  *   GET  /play/kit.js                 the viewer kit, for people who may play but not read the arena
- *   GET  /play/engine.json?b=<build>  the swarm's engine pack and the play worker of that build (swarm-relay.js)
- *   GET  /play/play-worker.js?b=<build>
- *   GET  /api/play/info               {on, login, admin, ready, build, files, why?, games}: the files to load and the
- *                                     person's last games (an admin also gets every game, with who played it)
+ *   GET  /play/<file>?b=<build>       a swarm file of that build (swarm-relay.js): engine.json, play-worker.js,
+ *                                     bot-worker.js, the JEPA bot's models, python-lib.json and python.wasm; each
+ *                                     answer says its unzipped size in x-raw-length
+ *   GET  /play/bundle/<sha256>        an arena version's canonical tar, for a version of the latest round only (the
+ *                                     swarm relay's lineup and sendBot: kept on the window's disk, so it loads while the
+ *                                     games machine sleeps)
+ *   GET  /api/play/info               {on, login, admin, ready, build, files, why?, games}: the engine's files to load
+ *                                     ({url, bytes} each) and the person's last games (an admin also gets every game,
+ *                                     with who played it)
+ *   GET  /api/play/bots               {ready, round, capMs, bots, runtimes}: the bots a person may pick, the JEPA bot first,
+ *                                     then the latest round's versions by rating, each with what it downloads (see
+ *                                     below); runtimes: the interpreters a bundle may need, {lib, wasm} each
  *   POST /api/play/games {replay}     keeps a finished game: {id}; the same replay again gives the same id
  *   GET  /api/play/games/<id>.jsonl   a game's replay, for the person who played it and admins
  *
  * The run document is a people run (window.js peopleRun: it has `feed`), so readers see the person as "opponent" and
  * the app leaves it out; who played each game is kept in admin/people as "@<login>", as for the Karabast feed's names.
+ *
+ * A bot of /api/play/bots is {name, title, kind, about, elo, bytes, ...}: kind 'jepa' runs in the play worker and
+ * brings files, [{url, path, bytes, wire}] (the page fetches each and sends [[path, bytes]] with its first game); kind
+ * 'arena' is a WebAssembly version that brings bundle, {url, hex, bytes, wire}, runtime ('wasi-p1', or an interpreter of
+ * runtimes the page also fetches) and capMs, its time per game; it needs a cross-origin isolated page. bytes: what the
+ * bot itself is, unzipped, its runtime not counted; wire: about what it downloads (gzipped), null when the window does
+ * not know yet. Every name, title and number is data from the arena: set them with textContent.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -34,7 +52,20 @@ const { atLeast, LOGIN } = require('./auth');
 const RUN = 'play';
 const BOT = 'jepa-tx-gate';
 const PERSON = 'person'; // the person's seat name in the replay (bot/table/host.js)
-const FILES = ['engine.json', 'play-worker.js'];
+// the files every game loads, the JEPA bot's models (bot/swarm/pack.js MODELS: where the worker puts each), and a
+// Python bundle's interpreter
+const FILES = ['engine.json', 'play-worker.js', 'bot-worker.js'];
+const MODELS = { 'tx-t10.safetensors': '/app/vendor/jepa/tx-t10.safetensors', 'tx-t10-e.safetensors': '/app/vendor/jepa/tx-t10-e.safetensors' };
+const PYTHON = { runtime: 'python-3.14-wasi', lib: 'python-lib.json', wasm: 'python.wasm' };
+const READY = [...FILES, ...Object.keys(MODELS)];
+const KEPT = [...READY, PYTHON.lib, PYTHON.wasm];
+// an arena version: a competitor's name as api.js allows it (at most 32 characters) and its version number
+const VERSION = /^[a-z][a-z0-9_]{0,31}-v\d{1,6}$/;
+const HEX = /^[0-9a-f]{64}$/;
+const TITLE = "Eric's JEPA bot";
+const ABOUT = 'A learned model of the game that looks ahead on simulations, as it plays in the arena. Its two models download once.';
+// the page's isolation: the swarm's pages use require-corp, which would block the card art (no CORP header on its CDN)
+const PAGE_ISOLATED = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'credentialless' };
 const MODES = new Set(['off', 'invited', 'github']);
 const MAX_REPLAY = 16e6; // a whole game; the longest arena game so far is ~14 MB
 const MAX_LINES = 40000;
@@ -52,6 +83,28 @@ const parseOr = (text, dflt) => {
     }
 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** The bytes of file `name` at the top of a canonical bundle tar (bot/compiled/bundle.py: ustar, plain files), or null. */
+function tarFile(tar, name) {
+    for (let off = 0; off + 512 <= tar.length;) {
+        const h = tar.subarray(off, off + 512);
+        if (h.every((x) => x === 0)) {
+            break;
+        }
+        const field = (o, n) => h.subarray(o, o + n).toString('latin1').split('\0')[0];
+        const size = parseInt(field(124, 12).trim() || '0', 8);
+        if (!Number.isSafeInteger(size) || size < 0) {
+            return null;
+        }
+        const prefix = field(345, 155);
+        const rel = (prefix ? `${prefix}/${field(0, 100)}` : field(0, 100)).replace(/^\.\//, '');
+        if (rel === name && String.fromCharCode(h[156] || 48) === '0') {
+            return tar.subarray(off + 512, off + 512 + size);
+        }
+        off += 512 + Math.ceil(size / 512) * 512;
+    }
+    return null;
+}
 
 /**
  * A finished game's replay as the play worker writes it (spec/replay-format.md): a header with the person in seat 1
@@ -85,8 +138,9 @@ function checkReplay(text) {
     }
     const p = Array.isArray(header.players) ? header.players : [];
     const deckName = (seat) => header.decks?.[seat]?.metadata?.name;
-    if (header.t !== 'header' || header.v !== 1 || p.length !== 2 || p[0]?.id !== 'p1' || p[0]?.bot !== PERSON || p[1]?.id !== 'p2' || p[1]?.bot !== BOT) {
-        throw new Error(`replay header: you in seat 1 (${PERSON}) and ${BOT} in seat 2`);
+    const bot = p[1]?.bot;
+    if (header.t !== 'header' || header.v !== 1 || p.length !== 2 || p[0]?.id !== 'p1' || p[0]?.bot !== PERSON || p[1]?.id !== 'p2' || !(bot === BOT || VERSION.test(String(bot)))) {
+        throw new Error(`replay header: you in seat 1 (${PERSON}) and ${BOT} or an arena version in seat 2`);
     }
     if (!Number.isInteger(header.seed) || header.seed < 0 || header.seed >= 2 ** 32) {
         throw new Error('replay header: the game seed');
@@ -98,11 +152,11 @@ function checkReplay(text) {
     if (end.t !== 'end' || typeof end.outcome !== 'string' || n(end.steps) === null || n(end.round) === null) {
         throw new Error('replay: the last line is the end of the game');
     }
-    return { header, end, steps: lines.length - 2 };
+    return { header, end, steps: lines.length - 2, bot };
 }
 
 /** The run row of a checked game (window.js feedRun's fields, plus the decks and when it was played). */
-function rowOf(id, { header, end }, { sha256, bytes, at }) {
+function rowOf(id, { header, end, bot = BOT }, { sha256, bytes, at }) {
     let outcome = 'abandoned';
     let winnerSeat = null;
     let conceded = false;
@@ -117,9 +171,9 @@ function rowOf(id, { header, end }, { sha256, bytes, at }) {
     } else if (end.winner === 'draw') {
         outcome = 'draw';
     }
-    const seatName = (s) => (s === 'p1' ? 'opponent' : BOT);
+    const seatName = (s) => (s === 'p1' ? 'opponent' : bot);
     return {
-        id, p1: 'opponent', p2: BOT, outcome, winnerSeat, winner: outcome === 'draw' ? 'draw' : winnerSeat ? seatName(winnerSeat) : null,
+        id, p1: 'opponent', p2: bot, outcome, winnerSeat, winner: outcome === 'draw' ? 'draw' : winnerSeat ? seatName(winnerSeat) : null,
         // an error's text could hold anything the tab wrote, so the row keeps only that there was one
         rounds: end.round, steps: end.steps, error: (end.outcome === 'ERROR' && !conceded) || outcome === 'abandoned' ? 'no result' : null,
         conceded, decks: { p1: header.decks.p1.metadata.name, p2: header.decks.p2.metadata.name }, playedAt: at, bytes, sha256
@@ -147,11 +201,73 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         const d = parseOr(store.getDoc('admin', 'people'), null)?.names;
         return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
     };
-    const brief = (r) => ({ id: r.id, outcome: r.outcome, winner: r.winnerSeat === 'p1' ? 'you' : r.winnerSeat === 'p2' ? BOT : r.outcome === 'draw' ? 'draw' : null, conceded: !!r.conceded, rounds: r.rounds, steps: r.steps, decks: r.decks, playedAt: r.playedAt });
+    const brief = (r) => ({ id: r.id, bot: r.p2 ?? BOT, outcome: r.outcome, winner: r.winnerSeat === 'p1' ? 'you' : r.winnerSeat === 'p2' ? r.p2 ?? BOT : r.outcome === 'draw' ? 'draw' : null, conceded: !!r.conceded, rounds: r.rounds, steps: r.steps, decks: r.decks, playedAt: r.playedAt });
 
     function sendPage(req, res, code, html, sendText) {
-        sendText(res, req, code, 'text/html; charset=utf-8', html);
+        sendText(res, req, code, 'text/html; charset=utf-8', html, PAGE_ISOLATED);
         return true;
+    }
+
+    /** The build whose files a page loads now: the machine's, else the one on the window's disk; null when neither. */
+    async function buildNow() {
+        const m = await swarm.currentManifest();
+        if (m) {
+            // kept on the window's disk, so the page loads while the games machine sleeps
+            swarm.keep(KEPT).catch(() => undefined);
+        }
+        return { build: m?.build ?? swarm.cachedBuild(READY), m };
+    }
+    // bytes: as the page reads it (unzipped); wire: about what it downloads (gzipped), null when not known
+    const fileOf = (build, name) => ({ url: `/play/${name}?b=${encodeURIComponent(build)}`, bytes: swarm.fileSize(build, name), wire: swarm.fileSize(build, name, { gz: true }) });
+    const wireOf = (hex) => {
+        const f = swarm.botHere(hex);
+        return f ? (typeof f.gz === 'string' ? fs.statSync(f.gz).size : f.gz.length) : null;
+    };
+    // bundle sha256 -> the runtime its arena.json names, read once the window has the bundle (null until then)
+    const runtimes = new Map();
+    const runtimeOf = (hex) => {
+        if (!runtimes.has(hex)) {
+            const f = swarm.botHere(hex);
+            if (!f) {
+                return null;
+            }
+            const m = tarFile(typeof f.raw === 'string' ? fs.readFileSync(f.raw) : f.raw, 'arena.json');
+            const r = parseOr(m?.toString('utf8'), null)?.runtime;
+            runtimes.set(hex, typeof r === 'string' ? r : null);
+        }
+        return runtimes.get(hex);
+    };
+
+    // ---- the bots: the JEPA bot, then the latest round's versions (swarm-relay.js lineup) by rating
+    async function bots(req, res, sendJson) {
+        const { build } = await buildNow();
+        const l = swarm.on() ? await swarm.lineup().catch(() => null) : null;
+        const arena = parseOr(store.getDoc('arena', 'standings'), null)?.global ?? {};
+        // a version's title is its builder's name (nova-v3: nova); the builders' own titles stay on the arena's pages
+        const titleOf = (name) => name.replace(/-v\d+$/, '');
+        const models = build ? Object.keys(MODELS).map((n) => ({ ...fileOf(build, n), path: MODELS[n] })) : [];
+        const total = (fs2, k) => (fs2.every((f) => Number.isSafeInteger(f[k])) ? fs2.reduce((a, f) => a + f[k], 0) : null);
+        const out = [{ name: BOT, title: TITLE, kind: 'jepa', about: ABOUT, elo: null, files: models, bytes: total(models, 'bytes'), wire: total(models, 'wire') }];
+        // each version thinks for as long as it did in that round (a lineup with no time limit offers none)
+        const cap = l?.capMs ?? null;
+        const rows = (cap ? l.bots : []).filter((b) => Number.isSafeInteger(b.bytes)).map((b) => ({
+            name: b.name, title: titleOf(b.name), kind: 'arena', about: null, elo: Number.isFinite(arena[b.name]) ? Math.round(arena[b.name]) : null,
+            runtime: runtimeOf(b.bundle), capMs: cap, bundle: { url: `/play/bundle/${b.bundle}`, hex: b.bundle, bytes: b.bytes, wire: wireOf(b.bundle) }, bytes: b.bytes, wire: wireOf(b.bundle)
+        }));
+        rows.sort((a, b) => (b.elo ?? -Infinity) - (a.elo ?? -Infinity) || a.name.localeCompare(b.name));
+        // an interpreter is offered when this build has it (its sizes known: the machine's manifest or the window's disk)
+        const python = build ? { lib: fileOf(build, PYTHON.lib), wasm: fileOf(build, PYTHON.wasm) } : null;
+        const runtimesNow = python && python.lib.bytes && python.wasm.bytes ? { [PYTHON.runtime]: python } : {};
+        return sendJson(res, 200, { result: { ready: !!build, round: l?.round ?? null, capMs: cap, bots: [...out, ...rows], runtimes: runtimesNow } }, req);
+    }
+
+    /** A bundle of the lineup (swarm-relay.js sendBot); the machine is woken when the window does not have it yet. */
+    async function sendBundle(req, res, hex, sendJson) {
+        if (!swarm.botHere(hex) && now() - woke > WAKE_MS) {
+            woke = now();
+            wake();
+        }
+        return swarm.sendBot(req, res, hex, { sendJson });
     }
 
     function sendKit(req, res, sendText) {
@@ -185,12 +301,7 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         if (!swarm.on()) {
             return sendJson(res, 200, { result: { ...out, ready: false, why: 'The game files are off on this window (no SWARM_HELPER_TOKEN).' } }, req);
         }
-        const m = await swarm.currentManifest();
-        const build = m?.build ?? swarm.cachedBuild(FILES);
-        if (m) {
-            // kept on the window's disk, so the page loads while the games machine sleeps
-            swarm.keep(FILES).catch(() => undefined);
-        }
+        const { build } = await buildNow();
         if (!build) {
             if (now() - woke > WAKE_MS) {
                 woke = now();
@@ -198,8 +309,7 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
             }
             return sendJson(res, 200, { result: { ...out, ready: false, why: 'The game files come from the games machine, which is starting. This takes about a minute.' } }, req);
         }
-        const q = `?b=${encodeURIComponent(build)}`;
-        return sendJson(res, 200, { result: { ...out, ready: true, build, files: { pack: `/play/engine.json${q}`, worker: `/play/play-worker.js${q}` } } }, req);
+        return sendJson(res, 200, { result: { ...out, ready: true, build, files: { pack: fileOf(build, 'engine.json'), worker: fileOf(build, 'play-worker.js'), botWorker: fileOf(build, 'bot-worker.js') } } }, req);
     }
 
     async function keepGame(req, res, login, { sendJson, readBody }) {
@@ -236,6 +346,8 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         const id = `play-${game.header.seed.toString(16).padStart(8, '0')}-${sha256.slice(0, 8)}`;
         store.putReplay(RUN, id, Buffer.from(replay, 'utf8'));
         doc.games = [...doc.games, rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(t).toISOString() })].slice(-MAX_ROWS);
+        // the bots of the games kept, so the list stays as short as the rows
+        doc.bots = [...new Set(doc.games.map((r) => r.p2 ?? BOT))];
         store.putDoc('runs', RUN, JSON.stringify(doc));
         // who played it, for admins only (window.js keepPeopleNames keeps the Karabast feed's names the same way)
         const all = names();
@@ -267,10 +379,10 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
                 return true;
             }
             if (who.via === 'cookie' && who.login && !who.guest) {
-                return sendPage(req, res, 403, auth.shell(`<h1>Play against Eric's bot</h1><p>You are signed in to GitHub as <b>@${esc(who.login)}</b>. The play page is open to people Eric invited to the arena, and <b>@${esc(who.login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(who.login)}</b>. Once he has added it, reload this page.</p><p><a href="/auth/logout">Sign out</a></p>`), sendText);
+                return sendPage(req, res, 403, auth.shell(`<h1>Play against a bot</h1><p>You are signed in to GitHub as <b>@${esc(who.login)}</b>. The play page is open to people Eric invited to the arena, and <b>@${esc(who.login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(who.login)}</b>. Once he has added it, reload this page.</p><p><a href="/auth/logout">Sign out</a></p>`), sendText);
             }
             const who2 = on === 'github' ? 'Anyone with a GitHub account can play.' : 'The play page is open to people Eric invited to the arena.';
-            return sendPage(req, res, 200, auth.shell(`<h1>Play against Eric's bot</h1><p>Play Star Wars Unlimited against Eric's JEPA bot. The game runs in your browser, and it is saved to the arena when it ends.</p><p>${who2} Sign in with GitHub so your games are kept as yours: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="/auth/github?next=%2Fplay">Sign in with GitHub</a></p>`), sendText);
+            return sendPage(req, res, 200, auth.shell(`<h1>Play against a bot</h1><p>Play Star Wars Unlimited against Eric's JEPA bot or a bot from the arena. The game runs in your browser, and it is saved to the arena when it ends.</p><p>${who2} Sign in with GitHub so your games are kept as yours: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="/auth/github?next=%2Fplay">Sign in with GitHub</a></p>`), sendText);
         }
         if (p === '/play' || p === '/play/') {
             if (req.method !== 'GET') {
@@ -282,13 +394,21 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         if (p === '/play/kit.js') {
             return sendKit(req, res, sendText);
         }
+        const tar = /^\/play\/bundle\/([0-9a-f]{64})$/.exec(p);
+        if (tar && req.method === 'GET') {
+            return sendBundle(req, res, tar[1], sendJson);
+        }
         const file = /^\/play\/([a-z0-9.-]+)$/.exec(p);
         if (file && req.method === 'GET') {
-            if (!FILES.includes(file[1])) {
+            if (!KEPT.includes(file[1])) {
                 sendText(res, req, 404, 'text/plain', 'not found');
                 return true;
             }
             return swarm.sendFile(req, res, url, file[1], { sendJson, sendText });
+        }
+        if (p === '/api/play/bots' && req.method === 'GET') {
+            await bots(req, res, sendJson);
+            return true;
         }
         if (p === '/api/play/info' && req.method === 'GET') {
             await info(req, res, who, login, sendJson);

@@ -8,8 +8,9 @@
  *                       sent, one at a time, with referee.js
  *   bot-worker.js       wasi.js and bot-worker.js: one bot bundle under the WASI host
  *   executor-worker.js  executor.js as it is: the tab's lease loop
- *   play-worker.js      runtime.js and engine.js, plus the entry below: the window's /play page, a person against the
- *                       JEPA bot (bot/table/host.js) on the same pack, with the referee and the bot in this worker
+ *   play-worker.js      runtime.js, engine.js, wasi.js, processes.js, tar.js and play-host.js, plus the entry below: the
+ *                       window's /play page, a person against a bot (bot/table/host.js) on the same pack, with the
+ *                       referee in this worker and the bot here (the JEPA bot) or in a bot worker (an arena version)
  *   tables-worker.js    runtime.js, engine.js, wasi.js, processes.js and tar.js, plus the entry below: the window's
  *                       /tables page (bot/table/open.js), a person against the JEPA bot or an arena version (its bundle
  *                       in bot workers, as the referee worker runs them), or two people with this tab as the host
@@ -21,6 +22,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const HERE = __dirname;
 
@@ -97,13 +99,16 @@ self.onmessage = (e) => {
 };
 `;
 
-// The play worker's entry (bot/table/host.js). Messages in: {t: 'init', pack (its URL) or packBytes}, then
-// {t: 'start', bot, deck, botDeck}, {t: 'act', act} and {t: 'concede'}. Out: {t: 'ready', ms, build, cards, options, cardText},
-// {t: 'started', id, seat} or {t: 'refused', error} for a start, {t: 'acted', error} for an act (error null when taken),
-// {t: 'msg', msg} for every table message (hello, decide, move, over, and end with the replay), {t: 'error', message}.
-// The seed and the key of each game come from the browser's crypto.getRandomValues.
+// The play worker's entry (play-host.js, bot/table/host.js). Messages in: {t: 'init', pack (its URL) or packBytes,
+// botWorker (bot-worker.js's URL, for arena versions)}, then {t: 'start', bot, deck, botDeck, files, bundle, python},
+// {t: 'act', act} and {t: 'concede'}. A start brings what its bot needs that the tab has not sent yet: files, [[path,
+// bytes]] (the JEPA bot's models); bundle, {name, hex, tar, capMs} (an arena version); python, {lib, wasm} (python-lib.json
+// as text and python.wasm's bytes, for a Python bundle). Out: {t: 'ready', ms, build, cards, options, cardText,
+// isolated}, {t: 'started', id, seat} or {t: 'refused', error} for a start, {t: 'acted', error} for an act (error null
+// when taken), {t: 'msg', msg} for every table message (hello, decide, move, over, and end with the replay),
+// {t: 'error', message}. The seed and the key of each game come from the browser's crypto.getRandomValues.
 const PLAY_ENTRY = `
-const { createEngineRuntime } = load('./engine');
+const { createPlayHost } = load('./play-host');
 let host = null;
 const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const filesOf = (doc) => {
@@ -117,16 +122,31 @@ const fail = (e) => self.postMessage({ t: 'error', message: String(e && e.stack 
 async function init(msg) {
     const t0 = performance.now();
     const doc = msg.packBytes ? JSON.parse(new TextDecoder().decode(msg.packBytes)) : await (await fetch(msg.pack)).json();
-    const rt = createEngineRuntime({ files: filesOf(doc), log: { log: () => undefined, error: (...a) => console.warn('[play]', ...a) } });
-    const { createTableHost } = rt.require('/app/bot/table/host.js');
-    host = createTableHost({ send: (m) => self.postMessage({ t: 'msg', msg: m }) });
-    self.postMessage({ t: 'ready', ms: Math.round(performance.now() - t0), build: doc.build, cards: doc.cards, options: host.options(), cardText: host.cardText() });
+    host = createPlayHost({
+        files: filesOf(doc),
+        makeWorker: () => new Worker(msg.botWorker),
+        send: (m) => self.postMessage({ t: 'msg', msg: m }),
+        cpus: (globalThis.navigator && navigator.hardwareConcurrency) || 1,
+        log: { log: () => undefined, error: (...a) => console.warn('[play]', ...a) }
+    });
+    const table = host.table;
+    self.postMessage({ t: 'ready', ms: Math.round(performance.now() - t0), build: doc.build, cards: doc.cards, options: table.options(), cardText: table.cardText(), isolated: !!self.crossOriginIsolated });
 }
-function start(msg) {
+async function start(msg) {
     const seed = crypto.getRandomValues(new Uint32Array(1))[0];
     const key = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
     try {
-        const g = host.start({ bot: msg.bot, deck: msg.deck, botDeck: msg.botDeck, seed, key });
+        if (msg.files) {
+            host.addFiles(msg.files);
+        }
+        if (msg.python) {
+            const lib = JSON.parse(typeof msg.python.lib === 'string' ? msg.python.lib : new TextDecoder().decode(msg.python.lib));
+            host.addPython(lib, await WebAssembly.compile(msg.python.wasm));
+        }
+        if (msg.bundle) {
+            host.addBundle(msg.bundle.name, msg.bundle.hex, new Uint8Array(msg.bundle.tar), msg.bundle.capMs);
+        }
+        const g = host.table.start({ bot: msg.bot, deck: msg.deck, botDeck: msg.botDeck, seed, key });
         self.postMessage({ t: 'started', id: g.id, seat: g.seat });
     } catch (e) {
         self.postMessage({ t: 'refused', error: String(e && e.message || e) });
@@ -140,11 +160,11 @@ self.onmessage = (e) => {
         } else if (!host) {
             fail('not ready (send init first)');
         } else if (msg.t === 'start') {
-            start(msg);
+            start(msg).catch(fail);
         } else if (msg.t === 'act') {
-            self.postMessage({ t: 'acted', error: host.act(msg.act) });
+            self.postMessage({ t: 'acted', error: host.table.act(msg.act) });
         } else if (msg.t === 'concede') {
-            host.concede();
+            host.table.concede();
         }
     } catch (err) {
         fail(err);
@@ -154,7 +174,7 @@ self.onmessage = (e) => {
 
 // The tables worker's entry (bot/table/open.js). Messages in: {t: 'init', pack (its URL) or packBytes, botWorker,
 // pythonLib, pythonWasm}; {t: 'bot', name, hex, tar} unpacks an arena version's bundle (tar: Uint8Array) so the host
-// can make it; {t: 'checkDeck', n, deck}; {t: 'start', game: {mode, bot, deck, botDeck, peerDeck, you, peer}};
+// can make it; {t: 'checkDeck', n, deck}; {t: 'start', game: {mode, bot, deck, botDeck, peerDeck, you, peer}, files?};
 // {t: 'act', act}, {t: 'peerAct', n, act}, {t: 'concede'}, {t: 'peerConcede'}. Out: {t: 'ready', ms, build, cards,
 // options, cardText, isolated}; {t: 'botReady', name, error}; {t: 'deckChecked', n, deck, error}; {t: 'started', id,
 // seat, peerSeat, cardText} or {t: 'refused', error}; {t: 'acted', error}; {t: 'peerActed', n, error}; {t: 'msg', msg}
@@ -238,6 +258,11 @@ function start(msg) {
     const seed = crypto.getRandomValues(new Uint32Array(1))[0];
     const key = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
     try {
+        // the JEPA bot's models (bot/swarm/pack.js MODELS), sent with the first game against it: [[path, bytes]]
+        for (const [p, data] of msg.files || []) {
+            rt.fs.mkdirSync(rt.path.dirname(p), { recursive: true });
+            rt.fs.writeFileSync(p, data);
+        }
         const gm = msg.game || {};
         const g = host.start({ ...gm, seed, key });
         const custom = [gm.deck, gm.peerDeck, gm.botDeck].filter((d) => d && typeof d === 'object');
@@ -283,13 +308,30 @@ self.SwarmWasi = load('./wasi');
 load('./bot-worker');
 `;
 
+/**
+ * Adds every file's size to the pack's manifest.json, when there is one, for the play page's progress bar: sizes, as
+ * the page reads it, and gz, about what it downloads (the window sends each file gzipped at level 6, swarm-relay.js).
+ */
+function sizes(out) {
+    const file = path.join(out, 'manifest.json');
+    if (!fs.existsSync(file)) {
+        return;
+    }
+    const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const names = fs.readdirSync(out).filter((n) => n !== 'manifest.json' && fs.statSync(path.join(out, n)).isFile()).sort();
+    m.sizes = Object.fromEntries(names.map((n) => [n, fs.statSync(path.join(out, n)).size]));
+    m.gz = Object.fromEntries(names.map((n) => [n, zlib.gzipSync(fs.readFileSync(path.join(out, n)), { level: 6 }).length]));
+    fs.writeFileSync(file, `${JSON.stringify(m, null, 2)}\n`);
+}
+
 function build(out) {
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, 'referee-worker.js'), bundle(['runtime', 'engine', 'wasi', 'processes', 'tar', 'referee-host'], REFEREE_ENTRY));
     fs.writeFileSync(path.join(out, 'bot-worker.js'), bundle(['wasi', 'bot-worker'], BOT_ENTRY));
     fs.copyFileSync(path.join(HERE, 'executor.js'), path.join(out, 'executor-worker.js'));
-    fs.writeFileSync(path.join(out, 'play-worker.js'), bundle(['runtime', 'engine'], PLAY_ENTRY));
+    fs.writeFileSync(path.join(out, 'play-worker.js'), bundle(['runtime', 'engine', 'wasi', 'processes', 'tar', 'play-host'], PLAY_ENTRY));
     fs.writeFileSync(path.join(out, 'tables-worker.js'), bundle(['runtime', 'engine', 'wasi', 'processes', 'tar'], TABLES_ENTRY));
+    sizes(out);
     return ['referee-worker.js', 'bot-worker.js', 'executor-worker.js', 'play-worker.js', 'tables-worker.js'];
 }
 

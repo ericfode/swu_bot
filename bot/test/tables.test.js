@@ -260,6 +260,12 @@ test("the bots come from the arena's latest round, joined with the arena's own d
         assert.strictEqual((await go(`/tables/bot/${'0'.repeat(64)}.tar`, { cookie: pal })).status, 404, 'only bundles of the lineup');
         assert.strictEqual((await go('/tables/play-worker.js?b=b1', { cookie: pal })).status, 404, 'only the tables files');
         assert.strictEqual(await (await go('/tables/tables-worker.js?b=b1', { cookie: pal })).text(), '// /v1/swarm/tables-worker.js');
+        // the JEPA bot's models: where the worker puts each, fetched only for a game against it
+        assert.deepStrictEqual(info.files.models.map((f) => [f.url, f.path]), [
+            ['/tables/tx-t10.safetensors?b=b1', '/app/vendor/jepa/tx-t10.safetensors'],
+            ['/tables/tx-t10-e.safetensors?b=b1', '/app/vendor/jepa/tx-t10-e.safetensors']
+        ]);
+        assert.strictEqual(await (await go('/tables/tx-t10.safetensors?b=b1', { cookie: pal })).text(), '// /v1/swarm/tx-t10.safetensors');
 
         // asleep: the window still has the lineup and the bundle
         m.awake = false;

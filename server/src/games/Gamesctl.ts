@@ -1,7 +1,7 @@
 /**
  * The Node side of the games machine (bot/arena/gamesctl.js), run as child processes. Each command prints one JSON line
- * on stdout; this checks it before anything uses it. Commands that run as the bots' user (warm, plan, push) are
- * untrusted: their words are checked like a stranger's. The window's documents stay Node's until stage 6 replaces them
+ * on stdout; this checks it before anything uses it. Commands that run as the bots' user (plan, push) are untrusted:
+ * their words are checked like a stranger's. The window's documents stay Node's until stage 6 replaces them
  * with the record.
  */
 import path from "node:path"
@@ -137,8 +137,7 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
       env: childEnv(c, o.home, { ...base, ...o.env }),
       as: o.as,
       isolate: o.isolate,
-      // the intake's job folders: only the intake (and its checker, in its own) works there. Python that a command
-      // starts as the bots' user may load code from their HOME, which game jobs can write
+      // the intake's job folders: only the intake (and its checker, in its own) works there
       ...(o.isolate ? { hide: [path.join(c.data, "intake")] } : {}),
       timeoutMs: o.timeoutMs,
       graceMs: o.graceMs ?? 5000,
@@ -159,7 +158,8 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
     )
   )
 
-  const warm = run("warm", ["warm"], { as: "arena", isolate: true, home: c.paths.home, timeoutMs: 15 * 60_000, env: { SWU_WASM_CACHE: c.paths.wasmCache } }).pipe(
+  // as root: only root writes the wasm cache, which the games (as the bots' user) read; compiling runs no bot code
+  const warm = run("warm", ["warm"], { as: "root", isolate: true, home: rootHome, timeoutMs: 15 * 60_000, env: { SWU_WASM_CACHE: c.paths.wasmCache } }).pipe(
     Effect.map((doc) => ({
       warmed: plain(doc) && Array.isArray(doc.warmed) ? doc.warmed.length : 0,
       failed: plain(doc) && Array.isArray(doc.failed) ? doc.failed.map((f) => String(plain(f) ? f.name : f)).slice(0, 50) : []

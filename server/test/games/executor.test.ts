@@ -4,8 +4,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { after, test } from "node:test"
 import { Effect, Exit, Fiber } from "effect"
-import { readConfig, TIMING } from "../../src/games/Config.ts"
-import { clearWork, MAX_REPLAY_BYTES, PlayFailed, playLocal, workDir } from "../../src/games/Executor.ts"
+import { readConfig, scripts, TIMING } from "../../src/games/Config.ts"
+import { clearWork, MAX_REPLAY_BYTES, notWarmed, PlayFailed, playLocal, warmOptions, workDir } from "../../src/games/Executor.ts"
 import * as Log from "../../src/games/Log.ts"
 import { makeProc } from "../../src/games/Proc.ts"
 import type { PlaySeedJob } from "../../src/games/Types.ts"
@@ -161,4 +161,20 @@ test("executor: stopping while it plays reads as stopped, and job folders an ear
   assert.equal(clearWork(c, /^r\d+-\d+-\d+$/), 1)
   assert.deepEqual(readdirSync(c.paths.work), ["replay-1"])
   assert.equal(statSync(c.paths.work).isDirectory(), true)
+})
+
+test("warmOptions and notWarmed: play-seed --warm --bundles as root, and the bundles it did not compile", () => {
+  const hexes = ["a".repeat(64), "b".repeat(64)]
+  const o = warmOptions(c, hexes, true)
+  assert.deepEqual([o.kind, o.as, o.isolate, o.stdout], ["warm", "root", true, "capture"])
+  assert.deepEqual(o.argv, [c.node, scripts(c).playSeed, "--warm", "--bundles", c.paths.bundles, ...hexes])
+  assert.deepEqual(Object.keys(o.env).sort(), ["HOME", "LANG", "PATH", "SWU_WASM_CACHE", "TZ"])
+  assert.deepEqual([o.env.HOME, o.env.SWU_WASM_CACHE], [c.paths.home, c.paths.wasmCache])
+  const exit = (stdout: string, code = 0) => ({ kind: "exit" as const, code, stdout })
+  const doc = (x: unknown) => `a log line\n${JSON.stringify(x)}\n`
+  assert.deepEqual(notWarmed(exit(doc({ ok: true, warmed: [hexes[0]], failed: [{ name: hexes[1], error: "x" }] })), hexes), [hexes[1]])
+  assert.deepEqual(notWarmed(exit(doc({ ok: true, warmed: hexes, failed: [] })), hexes), [])
+  for (const r of [null, exit(doc({ ok: true, warmed: hexes }), 1), exit("not json"), exit(doc({ ok: false, warmed: hexes })), { kind: "timeout" as const, stdout: "" }]) {
+    assert.deepEqual(notWarmed(r, hexes), hexes, JSON.stringify(r))
+  }
 })

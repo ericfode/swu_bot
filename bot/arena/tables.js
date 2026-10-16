@@ -20,7 +20,8 @@
  *
  *   GET  /tables                         the page (web/tables.html, cross-origin isolated so arena bots can run)
  *   GET  /tables/kit.js                  the viewer kit
- *   GET  /tables/<file>?b=<build>        engine.json, tables-worker.js, bot-worker.js, python-lib.json, python.wasm
+ *   GET  /tables/<file>?b=<build>        engine.json, tables-worker.js, bot-worker.js, python-lib.json, python.wasm, and
+ *                                        the JEPA bot's models (tx-t10.safetensors, tx-t10-e.safetensors)
  *   GET  /tables/bot/<sha256>.tar        an arena bot's bundle (swarm-relay.js lineup)
  *   GET  /tables/logs                    how to read the logs; a button for your reader token
  *   GET  /api/tables/info                {mode, login, you, admin, ready, build, files, why?, decks, bots, people, games}
@@ -57,7 +58,9 @@ const { normalizeDeck } = require('../decklists');
 const RUN = 'tables';
 const JEPA = 'jepa-tx-gate';
 const MODES = new Set(['off', 'invited', 'github']);
-const FILES = ['engine.json', 'tables-worker.js', 'bot-worker.js', 'python-lib.json', 'python.wasm'];
+// the JEPA bot's models (bot/swarm/pack.js MODELS) and where the worker puts each, fetched only for a game against it
+const MODELS = { 'tx-t10.safetensors': '/app/vendor/jepa/tx-t10.safetensors', 'tx-t10-e.safetensors': '/app/vendor/jepa/tx-t10-e.safetensors' };
+const FILES = ['engine.json', 'tables-worker.js', 'bot-worker.js', 'python-lib.json', 'python.wasm', ...Object.keys(MODELS)];
 const NEEDED = ['engine.json', 'tables-worker.js', 'bot-worker.js'];
 const PEOPLE = ['lobby', 'invite', 'join', 'direct'];
 // the page and the worker scripts: SharedArrayBuffer (a bot blocks on its stdin) needs cross-origin isolation, and
@@ -382,7 +385,8 @@ function createTables({
             return sendJson(res, 200, { result: { ...out, ready: false, why: 'The game files come from the games machine, which is starting. This takes about a minute.' } }, req);
         }
         const q = `?b=${encodeURIComponent(build)}`;
-        const files = { pack: `/tables/engine.json${q}`, worker: `/tables/tables-worker.js${q}`, botWorker: `/tables/bot-worker.js${q}`, pythonLib: `/tables/python-lib.json${q}`, pythonWasm: `/tables/python.wasm${q}` };
+        const models = Object.entries(MODELS).map(([name, p]) => ({ url: `/tables/${name}${q}`, path: p, bytes: swarm.fileSize?.(build, name) ?? null }));
+        const files = { pack: `/tables/engine.json${q}`, worker: `/tables/tables-worker.js${q}`, botWorker: `/tables/bot-worker.js${q}`, pythonLib: `/tables/python-lib.json${q}`, pythonWasm: `/tables/python.wasm${q}`, models };
         return sendJson(res, 200, { result: { ...out, ready: true, build, files } }, req);
     }
 

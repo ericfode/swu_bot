@@ -13,7 +13,9 @@
  *
  * Out: engine.json, {build, cards, files: {"/app/...": text}} (binary files are base64 under "b64:"), and
  * manifest.json, {build, cards, bytes, sha256, count}. build and cards are the games image's BUILD_SHA and CARDS_SHA
- * when the root has them (a helper must match both), else "dev".
+ * when the root has them (a helper must match both), else "dev". The JEPA bot's two models are files of their own
+ * (MODELS, as they are), so a play page whose person picks another bot never downloads them; build.js adds every
+ * file's size to the manifest.
  */
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +27,9 @@ const REPO = path.resolve(__dirname, '..', '..');
 // simulations and Kessel's adapter (vendor/kessel, without its WebAssembly package), and the play page's table
 // (bot/table: host.js plays a person against the JEPA bot in the person's tab)
 const BOT_DIRS = ['bot/players', 'bot/sims', 'vendor/kessel/js', 'bot/table'];
+// the play page's JEPA bot's models: next to engine.json as they are, each written by the page to its path in the
+// runtime when its first game starts (play-host.js addFiles)
+const MODELS = { 'tx-t10.safetensors': 'vendor/jepa/tx-t10.safetensors', 'tx-t10-e.safetensors': 'vendor/jepa/tx-t10-e.safetensors' };
 const SKIP = /(^|\/)(test|tests|__pycache__|target)(\/|$)|\.(map|md|ts|py|rs|c|h|o)$/;
 // the engine's logger and what it pulls in: the runtime gives the engine a silent logger instead (runtime.js aliases)
 const LOGGING = /\/node_modules\/(winston|winston-transport|logform|@colors|triple-beam|readable-stream|async|@dabh|colorspace|color|color-string|color-convert|color-name|simple-swizzle|is-arrayish|text-hex|kuler|enabled|one-time|fn\.name|stack-trace|safe-stable-stringify|fecha|is-stream|util-deprecate|process|inherits|string_decoder|safe-buffer|ms)\//;
@@ -132,8 +137,8 @@ function pack({ root, out }) {
     for (const f of ['bot/swarm/referee.js', 'bot/compiled/toolchain.json', 'bot/players/guard.js', 'bot/arena/play-seed.js', 'bot/decklists.js', 'bot/arena/registry.js', 'bot/arena/home.js', 'bot/game-pool.js']) {
         add(path.join(root, f));
     }
-    // the play page's JEPA bot (vendor/jepa: the player and its two models) and the deck lists people pick from
-    for (const f of ['vendor/jepa/jepa.js', 'vendor/jepa/tx-t10.safetensors', 'vendor/jepa/tx-t10-e.safetensors', 'vendor/jepa/VERSION.json', 'bot/decks/ash-meta-2026-09.json']) {
+    // the play page's JEPA bot (vendor/jepa: the player; its models are MODELS) and the deck lists people pick from
+    for (const f of ['vendor/jepa/jepa.js', 'vendor/jepa/VERSION.json', 'bot/decks/ash-meta-2026-09.json']) {
         add(path.join(root, f));
     }
     const compiled = path.join(root, 'build/compiled');
@@ -177,6 +182,14 @@ function pack({ root, out }) {
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, 'engine.json'), json);
     const manifest = { build: doc.build, cards: doc.cards, count: Object.keys(files).length, bytes, packBytes: Buffer.byteLength(json), sha256: crypto.createHash('sha256').update(json).digest('hex') };
+    const models = {};
+    for (const [name, rel] of Object.entries(MODELS)) {
+        if (fs.existsSync(path.join(root, rel))) {
+            fs.copyFileSync(path.join(root, rel), path.join(out, name));
+            models[name] = `/app/${rel}`;
+        }
+    }
+    manifest.models = models;
     // Python bundles' interpreter, when the root has it (the games image does): its WebAssembly as is, and its standard
     // library as python-lib.json, without what a bot never imports (tests, GUI toolkits, docs)
     const toolchain = JSON.parse(fs.readFileSync(path.join(root, 'bot/compiled/toolchain.json'), 'utf8'));
@@ -209,7 +222,7 @@ function filesOf(doc) {
     return m;
 }
 
-module.exports = { pack, filesOf };
+module.exports = { pack, filesOf, MODELS };
 
 if (require.main === module) {
     const argv = process.argv.slice(2);

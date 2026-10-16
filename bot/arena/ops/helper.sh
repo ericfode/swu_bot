@@ -274,7 +274,8 @@ run() {
         # the image's own command: the arena server, which COORD_ROLE=helper makes a helper (on the pulled path, an
         # image from before the TypeScript server starts its Elixir coordinator the same way)
         # shellcheck disable=SC2086
-        $awake docker run --rm --name swu-helper $platform $net \
+        # --init: an init as PID 1 reaps what the server kills after a play (a process a bot left behind, reparented)
+        $awake docker run --rm --init --name swu-helper $platform $net \
             --env-file "$ENVFILE" -e COORD_ROLE=helper -e "GAMES_HELPER_SLOTS=$slots" \
             -v swu-helper-data:/data --security-opt no-new-privileges --cap-drop NET_RAW --cap-drop MKNOD \
             "$tag" || code=$?

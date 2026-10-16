@@ -231,12 +231,23 @@ test("the swarm's files: the tables' worker is one of them", async () => {
   assert.equal(a.headers["content-type"], "text/javascript")
 })
 
+test("the swarm's files: the JEPA bot's models are two of them", async () => {
+  const m = await setup()
+  writeFileSync(path.join(m.dir, "app", "build", "swarm", "tx-t10.safetensors"), "model")
+  const a = await call(m, "GET", "/v1/swarm/tx-t10.safetensors", { build: null })
+  assert.equal(a.status, 200)
+  assert.equal(a.text, "model")
+  assert.equal(a.headers["content-type"], "application/octet-stream")
+  assert.equal((await call(m, "GET", "/v1/swarm/tx-t10-e.safetensors", { build: null })).status, 404)
+})
+
 /** a lineup of four versions in roster order: b's tar is missing, c's is a link, a's and d's are there */
 const tablesSetup = async () => {
   const hex = { a: sha256("tar a"), b: sha256("tar b"), c: sha256("tar c"), d: sha256("tar d"), other: sha256("other") }
   const m = await setup({
     lineup: async () => ({
       round: 7,
+      capMs: 45000,
       bots: [{ name: "b-v1", bundle: hex.b }, { name: "a-v2", bundle: hex.a }, { name: "c-v1", bundle: hex.c }, { name: "d-v3", bundle: hex.d }]
     })
   })
@@ -254,9 +265,9 @@ test("the tables' lineup: the latest round's versions whose tar is a regular fil
   const a = await call(m, "GET", "/v1/swarm/lineup.json", { build: null })
   assert.equal(a.status, 200)
   assert.equal(a.headers["content-type"], JSON_TYPE)
-  assert.deepEqual(a.json(), { round: 7, bots: [{ bundle: hex.a, bytes: 5, name: "a-v2" }, { bundle: hex.d, bytes: 10, name: "d-v3" }] })
+  assert.deepEqual(a.json(), { round: 7, capMs: 45000, bots: [{ bundle: hex.a, bytes: 5, name: "a-v2" }, { bundle: hex.d, bytes: 10, name: "d-v3" }] })
   // keys sorted, as every other answer's
-  assert.equal(a.text, `{"bots":[{"bundle":"${hex.a}","bytes":5,"name":"a-v2"},{"bundle":"${hex.d}","bytes":10,"name":"d-v3"}],"round":7}`)
+  assert.equal(a.text, `{"bots":[{"bundle":"${hex.a}","bytes":5,"name":"a-v2"},{"bundle":"${hex.d}","bytes":10,"name":"d-v3"}],"capMs":45000,"round":7}`)
   // a tar written later is in the next answer
   writeFileSync(path.join(m.bundles, `${hex.b}.tar`), "tar b")
   assert.deepEqual((await call(m, "GET", "/v1/swarm/lineup.json", { build: null })).json().bots.map((b: any) => b.name), ["b-v1", "a-v2", "d-v3"])
@@ -273,9 +284,9 @@ test("the tables' lineup before the first round, or with no lineup given, is emp
   const none = await setup({ lineup: async () => null })
   const a = await call(none, "GET", "/v1/swarm/lineup.json", { build: null })
   assert.equal(a.status, 200)
-  assert.equal(a.text, `{"bots":[],"round":null}`)
+  assert.equal(a.text, `{"bots":[],"capMs":null,"round":null}`)
   const bare = await setup()
-  assert.equal((await call(bare, "GET", "/v1/swarm/lineup.json", { build: null })).text, `{"bots":[],"round":null}`)
+  assert.equal((await call(bare, "GET", "/v1/swarm/lineup.json", { build: null })).text, `{"bots":[],"capMs":null,"round":null}`)
   const hex = sha256("tar a")
   writeFileSync(path.join(bare.bundles, `${hex}.tar`), "tar a")
   assert.equal((await call(bare, "GET", `/v1/swarm/bot/${hex}`, { build: null })).status, 404)

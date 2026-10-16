@@ -5,7 +5,7 @@
  * results. The helper (coord/, COORD_ROLE=helper) runs it as the bots' user, from the repo root:
  *
  *   node bot/arena/play-seed.js --job <job.json> --bundles <dir> --work <dir>
- *   node bot/arena/play-seed.js --warm
+ *   node bot/arena/play-seed.js --warm [--bundles <dir> <sha256>...]
  *
  * The job comes from the ladder's remote lane (bot/remote-lane.js):
  *   { v: 1, seed, key, maxSteps, capMs, hangMs, gameMs, games: [{ id, p1, p2, decks? }],
@@ -28,8 +28,12 @@
  * Exit 0 ok, 1 failed (the reason is the last line on stderr), 2 usage or a refused job.
  * --warm compiles the bundles of the old residents this image builds into $SWU_WASM_CACHE (run.py --warm, as gamesctl.js
  * warm does; none in an image that builds no bot of its own) and prints {ok: true, warmed: [name], failed: [{name, error}]}.
+ * With --bundles it compiles those versions' bundles instead, <dir>/<sha256>.tar each, and names them by their sha256:
+ * the server runs it as root before games that play them (the plays, as the bots' user, only read the cache root writes),
+ * and each bundle is unpacked in a folder of its own that only this user can enter. Compiling runs nothing of the bot.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { normalizeDeck } = require('../decklists');
@@ -169,7 +173,7 @@ function unpackVersion(arena, name, tar, hex) {
     const dir = path.join(arena, 'versions', name);
     fs.mkdirSync(dir, { recursive: true });
     try {
-        execFileSync('python3', [path.join(COMPILED, 'bundle.py'), 'unpack', tar, path.join(dir, 'bundle'), hex], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 120000 });
+        execFileSync('python3', ['-I', path.join(COMPILED, 'bundle.py'), 'unpack', tar, path.join(dir, 'bundle'), hex], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 120000 });
     } catch (e) {
         const why = String(e.stderr ?? '').trim().split('\n').pop() || e.message;
         throw new Refused(`${name}: its bundle does not unpack (${why})`);
@@ -184,10 +188,30 @@ function warm() {
     for (const name of residentsHere()) {
         const dir = residentDir(name);
         try {
-            execFileSync('python3', [path.join(COMPILED, 'run.py'), '--warm', dir], { stdio: ['ignore', 'ignore', 'pipe'], timeout: WARM_MS });
+            execFileSync('python3', ['-I', path.join(COMPILED, 'run.py'), '--warm', dir], { stdio: ['ignore', 'ignore', 'pipe'], timeout: WARM_MS });
             out.warmed.push(name);
         } catch (e) {
             out.failed.push({ name, error: String(e.stderr ?? '').trim().split('\n').pop() || e.message });
+        }
+    }
+    return out;
+}
+
+/** Compiles the bundles <bundles>/<hex>.tar (each checked against its sha256) into $SWU_WASM_CACHE, as warm() does. */
+function warmBundles(bundles, hexes) {
+    const out = { ok: true, warmed: [], failed: [] };
+    for (const hex of hexes) {
+        // 0700: whoever else runs here cannot reach the bundle between its check and its compiling
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'warm-'));
+        try {
+            const dir = path.join(tmp, 'bundle');
+            execFileSync('python3', ['-I', path.join(COMPILED, 'bundle.py'), 'unpack', path.join(bundles, `${hex}.tar`), dir, hex], { stdio: ['ignore', 'ignore', 'pipe'], timeout: WARM_MS });
+            execFileSync('python3', ['-I', path.join(COMPILED, 'run.py'), '--warm', dir], { stdio: ['ignore', 'ignore', 'pipe'], timeout: WARM_MS });
+            out.warmed.push(hex);
+        } catch (e) {
+            out.failed.push({ name: hex, error: String(e.stderr ?? '').trim().split('\n').pop() || e.message });
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
         }
     }
     return out;
@@ -256,11 +280,19 @@ async function main(argv) {
         return i >= 0 && argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? path.resolve(argv[i + 1]) : null;
     };
     if (argv.includes('--warm')) {
-        return warm();
+        const at = argv.indexOf('--bundles');
+        if (at < 0) {
+            return warm();
+        }
+        const [dir, ...hexes] = argv.slice(at + 1);
+        if (!dir || dir.startsWith('--') || hexes.some((h) => !HEX.test(h)) || argv.indexOf('--warm') > at) {
+            throw new Refused('usage: node bot/arena/play-seed.js --warm --bundles <dir> <sha256>...');
+        }
+        return warmBundles(path.resolve(dir), [...new Set(hexes)]);
     }
     const [jobFile, bundles, work] = ['job', 'bundles', 'work'].map(arg);
     if (!jobFile || !bundles || !work) {
-        throw new Refused('usage: node bot/arena/play-seed.js --job <job.json> --bundles <dir> --work <dir> | --warm');
+        throw new Refused('usage: node bot/arena/play-seed.js --job <job.json> --bundles <dir> --work <dir> | --warm [--bundles <dir> <sha256>...]');
     }
     // resident bot programs are named from the repo root (external-bots.json)
     process.chdir(ROOT);

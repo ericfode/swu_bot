@@ -280,10 +280,11 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       let n = 0;
       return {
         worker, handlers, isolated: r.isolated,
-        start: (game) => new Promise((ok, no) => {
+        // files: [[path, bytes]] for the worker's disk (the JEPA bot's models, with the first game against it)
+        start: (game, files) => new Promise((ok, no) => {
           if (waits.started) return no(new Error('a game is starting'));
           waits.started = { ok, no };
-          worker.postMessage({ t: 'start', game });
+          worker.postMessage({ t: 'start', game, ...(files ? { files } : {}) });
         }),
         bot: (name, hex, tar) => new Promise((ok, no) => {
           waits.bot.set(name, { ok, no });
@@ -307,6 +308,20 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     return engine;
   }
 
+  // the JEPA bot's models: downloaded once per visit, the first time someone plays it, and sent with that game
+  let jepaSent = false;
+  let jepaFiles = null;
+  async function loadJepa() {
+    if (jepaSent) return null;
+    jepaFiles ??= (async () => {
+      const out = [];
+      for (const f of info.files.models ?? []) out.push([f.path, await fetchBytes(f.url, "Eric's JEPA bot's models", f.bytes)]);
+      progress(null);
+      return out;
+    })();
+    jepaFiles.catch(() => { jepaFiles = null; });
+    return jepaFiles;
+  }
   // arena bots: the bundle, downloaded once per visit, unpacked in the worker
   const botsLoaded = new Set();
   async function loadBot(eng, name) {
@@ -915,12 +930,15 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   async function startBot(bot, deck, botDeck, wanted = () => true) {
     const eng = await loadEngine();
     await loadBot(eng, bot);
+    const files = bot === JEPA ? await loadJepa() : null;
     progress(null);
     if (!wanted()) throw new Error('cancelled');
     const early = [];
     let g = null;
     eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
-    const st = await eng.start({ mode: 'bot', bot, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you });
+    const st = await eng.start({ mode: 'bot', bot, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you }, files ?? undefined);
+    // the worker keeps the models once a game has started with them (about 2 MB, copied to it)
+    if (files) { jepaSent = true; jepaFiles = null; }
     g = newGame(st.id, st.seat, 'bot');
     g.act = (act) => eng.act(act);
     g.concede = () => eng.concede();

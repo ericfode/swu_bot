@@ -37,8 +37,11 @@ your computer                                       the games machine (private a
   `~/.config/swu-helper/env` and goes into the container as an env file. The helper keeps it inside the server's
   process; the processes that play games never get it.
 - The helper plays only WebAssembly bots (submitted bundles, the arena's own resident entries included) and the
-  in-process heuristic and rush. Bot code runs as the image's `arena` user with no capabilities; the container gets
-  no folder of yours, only a Docker volume.
+  in-process heuristic and rush. Bot code runs with no capabilities, each slot as its own user of the image (`arena1`
+  to `arena16`), and root kills every process of that user when its seed ends (`ops/kill-user.py`), so nothing a bot
+  leaves running reaches a later seed or another slot; if that ever fails, the helper stops. The compiled-code cache
+  and the bots' HOME are root's: the plays only read them. The container gets no folder of yours, only a Docker
+  volume.
 - A helper could send made-up results for the seeds it holds, so tokens go only to your own computers. To revoke all
   helpers: `sh bot/arena/ops/helper.sh revoke` (takes effect with the next games deploy).
 
