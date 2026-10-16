@@ -422,6 +422,7 @@ const ACTIONS = {
   linkSend: async b => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games and replays', url: b.dataset.url }); } catch {} },
   mcpCopy: async b => { const el = $('mcpurl'); try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } },
   appDisconnect: b => { if (confirm(`Disconnect ${b.dataset.app}? It has to sign in again to read anything.`)) appDisconnect(b.dataset.id); },
+  gameLink: b => copyGameLink(b),
   linkRemove: b => { if (confirm(`Remove the view link "${b.dataset.label}"? Anyone using it is locked out at once.`)) shareChange({ removeLink: b.dataset.id }); },
 };
 
@@ -476,7 +477,7 @@ async function mountViewer(v, host) {
   const step = +(route().qs.get('step') || 0) || undefined;
   try {
     v.v = KIT.mount(host, { jsonl: text, evals: evals || undefined, lens: lens || undefined, layout: host.dataset.layout || 'full', ...(step ? { stepN: step } : {}), persist: 'swuapp.viewer', follow: true,
-      onStep: (i, n) => { v.step = n; v.idx = i; } });
+      onStep: (i, n) => { v.step = n; v.idx = i; if (host.dataset.share) followStep(v); } });
     v.offset = new TextEncoder().encode(text).length;
     v.ended = /"t":"end"/.test(text.slice(-4000));
     // a small viewer of a finished game opens on its last move, so the board shows how it ended
@@ -1364,9 +1365,32 @@ function pageGame(r) {
   const both = atl(x.p1) && atl(x.p2);
   const side = s => `${botLink(x[s])}${styleTag(atl(x[s])?.summary?.style)}`;
   const lede = x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 5 ? 'No result: its run stopped sending before this game ended.' : x.res === 2 ? 'Draw.' : `${esc(winnerName(x))} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`;
-  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${side('p1')}<span class="faint" style="font-size:var(--fs-base)">vs</span>${side('p2')}</h1></div><p class="lede">${lede} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}</span></div>
-  <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" style="margin-top:8px"></div>
+  const copy = HOSTED ? `<button type="button" class="gamelink" data-act="gameLink" data-key="${esc(key)}" title="A link anyone can open, no sign-in: live while the game is played, a replay after">${SHARE_ICON}<span>Copy link</span></button>` : '';
+  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${side('p1')}<span class="faint" style="font-size:var(--fs-base)">vs</span>${side('p2')}</h1></div><p class="lede">${lede} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}${copy}</span></div>
+  <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" data-share="1" style="margin-top:8px"></div>
   <section class="box"><div class="bh"><h3>Pivotal plays</h3><span class="sub">the actions that moved the game most; click to jump</span></div><div id="pivotal" class="comps" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"><p class="muted">Loading…</p></div></section>`;
+}
+
+// ---------- every game's own link: /g/<run>/<game> (bot/arena/gamelinks.js), for anyone, live or replay ----------
+// The page's address and Copy link carry ?step=<n>, the decision on screen, except while the game is live, so whoever
+// opens the link follows it live too. A signed-out visitor who opens the app's address of a game lands on its own page.
+const stepOf = v => (v && !(v.live && !v.ended) && v.idx > 0 ? v.step : 0);
+const gameUrl = (key, n) => { const [run, id] = key.split('/'); return `${location.origin}/g/${encodeURIComponent(run)}/${encodeURIComponent(id)}${n ? `?step=${n}` : ''}`; };
+let stepTimer = 0;
+function followStep(v) {
+  clearTimeout(stepTimer);
+  stepTimer = setTimeout(() => {
+    const r = route(), [run, id] = v.game.split('/');
+    if (r.parts[0] !== 'games' || r.parts[1] !== run || r.parts[2] !== id) return; // the reader has moved on
+    const n = stepOf(v), q = new URLSearchParams(r.qs); if (n) q.set('step', n); else q.delete('step');
+    const qs = q.toString(); // not q.size: Safari before 17 has none
+    try { history.replaceState(history.state, '', `${location.pathname}${location.search}${href('games', run, id)}${qs ? `?${qs}` : ''}`); } catch {}
+  }, 400);
+}
+async function copyGameLink(b) {
+  const key = b.dataset.key, url = gameUrl(key, stepOf(VIEWERS.get(`${key}|full`))), label = b.querySelector('span');
+  try { await navigator.clipboard.writeText(url); label.textContent = 'Link copied'; } catch { prompt('Copy this link', url); return; }
+  setTimeout(() => { label.textContent = 'Copy link'; }, 2000);
 }
 
 // ---------- share: a link to any page, and (an admin) who may sign in ----------
