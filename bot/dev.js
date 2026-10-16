@@ -30,10 +30,12 @@
  *                 number of pairs.
  *   --cap-sec N   each bot's thinking time per game, 10..600 s (default 60, the games machine's default)
  *   --jobs N      seeds played at once, two games each (default: half the CPUs less one, at least 1)
- *   --all         play every game: without it a run stops once the bot has lost 3 games the same way (SAME_FAULT)
+ *   --all         play every game: without it a run stops once 3 of the bot's games went wrong the same way (SAME_FAULT):
+ *                 lost by its fault, or ended with no result
  *   --out DIR     the run folder (default <folder>/.runs/<UTC time>-s<seed>: a dot folder, so it is never packed)
  *   --again FILE  pack and check the folder as it is now, send it the messages of one game's transcript, and say
- *                 where its replies differ from the ones recorded next to it (FILE's .out.jsonl)
+ *                 where its replies differ from the ones recorded next to it (FILE's .out.jsonl). They come with no
+ *                 clock, so it does not judge a game lost on time.
  * A Python bot's bundle id is the arena's for the same owner and name (its arena.json names both). Javy's builds of a
  * JavaScript bot differ by a few bytes each time, so for one the run also gives the sha256 of the script Javy compiled,
  * which repeats.
@@ -50,14 +52,14 @@
  *      the guard's time cap, the watchdog, replays.
  *   4. record and report: run.json, index.json and ladder.json (the ladder's formats), games/<id>.jsonl (replays with
  *      their keys, so `node bot/trace.js check` plays them again), and per game the bots' transcripts in bots/
- *      (stdio.js StdioClient log: protocol lines as sent and read, stderr, sandbox stats). Faults that look the same
- *      are reported once.
+ *      (stdio.js StdioClient log: protocol lines as sent and read, stderr, sandbox stats). Games lost by a fault, and
+ *      games with no result, that look the same are reported once (faultKey).
  *
  * Every child gets an environment built here (no window address, no token, no NODE_ENV), in a process group of its
  * own that is killed when it ends, on a time-out, on an error and on Ctrl-C; play-seed.js also stops its group once
  * this process is gone (SWU_DEV_PARENT), even after a SIGKILL. Nothing here loads arena/push.js or ladder.js. Exit 0:
- * every game played and the bot never lost one by its own fault; 1: it did, or a job failed; 2: usage, or the sandbox
- * is not set up (npm run setup); 3: the arena would refuse a bot (its words are printed).
+ * every game played to an end and the bot never lost one by its own fault; 1: it did, a game had no result, or a job
+ * failed; 2: usage, or the sandbox is not set up (npm run setup); 3: the arena would refuse a bot (its words are printed).
  */
 const fs = require('fs');
 const os = require('os');
@@ -81,7 +83,8 @@ const LOGIN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/; // intake.js
 const SLACK_MS = 120000; // server/src/games/Executor.ts: a job's time past its gameMs
 const OUT_MAX = 16 << 20; // play-seed's answer line, at most (Executor.ts MAX_ANSWER_BYTES)
 const NEVER = ['SWU_WINDOW', 'SWU_WINDOW_TOKEN', 'ARENA_PUSH_TOKEN', 'ARENA_REMOTE', 'ARENA_ADMIN_TOKEN'];
-const SAME_FAULT = 3; // games the bot loses the same way before a run stops (--all plays on)
+const SAME_FAULT = 3; // games of the bot that go wrong the same way before a run stops (--all plays on)
+const TAIL = 20; // the protocol lines kept of a game with no result, but the first of its kind (prune)
 
 // nothing this process starts may reach a window, whatever the caller's environment holds
 for (const k of NEVER) {
@@ -104,12 +107,13 @@ rated rounds' deck lists by seat, under the rated games' time rules. It never se
   --seed S       the first seed (default: a random one, printed); the same seed deals the same games again
   --cap-sec N    thinking time per bot per game, 10..600 s (default 60, as in rated games)
   --jobs N       seeds played at once (default: half the CPUs less one)
-  --all          play every game; without it the run stops once the bot has lost ${SAME_FAULT} games the same way
+  --all          play every game; without it the run stops once ${SAME_FAULT} of the bot's games went wrong the same way
   --out DIR      the run folder (default <folder>/.runs/<time>-s<seed>)
   --again FILE   send one game's messages (a run's transcript) to the folder as it is now, and compare its replies
   --view RUN     show a run's replays in the browser, on 127.0.0.1 (--port P picks the port)
-Exit 0: no game lost by the bot's own fault; 1: some, or a game could not be played; 2: usage, or no sandbox;
-3: the arena would refuse the bot. bot/arena/BUILD.md ("Test locally") says more.`;
+Exit 0: every game ended, none lost by the bot's own fault; 1: some were, a game had no result (such as one that
+reached the step cap), or one could not be played; 2: usage, or no sandbox; 3: the arena would refuse the bot.
+bot/arena/BUILD.md ("Test locally") says more.`;
 
 const WHOSE = 'say whose bot it is: --owner <your GitHub login> (whoami) packs it as your arena_submit sends it; --house packs one of the arena\'s own bots';
 
@@ -434,9 +438,10 @@ function cardsSha() {
  * Takes the run folder for this run alone: makes it (or takes an empty one named by --out) and writes its run.json
  * first, with flag wx, so two runs never share one. Without --out, a run that finds its folder taken (another started
  * in the same second) takes <folder>-2, -3, ... Gives {run, made, release}: release() undoes it, for a run that ends
- * before anything ran.
+ * before anything ran, and takes back the folders made for it (such as <folder>/.runs) while they are empty.
  */
 function claimRun(planned, given) {
+    const top = fs.mkdirSync(path.dirname(planned), { recursive: true }); // the first folder made on the way, if any
     for (let k = 1; k < 100; k++) {
         const run = given || k === 1 ? planned : `${planned}-${k}`;
         const st = fs.statSync(run, { throwIfNoEntry: false });
@@ -445,7 +450,6 @@ function claimRun(planned, given) {
         }
         let made = false;
         if (!st) {
-            fs.mkdirSync(path.dirname(run), { recursive: true });
             try {
                 fs.mkdirSync(run);
                 made = true;
@@ -474,11 +478,11 @@ function claimRun(planned, given) {
         }
         const release = () => {
             fs.rmSync(path.join(run, 'run.json'), { force: true });
-            if (made) {
-                try {
-                    fs.rmdirSync(run);
-                } catch {} // something else is in it now
-            }
+            try {
+                for (let d = run; made && d !== path.dirname(top ?? run); d = path.dirname(d)) {
+                    fs.rmdirSync(d);
+                }
+            } catch {} // something else is in it now
         };
         return { run, made, release };
     }
@@ -547,15 +551,19 @@ function jobsFor(games, bot, { runKey, limits, bots, lists, bundles }) {
     });
 }
 
-/** The last `n` exchanges of a transcript: [{sent, reply}], reply null when the bot wrote none; null without one. */
+/**
+ * The last `n` exchanges of a transcript before its over (which a game with no result ends with, and which says nothing
+ * of how it got there): [{sent, reply}], reply null when the bot wrote none; null without one.
+ */
 function lastExchanges(prefix, n = 2) {
     const sent = readLines(`${prefix}.in.jsonl`);
     if (!sent) {
         return null;
     }
     const replies = readLines(`${prefix}.out.jsonl`) ?? [];
-    const from = Math.max(0, sent.length - n);
-    return sent.slice(from).map((s, k) => ({ sent: s, reply: replies[from + k] ?? null }));
+    const end = /^\{"t":"over"/.test(sent.at(-1) ?? '') ? sent.length - 1 : sent.length;
+    const from = Math.max(0, end - n);
+    return sent.slice(from, end).map((s, k) => ({ sent: s, reply: replies[from + k] ?? null }));
 }
 
 /** A referee line in a few words: its type, decision number, time left, prompt and how many actions. */
@@ -591,9 +599,10 @@ function hostStats(prefix) {
 
 /**
  * Keeps what a game's transcripts are worth (about 1 MB per seat per game): the bot's stderr and sandbox stats every
- * game, its protocol lines in the games it did not win; an opponent's files only in a game it lost by its own fault.
+ * game, its protocol lines in the games it did not win (only their last TAIL lines when `tail`: a game that reaches
+ * the step cap holds about 11 MB of them); an opponent's files only in a game it lost by its own fault.
  */
-function prune(dir, g, r, botVersion) {
+function prune(dir, g, r, botVersion, tail) {
     for (const seat of ['p1', 'p2']) {
         const prefix = path.join(dir, `${g.id}.${seat}`);
         const mine = g[seat] === botVersion;
@@ -604,24 +613,62 @@ function prune(dir, g, r, botVersion) {
                 fs.rmSync(`${prefix}.${ext}`, { force: true });
             }
         }
+        if (mine && tail && keep.includes('in.jsonl')) {
+            // line k of .out answers line k of .in: both lose the same lines
+            const from = Math.max(0, (readLines(`${prefix}.in.jsonl`) ?? []).length - TAIL);
+            for (const ext of ['in.jsonl', 'out.jsonl']) {
+                const kept = readLines(`${prefix}.${ext}`)?.slice(from) ?? [];
+                fs.writeFileSync(`${prefix}.${ext}`, kept.map((l) => `${l}\n`).join(''));
+            }
+        }
     }
 }
 
-/**
- * What makes two faults the same: the bot, the kind, the error's first line and the end of the bot's stderr, with the
- * seat and counts and times taken out (a place such as pick.js:12 or `line 12` stays).
- */
-function faultKey(g, r, botDir) {
-    const plain = (s) => String(s ?? '').replace(/\bp[12] (?=\S+: )/g, '').replace(/(?<!line |:)\b\d+(?:\.\d+)?\b/g, '#');
-    return [g[r.by], r.faultKind ?? 'error', plain(String(r.error ?? '').split('\n')[0]), ...tailOf(path.join(botDir, `${g.id}.${r.by}.stderr`), 3).map(plain)].join('\n');
+/** The seat a game that went wrong is shown from: the one at fault, else (no result) the bot's; null when it ended. */
+function failedSeat(g, r, botVersion) {
+    return r.by ?? (r.outcome === 'won' ? null : g.p1 === botVersion ? 'p1' : 'p2');
 }
 
-/** The games each bot lost by its own fault, grouped by faultKey: [[game, ...], ...] in order of their first game. */
-function faultGroups(games, results, botDir) {
+/**
+ * Where a bot's error was raised, from the end of its stderr: the exception's class and the deepest frame in the bot's
+ * own files as file:line. A Python traceback names that frame last (File "/bot/<file>", line N) and the class below
+ * it; a JavaScript stack as serve() writes it names the class first, then that frame first outside stdio.js. The last
+ * traceback or stack counts; null without one.
+ */
+function raised(lines) {
+    const type = (l) => /^[\w$.]+(?=:|$)/.exec(l ?? '')?.[0] ?? '?';
+    const py = lines.findLastIndex((l) => /^\s*File "\/bot\/.+", line \d+/.test(l));
+    if (py >= 0) {
+        const [, file, line] = /File "\/bot\/(.+)", line (\d+)/.exec(lines[py]);
+        return `${type(lines.slice(py + 1).find((l) => !/^\s/.test(l)))} at ${file}:${line}`;
+    }
+    const head = lines.slice(0, lines.findLastIndex((l) => /^\s+at /.test(l))).findLastIndex((l) => !/^\s/.test(l));
+    const at = lines.slice(head + 1).map((l) => /^\s+at .*?([^\s()]+\.js):(\d+)(?::\d+)?\)?\s*$/.exec(l)).find((m) => m && m[1] !== 'stdio.js');
+    return at ? `${type(lines[head])} at ${at[1]}:${at[2]}` : null;
+}
+
+/**
+ * What makes two games that went wrong the same, seen from `seat` (failedSeat): the bot, how the game ended (the
+ * fault's kind, or the outcome of a game with no result), the referee's first words for it (up to the first digit or
+ * sign, where its data starts), and for an error where it was raised (raised()). Messages, columns and counts stay
+ * out, so the data in them (card names, labels) does not make one bug many.
+ */
+function faultKey(g, seat, r, botDir) {
+    const how = r.by ? r.faultKind ?? 'error' : r.outcome;
+    const words = /^(?:p[12] \S+: )?([A-Za-z' ]*)/.exec(String(r.error ?? ''))[1].trim();
+    const where = how === 'error' || how === 'load' ? raised(tailOf(path.join(botDir, `${g.id}.${seat}.stderr`), 40)) : null;
+    return [g[seat], how, words, where].join('\n');
+}
+
+/** The games that went wrong, grouped by faultKey: [[game, ...], ...] in order of their first game. */
+function faultGroups(games, results, botDir, botVersion) {
     const groups = new Map();
-    for (const g of games.filter((x) => results.get(x.id)?.by)) {
-        const k = faultKey(g, results.get(g.id), botDir);
-        groups.set(k, [...(groups.get(k) ?? []), g]);
+    for (const g of games) {
+        const seat = failedSeat(g, results.get(g.id), botVersion);
+        const k = seat && faultKey(g, seat, results.get(g.id), botDir);
+        if (k) {
+            groups.set(k, [...(groups.get(k) ?? []), g]);
+        }
     }
     return [...groups.values()];
 }
@@ -652,10 +699,8 @@ async function main(argv) {
     }
     const t0 = Date.now();
     const seed = o.seed ?? crypto.randomInt(1, 1000000);
-    const { houseDoc } = require('./arena/ops/house-submit');
-    const { builderName, ownsName, notYours } = require('./arena/api');
-    if (o.again && !fs.statSync(o.again, { throwIfNoEntry: false })?.isFile()) {
-        usage(`--again ${rel(o.again)}: no such file (give a run's transcript, bots/<game>.<seat>.in.jsonl)`);
+    if (o.again && !/^\{"t":"hello"/.test(readLines(o.again)?.[0] ?? '')) {
+        usage(`--again ${rel(o.again)}: no transcript of a whole game there (a run's bots/<game>.<seat>.in.jsonl, which starts with hello)`);
     }
 
     // the bots: yours first, then each opponent, all packed as the same owner's (a house submission with --house)
@@ -700,10 +745,12 @@ async function main(argv) {
         }
     }
     const { run, release } = claimRun(planned, o.out !== null);
-    // before anything loads arena/home.js (players/index.js does): this run's own arena folder, never a shared one, and
-    // the repo's own list of bot programs (as play-seed.js reads it)
+    // before anything loads arena/home.js (api.js and players/index.js do): this run's own arena folder, never a shared
+    // one whose versions would take the bot's name, and the repo's own list of bot programs (as play-seed.js reads it)
     process.env.ARENA_HOME = path.join(run, 'arena');
     delete process.env.SWU_EXTERNAL_BOTS;
+    const { houseDoc } = require('./arena/ops/house-submit');
+    const { builderName, ownsName, notYours } = require('./arena/api');
     // a refusal before anything ran leaves no run folder
     const refuse = (b, by, words) => {
         console.log(`${b.version ?? b.name} (${rel(b.folder)}): ${by} would refuse it:\n${words}`);
@@ -871,9 +918,11 @@ async function main(argv) {
     const total = games.length;
     const results = new Map(); // game id -> result
     const queue = [...jobs];
-    let halted = null; // the bot's faults that stopped the run early: [game, ...]
+    let halted = null; // the bot's games that went wrong alike and stopped the run early: [game, ...]
+    const kept = new Set(); // the faultKeys of the games with no result whose transcripts were kept whole
+    const cut = new Set(); // the games with no result whose transcripts keep only their end
     const record = () => {
-        const out = finish(doc, { bot, packed, opponents, versions, games, results, capMs, decks, run, keyId, limits, o, halted });
+        const out = finish(doc, { bot, packed, opponents, versions, games, results, cut, capMs, decks, run, keyId, limits, o, halted });
         save();
         return out;
     };
@@ -919,15 +968,24 @@ async function main(argv) {
                     addReplayKey(to, res.key);
                 }
             }
-            prune(botsDir, g, res, bot.version);
+            // of the games with no result alike, the first keeps its whole transcript (the report shows it, with its
+            // again command) and the others only their end
+            const key = !res.by && res.outcome !== 'won' ? faultKey(g, failedSeat(g, res, bot.version), res, botsDir) : null;
+            if (key !== null) {
+                if (kept.has(key)) {
+                    cut.add(g.id);
+                }
+                kept.add(key);
+            }
+            prune(botsDir, g, res, bot.version, cut.has(g.id));
             results.set(g.id, res);
             console.log(`[${results.size}/${total}] ${gameLine(g, res, bot.version, capMs)}`);
         }
         fs.rmSync(work, { recursive: true, force: true });
-        // a bot that keeps losing the same way has shown what there is to see: the run stops (unless --all)
-        if (!o.all && !halted) {
-            const mine = games.filter((g) => results.get(g.id)?.by && g[results.get(g.id).by] === bot.version);
-            halted = faultGroups(mine, results, botsDir).find((gs) => gs.length >= SAME_FAULT) ?? null;
+        // a bot whose games keep going wrong the same way has shown what there is to see: the run stops (unless --all)
+        if (!o.all && !halted && queue.length) {
+            const mine = games.filter((g) => results.has(g.id) && g[failedSeat(g, results.get(g.id), bot.version)] === bot.version);
+            halted = faultGroups(mine, results, botsDir, bot.version).find((gs) => gs.length >= SAME_FAULT) ?? null;
         }
         record();
     };
@@ -964,10 +1022,16 @@ function packFlags(b, bot, o) {
  * and checked, in the sandbox, as one program, and compares its replies with the ones recorded next to it (.out.jsonl):
  * line k of one answers line k of the other. From the first reply that differs on, the messages were sent for the old
  * reply. Exit 0 when the bot answered every message with a reply the referee takes (a JSON object, no error), else 1.
+ * The messages come with no clock, so a game lost on time (its run.json says so) is not judged: exit 1.
  */
 async function sendAgain(bot, file, { run, doc, save, capMs }) {
     const sent = readLines(file) ?? [];
     const recorded = readLines(file.replace(/\.in\.jsonl$/, '.out.jsonl'));
+    let past = null; // the run the transcript comes from
+    try {
+        past = JSON.parse(fs.readFileSync(path.join(path.dirname(file), '..', 'run.json'), 'utf8'));
+    } catch {} // a transcript from elsewhere
+    const late = past?.failures?.find((f) => `${f.game}.${f.seat}.in.jsonl` === path.basename(file) && ['time', 'hang'].includes(f.faultKind));
     const out = path.join(run, 'again.out.jsonl');
     const errFile = path.join(run, 'again.stderr');
     doc.status = 'again';
@@ -1006,9 +1070,13 @@ async function sendAgain(bot, file, { run, doc, save, capMs }) {
     if (stderr.length) {
         lines.push(`  stderr (last ${stderr.length} lines):`, ...stderr.map((l) => `    ${l.slice(0, 300)}`));
     }
+    if (late) {
+        lines.push(`  the game was lost by ${late.faultKind}, and --again sends its messages with no clock, so it cannot say whether the bot is in time now:`
+            + ` play the run again${past.seeds?.first == null ? '' : ` with --seed ${past.seeds.first}`} for that`);
+    }
     lines.push(`  ${rel(out)}, ${rel(errFile)}`);
     console.log(lines.join('\n'));
-    const ok = replies.length >= sent.length && bad < 0 && !r.timedOut;
+    const ok = replies.length >= sent.length && bad < 0 && !r.timedOut && !late;
     doc.status = 'done';
     doc.again = { ...doc.again, replies: replies.length, sameAsRecorded: recorded ? k : null, ok };
     save();
@@ -1037,9 +1105,9 @@ function gameLine(g, r, botVersion, capMs) {
 
 /**
  * Writes index.json and ladder.json and fills the run's games, table and failures; gives {text, exit}: the report and
- * the exit code (1 when the bot lost a game by its own fault or a job failed).
+ * the exit code (1 when the bot lost a game by its own fault, a game had no result or was not played, or a job failed).
  */
-function finish(doc, { bot, packed, opponents, versions, games, results, capMs, decks, run, keyId, limits, o, halted }) {
+function finish(doc, { bot, packed, opponents, versions, games, results, cut, capMs, decks, run, keyId, limits, o, halted }) {
     const { summarize } = require('./ladder-report');
     const botDir = path.join(run, 'bots');
     const played = games.filter((g) => results.has(g.id));
@@ -1109,20 +1177,27 @@ function finish(doc, { bot, packed, opponents, versions, games, results, capMs, 
             + ' The games machine is slower than most computers: a bot this close to its cap can lose on time there.');
     }
 
-    // the failures: the bot's faults, the opponents', then games with no result; faults that look the same once
+    // the games that went wrong: the bot's faults, games with no result (seen from the bot's seat), then the opponents'
+    // faults; those that look the same are shown once
     doc.failures = [];
-    const faultGames = played.filter((g) => results.get(g.id).by);
-    const noResult = played.filter((g) => !results.get(g.id).by && results.get(g.id).outcome !== 'won');
-    const ordered = [...faultGames.filter((g) => results.get(g.id).by === seatOf(g)), ...faultGames.filter((g) => results.get(g.id).by !== seatOf(g))];
-    const grouped = faultGroups(ordered, results, botDir);
-    if (ordered.length) {
-        lines.push(`\nGames lost by a fault (${ordered.length}${grouped.length < ordered.length ? `, ${grouped.length} kind${grouped.length === 1 ? '' : 's'}` : ''})`);
+    const why = {
+        STEP_CAP: `${limits.maxSteps} decisions and no end: often a bot that repeats an action that changes nothing, or takes back its own choices (a card clicked on and off)`,
+        STUCK: 'the engine stopped asking either bot',
+        ERROR: 'an engine error, which the referee blames on no bot: report it to the arena (CLAUDE.md "Known engine bugs")'
+    };
+    const order = (g) => (!results.get(g.id).by ? 1 : results.get(g.id).by === seatOf(g) ? 0 : 2);
+    const failed = played.filter((g) => failedSeat(g, results.get(g.id), bot.version)).sort((a, b) => order(a) - order(b));
+    const grouped = faultGroups(failed, results, botDir, bot.version);
+    if (failed.length) {
+        const what = [failed.some((g) => results.get(g.id).by) && 'lost by a fault', failed.some((g) => !results.get(g.id).by) && 'with no result'].filter(Boolean).join(' or ');
+        lines.push(`\nGames ${what} (${failed.length}${grouped.length < failed.length ? `, ${grouped.length} kind${grouped.length === 1 ? '' : 's'}` : ''})`);
     }
     const byVersion = new Map(packed.map((b) => [b.version, b]));
     for (const group of grouped) {
+        group.sort((a, b) => cut.has(a.id) - cut.has(b.id)); // the one with a whole transcript first
         for (const [k, g] of group.entries()) {
             const r = results.get(g.id);
-            const seat = r.by;
+            const seat = failedSeat(g, r, bot.version);
             const prefix = path.join(botDir, `${g.id}.${seat}`);
             const exchanges = lastExchanges(prefix);
             const stats = hostStats(prefix);
@@ -1130,16 +1205,17 @@ function finish(doc, { bot, packed, opponents, versions, games, results, capMs, 
             const files = ['in.jsonl', 'out.jsonl', 'stderr', 'host.json'].map((x) => `${prefix}.${x}`).filter((f) => fs.existsSync(f));
             const replay = path.join(run, 'games', `${g.id}.jsonl`);
             const f = {
-                game: g.id, bot: g[seat], seat, decks: { p1: decks.names[g.decks[0]], p2: decks.names[g.decks[1]] }, faultKind: r.faultKind ?? 'error', error: r.error ?? null,
-                step: r.steps + 1, round: r.round, think: r.think?.[seat] ?? null, exchanges, stderr, trap: stats?.trap ?? null,
-                files: [...files, ...(fs.existsSync(replay) ? [replay] : [])].map((x) => path.relative(run, x)), ...(k ? { like: group[0].id } : {})
+                game: g.id, bot: g[seat], seat, decks: { p1: decks.names[g.decks[0]], p2: decks.names[g.decks[1]] }, outcome: r.outcome, faultKind: r.by ? r.faultKind ?? 'error' : null,
+                error: r.error ?? null, step: r.by ? r.steps + 1 : r.steps, round: r.round, think: r.think?.[seat] ?? null, exchanges, stderr, trap: stats?.trap ?? null,
+                files: [...files, ...(fs.existsSync(replay) ? [replay] : [])].map((x) => path.relative(run, x)), ...(cut.has(g.id) ? { transcript: 'end' } : {}), ...(k ? { like: group[0].id } : {})
             };
             doc.failures.push(f);
             if (k) {
                 continue; // reported with the first game of its group
             }
-            lines.push(`\n${g.id}: ${f.bot} (${seat}, deck ${f.decks[seat]} vs ${f.decks[seat === 'p1' ? 'p2' : 'p1']}) lost by ${f.faultKind} at step ${f.step}, round ${f.round}`
-                + `${f.faultKind === 'time' && f.think !== null ? `, after ${secs(f.think)} s of its ${capMs / 1000} s` : ''}`);
+            const side = `${seat}, deck ${f.decks[seat]} vs ${f.decks[seat === 'p1' ? 'p2' : 'p1']}`;
+            lines.push(r.by ? `\n${g.id}: ${f.bot} (${side}) lost by ${f.faultKind} at step ${f.step}, round ${f.round}${f.faultKind === 'time' && f.think !== null ? `, after ${secs(f.think)} s of its ${capMs / 1000} s` : ''}`
+                : `\n${g.id}: no result (${r.outcome}) at step ${f.step}, round ${f.round}, ${f.bot} as ${side}: ${why[r.outcome] ?? r.outcome}`);
             if (f.error) {
                 lines.push(`  ${String(f.error).split('\n').slice(0, 4).join('\n  ')}`);
             }
@@ -1165,31 +1241,21 @@ function finish(doc, { bot, packed, opponents, versions, games, results, capMs, 
             }
         }
     }
-    if (noResult.length) {
-        lines.push(`\nGames with no result, counted against neither bot (${noResult.length})`);
-        const why = {
-            STEP_CAP: `${limits.maxSteps} decisions and no end: often a bot that takes back its own choices (a card clicked on and off)`,
-            STUCK: 'the engine stopped asking either bot',
-            ERROR: 'an engine error, which the referee blames on no bot: report it to the arena (CLAUDE.md "Known engine bugs")'
-        };
-        for (const g of noResult) {
-            const r = results.get(g.id);
-            doc.failures.push({ game: g.id, bot: null, outcome: r.outcome, error: r.error ?? null, step: r.steps, round: r.round });
-            lines.push(`  ${g.id}: ${r.outcome} at step ${r.steps}, round ${r.round}: ${why[r.outcome] ?? r.outcome}${r.error ? `\n    ${String(r.error).split('\n')[0].slice(0, 200)}` : ''}`);
-        }
-    }
     for (const j of doc.jobFailures) {
         lines.push(`\nseed ${j.seed} (${j.games.join(', ')}): ${j.why}`, ...j.tail.map((l) => `  ${l.slice(0, 300)}`));
     }
     if (halted) {
         doc.halted = { games: halted.map((g) => g.id) };
-        lines.push(`\nstopped early: ${bot.version} lost ${halted.length} games the same way (${halted.map((g) => g.id).join(', ')}). Fix that, or give --all to play every game anyway.`);
+        lines.push(`\nstopped early: ${halted.length} games of ${bot.version} went wrong the same way (${halted.map((g) => g.id).join(', ')}). Fix that, or give --all to play every game anyway.`);
     }
     const own = rows.reduce((s, r) => s + Object.values(r.botFaults).reduce((a, b) => a + b, 0), 0);
-    const exit = own || doc.jobFailures.length || played.length < games.length ? 1 : 0;
+    const open = rows.reduce((s, r) => s + r.noResult, 0);
     const unplayed = games.length - played.length;
-    lines.push(exit ? `\nexit 1: ${[own && `${bot.version} lost ${own} game${own === 1 ? '' : 's'} by its own fault`, doc.jobFailures.length && `${doc.jobFailures.length} job${doc.jobFailures.length === 1 ? '' : 's'} failed`, unplayed && `${unplayed} game${unplayed === 1 ? '' : 's'} not played${halted ? ' (stopped early)' : ''}`].filter(Boolean).join('; ')}`
-        : `\n${bot.version} played every game without a fault of its own.`);
+    const exit = own || open || doc.jobFailures.length || unplayed ? 1 : 0;
+    const n = (k, what) => `${k} ${what}${k === 1 ? '' : 's'}`;
+    lines.push(exit ? `\nexit 1: ${[own && `${bot.version} lost ${n(own, 'game')} by its own fault`, open && `${n(open, 'game')} with no result`, doc.jobFailures.length && `${n(doc.jobFailures.length, 'job')} failed`,
+        unplayed && `${n(unplayed, 'game')} not played${halted ? ' (stopped early)' : ''}`].filter(Boolean).join('; ')}`
+        : `\n${bot.version} played every game to an end without a fault of its own.`);
     return { text: lines.join('\n'), exit };
 }
 

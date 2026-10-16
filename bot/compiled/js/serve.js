@@ -62,10 +62,10 @@ function errorText(e) {
     const message = String(e?.message ?? e);
     const where = typeof globalThis.__where === 'function' ? globalThis.__where : String;
     const stack = typeof e?.stack === 'string' ? where(e.stack) : '';
-    // QuickJS's stack is the frames alone; V8's (the tests run this under Node) starts with the message. A log that
-    // cannot be written changes no reply.
+    // QuickJS's stack is the frames alone, so the class and message go first, as V8's stack (the tests run this under
+    // Node) and Python's traceback give them. A log that cannot be written changes no reply.
     try {
-        console.error(!stack ? message : stack.includes(message) ? stack.trimEnd() : `${message}\n${stack.trimEnd()}`);
+        console.error(!stack ? message : stack.includes(message) ? stack.trimEnd() : `${e?.name ?? 'Error'}: ${message}\n${stack.trimEnd()}`);
     } catch {} // no stderr
     const at = stack.split('\n').map((l) => /([^\s()]+\.js:\d+(?::\d+)?)\)?\s*$/.exec(l)?.[1]).find((p) => p && !/^stdio\.js:/.test(p));
     return at ? `${message} (at ${at})` : message;

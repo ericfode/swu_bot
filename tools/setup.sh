@@ -78,6 +78,6 @@ if [ "$sandbox" = true ]; then
         echo 'No Javy for this computer yet: JavaScript bots and --vs random need it, Python bots and bundles do not.'
     fi
     "$venv/bin/python3" -I -c 'import wasmtime'
-    echo 'Sandbox ready. Try: npm run dev -- <your bot folder>'
+    echo 'Sandbox ready. Try: npm run dev -- <your bot folder> --owner <your GitHub login>'
 fi
 echo 'For a source snapshot without Git history, use npm run smoke:source instead of npm run smoke.'

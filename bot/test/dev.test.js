@@ -1,9 +1,9 @@
 'use strict';
 // The bot dev harness (bot/dev.js): how it reads a bot folder, arena_submit's rules, run folders, the deal and the jobs
 // it builds, real runs of small Python bots through the arena's checker and play-seed.js (recorded, reported, played
-// again the same), the faults it reports (once per kind, stopping early, sent to the bot again), the intake's refusals,
-// JavaScript errors named by file and line, the transcript tap, the viewer, Ctrl-C and SIGKILL, and that it never sends
-// anything anywhere. Each part skips when its piece is missing: the built engine and card data, wasmtime for Python,
+// again the same), the faults it reports (alike whatever their messages say, once per kind, stopping early, sent to the
+// bot again), games the bot never finishes, the intake's refusals, JavaScript errors named by file and line, the
+// transcript tap, the viewer, Ctrl-C and SIGKILL, and that it never sends anything anywhere. Each part skips when its piece is missing: the built engine and card data, wasmtime for Python,
 // CPython for WASI, Javy, /proc (Linux) for the process checks.
 const test = require('node:test');
 const assert = require('node:assert');
@@ -204,6 +204,8 @@ test('pasted commands, read ends of files, run folders, the card data id and Jav
     usageOf(() => dev.claimRun(planned, true));
     assert.strictEqual(dev.claimRun(path.join(tmp, 'claims', 'empty'), true).run, path.join(tmp, 'claims', 'empty'));
     usageOf(() => dev.claimRun(path.join(tmp, 'claims', 'empty'), true));
+    dev.claimRun(path.join(tmp, 'claims', 'new', '.runs', 'r'), false).release();
+    assert.ok(!fs.existsSync(path.join(tmp, 'claims', 'new')), 'and the folders made for it');
 
     // the card data's id is the games image's CARDS_SHA (Dockerfile.games)
     if (ENGINE) {
@@ -228,9 +230,12 @@ test('usage: an --out the bot would be packed with, an opponent the arena does n
         [[bot, '--owner', 'Not A Login'], /--owner/],
         [[bot], /say whose bot it is/],
         [[bot, '--house', '--out', path.join(tmp, 'usage-file')], /usage-file is not a folder: give another --out/],
-        [[bot, '--house', '--again', path.join(tmp, 'no-such.in.jsonl')], /--again .*no-such\.in\.jsonl: no such file/]
+        [[bot, '--house', '--again', path.join(tmp, 'no-such.in.jsonl')], /--again .*no-such\.in\.jsonl: no transcript of a whole game there/],
+        // the end of a transcript, as a run keeps it of a game with no result: it does not start with hello
+        [[bot, '--house', '--again', path.join(tmp, 'usage-end.in.jsonl')], /--again .*usage-end\.in\.jsonl: no transcript of a whole game there \(.*which starts with hello\)/]
     ];
     fs.writeFileSync(path.join(tmp, 'usage-file'), 'x');
+    fs.writeFileSync(path.join(tmp, 'usage-end.in.jsonl'), '{"t":"decide","seq":5980}\n');
     for (const [args, want] of cases) {
         const r = await runDev(args);
         assert.strictEqual(r.code, 2, `${args.join(' ')}: ${r.out}${r.err}`);
@@ -264,11 +269,17 @@ test('a builder\'s bot is held to arena_submit\'s rules before anything runs: it
         assert.strictEqual(n.code, 3, n.out + n.err);
         assert.strictEqual(n.out, want);
     }
+    // an arena folder in the caller's environment (a project's shared one) that holds ana-v1: the run reads its own,
+    // so the bot keeps its name (and its bundle id)
+    const shared = folder('shared-arena', { 'versions/ana-v1/SUBMISSION.json': '{"bot":{"kind":"wasm"}}', 'versions/ana-v1/bundle/arena.json': '{}' });
+    const own = await runDev([bot, '--owner', 'ana', '--entry', 'main.py', '--games', '0'], { env: { ...BASE_ENV, ARENA_HOME: shared } });
+    assert.strictEqual(own.code, 3, own.out + own.err);
+    assert.match(own.out, /^ana-v1 \(/);
     assert.match(notYours('ana', 'bob'), /^"bob" is not yours: use your builder name ana \(whoami\), or it with _ and a suffix, e.g\. ana_fast$/);
     const none = await runDev([folder('no-entry', { 'main.py': PY_BOT }), '--owner', 'ana', '--games', '0']);
     assert.strictEqual(none.code, 3);
     assert.match(none.out, /^ana-v1 \(no-entry\): the arena would refuse it:\nno bot\.js or bot\.py: /);
-    assert.ok(!fs.existsSync(path.join(bot, '.runs')) || !fs.readdirSync(path.join(bot, '.runs')).length, 'nothing ran: no run folder');
+    assert.ok(!fs.existsSync(path.join(bot, '.runs')), 'nothing ran: no run folder, and no .runs');
 });
 
 test('a missing sandbox stops the harness with exit 2 and says npm run setup', { skip: fs.existsSync(path.join(ROOT, 'build', 'compiled', 'venv')) && 'the sandbox\'s virtualenv comes first on PATH' }, async () => {
@@ -303,6 +314,44 @@ test('build.py picks the Javy release for each platform, and says what to pin fo
             assert.match(v, new RegExp(`^not pinned: Javy 8\\.0\\.0 is not pinned for ${k} yet: put .* in bot/compiled/toolchain\\.json javy\\.platforms\\.${k}`), k);
         }
     }
+});
+
+test('faults are alike by kind, exception class and the bot\'s own deepest line, whatever their messages say', () => {
+    const dir = path.join(tmp, 'fault-keys');
+    fs.mkdirSync(dir);
+    let n = 0;
+    const key = (error, stderr, more = {}) => {
+        const g = { id: `g${++n}`, p1: 'me-v1', p2: 'rush' };
+        fs.writeFileSync(path.join(dir, `${g.id}.p1.stderr`), stderr);
+        return dev.faultKey(g, 'p1', { by: 'p1', faultKind: 'error', outcome: 'ERROR', error, ...more }, dir);
+    };
+    // Python: the last frame in /bot/ (a library's frames below it do not count), the class on the last line
+    const py = (label, line = 40) => 'hello as p1: 170 cards indexed\nTraceback (most recent call last):\n  File "/bot/bot.py", line 62, in <module>\n'
+        + `    best = max(fresh, key=score)\n  File "/bot/lib/score.py", line ${line}, in score\n    return int(lookup(action["label"]))\n`
+        + '  File "/usr/local/lib/python3.14/x.py", line 9, in lookup\n    y()\n'
+        + `ValueError: invalid literal for int() with base 10: '${label}'\n`;
+    const a = key('p1 me-v1: exited (code 1)', py('allegiant-general-pryde#ruthless-and-loyal'));
+    assert.strictEqual(a, 'me-v1\nerror\nexited\nValueError at lib/score.py:40');
+    assert.strictEqual(key('p2 me-v1: exited (code 1)', py('advantage')), a, 'another label: the same fault');
+    assert.notStrictEqual(key('p1 me-v1: exited (code 1)', py('advantage', 41)), a, 'another line: another fault');
+    // JavaScript, as serve() writes it: the first frame outside stdio.js; callers' columns do not count
+    const js = (prop, col) => `hello as p1: 155 names\nTypeError: cannot read property '${prop}' of undefined\n    at cost (cards.js:20:34)\n`
+        + `    at decide (bot.js:26:${col})\n    at answer (stdio.js:50:45)\n    at serve (stdio.js:92:34)\n`;
+    const b = key('p1 me-v1: error: cannot read property \'n\' of undefined (at cards.js:20:34)', js('n', 79));
+    assert.strictEqual(b, 'me-v1\nerror\nerror\nTypeError at cards.js:20');
+    assert.strictEqual(key('p1 me-v1: error: cannot read property \'cost\' of undefined (at cards.js:20:34)', js('cost', 96)), b);
+    assert.strictEqual(key('p1 me-v1: error: bad', 'RangeError: bad\n    at next (stdio.js:40:1)\n    at pick (lib/pick.js:3:9)\n'), 'me-v1\nerror\nerror\nRangeError at lib/pick.js:3');
+    // the last stack counts, not one the bot logged before
+    assert.strictEqual(key('p1 me-v1: error: x', `Error: handled\n    at old (lib/old.js:7:1)\nlater\n${js('n', 79).split('\n').slice(1).join('\n')}`), b);
+    // no stack: the referee's words, less the data after them
+    assert.strictEqual(key('p1 me-v1: reply is not JSON: this is not json', ''), key('p1 me-v1: reply is not JSON: {"t": act', 'about to answer\n'));
+    assert.notStrictEqual(key('p1 me-v1: reply is not JSON: x', ''), key('p1 me-v1: expected {"t":"act","i":0..4}, got {"t":"ok"}', ''));
+    // time: never the stderr, which may hold an old traceback
+    const time = { faultKind: 'time' };
+    assert.strictEqual(key('p1 me-v1: TIME_FORFEIT me-v1 thought 10003 ms (cap 10000)', py('a'), time), key('p1 me-v1: TIME_FORFEIT me-v1 thought 10012 ms (cap 10000)', '', time));
+    // a game with no result, from the bot's seat
+    const g = { id: 'g0', p1: 'rush', p2: 'me-v1' };
+    assert.strictEqual(dev.faultKey(g, 'p2', { by: null, outcome: 'STEP_CAP', error: null }, dir), 'me-v1\nSTEP_CAP\n\n');
 });
 
 test('the deal: the round\'s lists by seat, the same seeds for every opponent, jobs play-seed takes and that repeat', { skip: !ENGINE && 'needs the engine\'s card data' }, () => {
@@ -564,24 +613,69 @@ test('a bot\'s faults are its losses, reported once per kind with the game, the 
             assert.ok(f.think >= 10000, `think ${f.think}`);
             assert.match(r.out, /lost by time at step \d+, round \d+, after 10\.\d s of its 10 s/);
             assert.match(r.out, /warning: in 2 games fault_slow-v1 used more than half its thinking time/);
+            // its replies come late, but come: again cannot judge time, and says so (exit 1)
+            const late = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 180000 });
+            assert.strictEqual(late.status, 1, late.stdout + late.stderr);
+            assert.match(late.stdout, new RegExp(`the game was lost by time, and --again sends its messages with no clock, so it cannot say whether the bot is in time now: play the run again with --seed ${s} for that`));
         }
     }
 });
 
 test('a bot that keeps losing the same way stops the run early, unless --all', { skip: NEEDS_PLAY, timeout: 600000 }, async () => {
-    const bot = folder('early-bot', { 'bot.py': faultyBot(1, 'raise RuntimeError("boom")') });
+    // its message changes every game (and is no number): the faults are still alike
+    const bot = folder('early-bot', { 'bot.py': faultyBot(1, 'import hashlib\nraise RuntimeError("boom " + hashlib.sha256(line.encode()).hexdigest()[:12])') });
     const args = [bot, '--owner', 'early', '--vs', 'rush,heuristic', '--games', '4', '--seed', '11', '--jobs', '1'];
     const [stopped, all] = await Promise.all([runDev([...args, '--out', path.join(tmp, 'early-run')]), runDev([...args, '--all', '--out', path.join(tmp, 'early-all-run')])]);
     assert.strictEqual(stopped.code, 1, stopped.out);
     const doc = readJson(path.join(tmp, 'early-run', 'run.json'));
     assert.strictEqual(doc.status, 'halted');
     assert.strictEqual(doc.games.length, 2 * dev.SAME_FAULT - 2, 'two jobs of two games: the second brings it to SAME_FAULT');
-    assert.match(stopped.out, /stopped early: early-v1 lost 4 games the same way \(.*\)\. Fix that, or give --all to play every game anyway\./);
+    assert.match(stopped.out, /stopped early: 4 games of early-v1 went wrong the same way \(.*\)\. Fix that, or give --all to play every game anyway\./);
     assert.match(stopped.out, /exit 1: early-v1 lost 4 games by its own fault; 4 games not played \(stopped early\)/);
-    assert.match(stopped.out, /RuntimeError: boom/);
+    assert.match(stopped.out, /RuntimeError: boom [0-9a-f]{12}/);
+    const messages = new Set(readJson(path.join(tmp, 'early-run', 'run.json')).failures.map((f) => f.stderr.at(-1)));
+    assert.strictEqual(messages.size, 4, 'four messages, one kind');
     assert.strictEqual(all.code, 1, all.out);
     assert.strictEqual(readJson(path.join(tmp, 'early-all-run', 'run.json')).games.length, 8);
     assert.match(all.out, /Games lost by a fault \(8, 1 kind\)/);
+});
+
+// A Python bot that never finishes a game: it clicks the first card it can, so it takes back its own choice forever
+const LOOP_BOT = `import json, sys
+for line in sys.stdin:
+    msg = json.loads(line)
+    t = msg["t"]
+    if t == "hello":
+        reply = {"t": "ready", "v": 2}
+    elif t == "decide":
+        cards = [a for a in msg["actions"] if a["kind"] == "card"]
+        reply = {"t": "act", "i": (cards or msg["actions"])[0]["i"]}
+    elif t == "over":
+        reply = {"t": "ok"}
+    else:
+        continue
+    print(json.dumps(reply), flush=True)
+`;
+
+test('a game the bot never finishes is a failure: shown like a fault, one whole transcript kept, the rest their ends (exit 1)', { skip: NEEDS_PLAY, timeout: 600000 }, async () => {
+    const bot = folder('loop-bot', { 'bot.py': LOOP_BOT });
+    const out = path.join(tmp, 'loop-run');
+    const r = await runDev([bot, '--owner', 'loop', '--vs', 'rush', '--games', '2', '--seed', '5', '--out', out]);
+    assert.strictEqual(r.code, 1, r.out + r.err);
+    assert.match(r.out, /\nGames with no result \(2, 1 kind\)\n/);
+    assert.match(r.out, /: no result \(STEP_CAP\) at step 6000, round 0, loop-v1 as p\d, deck \S+ vs \S+: 6000 decisions and no end/);
+    assert.match(r.out, /referee: decide \d+, [\d.]+ s left, "[^"]*", \d+ actions\n {2}bot: {5}\{"t": "act", "i": \d+\}\n/);
+    assert.match(r.out, /\n {2}and 1 more game like it: /);
+    assert.match(r.out, /\nexit 1: 2 games with no result\n/);
+    const doc = readJson(path.join(out, 'run.json'));
+    const [first, second] = doc.failures;
+    assert.deepStrictEqual([first.outcome, first.bot, first.transcript, second.like, second.transcript], ['STEP_CAP', 'loop-v1', undefined, first.game, 'end']);
+    const transcript = (f, ext) => lines(path.join(out, 'bots', `${f.game}.${f.seat}.${ext}`));
+    assert.strictEqual(JSON.parse(transcript(first, 'in.jsonl')[0]).t, 'hello', 'the game shown keeps its whole transcript');
+    assert.ok(transcript(first, 'in.jsonl').length > 1000);
+    assert.deepStrictEqual([transcript(second, 'in.jsonl').length, transcript(second, 'out.jsonl').length], [20, 20], 'the other only its end');
+    const again = /\n {2}again: {2}(.+)\n/.exec(r.out)?.[1];
+    assert.ok(again?.endsWith(`${first.game}.${first.seat}.in.jsonl`), again);
 });
 
 test('JavaScript: an error names the bot\'s own file and line, and a stdio.js of its own is replaced', { skip: (!PLAYS || !JAVY) && 'needs the engine, the sandbox and Javy', timeout: 600000 }, async () => {
@@ -598,7 +692,7 @@ test('JavaScript: an error names the bot\'s own file and line, and a stdio.js of
     assert.match(b.out, /warning: the arena replaces stdio\.js with its own serve\(\); a helper of yours there needs another name/);
     assert.match(b.out, /packed and start-checked .*: bundle [0-9a-f]{64} \(this build: Javy's differ by a few bytes each time; the script it compiled is [0-9a-f]{64}\)/);
     assert.match(b.out, /error: no pick at 3 \(at pick\.js:4:\d+\)/);
-    assert.match(b.out, /stderr \(last \d+ lines\):\n {4}no pick at 3\n\s+at pick \(pick\.js:4:\d+\)\n\s+at decide \(bot\.js:6:\d+\)/);
+    assert.match(b.out, /stderr \(last \d+ lines\):\n {4}Error: no pick at 3\n\s+at pick \(pick\.js:4:\d+\)\n\s+at decide \(bot\.js:6:\d+\)/);
 });
 
 test('Ctrl-C stops the check or every game and leaves a stopped run; after a SIGKILL the games stop by themselves', { skip: (!NEEDS_PLAY && !PROC) ? 'needs /proc' : NEEDS_PLAY, timeout: 300000 }, async () => {

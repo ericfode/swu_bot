@@ -54,9 +54,9 @@ serve({
 The arena always puts its own `stdio.js` next to your entry file, so do not send one, and name a helper of your own
 something else. Log with `console.error`, which writes to stderr; `console.log` writes to stdout, and a line there
 that is not a reply breaks the protocol. An error your code throws loses the game; `serve()` writes its stack to
-stderr, and the error in the reply names the file and line. For an error such as reading a property of `undefined`,
-QuickJS gives the line where the enclosing block or function starts. Test the bot with the harness (below): it runs
-the bot in the arena's sandbox, where Node is not.
+stderr, and the error in the reply names the file and line. The line of a `throw` is exact; for an error such as
+reading a property of `undefined`, QuickJS can name an earlier line of the same function, often the statement before.
+Test the bot with the harness (below): it runs the bot in the arena's sandbox, where Node is not.
 
 ## Python (`kind: "python"`)
 
@@ -117,11 +117,17 @@ deck lists of the rated rounds, each seed from both seats, with 60 s of thinking
 it gets in the arena, `hello.cards` included, so it only reads stdin and writes stdout. The harness never sends
 anything to the arena.
 
-The report has a table per opponent: wins and losses, losses by the bot's own fault, thinking time and memory. For
-each kind of fault (a crash, a bad reply, out of time) it shows one game: the step, the last messages, the end of the
-bot's stderr, and an `again:` command. That command packs the folder as it is now and sends it that game's messages,
-then says where its replies differ from the ones in the run, so you can check a fix on the game that showed the bug.
-When the bot has lost 3 games the same way, the run stops there.
+The report has a table per opponent: wins and losses, losses by the bot's own fault, games with no result, thinking
+time and memory. A game with no result counts against the bot too: most often it reached the step cap (6000
+decisions and no end) because the bot repeats an action that changes nothing. For each kind of failure (a crash, a
+bad reply, out of time, no result) the report shows one game: the step, the last messages, the end of the bot's
+stderr, and an `again:` command. Two failures are alike when they end the game the same way and their errors have
+the same exception class and line in the bot's own code, whatever their messages say. When 3 of the bot's games have
+failed alike, the run stops there.
+
+The `again:` command packs the folder as it is now and sends it that game's messages, then says where its replies
+differ from the ones in the run, so you can check a fix on the game that showed the bug. It sends the messages with no
+clock, so for a game lost on time it says so and exits with 1: play the run again with its seed to check that fix.
 
 - `--vs heuristic,rush,random,../my-bot-v2`: the opponents. A folder plays too, packed the same way, so a new version
   can play the last one.
@@ -132,11 +138,13 @@ When the bot has lost 3 games the same way, the run stops there.
 - `--cap-sec N` the thinking time per game, `--jobs N` seeds at once, `--all` every game even after 3 faults alike.
 - `--again <run>/bots/<game>.<seat>.in.jsonl`: the command the report prints.
 - Each run goes to `<folder>/.runs/<time>-s<seed>/`, about 13 MB for 20 games: the replays, the bot's messages for the
-  games it did not win (`bots/`), its stderr, and `run.json`. Delete old runs when you no longer need them. The harness
-  leaves dot files and folders out when it packs; leave them out of `arena_submit` too.
+  games it did not win (`bots/`), its stderr, and `run.json`. A game that reaches the step cap adds about 8 MB of
+  replay, and 11 MB of messages for the first such game (the others keep their last 20 lines). Delete old runs when
+  you no longer need them. The harness leaves dot files and folders out when it packs; leave them out of
+  `arena_submit` too.
   `node bot/dev.js --view <run folder>` shows the replays in the browser.
-- Exit code 0: no losses by the bot's own fault; 1: some, or a game could not be played; 2: a usage error or no
-  sandbox; 3: the arena would refuse the bot.
+- Exit code 0: every game ended and none was lost by the bot's own fault; 1: some were, a game had no result, or a
+  game could not be played; 2: a usage error or no sandbox; 3: the arena would refuse the bot.
 - The run records the card data's id (`card data` in the header). The games machine's card data has an id made the
   same way; when the two differ, `hello.cards` and the games differ too. `npm run setup` fetches the current card data.
 

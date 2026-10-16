@@ -45,14 +45,15 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 ## The bot protocol
 Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, over stdio for a program in any
 language or as plain objects in process.
-- `dev.js` — the bot dev harness, `npm run dev -- <bot folder> --owner <login>` (or `--house` for one of the arena's
-  own bots): packs the folder as that submitter's `arena_submit` would and holds it to its rules, start-checks it with
-  the arena's checker (`arena/intake.js --check`), deals a gauntlet against `heuristic` and `rush` (or `--vs` folders)
-  on the rated rounds' deck lists and limits, plays each seed with `arena/play-seed.js` in the sandbox, and writes the
-  replays, the bot's transcripts and a report to `<folder>/.runs/`. Faults that look alike are reported once, with an
-  `--again` command that sends that game's messages to the folder as it is now; 3 alike stop the run (`--all` plays
-  on). `node bot/dev.js --view <run>` serves that run's replays with the viewer kit on 127.0.0.1. It never sends
-  anything to a window. It is the one way to run a bot program locally.
+- `dev.js` — the bot dev harness, `npm run dev -- <bot folder> --owner <login>` (or `--house` for one of the arena's own
+  bots): packs the folder as that submitter's `arena_submit` would and holds it to its rules, start-checks it with the
+  arena's checker (`arena/intake.js --check`), deals a gauntlet against `heuristic` and `rush` (or `--vs` folders) on
+  the rated rounds' deck lists and limits, plays each seed with `arena/play-seed.js` in the sandbox, and writes the
+  replays, the bot's transcripts and a report to `<folder>/.runs/`. Games lost by a fault or with no result that look
+  alike (kind, exception class, the bot's own line) are reported once, with an `--again` command that sends that game's
+  messages to the folder as it is now; 3 alike stop the run (`--all` plays on). `node bot/dev.js --view <run>` serves
+  that run's replays with the viewer kit on 127.0.0.1. It never sends anything to a window. It is the one way to run a
+  bot program locally.
 - `stdio.js` — `StdioClient` runs a bot program; `serve(client)` runs an in-process client as a program. No engine
   dependency. With `log` set, a client writes what it sent and read, the program's stderr and the sandbox's stats
   next to that path (the ladder worker sets it under `SWU_BOT_LOG`, which `dev.js` uses).
