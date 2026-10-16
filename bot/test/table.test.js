@@ -367,6 +367,16 @@ test('a person takes back moves against a bot: the game plays again to their las
     assert.match(p.answer({ t: 'undo' }), /no move to take back/);
     assert.equal(p.answer({ t: 'act', seq: 1, i: 1 }), null);
     assert.deepStrictEqual(await asked, { t: 'act', i: 1 });
+    // an undo sent while the bot thinks, with nothing to take back at the next decision: the screen hears so first,
+    // and that decision is asked as usual
+    const heard = [];
+    const q = new PersonSeat({ name: 'you', send: (m) => heard.push(m) });
+    assert.equal(q.answer({ t: 'undo' }), null);
+    const next = q.decide(decide(2, [{ i: 0, kind: 'button', label: 'Pass' }, { i: 1, kind: 'button', label: 'Go' }]));
+    assert.deepStrictEqual(heard.map((m) => m.t), ['rewind', 'decide']);
+    assert.match(heard[0].error, /no move to take back/);
+    assert.equal(q.answer({ t: 'act', seq: 2, i: 0 }), null);
+    assert.deepStrictEqual(await next, { t: 'act', i: 0 });
 });
 
 test('the bot\'s look-ahead deals the person\'s hand, resources and deck again (protocol.js determinize)', { skip: !ENGINE && 'engine or card data not built' }, async () => {

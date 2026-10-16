@@ -16,7 +16,8 @@
  * so a slip never loses the game; only concede() ends it early.
  *
  * Where the game lets the person take back moves (a game against a bot), decide.undo says there is one to take back,
- * and {t: 'undo'} answers the decision with it; sent while the bot thinks, it answers the person's next decision.
+ * and {t: 'undo'} answers the decision with it; sent while the bot thinks, it answers the person's next decision (or,
+ * when that one has nothing to take back, the screen gets {t: 'rewind', error} before it).
  */
 
 const { lookAhead, withPreviews } = require('./preview');
@@ -130,6 +131,8 @@ class PersonSeat {
                 this.back();
                 return { t: 'undo' };
             }
+            // the screen waits for the move to come back: it does not, and this decision is asked as usual
+            this.send({ t: 'rewind', error: 'there is no move to take back' });
         }
         const shown = this.shown(msg);
         return new Promise((resolve) => {
