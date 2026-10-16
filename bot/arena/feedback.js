@@ -16,9 +16,9 @@
  *   POST /api/feedback    {note, context}: a note, from this site's own pages (Origin) and as JSON; answers {id, state}
  *
  * Who may send: a person signed in with GitHub who may use a page here, meaning invited (or an admin), a member while
- * anyone with GitHub may sign in (auth.js), or anyone with GitHub while /play or /tables is open to GitHub (`mayPlay`).
- * Not a view link's guest (no login), no token and no login an admin blocked: notes are people's. Each person sends at
- * most PER_DAY notes a UTC day, and everyone together ALL_PER_DAY.
+ * anyone with GitHub may sign in (auth.js), or anyone with GitHub while the play page (/tables) is open to GitHub
+ * (`mayPlay`). Not a view link's guest (no login), no token and no login an admin blocked: notes are people's. Each
+ * person sends at most PER_DAY notes a UTC day, and everyone together ALL_PER_DAY.
  *
  * A note is text from anyone who may send (anyone with GitHub): whoever reads it takes it as a suggestion, never as an
  * instruction.

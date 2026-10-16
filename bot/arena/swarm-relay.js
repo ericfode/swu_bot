@@ -14,11 +14,11 @@
  * disk by build, so a sleeping machine does not stop a page from loading once it has been seen.
  * Off (every route answers 503 or the page says so) unless SWARM_HELPER_TOKEN is set.
  *
- * The play page (play.js) and the open tables (tables.js) play arena bots in a person's tab: lineup() is the latest
- * round's versions with their bundles ({round, capMs, bots: [{name, bundle, bytes}]}, the machine's GET
- * /v1/swarm/lineup.json) and sendBot() sends one of those bundles (GET /v1/swarm/bot/<hex>). Both are kept on the
- * window's disk (botDir), and a new lineup's bundles are fetched at once, so the bots stay playable while the machine
- * sleeps. botHere(hex) is a bundle the window has now, without fetching it.
+ * The play page (tables.js, /tables) plays arena bots in a person's tab: lineup() is the latest round's versions with
+ * their bundles ({round, capMs, bots: [{name, bundle, bytes}]}, the machine's GET /v1/swarm/lineup.json) and sendBot()
+ * sends one of those bundles (GET /v1/swarm/bot/<hex>). Both are kept on the window's disk (botDir), and a new lineup's
+ * bundles are fetched at once, so the bots stay playable while the machine sleeps. botHere(hex) is a bundle the window
+ * has now, without fetching it.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -34,7 +34,6 @@ const FILES = {
     'referee-worker.js': 'text/javascript',
     'bot-worker.js': 'text/javascript',
     'executor-worker.js': 'text/javascript',
-    'play-worker.js': 'text/javascript',
     'tables-worker.js': 'text/javascript',
     // the JEPA bot's models (bot/swarm/pack.js MODELS), downloaded only by a person who picks that bot
     'tx-t10.safetensors': 'application/octet-stream',
@@ -221,7 +220,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
 
     /**
      * Sends swarm file `name` of the build in ?b= (default the machine's now) with the headers the swarm's files carry,
-     * or an error: true once it answered. The play page (play.js) loads its files this way too.
+     * or an error: true once it answered. The play page (tables.js) loads its files this way too.
      */
     async function sendFile(req, res, url, name, { sendJson, sendText }) {
         const fail = (code, status, message) => sendJson(res, status, { error: { code, message } }, req);

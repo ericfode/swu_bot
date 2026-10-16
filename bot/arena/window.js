@@ -33,7 +33,6 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
 const { createSwarmRelay } = require('./swarm-relay');
-const { createPlay } = require('./play');
 const { createTables } = require('./tables');
 const { createArt } = require('./art');
 const { createStatic, matches } = require('./static');
@@ -688,9 +687,8 @@ function createWindow(opts = {}) {
         const d = parseOr(store.getDoc('admin', 'links'), null);
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
-    let play = null;
     let tables = null;
-    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], blocked: () => blockedLogins(store), links: viewLinks, openTo: (next) => !!play?.openTo(next) || !!tables?.openTo(next) });
+    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], blocked: () => blockedLogins(store), links: viewLinks, openTo: (next) => !!tables?.openTo(next) });
     // the games machine (coord/), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     // the model is built at most every 30 s: each build is a new download for every open tab
@@ -703,22 +701,21 @@ function createWindow(opts = {}) {
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
     // files sent as they are (the app, the kit): compressed once, 304 when the browser has them (static.js)
     const statics = createStatic();
-    // the play page (play.js): a person against a bot in their own tab, on the swarm's files; games come back here
-    play = createPlay({ store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
-    // card art for the isolated pages (/play, /tables), which cannot show the CDN's images themselves (art.js); made
-    // smaller (WebP) once and kept on the volume
+    // card art for the isolated play page (/tables), which cannot show the CDN's images itself (art.js); made smaller
+    // (WebP) once and kept on the volume
     const art = opts.art ?? createArt({ dir: path.join(home, 'art') });
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
-    // the open tables (tables.js): people against people or any arena bot, every game in a player's tab
+    // the play page (tables.js, /tables; /play goes there): people against people or any arena bot, every game in a
+    // player's tab; ARENA_TABLES says who may play people, ARENA_PLAY who may play the bots
     tables = createTables({
-        store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES,
+        store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES, play: opts.play ?? process.env.ARENA_PLAY,
         arena: { status: () => arenaDoc('status') ?? { competitors: [] }, versions: (name) => (/^[a-z][a-z0-9_]{0,31}$/.test(name) ? arenaDoc(`versions-${name}`) ?? null : null) },
         ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
         ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
     });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
-    const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => play.mode === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
+    const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => tables.play === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
@@ -1360,8 +1357,8 @@ function createWindow(opts = {}) {
             if (url.pathname === '/healthz') {
                 return sendText(res, req, 200, 'text/plain', 'ok');
             }
-            // the kit's license list, for anyone: its banner names the file, next to /kit.js and /play/kit.js
-            if (req.method === 'GET' && (url.pathname === '/swu-viewer-kit.licenses.txt' || url.pathname === '/play/swu-viewer-kit.licenses.txt')) {
+            // the kit's license list, for anyone: its banner names the file, next to /kit.js and /tables/kit.js
+            if (req.method === 'GET' && (url.pathname === '/swu-viewer-kit.licenses.txt' || url.pathname === '/tables/swu-viewer-kit.licenses.txt')) {
                 return serveFile(req, res, kitLicenses, 'text/plain; charset=utf-8');
             }
             if (await auth.routes(req, res, url)) {
@@ -1382,9 +1379,6 @@ function createWindow(opts = {}) {
                 return sendJson(res, 401, { error: { code: 'unauthorized', message: 'wrong bearer token' } }, req);
             }
             if (await art.route(req, res, url, who)) {
-                return undefined;
-            }
-            if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;
             }
             if (await tables.route(req, res, url, who, { sendJson, sendText, readBody })) {

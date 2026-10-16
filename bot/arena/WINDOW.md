@@ -191,58 +191,11 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 - `PUT /api/docs/lens/karabast-<id>`: the game's win-probability lens (swu-lens/1), under the game's id, which is how
   the viewer finds it.
 
-## The play page (play.js)
-
-`/play` seats a person against a bot on Holotable's play screen: Eric's JEPA bot (jepa-tx-gate) or a WebAssembly
-version of the arena's latest round. The person picks the opponent first, and the page downloads only what that one
-needs, with a progress bar (`/play?bot=<name>` goes straight to one). The referee and the bot run in the person's tab
-(`play-worker.js` on the swarm's engine pack, `bot/table/README.md`), so the window and the games machine play
-nothing; the window only serves the files and keeps the finished games. The page is cross-origin isolated (an arena
-bot's stdin is a SharedArrayBuffer) with `require-corp`, as the swarm's pages are, because Safari (every iPhone browser)
-has no `credentialless`. Under `require-corp` the CDN's card art is blocked, so the page shows it through the window's
-`/art/` (below). A browser that does not isolate the page can play only the JEPA bot.
-
-- `ARENA_PLAY` says who may play: `invited` (the default: signed in with GitHub and invited), `github` (anyone signed in
-  with GitHub; their sign-in then returns to `/play` though they cannot read the arena) or `off`. A view link's guest has
-  no GitHub login, so the page asks them to sign in. The files come through the swarm relay, so the page needs
-  `SWARM_HELPER_TOKEN` too.
-- `GET /play`, `/play/kit.js` (the viewer kit; its license list `/play/swu-viewer-kit.licenses.txt`, like
-  `/swu-viewer-kit.licenses.txt`, is open to anyone), and `/play/<file>?b=<build>`: `engine.json`, `play-worker.js`,
-  `bot-worker.js`, the JEPA bot's `tx-t10.safetensors` and `tx-t10-e.safetensors`, `python-lib.json` and `python.wasm`
-  (the games machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and
-  the machine asleep, the page asks for them, which wakes it at most every 15 minutes). Every answer has
-  `x-raw-length`, the unzipped size, which is what a page reading the body counts. A URL with `?b=` names its build,
-  so browsers keep the file a year; it goes brotli to a browser that takes it (made once, in the background, next to
-  the gzip on the window's disk: the engine pack is 1.0 MB that way, 1.5 MB gzipped), else gzipped.
-- `GET /play/bundle/<sha256>`: an arena version's canonical tar, only for a version of the latest round. The swarm
-  relay (`lineup()`, `sendBot()`) gets the lineup (`GET /v1/swarm/lineup.json`) and each of its bundles
-  (`GET /v1/swarm/bot/<sha256>`) from the games machine as soon as it learns the lineup, checks each sha256 and keeps
-  the tars with their gzips and brotlis in `<home>/swarm-bots` (the latest round's only), so they load while the
-  machine sleeps. Browsers keep a bundle a year (its URL names it).
-  503 while the machine is asleep and the window does not have it yet (it is woken, at most every 15 minutes).
-- `GET /api/play/info`: the files to load (`pack`, `worker`, `botWorker`, each `{url, bytes}`) and the person's last
-  20 games; an admin also gets the last 200 games of everyone, with who played them.
-- `GET /api/play/bots`: `{ready, round, capMs, bots, runtimes}`, the opponents to pick. The JEPA bot comes first
-  (`kind: 'jepa'`, `files: [{url, path, bytes}]`, its models: the page sends `[[path, bytes]]` to the worker with its
-  first game), then the latest round's versions by arena rating (`kind: 'arena'`, `elo`, `runtime`, `capMs`,
-  `bundle: {url, hex, bytes, wire}`). `runtimes` names the files of each interpreter a bundle may need
-  (`python-3.14-wasi`: `{lib, wasm}`). The lineup is the swarm relay's (above), asked again when it is over a minute
-  old. `runtime` is what the bundle's `arena.json` names, read once the window has the bundle (null before); `capMs` is
-  that round's time per bot per game, which the tab plays the version under. `bytes` and `wire` (about what a file
-  downloads, brotli or gzip) are null when the window does not know a size yet.
-- `POST /api/play/games {replay}`: the tab sends the finished game. Only from this site's own page (Origin) and as JSON;
-  the header must seat `person` in seat 1 and `jepa-tx-gate` or an arena version in seat 2, with step lines and an
-  end line; at most 16 MB
-  and 40 games a day per person. The same replay again gives the same id. It goes into the run `play`
-  (`feed: "play"`, so a people run: readers see "opponent", and the app leaves it out), with who played it in
-  `admin/people` as `@<login>`. The games are unrated: the person's tab played them.
-- `GET /api/play/games/<id>.jsonl`: a game's replay, for the person who played it and admins.
-
 ## Card art for the isolated pages (art.js)
 
 `GET /art/<SET>/<NNN>.png` (and `<NNN>-b.png`, a leader's deployed side) is the image of
-`https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png`, fetched by the window. `/play` and `/tables` point the viewer
-kit's art here (`SWUViewer.setArtResolver`) because their isolation (`require-corp`) blocks images from a site that
+`https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png`, fetched by the window. The play page (`/tables`) points the
+viewer kit's art here (`SWUViewer.setArtResolver`) because its isolation (`require-corp`) blocks images from a site that
 does not allow it, and the CDN sends no CORP or CORS header. It answers anyone signed in with GitHub, a view link's
 guest or a token. Browsers keep each image a year, and the window remembers for an hour that a card has no art (404).
 
@@ -256,28 +209,59 @@ image goes as the CDN has it.
 
 ## Files sent as they are (static.js)
 
-The app (`/`, 2.7 MB), the viewer kit (`/kit.js`, `/play/kit.js`, `/tables/kit.js`: one file, 2.4 MB), the kit's
+The app (`/`, 2.7 MB), the viewer kit (`/kit.js`, `/tables/kit.js`: one file, 2.4 MB), the kit's
 license list and `/strategy-diagram.js` are read and compressed once per version (gzip at once, brotli in the
 background: the app is 622 KB that way, 785 KB gzipped), not for every request, and carry an `ETag` that names their
 content, so a reload is a 304 with no body. Their `cache-control` stays `no-cache`: the URLs stay the same when a deploy
 changes the file. Before 2026-10-16 each visit gzipped the app and the kit again (~75 ms of the window's one CPU each)
 and sent them in full.
 
-## The open tables (tables.js)
+## The play page (tables.js)
 
-`/tables` lets people play each other or any arena bot on Holotable's play screen (`bot/table/README.md`). Every game
-runs in a player's tab (`tables-worker.js`); the window puts people in touch, lists the bots, reads SWUDB decks and
-keeps the finished games, readable by anyone signed in with GitHub (`spec/open-tables.md`).
+`/tables` is the arena's one play page (Eric, 2026-10-16: "there should be just one play page"; the app's Play button
+opens it, and `/play` and `/play?bot=<name>` send people here). People play each other or any arena bot on Holotable's
+play screen (`bot/table/README.md`): the versus screen lists Eric's JEPA bot and the latest round's versions, and the
+page downloads the rules engine at once and the bot the person looks at while they choose, with its progress. Every
+game runs in a player's tab (`tables-worker.js` on the swarm's engine pack), so the window and the games machine play
+nothing; the window puts people in touch, lists the bots, reads SWUDB decks and keeps the finished games, readable by
+anyone signed in with GitHub (`spec/open-tables.md`).
 
-- `ARENA_TABLES` says who may play: `invited` (the default), `github` or `off`, as `ARENA_PLAY` does. The logs page and
-  reader tokens are for anyone signed in with GitHub whatever the mode. The page is cross-origin isolated (COOP
-  same-origin, COEP require-corp, as `/play`; card art through `/art/`) because arena bots block on a SharedArrayBuffer
-  stdin; a browser without that gets only the JEPA bot.
-- `GET /tables`, `/tables/kit.js`, `/tables/<file>?b=` (`engine.json`, `tables-worker.js`, `bot-worker.js`,
-  `python-lib.json`, `python.wasm`), `/tables/bot/<sha256>.tar` (an arena bundle of the games machine's latest round,
-  `swarm-relay.js` `lineup()` and `sendBot()`, kept on the window's disk in `swarm-bots/`), `/tables/logs`.
-- `GET /api/tables/info`: the files, the deck lists, the bots (JEPA first, then the latest round's versions with the
-  arena's title, owner, rating and note), the person's random id (`pl_` and 6 hex, `admin/tables-ids`) and games.
+- `ARENA_TABLES` says who may play other people and `ARENA_PLAY` who may play the bots, each `invited` (the default:
+  signed in with GitHub and invited), `github` (anyone signed in with GitHub; their sign-in then returns to `/tables`
+  though they cannot read the arena) or `off`. The page is for anyone either lets in; someone who may play only the bots
+  gets the bot screen alone (`people: []`) and the lobby's routes refuse them. `ARENA_PLAY` only adds bots-only
+  players: whoever may play people may also play the bots (the lobby plays one when nobody comes), so `ARENA_PLAY=off`
+  means no bots-only players, not no bots. The logs page and reader tokens are for
+  anyone signed in with GitHub whatever the modes. A view link's guest has no GitHub login, so the page asks them to
+  sign in. The files come through the swarm relay, so the page needs `SWARM_HELPER_TOKEN` too.
+- The page is cross-origin isolated (COOP same-origin, COEP `require-corp`, as the swarm's pages are, because Safari
+  has no `credentialless`) since arena bots block on a SharedArrayBuffer stdin; card art comes through `/art/`
+  (above). A browser that does not isolate the page shows the arena bots as unavailable and plays the JEPA bot.
+- `GET /tables`, `/tables/kit.js` (its license list `/tables/swu-viewer-kit.licenses.txt` is open to anyone, like
+  `/swu-viewer-kit.licenses.txt`), `/tables/<file>?b=<build>` (`engine.json`, `tables-worker.js`, `bot-worker.js`,
+  the JEPA bot's `tx-t10.safetensors` and `tx-t10-e.safetensors`, `python-lib.json`, `python.wasm`: the games
+  machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and the machine
+  asleep, `/api/tables/info` answers `ready: false, waking: true` and wakes it at most every 15 minutes, and the page
+  opens anyway: the loading bar under Play says "Waking the games machine · 0:23 of ~1:00", and a Play press starts
+  the game once the files are here), and `/tables/logs`. Every file answer has
+  `x-raw-length`, the unzipped size, which is what a page reading the body counts. A URL with `?b=` names its build,
+  so browsers keep the file a year; it goes brotli to a browser that takes it (made once, in the background, next to
+  the gzip on the window's disk: the engine pack is 1.0 MB that way, 1.5 MB gzipped), else gzipped.
+- `GET /tables/bot/<sha256>.tar`: an arena version's canonical tar, only for a version of the latest round. The swarm
+  relay (`lineup()`, `sendBot()`) gets the lineup (`GET /v1/swarm/lineup.json`) and each of its bundles
+  (`GET /v1/swarm/bot/<sha256>`) from the games machine as soon as it learns the lineup, checks each sha256 and keeps
+  the tars with their gzips and brotlis in `<home>/swarm-bots` (the latest round's only), so they load while the
+  machine sleeps. Browsers keep a bundle a year (its URL names it). 503 while the machine is asleep and the
+  window does not have it yet (it is woken, at most every 15 minutes).
+- `GET /api/tables/info`: the files (`pack`, `worker`, `botWorker`, each `{url, bytes, wire}`), `runtimes` (the files
+  of each interpreter a bundle may need, `python-3.14-wasi`: `{lib, wasm}`), the deck lists, the person's random id
+  (`pl_` and 6 hex, `admin/tables-ids`), their games, `people` (the ways to pair, empty for bots only), the lineup's
+  `round`, and the bots. The JEPA bot comes first (`kind: 'jepa'`, `files: [{url, path, bytes, wire}]`, its models:
+  the page sends `[[path, bytes]]` to the worker with its first game), then the latest round's versions by arena rating
+  (`kind: 'arena'`, the arena's title, owner, rating and note, `runtime`, `capMs`, `bundle: {url, hex, bytes, wire}`).
+  `runtime` is what the bundle's `arena.json` names once the window has the bundle, else what the submission's files
+  say; `capMs` is that round's time per bot per game, which the tab plays the version under. `bytes` and `wire` (about
+  what a file downloads, gzipped) are null when the window does not know a size yet.
 - `POST /api/tables/deck {text}`: a SWUDB link (read from SWUDB's deck API on the window, `swudb.js`) or a pasted deck
   list, as the arena's deck form; the host's worker checks it against the card data.
 - The lobby (`lobby.js`, rooms in memory): `POST /api/tables/invite` (a room and a 6-letter code), `POST
@@ -291,14 +275,16 @@ keeps the finished games, readable by anyone signed in with GitHub (`spec/open-t
   admin every game, with who played it). `POST /api/tables/me {renew: true}` gives a new random id.
 - `POST /api/tables/token` (from the logs page) makes a reader token; `/api/open/*` reads the kept games with it
   (`spec/open-tables.md`).
+- The old play page's games (run `play`, until 2026-10-16) stay in the store as they were; the play page lists only its
+  own.
 
 ## Feedback (feedback.js)
 
 Every page the window sends has a feedback button and the ` key (Backquote), so people can say what went wrong or what
 would be better, right where they saw it (Eric, 2026-10-16). The window adds `<script src="/feedback.js" defer>` to
 every HTML page in `sendText`, so no page has to. The widget (`web/feedback.js`) puts its button in the page's element
-marked `data-feedback-slot` (its value: the class names the button takes; the app's header and the `/play` and
-`/tables` bars have one), else floating in the bottom right corner (hidden while an element marked
+marked `data-feedback-slot` (its value: the class names the button takes; the app's header and the play page's
+bar have one), else floating in the bottom right corner (hidden while an element marked
 `data-feedback-hide` is on the page). The key works anywhere except in a text field, and while the box is open no key
 reaches the page (Holotable's play keys would otherwise play a card).
 
@@ -309,7 +295,7 @@ play screen's game, seat, bot, prompt and choices, last moves and board). A page
 `window.swuFeedbackContext = () => ({...})`. The box shows exactly what goes ("What gets sent").
 
 - Who may send: someone signed in with GitHub who may use a page here (invited or an admin, or anyone with GitHub
-  while `/play` or `/tables` is open to GitHub). Not a view link's guest and no token. Up to 10 notes a person a UTC
+  while the play page is open to GitHub). Not a view link's guest and no token. Up to 10 notes a person a UTC
   day and 200 for everyone. `GET /feedback.js` is an empty script for anyone else.
 - `POST /api/feedback {note, context}`: from this site's own pages (Origin) as JSON; a note of 1 to 2,000 characters
   and a context object of at most 64 KB. It is kept as `feedback/fb-<date>-<time>-<hex>`: `{id, at, login, role,
