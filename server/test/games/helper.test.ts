@@ -43,8 +43,19 @@ const requireRepo = createRequire(path.join(REPO, "bot", "package.json"))
 const tui = requireRepo(path.join(REPO, "bot", "arena", "ops", "helper-tui.js"))
 
 const ROOT = process.getuid?.() === 0
-// as root the plays run as the bots' user: arena where it exists (the image, this machine), else nobody
-const BOTS_USER = !ROOT || spawnSync("id", ["-u", "arena"], { stdio: "ignore" }).status === 0 ? "arena" : "nobody"
+// as root slot k plays as the user arena<k>, and the live view's reader runs as arena: the users the image makes (as
+// root these tests need arena and arena1 to arena4)
+const BOTS_USER = "arena"
+const uidOf = (user: string) => Number(spawnSync("id", ["-u", user], { encoding: "utf8" }).stdout.trim())
+const gidOf = (user: string) => Number(spawnSync("id", ["-g", user], { encoding: "utf8" }).stdout.trim())
+/** a process that is gone (or a zombie: killed, waiting for a parent to reap it) */
+const gone = (pid: number) => {
+  try {
+    return readFileSync(`/proc/${pid}/stat`, "utf8").split(") ").at(-1)!.startsWith("Z")
+  } catch {
+    return true
+  }
+}
 const TOKEN = "a-helper-token-for-these-tests-only-0123456789"
 const TIMES: Timing = { ...TIMING, helloRetryMs: 100, claimBackoffMs: [50, 100] }
 const scratch: Array<string> = []
@@ -96,6 +107,12 @@ if (args[0] === '--warm' && args[1] === '--bundles') {
   const job = JSON.parse(fs.readFileSync(arg('--job'), 'utf8'))
   const bundles = fs.readdirSync(arg('--bundles')).filter((f) => f.endsWith('.tar')).sort()
   ev({ start: args, env: process.env, job, bundles, uid: process.getuid() })
+  if (mode.daemon) {
+    // what a bot that got out of its sandbox could do: a process in a session of its own, outside the play's group
+    const d = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)'], { detached: true, stdio: 'ignore' })
+    d.unref()
+    ev({ daemon: d.pid, seed: job.seed })
+  }
   setTimeout(() => {
     if (mode.play === 'exit') process.exit(mode.code)
     if (mode.play === 'print') return console.log(mode.text)
@@ -110,7 +127,7 @@ if (args[0] === '--warm' && args[1] === '--bundles') {
     console.error('a log line from the engine')
     console.log('a stray line before the answer')
     console.log(JSON.stringify({ ok: true, results, replays }))
-  }, (mode.sleep ?? 0) * 1000)
+  }, (mode.sleeps?.[job.seed] ?? mode.sleep ?? 0) * 1000)
 }
 `
 
@@ -119,6 +136,10 @@ interface Mode {
   readonly code?: number
   readonly text?: string
   readonly sleep?: number
+  /** seconds a play sleeps, by its seed (over sleep) */
+  readonly sleeps?: Readonly<Record<string, number>>
+  /** each play starts a process outside its group, which outlives it */
+  readonly daemon?: boolean
   readonly warm?: "ok" | "fail" | "some"
   /** the bundles a lease's warm fails to compile */
   readonly bundles?: ReadonlyArray<string>
@@ -137,7 +158,7 @@ const fakeApp = (mode: Mode = {}) => {
   return app
 }
 
-type Event = { start?: Array<string>; env?: Record<string, string>; job?: any; bundles?: Array<string>; uid?: number; term?: string }
+type Event = { start?: Array<string>; env?: Record<string, string>; job?: any; bundles?: Array<string>; uid?: number; term?: string; daemon?: number; seed?: number }
 const events = (app: string): Array<Event> => {
   try {
     return readFileSync(path.join(app, "events", "log"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l))
@@ -417,7 +438,7 @@ test("a slot plays a lease: its bundle (fetched once), job.json and play-seed.js
   assert.equal(play!.env!.HOME, h.c.paths.home)
   assert.equal(play!.env!.SWU_WASM_CACHE, h.c.paths.wasmCache)
   assert.ok(Object.values(play!.env!).every((v) => !v.includes(TOKEN) && !v.includes(h.machine.url)))
-  if (ROOT) assert.equal(play!.uid, Number(spawnSync("id", ["-u", h.c.arenaUser], { encoding: "utf8" }).stdout.trim()), "plays run as the bots' user")
+  if (ROOT) assert.equal(play!.uid, uidOf(`${h.c.arenaUser}1`), "slot 1 plays as its own user")
   // the tar stays, readable, for the next lease that needs it
   assert.equal(statSync(path.join(h.c.paths.bundles, `${hex}.tar`)).mode & 0o777, 0o644)
 
@@ -438,6 +459,26 @@ test("a slot plays a lease: its bundle (fetched once), job.json and play-seed.js
   assert.ok(!h.log().includes(TOKEN))
 })
 
+test("each slot plays as its own user, and what a play leaves running is killed when it ends, never another slot's play", { skip: !ROOT && "needs root: the plays run as the slots' users" }, async () => {
+  const h = await start({ slots: 2, mode: { daemon: true, sleeps: { "4321": 2, "4322": 5 } } })
+  await h.waiting(2)
+  const a = h.machine.offer(job(4321))
+  const b = h.machine.offer(job(4322))
+  const daemons = () => new Map(events(h.app).filter((e) => e.daemon).map((e) => [e.seed!, e.daemon!]))
+  await eventually(() => daemons().size === 2, 10_000, "both plays to start")
+  const [da, db] = [daemons().get(4321)!, daemons().get(4322)!]
+  assert.ok(!gone(da) && !gone(db), "both plays run, and nothing was killed yet")
+  assert.deepEqual(plays(h.app).map((p) => p.uid).sort(), [uidOf("arena1"), uidOf("arena2")].sort())
+
+  assert.ok((await h.machine.ended(a)).results, "the first seed's result")
+  await eventually(() => gone(da), 5_000, "the first play's leftover to be killed")
+  assert.ok(!gone(db), "the other slot's play runs on")
+  const second = await h.machine.ended(b)
+  assert.equal(second.results?.length, 2, JSON.stringify(second))
+  await eventually(() => gone(db), 5_000, "the second play's leftover to be killed")
+  assert.equal(await h.stop(), 0)
+})
+
 test("a play that fails is posted as failed, so the machine plays the seed itself", async () => {
   const h = await start({ mode: { play: "exit", code: 1 } })
   await h.waiting()
@@ -453,8 +494,8 @@ test("a play that prints something other than its results fails the lease", asyn
   const text = JSON.stringify({ ok: true, results: [{ id: "a", result: {} }], replays: { a: "/etc/passwd" } })
   const h = await start({ mode: { play: "print", text } })
   await h.waiting()
-  // it made no out/ folder, and names a file elsewhere
-  assert.deepEqual(await h.machine.ended(h.machine.offer(job())), { failed: "no replay folder" })
+  // it names a file outside out/
+  assert.deepEqual(await h.machine.ended(h.machine.offer(job())), { failed: "a replay path is not a file in out/" })
   assert.equal(await h.stop(), 0)
 })
 
@@ -481,11 +522,16 @@ test("a heartbeat answered 410 stops the play and drops the lease; the work fold
   const dir = h.workDir(id)
   assert.equal(statSync(path.join(dir, "job.json")).mode & 0o777, 0o644)
   assert.deepEqual(JSON.parse(readFileSync(path.join(dir, "job.json"), "utf8")), job())
-  assert.equal(lstatSync(dir).mode & 0o777, 0o700)
+  // as on the games machine: the folder and job.json root's, out/ and arena/ the play's
+  assert.equal(lstatSync(dir).mode & 0o777, 0o755)
+  assert.equal(lstatSync(path.join(dir, "out")).mode & 0o777, ROOT ? 0o750 : 0o700)
+  assert.equal(lstatSync(path.join(dir, "arena")).mode & 0o777, 0o700)
   if (ROOT) {
     assert.equal(statSync(path.join(h.data, "helper")).mode & 0o777, 0o711)
-    assert.equal(statSync(dir).uid, plays(h.app)[0]!.uid, "the lease's folder is the bots' user's")
-    assert.equal(statSync(path.join(dir, "job.json")).uid, 0)
+    assert.deepEqual([statSync(dir).uid, statSync(path.join(dir, "job.json")).uid], [0, 0])
+    const uid = plays(h.app)[0]!.uid
+    assert.deepEqual([statSync(path.join(dir, "arena")).uid, statSync(path.join(dir, "out")).uid], [uid, uid])
+    assert.equal(statSync(path.join(dir, "out")).gid, gidOf(BOTS_USER), "the live view's reader (docker exec -u arena) reads out/")
   }
 
   h.machine.m.leases.get(id)!.gone = true
@@ -753,7 +799,7 @@ test("over timing.bundlesLimit the least recently used tars no lease holds go", 
 
 const ENGINE = existsSync(path.join(REPO, "forceteki", "build", "server")) && existsSync(path.join(REPO, "forceteki", "test", "json"))
 const WASM = existsSync(path.join(REPO, "build", "compiled", "node-random", "arena.json")) &&
-  spawnSync("python3", ["-c", "import wasmtime"], { stdio: "ignore" }).status === 0
+  spawnSync("python3", ["-I", "-c", "import wasmtime"], { stdio: "ignore" }).status === 0
 
 test("a real seed: a WebAssembly version against rush through play-seed.js, as the machine checks it", {
   skip: ENGINE && WASM ? false : "needs the built engine, its card data, wasmtime and build/compiled/node-random",

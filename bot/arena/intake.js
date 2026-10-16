@@ -509,7 +509,7 @@ function toolchainMissing() {
     const missing = [
         !fs.existsSync(path.join(TOOLS, `javy-${TOOLCHAIN.javy.version}`, 'javy')) && 'Javy',
         !fs.existsSync(path.join(TOOLS, TOOLCHAIN.runtimes['python-3.14-wasi'].dir, 'python.wasm')) && 'CPython for WASI',
-        spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore', env: toolEnv() }).status !== 0 && 'wasmtime for Python'
+        spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore', env: toolEnv() }).status !== 0 && 'wasmtime for Python'
     ].filter(Boolean);
     toolsReady = !missing.length;
     return missing.length ? `no ${missing.join(', ')} (the games image builds them; elsewhere see bot/compiled/README.md)` : null;

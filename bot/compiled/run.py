@@ -176,7 +176,8 @@ def main():
         module = wasmtime.Module(engine, wasm_bytes)
         try:
             if owner is None:
-                raise OSError("%s is not a folder only root or this user can write in" % cache_dir)
+                raise OSError("%s is not a folder only root or this user can write in (one an older run.py made can be "
+                              "group-writable: delete it)" % cache_dir)
             store_cached(module, cpath)
         except OSError as e:
             if o.warm:

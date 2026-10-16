@@ -20,7 +20,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'play-seed-test-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const ENGINE = fs.existsSync(path.join(ROOT, 'forceteki', 'build', 'server')) && fs.existsSync(path.join(ROOT, 'forceteki', 'test', 'json'));
-const WASMTIME = spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
+const WASMTIME = spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
 const NODE_RANDOM = path.join(ROOT, 'build', 'compiled', 'node-random');
 const KEY = gameKey('play-seed-test', 11);
 

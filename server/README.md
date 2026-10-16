@@ -24,7 +24,9 @@ file (pick 2A), with games played by Node (pick 1A). It has two parts:
   finished round it gzips the replays of older rounds in place (`src/games/Compact.ts`, below). With nothing to do
   for `GAMES_IDLE_MIN` minutes it exits 0, and Fly leaves the machine stopped until the next wake.
 - **helper** (`COORD_ROLE=helper`): plays seeds the machine leases out, on a computer of Eric's
-  ([bot/arena/HELPER.md](../bot/arena/HELPER.md)).
+  ([bot/arena/HELPER.md](../bot/arena/HELPER.md)). A container gives a play no PID namespace, so as root slot k plays
+  as its own user (`ARENA_USER` and k: `arena1` to `arena16`, which the image makes) and every process of that user is
+  killed when the play ends.
 - **replay**: `node src/main-games.ts replay --results <arena-rK folder> --bundles <folder of tars> --names <file>
   --out <folder> [--only a,b] [--decks-dir <folder>]` plays a recorded round again from its seeds and compares every
   game and replay with the record (the stage 5 done check). It exits 0 only when every game came out the same.
@@ -49,7 +51,7 @@ The volume (`GAMES_DATA`, `/data`):
 | `bundles/` | root | `<sha256>.tar`, each version's canonical bundle: play-seed and helpers read them |
 | `work/<job>/` | root (`out/` the bots' user's) | one game job, removed once its results are read |
 | `wasm-cache/` | root, readable by all | wasmtime's compiled modules. Only root compiles into it (warm at a start, each round for its lineup, the replay check, a helper for each lease's bundles; compiling runs nothing of a bot), and the games read it: `run.py` loads only entries of the folder's owner. Emptied at a start when it is not root's |
-| `home/` | root, empty | the HOME of what runs as the bots' user, emptied on every start: Python runs with `-I` and nothing else reads it, so nothing a bot leaves reaches a later game |
+| `home/` | root, empty | the HOME of what runs as the bots' user, emptied on every start: the bots' user cannot write in it, so it leaves nothing there that a later game's Node (`~/.node_modules`) or Python (its user site) would load |
 | `intake/`, `tmp/<kind>/` | root (`intake/` 0711, `tmp/<kind>/` 1777) | the intake's checks (a job's `home/` the bots' user's while it runs; hidden from every other command and game job); each isolated child's `/tmp` |
 | `coord/` | root | the Elixir coordinator's state: its settings and round end are read once; hidden from children |
 

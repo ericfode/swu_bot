@@ -4,8 +4,8 @@
  * proxy` at GAMES_HELPER_URL with its own token (GAMES_HELPER_TOKEN) and listens on nothing. Coord.Helper, its Client,
  * Slot and Play in TypeScript, on the same wire (map-helper-lease.md §7, §13):
  *
- * - boot: the token kept, stale child groups reaped, `<data>/helper` wiped (0711 when the plays run as the bots' user,
- *   who must reach their own folder in it); as root, the bots' HOME emptied and the wasm cache emptied unless it is
+ * - boot: the token kept, stale child groups reaped, `<data>/helper` wiped (0711 when the plays run as the bots' users,
+ *   who must reach their own folders in it); as root, the bots' HOME emptied and the wasm cache emptied unless it is
  *   root's, both root's (the plays only read them: nothing a bot leaves there reaches a later game);
  * - `play-seed.js --warm` (as root; a failure is only logged), then hello: 200 starts GAMES_HELPER_SLOTS
  *   slots, 409 (another build) stops with 3, 401 (unknown token) with 1, no answer says hello again every 30 s;
@@ -13,13 +13,17 @@
  *   start), plays the lease's seed with play-seed.js in `<data>/helper/<slot>/<lease>/` (job.json, out/; the layout
  *   helper-tui.js reads), heartbeats meanwhile (the first at once: the machine's ack), posts the results and replays,
  *   removes the folder and claims again. A seed is never played twice here.
+ * - as root, slot k plays as its own user, the bots' user's name and k (arena1 to arena16, made by the image), and
+ *   every process of that user is killed when its play ends. A container has no PID namespace for a play, so this is
+ *   what keeps a process a bot left running (one that left the play's process group) from reaching a later lease's
+ *   files, or another slot's play.
  * - stopping (SIGTERM: docker stop, Ctrl-C in the live view) gives every seed in play back at once.
  *
  * Bundles (canonical tars, named by their sha256) are fetched once into `<data>/bundles`, which keeps them across
  * leases and restarts up to timing.bundlesLimit, the least recently used going first. The log lines are the Elixir
  * helper's, word for word: helper-tui.js parses them.
  */
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import {
   chmodSync,
@@ -550,7 +554,8 @@ export const resultBody = (stdout: string, outDir: string, owner: number | null 
 
 // --- the helper
 
-interface Ids {
+interface BotUser {
+  readonly name: string
   readonly uid: number
   readonly gid: number
 }
@@ -562,8 +567,10 @@ interface Ctx {
   readonly cache: BundleCache
   /** the bundles compiled into the wasm cache since this start, or being compiled (warmLease) */
   readonly warmed: Map<string, Promise<void>>
-  /** the bots' user when the plays run as them (this process is root), else null */
-  readonly ids: Ids | null
+  /** each slot's own user when the plays run as the bots' users (this process is root), else null */
+  readonly users: ReadonlyMap<string, BotUser> | null
+  /** the group of the live view's reader (helper-tui.js, `docker exec -u arena`), which reads the replays in out/ */
+  readonly viewGid: number | null
   readonly helperDir: string
   /** aborted when the helper stops (a signal, 409, 401) */
   readonly stopping: AbortSignal
@@ -573,13 +580,14 @@ interface Ctx {
   readonly clock: () => Tick
 }
 
-const playOptions = (h: Ctx, kind: "warm" | "play", args: ReadonlyArray<string>, timeoutMs: number): RunOptions => ({
+const playOptions = (h: Ctx, kind: "warm" | "play", args: ReadonlyArray<string>, timeoutMs: number, user: BotUser | null = null): RunOptions => ({
   kind,
   argv: [h.c.node, scripts(h.c).playSeed, ...args],
   // built from nothing: no token, no address of the machine, no NODE_ENV (the engine's default, as on the machine)
   env: childEnv(h.c, h.c.paths.home, { SWU_WASM_CACHE: h.c.paths.wasmCache }),
   // only root writes the wasm cache, which the plays read; compiling runs nothing of a bot
   as: kind === "warm" ? "root" : "arena",
+  ...(user ? { user: user.name } : {}),
   // plain setpriv: isolate.sh needs namespaces a Docker container does not grant; Docker is the helper's boundary
   isolate: false,
   timeoutMs,
@@ -605,18 +613,31 @@ const playFailed = (r: Result | null, timeoutMs: number): string => {
   }
 }
 
+/**
+ * Kills every process of a slot's user (kill -1 as that user: all it may signal, which is its own processes). As
+ * root, after each play; the play's process group is already gone, so this finds only what left the group.
+ */
+const killLeft = (user: BotUser) => {
+  const r = spawnSync(process.execPath, ["-e", "try { process.kill(-1, 'SIGKILL') } catch (e) { if (e.code !== 'ESRCH') throw e }"], {
+    uid: user.uid, gid: user.gid, env: { PATH: "/usr/bin:/bin" }, cwd: "/", stdio: "ignore", timeout: 10_000
+  })
+  if (r.status !== 0) Log.warn(`could not stop what ${user.name} left running (${r.error?.message ?? `exit ${r.status}`})`)
+}
+
 /** Plays a lease in `dir`: started at once; `done` is its outcome, `stop` ends it and waits until it is gone. */
 const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: number) => {
   const ctl = new AbortController()
+  const user = h.users?.get(slot) ?? null
   let child: ReturnType<typeof runChild> | null = null
   const done = (async (): Promise<PlayOutcome> => {
     try {
-      // a fresh folder; job.json goes in while it is still root's (written once, never through a link), then the
-      // folder becomes the bots' (play-seed writes out/ and arena/ in it)
+      // a fresh folder, root's, as on the games machine (Executor.ts prepare): job.json (written once, never through a
+      // link) and the two folders play-seed writes, out/ and arena/, the slot's user's (out/ readable by the live view's
+      // group); that user can swap nothing else
       try {
         removeTree(dir)
         mkdirSync(dir, { recursive: true })
-        chmodSync(dir, 0o700)
+        chmodSync(dir, 0o755)
       } catch (e) {
         return { ok: false, why: `could not make the work folder (${errorCode(e)})` }
       }
@@ -627,7 +648,13 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
         return { ok: false, why: `could not write job.json (${errorCode(e)})` }
       }
       try {
-        if (h.ids) chownSync(dir, h.ids.uid, h.ids.gid)
+        for (const sub of ["out", "arena"]) {
+          const p = path.join(dir, sub)
+          const view = sub === "out" && user && h.viewGid !== null
+          mkdirSync(p, { mode: 0o700 })
+          chmodSync(p, view ? 0o750 : 0o700)
+          if (user) chownSync(p, user.uid, view ? h.viewGid! : user.gid)
+        }
       } catch (e) {
         return { ok: false, why: `could not make the work folder (${errorCode(e)})` }
       }
@@ -641,20 +668,13 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
       // compiled before the games start: no bot's clock pays for it (a bundle that failed compiles in its games)
       await Promise.race([warmLease(h, lease.bundles), stopped])
       if (ctl.signal.aborted) return { ok: false, why: "play-seed was stopped (interrupted)" }
-      child = runChild(h.proc, playOptions(h, "play", ["--job", job, "--bundles", h.c.paths.bundles, "--work", dir], timeoutMs))
+      child = runChild(h.proc, playOptions(h, "play", ["--job", job, "--bundles", h.c.paths.bundles, "--work", dir], timeoutMs, user))
       const r = await child.result
+      // however it ended: nothing of the slot's user runs on, so nothing swaps a replay for a link while it is read,
+      // and nothing waits for the next lease
+      if (user) killLeft(user)
       if (r === null || r.kind !== "exit" || r.code !== 0) return { ok: false, why: playFailed(r, timeoutMs) }
-      // the folder is root's again before anything in it is read: nothing the bots' user still runs can swap a file
-      // or a folder in it for a link from here on
-      try {
-        if (h.ids) {
-          chownSync(dir, 0, 0)
-          chmodSync(dir, 0o700)
-        }
-      } catch (e) {
-        return { ok: false, why: `could not read the work folder (${errorCode(e)})` }
-      }
-      return resultBody(r.stdout, path.join(dir, "out"), h.ids?.uid ?? null)
+      return resultBody(r.stdout, path.join(dir, "out"), user?.uid ?? null)
     } catch (e) {
       Log.error(`slot ${slot}: the play task crashed (${String((e as Error)?.message ?? e).slice(0, 200)})`)
       return { ok: false, why: "the helper crashed while playing" }
@@ -905,43 +925,48 @@ const hello = async (h: Ctx): Promise<HelloTiming | null> => {
   return null
 }
 
-const botIds = (user: string): Ids => {
+const botUser = (name: string): BotUser => {
   try {
-    const id = (flag: string) => Number(execFileSync("id", [flag, user], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim())
-    const ids = { uid: id("-u"), gid: id("-g") }
-    if (!Number.isInteger(ids.uid) || !Number.isInteger(ids.gid)) throw new Error("no ids")
-    return ids
+    const id = (flag: string) => Number(execFileSync("id", [flag, name], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim())
+    const user = { name, uid: id("-u"), gid: id("-g") }
+    if (!Number.isInteger(user.uid) || !Number.isInteger(user.gid) || user.uid === 0) throw new Error("no ids")
+    return user
   } catch {
-    throw new SetupError(`no user ${user}: the plays could not run as the bots' user`)
+    throw new SetupError(`no user ${name}: the plays could not run as the bots' user`)
   }
 }
 
 /**
  * Before anything plays (Coord.Helper.prepare!): the server's folder for the pidfiles (0700) and the groups a crashed
- * run left reaped, `<data>/helper` wiped (0711 when the plays run as the bots' user, who must reach their own folder in
- * it, else 0700), and as root the bots' HOME and the wasm cache root's (0755): the HOME emptied, the cache emptied when
- * it was not root's (an older image made it the bots' user's; run.py loads only the entries of the folder's owner).
+ * run left reaped, `<data>/helper` wiped (0711 when the plays run as the bots' users, who must reach their own folders
+ * in it, else 0700), and as root each slot's user found with nothing of it running, and the bots' HOME and the wasm
+ * cache root's (0755): the HOME emptied, the cache emptied when it was not root's (an older image made it the bots'
+ * user's; run.py loads only the entries of the folder's owner).
  */
-const prepare = (c: GamesConfig, proc: ProcService): { readonly ids: Ids | null; readonly helperDir: string } => {
+const prepare = (c: GamesConfig, proc: ProcService): { readonly users: ReadonlyMap<string, BotUser> | null; readonly viewGid: number | null; readonly helperDir: string } => {
   mkdirSync(c.paths.server, { recursive: true, mode: 0o700 })
   chmodSync(c.paths.server, 0o700)
   mkdirSync(c.paths.procs, { recursive: true, mode: 0o700 })
   proc.reapStale()
-  const ids = process.getuid?.() === 0 ? botIds(c.arenaUser) : null
+  const users = process.getuid?.() === 0
+    ? new Map(Array.from({ length: c.helperSlots }, (_, i) => [String(i + 1), botUser(`${c.arenaUser}${i + 1}`)] as const))
+    : null
+  for (const user of users?.values() ?? []) killLeft(user)
+  const viewGid = users ? botUser(c.arenaUser).gid : null
   // the plays of a run that crashed are gone (reaped), and so are their work folders
   const helperDir = path.join(c.data, "helper")
   removeTree(helperDir)
   mkdirSync(helperDir, { recursive: true })
-  chmodSync(helperDir, ids ? 0o711 : 0o700)
+  chmodSync(helperDir, users ? 0o711 : 0o700)
   for (const dir of [c.paths.home, c.paths.wasmCache]) {
-    if (ids && (dir === c.paths.home || lstatSync(dir, { throwIfNoEntry: false })?.uid !== 0)) removeTree(dir)
+    if (users && (dir === c.paths.home || lstatSync(dir, { throwIfNoEntry: false })?.uid !== 0)) removeTree(dir)
     mkdirSync(dir, { recursive: true })
-    if (ids) {
+    if (users) {
       chownSync(dir, 0, 0)
       chmodSync(dir, 0o755)
     }
   }
-  return { ids, helperDir }
+  return { users, viewGid, helperDir }
 }
 
 /** Runs the helper until it stops; resolves its exit code: 0 stopped, 1 refused (401) or broken setup, 3 another build (409). */
@@ -981,7 +1006,7 @@ export const runHelper = async (c: GamesConfig, secrets: Secrets, proc: ProcServ
       throw e instanceof SetupError ? e : new SetupError(`the helper's folders could not be made (${errorCode(e)})`)
     }
     const h: Ctx = {
-      c, proc, client, cache, warmed: new Map(), ids: setup.ids, helperDir: setup.helperDir,
+      c, proc, client, cache, warmed: new Map(), users: setup.users, viewGid: setup.viewGid, helperDir: setup.helperDir,
       stopping: stopper.signal, hard: hardStopper.signal, stop, clock: opts.clock ?? defaultClock
     }
     if (!stopper.signal.aborted) await warm(h)

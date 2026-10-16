@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { chmodSync, chownSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -569,7 +569,7 @@ test("lane: a long error is cut to 500 characters", async () => {
 
 const ENGINE = existsSync(path.join(repo, "forceteki", "build", "server")) && existsSync(path.join(repo, "forceteki", "test", "json"))
 const NODE_RANDOM = path.join(repo, "build", "compiled", "node-random")
-const WASMTIME = spawnSync("python3", ["-c", "import wasmtime"], { stdio: "ignore" }).status === 0
+const WASMTIME = spawnSync("python3", ["-I", "-c", "import wasmtime"], { stdio: "ignore" }).status === 0
 const real = ENGINE && WASMTIME && existsSync(path.join(NODE_RANDOM, "arena.json"))
 
 test("round: a real round plays end to end through play-seed, and its replays pass the trace check", { skip: !real && "needs the engine, card data, wasmtime and build/compiled/node-random", timeout: 240_000 }, async () => {
@@ -578,13 +578,17 @@ test("round: a real round plays end to end through play-seed, and its replays pa
   const hex = sha(tar)
   mkdirSync(c.paths.bundles, { recursive: true })
   writeFileSync(path.join(c.paths.bundles, `${hex}.tar`), tar)
+  // as gamesctl setup leaves them: both this user's (root's on the machine) and only it writes them
   for (const d of [c.paths.home, c.paths.wasmCache]) {
     mkdirSync(d, { recursive: true })
-    if (process.getuid?.() === 0) {
-      const id = (flag: string) => Number(execFileSync("id", [flag, c.arenaUser], { encoding: "utf8" }).trim())
-      chownSync(d, id("-u"), id("-g"))
-    }
+    chmodSync(d, 0o755)
   }
+  // and as gamesctl round does, the lineup is compiled into the cache first; the games (as the bots' user when this
+  // runs as root) only read it
+  const { SWU_WINDOW: _w, ARENA_PUSH_TOKEN: _p, SWU_WINDOW_TOKEN: _t, NODE_ENV: _n, ...env } = process.env
+  const warm = spawnSync(process.execPath, [path.join(repo, "bot", "arena", "play-seed.js"), "--warm", "--bundles", c.paths.bundles, hex], { env: { ...env, SWU_WASM_CACHE: c.paths.wasmCache }, encoding: "utf8", timeout: 120_000 })
+  assert.equal(warm.status, 0, warm.stderr)
+  assert.deepEqual(JSON.parse(warm.stdout.trim().split("\n").pop()!).warmed, [hex])
   const bots = ["alpha-v1", "beta-v1"]
   const spec = specOf(bots, { bundles: { "alpha-v1": hex, "beta-v1": hex } })
   const { gamesctl } = fakeGamesctl(() => spec)
@@ -600,7 +604,10 @@ test("round: a real round plays end to end through play-seed, and its replays pa
     assert.equal(end.key, g.key)
     assert.equal(end.outcome, g.outcome)
   }
-  const { SWU_WINDOW: _w, ARENA_PUSH_TOKEN: _p, SWU_WINDOW_TOKEN: _t, NODE_ENV: _n, ...env } = process.env
+  const cached = readdirSync(c.paths.wasmCache)
+  assert.equal(cached.length, 1, `the games used what was compiled before them: ${cached}`)
+  assert.equal(statSync(path.join(c.paths.wasmCache, cached[0]!)).uid, process.getuid?.())
+  assert.deepEqual(readdirSync(c.paths.home), [], "the games left nothing in their HOME")
   const trace = spawnSync(process.execPath, [path.join(repo, "bot", "trace.js"), "check", path.join(dir, "games")], { cwd: repo, env, encoding: "utf8", timeout: 180_000 })
   assert.equal(trace.status, 0, `${trace.stdout}\n${trace.stderr}`)
   const left = existsSync(c.paths.work) ? readdirSync(c.paths.work).filter((f) => f.startsWith("r2-")) : []

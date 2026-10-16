@@ -206,7 +206,7 @@ test('intake: a house submission that names a builder\'s competitor is rejected;
 });
 
 const TOOLS = path.join(__dirname, '..', '..', 'build', 'compiled', '.tools');
-const javyReady = fs.existsSync(path.join(TOOLS, 'javy-8.0.0', 'javy')) && require('child_process').spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
+const javyReady = fs.existsSync(path.join(TOOLS, 'javy-8.0.0', 'javy')) && require('child_process').spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
 
 test('intake: a house submission enters a resident under a built-in name, owner arena, versions from v1', { skip: !javyReady && 'needs wasmtime and Javy (bot/compiled/README.md)' }, async () => {
     setRoster([]);

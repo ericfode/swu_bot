@@ -88,8 +88,9 @@ const HIDE = (process.env.GAMES_HIDE || ['/.fly', DIRS.server, path.join(DATA, '
 // on every start (ops/own-tree.py root): the intake's checker only packs and start-checks a submission in its own job
 // folder, and root enters it (intake.js enter). The wasm cache is root's: root compiles into it (warm, round) and the
 // games only read it (bot/compiled/run.py loads root's entries alone); one the bots' user owned (every image before
-// this one) is emptied. home/, the HOME of what runs as the bots' user, is root's and emptied on every start: Python runs
-// with -I and nothing else reads it, so it holds nothing. results/ is root's and everyone may read it: only the server
+// this one) is emptied. home/, the HOME of what runs as the bots' user, is root's 0755 and emptied on every start, so the
+// bots' user can leave nothing there that a later game's Node (~/.node_modules) or Python (its user site) would load.
+// results/ is root's and everyone may read it: only the server
 // and root's children write rounds now. The rest is root's alone, with these modes (null: left as it is; isolate.sh
 // makes the referee's /tmp 1777 when it runs). intake/ is 0711: a checker reaches its own job folder by name and lists
 // no other.

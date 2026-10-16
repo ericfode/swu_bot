@@ -732,10 +732,10 @@ process.env.ARENA_INTAKE_WORK = path.join(tmp, 'intake-work');
 const wasmReady = (() => {
     const { spawnSync } = require('child_process');
     const rt = path.join(__dirname, '..', '..', 'build', 'compiled', '.tools', 'python-3.14.7', 'python.wasm');
-    return fs.existsSync(rt) && spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
+    return fs.existsSync(rt) && spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore' }).status === 0;
 })();
 
-test('a submitted wasm bundle is held to the host memory cap: its own memory_mb counts up to 1024, and it gets one memory', { skip: require('child_process').spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status !== 0 && 'needs wasmtime' }, () => {
+test('a submitted wasm bundle is held to the host memory cap: its own memory_mb counts up to 1024, and it gets one memory', { skip: require('child_process').spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore' }).status !== 0 && 'needs wasmtime' }, () => {
     const { spawnSync } = require('child_process');
     // a WASI program that grows its last memory by 20000 pages (1.25 GiB) and prints whether that worked
     const program = (memories) => `(module

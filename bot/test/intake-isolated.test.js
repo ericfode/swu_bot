@@ -20,7 +20,7 @@ const skip = (() => {
     if (spawnSync('unshare', ['--pid', '--fork', '--mount', '--mount-proc', 'true'], { stdio: 'ignore' }).status !== 0) {
         return 'needs unshare';
     }
-    if (spawnSync('python3', ['-c', 'import wasmtime'], { stdio: 'ignore' }).status !== 0) {
+    if (spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore' }).status !== 0) {
         return 'needs wasmtime';
     }
     return !fs.existsSync(path.join(BOT, 'bot.wasm')) && 'needs build/compiled/node-random (python3 bot/compiled/build.py)';

@@ -14,14 +14,15 @@ bundle of its own, `node-random` (the protocol random bot in `bot/test/fixtures/
 ## Use
 
 ```bash
-python3 -m pip install wasmtime==49.0.0          # once
+python3 -m pip install wasmtime==49.0.0          # once, into the interpreter or a virtualenv (python3 -I skips --user installs)
 python3 bot/compiled/build.py --tools          # only Javy and CPython for WASI: what the arena's intake packs with
 python3 bot/compiled/build.py                  # node-random into build/compiled/node-random/, id in build/compiled/index.json
 python3 bot/compiled/bundle.py build/compiled/node-random   # print a bundle's id and sizes
 ```
 
 The first build downloads Javy 8.0.0 and CPython 3.14.7 for WASI (`toolchain.json` pins their URLs and sha256) into
-`build/compiled/.tools`. `build/` is not in git.
+`build/compiled/.tools`. `build/` is not in git. A `build/compiled/.cache` made by an older `run.py` can be writable by
+your group, and `run.py` then does not use it (`build.py` stops with "could not keep the compiled code"): delete it once.
 
 ## Files
 
