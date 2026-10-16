@@ -1370,7 +1370,8 @@ function followStep(v) {
     const r = route(), [run, id] = v.game.split('/');
     if (r.parts[0] !== 'games' || r.parts[1] !== run || r.parts[2] !== id) return; // the reader has moved on
     const n = stepOf(v), q = new URLSearchParams(r.qs); if (n) q.set('step', n); else q.delete('step');
-    try { history.replaceState(history.state, '', `${location.pathname}${location.search}${href('games', run, id)}${q.size ? `?${q}` : ''}`); } catch {}
+    const qs = q.toString(); // not q.size: Safari before 17 has none
+    try { history.replaceState(history.state, '', `${location.pathname}${location.search}${href('games', run, id)}${qs ? `?${qs}` : ''}`); } catch {}
   }, 400);
 }
 async function copyGameLink(b) {
