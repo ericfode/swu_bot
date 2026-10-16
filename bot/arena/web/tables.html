@@ -344,6 +344,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     return g;
   }
   function deliver(g, m) {
+    if (g.dropped) return; // ended in this tab when its link closed for good (dropGame)
     if (m.t === 'end') {
       g.over = true;
       playing = false;
@@ -372,6 +373,21 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     }
     g.msgs.push(m);
     for (const s of g.subs) s.onMsg(m);
+  }
+  /**
+   * The link to the other player closed and nothing can take its place (a game linked by codes, or the lobby's room
+   * gone): the game cannot go on, so it ends here with no winner, and nothing is kept.
+   */
+  function dropGame(g, why) {
+    if (g.over) return;
+    g.dropped = true;
+    g.over = true;
+    playing = false;
+    status(`The game stopped: ${why}. It was not saved.`, 'bad');
+    const end = { t: 'end', winner: null, outcome: 'ERROR', round: null, steps: null, error: why, conceded: false, concededBy: null, replay: null };
+    g.msgs.push(end);
+    for (const s of g.subs) s.onMsg(end);
+    for (const l of g.links?.() ?? []) l?.close?.();
   }
   async function save(replay, seat) {
     saving++;
@@ -629,6 +645,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     let guestHas = 0; // the last message the guest said it has (resume, got)
     let endAt = 0; // the end's number in the log
     let gotEnd = null;
+    let gone = null; // the link closed for good before the game started
     const received = new Promise((ok) => { gotEnd = ok; });
     const heard = (n) => {
       guestHas = Math.max(guestHas, n);
@@ -659,8 +676,17 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         }
         joinedWait?.();
       };
+      // only a link nothing can replace gets here (lobbyGame moves a dropped direct link to the room): the game ends
       l.onDown = (why) => {
-        if (g && !g.over) status(`The link to ${peerPid} dropped (${why}). The game waits for them.`, 'bad');
+        if (cur !== l) return;
+        const text = `${why}, and this game cannot reconnect`;
+        if (g && !g.over) {
+          dropGame(g, text);
+          eng.concede(); // the worker's game ends too, so the table takes the next one
+        } else if (!g) {
+          gone = new Error(text);
+          joinedWait?.();
+        }
       };
       l.onReopen = () => { if (cur === l) l.game({ t: 'again' }); };
     };
@@ -674,13 +700,17 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       throw e;
     }
     if (!wanted()) throw new Error('cancelled');
+    if (gone) throw gone;
     if (!joined) {
       await new Promise((ok, no) => {
         const t = setTimeout(() => {
           toGuest({ t: 'refused', error: 'the host never got your deck' });
           no(new Error('the other player did not send their deck'));
         }, 60000);
-        joinedWait = () => { if (joined) { clearTimeout(t); joinedWait = null; ok(); } };
+        joinedWait = () => {
+          if (gone) { clearTimeout(t); joinedWait = null; no(gone); }
+          else if (joined) { clearTimeout(t); joinedWait = null; ok(); }
+        };
       });
     }
     if (!wanted()) throw new Error('cancelled');
@@ -695,10 +725,11 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       toGuest({ t: 'refused', error: e.message });
       throw e;
     }
-    if (!wanted()) {
-      // cancelled while the worker dealt: end it there (the table takes one game at a time), and keep nothing
+    if (!wanted() || gone) {
+      // cancelled, or the link closed for good, while the worker dealt: end it there (the table takes one game at a
+      // time), and keep nothing
       eng.concede();
-      throw new Error('cancelled');
+      throw gone ?? new Error('cancelled');
     }
     g = newGame(st.id, st.seat, 'host');
     g.links = () => [cur];
@@ -760,10 +791,16 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
             if (w) m.error ? w.no(new Error(m.error)) : w.ok({ ok: true });
           }
         };
+        // only a link nothing can replace gets here (lobbyGame moves a dropped direct link to the room): the game ends
         l.onDown = (why) => {
+          if (cur !== l) return;
+          const text = `${why}, and this game cannot reconnect`;
           if (g && !g.over) {
-            status(`The link to the host dropped (${why}).`, 'bad');
-            for (const s of g.subs) s.onError(true);
+            for (const w of acts.values()) w.no(new Error(text));
+            acts.clear();
+            dropGame(g, text);
+          } else if (!g) {
+            no(new Error(text));
           }
         };
         if (again) {
