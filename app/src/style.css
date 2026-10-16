@@ -577,6 +577,9 @@ figure.pd { margin: 0; }
 .vlink .vurl { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vlink .vbtns { display: flex; gap: var(--sp-6); margin-left: auto; }
 .vlink .vbtns button { margin-left: 0; }
+/* a game's Copy link (its own page, /g/<run>/<game>) */
+.gamelink { display: inline-flex; align-items: center; gap: var(--sp-6); margin-left: var(--sp-8); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); border-radius: var(--r-sm); padding: var(--sp-4) var(--sp-10); font-size: var(--fs-md); }
+.gamelink:hover { border-color: var(--accent); color: var(--accent); }
 /* Build a bot (Arena > Join): connect your own MCP app */
 ol.steps-list { margin: var(--sp-8) 0 0; padding-left: var(--sp-24); display: grid; gap: var(--sp-12); font-size: var(--fs-base); color: var(--ink-2); }
 ol.steps-list b { color: var(--ink); }

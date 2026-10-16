@@ -316,7 +316,9 @@ function signInPage(next, login, note, { open = false, blocked = false } = {}) {
                 : `<p>The arena and its research are open to invited friends. Sign in with your GitHub account: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="${esc(href)}">Sign in with GitHub</a></p><p class="small">Got a view link from Eric? Open it instead; it needs no sign-in.</p>`;
     // the browser keeps the #/page part of a shared link to itself, so the button adds it to where sign-in returns
     const keepHash = login ? '' : `<script>(()=>{const a=document.querySelector('a.btn');if(a&&location.hash){const u=new URL(a.href,location.href);u.searchParams.set('next',(u.searchParams.get('next')||'/')+location.hash);a.href=u.pathname+u.search}})()</script>`;
-    return shell(`<h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}`, keepHash);
+    // an app link to one game (#/games/<run>/<game>) opens that game's own page, which needs no sign-in (gamelinks.js)
+    const toGame = `<script>(()=>{const h=location.hash.split('?'),p=h[0].split('/'),n=Math.floor(Number(new URLSearchParams(h[1]||'').get('step')))||0;if(p[0]==='#'&&p[1]==='games'&&p[2]&&p[3]&&p[2]!=='runs')location.replace('/g/'+p[2]+'/'+p[3]+(n>0?'?step='+n:''))})()</script>`;
+    return shell(`<h1>SWU Arena</h1>${note ? `<p class="note">${esc(note)}</p>` : ''}${body}`, toGame + keepHash);
 }
 
 /** The plain page the sign-in and app-connect screens share. */

@@ -27,14 +27,14 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas, gameLinksLimits } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins,
         blocked: () => JSON.parse(store.getDoc('admin', 'blocked') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas, gameLinksLimits });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -397,6 +397,231 @@ test('view links: a guest reads with no sign-in while the link exists, and never
     }
 });
 
+test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay; a game against people once it ends', async () => {
+    const header = (p1, p2) => `${JSON.stringify({ t: 'header', players: [{ id: 'p1', bot: p1 }, { id: 'p2', bot: p2 }] })}\n`;
+    const step = (n) => `${JSON.stringify({ t: 'step', n })}\n`;
+    const end = `${JSON.stringify({ t: 'end', winner: 'p2', round: 7, steps: 120, outcome: 'won' })}\n`;
+    const w = makeWindow('w-games');
+    w.store.putDoc('runs', 'arena-t1-r1', JSON.stringify({ id: 'arena-t1-r1', games: [{ id: 'g1', p1: 'rush', p2: 'c_clock' }, { id: 'g2' }, { id: 'g3' }] }));
+    w.store.putReplay('arena-t1-r1', 'g1', Buffer.from(header('rush', 'c_clock') + end));
+    w.store.putDoc('runs', 'karabast-p', JSON.stringify({ id: 'karabast-p', bots: ['c-clock'], games: [{ id: 'k1', p1: 'opponent', p2: 'c-clock' }] }));
+    w.store.appendReplay('karabast-p', 'k1', 0, Buffer.from(header('bob', 'c-clock') + step(1)));
+    const { srv, go, close } = await serve(w);
+    try {
+        // a finished game: its page with no sign-in, titled from the replay, and the replay itself
+        const page = await go('/g/arena-t1-r1/g1?step=40');
+        assert.strictEqual(page.status, 200);
+        const html = await page.text();
+        assert.match(html, /<title>rush vs c_clock · SWU Arena<\/title>/);
+        assert.match(html, /<meta property="og:description" content="c_clock won in round 7\./);
+        assert.match(html, /<meta property="og:url" content="https:\/\/swu-arena\.fly\.dev\/g\/arena-t1-r1\/g1">/);
+        assert.match(html, /"run":"arena-t1-r1","game":"g1"/);
+        assert.match(html, /<script src="\/g\/kit\.js">/);
+        assert.strictEqual(await (await go('/g/arena-t1-r1/g1/game.jsonl')).text(), header('rush', 'c_clock') + end);
+        assert.strictEqual((await go('/g/arena-t1-r1/g1/')).status, 200);
+        assert.strictEqual((await go('/g/arena-t1-r1/g1', { method: 'HEAD' })).status, 200);
+
+        // a game being played: the page follows it, fetching only the lines after the bytes it has
+        w.store.appendReplay('arena-t1-r1', 'g2', 0, Buffer.from(header('rush', 'heuristic') + step(1)));
+        assert.match(await (await go('/g/arena-t1-r1/g2')).text(), /Playing now: watch it live\./);
+        const first = await go('/g/arena-t1-r1/g2/game.jsonl');
+        const size = Number(first.headers.get('x-size'));
+        assert.strictEqual(size, Buffer.byteLength(await first.text()));
+        w.store.appendReplay('arena-t1-r1', 'g2', size, Buffer.from(step(2)));
+        const more = await go(`/g/arena-t1-r1/g2/game.jsonl?from=${size}`);
+        assert.strictEqual(await more.text(), step(2));
+        assert.strictEqual(Number(more.headers.get('x-size')), size + Buffer.byteLength(step(2)));
+        assert.match(first.headers.get('x-gen'), /^[0-9a-f]{16}$/);
+        assert.strictEqual(more.headers.get('x-gen'), first.headers.get('x-gen'), 'an append keeps the generation');
+        assert.strictEqual(await (await go('/g/arena-t1-r1/g2/game.jsonl?from=999999')).text(), '');
+        // spectators polling a live game share one read of it per new move; a poll with nothing new reads nothing
+        const readReplay = w.store.readReplay;
+        let reads = 0;
+        w.store.readReplay = (...a) => (reads++, readReplay.apply(w.store, a));
+        try {
+            const at = size + Buffer.byteLength(step(2));
+            for (let i = 0; i < 5; i++) {
+                assert.strictEqual(await (await go(`/g/arena-t1-r1/g2/game.jsonl?from=${at}`)).text(), '');
+            }
+            assert.strictEqual(reads, 0);
+            w.store.appendReplay('arena-t1-r1', 'g2', at, Buffer.from(step(3)));
+            for (let i = 0; i < 5; i++) {
+                assert.strictEqual(await (await go(`/g/arena-t1-r1/g2/game.jsonl?from=${at}`)).text(), step(3));
+            }
+            assert.strictEqual(reads, 1);
+        } finally {
+            w.store.readReplay = readReplay;
+        }
+        // a replay replaced whole (a resync) is read again, even at the same size, with a new generation so a live
+        // page starts over
+        const before = await go('/g/arena-t1-r1/g1/game.jsonl');
+        assert.strictEqual(await before.text(), header('rush', 'c_clock') + end);
+        const redo = header('rush', 'c_clock') + end.replace('"p2"', '"p1"');
+        w.store.putReplay('arena-t1-r1', 'g1', Buffer.from(redo));
+        const after = await go('/g/arena-t1-r1/g1/game.jsonl');
+        assert.strictEqual(await after.text(), redo);
+        assert.notStrictEqual(after.headers.get('x-gen'), before.headers.get('x-gen'));
+        // opening a page sends the whole replay gzipped, compressed once per version of it, off the event loop
+        const zlib = require('zlib');
+        const long = header('rush', 'heuristic') + Array.from({ length: 200 }, (_, i) => step(i)).join('') + end;
+        w.store.putReplay('arena-t1-r1', 'g4', Buffer.from(long));
+        const big = header('rush', 'heuristic') + Array.from({ length: 200 }, (_, i) => `${JSON.stringify({ t: 'step', n: i, pad: 'x'.repeat(2000) })}\n`).join('') + end;
+        w.store.putReplay('arena-t1-r1', 'g5', Buffer.from(big));
+        const [gzip, gzipSync] = [zlib.gzip, zlib.gzipSync];
+        let [async, sync] = [0, 0];
+        zlib.gzip = (...a) => (async++, gzip(...a));
+        zlib.gzipSync = (...a) => (sync++, gzipSync(...a));
+        try {
+            const at = `http://127.0.0.1:${srv.address().port}/g/arena-t1-r1/g4/game.jsonl`;
+            for (let i = 0; i < 3; i++) {
+                const r = await fetch(at, { headers: { 'accept-encoding': 'gzip' } });
+                assert.strictEqual(r.headers.get('content-encoding'), 'gzip');
+                assert.strictEqual(r.headers.get('x-size'), String(long.length));
+                assert.strictEqual(await r.text(), long);
+            }
+            assert.deepStrictEqual([async, sync], [1, 0]);
+            assert.strictEqual(await (await fetch(at, { headers: { 'accept-encoding': 'gzip;q=0' } })).text(), long);
+            // a live poll's new lines are gzipped off the event loop too; a HEAD compresses nothing
+            const tail = await fetch(`${at}?from=${long.length - 2000}`, { headers: { 'accept-encoding': 'gzip' } });
+            assert.strictEqual(tail.headers.get('content-encoding'), 'gzip');
+            assert.strictEqual(await tail.text(), long.slice(-2000));
+            assert.strictEqual((await fetch(`${at}?from=${long.length - 2000}`, { method: 'HEAD', headers: { 'accept-encoding': 'gzip' } })).status, 200);
+            assert.deepStrictEqual([async, sync], [2, 0]);
+            // most of a big replay from any ?from (a page far behind, or anyone picking one) goes as it is: no request
+            // makes the window compress most of a replay again
+            for (let i = 0; i < 3; i++) {
+                const r = await fetch(`http://127.0.0.1:${srv.address().port}/g/arena-t1-r1/g5/game.jsonl?from=1`, { headers: { 'accept-encoding': 'gzip' } });
+                assert.strictEqual(r.headers.get('content-encoding'), null);
+                assert.strictEqual(r.headers.get('x-size'), String(big.length));
+                assert.strictEqual(await r.text(), big.slice(1));
+            }
+            assert.deepStrictEqual([async, sync], [2, 0]);
+        } finally {
+            Object.assign(zlib, { gzip, gzipSync });
+        }
+        // a page view reads its title and preview from the replay's first line and last few KB, not the whole replay
+        assert.match(await (await go('/g/arena-t1-r1/g5')).text(), /<title>rush vs heuristic · SWU Arena/);
+        const toString = Buffer.prototype.toString;
+        let widest = 0;
+        Buffer.prototype.toString = function (...a) {
+            widest = Math.max(widest, this.length);
+            return toString.apply(this, a);
+        };
+        try {
+            assert.match(await (await go('/g/arena-t1-r1/g5')).text(), /heuristic won in round 7/);
+        } finally {
+            Buffer.prototype.toString = toString;
+        }
+        assert.ok(widest < 20000, `read ${widest} bytes as text for one page view`);
+        // listed, no moves yet: the page waits; the replay is not there yet
+        assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
+        assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);
+
+        // a game against a person: closed while it is played (a person's hidden cards), then the person reads "a person"
+        assert.match(await (await go('/g/karabast-p/k1')).text(), /<title>a person vs c-clock/);
+        const peopleSize = w.store.replaySize('karabast-p', 'k1');
+        let peopleReads = 0;
+        w.store.readReplay = (...a) => (peopleReads++, readReplay.apply(w.store, a));
+        try {
+            for (let i = 0; i < 5; i++) {
+                assert.strictEqual((await go('/g/karabast-p/k1/game.jsonl')).status, 409);
+            }
+            assert.strictEqual(peopleReads, 0, 'its page was read already; waiting readers read nothing more');
+        } finally {
+            w.store.readReplay = readReplay;
+        }
+        w.store.appendReplay('karabast-p', 'k1', peopleSize, Buffer.from(end));
+        const masked = await (await go('/g/karabast-p/k1/game.jsonl')).text();
+        assert.ok(!masked.includes('bob') && masked.includes('"bot":"a person"'), masked);
+        // a change to its run document (how its people read) is read again
+        w.store.putDoc('runs', 'karabast-p', JSON.stringify({ id: 'karabast-p', bots: ['c-clock'], games: [{ id: 'k1', p1: 'opponent', p2: 'c-clock', note: 'x' }] }));
+        peopleReads = 0;
+        w.store.readReplay = (...a) => (peopleReads++, readReplay.apply(w.store, a));
+        try {
+            assert.ok((await (await go('/g/karabast-p/k1/game.jsonl')).text()).includes('"bot":"a person"'));
+            assert.strictEqual(peopleReads, 1);
+        } finally {
+            w.store.readReplay = readReplay;
+        }
+        assert.ok(!(await (await go('/g/karabast-p/k1')).text()).includes('bob'));
+
+        // a replay left behind when its run document is deleted is not shown: only the document tells people apart
+        w.store.putDoc('runs', 'feed-x', JSON.stringify({ id: 'feed-x', feed: 'x', bots: ['c-clock'], games: [{ id: 'f1', p1: 'opponent', p2: 'c-clock' }] }));
+        w.store.putReplay('feed-x', 'f1', Buffer.from(header('carol', 'c-clock') + end));
+        assert.ok(!(await (await go('/g/feed-x/f1/game.jsonl')).text()).includes('carol'));
+        w.store.deleteDoc('runs', 'feed-x');
+        assert.strictEqual((await go('/g/feed-x/f1/game.jsonl')).status, 404);
+        assert.strictEqual((await go('/g/feed-x/f1')).status, 404);
+
+        // the viewer kit, as the window's /kit.js (static.js): kept by the browser (ETag), gzip only for a client that takes it
+        const kitAt = `http://127.0.0.1:${srv.address().port}/g/kit.js`;
+        const kit = await fetch(kitAt);
+        assert.strictEqual(kit.status, 200);
+        assert.match(kit.headers.get('content-type'), /javascript/);
+        const kept = await fetch(kitAt, { headers: { 'if-none-match': kit.headers.get('etag') } });
+        assert.strictEqual(kept.status, 304);
+        assert.strictEqual(kept.headers.get('vary'), 'accept-encoding');
+        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } })).headers.get('content-encoding'), 'gzip');
+        const plain = await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0' } });
+        assert.strictEqual(plain.headers.get('content-encoding'), null, 'a client that refuses gzip gets the kit plain');
+        assert.strictEqual(await plain.text(), fs.readFileSync(path.join(__dirname, '..', '..', 'vendor', 'holotable', 'swu-viewer-kit.js'), 'utf8'));
+
+        // nothing else: no game, a bad id, another method, and the rest of the arena still needs sign-in
+        for (const p of ['/g/arena-t1-r1/nope', '/g/nope/g1', '/g/arena-t1-r1/nope/game.jsonl', '/g/..%2Fx/g1', '/g/arena-t1-r1', '/g', '/g/a/b/c']) {
+            assert.strictEqual((await go(p)).status, 404, p);
+        }
+        assert.strictEqual((await go('/g/arena-t1-r1/g1', { method: 'POST', body: '{}' })).status, 405);
+        assert.strictEqual((await go('/api/app')).status, 401, 'a game page opens no other door');
+        assert.strictEqual((await go('/api/replays/arena-t1-r1/g1')).status, 401);
+    } finally {
+        await close();
+    }
+});
+
+test('game pages: replays being gzipped at once are bounded; past the bound a replay goes as it is', async () => {
+    const w = makeWindow('w-games-zip', { gameLinksLimits: { zipMax: 6000 } });
+    const replay = (bot) => `${JSON.stringify({ t: 'header', players: [{ id: 'p1', bot }, { id: 'p2', bot: 'rush' }] })}\n${Array.from({ length: 200 }, (_, n) => `${JSON.stringify({ t: 'step', n })}\n`).join('')}`;
+    w.store.putDoc('runs', 'arena-t1-r2', JSON.stringify({ id: 'arena-t1-r2', games: [{ id: 'a' }, { id: 'b' }] }));
+    w.store.putReplay('arena-t1-r2', 'a', Buffer.from(replay('c_clock')));
+    w.store.putReplay('arena-t1-r2', 'b', Buffer.from(replay('heuristic')));
+    const { srv, close } = await serve(w);
+    const zlib = require('zlib');
+    const gzip = zlib.gzip;
+    const held = [];
+    zlib.gzip = (...a) => held.push(a); // every gzip job waits until the test lets it go
+    try {
+        const at = (g) => `http://127.0.0.1:${srv.address().port}/g/arena-t1-r2/${g}/game.jsonl`;
+        const a = fetch(at('a'), { headers: { 'accept-encoding': 'gzip' } });
+        while (held.length < 1) {
+            await new Promise((r) => setTimeout(r, 5));
+        }
+        // a's ~4 KB is being gzipped: b's ~4 KB would pass 6000, so b goes as it is, with no second job
+        let timer;
+        const b = await Promise.race([fetch(at('b'), { headers: { 'accept-encoding': 'gzip' } }), new Promise((_, no) => (timer = setTimeout(() => no(new Error('b waits for a gzip job')), 3000)))]);
+        clearTimeout(timer);
+        assert.strictEqual(b.headers.get('content-encoding'), null);
+        assert.strictEqual(await b.text(), replay('heuristic'));
+        assert.strictEqual(held.length, 1);
+        for (const [buf, ...rest] of held.splice(0)) {
+            gzip(buf, ...rest);
+        }
+        const done = await a;
+        assert.strictEqual(done.headers.get('content-encoding'), 'gzip');
+        assert.strictEqual(await done.text(), replay('c_clock'));
+        // once a's job ends, b is gzipped again
+        zlib.gzip = gzip;
+        const again = await fetch(at('b'), { headers: { 'accept-encoding': 'gzip' } });
+        assert.strictEqual(again.headers.get('content-encoding'), 'gzip');
+        assert.strictEqual(await again.text(), replay('heuristic'));
+    } finally {
+        zlib.gzip = gzip;
+        for (const [buf, ...rest] of held.splice(0)) {
+            gzip(buf, ...rest);
+        }
+        await close();
+    }
+});
+
 test('sign-in page: a shared link keeps its #/page through sign-in', async () => {
     const w = makeWindow('w-hash');
     const { go, close } = await serve(w);
@@ -404,6 +629,20 @@ test('sign-in page: a shared link keeps its #/page through sign-in', async () =>
         const html = await (await go('/')).text();
         assert.match(html, /location\.hash/);
         assert.match(html, /searchParams\.set\('next'/);
+        // an app link to one game goes to that game's own page, which needs no sign-in; other pages stay here
+        const vm = require('vm');
+        const toGame = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((js) => js.includes("'/g/'"));
+        const opens = (hash) => {
+            let to = null;
+            vm.runInNewContext(toGame, { URLSearchParams, location: { hash, replace: (u) => { to = u; } } });
+            return to;
+        };
+        assert.strictEqual(opens('#/games/arena-t1-r1/rush-vs-c%23b-7?step=30'), '/g/arena-t1-r1/rush-vs-c%23b-7?step=30');
+        assert.strictEqual(opens('#/games/arena-t1-r1/g1'), '/g/arena-t1-r1/g1');
+        assert.strictEqual(opens('#/games/arena-t1-r1/g1?step=x'), '/g/arena-t1-r1/g1');
+        for (const stay of ['', '#/games', '#/games/runs/arena-t1-r1', '#/bots/rush', '#/games/arena-t1-r1']) {
+            assert.strictEqual(opens(stay), null, stay);
+        }
     } finally {
         await close();
     }

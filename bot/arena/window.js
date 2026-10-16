@@ -40,6 +40,7 @@ const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
 const { createFeedback } = require('./feedback');
+const { createGameLinks } = require('./gamelinks');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -716,6 +717,8 @@ function createWindow(opts = {}) {
     });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
     const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => tables.play === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
+    // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
+    const gameLinks = createGameLinks({ store, publicUrl: auth.publicUrl, kitFile, statics, replayFor, peopleRun, ...(opts.gameLinksLimits ?? {}) }); // tests: {zipMax}
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
@@ -752,7 +755,13 @@ function createWindow(opts = {}) {
     };
 
     // a replay as this reader may see it (maskReplay above), or null; the last few masked copies are kept
+    // run/game -> {sig, buf}, oldest first; at most 24 and 48 MB, since game pages (gamelinks.js) read with no sign-in
     const masked = new Map();
+    let maskedBytes = 0;
+    const unmask = (k) => {
+        maskedBytes -= masked.get(k)?.buf.length ?? 0;
+        masked.delete(k);
+    };
     function replayFor(who, run, game) {
         const buf = store.readReplay(run, game);
         if (!buf || !readsMasked(who)) {
@@ -769,10 +778,11 @@ function createWindow(opts = {}) {
             return hit.buf;
         }
         const out = maskReplay(buf, doc, game);
-        masked.delete(k);
+        unmask(k);
         masked.set(k, { sig, buf: out });
-        if (masked.size > 24) {
-            masked.delete(masked.keys().next().value);
+        maskedBytes += out.length;
+        while (masked.size > 24 || maskedBytes > 48e6) {
+            unmask(masked.keys().next().value);
         }
         return out;
     }
@@ -1389,6 +1399,10 @@ function createWindow(opts = {}) {
             }
             // feedback (feedback.js): anyone who may use a page here, invited or not, so before the invite check
             if (await feedback.route(req, res, url, who, { sendJson, sendText, readBody })) {
+                return undefined;
+            }
+            // every game's own page (gamelinks.js): /g/<run>/<game> opens for anyone, so before the invite check
+            if (await gameLinks.route(req, res, url, { sendJson, sendText })) {
                 return undefined;
             }
             if (url.pathname.startsWith('/api')) {

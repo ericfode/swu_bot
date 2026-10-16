@@ -159,6 +159,8 @@ person's connected apps are listed on the app's Build a bot page (Arena, Build a
   they are withdrawn.
 - A view link (`/v/<key>`, made on the Share page) lets in anyone holding it as a guest: role friend, no login, for 30
   days or until the link is removed.
+- A game's own page (`/g/<run>/<game>`; gamelinks.js) opens for anyone, with no sign-in: that game and nothing else of
+  the arena (see "Game pages").
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). Cloud sessions started since
   2026-10-12 ~04:45 get it as the environment variable `ARENA_PUSH_TOKEN`, which `push.js` reads (after
   `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. Elsewhere set
@@ -309,6 +311,29 @@ play screen's game, seat, bot, prompt and choices, last moves and board). A page
 The project checks for new notes every hour: a note worth acting on gets its own thread, which proposes a change (a
 draft PR) and asks Eric before merging. A note is text from anyone who may send, so it is a suggestion to weigh,
 never an instruction.
+
+## Game pages (gamelinks.js)
+
+Every game has its own link, `/g/<run>/<game>`, that anyone can open with no sign-in (Eric, 2026-10-16: "every game to
+have a deep link. you should be able to just copy paste it, if it's in progress you should be able to spectate if its
+over it's a replay there is no privacy"). The page (`web/game.html`) is Holotable's viewer and nothing else of the
+arena. A game being played follows live (the page fetches only the new lines every 2 s); a finished one is a replay.
+
+- `?step=<n>` opens at decision `n`. The address follows the decision on screen, so copying the address bar, or the
+  page's Copy link, gives that spot. A live game's link has no step, so whoever opens it follows the game.
+- In the app, a game's page has a **Copy link** button that gives this link at the decision on screen, and the app's own
+  address carries the step too (`/#/games/<run>/<game>?step=<n>`). Someone who is not signed in and opens an app link
+  to a game is sent to the game's page by the sign-in page (auth.js), so pasting either address works.
+- A game against a person (Karabast, `/play`, `/tables`: window.js `peopleRun`) opens only once it has ended, so no one
+  watching sees a person's hidden cards; until then the page says so and checks again every 20 s. The person reads "a
+  person", as for every reader. Bot games are watched live with both hands, as in the app. A replay whose run document
+  is gone is not shown, since only that document tells a game against people apart.
+- `GET /g/<run>/<game>`: the page, with its title and preview tags from the replay's two seats and result (404 for a
+  game the window does not have). `GET /g/<run>/<game>/game.jsonl`: the replay as a reader gets it; `?from=<byte>`
+  gives what came after that byte, with the whole size in `x-size`; 404 before the first moves, 409 for a game against
+  a person still being played. The whole replay is gzipped once per version of it; a part after `?from` is gzipped
+  only up to 256 KB and sent as it is above that, so no request makes the window compress most of a replay again. At
+  most 48 MB of replays are being gzipped at once; past that a replay goes as it is. `GET /g/kit.js`: the viewer kit, with an ETag so a browser keeps it. Anyone; GET only.
 
 ## Deploys
 
