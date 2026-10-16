@@ -24,9 +24,9 @@
  *   GET  /play/bundle/<sha256>        an arena version's canonical tar, for a version of the latest round only (the
  *                                     swarm relay's lineup and sendBot: kept on the window's disk, so it loads while the
  *                                     games machine sleeps)
- *   GET  /api/play/info               {on, login, admin, ready, build, files, why?, games}: the engine's files to load
- *                                     ({url, bytes} each) and the person's last games (an admin also gets every game,
- *                                     with who played it)
+ *   GET  /api/play/info               {on, login, admin, ready, build, files, why?, decks, games}: the engine's files to
+ *                                     load ({url, bytes} each), the deck lists ({name, leader, base, style}) and the
+ *                                     person's last games (an admin also gets every game, with who played it)
  *   GET  /api/play/bots               {ready, round, capMs, bots, runtimes}: the bots a person may pick, the JEPA bot first,
  *                                     then the latest round's versions by rating, each with what it downloads (see
  *                                     below); runtimes: the interpreters a bundle may need, {lib, wasm} each
@@ -48,6 +48,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { atLeast, LOGIN } = require('./auth');
+const { normalizeDeck } = require('../decklists');
 
 const RUN = 'play';
 const BOT = 'jepa-tx-gate';
@@ -58,6 +59,8 @@ const FILES = ['engine.json', 'play-worker.js', 'bot-worker.js'];
 const MODELS = { 'tx-t10.safetensors': '/app/vendor/jepa/tx-t10.safetensors', 'tx-t10-e.safetensors': '/app/vendor/jepa/tx-t10-e.safetensors' };
 const PYTHON = { runtime: 'python-3.14-wasi', lib: 'python-lib.json', wasm: 'python.wasm' };
 const READY = [...FILES, ...Object.keys(MODELS)];
+// the deck lists people pick from: the same file the engine pack carries (bot/swarm/pack.js), so names match the worker's
+const DECKS = path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json');
 const KEPT = [...READY, PYTHON.lib, PYTHON.wasm];
 // an arena version: a competitor's name as api.js allows it (at most 32 characters) and its version number
 const VERSION = /^[a-z][a-z0-9_]{0,31}-v\d{1,6}$/;
@@ -181,8 +184,16 @@ function rowOf(id, { header, end, bot = BOT }, { sha256, bytes, at }) {
     };
 }
 
-function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode = process.env.ARENA_PLAY || 'invited', page = path.join(__dirname, 'web', 'play.html'), now = Date.now } = {}) {
+function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode = process.env.ARENA_PLAY || 'invited', page = path.join(__dirname, 'web', 'play.html'), decksFile = DECKS, now = Date.now } = {}) {
     const on = MODES.has(mode) ? mode : 'invited';
+    // the versus screen shows the lists before the engine is in the tab: {name, leader, base, style} each
+    let decks = [];
+    try {
+        const raw = parseOr(fs.readFileSync(decksFile, 'utf8'), []);
+        decks = (Array.isArray(raw) ? raw : raw?.decks ?? []).map((d, i) => normalizeDeck(d, i)).map((d) => ({ name: d.metadata.name, leader: d.leader.id, base: d.base.id, style: d.metadata.style ?? null }));
+    } catch (e) {
+        console.error(`play: no deck lists (${e.message})`);
+    }
     const sent = new Map(); // login -> times of the games they sent, the last day
     let woke = 0;
     let kit = null; // {mtimeMs, raw, gz}
@@ -294,7 +305,7 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         const by = names();
         const mine = all.filter((r) => by[r.id] === `@${login}`).slice(-20).reverse().map(brief);
         const admin = who.role === 'admin';
-        const out = { on: true, mode: on, login, admin, games: mine };
+        const out = { on: true, mode: on, login, admin, decks, games: mine };
         if (admin) {
             out.all = all.slice(-200).reverse().map((r) => ({ ...brief(r), person: by[r.id] ?? null }));
             out.played = all.length;
