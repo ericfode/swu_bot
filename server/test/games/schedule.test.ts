@@ -56,3 +56,31 @@ test("schedule: a job for some games of a seed passes play-seed's own check, dec
   assert.doesNotThrow(() => checkJob(JSON.parse(JSON.stringify(plain)), bundles))
   assert.throws(() => jobFor(js, spec, run, [games[0]!, games[2]!], limitsFor(45000)))
 })
+
+test("schedule: play-seed's seedJob, which the dev harness and the remote lane build jobs with, makes the jobs jobFor makes", () => {
+  const { seedJob } = require(path.join(app, "bot", "arena", "play-seed.js"))
+  const { normalizeDeck } = require(path.join(app, "bot", "decklists.js"))
+  const deck = (name: string) => ({ metadata: { name }, leader: { id: "SOR_005", count: 1 }, base: { id: "SOR_022", count: 1 }, deck: [], sideboard: [] })
+  const lists = ["d0", "d1", "d2", "d3", "d4"].map((n) => normalizeDeck(deck(n)))
+  const bundleOf = { "a-v1": hex("a"), "b-v2": hex("b"), "c-v1": hex("c") }
+  const bots = Object.fromEntries(Object.entries(bundleOf).map(([n, h]) => [n, { kind: "wasm", bundle: h }]))
+  const run = "r".repeat(32)
+  let compared = 0
+  for (const decks of [{ file: "x.json", sha256: hex("x"), names: lists.map((l) => l.metadata.name), deal: "seat" as const, skipped: [], lists }, null]) {
+    const spec = { bots: Object.keys(bundleOf), gamesPerPair: 4, bundles: bundleOf, decks }
+    for (const [seed, ofSeed] of bySeed(buildSchedule(js, spec, 11))) {
+      for (const cap of [10000, 60000]) {
+        const want = jobFor(js, spec, run, ofSeed, limitsFor(cap))
+        const got = seedJob(seed, ofSeed, { key: js.gameKey(run, seed), limits: limitsFor(cap), bots, decks: decks?.lists ?? null })
+        assert.equal(JSON.stringify(got), JSON.stringify(want), `seed ${seed}, cap ${cap}`)
+        compared++
+      }
+    }
+  }
+  assert.equal(compared, 2 * 6 * 2, "two deals, six seeds, two caps")
+})
+
+test("schedule: game-pool.js roundLimits, the dev harness's limits, is limitsFor", () => {
+  const { roundLimits } = require(path.join(app, "bot", "game-pool.js"))
+  for (const cap of [10000, 45000, 60000, 600000]) assert.deepEqual(roundLimits(cap), limitsFor(cap))
+})

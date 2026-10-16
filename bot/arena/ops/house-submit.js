@@ -9,10 +9,10 @@
  *
  *   node bot/arena/ops/house-submit.js <name> <folder> --note "<what this version is>" [--entry <file>] [--dry-run]
  *
- * <folder> is what arena_submit takes: a built bundle (it has an arena.json: kind wasm, binary files sent in base64),
- * or the source of a Python bot (--entry <file>.py: kind python) or a JavaScript bot (--entry <file>.js, default
- * bot.js: kind js). Every file in it goes, except dot files, __pycache__ and node_modules. --dry-run prints what would
- * go instead of sending it.
+ * <folder> is what arena_submit takes: a built bundle (it has an arena.json: kind wasm), or the source of a Python bot
+ * (--entry <file>.py: kind python) or a JavaScript bot (--entry <file>.js, default bot.js: kind js). Every file in it
+ * goes, binary files in base64, except dot files and folders, __pycache__ and node_modules. --dry-run prints what would
+ * go instead of sending it. The dev harness (bot/dev.js) packs a bot folder with houseDoc too.
  *
  * Writing a window document takes the project's token: in the project's cloud sessions the egress proxy adds it (as for
  * push.js; SWU_WINDOW names another window). The window's arena_submit limits (size, rate) do not apply; the intake's
@@ -71,11 +71,10 @@ function houseDoc(name, folder, { note, entry = null, now = Date.now() } = {}) {
         bytes += buf.length;
         if (isText(buf)) {
             files[p] = buf.toString('utf8');
-        } else if (bundle) {
+        } else {
+            // as arena_submit takes any kind's binary files (a model's weights, say)
             files[p] = buf.toString('base64');
             base64.push(p);
-        } else {
-            throw new Error(`${p} is not text: a ${kind} bot's files are its source`);
         }
     }
     if (bytes > MAX_BYTES) {

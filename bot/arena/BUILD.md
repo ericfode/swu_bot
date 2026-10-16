@@ -20,7 +20,9 @@ action's kind and target), splits for damage, and `sim` requests for look-ahead.
 
 ## Rules of the sandbox
 
-- **Time:** 30 s for `hello`, 10 s for each `decide`. A late, malformed or illegal reply loses the game.
+- **Time:** each bot has 60 s of thinking per game (`thinkCapMs` in `arena_status`), counted as wall time over all
+  its `hello` and `decide` replies. Every message's `ms` is the time it has left. A bot that runs out of time, or
+  sends a malformed or illegal reply, loses the game. The check after you submit gives it 30 s to answer one `hello`.
 - **Space:** 1 GB of memory, in one linear memory (an `arena.json` asking for more gets 1 GB). There is no network, no
   other programs and no writable files.
 - **Output:** stdout carries the protocol only; write logs to stderr.
@@ -49,9 +51,8 @@ serve({
 });
 ```
 
-To test it at home, copy `bot/stdio.js` from the swu_bot repo next to it as `stdio.js` and run it under Node. Sending
-that copy along does no harm: the arena always puts its own `stdio.js` next to your entry file, so name a helper of
-your own something else.
+The arena always puts its own `stdio.js` next to your entry file, so do not send one, and name a helper of your own
+something else. Test it with the harness (below): it runs the bot in the arena's sandbox, where Node is not.
 
 ## Python (`kind: "python"`)
 
@@ -83,6 +84,48 @@ since it comes in `hello.cards`. List binary files such as `bot.wasm` in `base64
 base64-encoded. Rust (`cargo build --target wasm32-wasip1`), C and Zig (`zig cc --target=wasm32-wasi`) work. A request
 may carry about 3 MB of files.
 `bot/compiled/README.md` in the swu_bot repo describes the format and builds nine of the project's bots this way.
+
+## Test locally
+
+The swu_bot repo has a harness that plays your bot the way the arena does, on your own computer. Set it up once:
+
+```
+git clone --recurse-submodules https://github.com/ericfode/swu_bot && cd swu_bot
+npm run setup        # the engine, the card data and the sandbox (wasmtime, Javy, CPython for WASI); Node 22
+```
+
+Javy, which packs JavaScript bots, is pinned for Linux on x64 so far. On other computers setup says so, and Python
+bots and bundles still work.
+
+Keep the bot in a folder of its own, holding only what you would send, and run
+
+```
+npm run dev -- ../my-bot
+```
+
+It packs the folder as `arena_submit` sends it and checks it with the arena's own checker, so a bot it accepts the
+arena accepts, and a refusal comes with the arena's own words. Then it plays the bot in the same sandbox against the
+arena's `heuristic` and `rush`: 10 games each, on the deck lists of the rated rounds, each seed from both seats, with
+60 s of thinking per game. The bot gets the messages it gets in the arena, `hello.cards` included, so it only reads
+stdin and writes stdout. The harness prints a table per opponent (wins, losses by the bot's own fault, thinking time,
+memory) and, for each game the bot lost by its own fault, the step, the last messages, the end of its stderr and a
+command that sends that game's messages to it again. It never sends anything to the arena.
+
+- `--vs heuristic,rush,random,../my-bot-v2`: the opponents. A folder plays too, packed the same way, so a new version
+  can play the last one.
+- `--games N` games per opponent, `--seed S` the first seed (one seed plays one deck pair, so vary it), `--cap-sec N`
+  the thinking time per game, `--jobs N` seeds at once.
+- `--games 0` only packs and checks: run it before every `arena_submit`.
+- Each run goes to `<folder>/.runs/<time>-s<seed>/`: the replays, the bot's messages for the games it did not win
+  (`bots/`), its stderr, and `run.json`. The harness leaves dot files and folders out when it packs; leave them out
+  of `arena_submit` too. `node bot/dev.js --view <run folder>` shows
+  the replays in the browser.
+- Exit code 0: no losses by the bot's own fault; 1: some, or a game could not be played; 2: a usage error or no
+  sandbox; 3: the arena would refuse the bot.
+
+In the harness, `heuristic` and `rush` are the referee's own bots, run in process. In the arena they are ports of
+them to the bot protocol, run in the sandbox, and five more residents play there too. So the harness's results are a
+guide, and the arena's ratings can come out different.
 
 ## Submitting
 

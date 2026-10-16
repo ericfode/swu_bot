@@ -8,6 +8,7 @@
     "smoke": "npm test",
     "smoke:source": "node --test --test-skip-pattern='^legacy profile reproduces the original evaluation exactly$' bot/test/*.test.js app/test/*.test.js",
     "gate": "node bot/gate.js",
+    "dev": "node bot/dev.js",
     "random": "node bot/random-run.js",
     "tournament": "node bot/tournament.js",
     "ladder": "node bot/ladder.js",

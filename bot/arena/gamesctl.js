@@ -424,26 +424,6 @@ function roundRules(k, { games, capMs }) {
 }
 
 /**
- * The lists of a deck file, loaded and checked against the engine's card data (decklists.js loadDecks, as ladder.js
- * --decks loads them before a round), less the lists named in `skip`: {file, sha256, names, skipped, lists}, the lists
- * in normalizeDeck form, as play-seed.js takes them in a job.
- */
-function deckLists(file, skip) {
-    const { loadDecks } = require('../decklists');
-    const set = loadDecks(file, new (require('../env').Env)());
-    const name = path.basename(file);
-    const unknown = skip.filter((n) => !set.decks.some((d) => d.metadata.name === n));
-    if (unknown.length) {
-        throw new Error(`${name} has no deck list ${unknown.join(', ')} to skip`);
-    }
-    const lists = set.decks.filter((d) => !skip.includes(d.metadata.name));
-    if (lists.length < 2) {
-        throw new Error(`${name} less the skipped lists leaves fewer than 2 decks`);
-    }
-    return { file: name, sha256: set.sha256, names: lists.map((d) => d.metadata.name), skipped: [...skip], lists };
-}
-
-/**
  * The lineup the games machine plays, the same for plan, round and warm: each agent's newest version that is a
  * WebAssembly one (an agent whose newest playable version was withdrawn plays its newest earlier one; its JS starter v0,
  * which register makes, never plays here). Agents with none are left out at every look, so plan sees one change.
@@ -527,7 +507,7 @@ function storeBundle(name) {
  * this answers, so a referee.lock left in the round's folder (a stop, a crash) is stale and goes.
  */
 function roundSpec(k, { games, capMs = null }) {
-    const { ladderIdOf, ROUND_DECKS } = require('./referee');
+    const { ladderIdOf, ROUND_DECKS, roundDeckLists } = require('./referee');
     const { describeBot } = require('../players');
     const bots = machineLineup();
     // machineLineup fields only WebAssembly versions, so this does not happen; if it did, the round stops here (a
@@ -539,7 +519,7 @@ function roundSpec(k, { games, capMs = null }) {
     }
     let decks = null;
     if (ROUND_DECKS) {
-        const d = deckLists(ROUND_DECKS.file, ROUND_DECKS.skip ?? []);
+        const d = roundDeckLists();
         decks = { file: d.file, sha256: d.sha256, names: d.names, deal: 'seat', skipped: d.skipped, lists: d.lists };
     }
     fs.mkdirSync(DIRS.bundles, { recursive: true, mode: 0o755 });
@@ -659,7 +639,7 @@ const commands = {
             throw new Usage(`--file: no deck file ${file} in bot/decks`);
         }
         const skip = o.skip === undefined ? [] : need(o, 'skip').split(',').filter(Boolean);
-        return deckLists(full, skip);
+        return require('./referee').deckLists(full, skip);
     },
 
     async intake(o) {

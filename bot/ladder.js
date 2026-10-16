@@ -58,6 +58,7 @@ const { roundRobin, gauntlet } = require('./ratings');
 const { summarize } = require('./ladder-report');
 const { runPool, killChildren, DEFAULT_GAME_MS } = require('./game-pool');
 const { remoteLane, relayBase } = require('./remote-lane');
+const { addReplayKey } = require('./recorder');
 const { loadDecks, dealDecks, deckPairs } = require('./decklists');
 const { loadPool, checkPool } = require('./cardpool');
 
@@ -199,26 +200,6 @@ function filesIn(p) {
         return [];
     }
     return entries.filter((e) => e.name !== '.git' && e.name !== 'node_modules').flatMap((e) => filesIn(path.join(p, e.name)));
-}
-
-/** Adds a game's key to the end event (the last line) of its finished replay, atomically; nothing when there is none. */
-function addReplayKey(file, k) {
-    let text;
-    try {
-        text = fs.readFileSync(file, 'utf8');
-    } catch {
-        return;
-    }
-    const i = text.lastIndexOf('\n', text.length - 2) + 1;
-    let end = null;
-    try {
-        end = JSON.parse(text.slice(i));
-    } catch {
-        return;
-    }
-    if (end?.t === 'end' && !end.key) {
-        writeText(file, `${text.slice(0, i)}${JSON.stringify({ ...end, key: k })}\n`);
-    }
 }
 
 function writeText(file, text) {

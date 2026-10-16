@@ -287,7 +287,16 @@ to finish before the next game is done. A failure here changes no result; the pr
 
 ## Running bot programs
 
-`bot/external-bots.json` (or the file named by `$SWU_EXTERNAL_BOTS`) maps a bot name to a program; the name then works
+To develop a bot, use the dev harness: `npm run dev -- <bot folder>` packs the folder as the arena does, checks it
+with the arena's checker, and plays it in the arena's sandbox against `heuristic` and `rush` (or `--vs` other bot
+folders), on the rated rounds' deck lists and time rules, with replays, transcripts and a report. The bot only talks
+this protocol on stdin and stdout; the harness does the rest and sends nothing anywhere. `bot/arena/BUILD.md` ("Test
+locally") and the header of `bot/dev.js` describe it.
+
+In a rated game each bot has a thinking budget for the whole game (60 s by default) in place of the defaults in
+rule 2: every message's `ms` is the part of that budget the bot has left.
+
+For research runs on the referee's machine (no sandbox, trusted programs only), `bot/external-bots.json` (or the file named by `$SWU_EXTERNAL_BOTS`) maps a bot name to a program; the name then works
 in `node bot/tournament.js --bots ...` like any other bot.
 
 ```json

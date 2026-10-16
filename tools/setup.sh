@@ -4,21 +4,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 cards=true
-case "${1:-}" in
-    --skip-cards) cards=false ;;
-    --help|-h)
-        echo 'Usage: npm run setup -- [--skip-cards]'
-        echo 'Install locked dependencies and build the engine.'
-        echo '--skip-cards leaves real games unavailable; the unit tests that need no card data still run.'
-        exit 0
-        ;;
-    '') ;;
-    *) echo "Unknown setup option: $1" >&2; exit 2 ;;
-esac
-if [ "$#" -gt 1 ]; then
-    echo 'Only one setup option is supported.' >&2
-    exit 2
-fi
+sandbox=true
+for opt in "$@"; do
+    case "$opt" in
+        --skip-cards) cards=false ;;
+        --skip-sandbox) sandbox=false ;;
+        --help|-h)
+            echo 'Usage: npm run setup -- [--skip-cards] [--skip-sandbox]'
+            echo 'Install locked dependencies, build the engine, fetch the card data and set up the bot sandbox.'
+            echo '--skip-cards leaves real games unavailable; the unit tests that need no card data still run.'
+            echo '--skip-sandbox leaves out the sandbox bots run in (npm run dev needs it).'
+            exit 0
+            ;;
+        *) echo "Unknown setup option: $opt" >&2; exit 2 ;;
+    esac
+done
 
 if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
     echo 'Install Node.js 22 (see .nvmrc) and its bundled npm first.' >&2
@@ -55,5 +55,29 @@ if [ "$cards" = true ]; then
     echo 'Setup complete. Run npm run smoke, then npm run gate to check real games.'
 else
     echo 'Setup complete without card data. npm test runs; real games and npm run gate need card data.'
+fi
+
+# The sandbox submitted bots run in (bot/compiled/README.md), for npm run dev: wasmtime for Python in a virtualenv of
+# its own (python3 -I still loads it, and a Homebrew Python refuses pip installs into itself), Javy and CPython for
+# WASI (sha256-checked), and the protocol random bot. Needs pypi.org and github.com once.
+if [ "$sandbox" = true ]; then
+    if ! command -v python3 >/dev/null; then
+        echo 'Install Python 3 (with its venv module) first, or run setup with --skip-sandbox.' >&2
+        exit 1
+    fi
+    venv=build/compiled/venv
+    if [ ! -x "$venv/bin/python3" ]; then
+        python3 -m venv "$venv"
+    fi
+    toolchain() { node -p "require('./bot/compiled/toolchain.json').$1"; }
+    "$venv/bin/python3" -m pip install --disable-pip-version-check --quiet "wasmtime==$(toolchain python.wasmtime)"
+    "$venv/bin/python3" bot/compiled/build.py --tools
+    if [ -x "build/compiled/.tools/javy-$(toolchain javy.version)/javy" ]; then
+        "$venv/bin/python3" bot/compiled/build.py node-random
+    else
+        echo 'No Javy for this computer yet: JavaScript bots and --vs random need it, Python bots and bundles do not.'
+    fi
+    "$venv/bin/python3" -I -c 'import wasmtime'
+    echo 'Sandbox ready. Try: npm run dev -- <your bot folder>'
 fi
 echo 'For a source snapshot without Git history, use npm run smoke:source instead of npm run smoke.'

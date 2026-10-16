@@ -40,6 +40,12 @@ const KILL_AFTER_MS = 5000;
 const MAX_REQUEUE = 2;
 const POOL_WORKER = 'SWU_POOL_WORKER';
 const DEFAULT_GAME_MS = (capMs) => (Number.isFinite(capMs) && capMs > 0 ? 4 * capMs + 600000 : 0);
+/**
+ * The limits of a rated game with a thinking cap of capMs per bot: { maxSteps, capMs, hangMs, gameMs }, what the games
+ * machine puts in every job (server/src/games/Types.ts limitsFor, which a server test pins equal to this). The watchdog
+ * waits 30 s past the guard's wall cap (2 x capMs), so a call the guard allows is never taken for a hang.
+ */
+const roundLimits = (capMs) => ({ maxSteps: 6000, capMs, hangMs: 2 * capMs + 30000, gameMs: DEFAULT_GAME_MS(capMs) });
 let workerIds = 0;
 // bound when this module loads, before any bot code runs in the worker, so a bot that later replaces Date.now or
 // Atomics.store cannot make the control array say something else (ladder-worker.js also hides the array itself)
@@ -340,4 +346,4 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
     return pool;
 }
 
-module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT, DEFAULT_GAME_MS };
+module.exports = { runPool, killChildren, workerControl, forfeit, PHASE, SLOT, DEFAULT_GAME_MS, roundLimits };

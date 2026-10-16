@@ -15,6 +15,7 @@ import argparse
 import gzip
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -68,10 +69,37 @@ def fetch(url, sha256, dest):
     return dest
 
 
+class NotPinned(Exception):
+    """No Javy release is pinned for this platform (toolchain.json javy.platforms)."""
+
+
+def javy_platform(system=None, machine=None):
+    """This computer as toolchain.json names platforms: linux-x64, linux-arm64, darwin-arm64, darwin-x64, ..."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    cpu = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}.get(machine, machine)
+    return "%s-%s" % (system, cpu)
+
+
+def javy_asset(system=None, machine=None):
+    """The Javy release asset for a platform ({url, sha256}); raises NotPinned when toolchain.json pins none."""
+    j = TOOLCHAIN["javy"]
+    key = javy_platform(system, machine)
+    asset = j["platforms"].get(key)
+    if not asset or not asset.get("sha256"):
+        what = "the sha256 of %s" % asset["url"] if asset else "the url and sha256 of its release asset"
+        raise NotPinned("Javy %s is not pinned for %s yet: put %s in bot/compiled/toolchain.json javy.platforms.%s."
+                        " Until then this computer cannot pack JavaScript bots." % (j["version"], key, what, key))
+    return asset
+
+
 def javy():
     j = TOOLCHAIN["javy"]
     exe = os.path.join(TOOLS, "javy-%s" % j["version"], "javy")
-    gz = fetch(j["url"], j["sha256"], os.path.join(TOOLS, "downloads", os.path.basename(j["url"])))
+    if os.path.exists(exe):
+        return exe
+    asset = javy_asset()
+    gz = fetch(asset["url"], asset["sha256"], os.path.join(TOOLS, "downloads", os.path.basename(asset["url"])))
     if not os.path.exists(exe):
         os.makedirs(os.path.dirname(exe), exist_ok=True)
         with gzip.open(gz) as src, open(exe + ".part", "wb") as dst:
@@ -121,12 +149,16 @@ def provenance(path, recipe, toolchain):
 
 
 def build_js(spec, work, name):
+    try:
+        exe = javy()
+    except NotPinned as e:
+        sys.exit(str(e))
     sys_js = os.path.join(work, name + ".bundle.js")
     with open(sys_js, "w") as f:
         subprocess.run(["node", os.path.join(HERE, "js", "bundle.js"), spec["entry"], *spec.get("args", [])], cwd=ROOT, check=True, stdout=f)
     out = os.path.join(work, name + ".wasm")
     flags = TOOLCHAIN["javy"]["flags"]
-    run([javy(), "build", *flags, "-o", out, sys_js])
+    run([exe, "build", *flags, "-o", out, sys_js])
     return out, "node bot/compiled/js/bundle.js %s %s | javy build %s" % (spec["entry"], " ".join(spec.get("args", [])), " ".join(flags)), "javy %s" % TOOLCHAIN["javy"]["version"]
 
 
@@ -199,7 +231,10 @@ def main():
         return
     if o.tools:
         # what the arena's intake packs submissions with (intake.js toolchainMissing): Javy and CPython for WASI
-        log("javy: %s" % os.path.relpath(javy(), ROOT))
+        try:
+            log("javy: %s" % os.path.relpath(javy(), ROOT))
+        except NotPinned as e:
+            log("warning: %s" % e)
         for name in TOOLCHAIN["runtimes"]:
             runtime(name)
             log("runtime %s: %s" % (name, os.path.relpath(os.path.join(TOOLS, TOOLCHAIN["runtimes"][name]["dir"]), ROOT)))

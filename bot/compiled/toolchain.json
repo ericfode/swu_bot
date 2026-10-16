@@ -5,8 +5,16 @@
     },
     "javy": {
         "version": "8.0.0",
-        "url": "https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-x86_64-linux-v8.0.0.gz",
-        "sha256": "2a1e16eff42a5a90f5fb9fcd03a9e61b4eeb2518bfe1bc399196afe46e60ac86",
+        "about": "the release asset for each platform (build.py javy picks <os>-<cpu>); one whose sha256 is null is not pinned yet, so build.py will not fetch it",
+        "platforms": {
+            "linux-x64": {
+                "url": "https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-x86_64-linux-v8.0.0.gz",
+                "sha256": "2a1e16eff42a5a90f5fb9fcd03a9e61b4eeb2518bfe1bc399196afe46e60ac86"
+            },
+            "linux-arm64": { "url": "https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-arm-linux-v8.0.0.gz", "sha256": null },
+            "darwin-arm64": { "url": "https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-arm-macos-v8.0.0.gz", "sha256": null },
+            "darwin-x64": { "url": "https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-x86_64-macos-v8.0.0.gz", "sha256": null }
+        },
         "flags": ["-J", "javy-stream-io=y", "-J", "text-encoding=y", "-J", "event-loop=y"]
     },
     "runtimes": {

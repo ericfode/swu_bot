@@ -14,7 +14,8 @@
  *   think       { p1, p2 } guarded thinking time in ms (CPU for bots that run here); timing stays the referee's
  * A bot that cannot be built loses before the game starts; when neither can, the game is an ERROR with `by` null.
  * Bot programs from bot/external-bots.json keep running between games (players/index.js makeBot); every other bot is
- * built for one game and closed after it.
+ * built for one game and closed after it. With SWU_BOT_LOG set to a folder (bot/dev.js), a bot program built for a game
+ * writes its transcript there as <game id>.p<seat>.* (stdio.js StdioClient log).
  */
 const fs = require('fs');
 const path = require('path');
@@ -30,12 +31,16 @@ const { Env } = require('./env');
 const { playGame, timingSummary } = require('./match');
 const { snapshot } = require('./recorder');
 const { makeBot, closeBots, describeBot } = require('./players');
+const { StdioClient } = require('./stdio');
 const { guard } = require('./players/guard');
 const { gameKey } = require('./rng');
 const { workerControl, forfeit, PHASE } = require('./game-pool');
 
 const env = new Env();
 env.engineRev = workerData.engineRev ?? null;
+// a folder for each bot program's transcript (stdio.js StdioClient log), when the dev harness sets it; never set on the
+// games machine or a helper, which build their children's environment from scratch
+const BOT_LOG = process.env.SWU_BOT_LOG || null;
 const capMs = workerData.capMs ?? Infinity;
 // with a cap, the guard's per-game budget decides a slow bot program, so protocol.js's per-message limits only back it up
 const limits = Number.isFinite(capMs) ? { hello: capMs + 5000, decide: capMs + 5000, over: 10000 } : {};
@@ -117,6 +122,10 @@ function load(name, i, taken) {
             const t0 = cpuMs();
             const w0 = perfNow();
             const raw = makeBot(name, taken);
+            if (BOT_LOG && raw instanceof StdioClient && describeBot(name)?.kind !== 'external') {
+                // the dev harness's transcripts (bot/dev.js): a bot program's protocol lines, stderr and sandbox stats
+                raw.log = path.join(BOT_LOG, `${thisGame.id}.p${i + 1}`);
+            }
             // read by guard() once it has read the bot's properties (getters run bot code too): all of it is load time, on
             // both clocks (a wait while loading, for work done off this thread, is not free either)
             const loadMs = () => Math.max(0, cpuMs() - t0);

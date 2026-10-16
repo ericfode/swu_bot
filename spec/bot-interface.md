@@ -38,8 +38,9 @@ function createRandomBot(name = 'random') {
 }
 ```
 
-Registering a bot by name for `node bot/tournament.js --bots ...`: a bot program goes in `bot/external-bots.json`
-([protocol.md](protocol.md#running-bot-programs)); a JavaScript bot gets a branch in `makeBot(name, taken)` in
+A bot for the arena is a program in its own folder, developed with `npm run dev -- <folder>`
+([protocol.md](protocol.md#running-bot-programs)). Registering a bot by name for `node bot/tournament.js --bots ...`:
+a bot program goes in `bot/external-bots.json`; a JavaScript bot gets a branch in `makeBot(name, taken)` in
 `bot/players/index.js`. An entry in `external-bots.json` may also name its own class with `"adapter"`, built as
 `new Class(name, entry)`: holocron's `bots/jev/look.js` is a native bot that runs a v1 program and lets it look ahead on the
 engine.

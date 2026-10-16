@@ -15,15 +15,22 @@ bundle of its own, `node-random` (the protocol random bot in `bot/test/fixtures/
 
 ## Use
 
+`npm run setup` sets the sandbox up (its last step; `tools/setup.sh`): wasmtime in a virtualenv of its own,
+`build/compiled/venv`, then `build.py --tools` and `build.py node-random` with that virtualenv's Python. To develop a
+bot, run it through the dev harness (`npm run dev -- <bot folder>`, `bot/dev.js`), which puts the virtualenv first on
+its children's PATH and packs, checks and plays the bot with the files here. By hand:
+
 ```bash
-python3 -m pip install wasmtime==49.0.0          # once, into the interpreter or a virtualenv (python3 -I skips --user installs)
+build/compiled/venv/bin/python3 -m pip install wasmtime==49.0.0   # or into any interpreter (python3 -I skips --user installs)
 python3 bot/compiled/build.py --tools          # only Javy and CPython for WASI: what the arena's intake packs with
 python3 bot/compiled/build.py                  # node-random into build/compiled/node-random/, id in build/compiled/index.json
 python3 bot/compiled/bundle.py build/compiled/node-random   # print a bundle's id and sizes
 ```
 
 The first build downloads Javy 8.0.0 and CPython 3.14.7 for WASI (`toolchain.json` pins their URLs and sha256) into
-`build/compiled/.tools`. `build/` is not in git. A `build/compiled/.cache` made by an older `run.py` can be writable by
+`build/compiled/.tools`. Javy has one release per platform (`javy.platforms`): Linux on x64 is pinned, and on another
+platform `build.py` says which sha256 to add before it packs JavaScript (CPython for WASI is the same everywhere).
+`build/` is not in git. A `build/compiled/.cache` made by an older `run.py` can be writable by
 your group, and `run.py` then does not use it (`build.py` stops with "could not keep the compiled code"): delete it once.
 
 ## Files
@@ -48,6 +55,9 @@ your group, and `run.py` then does not use it (`build.py` stops with "could not 
 - read-only folders only: the bundle at `/bot`, and for Python the standard library at `/usr/local/lib`;
 - the environment from the manifest and runtime, nothing inherited;
 - a memory cap (`resources.memory_mb`, default 512), and optional `--fuel` per reply and a `--wall-s` watchdog.
+
+With `WASM_HOST_STATS` set to a file, `run.py` adds its stats (replies, start-up and compile time, memory, fuel with
+`--fuel`) to it as one JSON line when it ends; the dev harness keeps them as each game's `.host.json`.
 
 No card files either: like every bot, a bundle gets the card data in `hello.cards`
 ([spec/protocol.md](../../spec/protocol.md#hello--ready)), and `run.py` mounts nothing whatever `arena.json` says.
