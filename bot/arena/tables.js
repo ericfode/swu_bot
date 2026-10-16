@@ -10,7 +10,7 @@
  * in every log, never a GitHub name (3A); any arena bot that runs in a browser (4B); both players trusted in this
  * first version (no signed moves, no deal proof).
  *
- *   const tables = createTables({ store, swarm, auth, kitFile, arena, wake });
+ *   const tables = createTables({ store, swarm, auth, kitFile, statics, arena, wake });   // statics: static.js
  *   if (await tables.openRoute(req, res, url, helpers)) return;      // /api/open/*, before the window's own auth
  *   if (await tables.route(req, res, url, who, helpers)) return;     // helpers: {sendJson, sendText, readBody}
  *   tables.openTo(next)   // whether GitHub sign-in may return a login with no role to `next` (auth.js openTo)
@@ -54,6 +54,7 @@ const { atLeast, LOGIN } = require('./auth');
 const { createLobby, LobbyError, MAX_MSG } = require('./lobby');
 const { swudbId, fetchSwudb, deckFromJson } = require('./swudb');
 const { normalizeDeck } = require('../decklists');
+const { createStatic } = require('./static');
 
 const RUN = 'tables';
 const JEPA = 'jepa-tx-gate';
@@ -223,7 +224,7 @@ function tarEntry(name, data, mtime = Math.floor(Date.now() / 1000)) {
 const TAR_END = Buffer.alloc(1024);
 
 function createTables({
-    store, swarm, auth, kitFile, arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
+    store, swarm, auth, kitFile, statics = createStatic(), arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
     mode = process.env.ARENA_TABLES || 'invited', page = path.join(__dirname, 'web', 'tables.html'), decksFile = DECKS,
     fetchImpl = globalThis.fetch, now = Date.now, lobby = createLobby({ now }), perDay = PER_DAY, maxRows = MAX_ROWS
 } = {}) {
@@ -232,7 +233,6 @@ function createTables({
     const rate = new Map(); // `${what}:${login}` -> times, the last hour
     const deckCache = new Map(); // SWUDB id -> {at, deck}
     let woke = 0;
-    let kit = null;
 
     let lists = [];
     try {
@@ -343,21 +343,11 @@ function createTables({
         return true;
     }
 
-    function sendKit(req, res, sendText) {
-        let st;
-        try {
-            st = fs.statSync(kitFile);
-        } catch {
+    // compressed once and 304 on a reload (static.js), one copy with the window's /kit.js and /play/kit.js
+    async function sendKit(req, res, sendText) {
+        if (!(await statics.send(req, res, kitFile, 'text/javascript', { headers: { 'cross-origin-resource-policy': 'same-origin' } }))) {
             sendText(res, req, 404, 'text/plain', 'not found');
-            return true;
         }
-        if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            const raw = fs.readFileSync(kitFile);
-            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
-        }
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', 'cross-origin-resource-policy': 'same-origin', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        res.end(gzip ? kit.gz : kit.raw);
         return true;
     }
 

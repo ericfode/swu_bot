@@ -36,6 +36,7 @@ const { createSwarmRelay } = require('./swarm-relay');
 const { createPlay } = require('./play');
 const { createTables } = require('./tables');
 const { createArt } = require('./art');
+const { createStatic } = require('./static');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
@@ -677,15 +678,18 @@ function createWindow(opts = {}) {
     const kitLicenses = path.join(path.dirname(kitFile), 'swu-viewer-kit.licenses.txt');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
+    // files sent as they are (the app, the kit): compressed once, 304 when the browser has them (static.js)
+    const statics = createStatic();
     // the play page (play.js): a person against a bot in their own tab, on the swarm's files; games come back here
-    play = createPlay({ store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
-    // card art for the isolated pages (/play, /tables), which cannot show the CDN's images themselves (art.js)
-    const art = opts.art ?? createArt();
+    play = createPlay({ store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
+    // card art for the isolated pages (/play, /tables), which cannot show the CDN's images themselves (art.js); made
+    // smaller (WebP) once and kept on the volume
+    const art = opts.art ?? createArt({ dir: path.join(home, 'art') });
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
     // the open tables (tables.js): people against people or any arena bot, every game in a player's tab
     tables = createTables({
-        store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES,
+        store, swarm, auth, kitFile, statics, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES,
         arena: { status: () => arenaDoc('status') ?? { competitors: [] }, versions: (name) => (/^[a-z][a-z0-9_]{0,31}$/.test(name) ? arenaDoc(`versions-${name}`) ?? null : null) },
         ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
         ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
@@ -961,14 +965,11 @@ function createWindow(opts = {}) {
         res.end(gzip ? zlib.gzipSync(text) : text);
     }
 
-    function serveFile(req, res, file, type) {
-        let text;
-        try {
-            text = fs.readFileSync(file);
-        } catch {
-            return sendText(res, req, 404, 'text/plain', 'not found');
+    /** A file as it is on disk (the app, the kit), through static.js; a page gets the feedback widget, as in sendText. */
+    async function serveFile(req, res, file, type) {
+        if (!(await statics.send(req, res, file, type, /^text\/html\b/.test(type) ? { transform: feedback.inject } : {}))) {
+            sendText(res, req, 404, 'text/plain', 'not found');
         }
-        return sendText(res, req, 200, type, text);
     }
 
     /** The request body, or too_large: refused up front when its length says so, else read to the end and dropped. */
