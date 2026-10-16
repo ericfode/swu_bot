@@ -120,7 +120,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   function watch(jsonl, bottomSeat = 'p1') {
     viewer?.destroy?.();
     show('viewer');
-    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false, bottomSeat });
+    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false, bottomSeat, persist: 'swuarena.tables.replay' });
   }
   $('back').onclick = () => { viewer?.destroy?.(); viewer = null; show(backTo); };
   $('games-back').onclick = () => show('table');
