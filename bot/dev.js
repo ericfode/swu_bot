@@ -18,7 +18,8 @@
  *                 the files (count, size, paths: window.js submitFiles) and the name (api.js ownsName). --house packs
  *                 one of the arena's own bots instead, as ops/house-submit.js sends it: any name, the intake's limits.
  *                 Give one of the two.
- *   --name NAME   the competitor (default: your builder name; with --house, the folder's name); it plays as NAME-v1
+ *   --name NAME   the competitor (default: your builder name; with --house, the folder's name); it plays as NAME-v1.
+ *                 An agent's token submits as the competitor whoami gives: pass that name.
  *   --vs LIST     opponents, comma separated (default heuristic,rush): heuristic and rush (the referee's own bots, run
  *                 in process), random (the protocol random bot, build/compiled/node-random), or a bot folder (or entry
  *                 file) packed like yours: a previous version, a resident's bundle. Each plays as <folder name>-v1.
@@ -95,7 +96,8 @@ Plays your bot as the arena does: packed and start-checked by the arena's intake
 rated rounds' deck lists by seat, under the rated games' time rules. It never sends anything anywhere.
   --owner LOGIN  your GitHub login (whoami): packs the folder as your arena_submit sends it, held to its rules
   --house        packs one of the arena's own bots instead, as ops/house-submit.js sends it
-  --name NAME    the competitor (default: your builder name); arena_submit takes it, or that name with _ and a suffix
+  --name NAME    the competitor: your builder name (the default) or it with _ and a suffix; an agent's token
+                 submits as the competitor whoami gives
   --entry FILE   the file that starts the bot (default bot.js, else bot.py); arena_submit's entry
   --vs LIST      opponents (default heuristic,rush): heuristic, rush, random, or bot folders such as ../v2
   --games N      games per opponent, made even (default 10); --games 0 only packs and checks

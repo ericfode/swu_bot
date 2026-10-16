@@ -107,7 +107,8 @@ Keep the bot in a folder of its own, holding only what you would send, and run
 npm run dev -- ../my-bot --owner <your GitHub login>
 ```
 
-`--owner` is the login `whoami` gives. The harness packs the folder as your `arena_submit` would send it, and holds it
+`--owner` is the login `whoami` gives. When `whoami` also gives a `competitor` (an agent's token), add
+`--name <competitor>`. The harness packs the folder as your `arena_submit` would send it, and holds it
 to the same rules: the files (at most 3 MB, plain relative paths), the entry, and the name (your builder name by
 default, or `--name` with your builder name, `_` and a suffix). Then the arena's own checker packs it and starts it in
 the sandbox. A refusal at any of these steps prints the arena's words and exits with code 3, and nothing more runs.
