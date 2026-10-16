@@ -6,8 +6,8 @@
  *
  * A room has two sides, host and guest, each with its own key k (a side's messages and stream need its key, so the
  * same person may sit on both sides, in two tabs). Each side reads one stream (server-sent events) and sends with
- * POST; a message sent to a side waits in its queue until that side reads it, and a stream that reconnects gets what
- * it missed after its Last-Event-ID. Room events come as {room: 'joined', peer} and {room: 'left'}; a side's
+ * POST; a message sent to a side waits in its queue until its stream takes it, and a stream that reconnects gets what
+ * it missed after its Last-Event-ID (the last KEEP_BYTES a side was sent are kept for that). Room events come as {room: 'joined', peer} and {room: 'left'}; a side's
  * messages as {msg}. What the two tabs send is theirs: the WebRTC handshake (offer, answer), then, when the direct
  * link does not open, the game itself (bot/arena/web/tables.html).
  *
@@ -30,7 +30,8 @@ const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LEN = 6;
 const IDLE_MS = 30 * 60000;
 const MAX_MS = 12 * 3600000;
-const QUEUE_BYTES = 8 << 20; // what may wait for one side
+const QUEUE_BYTES = 8 << 20; // what may wait for one side: not on its stream yet, or on it and not yet read
+const KEEP_BYTES = 4 << 20; // what a side was sent, kept for a stream that reconnects
 const MAX_MSG = 256 << 10;
 const PING_MS = 15000;
 const TICKET_MS = 60000; // a ticket whose stream never came
@@ -52,7 +53,24 @@ function createLobby({ now = Date.now, setTimer = setInterval, clearTimer = clea
     const codes = new Map(); // invite code -> room id
     const tickets = new Map(); // ticket -> {login, pid, k, at, out}
 
-    const newSide = (who) => ({ login: who.login, pid: who.pid, k: randomKey(), q: [], bytes: 0, seq: 0, out: null, left: false });
+    // q: the kept messages (bytes in all), the first ones sent (ids up to wrote), then the waiting ones (waiting bytes)
+    const newSide = (who) => ({ login: who.login, pid: who.pid, k: randomKey(), q: [], bytes: 0, waiting: 0, wrote: 0, seq: 0, out: null, left: false });
+
+    /** Writes e on the side's stream; it no longer waits. */
+    function put(s, e) {
+        s.out.write(e);
+        if (e.id > s.wrote) {
+            s.wrote = e.id;
+            s.waiting -= e.text.length;
+        }
+    }
+
+    /** Drops the oldest messages a side was sent beyond KEEP_BYTES. */
+    function trim(s) {
+        while (s.q.length && s.q[0].id <= s.wrote && s.bytes - s.waiting > KEEP_BYTES) {
+            s.bytes -= s.q.shift().text.length;
+        }
+    }
 
     function newRoom(kind, host) {
         const room = { id: randomKey(), kind, code: null, createdAt: now(), lastAt: now(), host: newSide(host), guest: null };
@@ -70,21 +88,25 @@ function createLobby({ now = Date.now, setTimer = setInterval, clearTimer = clea
         }
     }
 
-    /** Puts a message in `side`'s queue and on its stream; false when the queue is full. */
+    /** Puts a message in `side`'s queue and on its stream; false when too much already waits for that side. */
     function deliver(room, side, data) {
         const s = room[side];
         if (!s) {
             return false;
         }
         const text = JSON.stringify(data);
-        if (s.bytes + text.length > QUEUE_BYTES) {
+        if (s.waiting + (s.out?.buffered() ?? 0) + text.length > QUEUE_BYTES) {
             return false;
         }
         const e = { id: ++s.seq, text };
         s.q.push(e);
         s.bytes += text.length;
+        s.waiting += text.length;
         room.lastAt = now();
-        s.out?.write(e);
+        if (s.out) {
+            put(s, e);
+            trim(s);
+        }
         return true;
     }
 
@@ -148,6 +170,7 @@ function createLobby({ now = Date.now, setTimer = setInterval, clearTimer = clea
         ping.unref?.();
         const out = {
             write: (e) => open && res.write(`${e.id ? `id: ${e.id}\n` : ''}data: ${e.text}\n\n`),
+            buffered: () => (open ? res.writableLength ?? 0 : 0), // written and not yet taken by the socket
             end: () => {
                 if (open) {
                     open = false;
@@ -196,14 +219,15 @@ function createLobby({ now = Date.now, setTimer = setInterval, clearTimer = clea
             }
         });
         s.out = out;
-        const after = Number(req.headers['last-event-id'] ?? 0) || 0;
+        const after = Math.min(Number(req.headers['last-event-id'] ?? 0) || 0, s.wrote);
         // what this side has read is what it read before a reconnect: drop it, send the rest
         while (s.q.length && s.q[0].id <= after) {
             s.bytes -= s.q.shift().text.length;
         }
-        for (const e of s.q) {
-            out.write(e);
+        for (const e of [...s.q]) {
+            put(s, e);
         }
+        trim(s);
     }
 
     function sideOf(roomId, side, k) {
@@ -272,4 +296,4 @@ function createLobby({ now = Date.now, setTimer = setInterval, clearTimer = clea
     };
 }
 
-module.exports = { createLobby, LobbyError, MAX_MSG };
+module.exports = { createLobby, LobbyError, MAX_MSG, QUEUE_BYTES, KEEP_BYTES };

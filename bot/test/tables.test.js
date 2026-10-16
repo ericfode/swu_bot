@@ -19,7 +19,7 @@ const { createWindow, Store } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 const { createSwarmRelay } = require('../arena/swarm-relay');
 const { checkReplay, isoWeek } = require('../arena/tables');
-const { createLobby } = require('../arena/lobby');
+const { createLobby, QUEUE_BYTES, KEEP_BYTES } = require('../arena/lobby');
 const { swudbId, fromSwudbApi, deckFromJson, fetchSwudb } = require('../arena/swudb');
 
 const ENV = { ARENA_PUSH_TOKEN: 'push-secret', ARENA_ADMIN_TOKEN: 'admin-secret', ARENA_ADMINS: 'ericfode', ARENA_INVITES: 'pal,pal2', GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'csecret', ARENA_PUBLIC_URL: 'https://swu-arena.fly.dev' };
@@ -398,6 +398,33 @@ test('the queue pairs the two people who waited longest, and the one who waited 
         }
         await close();
     }
+});
+
+test('the lobby counts only what waits for a side: a side that reads takes a long game, a stalled stream does not', () => {
+    const lobby = createLobby({ setTimer: () => ({ unref() {} }), clearTimer: () => undefined });
+    /** A response the side reads at once; `stall` bytes sit unread in its socket. */
+    const reader = (stall = 0) => ({ got: [], writableLength: stall, writeHead() {}, on() {}, end() {}, write(t) { this.got.push(...[...t.matchAll(/^id: (\d+)$/gm)].map((m) => Number(m[1]))); return true; } });
+    const inv = lobby.invite({ login: 'a', pid: 'pl_aaaaaa' });
+    const join = lobby.join(inv.code, { login: 'b', pid: 'pl_bbbbbb' });
+    const res = reader();
+    lobby.stream({ headers: {} }, res, { room: inv.room, side: 'guest', k: join.k });
+    const big = 'z'.repeat(200000);
+    const n = Math.ceil((3 * QUEUE_BYTES) / big.length);
+    for (let i = 0; i < n; i++) {
+        assert.strictEqual(lobby.send(inv.room, 'host', inv.k, big), null, `message ${i + 1} of ${n}`);
+    }
+    assert.deepStrictEqual([res.got.length, res.got.at(-1)], [n, n]);
+    // a stream that comes back gets what it missed, from the last KEEP_BYTES it was sent
+    const back = reader();
+    lobby.stream({ headers: { 'last-event-id': String(n - 2) } }, back, { room: inv.room, side: 'guest', k: join.k });
+    assert.deepStrictEqual(back.got, [n - 1, n]);
+    const again = reader();
+    lobby.stream({ headers: {} }, again, { room: inv.room, side: 'guest', k: join.k });
+    assert.ok(again.got.length * big.length <= KEEP_BYTES && again.got.length >= 2, `kept ${again.got.length}`);
+    // a stream whose socket takes nothing stops taking messages
+    lobby.stream({ headers: {} }, reader(QUEUE_BYTES), { room: inv.room, side: 'guest', k: join.k });
+    assert.match(lobby.send(inv.room, 'host', inv.k, big), /not reading/);
+    lobby.close();
 });
 
 test('the lobby drops idle rooms and tickets whose stream never came, and caps what waits for one side', () => {

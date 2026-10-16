@@ -46,6 +46,8 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 const zlib = require('zlib');
 const { atLeast, LOGIN } = require('./auth');
 const { createLobby, LobbyError, MAX_MSG } = require('./lobby');
@@ -181,32 +183,28 @@ function rowOf(id, { header, end }, { sha256, bytes, at }) {
     };
 }
 
-/** A ustar archive of [name, Buffer] entries, as one Buffer. */
-function tar(entries, mtime = Math.floor(Date.now() / 1000)) {
-    const parts = [];
-    for (const [name, data] of entries) {
-        const h = Buffer.alloc(512);
-        const put = (s, off, len) => h.write(s, off, len, 'utf8');
-        put(name.slice(-100), 0, 100);
-        put('0000644\0', 100, 8);
-        put('0000000\0', 108, 8);
-        put('0000000\0', 116, 8);
-        put(`${data.length.toString(8).padStart(11, '0')}\0`, 124, 12);
-        put(`${mtime.toString(8).padStart(11, '0')}\0`, 136, 12);
-        h.fill(' ', 148, 156);
-        put('0', 156, 1);
-        put('ustar\0', 257, 6);
-        put('00', 263, 2);
-        let sum = 0;
-        for (const b of h) {
-            sum += b;
-        }
-        put(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8);
-        parts.push(h, data, Buffer.alloc((512 - (data.length % 512)) % 512));
+/** One file of a ustar archive: its header, its data and the padding after it. An archive ends with TAR_END. */
+function tarEntry(name, data, mtime = Math.floor(Date.now() / 1000)) {
+    const h = Buffer.alloc(512);
+    const put = (s, off, len) => h.write(s, off, len, 'utf8');
+    put(name.slice(-100), 0, 100);
+    put('0000644\0', 100, 8);
+    put('0000000\0', 108, 8);
+    put('0000000\0', 116, 8);
+    put(`${data.length.toString(8).padStart(11, '0')}\0`, 124, 12);
+    put(`${mtime.toString(8).padStart(11, '0')}\0`, 136, 12);
+    h.fill(' ', 148, 156);
+    put('0', 156, 1);
+    put('ustar\0', 257, 6);
+    put('00', 263, 2);
+    let sum = 0;
+    for (const b of h) {
+        sum += b;
     }
-    parts.push(Buffer.alloc(1024));
-    return Buffer.concat(parts);
+    put(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8);
+    return [h, data, Buffer.alloc((512 - (data.length % 512)) % 512)];
 }
+const TAR_END = Buffer.alloc(1024);
 
 function createTables({
     store, swarm, auth, kitFile, arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
@@ -518,16 +516,20 @@ function createTables({
         if (w && WEEK.test(w[1])) {
             const games = rows.filter((r) => isoWeek(r.playedAt) === w[1]);
             const dir = `tables-${w[1]}`;
-            const entries = [[`${dir}/index.json`, Buffer.from(JSON.stringify({ id: dir, kind: 'tables', week: w[1], games }))]];
-            for (const r of games) {
-                const buf = store.readReplay(RUN, r.id);
-                if (buf) {
-                    entries.push([`${dir}/games/${r.id}.jsonl`, buf]);
+            const mtime = Math.floor(now() / 1000);
+            // streamed: one replay in memory at a time, read when the client has taken the ones before
+            function* archive() {
+                yield* tarEntry(`${dir}/index.json`, Buffer.from(JSON.stringify({ id: dir, kind: 'tables', week: w[1], games })), mtime);
+                for (const r of games) {
+                    const buf = store.readReplay(RUN, r.id);
+                    if (buf) {
+                        yield* tarEntry(`${dir}/games/${r.id}.jsonl`, buf, mtime);
+                    }
                 }
+                yield TAR_END;
             }
-            const gz = await new Promise((resolve, reject) => zlib.gzip(tar(entries, Math.floor(now() / 1000)), (e, b) => (e ? reject(e) : resolve(b))));
             res.writeHead(200, { 'content-type': 'application/gzip', 'content-disposition': `attachment; filename="${dir}.tar.gz"`, 'cache-control': 'no-cache' });
-            res.end(gz);
+            await pipeline(Readable.from(archive(), { objectMode: false, highWaterMark: 1 << 20 }), zlib.createGzip(), res).catch(() => undefined); // a reader that goes away ends it
             return true;
         }
         fail(404, 'not_found', 'unknown open API path (/api/open/games, /api/open/weeks)');
@@ -710,4 +712,4 @@ function createTables({
     return { route, openRoute, openTo, mode: on, lobby, close: () => lobby.close() };
 }
 
-module.exports = { createTables, checkReplay, rowOf, isoWeek, tar, RUN };
+module.exports = { createTables, checkReplay, rowOf, isoWeek, tarEntry, RUN };
