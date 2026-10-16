@@ -54,6 +54,23 @@ async function answer(client, msg, sim) {
     }
 }
 
+/**
+ * An error the bot threw, as its reply says it: the message and the first place in the bot's own files (the bundle's
+ * globalThis.__where turns QuickJS's places in the script into file:line). The whole stack goes to stderr.
+ */
+function errorText(e) {
+    const message = String(e?.message ?? e);
+    const where = typeof globalThis.__where === 'function' ? globalThis.__where : String;
+    const stack = typeof e?.stack === 'string' ? where(e.stack) : '';
+    // QuickJS's stack is the frames alone; V8's (the tests run this under Node) starts with the message. A log that
+    // cannot be written changes no reply.
+    try {
+        console.error(!stack ? message : stack.includes(message) ? stack.trimEnd() : `${message}\n${stack.trimEnd()}`);
+    } catch {} // no stderr
+    const at = stack.split('\n').map((l) => /([^\s()]+\.js:\d+(?::\d+)?)\)?\s*$/.exec(l)?.[1]).find((p) => p && !/^stdio\.js:/.test(p));
+    return at ? `${message} (at ${at})` : message;
+}
+
 /** As bot/stdio.js serve(): answer referee messages on stdin until end of file. */
 async function serve(client) {
     for (let msg; (msg = next());) {
@@ -74,7 +91,7 @@ async function serve(client) {
         try {
             reply = await answer(client, msg, sim);
         } catch (e) {
-            reply = { t: 'error', error: String(e?.message ?? e) };
+            reply = { t: 'error', error: errorText(e) };
         }
         open = false;
         if (reply !== undefined) {

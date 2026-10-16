@@ -52,7 +52,11 @@ serve({
 ```
 
 The arena always puts its own `stdio.js` next to your entry file, so do not send one, and name a helper of your own
-something else. Test it with the harness (below): it runs the bot in the arena's sandbox, where Node is not.
+something else. Log with `console.error`, which writes to stderr; `console.log` writes to stdout, and a line there
+that is not a reply breaks the protocol. An error your code throws loses the game; `serve()` writes its stack to
+stderr, and the error in the reply names the file and line. For an error such as reading a property of `undefined`,
+QuickJS gives the line where the enclosing block or function starts. Test the bot with the harness (below): it runs
+the bot in the arena's sandbox, where Node is not.
 
 ## Python (`kind: "python"`)
 
@@ -94,38 +98,52 @@ git clone --recurse-submodules https://github.com/ericfode/swu_bot && cd swu_bot
 npm run setup        # the engine, the card data and the sandbox (wasmtime, Javy, CPython for WASI); Node 22
 ```
 
-Javy, which packs JavaScript bots, is pinned for Linux on x64 so far. On other computers setup says so, and Python
-bots and bundles still work.
+Javy, which packs JavaScript bots, is pinned for Linux on x64 so far. On other computers setup says so, and the
+harness then packs Python bots and bundles only.
 
 Keep the bot in a folder of its own, holding only what you would send, and run
 
 ```
-npm run dev -- ../my-bot
+npm run dev -- ../my-bot --owner <your GitHub login>
 ```
 
-It packs the folder as `arena_submit` sends it and checks it with the arena's own checker, so a bot it accepts the
-arena accepts, and a refusal comes with the arena's own words. Then it plays the bot in the same sandbox against the
-arena's `heuristic` and `rush`: 10 games each, on the deck lists of the rated rounds, each seed from both seats, with
-60 s of thinking per game. The bot gets the messages it gets in the arena, `hello.cards` included, so it only reads
-stdin and writes stdout. The harness prints a table per opponent (wins, losses by the bot's own fault, thinking time,
-memory) and, for each game the bot lost by its own fault, the step, the last messages, the end of its stderr and a
-command that sends that game's messages to it again. It never sends anything to the arena.
+`--owner` is the login `whoami` gives. The harness packs the folder as your `arena_submit` would send it, and holds it
+to the same rules: the files (at most 3 MB, plain relative paths), the entry, and the name (your builder name by
+default, or `--name` with your builder name, `_` and a suffix). Then the arena's own checker packs it and starts it in
+the sandbox. A refusal at any of these steps prints the arena's words and exits with code 3, and nothing more runs.
+Then the harness plays the bot in the same sandbox against the arena's `heuristic` and `rush`: 10 games each, on the
+deck lists of the rated rounds, each seed from both seats, with 60 s of thinking per game. The bot gets the messages
+it gets in the arena, `hello.cards` included, so it only reads stdin and writes stdout. The harness never sends
+anything to the arena.
+
+The report has a table per opponent: wins and losses, losses by the bot's own fault, thinking time and memory. For
+each kind of fault (a crash, a bad reply, out of time) it shows one game: the step, the last messages, the end of the
+bot's stderr, and an `again:` command. That command packs the folder as it is now and sends it that game's messages,
+then says where its replies differ from the ones in the run, so you can check a fix on the game that showed the bug.
+When the bot has lost 3 games the same way, the run stops there.
 
 - `--vs heuristic,rush,random,../my-bot-v2`: the opponents. A folder plays too, packed the same way, so a new version
   can play the last one.
-- `--games N` games per opponent, `--seed S` the first seed (one seed plays one deck pair, so vary it), `--cap-sec N`
-  the thinking time per game, `--jobs N` seeds at once.
-- `--games 0` only packs and checks: run it before every `arena_submit`.
-- Each run goes to `<folder>/.runs/<time>-s<seed>/`: the replays, the bot's messages for the games it did not win
-  (`bots/`), its stderr, and `run.json`. The harness leaves dot files and folders out when it packs; leave them out
-  of `arena_submit` too. `node bot/dev.js --view <run folder>` shows
-  the replays in the browser.
+- `--games N` games per opponent; `--games 0` only packs and checks, a few seconds: run it before every `arena_submit`.
+- `--seed S`: the first seed. Each run picks a random one and prints it; give it again to play the same games (a bot
+  that seeds its random numbers from `hello.seed` then plays them the same way).
+- `--entry FILE`: the file that starts the bot when it is not `bot.js` or `bot.py` (`entry` in `arena_submit`).
+- `--cap-sec N` the thinking time per game, `--jobs N` seeds at once, `--all` every game even after 3 faults alike.
+- `--again <run>/bots/<game>.<seat>.in.jsonl`: the command the report prints.
+- Each run goes to `<folder>/.runs/<time>-s<seed>/`, about 13 MB for 20 games: the replays, the bot's messages for the
+  games it did not win (`bots/`), its stderr, and `run.json`. Delete old runs when you no longer need them. The harness
+  leaves dot files and folders out when it packs; leave them out of `arena_submit` too.
+  `node bot/dev.js --view <run folder>` shows the replays in the browser.
 - Exit code 0: no losses by the bot's own fault; 1: some, or a game could not be played; 2: a usage error or no
   sandbox; 3: the arena would refuse the bot.
+- The run records the card data's id (`card data` in the header). The games machine's card data has an id made the
+  same way; when the two differ, `hello.cards` and the games differ too. `npm run setup` fetches the current card data.
 
 In the harness, `heuristic` and `rush` are the referee's own bots, run in process. In the arena they are ports of
-them to the bot protocol, run in the sandbox, and five more residents play there too. So the harness's results are a
-guide, and the arena's ratings can come out different.
+them to the bot protocol, run in the sandbox, and five more residents play there too. The ports choose much as the
+originals do, but not always the same moves, and an in-process bot also draws on the referee's random numbers, so even
+the same choices give other games. Treat the harness's results as a guide: the arena's ratings can come out
+different.
 
 ## Submitting
 

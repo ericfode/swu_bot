@@ -35,7 +35,7 @@ const { createPlay } = require('./play');
 const { createTables } = require('./tables');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
-const { builderName, ownsName } = require('./api');
+const { builderName, ownsName, notYours } = require('./api');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -779,7 +779,7 @@ function createWindow(opts = {}) {
         const { admins, fromEnv } = auth.fixed();
         const others = [...admins, ...fromEnv, ...invited()].map((x) => String(x).toLowerCase()).filter((x) => x !== login);
         if (!ownsName(login, n) || others.some((x) => builderName(x) === n)) {
-            return `"${n}" is not yours: use your builder name ${builderName(login)} (whoami), or it with _ and a suffix, e.g. ${builderName(login)}_fast`;
+            return notYours(login, n);
         }
         // a competitor of someone else's: the arena refuses it too, but say so now
         const theirs = (arenaMethods.status().competitors ?? []).find((c) => c?.name === n);

@@ -49,7 +49,7 @@ node bot/debug-seed.js <seed>                           # replay one seed, dump 
 ```bash
 npm run tournament -- --bots rush,heuristic,random --games 4 --out replays/demo   # recorded replays
 npm run app                  # SWU Arena app -> app/dist/app.html (--public for the friends build, --data DIR)
-npm run dev -- <bot folder>  # bot dev harness: the arena's check, its sandbox and deal vs heuristic,rush; never pushes
+npm run dev -- <bot folder> --owner <login>   # bot dev harness: arena_submit's rules, the arena's check, sandbox and deal vs heuristic,rush; never pushes
 node bot/dev.js --view <run> # that run's replays on 127.0.0.1 (runs go to <bot folder>/.runs/)
 npm run gate                 # determinism gate: seeds 1-3 = 594/342/486 steps, p2 wins, with recording on
 node bot/trace.js check <replays>   # trace checks: recorded games must play out the same again, board by board

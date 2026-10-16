@@ -309,6 +309,20 @@ if (require.main === module) {
         require('../game-pool').killChildren(null);
         process.exit(code);
     };
+    // started by the dev harness (bot/dev.js), in a process group of its own: once the harness is gone, even killed by
+    // SIGKILL, so is the group (this process, its workers' bot programs), so no game plays on alone. The games machine
+    // and helpers never set SWU_DEV_PARENT.
+    const parent = Number(process.env.SWU_DEV_PARENT);
+    if (Number.isSafeInteger(parent) && parent > 1) {
+        setInterval(() => {
+            if (process.ppid !== parent) {
+                try {
+                    process.kill(-process.pid, 'SIGKILL');
+                } catch {} // not a group leader: this process alone
+                done(1);
+            }
+        }, 1000).unref();
+    }
     main(process.argv.slice(2)).then((doc) => write(`${JSON.stringify(doc)}\n`, () => done(0)), (e) => {
         console.error(`play-seed: ${String(e?.message ?? e).split('\n')[0]}`);
         done(e instanceof Refused ? 2 : 1);

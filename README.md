@@ -84,7 +84,7 @@ If the official card-data service is unavailable, `npm run setup -- --skip-cards
 ## Daily commands
 
 ```bash
-npm run dev -- ../my-bot            # play a bot folder as the arena does: checked, sandboxed, vs heuristic and rush
+npm run dev -- ../my-bot --owner <login>   # play a bot folder as the arena does: checked, sandboxed, vs heuristic and rush
 node bot/dev.js --view ../my-bot/.runs/<run>   # watch that run's replays in the browser
 npm run random -- 3 1 6000          # random real seeded games; needs card data
 npm run gate                        # determinism gate
@@ -95,8 +95,10 @@ npm test
 ```
 
 `npm run dev` is how to write a bot: the bot only reads protocol messages and answers them, and the harness packs it
-with the arena's checker, plays it in the sandbox on the rated rounds' deck lists and time rules, and reports each
-game it lost by its own fault (`bot/arena/BUILD.md`, "Test locally"). It never sends anything to the arena window,
+as its owner's `arena_submit` would (`--owner <GitHub login>`; `--house` for the arena's own bots), checks it with the
+arena's checker, plays it in the sandbox on the rated rounds' deck lists and time rules, and reports each kind of game
+it lost by its own fault, with a command that sends that game to the bot again (`bot/arena/BUILD.md`, "Test
+locally"). It never sends anything to the arena window,
 whatever the environment holds. A ladder started where `SWU_WINDOW` is set (cloud sessions set it) sends its run to
 the live arena window; unset it for a test run. To look at replays, open them in Holotable (its own repo) or in the arena window.
 

@@ -17,7 +17,7 @@ bundle of its own, `node-random` (the protocol random bot in `bot/test/fixtures/
 
 `npm run setup` sets the sandbox up (its last step; `tools/setup.sh`): wasmtime in a virtualenv of its own,
 `build/compiled/venv`, then `build.py --tools` and `build.py node-random` with that virtualenv's Python. To develop a
-bot, run it through the dev harness (`npm run dev -- <bot folder>`, `bot/dev.js`), which puts the virtualenv first on
+bot, run it through the dev harness (`npm run dev -- <bot folder> --owner <login>`, `bot/dev.js`), which puts the virtualenv first on
 its children's PATH and packs, checks and plays the bot with the files here. By hand:
 
 ```bash
@@ -44,6 +44,9 @@ your group, and `run.py` then does not use it (`build.py` stops with "could not 
   the same games as the program it was built from?).
 - `js/bundle.js`, `js/serve.js`, `js/crypto.js`: the JS bundler and what it swaps in. `bot/stdio.js` becomes
   `js/serve.js` (the same `serve()` over Javy's blocking stdin and stdout), and `crypto` becomes a sha1-only shim.
+  QuickJS names a place in the bundled script `function.mjs:LINE`; the bundle knows which lines hold which file
+  (`build()`, `sourcePositions()`, `globalThis.__where` in the script), so the intake's report of a Javy compile error
+  and the stack `serve()` writes to stderr for an error the bot throws name the bot's own file and line.
   Any other Node built-in stops the build. Tests: `bot/test/compiled.test.js`.
 - `toolchain.json`: pinned tools and the Python runtime.
 

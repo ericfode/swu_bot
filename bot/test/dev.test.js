@@ -1,8 +1,10 @@
 'use strict';
-// The bot dev harness (bot/dev.js): how it reads a bot folder, the deal and the jobs it builds, real runs of small
-// Python bots through the arena's checker and play-seed.js (recorded, reported, played again the same), the faults it
-// reports, the intake's refusals, the transcript tap, the viewer, and that it never sends anything anywhere. Each part
-// skips when its piece is missing: the built engine and card data, wasmtime for Python, CPython for WASI, Javy.
+// The bot dev harness (bot/dev.js): how it reads a bot folder, arena_submit's rules, run folders, the deal and the jobs
+// it builds, real runs of small Python bots through the arena's checker and play-seed.js (recorded, reported, played
+// again the same), the faults it reports (once per kind, stopping early, sent to the bot again), the intake's refusals,
+// JavaScript errors named by file and line, the transcript tap, the viewer, Ctrl-C and SIGKILL, and that it never sends
+// anything anywhere. Each part skips when its piece is missing: the built engine and card data, wasmtime for Python,
+// CPython for WASI, Javy, /proc (Linux) for the process checks.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -40,16 +42,53 @@ function folder(name, files) {
     return d;
 }
 
-/** Runs bot/dev.js; resolves to {code, out, err}. Async, so a server in this process can answer while it runs. */
-function runDev(args, { env = BASE_ENV, cwd = tmp } = {}) {
+/** Runs bot/dev.js; resolves to {code, signal, out, err}. Async, so a server in this process can answer while it runs. */
+function runDev(args, { env = BASE_ENV, cwd = tmp, started = null } = {}) {
     return new Promise((resolve) => {
         const child = spawn(process.execPath, [DEV, ...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+        started?.(child);
         let out = '';
         let err = '';
         child.stdout.on('data', (d) => (out += d));
         child.stderr.on('data', (d) => (err += d));
-        child.on('close', (code) => resolve({ code, out, err }));
+        child.on('close', (code, signal) => resolve({ code, signal, out, err }));
     });
+}
+
+/**
+ * The processes started for a run, as {pid, cmd}: those with the run's arena folder as ARENA_HOME (the harness's
+ * children) and every process in their process groups (the bots in the sandbox, whose environment is built from
+ * nothing); Linux.
+ */
+function runProcesses(run) {
+    const mark = `ARENA_HOME=${path.join(run, 'arena')}\0`;
+    const read = (pid, f) => {
+        try {
+            return fs.readFileSync(`/proc/${pid}/${f}`, 'latin1');
+        } catch {
+            return null; // gone, or not ours
+        }
+    };
+    const all = fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).map((pid) => {
+        const stat = read(pid, 'stat');
+        // pid (comm) state ppid pgrp ...: the command may hold spaces and parentheses
+        const pgrp = stat ? Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]) : null;
+        return { pid: Number(pid), pgrp, cmd: (read(pid, 'cmdline') ?? '').split('\0').join(' ') };
+    });
+    const leaders = new Set(all.filter((p) => read(p.pid, 'environ')?.includes(mark)).map((p) => p.pid));
+    return all.filter((p) => leaders.has(p.pid) || leaders.has(p.pgrp));
+}
+const PROC = fs.existsSync('/proc/self/environ');
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits until check() is true, for up to ms; gives its last value. */
+async function until(check, ms) {
+    const end = Date.now() + ms;
+    let v = check();
+    while (!v && Date.now() < end) {
+        await pause(200);
+        v = check();
+    }
+    return v;
 }
 
 // A Python bot that reads the card data in hello.cards, logs one line to stderr, and plays at random from hello.seed
@@ -95,12 +134,16 @@ const lines = (f) => fs.readFileSync(f, 'utf8').split('\n').filter((l) => l.trim
 const played = (r) => ({ outcome: r.outcome, winner: r.winner, winnerSeat: r.winnerSeat, by: r.by, faultKind: r.faultKind, steps: r.steps, round: r.round, key: r.key, error: r.error ?? null });
 
 test('parseArgs and the folder: what arena_submit takes, and the names versions play as', () => {
-    const o = dev.parseArgs(['mybot', '--games', '3', '--vs', 'heuristic, ../v1', '--cap-sec=30']);
-    assert.deepStrictEqual([o.games, o.vs, o.capSec, o.seed, o.entry], [4, ['heuristic', '../v1'], 30, 1, null], 'games made even');
+    const o = dev.parseArgs(['mybot', '--owner', 'Ana-B', '--games', '3', '--vs', 'heuristic, ../v1', '--cap-sec=30']);
+    assert.deepStrictEqual([o.games, o.vs, o.capSec, o.seed, o.entry, o.owner, o.house, o.all, o.again], [4, ['heuristic', '../v1'], 30, null, null, 'ana-b', false, false, null], 'games made even; a random seed');
+    assert.deepStrictEqual([dev.parseArgs(['mybot', '--house', '--seed', '7', '--all']).seed, dev.parseArgs(['mybot', '--house', '--all']).all], [7, true]);
     assert.strictEqual(dev.parseArgs(['--view', 'r']).port, 0);
-    for (const bad of [['a', '--cap-sec', '5'], ['a', '--games', '-2'], ['a', '--bogus', '1'], [], ['a', 'b'], ['a', '--seed']]) {
-        assert.throws(() => dev.parseArgs(bad), (e) => e.constructor.name === 'Usage', bad.join(' '));
+    const bad = [['a', '--house', '--cap-sec', '5'], ['a', '--house', '--games', '-2'], ['a', '--house', '--bogus', '1'], ['--house'], ['a', 'b', '--house'], ['a', '--house', '--seed'],
+        ['a'], ['a', '--owner', 'ana', '--house'], ['a', '--owner', 'not a login'], ['a', '--house=1'], ['a', '--house', '--again', 'f.in.jsonl', '--games', '2']];
+    for (const args of bad) {
+        assert.throws(() => dev.parseArgs(args), (e) => e.constructor.name === 'Usage', args.join(' '));
     }
+    assert.throws(() => dev.parseArgs(['a']), /say whose bot it is: --owner <your GitHub login>/);
     assert.strictEqual(dev.nameOf('/x/My-Bot.v2'), 'my_bot_v2');
     assert.strictEqual(dev.nameOf('/x/2fast'), 'bot_2fast');
 
@@ -119,17 +162,75 @@ test('parseArgs and the folder: what arena_submit takes, and the names versions 
     const wasm = folder('kinds-wasm', { 'arena.json': '{}', 'bot.wasm': Buffer.from([0, 97, 115, 109]) });
     assert.deepStrictEqual(dev.withDefaultEntry(dev.botAt(wasm)), { folder: wasm, entry: null });
     assert.deepStrictEqual(houseDoc('k', wasm, { note: 'n' }).base64, ['bot.wasm']);
+    // no entry to be found: the intake's words, for either language
+    const none = folder('kinds-none', { 'main.py': 'x' });
+    assert.match(dev.withDefaultEntry(dev.botAt(none)).refused, /^no bot\.js or bot\.py: .*--entry FILE here, entry in arena_submit/);
+    assert.strictEqual(dev.withDefaultEntry(dev.botAt(none, 'run.py')).refused, 'no run.py: a Python bot\'s files must include it (or name another entry)');
+    assert.strictEqual(dev.withDefaultEntry(dev.botAt(none, 'main.py')).refused, undefined);
+});
+
+test('pasted commands, read ends of files, run folders, the card data id and Javy\'s platforms', () => {
+    assert.deepStrictEqual(['a/b-c.in.jsonl', 'my bot/x', "it's", ''].map(dev.sh), ['a/b-c.in.jsonl', "'my bot/x'", "'it'\\''s'", "''"]);
+    const r = spawnSync('bash', ['-c', `printf '%s|' ${['my bot/x', "it's", 'a b'].map(dev.sh).join(' ')}`], { encoding: 'utf8' });
+    assert.strictEqual(r.stdout, "my bot/x|it's|a b|", 'bash reads each back as it was');
+
+    // the end of a big file, read from its end
+    const big = path.join(tmp, 'big.stderr');
+    fs.writeFileSync(big, `${'x'.repeat(200)}\n`.repeat(50000) + 'Traceback\n  line 3\nValueError: no\n');
+    assert.deepStrictEqual(dev.tailOf(big, 2), ['  line 3', 'ValueError: no']);
+    assert.deepStrictEqual(dev.tailOf(path.join(tmp, 'nothing'), 2), []);
+
+    // the transcript tap keeps the head and the tail of a flood of stderr
+    const { openTap } = require('../stdio');
+    const tap = openTap(path.join(tmp, 'flood'), { head: 10, tail: 8 });
+    for (const chunk of ['0123456', '789abcdef', 'ghijklmnop', 'qrstuvwxyz\n']) {
+        tap.write('err', chunk);
+    }
+    tap.close();
+    assert.strictEqual(fs.readFileSync(path.join(tmp, 'flood.stderr'), 'utf8'), '0123456789\n[19 bytes of stderr left out]\ntuvwxyz\n');
+
+    // two runs never share a folder; --out must be an empty folder (or none yet)
+    const planned = path.join(tmp, 'claims', 'r');
+    const a = dev.claimRun(planned, false);
+    const b = dev.claimRun(planned, false);
+    assert.deepStrictEqual([a.run, b.run], [planned, `${planned}-2`]);
+    assert.ok(fs.existsSync(path.join(planned, 'run.json')));
+    b.release();
+    assert.ok(!fs.existsSync(`${planned}-2`), 'release() takes back a folder it made');
+    fs.writeFileSync(path.join(tmp, 'claims', 'afile'), 'x');
+    fs.mkdirSync(path.join(tmp, 'claims', 'empty'));
+    const usageOf = (f) => assert.throws(f, (e) => e.constructor.name === 'Usage');
+    usageOf(() => dev.claimRun(path.join(tmp, 'claims', 'afile'), true));
+    usageOf(() => dev.claimRun(planned, true));
+    assert.strictEqual(dev.claimRun(path.join(tmp, 'claims', 'empty'), true).run, path.join(tmp, 'claims', 'empty'));
+    usageOf(() => dev.claimRun(path.join(tmp, 'claims', 'empty'), true));
+
+    // the card data's id is the games image's CARDS_SHA (Dockerfile.games)
+    if (ENGINE) {
+        const sh = spawnSync('sh', ['-c', 'cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1', 'sh', path.join(ROOT, 'forceteki', 'test', 'json')], { encoding: 'utf8' });
+        if (sh.status === 0 && /^[0-9a-f]{64}$/.test(sh.stdout.trim())) {
+            assert.strictEqual(dev.cardsSha(), sh.stdout.trim());
+        }
+    }
+
+    // Javy: setup installs it only where toolchain.json pins it, and the harness says so elsewhere
+    assert.strictEqual(dev.javyUnpinned('linux-x64'), null);
+    assert.match(dev.javyUnpinned('darwin-arm64'), /^Javy 8\.0\.0 is not pinned for darwin-arm64 yet .*cannot pack JavaScript bots; Python bots and bundles work$/);
 });
 
 test('usage: an --out the bot would be packed with, an opponent the arena does not play, a missing folder (exit 2)', async () => {
     const bot = folder('usage-bot', { 'bot.py': PY_BOT });
     const cases = [
-        [[bot, '--out', path.join(bot, 'runs')], /inside .*usage-bot, so the arena would get it with the bot: put it under a dot folder/],
-        [[bot, '--vs', 'aggro'], /--vs aggro: the opponents are heuristic, rush, random, or a bot folder/],
-        [[bot, '--vs', 'rush,rush'], /names rush twice/],
-        [[path.join(tmp, 'no-such-bot')], /no such file or folder/],
-        [[bot, '--owner', 'Not A Login'], /--owner/]
+        [[bot, '--house', '--out', path.join(bot, 'runs')], /inside .*usage-bot, so the arena would get it with the bot: put it under a dot folder/],
+        [[bot, '--house', '--vs', 'aggro'], /--vs aggro: the opponents are heuristic, rush, random, or a bot folder/],
+        [[bot, '--house', '--vs', 'rush,rush'], /names rush twice/],
+        [[path.join(tmp, 'no-such-bot'), '--house'], /no such file or folder/],
+        [[bot, '--owner', 'Not A Login'], /--owner/],
+        [[bot], /say whose bot it is/],
+        [[bot, '--house', '--out', path.join(tmp, 'usage-file')], /usage-file is not a folder: give another --out/],
+        [[bot, '--house', '--again', path.join(tmp, 'no-such.in.jsonl')], /--again .*no-such\.in\.jsonl: no such file/]
     ];
+    fs.writeFileSync(path.join(tmp, 'usage-file'), 'x');
     for (const [args, want] of cases) {
         const r = await runDev(args);
         assert.strictEqual(r.code, 2, `${args.join(' ')}: ${r.out}${r.err}`);
@@ -138,24 +239,43 @@ test('usage: an --out the bot would be packed with, an opponent the arena does n
     assert.ok(!fs.existsSync(path.join(bot, 'runs')) && !fs.existsSync(path.join(bot, '.runs')), 'no run folder');
 });
 
-test('a builder\'s bot is held to arena_submit\'s limits (exit 3); a house submission is only warned', async () => {
+test('a builder\'s bot is held to arena_submit\'s rules before anything runs: its files, its name, its entry (exit 3)', async () => {
     const big = folder('big-bot', { 'bot.py': PY_BOT, 'weights.bin': Buffer.alloc(3.1e6, 1) });
-    const r = await runDev([big, '--owner', 'ana', '--games', '0', '--out', path.join(tmp, 'big-run')]);
+    const bigRun = path.join(tmp, 'big-run');
+    const r = await runDev([big, '--owner', 'ana', '--games', '0', '--out', bigRun]);
     assert.strictEqual(r.code, 3, r.out + r.err);
-    assert.match(r.out, /^big_bot-v1 \(.*big-bot\): arena_submit would refuse it:\nfiles: at most 3 MB in all\n$/);
-    assert.ok(!fs.existsSync(path.join(tmp, 'big-run')));
+    assert.match(r.out, /^ana-v1 \(.*big-bot\): arena_submit would refuse it:\nfiles: at most 3 MB in all\n$/);
+    assert.ok(!fs.existsSync(bigRun), 'nothing ran: no run folder');
     const { submitFiles } = require('../arena/window');
     const { houseDoc } = require('../arena/ops/house-submit');
     assert.throws(() => submitFiles(houseDoc('big_bot', big, { note: 'n', entry: 'bot.py' })), /at most 3 MB/);
     fs.writeFileSync(path.join(big, 'weights.bin'), Buffer.alloc(2e6, 1));
     assert.doesNotThrow(() => submitFiles(houseDoc('big_bot', big, { note: 'n', entry: 'bot.py' })));
+
+    // arena_submit's name rule: the builder name (the default), or it with _ and a suffix; the window's words
+    const bot = folder('names-bot', { 'bot.py': PY_BOT });
+    const { notYours } = require('../arena/api');
+    for (const [args, want] of [
+        [['--owner', 'ana', '--name', 'bob'], `bob (${path.relative(tmp, bot)}): arena_submit would refuse it:\n${notYours('ana', 'bob')}\n`],
+        [['--owner', 'ana', '--name', 'Ana'], `Ana (${path.relative(tmp, bot)}): arena_submit would refuse it:\nname: 1-32 characters, lowercase letters, digits and _, starting with a letter\n`],
+        [['--owner', 'ana', '--entry', 'main.py'], `ana-v1 (${path.relative(tmp, bot)}): the arena would refuse it:\nno main.py: a Python bot's files must include it (or name another entry)\n`]
+    ]) {
+        const n = await runDev([bot, ...args, '--games', '0']);
+        assert.strictEqual(n.code, 3, n.out + n.err);
+        assert.strictEqual(n.out, want);
+    }
+    assert.match(notYours('ana', 'bob'), /^"bob" is not yours: use your builder name ana \(whoami\), or it with _ and a suffix, e.g\. ana_fast$/);
+    const none = await runDev([folder('no-entry', { 'main.py': PY_BOT }), '--owner', 'ana', '--games', '0']);
+    assert.strictEqual(none.code, 3);
+    assert.match(none.out, /^ana-v1 \(no-entry\): the arena would refuse it:\nno bot\.js or bot\.py: /);
+    assert.ok(!fs.existsSync(path.join(bot, '.runs')) || !fs.readdirSync(path.join(bot, '.runs')).length, 'nothing ran: no run folder');
 });
 
 test('a missing sandbox stops the harness with exit 2 and says npm run setup', { skip: fs.existsSync(path.join(ROOT, 'build', 'compiled', 'venv')) && 'the sandbox\'s virtualenv comes first on PATH' }, async () => {
     const bin = folder('fake-bin', { python3: '#!/bin/sh\nexit 1\n' });
     fs.chmodSync(path.join(bin, 'python3'), 0o755);
     const bot = folder('nosandbox-bot', { 'bot.py': PY_BOT });
-    const r = await runDev([bot, '--out', path.join(tmp, 'nosandbox-run')], { env: { ...BASE_ENV, PATH: `${bin}${path.delimiter}${BASE_ENV.PATH}` } });
+    const r = await runDev([bot, '--house', '--out', path.join(tmp, 'nosandbox-run')], { env: { ...BASE_ENV, PATH: `${bin}${path.delimiter}${BASE_ENV.PATH}` } });
     assert.strictEqual(r.code, 2, r.out + r.err);
     assert.match(r.out, /the sandbox is not set up \(no .*wasmtime for Python\): npm run setup/);
 });
@@ -243,7 +363,8 @@ test('a Python bot that reads hello.cards plays through the harness: recorded, r
         NODE_OPTIONS: `--require ${hook}`
     };
     const out1 = path.join(tmp, 'cards-run-1');
-    const r = await runDev([bot, '--vs', 'rush', '--games', '2', '--seed', '3', '--out', out1], { env: hostile });
+    // a builder's bot: @cards-bot's builder name is cards_bot
+    const r = await runDev([bot, '--owner', 'cards-bot', '--vs', 'rush', '--games', '2', '--seed', '3', '--out', out1], { env: hostile });
     server.close();
     assert.strictEqual(r.code, 0, r.out + r.err);
     assert.strictEqual(requests, 0, 'nothing reached the window');
@@ -251,7 +372,8 @@ test('a Python bot that reads hello.cards plays through the harness: recorded, r
     assert.ok(mods.includes('bot/dev.js') && !mods.some((f) => /^bot\/(arena\/push|ladder)\.js$/.test(f)), 'neither arena/push.js nor ladder.js loads');
 
     // the report
-    assert.match(r.out, /cards_bot-v1: python, 1 file/);
+    assert.match(r.out, /cards_bot-v1: python, 1 file \(.*\) from \S*cards-bot, as @cards-bot's arena_submit sends it/);
+    assert.match(r.out, /card data [0-9a-f]{64} \(the games machine's CARDS_SHA when they match\)/);
     assert.match(r.out, /packed and start-checked by the arena's checker in [\d.]+ s: bundle [0-9a-f]{64}/);
     assert.match(r.out, /\[2\/2\] cards_bot-v1-vs-rush-3: /);
     assert.match(r.out, /cards_bot-v1 vs\s+games\s+W-L-D\s+bot faults\s+no result\s+think mean\/max \(cap 60 s\)/);
@@ -263,7 +385,11 @@ test('a Python bot that reads hello.cards plays through the harness: recorded, r
     assert.deepStrictEqual([doc.schema, doc.status, doc.bot.kind, doc.bot.entry, doc.games.length, doc.seeds.first, doc.limits.capMs], ['swu-dev-run/1', 'done', 'python', 'bot.py', 2, 3, 60000]);
     assert.deepStrictEqual(doc.games.map((g) => g.id), ['rush-vs-cards_bot-v1-3', 'cards_bot-v1-vs-rush-3']);
     assert.ok(fs.existsSync(path.join(out1, 'bundles', `${doc.bot.bundle}.tar`)));
-    assert.ok(fs.existsSync(path.join(out1, 'check', 'cards_bot', 'bundle', 'arena.json')), 'the arena.json the arena would build');
+    // the arena.json the arena builds for @cards-bot's submission: a Python bot's bundle id is the arena's
+    const manifest = readJson(path.join(out1, 'check', 'cards_bot', 'bundle', 'arena.json'));
+    assert.deepStrictEqual([manifest.name, manifest.build.source], ['cards_bot', 'submitted by github:cards-bot']);
+    assert.strictEqual(doc.versions.cards, dev.cardsSha());
+    assert.strictEqual(doc.seeds.random, false);
     const index = readJson(path.join(out1, 'index.json'));
     assert.deepStrictEqual(index.games.map((g) => g.id), doc.games.map((g) => g.id));
     const ladder = readJson(path.join(out1, 'ladder.json'));
@@ -294,7 +420,7 @@ test('a Python bot that reads hello.cards plays through the harness: recorded, r
 
     // again, from a plain environment: the same games
     const out2 = path.join(tmp, 'cards-run-2');
-    const again = await runDev([bot, '--vs', 'rush', '--games', '2', '--seed', '3', '--out', out2]);
+    const again = await runDev([bot, '--owner', 'cards-bot', '--vs', 'rush', '--games', '2', '--seed', '3', '--out', out2]);
     assert.strictEqual(again.code, 0, again.out + again.err);
     const doc2 = readJson(path.join(out2, 'run.json'));
     assert.strictEqual(doc2.bot.bundle, doc.bot.bundle, 'a Python bot packs to the same bundle');
@@ -378,28 +504,39 @@ test('--view serves the run\'s index, replays and the viewer kit on 127.0.0.1 on
     assert.strictEqual((await get('/', { method: 'POST' })).status, 405);
 });
 
-test('a bot\'s faults are its losses, reported with the game, the step and its last lines (exit 1)', { skip: NEEDS_PLAY, timeout: 600000 }, async () => {
+test('a bot\'s faults are its losses, reported once per kind with the game, the step, its last lines and how to send it the game again (exit 1)', { skip: NEEDS_PLAY, timeout: 600000 }, async () => {
     const cases = {
         garbage: { code: faultyBot(5, 'sys.stderr.write("about to answer garbage\\n")\nprint("this is not json", flush=True)\ncontinue'), args: [] },
         quits: { code: faultyBot(4, 'sys.stderr.write("leaving\\n")\nsys.exit(3)'), args: [] },
         slow: { code: faultyBot(3, 'time.sleep(12)'), args: ['--cap-sec', '10'] }
     };
     const runs = await Promise.all(Object.entries(cases).map(async ([name, c]) => {
-        const bot = folder(`fault-${name}`, { 'bot.py': c.code });
+        // a folder whose name has a space: the printed commands still paste
+        const bot = folder(`fault ${name}`, { 'bot.py': c.code });
         const out = path.join(tmp, `fault-${name}-run`);
-        return [name, out, await runDev([bot, '--vs', 'rush', '--games', '2', '--jobs', '1', '--out', out, ...c.args])];
+        return [name, bot, out, await runDev([bot, '--owner', `fault-${name}`, '--vs', 'rush', '--games', '2', '--jobs', '1', '--out', out, ...c.args])];
     }));
-    for (const [name, out, r] of runs) {
+    for (const [name, bot, out, r] of runs) {
         assert.strictEqual(r.code, 1, `${name}: ${r.out}${r.err}`);
         const doc = readJson(path.join(out, 'run.json'));
+        assert.strictEqual(doc.seeds.random, true, 'no --seed: a random one');
+        assert.match(r.out, new RegExp(`seeds (\\d+)-\\1 \\(random: --seed \\1 deals these games again\\)`));
         const mine = doc.failures.filter((f) => f.bot === `fault_${name}-v1`);
         assert.strictEqual(mine.length, 2, `${name}: both games lost by its fault\n${r.out}`);
+        assert.strictEqual(mine[1].like, mine[0].game, `${name}: the same fault`);
+        const s = doc.seeds.first;
         assert.match(r.out, new RegExp(`exit 1: fault_${name}-v1 lost 2 games by its own fault`));
-        assert.match(r.out, new RegExp(`fault_${name}-v1-vs-rush-1: fault_${name}-v1 \\(p1, deck [a-z0-9_-]+ vs [a-z0-9_-]+\\) lost by \\w+ at step \\d+, round \\d+`));
+        assert.match(r.out, /Games lost by a fault \(2, 1 kind\)/);
+        assert.match(r.out, new RegExp(`rush-vs-fault_${name}-v1-${s}: fault_${name}-v1 \\(p2, deck [a-z0-9_-]+ vs [a-z0-9_-]+\\) lost by \\w+ at step \\d+, round \\d+`));
+        assert.match(r.out, new RegExp(`\\n  and 1 more game like it: fault_${name}-v1-vs-rush-${s}\\n`));
+        assert.ok(!r.out.includes(`\nfault_${name}-v1-vs-rush-${s}: `), 'a fault like the first is not reported again');
         for (const f of mine) {
             assert.ok(f.files.some((x) => x.endsWith('.in.jsonl')) && f.files.some((x) => x.startsWith('games/')), `${name}: ${f.files}`);
         }
         const f = mine[0];
+        // the printed command sends the game to the folder again, pasted as it is
+        const again = /\n {2}again: {2}(.+)\n/.exec(r.out)?.[1];
+        assert.ok(again?.includes(`'${path.basename(bot)}' --owner fault-${name} --again `), `${name}: ${again}`);
         if (name === 'garbage') {
             assert.strictEqual(f.faultKind, 'error');
             assert.match(f.error, /reply is not JSON: this is not json/);
@@ -407,7 +544,15 @@ test('a bot\'s faults are its losses, reported with the game, the step and its l
             assert.strictEqual(JSON.parse(f.exchanges.at(-1).sent).seq, 5, 'its fifth decision');
             assert.match(r.out, /referee: decide 5, [\d.]+ s left, "[^"]*", \d+ actions\n {2}bot: {5}this is not json/);
             assert.match(r.out, /stderr \(last 1 lines\):\n {4}about to answer garbage/);
-            assert.match(r.out, /again: {2}\S*python3 -I \S*bot\/compiled\/run\.py \S+check\/fault_garbage\/bundle < \S+\.in\.jsonl/);
+            // sent again to the bot as it is: the same replies, the garbage included (exit 1); fixed: exit 0
+            const same = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 120000 });
+            assert.strictEqual(same.status, 1, same.stdout + same.stderr);
+            assert.match(same.stdout, /every reply is the one recorded in the run\n {2}reply \d+ loses the game: this is not json/);
+            fs.writeFileSync(path.join(bot, 'bot.py'), faultyBot(5, 'sys.stderr.write("fixed\\n")'));
+            const fixed = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 120000 });
+            assert.strictEqual(fixed.status, 0, fixed.stdout + fixed.stderr);
+            assert.match(fixed.stdout, /the first \d+ replies are the ones recorded in the run\n {2}message \d+: decide 5, .*\n {4}was: this is not json\n {4}now: \{"t": "act", "i": 0\}/);
+            assert.match(fixed.stdout, /stderr \(last 1 lines\):\n {4}fixed/);
         } else if (name === 'quits') {
             assert.strictEqual(f.faultKind, 'error');
             assert.match(f.error, /exited \(code 3/);
@@ -421,6 +566,70 @@ test('a bot\'s faults are its losses, reported with the game, the step and its l
             assert.match(r.out, /warning: in 2 games fault_slow-v1 used more than half its thinking time/);
         }
     }
+});
+
+test('a bot that keeps losing the same way stops the run early, unless --all', { skip: NEEDS_PLAY, timeout: 600000 }, async () => {
+    const bot = folder('early-bot', { 'bot.py': faultyBot(1, 'raise RuntimeError("boom")') });
+    const args = [bot, '--owner', 'early', '--vs', 'rush,heuristic', '--games', '4', '--seed', '11', '--jobs', '1'];
+    const [stopped, all] = await Promise.all([runDev([...args, '--out', path.join(tmp, 'early-run')]), runDev([...args, '--all', '--out', path.join(tmp, 'early-all-run')])]);
+    assert.strictEqual(stopped.code, 1, stopped.out);
+    const doc = readJson(path.join(tmp, 'early-run', 'run.json'));
+    assert.strictEqual(doc.status, 'halted');
+    assert.strictEqual(doc.games.length, 2 * dev.SAME_FAULT - 2, 'two jobs of two games: the second brings it to SAME_FAULT');
+    assert.match(stopped.out, /stopped early: early-v1 lost 4 games the same way \(.*\)\. Fix that, or give --all to play every game anyway\./);
+    assert.match(stopped.out, /exit 1: early-v1 lost 4 games by its own fault; 4 games not played \(stopped early\)/);
+    assert.match(stopped.out, /RuntimeError: boom/);
+    assert.strictEqual(all.code, 1, all.out);
+    assert.strictEqual(readJson(path.join(tmp, 'early-all-run', 'run.json')).games.length, 8);
+    assert.match(all.out, /Games lost by a fault \(8, 1 kind\)/);
+});
+
+test('JavaScript: an error names the bot\'s own file and line, and a stdio.js of its own is replaced', { skip: (!PLAYS || !JAVY) && 'needs the engine, the sandbox and Javy', timeout: 600000 }, async () => {
+    const serveBot = "const { serve } = require('./stdio');\nconst { pick } = require('./pick');\nlet n = 0;\nserve({\n    hello() { n = 0; return { t: 'ready', v: 2 }; },\n    decide(msg) { n++; return { t: 'act', i: pick(msg.actions, n) }; }\n});\n";
+    const syntax = folder('js-syntax', { 'bot.js': serveBot, 'pick.js': 'function pick(actions) {\n    return actions[0].i +;\n}\nmodule.exports = { pick };\n' });
+    const thrown = folder('js-throws', {
+        'bot.js': serveBot, 'stdio.js': 'module.exports = {};\n',
+        'pick.js': '// picks the first action\nfunction pick(actions, n) {\n    if (n === 3) {\n        throw new Error(`no pick at ${n}`);\n    }\n    return actions[0].i;\n}\nmodule.exports = { pick };\n'
+    });
+    const [a, b] = await Promise.all([runDev([syntax, '--house', '--games', '0']), runDev([thrown, '--house', '--vs', 'rush', '--games', '2', '--seed', '2'])]);
+    assert.strictEqual(a.code, 3, a.out);
+    assert.match(a.out, /Javy could not compile it:\n.*unexpected token.*\n\s*at pick\.js:2:\d+/);
+    assert.strictEqual(b.code, 1, b.out);
+    assert.match(b.out, /warning: the arena replaces stdio\.js with its own serve\(\); a helper of yours there needs another name/);
+    assert.match(b.out, /packed and start-checked .*: bundle [0-9a-f]{64} \(this build: Javy's differ by a few bytes each time; the script it compiled is [0-9a-f]{64}\)/);
+    assert.match(b.out, /error: no pick at 3 \(at pick\.js:4:\d+\)/);
+    assert.match(b.out, /stderr \(last \d+ lines\):\n {4}no pick at 3\n\s+at pick \(pick\.js:4:\d+\)\n\s+at decide \(bot\.js:6:\d+\)/);
+});
+
+test('Ctrl-C stops the check or every game and leaves a stopped run; after a SIGKILL the games stop by themselves', { skip: (!NEEDS_PLAY && !PROC) ? 'needs /proc' : NEEDS_PLAY, timeout: 300000 }, async () => {
+    // one bot answers hello after 20 s (the check's limit is 30 s), one takes 40 s at decision 2: each is still busy
+    // when the signal comes
+    const slowHello = folder('slow-hello-bot', { 'bot.py': `import time\ntime.sleep(20)\n${PY_BOT}` });
+    const slowGame = folder('slow-game-bot', { 'bot.py': faultyBot(2, 'time.sleep(40)') });
+    const checking = (cmds) => cmds.some((c) => c.includes('intake.js') && c.includes('--check')) && cmds.some((c) => c.includes('run.py'));
+    const playing = (cmds) => cmds.some((c) => c.includes('play-seed.js') && c.includes('--job')) && cmds.some((c) => c.includes('run.py'));
+    const play = async (name, bot, busy, signal) => {
+        const run = path.join(tmp, name);
+        let child = null;
+        const done = runDev([bot, '--house', '--vs', 'rush', '--games', '2', '--jobs', '1', '--out', run], { started: (c) => (child = c) });
+        assert.ok(await until(() => busy(runProcesses(run).map((p) => p.cmd)), 120000), `${name}: never busy`);
+        child.kill(signal);
+        const r = await done;
+        // the check has no watch of its own on the harness (only play-seed does): only the harness's own kill ends it
+        const left = await until(() => !runProcesses(run).length, 15000);
+        return { run, r, left };
+    };
+    const [check, game, kill] = await Promise.all([
+        play('signal-check', slowHello, checking, 'SIGINT'), play('signal-game', slowGame, playing, 'SIGINT'), play('signal-kill', slowGame, playing, 'SIGKILL')
+    ]);
+    for (const [x, want] of [[check, /stopped \(SIGINT\) while checking/], [game, /stopped \(SIGINT\) after 0 of 2 games/]]) {
+        assert.strictEqual(x.r.code, 130, x.r.out + x.r.err);
+        assert.ok(x.left, `nothing of the run is left running: ${JSON.stringify(runProcesses(x.run))}`);
+        assert.strictEqual(readJson(path.join(x.run, 'run.json')).status, 'stopped');
+        assert.match(x.r.out, want);
+    }
+    assert.strictEqual(kill.r.signal, 'SIGKILL');
+    assert.ok(kill.left, `play-seed and the bots stop once the harness is gone: ${JSON.stringify(runProcesses(kill.run))}`);
 });
 
 test('a bot the intake refuses: its words, word for word, and no games (exit 3)', { skip: (!WASMTIME || !ENGINE) && 'needs wasmtime for Python and the engine\'s card data', timeout: 300000 }, async () => {
@@ -446,7 +655,7 @@ test('a bot the intake refuses: its words, word for word, and no games (exit 3)'
         ...(JAVY && PYWASI ? [['broken', folder('broken', { 'bot.js': 'const { serve } = require(\'./stdio\');\nserve({ decide(msg) { return { t: \'act\', i: 0 } }\n' }),
             (out) => assert.match(out, /broken-v1 \(.*\): the arena would refuse it:\nJavy could not compile it:\n/)]] : [])
     ];
-    const runs = await Promise.all(cases.map(([name, dir]) => runDev([dir, '--games', '2', '--out', path.join(tmp, `${name}-run`)])));
+    const runs = await Promise.all(cases.map(([name, dir]) => runDev([dir, '--house', '--games', '2', '--out', path.join(tmp, `${name}-run`)])));
     for (const [k, [name, , check]] of cases.entries()) {
         const r = runs[k];
         assert.strictEqual(r.code, 3, `${name}: ${r.out}${r.err}`);

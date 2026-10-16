@@ -123,19 +123,21 @@ function pack(job, work) {
     for (const dir of new Set([src, path.dirname(path.join(src, entry))])) {
         fs.copyFileSync(path.join(COMPILED, 'js', 'serve.js'), path.join(dir, 'stdio.js'));
     }
-    let script;
+    const { build, sourcePositions } = require('../compiled/js/bundle');
+    let bundled;
     try {
-        script = require('../compiled/js/bundle').bundle(path.join(src, entry), [job.name], { root: src });
+        bundled = build(path.join(src, entry), [job.name], { root: src });
     } catch (e) {
         throw new IntakeError(`could not bundle ${entry}: ${tail(e.message, work)}`);
     }
     const js = path.join(work, 'bot.bundle.js');
-    fs.writeFileSync(js, script);
+    fs.writeFileSync(js, bundled.script);
     const javy = path.join(TOOLS, `javy-${TOOLCHAIN.javy.version}`, 'javy');
     need(fs.existsSync(javy), 'the arena has no Javy yet; try again later');
     const wasm = path.join(out, 'bot.wasm');
     const r = spawnSync(javy, ['build', ...TOOLCHAIN.javy.flags, '-o', wasm, js], { encoding: 'utf8', timeout: 180000, cwd: work, env: toolEnv() });
-    need(r.status === 0, `Javy could not compile it:\n${tail(r.stderr || r.error?.message, work)}`);
+    // QuickJS names a place in the bundled script (function.mjs:LINE:COLUMN): say which of the bot's files and lines it is
+    need(r.status === 0, `Javy could not compile it:\n${tail(sourcePositions(r.stderr || r.error?.message || '', bundled.sources), work)}`);
     const m = manifest(job.name, 'js', wasm, 'wasi-p1', { cmd: './bot.wasm', args: [], env: {} }, job.owner);
     fs.writeFileSync(path.join(out, 'arena.json'), `${JSON.stringify(m, null, 2)}\n`);
     return out;

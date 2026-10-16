@@ -33,11 +33,17 @@ async function answer(client, msg, sim) {
     }
 }
 
+// a transcript keeps at most this much of a program's stderr: its first ERR_HEAD bytes, and its last ERR_TAIL written
+// when it closes, so a bot that floods stderr fills no disk and still shows how it ended
+const ERR_HEAD = 4 << 20;
+const ERR_TAIL = 1 << 20;
+
 /**
  * A program's transcript files (StdioClient log): <log>.in.jsonl, .out.jsonl and .stderr, opened now. write(which,
- * data) appends synchronously; close() closes them, once. A file that cannot be written never fails the game.
+ * data) appends synchronously; close() closes them, once. A file that cannot be written never fails the game. Past
+ * ERR_HEAD bytes, stderr is held back, and close() writes how much was left out and the last ERR_TAIL bytes.
  */
-function openTap(log) {
+function openTap(log, { head = ERR_HEAD, tail = ERR_TAIL } = {}) {
     const fds = {};
     for (const [k, ext] of [['in', 'in.jsonl'], ['out', 'out.jsonl'], ['err', 'stderr']]) {
         try {
@@ -46,17 +52,52 @@ function openTap(log) {
             fds[k] = null;
         }
     }
+    const put = (which, data) => {
+        try {
+            if (fds[which] !== null) {
+                fs.writeSync(fds[which], data);
+            }
+        } catch {
+            fds[which] = null;
+        }
+    };
+    let errBytes = 0;
+    let held = []; // stderr past the head, at most `tail` bytes of it
+    let heldBytes = 0;
+    let dropped = 0;
     return {
         write(which, data) {
-            try {
-                if (fds[which] !== null) {
-                    fs.writeSync(fds[which], data);
+            if (which !== 'err') {
+                return put(which, data);
+            }
+            let buf = Buffer.from(data);
+            if (errBytes < head) {
+                const n = Math.min(buf.length, head - errBytes);
+                put('err', buf.subarray(0, n));
+                errBytes += n;
+                buf = buf.subarray(n);
+            }
+            if (buf.length) {
+                held.push(buf);
+                heldBytes += buf.length;
+                while (heldBytes - held[0].length >= tail) {
+                    heldBytes -= held[0].length;
+                    dropped += held.shift().length;
                 }
-            } catch {
-                fds[which] = null;
             }
         },
         close() {
+            if (heldBytes) {
+                const all = Buffer.concat(held);
+                const keep = all.subarray(Math.max(0, all.length - tail));
+                dropped += all.length - keep.length;
+                if (dropped) {
+                    put('err', `\n[${dropped} bytes of stderr left out]\n`);
+                }
+                put('err', keep);
+                held = [];
+                heldBytes = 0;
+            }
             for (const k of Object.keys(fds)) {
                 try {
                     if (fds[k] !== null) {
@@ -76,7 +117,7 @@ function openTap(log) {
  * then SIGKILL 2 s later, so `cmd` must be the bot itself (a wrapper script must exec it). Time limits are the
  * referee's (protocol.js); `timeoutMs` and `startTimeoutMs`, when given, override its budgets for this bot.
  * With `log` set to a path prefix before the program starts (the dev harness's transcripts, ladder-worker.js), the
- * program's stderr goes to <log>.stderr instead, every line sent to it to <log>.in.jsonl and every line it writes on
+ * program's stderr goes to <log>.stderr instead (its first 4 MB and last 1 MB), every line sent to it to <log>.in.jsonl and every line it writes on
  * stdout to <log>.out.jsonl (line k of .out answers line k of .in), each as it is, and WASM_HOST_STATS=<log>.host.json
  * is added to its environment (bot/compiled/run.py writes its stats there). Off by default.
  */
@@ -271,4 +312,4 @@ async function serve(client, { input = process.stdin, output = process.stdout } 
     }
 }
 
-module.exports = { answer, StdioClient, serve };
+module.exports = { answer, StdioClient, serve, openTap };

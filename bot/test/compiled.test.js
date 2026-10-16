@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const crypto = require('crypto');
 const path = require('path');
 const vm = require('vm');
-const { bundle, requires } = require('../compiled/js/bundle');
+const { bundle, build, sourcePositions, requires } = require('../compiled/js/bundle');
 const shim = require('../compiled/js/crypto');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -34,7 +34,7 @@ test('a Node-only module is a build error', () => {
  * Run a bundle as Javy would: messages arrive one at a time, the next only after the bot's reply, and each `sim`
  * request is answered by onSim. Resolves to everything the bot wrote.
  */
-async function runBundled(code, messages, onSim = () => ({ t: 'simulated', error: 'no sims here' })) {
+async function runBundled(code, messages, onSim = () => ({ t: 'simulated', error: 'no sims here' }), { filename, log } = {}) {
     const queue = [...messages];
     const out = [];
     let pending = Buffer.alloc(0);
@@ -61,8 +61,9 @@ async function runBundled(code, messages, onSim = () => ({ t: 'simulated', error
             return bytes.length;
         }
     };
-    const ctx = vm.createContext({ Javy: { IO }, TextEncoder, TextDecoder, console });
-    vm.runInContext(code, ctx);
+    // `filename` names the script as Javy does (function.mjs); `log` gets what the bot writes to stderr
+    const ctx = vm.createContext({ Javy: { IO }, TextEncoder, TextDecoder, console: log ? { ...console, error: log } : console });
+    vm.runInContext(code, ctx, filename ? { filename } : undefined);
     for (let k = 0; k < 100 && (queue.length || pending.length); k++) {
         await new Promise(setImmediate);
     }
@@ -138,6 +139,37 @@ test('with a root, only files inside it are bundled: no path, link or ../ leads 
         } finally {
             fs.rmSync(outside, { force: true });
         }
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('build() says which lines of the script hold which file, so an error names the bot\'s own file and line', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-lines-'));
+    try {
+        fs.writeFileSync(path.join(root, 'bot.js'), "const { serve } = require('./stdio');\nconst { pick } = require('./lib/pick');\nserve({ decide(msg) { return { t: 'act', i: pick(msg) }; } });\n");
+        fs.mkdirSync(path.join(root, 'lib'));
+        fs.writeFileSync(path.join(root, 'lib', 'pick.js'), "// picks the first action\nfunction pick(msg) {\n    if (msg.seq === 2) {\n        throw new Error('no pick for ' + msg.seq);\n    }\n    return 0;\n}\nmodule.exports = { pick };\n");
+        // as intake.js pack puts the arena's serve() next to the entry
+        fs.copyFileSync(path.join(ROOT, 'bot', 'compiled', 'js', 'serve.js'), path.join(root, 'stdio.js'));
+        const { script, sources } = build(path.join(root, 'bot.js'), ['me'], { root });
+        assert.strictEqual(script, bundle(path.join(root, 'bot.js'), ['me'], { root }));
+        assert.deepStrictEqual(sources.map((x) => x[2]), ['bot.js', 'stdio.js', 'lib/pick.js']);
+        const lines = script.split('\n');
+        for (const [from, to, file] of sources) {
+            const own = fs.readFileSync(path.join(root, file), 'utf8').split('\n');
+            assert.deepStrictEqual(lines.slice(from - 1, to), own, file);
+        }
+        const pickAt = sources[2][0];
+        assert.strictEqual(sourcePositions(`x function.mjs:${pickAt + 3}:9 y function.mjs:${pickAt + 3} z function.mjs:1:1`, sources), 'x lib/pick.js:4:9 y lib/pick.js:4 z function.mjs:1:1');
+        // run as Javy names the script: the reply says where the error was thrown, and stderr gets the stack
+        const logged = [];
+        const got = await runBundled(script, [hello, decide(1), decide(2)], undefined, { filename: 'function.mjs', log: (...a) => logged.push(a.join(' ')) });
+        assert.deepStrictEqual(got.slice(0, 2), [{ t: 'ready', v: 2 }, { t: 'act', i: 0 }]);
+        assert.match(got[2].error, /^no pick for 2 \(at lib\/pick\.js:4:\d+\)$/);
+        assert.match(logged.join('\n'), /no pick for 2\n\s*at pick \(lib\/pick\.js:4:\d+\)\n\s*at (Object\.)?decide \(bot\.js:3:\d+\)/);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }

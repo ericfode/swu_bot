@@ -527,5 +527,10 @@ function ownsName(login, name) {
     const b = builderName(login);
     return name === b || String(name).startsWith(`${b}_`);
 }
+/** What arena_submit says to @login about a name that is not theirs (window.js nameProblem; the dev harness says it too). */
+function notYours(login, name) {
+    const b = builderName(login);
+    return `"${name}" is not yours: use your builder name ${b} (whoami), or it with _ and a suffix, e.g. ${b}_fast`;
+}
 
-module.exports = { api, call, startCheck, builderName, ownsName, clock, METHODS, ArenaError, TOURNAMENT, NO_CARD_FILES, cardsUse };
+module.exports = { api, call, startCheck, builderName, ownsName, notYours, clock, METHODS, ArenaError, TOURNAMENT, NO_CARD_FILES, cardsUse };
