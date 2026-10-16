@@ -366,6 +366,9 @@ test('the replay check takes the play worker\'s games and nothing else', () => {
     assert.strictEqual(checkReplay(replay()).steps, 3);
     assert.strictEqual(checkReplay(replay({ bot: 'nova-v3' })).bot, 'nova-v3', 'an arena version');
     assert.throws(() => checkReplay(replay({ bot: 'heuristic' })), /jepa-tx-gate or an arena version in seat 2/);
+    for (const bot of [`${'a'.repeat(33)}-v1`, 'nova-v1234567', `nova-v3${'x'.repeat(1000)}`]) {
+        assert.throws(() => checkReplay(replay({ bot })), /jepa-tx-gate or an arena version in seat 2/, 'no name longer than the arena allows');
+    }
     assert.throws(() => checkReplay(''), /JSON Lines/);
     assert.throws(() => checkReplay(replay({ seed: -1 })), /seed/);
     assert.throws(() => checkReplay(replay().replace('{"t":"step","n":1', '{"t":"header","n":1')), /a step/);

@@ -59,7 +59,8 @@ const MODELS = { 'tx-t10.safetensors': '/app/vendor/jepa/tx-t10.safetensors', 't
 const PYTHON = { runtime: 'python-3.14-wasi', lib: 'python-lib.json', wasm: 'python.wasm' };
 const READY = [...FILES, ...Object.keys(MODELS)];
 const KEPT = [...READY, PYTHON.lib, PYTHON.wasm];
-const VERSION = /^[a-z][a-z0-9_]*-v\d+$/;
+// an arena version: a competitor's name as api.js allows it (at most 32 characters) and its version number
+const VERSION = /^[a-z][a-z0-9_]{0,31}-v\d{1,6}$/;
 const HEX = /^[0-9a-f]{64}$/;
 const TITLE = "Eric's JEPA bot";
 const ABOUT = 'A learned model of the game that looks ahead on simulations, as it plays in the arena. Its two models download once.';
@@ -345,7 +346,8 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         const id = `play-${game.header.seed.toString(16).padStart(8, '0')}-${sha256.slice(0, 8)}`;
         store.putReplay(RUN, id, Buffer.from(replay, 'utf8'));
         doc.games = [...doc.games, rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(t).toISOString() })].slice(-MAX_ROWS);
-        doc.bots = [...new Set([...(Array.isArray(doc.bots) ? doc.bots : []), game.bot])];
+        // the bots of the games kept, so the list stays as short as the rows
+        doc.bots = [...new Set(doc.games.map((r) => r.p2 ?? BOT))];
         store.putDoc('runs', RUN, JSON.stringify(doc));
         // who played it, for admins only (window.js keepPeopleNames keeps the Karabast feed's names the same way)
         const all = names();
