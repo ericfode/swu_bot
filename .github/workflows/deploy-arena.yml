@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: 22
           package-manager-cache: false
-      - run: node --test bot/test/window.test.js app/test/*.test.js
+      - run: node --test bot/test/window.test.js bot/test/feedback.test.js app/test/*.test.js
 
   deploy:
     needs: test

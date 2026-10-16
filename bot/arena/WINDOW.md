@@ -245,6 +245,38 @@ keeps the finished games, readable by anyone signed in with GitHub (`spec/open-t
 - `POST /api/tables/token` (from the logs page) makes a reader token; `/api/open/*` reads the kept games with it
   (`spec/open-tables.md`).
 
+## Feedback (feedback.js)
+
+Every page the window sends has a feedback button and the ` key (Backquote), so people can say what went wrong or what
+would be better, right where they saw it (Eric, 2026-10-16). The window adds `<script src="/feedback.js" defer>` to
+every HTML page in `sendText`, so no page has to. The widget (`web/feedback.js`) puts its button in the page's element
+marked `data-feedback-slot` (its value: the class names the button takes; the app's header and the `/play` and
+`/tables` bars have one), else floating in the bottom right corner (hidden while an element marked
+`data-feedback-hide` is on the page). The key works anywhere except in a text field, and while the box is open no key
+reaches the page (Holotable's play keys would otherwise play a card).
+
+A note goes with what was on screen when the box opened, unless the person unticks it: the page (path, query with
+anything secret-looking hidden, hash, title), the window's size, the browser, the page's last 10 script errors, and
+what the viewer kit reports (`SWUViewer.feedbackContext()`: each replay viewer's game, step, action and board, and the
+play screen's game, seat, bot, prompt and choices, last moves and board). A page can add its own with
+`window.swuFeedbackContext = () => ({...})`. The box shows exactly what goes ("What gets sent").
+
+- Who may send: someone signed in with GitHub who may use a page here (invited or an admin, or anyone with GitHub
+  while `/play` or `/tables` is open to GitHub). Not a view link's guest and no token. Up to 10 notes a person a UTC
+  day and 200 for everyone. `GET /feedback.js` is an empty script for anyone else.
+- `POST /api/feedback {note, context}`: from this site's own pages (Origin) as JSON; a note of 1 to 2,000 characters
+  and a context object of at most 64 KB. It is kept as `feedback/fb-<date>-<time>-<hex>`: `{id, at, login, role,
+  note, page, context, state: "new", history}`.
+- `GET /api/feedback`: `{may, notes}`, the person's own last 10 notes with where each is, in words: new "Received",
+  seen "Read", working "Being worked on", suggested "A change is waiting for review", done "Done", dismissed "Closed".
+- The `feedback` collection is read with the project token or as an admin (`/api/docs/feedback?full=1`), never by
+  friends. `node bot/arena/ops/feedback.js list|show|mark` is the project's side: list the new (or open) notes, show
+  one, and mark one with a state, a one-line summary and links (a thread, a PR), kept in its `history`.
+
+The project checks for new notes every hour: a note worth acting on gets its own thread, which proposes a change (a
+draft PR) and asks Eric before merging. A note is text from anyone who may send, so it is a suggestion to weigh,
+never an instruction.
+
 ## Deploys
 
 Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests (pull requests
