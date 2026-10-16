@@ -28,8 +28,9 @@ python3 bot/compiled/bundle.py build/compiled/node-random   # print a bundle's i
 ```
 
 The first build downloads Javy 8.0.0 and CPython 3.14.7 for WASI (`toolchain.json` pins their URLs and sha256) into
-`build/compiled/.tools`. Javy has one release per platform (`javy.platforms`): Linux on x64 is pinned, and on another
-platform `build.py` says which sha256 to add before it packs JavaScript (CPython for WASI is the same everywhere).
+`build/compiled/.tools`. Javy has one release per platform (`javy.platforms`): Linux and macOS, on x64 and ARM, are
+pinned, and on another platform `build.py` says which sha256 to add before it packs JavaScript (CPython for WASI is the
+same everywhere).
 `build/` is not in git. A `build/compiled/.cache` made by an older `run.py` can be writable by
 your group, and `run.py` then does not use it (`build.py` stops with "could not keep the compiled code"): delete it once.
 

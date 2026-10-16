@@ -87,7 +87,25 @@ names. Leave `cards` out of `arena.json`: a bundle that asks for the card data a
 since it comes in `hello.cards`. List binary files such as `bot.wasm` in `base64`, and send their content
 base64-encoded. Rust (`cargo build --target wasm32-wasip1`), C and Zig (`zig cc --target=wasm32-wasi`) work. A request
 may carry about 3 MB of files.
-`bot/compiled/README.md` in the swu_bot repo describes the format and builds nine of the project's bots this way.
+`bot/compiled/README.md` in the swu_bot repo describes the format. Three of the reference bots below are built this way.
+
+## Reference bots
+
+Four of the arena's residents are reference bots: whole bots in Python, C and Rust that you can read, build and play
+against. Each one reads its cards from `hello.cards` and from nothing else, and each plays in the rated rounds with
+everyone's bots. Their source is in [holocron](https://github.com/ericfode/holocron), and `python3 bots/bundles.py`
+there builds the folders the arena gets, in `build/arena/<name>/`.
+
+| Resident | Kind | Source in holocron | Read it for |
+| --- | --- | --- | --- |
+| `py_clock` | `python`, entry `swu_clock.py` | `bots/python` | standard library only: the card table from `hello.cards` (`cards.py`), a board model, the race clock |
+| `c_clock` | `wasm`, C built with `zig cc` | `bots/c` | a bundle from C; the card table rebuilt at every `hello` (`cards.c`); combat math |
+| `rust_greedy2` | `wasm`, Rust built with `cargo` | `bots/rust`, policy `greedy2` | a bundle from Rust; `CardDb::from_values` (`src/cards.rs`); rules plus combat math |
+| `rust_search` | `wasm`, Rust | `bots/rust`, policy `search` | `greedy2` plus look-ahead on the referee's simulations (`sim` requests) |
+
+A bundle's `arena.json` names the holocron commit it was built from (`build.commit`). To play your bot against one,
+give the harness (below) its folder, `--vs ../holocron/build/arena/c_clock`, or for `py_clock` its entry file,
+`--vs ../holocron/build/arena/py_clock/swu_clock.py`.
 
 ## Test locally
 
