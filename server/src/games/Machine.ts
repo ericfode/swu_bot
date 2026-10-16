@@ -24,7 +24,7 @@ import type { Compactor } from "./Compact.ts"
 import type { GamesConfig } from "./Config.ts"
 import { makeGamesctl } from "./Gamesctl.ts"
 import { startHelperApi } from "./HelperApi.ts"
-import type { Listening } from "./HelperApi.ts"
+import type { Lineup, Listening } from "./HelperApi.ts"
 import type { ArenaJs } from "./Js.ts"
 import { loadArenaJs } from "./Js.ts"
 import { makeLeaseBoard } from "./Leases.ts"
@@ -129,6 +129,23 @@ const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect.pipe
 const within = <A>(p: Promise<A>, ms: number) =>
   Promise.race([p, new Promise<void>((r) => setTimeout(r, ms).unref())])
 
+/**
+ * The latest round's lineup for the window's pages that play arena bots in a person's tab (helper API
+ * swarm/lineup.json): its versions in roster order, each with the bundle the round wrote (a version without one is left
+ * out), and the round's time per bot per game. Null before the first round.
+ */
+export const lineupOf = async (store: StoreService): Promise<Lineup | null> => {
+  const row = await run(store.lastRound)
+  if (!row) return null
+  const bundles = row.spec.bundles ?? {}
+  const bots: Array<{ name: string; bundle: string }> = []
+  for (const name of row.spec.bots ?? []) {
+    const bundle = Object.hasOwn(bundles, name) ? bundles[name] : undefined
+    if (typeof bundle === "string") bots.push({ name, bundle })
+  }
+  return { round: row.k, capMs: row.spec.capMs, bots }
+}
+
 /** Boots the machine; throws BootFailed when it cannot start. */
 export const startMachine = async (o: MachineOptions): Promise<Machine> => {
   const c = o.config
@@ -211,7 +228,7 @@ export const startMachine = async (o: MachineOptions): Promise<Machine> => {
     if (c.helperPort !== null) {
       if (secrets.helpers.length > 0) {
         board = makeLeaseBoard({ bundles: c.paths.bundles, timing: c.timing, isStopping: () => stopping })
-        helperApi = await startHelperApi({ config: c, secrets, board, isStopping: () => stopping })
+        helperApi = await startHelperApi({ config: c, secrets, board, isStopping: () => stopping, lineup: () => lineupOf(store) })
       } else {
         Log.info("helper node off: GAMES_HELPER_PORT is set but GAMES_HELPER_TOKENS has no usable entry")
       }

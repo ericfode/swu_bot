@@ -13,7 +13,14 @@
  * files come from the machine (built with its image, so their build always matches it) and are kept on the window's
  * disk by build, so a sleeping machine does not stop a page from loading once it has been seen.
  * Off (every route answers 503 or the page says so) unless SWARM_HELPER_TOKEN is set.
+ *
+ * The play page (play.js) plays arena bots in a person's tab: lineup() is the latest round's versions with their
+ * bundles ({round, capMs, bots: [{name, bundle, bytes}]}, the machine's GET /v1/swarm/lineup.json) and sendBot() sends one
+ * of those bundles (GET /v1/swarm/bot/<hex>). Both are kept on the window's disk (botDir), and a new lineup's bundles
+ * are fetched at once, so the bots stay playable while the machine sleeps. botHere(hex) is a bundle the window has
+ * now, without fetching it.
  */
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -26,7 +33,10 @@ const FILES = {
     'referee-worker.js': 'text/javascript',
     'bot-worker.js': 'text/javascript',
     'executor-worker.js': 'text/javascript',
-    'play-worker.js': 'text/javascript'
+    'play-worker.js': 'text/javascript',
+    // the play page's JEPA bot's models (bot/swarm/pack.js MODELS), downloaded only by a person who picks that bot
+    'tx-t10.safetensors': 'application/octet-stream',
+    'tx-t10-e.safetensors': 'application/octet-stream'
 };
 // cross-origin isolation, which SharedArrayBuffer needs (a bot blocks on its stdin): the page and its workers
 const ISOLATED = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy': 'same-origin' };
@@ -35,7 +45,7 @@ const LEASE = /^[A-Za-z0-9_-]{1,64}$/;
 const LEASE_TTL_MS = 6 * 3600 * 1000;
 const RESULT_MAX = 48 << 20;
 
-function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, machine = process.env.SWARM_GAMES_URL || 'http://swu-arena-games.internal:8090', cacheDir = null, page = path.join(__dirname, 'web', 'swarm.html'), fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, machine = process.env.SWARM_GAMES_URL || 'http://swu-arena-games.internal:8090', cacheDir = null, botDir = null, page = path.join(__dirname, 'web', 'swarm.html'), fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const leases = new Map(); // lease id -> {login, bundles, at}
     const tabs = new Map(); // login -> {at, slots: Set}: who asked for seeds lately, for the page's picture of the swarm
     let manifest = null; // {build, cards, at}
@@ -68,7 +78,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         })() };
     }
 
-    /** The machine's swarm manifest ({build, cards}), at most a minute old; null when the machine does not answer. */
+    /** The machine's swarm manifest ({build, cards, sizes}), at most a minute old; null when the machine does not answer. */
     async function currentManifest() {
         if (manifest && now() - manifest.at < 60000) {
             return manifest;
@@ -76,7 +86,9 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         try {
             const r = await toMachine('GET', '/v1/swarm/manifest.json', { build: null, timeoutMs: 8000 });
             if (r.status === 200 && r.json?.build) {
-                manifest = { build: String(r.json.build), cards: String(r.json.cards), at: now() };
+                // sizes and gz: each file's bytes and about what it is gzipped (bot/swarm/build.js), for the play page
+                const map = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+                manifest = { build: String(r.json.build), cards: String(r.json.cards), sizes: map(r.json.sizes), gz: map(r.json.gz), at: now() };
                 return manifest;
             }
         } catch {
@@ -133,6 +145,20 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         return pending.get(key);
     }
 
+    /**
+     * The bytes of swarm file `name` of `build` (gz: of its gzip, what a browser downloads), from the window's disk or
+     * the machine's manifest, or null.
+     */
+    function fileSize(build, name, { gz = false } = {}) {
+        const raw = cacheDir && /^[0-9a-zA-Z._-]{1,64}$/.test(build) && Object.hasOwn(FILES, name) ? path.join(cacheDir, build, gz ? `${name}.gz` : name) : null;
+        const st = raw ? fs.statSync(raw, { throwIfNoEntry: false }) : null;
+        if (st?.isFile()) {
+            return st.size;
+        }
+        const n = manifest?.build === build ? manifest[gz ? 'gz' : 'sizes']?.[name] : null;
+        return Number.isSafeInteger(n) ? n : null;
+    }
+
     /** The build whose files the window has on its disk (only the newest is kept), or null: what a page loads while the machine sleeps. */
     function cachedBuild(names) {
         if (!cacheDir || !fs.existsSync(cacheDir)) {
@@ -167,7 +193,9 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         // the URL names the build, so a file never changes: browsers keep it
         const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
         const body = gzip ? f.gz : f.raw;
-        res.writeHead(200, { 'content-type': FILES[name], 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+        // x-raw-length: the bytes the page reads once the browser has unzipped them (its progress bar's total)
+        const lengthOf = (b) => (typeof b === 'string' ? fs.statSync(b).size : b.length);
+        res.writeHead(200, { 'content-type': FILES[name], 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', 'content-length': String(lengthOf(body)), 'x-raw-length': String(lengthOf(f.raw)), ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
         if (typeof body === 'string') {
             fs.createReadStream(body).pipe(res);
         } else {
@@ -183,6 +211,144 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             await Promise.all(names.map((n) => swarmFile(m.build, n, m.build).catch(() => null)));
         }
         return m;
+    }
+
+    // ---- arena bots for a person's tab: the lineup and its bundles, kept on the window's disk ----
+    let lineupSeen = null; // {at, data}
+    const botMemory = new Map(); // hex -> {raw, gz} when there is no bot folder (tests)
+    const botPending = new Map();
+    const lineupFile = () => botDir && path.join(botDir, 'lineup.json');
+    const readLineup = () => {
+        try {
+            return lineupFile() ? JSON.parse(fs.readFileSync(lineupFile(), 'utf8')) : null;
+        } catch {
+            return null;
+        }
+    };
+    const cleanLineup = (j) => ({
+        round: Number.isInteger(j?.round) ? j.round : null,
+        // the round's time per bot per game, which a tab plays its bots under
+        capMs: Number.isSafeInteger(j?.capMs) && j.capMs >= 1000 ? j.capMs : null,
+        bots: (Array.isArray(j?.bots) ? j.bots : []).filter((b) => b && /^[a-z][a-z0-9_]*-v\d+$/.test(String(b.name)) && HEX.test(String(b.bundle)))
+            .map((b) => ({ name: String(b.name), bundle: String(b.bundle), bytes: Number.isSafeInteger(b.bytes) ? b.bytes : null })),
+        at: new Date(now()).toISOString()
+    });
+
+    /** The latest round's versions with their bundles: {round, bots, at}; the machine's at most a minute old, else the window's last copy, else null. */
+    async function lineup() {
+        if (lineupSeen && now() - lineupSeen.at < 60000) {
+            return lineupSeen.data;
+        }
+        if (token) {
+            try {
+                const r = await toMachine('GET', '/v1/swarm/lineup.json', { timeoutMs: 8000 });
+                if (r.status === 200 && Array.isArray(r.json?.bots)) {
+                    const data = cleanLineup(r.json);
+                    lineupSeen = { at: now(), data };
+                    if (botDir) {
+                        fs.mkdirSync(botDir, { recursive: true });
+                        fs.writeFileSync(`${lineupFile()}.tmp`, JSON.stringify(data));
+                        fs.renameSync(`${lineupFile()}.tmp`, lineupFile());
+                    }
+                    // every bundle of the lineup now, so the bots play while the machine sleeps; the rest go
+                    keepBots(data).catch(() => undefined);
+                    return data;
+                }
+            } catch {
+                // asleep, or no address while it is stopped
+            }
+        }
+        const disk = readLineup();
+        if (disk) {
+            lineupSeen = { at: now() - 50000, data: disk }; // asked again in 10 s, not on every request
+        }
+        return disk;
+    }
+
+    /** Bundle `hex` and its gzip as the window has them now ({raw, gz}: paths, or buffers with no bot folder), else null. */
+    function botHere(hex) {
+        if (!HEX.test(String(hex))) {
+            return null;
+        }
+        if (!botDir) {
+            return botMemory.get(hex) ?? null;
+        }
+        const raw = path.join(botDir, `${hex}.tar`);
+        return fs.existsSync(`${raw}.gz`) && fs.existsSync(raw) ? { raw, gz: `${raw}.gz` } : null;
+    }
+
+    /** Bundle `hex` and its gzip ({raw, gz}: paths, or buffers with no bot folder), fetched from the machine once; null when it has none. */
+    function botFile(hex) {
+        const here = botHere(hex);
+        if (here) {
+            return Promise.resolve(here);
+        }
+        const raw = botDir && path.join(botDir, `${hex}.tar`);
+        if (!token) {
+            return Promise.resolve(null);
+        }
+        if (!botPending.has(hex)) {
+            botPending.set(hex, (async () => {
+                const r = await toMachine('GET', `/v1/swarm/bot/${hex}`, { timeoutMs: 120000, raw: true });
+                if (r.status !== 200 || crypto.createHash('sha256').update(r.bytes).digest('hex') !== hex) {
+                    return null;
+                }
+                const gz = await new Promise((resolve, reject) => zlib.gzip(r.bytes, { level: 6 }, (e, b) => (e ? reject(e) : resolve(b))));
+                if (!botDir) {
+                    const v = { raw: r.bytes, gz };
+                    botMemory.set(hex, v);
+                    return v;
+                }
+                fs.mkdirSync(botDir, { recursive: true });
+                for (const [f, bytes] of [[raw, r.bytes], [`${raw}.gz`, gz]]) {
+                    fs.writeFileSync(`${f}.tmp`, bytes);
+                    fs.renameSync(`${f}.tmp`, f);
+                }
+                return { raw, gz: `${raw}.gz` };
+            })().catch(() => null).finally(() => botPending.delete(hex)));
+        }
+        return botPending.get(hex);
+    }
+
+    /** Fetches every bundle of `data` (a lineup) to the window's disk and drops the bundles no lineup names now. */
+    async function keepBots(data) {
+        const want = new Set(data.bots.map((b) => b.bundle));
+        for (const hex of want) {
+            await botFile(hex);
+        }
+        if (botDir && fs.existsSync(botDir)) {
+            for (const f of fs.readdirSync(botDir)) {
+                const m = /^([0-9a-f]{64})\.tar(\.gz)?$/.exec(f);
+                if (m && !want.has(m[1])) {
+                    fs.rmSync(path.join(botDir, f), { force: true });
+                }
+            }
+        }
+    }
+
+    /** Sends bundle `hex` of the lineup (isolated, gzip when asked): true once answered. */
+    async function sendBot(req, res, hex, { sendJson }) {
+        const l = await lineup();
+        if (!HEX.test(hex) || !l?.bots.some((b) => b.bundle === hex)) {
+            sendJson(res, 404, { error: { code: 'not_found', message: 'not a bot of the arena now' } }, req);
+            return true;
+        }
+        const f = await botFile(hex);
+        if (!f) {
+            sendJson(res, 503, { error: { code: 'unavailable', message: "this bot's files come from the games machine, which is asleep; try again in a minute" } }, req);
+            return true;
+        }
+        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
+        const body = gzip ? f.gz : f.raw;
+        // x-raw-length: the bytes the page reads once the browser has unzipped them (its progress bar's total)
+        const lengthOf = (b) => (typeof b === 'string' ? fs.statSync(b).size : b.length);
+        res.writeHead(200, { 'content-type': 'application/x-tar', 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', 'content-length': String(lengthOf(body)), 'x-raw-length': String(lengthOf(f.raw)), ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+        if (typeof body === 'string') {
+            fs.createReadStream(body).pipe(res);
+        } else {
+            res.end(body);
+        }
+        return true;
     }
 
     const slotOf = (login, slot) => `${String(login).toLowerCase().replace(/[^a-z0-9_-]/g, '')}-${String(slot).replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 32);
@@ -311,7 +477,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
     }
 
-    return { route, leases, on: () => !!token, sendFile, currentManifest, cachedBuild, keep };
+    return { route, leases, on: () => !!token, sendFile, currentManifest, cachedBuild, keep, fileSize, lineup, sendBot, botHere };
 }
 
 function safeJson(text) {

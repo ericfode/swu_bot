@@ -73,6 +73,20 @@ const STOP_LOOK_MS = 1_000
 export const deadlineMs = (job: { readonly gameMs?: unknown }): number =>
   (Number.isSafeInteger(job.gameMs) && (job.gameMs as number) > 0 ? (job.gameMs as number) : NO_GAME_CAP_MS) + DEADLINE_MARGIN_MS
 
+/**
+ * The size of bundle `hex`'s tar when it is a regular file (not a link, which is not followed) in the bundles folder,
+ * else null (a name that is not 64 lowercase hex characters, a missing file, a link, a folder).
+ */
+export const tarSize = (bundles: string, hex: string): number | null => {
+  if (!HEX64.test(hex)) return null
+  try {
+    const st = lstatSync(path.join(bundles, `${hex}.tar`))
+    return st.isFile() ? st.size : null
+  } catch {
+    return null
+  }
+}
+
 const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" })
 
 /** The first n characters as a reader counts them (grapheme clusters), as Elixir's String.slice cut reasons. */
@@ -134,22 +148,9 @@ export const makeLeaseBoard = (opts: LeaseBoardOptions): LeaseBoardImpl => {
   const tarOf = (hex: string) => path.join(opts.bundles, `${hex}.tar`)
 
   /** a regular file (not a link) of that name in the bundles folder */
-  const hasTar = (hex: string) => {
-    if (!HEX64.test(hex)) return false
-    try {
-      return lstatSync(tarOf(hex)).isFile()
-    } catch {
-      return false
-    }
-  }
+  const hasTar = (hex: string) => tarSize(opts.bundles, hex) !== null
 
-  const sizeOf = (hex: string) => {
-    try {
-      return lstatSync(tarOf(hex)).size
-    } catch {
-      return 0
-    }
-  }
+  const sizeOf = (hex: string) => tarSize(opts.bundles, hex) ?? 0
 
   const holds = (l: Lease | undefined, name: string): l is Lease => !!l && live(l) && l.host === name
 

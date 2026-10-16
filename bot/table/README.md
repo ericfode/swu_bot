@@ -27,27 +27,36 @@ node bot/table/serve.js --site ../holotable/dist \
 `--bots-file` takes holocron's program list (build the C bots first: `make -C bots/c` there); `serve.js` offers the
 JEPA bot too. Tests: `node --test bot/test/table.test.js` (split checks, refused answers, conceding, and whole games a
 scripted person plays, checking that the bot's hidden cards never reach the person's screen, one of them through
-`host.js` against the JEPA bot), `bot/test/swarm-engine.test.js` (the play worker plays the same game as Node) and
-`bot/test/play.test.js` (the window's side).
+`host.js` against the JEPA bot), `bot/test/swarm-engine.test.js` (the play worker plays the same game as Node, and
+an arena bundle plays a whole game in `bot/swarm/play-host.js`) and `bot/test/play.test.js` (the window's side).
 
 ## The hosted table: /play on the arena window
 
-Eric's picks (2026-10-15): the game runs in the person's browser, against his JEPA bot only, the person picks their
-deck, and finished games go back to the arena.
+Eric's picks (2026-10-15): the game runs in the person's browser, the person picks their deck, and finished games go
+back to the arena. On 2026-10-16 he asked to pick the bot too, so a tab downloads only that one: the JEPA bot, or a
+WebAssembly version of the arena's latest round.
 
 ```
-window /play ── play.html + Holotable's kit (SWUViewer.mountPlay) ── worker: play-worker.js
-                                                                     referee (forceteki) ◀─▶ jepa-tx-gate (vendor/jepa)
+window /play ── play.html: pick a bot, download it ── worker: play-worker.js (bot/swarm/play-host.js)
+   + Holotable's kit (SWUViewer.mountPlay)                   referee (forceteki) ◀─▶ jepa-tx-gate (vendor/jepa)
+                                                                                 ◀─▶ an arena bundle (bot worker)
            ◀── POST /api/play/games {replay} at the end ──┘
 ```
 
 - `jepa.js`: the JEPA bot (`jepa-tx-gate`: holocron's JavaScript port in `vendor/jepa`, with its two models) as an
   in-process protocol client. Its planner asks the referee for simulations, which re-deal the person's hidden cards.
-- `host.js`: `createTableHost`, one game at a time in the tab: `options()`, `start({deck, botDeck, seed, key})`,
+- `host.js`: `createTableHost`, one game at a time in the tab: `options()`, `start({bot, deck, botDeck, seed, key})`,
   `act()`, `concede()`, and `cardText()` (card text for the lists' cards and the tokens). The bot's deck is one of
   the lists picked by the game's seed unless the person names one.
+- `bot/swarm/play-host.js`: the worker's host. It writes the JEPA bot's models when its first game brings them
+  (`addFiles`), unpacks an arena version's tar where the registry finds it (`addBundle(name, hex, tar, capMs)`, checked
+  against its sha256), loads Python for a Python bundle (`addPython`), and makes each game's bot: an arena version is a
+  fresh program in its own bot worker, guarded with the round's time per game, stopped when the game ends.
 - `bot/swarm/build.js` bundles it as `play-worker.js` on the swarm's engine pack (`bot/swarm/pack.js` adds this folder,
-  `vendor/jepa` and the deck lists); the games machine serves both, and the window keeps them on its disk.
+  `vendor/jepa` and the deck lists; the models are files of their own); the games machine serves them, and the window
+  keeps them on its disk. Messages: `{t: 'init', packBytes, botWorker}`, then `{t: 'start', bot, deck, botDeck, files,
+  bundle, python}` (what this bot needs that the worker has not had yet), `{t: 'act', act}`, `{t: 'concede'}`; out
+  `ready` (with `options`, `cardText`, `isolated`), `started` or `refused`, `acted`, `msg` (every table message).
 - `bot/arena/play.js`: the window's side. `ARENA_PLAY` says who may play: `invited` (the default), `github` (anyone
   signed in with GitHub) or `off`. Games are kept in the run `play` as a people run, unrated, with who played each
   one in `admin/people`; `bot/arena/WINDOW.md` has the routes.

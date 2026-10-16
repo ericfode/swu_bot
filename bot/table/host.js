@@ -1,10 +1,12 @@
 'use strict';
 /**
- * A table in a browser tab (the window's /play page with Holotable's play screen): the person against the JEPA bot,
- * one game at a time, with the referee and the bot in the same worker (bot/swarm/build.js play-worker.js) and the
- * engine from the swarm's pack. serve.js plays the same games on one computer over HTTP.
+ * A table in a browser tab (the window's /play page with Holotable's play screen): the person against a bot, one game
+ * at a time, with the referee and the bot in the same worker (bot/swarm/build.js play-worker.js) and the engine from
+ * the swarm's pack. serve.js plays the same games on one computer over HTTP.
  *
  *   const host = createTableHost({ send });          // send(msg): every message for the page (table.js), in order
+ *   createTableHost({ send, makeBot, bots })         // makeBot(name): a fresh bot for one game (default: the JEPA bot
+ *                                                    // only, its models read when its first game starts)
  *   host.options()                                   // {bots, decks, botDeck}, as serve.js's GET /table/api/options
  *   await host.start({ bot, deck, botDeck, seed, key })   // {id, seat}; the game's last message is table.js's end, with
  *                                                    // the replay; host.done resolves to {result, replay} then
@@ -84,30 +86,40 @@ function cardTextOf(env, decks) {
     return { schema: 'swu-card-text/1', source: 'forceteki card data', cards };
 }
 
-function createTableHost({ send, env = new Env(), decksFile = DECKS, makeBot = jepaMaker() }) {
+/** The JEPA bot and no other; its two models are read when its first game starts, so the play page sends them then. */
+function jepaOnly() {
+    let make = null;
+    return (name) => {
+        if (name !== JEPA_NAME) {
+            throw new Error(`no bot ${name}`);
+        }
+        make ??= jepaMaker();
+        return make();
+    };
+}
+
+function createTableHost({ send, env = new Env(), decksFile = DECKS, makeBot = jepaOnly(), bots = [JEPA_NAME] }) {
     const { decks } = loadDecks(decksFile, env);
     let game = null;
     let text = null;
 
     const host = {
         done: null,
-        options: () => ({ bots: [JEPA_NAME], decks: deckOptions(decks), botDeck: RANDOM }),
+        options: () => ({ bots: [...bots], decks: deckOptions(decks), botDeck: RANDOM }),
         start({ bot = JEPA_NAME, deck, botDeck = RANDOM, seed, key = null } = {}) {
             if (game && !game.over) {
                 throw new Error('a game is being played at this table');
-            }
-            if (bot !== JEPA_NAME) {
-                throw new Error(`no bot ${bot}`);
             }
             if (!Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32) {
                 throw new Error('seed: a whole number from 0 to 2^32 - 1');
             }
             const { mine, theirs } = pickDecks(decks, deck, botDeck, seed);
+            const opponent = makeBot(bot);
             const id = `play-${seed.toString(16).padStart(8, '0')}`;
             const person = new PersonSeat({ name: 'person', send });
             game = { id, person, over: false };
             const g = game;
-            host.done = playTable({ env, person, personSeat: 'p1', bot: makeBot(), decks: { p1: mine, p2: theirs }, seed, key, send })
+            host.done = playTable({ env, person, personSeat: 'p1', bot: opponent, decks: { p1: mine, p2: theirs }, seed, key, send })
                 .catch((e) => {
                     send({ t: 'end', winner: null, outcome: 'ERROR', round: 0, steps: 0, error: String(e?.message ?? e).slice(0, 200), by: null, conceded: false, replay: null });
                     return { result: null, replay: null };
@@ -124,4 +136,4 @@ function createTableHost({ send, env = new Env(), decksFile = DECKS, makeBot = j
     return host;
 }
 
-module.exports = { createTableHost, deckOptions, pickDecks, RANDOM };
+module.exports = { createTableHost, jepaOnly, deckOptions, pickDecks, RANDOM };

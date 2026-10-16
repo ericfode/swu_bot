@@ -645,8 +645,8 @@ function createWindow(opts = {}) {
     // the third-party licenses of the packages bundled into the kit, which Holotable's build writes next to it
     const kitLicenses = path.join(path.dirname(kitFile), 'swu-viewer-kit.licenses.txt');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
-    const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm') });
-    // the play page (play.js): a person against the JEPA bot in their own tab, on the swarm's files; games come back here
+    const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
+    // the play page (play.js): a person against a bot in their own tab, on the swarm's files; games come back here
     play = createPlay({ store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
