@@ -177,10 +177,26 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 
 `GET /art/<SET>/<NNN>.png` (and `<NNN>-b.png`, a leader's deployed side) is the image of
 `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png`, fetched by the window. The play page (`/tables`) points the
-viewer kit's art here (`SWUViewer.setArtResolver`) because its isolation (`require-corp`) blocks images from a site
-that does not allow it, and the CDN sends no CORP or CORS header. It answers anyone signed in with GitHub, a view link's
-guest or a token. Browsers keep each image a year; the window keeps about 48 MB of them in memory and none on disk,
-and remembers for an hour that a card has no art (404).
+viewer kit's art here (`SWUViewer.setArtResolver`) because its isolation (`require-corp`) blocks images from a site that
+does not allow it, and the CDN sends no CORP or CORS header. It answers anyone signed in with GitHub, a view link's
+guest or a token. Browsers keep each image a year, and the window remembers for an hour that a card has no art (404).
+
+The CDN's images are ~270 KB JPEGs of 1120x1560. After the first request for a card, the window makes it a WebP of at
+most 1000 px on its long side (~70 KB, the same look at the largest size Holotable shows a card) with `cwebp` (the
+Debian package `webp`, in the image), one at a time in the background, and keeps it in `<home>/art` (up to 150 MB,
+oldest out first; none written when the volume has under 200 MB free) and in memory (48 MB, with the CDN images it
+has not made smaller yet). A browser whose `Accept` names `image/webp` (Chrome, Firefox, Safari 16+) gets the WebP once
+it is made and the CDN's image until then; others always get the CDN's image (`Vary: Accept`). Without `cwebp` every
+image goes as the CDN has it.
+
+## Files sent as they are (static.js)
+
+The app (`/`, 2.7 MB), the viewer kit (`/kit.js`, `/tables/kit.js`: one file, 2.4 MB), the kit's
+license list and `/strategy-diagram.js` are read and compressed once per version (gzip at once, brotli in the
+background: the app is 622 KB that way, 785 KB gzipped), not for every request, and carry an `ETag` that names their
+content, so a reload is a 304 with no body. Their `cache-control` stays `no-cache`: the URLs stay the same when a deploy
+changes the file. Before 2026-10-16 each visit gzipped the app and the kit again (~75 ms of the window's one CPU each)
+and sent them in full.
 
 ## The play page (tables.js)
 
@@ -208,11 +224,14 @@ anyone signed in with GitHub (`spec/open-tables.md`).
   asleep, `/api/tables/info` answers `ready: false, waking: true` and wakes it at most every 15 minutes, and the page
   opens anyway: the loading bar under Play says "Waking the games machine · 0:23 of ~1:00", and a Play press starts
   the game once the files are here), and `/tables/logs`. Every file answer has
-  `x-raw-length`, the unzipped size, which is what a page reading the body counts.
+  `x-raw-length`, the unzipped size, which is what a page reading the body counts. A URL with `?b=` names its build,
+  so browsers keep the file a year; it goes brotli to a browser that takes it (made once, in the background, next to
+  the gzip on the window's disk: the engine pack is 1.0 MB that way, 1.5 MB gzipped), else gzipped.
 - `GET /tables/bot/<sha256>.tar`: an arena version's canonical tar, only for a version of the latest round. The swarm
   relay (`lineup()`, `sendBot()`) gets the lineup (`GET /v1/swarm/lineup.json`) and each of its bundles
   (`GET /v1/swarm/bot/<sha256>`) from the games machine as soon as it learns the lineup, checks each sha256 and keeps
-  the tars with their gzips in `<home>/swarm-bots` (the latest round's only). 503 while the machine is asleep and the
+  the tars with their gzips and brotlis in `<home>/swarm-bots` (the latest round's only), so they load while the
+  machine sleeps. Browsers keep a bundle a year (its URL names it). 503 while the machine is asleep and the
   window does not have it yet (it is woken, at most every 15 minutes).
 - `GET /api/tables/info`: the files (`pack`, `worker`, `botWorker`, each `{url, bytes, wire}`), `runtimes` (the files
   of each interpreter a bundle may need, `python-3.14-wasi`: `{lib, wasm}`), the deck lists, the person's random id

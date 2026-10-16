@@ -24,6 +24,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { compress, pickEncoding } = require('./static');
 
 const FILES = {
     'manifest.json': 'application/json',
@@ -44,6 +45,8 @@ const HEX = /^[0-9a-f]{64}$/;
 const LEASE = /^[A-Za-z0-9_-]{1,64}$/;
 const LEASE_TTL_MS = 6 * 3600 * 1000;
 const RESULT_MAX = 48 << 20;
+// a file whose URL names its content (?b=<build>, a bundle's sha256) never changes: browsers keep it a year
+const KEEP = 'private, max-age=31536000, immutable';
 
 function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, machine = process.env.SWARM_GAMES_URL || 'http://swu-arena-games.internal:8090', cacheDir = null, botDir = null, page = path.join(__dirname, 'web', 'swarm.html'), fetchImpl = globalThis.fetch, now = Date.now } = {}) {
     const leases = new Map(); // lease id -> {login, bundles, at}
@@ -146,17 +149,64 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
     }
 
     /**
-     * The bytes of swarm file `name` of `build` (gz: of its gzip, what a browser downloads), from the window's disk or
-     * the machine's manifest, or null.
+     * The bytes of swarm file `name` of `build` (gz: about what a browser downloads, its brotli or else its gzip), from
+     * the window's disk or the machine's manifest, or null.
      */
     function fileSize(build, name, { gz = false } = {}) {
-        const raw = cacheDir && /^[0-9a-zA-Z._-]{1,64}$/.test(build) && Object.hasOwn(FILES, name) ? path.join(cacheDir, build, gz ? `${name}.gz` : name) : null;
-        const st = raw ? fs.statSync(raw, { throwIfNoEntry: false }) : null;
-        if (st?.isFile()) {
-            return st.size;
+        const ok = cacheDir && /^[0-9a-zA-Z._-]{1,64}$/.test(build) && Object.hasOwn(FILES, name);
+        for (const f of ok ? (gz ? [`${name}.br`, `${name}.gz`] : [name]) : []) {
+            const st = fs.statSync(path.join(cacheDir, build, f), { throwIfNoEntry: false });
+            if (st?.isFile()) {
+                return st.size;
+            }
         }
         const n = manifest?.build === build ? manifest[gz ? 'gz' : 'sizes']?.[name] : null;
         return Number.isSafeInteger(n) ? n : null;
+    }
+
+    /**
+     * Kept file `f` ({raw, gz}: paths on the window's disk, or buffers) with its brotli as br once it has one. Brotli
+     * takes seconds on the engine pack, so it is made in the background the first time (next to the file on disk), and
+     * the file goes out gzipped until then.
+     */
+    const brMaking = new Set();
+    function withBrotli(f) {
+        if (typeof f.raw !== 'string') {
+            f.brMade ??= compress(f.raw, 'br').then((b) => {
+                f.br = b;
+            }, () => undefined);
+            return f;
+        }
+        const br = `${f.raw}.br`;
+        if (fs.existsSync(br)) {
+            return { ...f, br };
+        }
+        if (!brMaking.has(br)) {
+            brMaking.add(br);
+            fs.promises.readFile(f.raw).then((raw) => compress(raw, 'br')).then((b) => {
+                fs.writeFileSync(`${br}.tmp`, b);
+                fs.renameSync(`${br}.tmp`, br);
+            }).catch(() => undefined).finally(() => brMaking.delete(br)); // an older build's folder may go meanwhile
+        }
+        return f;
+    }
+
+    /** Sends kept file `f` as `type`: brotli, gzip or as it is, as the request takes it; x-raw-length is its unzipped size. */
+    function sendKept(req, res, f, type, cache) {
+        const g = withBrotli(f);
+        const coding = pickEncoding(req, { br: !!g.br, gz: !!g.gz });
+        const body = coding === 'br' ? g.br : coding === 'gzip' ? g.gz : g.raw;
+        const lengthOf = (b) => (typeof b === 'string' ? fs.statSync(b).size : b.length);
+        // x-raw-length: the bytes the page reads once the browser has unzipped them (its progress bar's total)
+        res.writeHead(200, { 'content-type': type, 'cache-control': cache, vary: 'accept-encoding', 'content-length': String(lengthOf(body)), 'x-raw-length': String(lengthOf(g.raw)), ...ISOLATED, ...(coding ? { 'content-encoding': coding } : {}) });
+        if (req.method === 'HEAD') {
+            res.end();
+        } else if (typeof body === 'string') {
+            fs.createReadStream(body).pipe(res);
+        } else {
+            res.end(body);
+        }
+        return true;
     }
 
     /** The build whose files the window has on its disk (only the newest is kept), or null: what a page loads while the machine sleeps. */
@@ -190,18 +240,8 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             fail(m && build !== m.build ? 'build' : 'unavailable', m && build !== m.build ? 409 : 503, m && build !== m.build ? 'the games machine runs a newer build: reload the page' : 'the games machine is asleep: the swarm starts with the next round');
             return true;
         }
-        // the URL names the build, so a file never changes: browsers keep it
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-        const body = gzip ? f.gz : f.raw;
-        // x-raw-length: the bytes the page reads once the browser has unzipped them (its progress bar's total)
-        const lengthOf = (b) => (typeof b === 'string' ? fs.statSync(b).size : b.length);
-        res.writeHead(200, { 'content-type': FILES[name], 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', 'content-length': String(lengthOf(body)), 'x-raw-length': String(lengthOf(f.raw)), ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        if (typeof body === 'string') {
-            fs.createReadStream(body).pipe(res);
-        } else {
-            res.end(body);
-        }
-        return true;
+        // a URL that names the build never changes: browsers keep it (without ?b= it is whatever the machine runs now)
+        return sendKept(req, res, f, FILES[name], url.searchParams.get('b') ? KEEP : 'private, no-cache');
     }
 
     /** Fetches the machine's files `names` of its build now into the window's cache, so they load while it sleeps. */
@@ -274,7 +314,10 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             return botMemory.get(hex) ?? null;
         }
         const raw = path.join(botDir, `${hex}.tar`);
-        return fs.existsSync(`${raw}.gz`) && fs.existsSync(raw) ? { raw, gz: `${raw}.gz` } : null;
+        if (!fs.existsSync(`${raw}.gz`) || !fs.existsSync(raw)) {
+            return null;
+        }
+        return fs.existsSync(`${raw}.br`) ? { raw, gz: `${raw}.gz`, br: `${raw}.br` } : { raw, gz: `${raw}.gz` };
     }
 
     /** Bundle `hex` and its gzip ({raw, gz}: paths, or buffers with no bot folder), fetched from the machine once; null when it has none. */
@@ -318,7 +361,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
         if (botDir && fs.existsSync(botDir)) {
             for (const f of fs.readdirSync(botDir)) {
-                const m = /^([0-9a-f]{64})\.tar(\.gz)?$/.exec(f);
+                const m = /^([0-9a-f]{64})\.tar(\.gz|\.br)?$/.exec(f);
                 if (m && !want.has(m[1])) {
                     fs.rmSync(path.join(botDir, f), { force: true });
                 }
@@ -338,17 +381,8 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             sendJson(res, 503, { error: { code: 'unavailable', message: "this bot's files come from the games machine, which is asleep; try again in a minute" } }, req);
             return true;
         }
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-        const body = gzip ? f.gz : f.raw;
-        // x-raw-length: the bytes the page reads once the browser has unzipped them (its progress bar's total)
-        const lengthOf = (b) => (typeof b === 'string' ? fs.statSync(b).size : b.length);
-        res.writeHead(200, { 'content-type': 'application/x-tar', 'cache-control': 'private, max-age=86400, immutable', vary: 'accept-encoding', 'content-length': String(lengthOf(body)), 'x-raw-length': String(lengthOf(f.raw)), ...ISOLATED, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        if (typeof body === 'string') {
-            fs.createReadStream(body).pipe(res);
-        } else {
-            res.end(body);
-        }
-        return true;
+        // the URL names the bundle by its sha256
+        return sendKept(req, res, f, 'application/x-tar', KEEP);
     }
 
     const slotOf = (login, slot) => `${String(login).toLowerCase().replace(/[^a-z0-9_-]/g, '')}-${String(slot).replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 32);

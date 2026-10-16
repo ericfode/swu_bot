@@ -11,7 +11,7 @@
  * in every log, never a GitHub name (3A); any arena bot that runs in a browser (4B); both players trusted in this
  * first version (no signed moves, no deal proof).
  *
- *   const tables = createTables({ store, swarm, auth, kitFile, arena, wake });
+ *   const tables = createTables({ store, swarm, auth, kitFile, statics, arena, wake });   // statics: static.js
  *   if (await tables.openRoute(req, res, url, helpers)) return;      // /api/open/*, before the window's own auth
  *   if (await tables.route(req, res, url, who, helpers)) return;     // helpers: {sendJson, sendText, readBody}
  *   tables.openTo(next)   // whether GitHub sign-in may return a login with no role to `next` (auth.js openTo)
@@ -57,7 +57,7 @@
  * about, and files [{url, path, bytes, wire}]: its models, which the page fetches and sends with its first game), then
  * the latest round's versions by rating (kind 'arena': bundle {url, hex, bytes, wire}, runtime ('wasi-p1', or an
  * interpreter of runtimes the page also fetches) and capMs, its time per game; they need a cross-origin isolated page).
- * bytes: what the bot itself is, unzipped; wire: about what it downloads (gzipped), null when the window does not know
+ * bytes: what the bot itself is, unzipped; wire: about what it downloads (brotli or gzip), null when the window does not know
  * yet. Every name, title and number is data from the arena: the page sets them with textContent.
  */
 const crypto = require('crypto');
@@ -70,6 +70,7 @@ const { atLeast, LOGIN } = require('./auth');
 const { createLobby, LobbyError, MAX_MSG } = require('./lobby');
 const { swudbId, fetchSwudb, deckFromJson } = require('./swudb');
 const { normalizeDeck } = require('../decklists');
+const { createStatic } = require('./static');
 
 const RUN = 'tables';
 const JEPA = 'jepa-tx-gate';
@@ -264,7 +265,7 @@ function tarEntry(name, data, mtime = Math.floor(Date.now() / 1000)) {
 const TAR_END = Buffer.alloc(1024);
 
 function createTables({
-    store, swarm, auth, kitFile, arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
+    store, swarm, auth, kitFile, statics = createStatic(), arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
     mode = process.env.ARENA_TABLES || 'invited', play = process.env.ARENA_PLAY || 'invited', page = path.join(__dirname, 'web', 'tables.html'), decksFile = DECKS,
     fetchImpl = globalThis.fetch, now = Date.now, lobby = createLobby({ now }), perDay = PER_DAY, maxRows = MAX_ROWS
 } = {}) {
@@ -274,7 +275,6 @@ function createTables({
     const rate = new Map(); // `${what}:${login}` -> times, the last hour
     const deckCache = new Map(); // SWUDB id -> {at, deck}
     let woke = 0;
-    let kit = null;
 
     let lists = [];
     try {
@@ -365,11 +365,12 @@ function createTables({
         };
     };
 
-    // bytes: a file as the page reads it (unzipped); wire: about what it downloads (gzipped); null when not known
+    // bytes: a file as the page reads it (unzipped); wire: about what it downloads (brotli or gzip); null when not known
     const fileOf = (build, name) => ({ url: `/tables/${name}?b=${encodeURIComponent(build)}`, bytes: swarm.fileSize?.(build, name) ?? null, wire: swarm.fileSize?.(build, name, { gz: true }) ?? null });
     const wireOf = (hex) => {
         const f = swarm.botHere?.(hex);
-        return f ? (typeof f.gz === 'string' ? fs.statSync(f.gz).size : f.gz.length) : null;
+        const z = f && (f.br ?? f.gz);
+        return z ? (typeof z === 'string' ? fs.statSync(z).size : z.length) : null;
     };
     // bundle sha256 -> the runtime its arena.json names, read once the window has the bundle (null: none named)
     const runtimes = new Map();
@@ -414,21 +415,11 @@ function createTables({
         return true;
     }
 
-    function sendKit(req, res, sendText) {
-        let st;
-        try {
-            st = fs.statSync(kitFile);
-        } catch {
+    // compressed once and 304 on a reload (static.js), one copy with the window's /kit.js
+    async function sendKit(req, res, sendText) {
+        if (!(await statics.send(req, res, kitFile, 'text/javascript', { headers: { 'cross-origin-resource-policy': 'same-origin' } }))) {
             sendText(res, req, 404, 'text/plain', 'not found');
-            return true;
         }
-        if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            const raw = fs.readFileSync(kitFile);
-            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
-        }
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', 'cross-origin-resource-policy': 'same-origin', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        res.end(gzip ? kit.gz : kit.raw);
         return true;
     }
 
