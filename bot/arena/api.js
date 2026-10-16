@@ -68,7 +68,6 @@ function need(cond, code, msg) {
 
 // bot/players pulls in the engine wrapper (~1 s), and mcp.js --remote must work without the engine: load it on use
 const describeBot = (name) => require('../players').describeBot(name);
-const cardJson = () => require('./registry').CARD_JSON;
 
 /** An integer argument that may arrive as a string (query strings, shells); anything else is returned unchanged. */
 const int = (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v);
@@ -161,26 +160,29 @@ function loadCheck(dir, version, shownAs) {
 }
 
 // Runs in a child process: starts a submitted bot program in its folder, as the registry does for a game, and sends it the
-// hello the referee sends (two real deck lists), then expects ready. Never resolves on its own: the timer ends it.
+// hello the referee sends (two real deck lists, and their card data from the referee's card folder as game-cards.js
+// gives it to a game), then expects ready. Never resolves on its own: the timer ends it.
 const START_CHECK = `
-const [stdio, decksFile, dir, name, spec, ms] = process.argv.slice(1);
+const [stdio, gameCardsFile, decksFile, dir, name, spec, ms] = process.argv.slice(1);
 const { StdioClient } = require(stdio);
+const { gameCards, cardGetter } = require(gameCardsFile);
 const { cmd, args } = JSON.parse(spec);
 const decks = require(decksFile);
+const cards = gameCards(cardGetter(), [decks[0], decks[1]]);
 const bye = (code, msg) => { if (msg) process.stderr.write(msg + '\\n'); process.exit(code); };
 setTimeout(() => bye(1, 'no reply to hello within ' + ms + ' ms'), Number(ms));
 const client = new StdioClient(name, { cmd: /[\\\\/]/.test(cmd) ? require('path').join(dir, cmd) : cmd, args, cwd: dir });
 client.hello({ t: 'hello', protocol: 'swu-bot-stdio', v: 1, versions: [1, 2], bot: name, you: 'p1', seed: 1,
-    players: [{ id: 'p1', name: 'p1', bot: name }, { id: 'p2', name: 'p2', bot: 'heuristic' }], deck: decks[0], opponent: decks[1], ms: Number(ms) })
+    players: [{ id: 'p1', name: 'p1', bot: name }, { id: 'p2', name: 'p2', bot: 'heuristic' }], deck: decks[0], opponent: decks[1], ms: Number(ms), cards })
     .then((r) => r?.t === 'ready' && [1, 2].includes(r.v ?? 1) ? bye(0) : bye(1, 'expected {"t":"ready","v":2}, got ' + JSON.stringify(r).slice(0, 200)),
           (e) => bye(1, e.message));
 `;
 
 /** Throws bad_bot unless the bot program in dir starts and answers hello with ready (same environment as a game). */
 function startCheck(dir, version, bot, shownAs) {
-    const r = spawnSync(process.execPath, ['-e', START_CHECK, path.join(__dirname, '..', 'stdio.js'), path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'),
-        dir, version, JSON.stringify({ cmd: bot.cmd, args: bot.args ?? [] }), String(START_CHECK_MS)], {
-        env: { ...checkEnv(), SWU_CARD_JSON: cardJson() },
+    const r = spawnSync(process.execPath, ['-e', START_CHECK, path.join(__dirname, '..', 'stdio.js'), path.join(__dirname, '..', 'game-cards.js'),
+        path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'), dir, version, JSON.stringify({ cmd: bot.cmd, args: bot.args ?? [] }), String(START_CHECK_MS)], {
+        env: checkEnv(),
         stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', timeout: START_CHECK_MS + 5000, killSignal: 'SIGKILL'
     });
     if (r.status === 0) {

@@ -64,10 +64,15 @@ referee                              bot
 ### `hello` → `ready`
 
 ```json
-{"t":"hello","protocol":"swu-bot-stdio","v":1,"versions":[1,2],"bot":"rust-mcts","you":"p1","seed":1968796899,"ms":30000,
+{"t":"hello","protocol":"swu-bot-stdio","v":1,"versions":[1,2],"bot":"rust-mcts","you":"p1","seed":1968796899,
  "players":[{"id":"p1","name":"p1","bot":"rust-mcts"},{"id":"p2","name":"p2","bot":"heuristic"}],
  "deck":{"metadata":{"name":"Darth Vader / Echo Base","author":"bot"},"leader":{"id":"SOR_010","count":1},"base":{"id":"SOR_023","count":1},"deck":[{"id":"SOR_042","count":3}]},
- "opponent":{"metadata":{"name":"...","author":"bot"},"leader":{"id":"SHD_009","count":1},"base":{"id":"SHD_021","count":1},"deck":[...]}}
+ "opponent":{"metadata":{"name":"...","author":"bot"},"leader":{"id":"SHD_009","count":1},"base":{"id":"SHD_021","count":1},"deck":[...]},
+ "ms":30000,
+ "cards":[...,
+  {"title":"Search Your Feelings","subtitle":null,"cost":4,"hp":null,"power":null,"text":"Search your deck for a card and draw it. (Then, shuffle your deck.)","deployBox":null,"epicAction":null,"unique":false,"rules":"After searching your deck, shuffle it.\n","upgradePower":null,"upgradeHp":null,"id":"7485151088","aspects":["villainy","vigilance"],"traits":["innate"],"keywords":[],"types":["event"],"setId":{"set":"SOR","number":42},"setCodes":[{"set":"SOR","number":42}],"internalName":"search-your-feelings"},
+  {"title":"Shield","subtitle":null,"cost":0,"hp":0,"power":0,"text":"If damage would be dealt to attached unit, prevent that damage. If you do, defeat a Shield token on it.","deployBox":null,"epicAction":null,"unique":false,"rules":null,"upgradePower":0,"upgradeHp":0,"id":"8752877738","aspects":[],"traits":["armor"],"keywords":[],"types":["token","upgrade"],"setId":{"set":"SOR"},"internalName":"shield"},
+  ...]}
 ```
 
 | Field | Meaning |
@@ -78,6 +83,34 @@ referee                              bot
 | `seed` | Integer in `[0, 2^32)` for this game and seat. Seed your own RNG from it to make games reproducible. In a keyed game it tells you nothing about the hidden cards (see Fairness). |
 | `players` | Both seats: engine name and bot name. |
 | `deck`, `opponent` | Both deck lists (they are open, see Fairness): `{ metadata, leader, base, deck: [{ id, count }] }` with set codes `<SET>_<NNN>`. |
+| `cards` | The card data of this game: every card it can show you, as the engine's own card objects (below). |
+
+**Card data (`hello.cards`).** A bot gets its card data here and nowhere else: finding it is the referee's job, and a
+bot reads no card files (a sandboxed bot has none). It comes once per game. The array holds the engine's card object
+for each card of both lists (leader, a second leader, base, deck and sideboard) and the 13 tokens (Battle Droid, Clone
+Trooper, TIE Fighter, X-Wing, Spy, Mandalorian, Beast, Experience, Shield, Advantage, Weakness, The Force, Credit).
+Each card appears once, and the array is sorted by `internalName`, so both seats get the same array. Fields are the
+engine's: `title`, `subtitle`, `cost`, `power`, `hp`, `upgradePower`, `upgradeHp` (an upgrade's modifiers), `arena`
+(`ground` or `space`, where it applies), `aspects`, `traits`, `keywords`, `types`, `unique`, `text`, `rules`,
+`deployBox` and `epicAction` (texts), `setId`, `setCodes`, `internalName`, and where a card has them `pilotText` and
+the `backSide*` fields of a two-sided card. `id` is the engine's own number for the card, not a card id (`c41`) of
+the game. Two real lists give 42-68 cards (`hello` is 24-43 KB), two random decks 106-117 (62-75 KB).
+
+Index it by every name a message can use:
+
+- **`setId`**: the card's own set code, `{ "set": "HMW", "number": 22 }`, or `HMW_022` with the number padded to three
+  digits. Board refs in `decide` (`s`) carry it.
+- **every entry of `setCodes`**: a deck list may name a card by a reprint code. `JTL_020` in a list is Shield Generator
+  Complex, whose `setId` is `HMW_022` (`setCodes` holds both), and the board then shows it as `HMW_022`.
+- **`internalName`**: the `label` of `card` and `displayCard` actions and the part after `:` of a `perCardButton`
+  label.
+- **`title`**: `n` in every card ref. Tokens have no set number (`setId` is only `{ "set": "SOR" }`, no `setCodes`)
+  and come with `s: null`, so a token is found by its title among the cards whose `types` include `token`.
+
+The labels of a "name a card" dropdown are titles of cards outside the game too: those cards are not in `hello.cards`.
+`hello.cards` is card data, one entry per card of the game, and is not the same thing as the card refs of `decide`
+(`{ id, n, s, ... }` in `state`, `actions[].card`, `revealed`, and `prompt.cards`, the cards a prompt shows): a ref
+names one physical card of this game by its card id, and its `s`, `n` or the action's label finds its data here.
 
 Reply `{"t":"ready","v":2,"name":"rust-mcts","sim":true}`. `v` is the version you pick from `versions`; omitted means
 1, anything not offered is an error. `sim: true` asks for simulations (the referee then keeps a copy of the game to

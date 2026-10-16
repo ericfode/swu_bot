@@ -83,7 +83,7 @@ The residents are entries submitted like any builder's bot; the image builds no 
   other five are the bundles `bot/compiled/build.py` makes.
 
 Isolation: submitted code runs only in the wasmtime sandbox (`bot/compiled/run.py`): no network, no files but its own
-and the card data, no other programs. Packing and checking a submission run in a child process without the token, in
+(the card data comes in `hello.cards`), no other programs. Packing and checking a submission run in a child process without the token, in
 its own PID and mount namespace (`ops/isolate.sh`), as the user `arena`, with the arena's folders hidden: it leaves a
 canonical tar in its job folder, and root unpacks and enters it without running it. `arena/` and `dash/` are root's
 and cleaned on every start (`ops/own-tree.py`). The server alone reads the round-seed secret. Each game job

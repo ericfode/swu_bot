@@ -120,11 +120,6 @@ def provenance(path, recipe, toolchain):
     }
 
 
-def card_snapshot():
-    p = os.path.join(ROOT, "forceteki", "test", "json", "card-data-hash.txt")
-    return "forceteki-card-data sha256:" + open(p).read().strip() if os.path.exists(p) else None
-
-
 def build_js(spec, work, name):
     sys_js = os.path.join(work, name + ".bundle.js")
     with open(sys_js, "w") as f:
@@ -135,18 +130,15 @@ def build_js(spec, work, name):
     return out, "node bot/compiled/js/bundle.js %s %s | javy build %s" % (spec["entry"], " ".join(spec.get("args", [])), " ".join(flags)), "javy %s" % TOOLCHAIN["javy"]["version"]
 
 
-def manifest(name, spec, entry_path, runtime_name, run_spec, prov, cards):
-    m = {
+def manifest(name, spec, entry_path, runtime_name, run_spec, prov):
+    # no "cards": a bot gets the card data in hello (spec/protocol.md), never as files
+    return {
         "schema": bundle.SCHEMA, "name": name, "lang": spec["lang"], "protocol": spec.get("protocol", 2),
         "kind": "wasm", "platform": "wasm32-wasip1", "runtime": runtime_name, "run": run_spec,
         "entry_sha256": bundle.sha256_file(entry_path),
         "resources": {"memory_mb": 1024 if spec["lang"] in ("python", "js") else 512, "start_ms": 30000, "decide_ms": 10000},
-        "cards": {"use": "mount", "layout": "dir", "env": {"SWU_CARD_JSON": "/cards"}} if cards else {"use": "none"},
         "network": "none", "deterministic": True, "build": prov,
     }
-    if cards and card_snapshot():
-        m["cards"]["built_with"] = card_snapshot()
-    return m
 
 
 def build_one(name):
@@ -163,7 +155,7 @@ def build_one(name):
         entry = os.path.join(folder, "bot.wasm")
         shutil.copyfile(wasm, entry)
         m = manifest(name, spec, entry, "wasi-p1", {"cmd": "./bot.wasm", "args": [], "env": {}},
-                     provenance(spec["entry"], recipe, tool), cards=False)
+                     provenance(spec["entry"], recipe, tool))
     else:
         runtime("python-3.14-wasi")
         files = spec.get("files") or sorted(
@@ -177,7 +169,7 @@ def build_one(name):
         src = spec.get("dir") or os.path.dirname(spec["files"][0])
         m = manifest(name, spec, os.path.join(folder, entry_name), "python-3.14-wasi",
                      {"cmd": "python3", "args": [entry_name], "env": {}},
-                     provenance(src, "copy %s" % ", ".join(files), "python-3.14-wasi (CPython 3.14.7)"), cards=spec["cards"])
+                     provenance(src, "copy %s" % ", ".join(files), "python-3.14-wasi (CPython 3.14.7)"))
     with open(os.path.join(folder, "arena.json"), "w") as f:
         json.dump(m, f, indent=2)
         f.write("\n")

@@ -3,10 +3,10 @@
  * child_process.spawn for the swarm runtime (runtime.js, bot/swarm/README.md): the referee starts a bot program with
  * `python3 bot/compiled/run.py <bundle>` (resident WebAssembly bots, bot/external-bots.json and players/, and arena
  * versions, arena/registry.js). Here that becomes a bot worker (bot-worker.js) running the bundle under the WASI host
- * the way run.py runs it under wasmtime: same argv, env, read-only /bot and /cards, the runtime's own folders for
- * Python bundles. Any other program fails to start, as a missing program would.
+ * the way run.py runs it under wasmtime: same argv, env, read-only /bot, the runtime's own folders for Python bundles,
+ * and no card files (the card data comes in hello). Any other program fails to start, as a missing program would.
  *
- *   const spawn = createSpawn({ fs, makeWorker })   // fs: the runtime's (bundles and card data are files in it)
+ *   const spawn = createSpawn({ fs, makeWorker })   // fs: the runtime's (bundles are files in it)
  *   createRuntime({ ..., spawn })
  *
  * makeWorker() returns a Worker-like object: postMessage, terminate, and onmessage (browser) or on('message') (Node).
@@ -163,9 +163,8 @@ class BotProcess extends Emitter {
  * The spawn function. fs and path: the runtime's. modules: a Map cache of compiled WebAssembly by file. stderr(bytes):
  * where bots' stderr goes when the caller asked for it.
  */
-function createSpawn({ fs, path, makeWorker, compile = (bytes) => WebAssembly.compile(bytes), stderr = null, cardRoot = '/app/forceteki/test/json', toolsRoot = '/app/build/compiled/.tools', modules = new Map() }) {
+function createSpawn({ fs, path, makeWorker, compile = (bytes) => WebAssembly.compile(bytes), stderr = null, toolsRoot = '/app/build/compiled/.tools', modules = new Map() }) {
     // modules: compiled WebAssembly by file, which the caller may fill ahead (a runtime's interpreter, fetched as is)
-    let cards = null;
     const folderFiles = (root) => {
         const out = [];
         const walk = (dir, rel) => {
@@ -194,11 +193,6 @@ function createSpawn({ fs, path, makeWorker, compile = (bytes) => WebAssembly.co
         const name = m.name || path.basename(bundleDir);
         const preopens = [{ guest: '/bot', files: folderFiles(bundleDir) }];
         const env = { ...(m.run?.env ?? {}) };
-        if (m.cards?.use === 'mount') {
-            cards ??= folderFiles(cardRoot);
-            preopens.push({ guest: '/cards', files: cards });
-            Object.assign(env, m.cards.env ?? { SWU_CARD_JSON: '/cards' });
-        }
         if (m.runtime === 'wasi-p1') {
             // bundle.py entry_file: run.cmd "./bot.wasm", else the first argument
             const cmd = String(m.run?.cmd ?? '');

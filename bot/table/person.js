@@ -69,7 +69,9 @@ class PersonSeat {
     }
 
     hello(msg) {
-        this.send(msg);
+        // the card data is for programs (Holotable draws cards from its own card text), and 24-75 KB a game
+        const { cards, ...screen } = msg;
+        this.send(screen);
         return { t: 'ready', v: 2, name: this.name };
     }
 

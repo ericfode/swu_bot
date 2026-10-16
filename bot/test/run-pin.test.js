@@ -1,7 +1,7 @@
 'use strict';
 // bot/compiled/run.py runs on one CPU until the bot's first reply: wasmtime hands every WASI file call to a thread of its
-// pool, which starts on the same CPU, so a bot that reads the card data at start is not slowed by hand-offs between
-// CPUs. The first reply puts every thread back on all the CPUs. Needs Linux, wasmtime and at least 2 CPUs.
+// pool, which starts on the same CPU, so a bot that opens files at start (a Python bundle's standard library) is not
+// slowed by hand-offs between CPUs. The first reply puts every thread back on all the CPUs. Needs Linux, wasmtime and at least 2 CPUs.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

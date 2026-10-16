@@ -41,6 +41,15 @@ test('a person\'s wrong answer is refused and the decision stays open; a right o
     assert.equal(seat.answer({ t: 'act', seq: 1, i: 0 }), 'nothing to answer now');
 });
 
+test('a person\'s screen gets hello without the card data, and the referee\'s message stays as it was', () => {
+    const sent = [];
+    const seat = new PersonSeat({ send: (m) => sent.push(m) });
+    const hello = { t: 'hello', you: 'p1', deck: { leader: { id: 'SOR_010', count: 1 } }, ms: null, cards: [{ internalName: 'shield', title: 'Shield' }] };
+    assert.deepEqual(seat.hello(hello), { t: 'ready', v: 2, name: 'person' });
+    assert.deepStrictEqual(sent, [{ t: 'hello', you: 'p1', deck: { leader: { id: 'SOR_010', count: 1 } }, ms: null }]);
+    assert.strictEqual(hello.cards.length, 1);
+});
+
 test('conceding answers the open decision with an error, and every later one too', async () => {
     const seat = new PersonSeat({ send: () => undefined });
     const reply = seat.decide(decide(1, [{ i: 0, kind: 'button', label: 'Pass' }]));
@@ -184,6 +193,9 @@ test('the browser table (host.js): a scripted person plays a whole game against 
     assert.deepStrictEqual(lines[0].players.map((p) => p.bot), ['person', 'jepa-tx-gate']);
     assert.equal(lines[0].players[1].deck, decks[seed % decks.length].metadata.name);
     assert.equal(msgs.at(-1).t, 'end');
+    // the person's screen got hello without the card data the JEPA bot built its card tables from
+    const hello = msgs.find((m) => m.t === 'hello');
+    assert.deepStrictEqual([hello.you, hello.deck.metadata.name, 'cards' in hello], ['p1', 'darth-vader_jtl_yellow', false]);
     assert.equal(host.act({ t: 'act', seq: 1, i: 0 }), 'no game is being played');
     // the window keeps this replay as the play page sends it (bot/arena/play.js)
     const { checkReplay, rowOf } = require('../arena/play');

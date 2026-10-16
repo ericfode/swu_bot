@@ -113,7 +113,8 @@ class NativeSeat {
 
 class ClientSeat {
     /**
-     * setup: { players, decks: { p1, p2 }, botSeed, deals(label) -> rng, limits }; match.js sets `shadow` after hello.
+     * setup: { players, decks: { p1, p2 }, cards, botSeed, deals(label) -> rng, limits }, cards being the game's card data
+     * (game-cards.js), set before hello; match.js sets `shadow` after hello.
      * Time limits: the referee's LIMITS, then the bot's own timeoutMs/startTimeoutMs, then the game's `limits`.
      */
     constructor(client, seat, setup) {
@@ -169,12 +170,12 @@ class ClientSeat {
     }
 
     async hello() {
-        const { players, decks, botSeed } = this.setup;
+        const { players, decks, cards, botSeed } = this.setup;
         // the same in every version (v: 1), so any bot can read it; the bot picks the version in ready. A copy, so an
-        // in-process client cannot change the deck lists the game is built from.
+        // in-process client cannot change the deck lists the game is built from, nor the card data the engine plays.
         const r = await this.call(JSON.parse(JSON.stringify({
             t: 'hello', protocol: PROTOCOL, v: 1, versions: VERSIONS, bot: this.client.name, you: this.seat, seed: botSeed,
-            players, deck: decks[this.seat], opponent: decks[this.seat === 'p1' ? 'p2' : 'p1'], ms: this.limits.hello
+            players, deck: decks[this.seat], opponent: decks[this.seat === 'p1' ? 'p2' : 'p1'], ms: this.limits.hello, cards
         })));
         if (r?.t !== 'ready') {
             this.fail(`expected ready, got ${short(r)}`);

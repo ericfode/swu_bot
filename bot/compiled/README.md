@@ -43,10 +43,13 @@ your group, and `run.py` then does not use it (`build.py` stops with "could not 
 `run.py` gives the bot:
 
 - stdin and stdout (the protocol lines), and stderr unless `--quiet`;
-- read-only folders only: the bundle at `/bot`, the card data at `/cards` when `cards.use` is `mount`
-  (`$SWU_CARD_JSON` on the host, else `forceteki/test/json`), and for Python the standard library at `/usr/local/lib`;
+- read-only folders only: the bundle at `/bot`, and for Python the standard library at `/usr/local/lib`;
 - the environment from the manifest and runtime, nothing inherited;
 - a memory cap (`resources.memory_mb`, default 512), and optional `--fuel` per reply and a `--wall-s` watchdog.
+
+No card files either: like every bot, a bundle gets the card data in `hello.cards`
+([spec/protocol.md](../../spec/protocol.md#hello--ready)), and `run.py` mounts nothing whatever `arena.json` says.
+Bundles no longer have a `cards` key, and the intake refuses a submitted bundle whose `cards.use` is `mount`.
 
 No network (WASI preview 1 has no sockets), no writable files, no other programs. Compiled machine code is cached in
 `build/compiled/.cache` (`$SWU_WASM_CACHE`) by the sha256 of the module, and `build.py` fills that cache so the first
@@ -57,11 +60,14 @@ the games machine the cache is root's: root compiles into it and the games, as t
 `run.py` with `python3 -I` (the arena does), so wasmtime must be installed where Python finds it without the user's
 site folder or `PYTHONPATH` (`pip install wasmtime` into the interpreter or a virtualenv).
 
-Start-up counts against the bot's clock, so `run.py` keeps it short. wasmtime hands every WASI file call to a thread of
-its own and waits for it, and listing a folder re-reads the whole folder on every call. Reading the card data
-(2,479 files) that way took 4.3 s to a bot's first reply, almost all of it hand-offs between CPUs. So until the first
-reply `run.py` and its threads run on one CPU (1.1 s; `SWU_WASM_PIN=off` turns it off), and then every thread goes
-back on all its CPUs. A browser tab (`bot/swarm/wasi.js`) serves the same files from memory and starts in about 0.2 s.
+Start-up counts against the bot's clock, so `run.py` keeps it short. A bot reads no card files, so what is left at
+start is compiling (the cache above) and the files the bot itself opens. wasmtime hands every WASI file call to a
+thread of its own and waits for it, and in a VM a hand-off to another CPU costs about eight times one on the same CPU.
+So until the first reply `run.py` and its threads run on one CPU (`SWU_WASM_PIN=off` turns it off), and then every
+thread goes back on all its CPUs. That still helps a Python bundle, which imports its standard library from
+`/usr/local/lib` at start: `py-random` answered `hello` in 0.50 s on all CPUs and 0.44 s pinned (2026-10-16, four CPUs,
+a 28 KB `hello`). A bundle that opens no files at start, such as a JS bundle, gains nothing (`node-random`: 0.13 s
+either way). A browser tab (`bot/swarm/wasi.js`) serves the same files from memory.
 
 ## Same games as native?
 

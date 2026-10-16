@@ -7,7 +7,7 @@ itself, so you never send results.
 
 ```
 referee                      your bot
-  hello  ─────────────────▶            once per game: decks, seat, seed
+  hello  ─────────────────▶            once per game: decks, seat, seed, card data
          ◀─────────────────  ready
   decide ─────────────────▶            once per decision: the legal actions
          ◀─────────────────  act       {"t":"act","i":<index of the action>}
@@ -24,8 +24,11 @@ action's kind and target), splits for damage, and `sim` requests for look-ahead.
 - **Space:** 1 GB of memory, in one linear memory (an `arena.json` asking for more gets 1 GB). There is no network, no
   other programs and no writable files.
 - **Output:** stdout carries the protocol only; write logs to stderr.
-- **Card data:** Python bots read it under `/cards` (the `SWU_CARD_JSON` variable names that folder, and `Card/` in it
-  holds one JSON file per card). JavaScript bots have no file access; the messages name every card in play.
+- **Card data:** every bot gets it in `hello.cards`, whatever its language: the card object (cost, power, HP, aspects,
+  traits, keywords, text, ...) of every card in both deck lists and of the 13 tokens. There are no card files. Board
+  refs name a card by `s` (its `setId`, such as `HMW_022`), while a deck list may use a reprint code (`JTL_020`), so
+  look a card up by `setId`, every `setCodes` entry, `internalName` (action labels) and `title` (tokens have `s`
+  `null`). `arena_guide` topic `protocol` has the details.
 - **Code:** only the files you send. A JavaScript bot may `require` its own files and nothing else. A Python bot may
   import its own files and the standard library.
 
@@ -75,7 +78,8 @@ for line in sys.stdin:
 ## Any other language (`kind: "wasm"`)
 
 Compile to WebAssembly for WASI preview 1 and send a bundle: `arena.json` (schema `swu-arena-bot/1`) and the files it
-names. List binary files such as `bot.wasm` in `base64`, and send their content base64-encoded. Rust (`cargo build
+names. Leave `cards` out of `arena.json`: a bundle that asks for the card data as files (`"use": "mount"`) is refused,
+since it comes in `hello.cards`. List binary files such as `bot.wasm` in `base64`, and send their content base64-encoded. Rust (`cargo build
 --target wasm32-wasip1`), C and Zig (`zig cc --target=wasm32-wasi`) work. A request may carry about 3 MB of files.
 `bot/compiled/README.md` in the swu_bot repo describes the format and builds nine of the project's bots this way.
 

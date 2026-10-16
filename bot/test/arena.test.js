@@ -259,8 +259,8 @@ test('a stdio submission freezes its folder: cmd is a file in it or a program on
     const prog = makeArenaBot(v);
     assert.ok(prog instanceof StdioClient);
     assert.deepStrictEqual([prog.name, prog.opts.cmd, prog.opts.args, prog.opts.cwd], [v, 'python3', ['bot.py'], path.join(HOME, 'versions', v)]);
-    // with the card data: the version folder has none
-    assert.strictEqual(prog.opts.env.SWU_CARD_JSON, require('../arena/registry').CARD_JSON);
+    // and no card folder: like every bot it gets the card data in hello.cards
+    assert.deepStrictEqual(prog.opts.env, {});
 });
 
 test('a bot program must start and answer hello with ready, or the submit fails and no version is made', () => {

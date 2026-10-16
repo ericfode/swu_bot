@@ -45,6 +45,8 @@ window /play ── play.html: pick a bot, download it ── worker: play-worke
 
 - `jepa.js`: the JEPA bot (`jepa-tx-gate`: holocron's JavaScript port in `vendor/jepa`, with its two models) as an
   in-process protocol client. Its planner asks the referee for simulations, which re-deal the person's hidden cards.
+  Its card tables come from each game's `hello.cards`, as any bot's card data does. The person's screen gets `hello`
+  without `cards` (`person.js`): the page draws cards from `cardText()`.
 - `host.js`: `createTableHost`, one game at a time in the tab: `options()`, `start({bot, deck, botDeck, seed, key})`,
   `act()`, `concede()`, and `cardText()` (card text for the lists' cards and the tokens). The bot's deck is one of
   the lists picked by the game's seed unless the person names one.

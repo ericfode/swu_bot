@@ -3,6 +3,7 @@
 const { gameStreams } = require('./rng');
 const { snapshot: boardSnapshot, placedRef, actionKey } = require('./view');
 const { seatFor, Shadow, BotError } = require('./protocol');
+const { gameCards } = require('./game-cards');
 
 /**
  * Play one game between two bots and optionally record every decision (spec/replay-format.md).
@@ -36,10 +37,12 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
     const deal = pool ? { pool } : {};
     const decks = given ?? { p1: env.randomDeck(rng, deal), p2: env.randomDeck(rng, deal) };
     const players = bots.map((b, i) => ({ id: `p${i + 1}`, name: `p${i + 1}`, bot: b.name }));
-    const seats = bots.map((b, i) => {
+    // each seat's setup; `cards` is filled in at the start of the game, below
+    const setups = bots.map((b, i) => {
         const seat = `p${i + 1}`;
-        return seatFor(b, seat, { players, decks, botSeed: streams.botSeed(seat), deals: (deal) => streams.sim(seat, deal), limits });
+        return { players, decks, cards: null, botSeed: streams.botSeed(seat), deals: (deal) => streams.sim(seat, deal), limits };
     });
+    const seats = bots.map((b, i) => seatFor(b, `p${i + 1}`, setups[i]));
     const res = { seed, steps: 0, outcome: '?', winner: null, round: 0, ms: 0, ...(key ? { key } : {}), events: [] };
     const stopped = stop && Promise.resolve(stop).then((s) => {
         throw new BotError(s.seat, bots[s.seat === 'p2' ? 1 : 0].name, s.why ?? 'left the game');
@@ -60,6 +63,10 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
     });
     let eg = null;
     try {
+        // the card data both seats get in hello: every card this game can show them (game-cards.js), one array for both.
+        // A list that names a card the card data does not know fails the game here.
+        const cards = gameCards(env.cardDataGetter, [decks.p1, decks.p2]);
+        setups.forEach((s) => (s.cards = cards));
         for (const s of seats) {
             await s.hello();
         }

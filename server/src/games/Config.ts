@@ -49,7 +49,6 @@ export interface GamesConfig {
   readonly requireMount: boolean
   /** the window's address, trailing slash trimmed; null only off the machine (tests, rehearsals) */
   readonly window: string | null
-  readonly cardJson: string | null
   readonly helperPort: number | null
   readonly helperListen: string
   readonly helperImage: string
@@ -184,7 +183,6 @@ export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing 
     thinkCapSec: int(env, "GAMES_THINK_CAP_SEC", 60),
     requireMount: env.GAMES_REQUIRE_MOUNT === "1",
     window,
-    cardJson: env.SWU_CARD_JSON || null,
     helperPort,
     helperListen,
     helperImage: env.GAMES_HELPER_IMAGE || "registry.fly.io/swu-arena-games",

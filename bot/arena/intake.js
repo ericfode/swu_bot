@@ -17,12 +17,12 @@
  * ops/house-submit.js) enters one of the arena's own bots: a resident entry under any free name, owner 'arena'
  * (api.js register resident), rated with everyone and anchoring the ratings.
  *
- * Submitted code never runs outside the wasmtime sandbox, which has no network, no files but its own and the card data,
- * and no other programs. On top of that, packing and checking run in a child process (--check) that gets no token and,
- * where it can (root, unshare), its own PID and mount namespace (ops/isolate.sh), as the user ARENA_USER when set (no
- * capabilities, so it cannot undo the hiding), like the referee. It reads and writes only its job folder, never the
- * arena's (ARENA_HIDE hides them on the games machine): it leaves the bundle there as a canonical tar, which root
- * unpacks (bundle.py unpack, no links) and enters without running anything (enter).
+ * Submitted code never runs outside the wasmtime sandbox, which has no network, no files but its own (the card data
+ * comes in the protocol's hello), and no other programs. On top of that, packing and checking run in a child process
+ * (--check) that gets no token and, where it can (root, unshare), its own PID and mount namespace (ops/isolate.sh), as
+ * the user ARENA_USER when set (no capabilities, so it cannot undo the hiding), like the referee. It reads and writes
+ * only its job folder, never the arena's (ARENA_HIDE hides them on the games machine): it leaves the bundle there as a
+ * canonical tar, which root unpacks (bundle.py unpack, no links) and enters without running anything (enter).
  * A builder's later versions go to wherever the competitor is: on the bench (api.js withdraw), they wait for rejoin.
  * The toolchain (Javy, CPython for WASI) must be in build/compiled/.tools: Dockerfile.games builds it, or
  * `python3 -c "import sys; sys.path.insert(0, 'bot/compiled'); import build; build.javy(); build.runtime('python-3.14-wasi')"`.
@@ -76,14 +76,19 @@ function writeFiles(dir, files, base64 = []) {
 
 const sha256 = (file) => require('crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-function manifest(name, lang, entry, runtime, run, cards, owner) {
+function manifest(name, lang, entry, runtime, run, owner) {
     return {
         schema: 'swu-arena-bot/1', name, lang, protocol: 2, kind: 'wasm', platform: 'wasm32-wasip1', runtime, run,
         entry_sha256: sha256(entry),
         resources: { memory_mb: 1024, start_ms: 30000, decide_ms: 10000 },
-        cards: cards ? { use: 'mount', layout: 'dir', env: { SWU_CARD_JSON: '/cards' } } : { use: 'none' },
         network: 'none', deterministic: true, build: { source: owner === HOUSE ? 'an arena house submission' : `submitted by github:${owner}`, toolchain: lang === 'js' ? `javy ${TOOLCHAIN.javy.version}` : lang }
     };
+}
+
+/** A checked bundle's cards.use, or null when its arena.json has none. */
+function cardsUse(folder) {
+    const m = JSON.parse(fs.readFileSync(path.join(folder, 'arena.json'), 'utf8'));
+    return m?.cards?.use ?? null;
 }
 
 /** Lines of a failed tool's output worth showing the builder, with our folders taken out. */
@@ -99,6 +104,8 @@ function pack(job, work) {
         writeFiles(out, job.files, job.base64);
         const r = spawnSync('python3', ['-I', path.join(COMPILED, 'bundle.py'), out], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
         need(r.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(r.stderr || r.stdout || r.error?.message, work)}`);
+        // a bundle built for the card folder bots once had would start and then find no cards: say so now
+        need(cardsUse(out) !== 'mount', 'arena.json asks for the card data as files (cards.use "mount"), and the sandbox has none: bots get the card data in hello.cards (spec/protocol.md). Read it from there and drop "cards" from arena.json.');
         return out;
     }
     if (job.kind === 'python') {
@@ -106,7 +113,7 @@ function pack(job, work) {
         const entry = job.entry ?? 'bot.py';
         need(files.includes(entry), `no ${entry}: a Python bot's files must include it (or name another entry)`);
         need(fs.existsSync(path.join(TOOLS, TOOLCHAIN.runtimes['python-3.14-wasi'].dir, 'python.wasm')), 'the arena has no CPython for WASI yet; try again later');
-        const m = manifest(job.name, 'python', path.join(out, entry), 'python-3.14-wasi', { cmd: 'python3', args: [entry], env: {} }, true, job.owner);
+        const m = manifest(job.name, 'python', path.join(out, entry), 'python-3.14-wasi', { cmd: 'python3', args: [entry], env: {} }, job.owner);
         fs.writeFileSync(path.join(out, 'arena.json'), `${JSON.stringify(m, null, 2)}\n`);
         return out;
     }
@@ -134,7 +141,7 @@ function pack(job, work) {
     const wasm = path.join(out, 'bot.wasm');
     const r = spawnSync(javy, ['build', ...TOOLCHAIN.javy.flags, '-o', wasm, js], { encoding: 'utf8', timeout: 180000, cwd: work, env: toolEnv() });
     need(r.status === 0, `Javy could not compile it:\n${tail(r.stderr || r.error?.message, work)}`);
-    const m = manifest(job.name, 'js', wasm, 'wasi-p1', { cmd: './bot.wasm', args: [], env: {} }, false, job.owner);
+    const m = manifest(job.name, 'js', wasm, 'wasi-p1', { cmd: './bot.wasm', args: [], env: {} }, job.owner);
     fs.writeFileSync(path.join(out, 'arena.json'), `${JSON.stringify(m, null, 2)}\n`);
     return out;
 }
@@ -330,7 +337,7 @@ async function checkIsolated(job) {
         fs.writeFileSync(jobFile, JSON.stringify({ ...job, checkAs: `${job.name}-v${admitted.next}` }), { flag: 'wx' });
         // only what the checker needs: no token, no proxy (the toolchain is fetched beforehand), none of the arena's
         // folders (it reads and writes only its job folder)
-        const keep = ['PATH', 'HOME', 'LANG', 'TZ', 'SWU_CARD_JSON'];
+        const keep = ['PATH', 'HOME', 'LANG', 'TZ'];
         const env = Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
         // compiled code of a bot that may be rejected stays with the job and goes with it; the ladders compile their own
         env.SWU_WASM_CACHE = path.join(jobHome, 'wasm-cache');

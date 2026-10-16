@@ -142,7 +142,8 @@
         "bot",
         "you",
         "seed",
-        "players"
+        "players",
+        "cards"
       ],
       "properties": {
         "t": {
@@ -203,6 +204,167 @@
         "opponent": {
           "$ref": "#/$defs/DeckList",
           "description": "The opponent's deck list; lists are open (v2 field)."
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CardData"
+          },
+          "description": "The game's card data, the only card data a bot gets: the engine's card object for every card of both lists (leader, second leader, base, deck and sideboard) and the 13 tokens, once each, sorted by internalName, so both seats get the same array. Card data, not card refs: find a ref's card by setId (its s), any setCodes entry (deck lists may use reprint codes), internalName (action labels) or title (n; tokens have s null). See spec/protocol.md."
+        }
+      }
+    },
+    "CardData": {
+      "type": "object",
+      "description": "One card of hello.cards, as the engine's card data has it. Readers ignore fields they do not know.",
+      "required": [
+        "title",
+        "internalName",
+        "setId",
+        "types"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "internalName": {
+          "type": "string",
+          "description": "Unique: the label of card and displayCard actions, the part after ':' of a perCardButton label."
+        },
+        "id": {
+          "type": "string",
+          "description": "The engine's own number for the card; not a card id ('c41') of the game."
+        },
+        "setId": {
+          "type": "object",
+          "required": [
+            "set"
+          ],
+          "properties": {
+            "set": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer"
+            }
+          },
+          "description": "The card's own set code ('HMW_022' as s, number padded to 3 digits); board refs carry it. A token has no number."
+        },
+        "setCodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "set",
+              "number"
+            ],
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "number": {
+                "type": "integer"
+              }
+            }
+          },
+          "description": "Every code the card is printed under, setId and reprints; deck lists may use any of them. Absent for tokens."
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cost": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "power": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "hp": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "upgradePower": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "upgradeHp": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "arena": {
+          "enum": [
+            "ground",
+            "space",
+            null
+          ]
+        },
+        "aspects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "traits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deployBox": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epicAction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pilotText": {
+          "type": "string"
         }
       }
     },

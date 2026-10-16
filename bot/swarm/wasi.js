@@ -4,7 +4,7 @@
  * bot/compiled/run.py does under wasmtime, in a browser worker or a Node worker thread. The bot reads its messages
  * from a pipe it blocks on (a SharedArrayBuffer ring, written by the referee: stdinPipe/StdinWriter below) and writes
  * its replies to stdout, which goes to the referee a chunk at a time. Its folders are read-only and in memory:
- * /bot (the bundle), /cards when the bundle mounts the card data, and a runtime's own (Python's standard library).
+ * /bot (the bundle) and a runtime's own (Python's standard library); the card data comes in hello.
  *
  * Same as run.py: argv, env, read-only preopens, stdout and stderr, wall clocks, random bytes, exit codes (a trap is
  * 134). Not the same: no memory cap (a browser cannot cap a memory the module defines itself) and no fuel, which the

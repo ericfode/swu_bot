@@ -112,7 +112,7 @@ function engineDiff() {
  * The revision of the harness and the built-in bots: the git tree ids of bot/ and vendor/kessel/ (the referee's Rust
  * simulations) at HEAD, plus a hash of uncommitted changes and new files there, of the file
  * $SWU_LEARNED_MODEL names (holocron's learned bots read it) and of the other $SWU_* settings bots read ($SWU_LEARNED_BLEND,
- * $SWU_CARD_JSON, ...; not the *_THOUGHTS and *_TRACE outputs), when there are any. Arena versions live outside the
+ * ...; not the *_THOUGHTS and *_TRACE outputs), when there are any. Arena versions live outside the
  * repo and never change. null without git.
  */
 function harnessRev() {

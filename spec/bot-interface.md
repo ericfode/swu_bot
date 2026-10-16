@@ -84,7 +84,7 @@ keep them only for the current decision. `game.refetch(pid, action)` finds the l
 
 ```js
 const { Env, seededRng } = require('./bot/env');
-const env = new Env();                       // card data from forceteki/test/json
+const env = new Env();                       // the referee's card data, from forceteki/test/json
 const rng = seededRng('bot' + seed);
 const game = env.newGame({ seed, deck1: env.randomDeck(rng), deck2: env.randomDeck(rng), undo: false, names: ['p1', 'p2'] });
 await game.start();
@@ -129,12 +129,13 @@ Each bot is a protocol client or a native bot; it gets a seat object from `bot/p
 
 1. Random streams come from `gameStreams(seed, key)` (`bot/rng.js`): the match rng, the engine seed, each seat's
    `hello.seed` and each seat's simulation stream. Two decks are drawn from the match rng.
-2. The replay header is written; each protocol client gets `hello`, one after the other. The engine game is created,
-   always without rollback, and started. When a client asks for simulations or a native bot sets `needsUndo`, a
-   second engine (`Shadow` in `bot/protocol.js`) follows the real moves, and every lookahead runs on it, so the real
-   game is never rolled back. Before each lookahead it checks that it matches the real game (board, deck orders,
-   resources, prompts, the legal actions of the seat to move) and rebuilds itself from the moves, in the same object,
-   when it does not. If that fails too, simulations are off for the rest of the game, and a native bot that needs the
+2. The replay header is written; each protocol client gets `hello`, one after the other, with the game's card data
+   (`hello.cards`, built once per game by `bot/game-cards.js` from the engine's card-data getter; a native bot reads
+   the engine instead). The engine game is created, always without rollback, and started. When a client asks for
+   simulations or a native bot sets `needsUndo`, a second engine (`Shadow` in `bot/protocol.js`) follows the real
+   moves, and every lookahead runs on it, so the real game is never rolled back. Before each lookahead it checks that
+   it matches the real game (board, deck orders, resources, prompts, the legal actions of the seat to move) and
+   rebuilds itself from the moves, in the same object, when it does not. If that fails too, simulations are off for the rest of the game, and a native bot that needs the
    copy ends the game as `ERROR` with `by: null`.
 3. Each step: `order = rng() < 0.5 ? [p1, p2] : [p2, p1]`. The first seat in `order` with a legal action decides, and
    `game.apply(pid, action, rng)` plays it. That is one step. (Usually only one seat has actions; the coin flip only
