@@ -508,13 +508,20 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
    * Links this tab with the other side of a lobby room: a direct WebRTC channel when the two browsers can reach each
    * other, else the room itself carries the game. Resolves to {link, room}; the room stays open as the way back.
    */
-  async function connect(room, side, onState) {
+  async function connect(room, side, onState, stopped) {
     const r = roomLink(room);
     let peer = room.peer ?? null;
     const pc = new RTCPeerConnection({ iceServers: STUN });
     const result = new Promise((resolve, reject) => {
       let done = false;
       const finish = (link) => { if (!done) { done = true; resolve({ link, room: r, peer, pc }); } };
+      stopped?.catch((e) => {
+        if (done) return;
+        done = true;
+        try { pc.close(); } catch { /* gone */ }
+        r.close();
+        reject(e);
+      });
       const viaRoom = () => {
         try { pc.close(); } catch { /* gone */ }
         r.kind = 'relay';
@@ -695,36 +702,54 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           }
         };
         if (again) {
-          // what the host sent and this tab missed, then the actions it may never have had (it plays each one once)
-          l.game({ t: 'resume', have });
+          // what the host sent and this tab missed (before the start, the join, which the host may never have had),
+          // then the actions it may never have had (it plays each one once)
+          l.game(g ? { t: 'resume', have } : joinMsg);
           for (const [k, w] of acts) l.game({ t: 'act', a: k, act: w.act });
         }
       };
+      const joinMsg = { t: 'join', v: 1, deck: deckRef(deckName), have: 0 };
       attach(link);
       setLink?.((l) => attach(l, true));
-      link.game({ t: 'join', v: 1, deck: deckRef(deckName), have });
+      link.game(joinMsg);
     });
   }
 
   // ---------------------------------------------------------------- pairing (Holotable's Table.pair)
-  async function lobbyGame(room, side, deck, onState, cancelled) {
-    const c = await connect(room, side, onState);
-    if (cancelled()) { c.link.close(); c.room.close(); throw new Error('cancelled'); }
+  /** Links and starts a game in a lobby room; setCancel gets what Cancel does until the game has started. */
+  async function lobbyGame(room, side, deck, onState, setCancel) {
+    let stop;
+    const stopped = new Promise((_, no) => { stop = no; });
+    stopped.catch(() => undefined);
+    let c = null;
+    setCancel(() => {
+      if (c) { c.link.close(); c.room.close(); }
+      stop(new Error('cancelled'));
+    });
+    c = await connect(room, side, onState, stopped);
     const peer = c.peer ?? room.peer;
     const how = c.link === c.room ? 'through the lobby' : 'directly';
     onState({ text: side === 'host' ? `Linked ${how} with ${peer}. Dealing…` : `Linked ${how} with ${peer}. Waiting for the host's table…` });
     let move = null;
-    const game = side === 'host' ? await hostGame(c.link, peer, deck, (fn) => { move = fn; }) : await guestGame(c.link, peer, deck, (fn) => { move = fn; });
-    // the room stays as the way back: a direct link that drops goes on through the lobby, on both sides
+    let id = null;
+    const starting = side === 'host' ? hostGame(c.link, peer, deck, (fn) => { move = fn; }) : guestGame(c.link, peer, deck, (fn) => { move = fn; });
+    // the room stays as the way back: a direct link that drops goes on through the lobby, on both sides, from the start
     if (c.link !== c.room) {
       c.link.onDown = () => {
-        if (games.get(game.id)?.over) return;
+        if (id && games.get(id)?.over) return;
         status('The direct link dropped: going on through the lobby.', 'busy');
         c.room.onSignal = () => undefined;
         move(c.room);
       };
     }
-    c.room.onRoom = (d) => { if (d.room === 'left' && !games.get(game.id)?.over) status(`${peer} left the table.`, 'bad'); };
+    c.room.onRoom = (d) => {
+      if (d.room !== 'left') return;
+      if (!id) stop(new Error('the other player left'));
+      else if (!games.get(id)?.over) status(`${peer} left the table.`, 'bad');
+    };
+    const game = await Promise.race([starting, stopped]);
+    id = game.id;
+    setCancel(() => undefined);
     const g = games.get(game.id);
     if (g) g.links = () => [c.link, c.room];
     status(`Playing ${peer}, linked ${how}.`, 'good');
@@ -735,7 +760,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     let cancel = () => undefined;
     let cancelled = false;
     let answerFn = null;
-    const isCancelled = () => cancelled;
+    const setCancel = (fn) => { cancel = fn; if (cancelled) fn(); };
     const done = (async () => {
       if (req.how === 'invite') {
         const room = await api('POST', '/api/tables/invite', {});
@@ -743,16 +768,16 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         onState({ text: 'Send your friend this link or code. The game starts when they join.', code: room.code, link });
         cancel = () => api('POST', `/api/tables/leave?room=${room.room}&side=host&k=${room.k}`, {}).catch(() => undefined);
         loadEngine().catch(() => undefined);
-        return lobbyGame({ room: room.room, side: 'host', k: room.k }, 'host', req.deck, onState, isCancelled);
+        return lobbyGame({ room: room.room, side: 'host', k: room.k }, 'host', req.deck, onState, setCancel);
       }
       if (req.how === 'join') {
         const text = String(req.code || '').trim();
-        if (text.startsWith(OFFER)) return directJoin(text, req.deck, onState, (fn) => { cancel = fn; });
+        if (text.startsWith(OFFER)) return directJoin(text, req.deck, onState, setCancel);
         const m = /(?:#|[?&])join=([A-Za-z0-9]{6})\b/.exec(text) || /^([A-Za-z0-9]{6})$/.exec(text);
         if (!m) throw new Error('paste the invite link, the 6-letter code, or a code that starts with SWU1.');
         onState({ text: 'Joining…' });
         const room = await api('POST', '/api/tables/join', { code: m[1].toUpperCase() });
-        return lobbyGame({ room: room.room, side: 'guest', k: room.k, peer: room.peer }, 'guest', req.deck, onState, isCancelled);
+        return lobbyGame({ room: room.room, side: 'guest', k: room.k, peer: room.peer }, 'guest', req.deck, onState, setCancel);
       }
       if (req.how === 'lobby') {
         const t = await api('POST', '/api/tables/queue', {});
@@ -781,9 +806,9 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           const g = await table.start(bot.name, req.deck, RANDOM);
           return { ...g, opponent: bot.name };
         }
-        return lobbyGame({ room: paired.room, side: paired.side, k: paired.k, peer: paired.peer }, paired.side, req.deck, onState, isCancelled);
+        return lobbyGame({ room: paired.room, side: paired.side, k: paired.k, peer: paired.peer }, paired.side, req.deck, onState, setCancel);
       }
-      if (req.how === 'direct') return directHost(req.deck, onState, (fn) => { answerFn = fn; }, (fn) => { cancel = fn; });
+      if (req.how === 'direct') return directHost(req.deck, onState, (fn) => { answerFn = fn; }, setCancel);
       throw new Error(`no way to pair: ${req.how}`);
     })();
     done.catch(() => undefined);
