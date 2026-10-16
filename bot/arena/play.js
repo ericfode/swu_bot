@@ -201,7 +201,7 @@ function createPlay({ store, swarm, auth, kitFile, statics = createStatic(), wak
     /** The GitHub login of a person signed in on this site who may play, or null. */
     const player = (who) => {
         const login = who.via === 'cookie' && !who.guest && typeof who.login === 'string' && LOGIN.test(who.login) ? who.login.toLowerCase() : null;
-        return login && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
+        return login && !who.blocked && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
     };
     const openTo = (next) => on === 'github' && typeof next === 'string' && /^\/play(?:[?#]|$)/.test(next);
 

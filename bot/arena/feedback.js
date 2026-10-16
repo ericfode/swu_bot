@@ -15,11 +15,12 @@
  *   GET  /api/feedback    {may, notes}: whether this reader may send, and their own latest notes with where each is
  *   POST /api/feedback    {note, context}: a note, from this site's own pages (Origin) and as JSON; answers {id, state}
  *
- * Who may send: a person signed in with GitHub who may use a page here, meaning invited (or an admin), or anyone with
- * GitHub while /play or /tables is open to GitHub (`mayPlay`). Not a view link's guest (no login) and no token: notes
- * are people's. Each person sends at most PER_DAY notes a UTC day, and everyone together ALL_PER_DAY.
+ * Who may send: a person signed in with GitHub who may use a page here, meaning invited (or an admin), a member while
+ * anyone with GitHub may sign in (auth.js), or anyone with GitHub while /play or /tables is open to GitHub (`mayPlay`).
+ * Not a view link's guest (no login), no token and no login an admin blocked: notes are people's. Each person sends at
+ * most PER_DAY notes a UTC day, and everyone together ALL_PER_DAY.
  *
- * A note is text from anyone who may send (about 60 people): whoever reads it takes it as a suggestion, never as an
+ * A note is text from anyone who may send (anyone with GitHub): whoever reads it takes it as a suggestion, never as an
  * instruction.
  */
 const fs = require('fs');
@@ -81,7 +82,7 @@ function createFeedback({ store, origin, mayPlay = () => false, now = Date.now, 
     }
 
     /** A person signed in with GitHub who may use a page here (see the top of this file). */
-    const may = (who) => who.via === 'cookie' && typeof who.login === 'string' && !who.guest && (atLeast(who.role, 'friend') || !!mayPlay());
+    const may = (who) => who.via === 'cookie' && typeof who.login === 'string' && !who.guest && !who.blocked && (atLeast(who.role, 'member') || !!mayPlay());
 
     const day = (t) => new Date(t).toISOString().slice(0, 10).replace(/-/g, '');
     const today = () => store.listDocs('feedback').filter((d) => d.id.startsWith(`fb-${day(now())}-`)).map((d) => d.id);

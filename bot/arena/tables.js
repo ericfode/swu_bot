@@ -248,7 +248,7 @@ function createTables({
     /** The login of a person who may play here, or null. */
     const player = (who) => {
         const login = github(who);
-        return login && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
+        return login && !who.blocked && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
     };
     const openTo = (next) => typeof next === 'string' && (/^\/tables\/logs(?:[?#]|$)/.test(next) || (on === 'github' && /^\/tables(?:[/?#]|$)/.test(next)));
 

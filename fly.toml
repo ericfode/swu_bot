@@ -15,6 +15,11 @@ primary_region = "dfw"
   WINDOW_HOME = "/data/window"
   ARENA_PUBLIC_URL = "https://swu-arena.fly.dev"
   ARENA_ADMINS = "ericfode"
+  # who may sign in with GitHub (bot/arena/auth.js): anyone with a GitHub account (Eric 18:32 2026-10-16, "make it so
+  # that anyone with a github can sign up for the arena"); invited people also join the swarm. 'invited' closes it again.
+  # Limits on what each person enters are in bot/arena/window.js (ARENA_BOTS_PER_PERSON, ARENA_OUTSIDE_BOTS,
+  # ARENA_SUBMITS_PER_DAY), and the Share page blocks one login.
+  ARENA_SIGNIN = "github"
   # /play (bot/arena/play.js): anyone signed in with GitHub may play Eric's JEPA bot (Eric 23:02 2026-10-15)
   ARENA_PLAY = "github"
   # the games machine (fly.games.toml): woken over Fly's private network on every submission and every 6 hours
