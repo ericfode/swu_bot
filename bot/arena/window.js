@@ -695,7 +695,7 @@ function createWindow(opts = {}) {
     // game links (gamelinks.js): one game's replay for anyone holding its link, with no sign-in; off unless ARENA_GAME_LINKS
     const gameLinks = createGameLinks({
         store, origin: auth.origin, publicUrl: auth.publicUrl, kitFile, mode: opts.gameLinks ?? process.env.ARENA_GAME_LINKS,
-        replayFor: (who, run, game) => replayFor(who, run, game), peopleRun: (run) => peopleRun(run, parseOr(store.getDoc('runs', run), null))
+        replayFor, peopleRun: (run) => peopleRun(run, parseOr(store.getDoc('runs', run), null))
     });
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
