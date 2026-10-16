@@ -57,8 +57,17 @@ function gameFacts(buf) {
     return { p1: seat('p1'), p2: seat('p2'), winner, draw: done && end.winner === 'draw', round: done && Number.isInteger(end.round) ? end.round : null, done };
 }
 
-function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
+function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html'), zipMax = 48e6 } = {}) {
     const base = String(publicUrl ?? '').replace(/\/+$/, '');
+    // bytes of replay being gzipped now: each job holds its replay until it ends, kept or not, so at most zipMax (48 MB)
+    // at once; past that a replay goes as it is
+    let zipping = 0;
+    const zipJob = (bytes) => {
+        zipping += bytes.length;
+        return gzip(bytes).finally(() => {
+            zipping -= bytes.length;
+        });
+    };
     // the last few games read here (at most 16 and 48 MB), oldest first: run/game -> {sig, gen, bytes, buf, gz}
     const hot = new Map();
     let hotBytes = 0;
@@ -112,9 +121,9 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
     function gzipped(k, buf) {
         const e = hot.get(k);
         if (e?.buf !== buf) {
-            return gzip(buf);
+            return zipJob(buf);
         }
-        e.gz ??= gzip(buf).then((gz) => {
+        e.gz ??= zipJob(buf).then((gz) => {
             if (hot.get(k) === e) {
                 e.bytes += gz.length;
                 hotBytes += gz.length;
@@ -207,9 +216,12 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
             const body = buf.subarray(from);
             // the whole replay (opening the page) from the kept gzip; what came after `from` (a live poll: a few new
             // lines) gzipped off the event loop; a bigger part (a page far behind, or any ?from a client picks) goes as
-            // it is, so no request makes the window compress most of a replay again
-            const zip = body.length > 1024 && (from === 0 || body.length <= 256e3) && require('./server').acceptsGzip(req.headers['accept-encoding']);
-            const out = req.method === 'HEAD' ? undefined : !zip ? body : from === 0 ? await gzipped(`${run}/${game}`, buf) : await gzip(body);
+            // it is, so no request makes the window compress most of a replay again; so does any replay while zipMax
+            // bytes are being gzipped already, unless its own gzip is kept or under way
+            const k = `${run}/${game}`;
+            const kept = from === 0 && hot.get(k)?.buf === buf && !!hot.get(k).gz;
+            const zip = body.length > 1024 && (from === 0 || body.length <= 256e3) && (kept || zipping + body.length <= zipMax) && require('./server').acceptsGzip(req.headers['accept-encoding']);
+            const out = req.method === 'HEAD' ? undefined : !zip ? body : from === 0 ? await gzipped(k, buf) : await zipJob(body);
             res.writeHead(200, {
                 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache', vary: 'accept-encoding', 'x-size': String(buf.length), 'x-gen': gen,
                 ...(zip ? { 'content-encoding': 'gzip' } : {})

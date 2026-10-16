@@ -94,15 +94,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-
   let partial = ''; // a line still being written
   async function load(step = stepN) {
     let r;
-    try { r = await fetch(src, { cache: 'no-store' }); } catch { r = null; }
-    if (!r || !r.ok) {
+    let text = null;
+    // a connection that drops while the body comes in retries like one that never answered
+    try { r = await fetch(src, { cache: 'no-store' }); if (r.ok) text = await r.text(); } catch { r = null; }
+    if (!r || !r.ok || text == null) {
       say(r?.status === 409 ? 'This game against a person is still being played. Its replay opens here when it ends.'
         : r?.status === 404 ? 'This game has not sent its first moves yet. It shows here as soon as it does.'
         : 'The game did not load. Trying again…');
       setTimeout(() => load(step), r?.status === 409 ? 20000 : 4000);
       return;
     }
-    const text = await r.text();
     size = Number(r.headers.get('x-size')) || new TextEncoder().encode(text).length;
     gen = r.headers.get('x-gen');
     partial = '';

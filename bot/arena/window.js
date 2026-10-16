@@ -718,7 +718,7 @@ function createWindow(opts = {}) {
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
     const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => tables.play === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
     // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
-    const gameLinks = createGameLinks({ store, publicUrl: auth.publicUrl, kitFile, statics, replayFor, peopleRun });
+    const gameLinks = createGameLinks({ store, publicUrl: auth.publicUrl, kitFile, statics, replayFor, peopleRun, ...(opts.gameLinksLimits ?? {}) }); // tests: {zipMax}
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },

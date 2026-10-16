@@ -27,14 +27,14 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas, gameLinksLimits } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins,
         blocked: () => JSON.parse(store.getDoc('admin', 'blocked') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas, gameLinksLimits });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -560,6 +560,50 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         assert.strictEqual((await go('/api/app')).status, 401, 'a game page opens no other door');
         assert.strictEqual((await go('/api/replays/arena-t1-r1/g1')).status, 401);
     } finally {
+        await close();
+    }
+});
+
+test('game pages: replays being gzipped at once are bounded; past the bound a replay goes as it is', async () => {
+    const w = makeWindow('w-games-zip', { gameLinksLimits: { zipMax: 6000 } });
+    const replay = (bot) => `${JSON.stringify({ t: 'header', players: [{ id: 'p1', bot }, { id: 'p2', bot: 'rush' }] })}\n${Array.from({ length: 200 }, (_, n) => `${JSON.stringify({ t: 'step', n })}\n`).join('')}`;
+    w.store.putDoc('runs', 'arena-t1-r2', JSON.stringify({ id: 'arena-t1-r2', games: [{ id: 'a' }, { id: 'b' }] }));
+    w.store.putReplay('arena-t1-r2', 'a', Buffer.from(replay('c_clock')));
+    w.store.putReplay('arena-t1-r2', 'b', Buffer.from(replay('heuristic')));
+    const { srv, close } = await serve(w);
+    const zlib = require('zlib');
+    const gzip = zlib.gzip;
+    const held = [];
+    zlib.gzip = (...a) => held.push(a); // every gzip job waits until the test lets it go
+    try {
+        const at = (g) => `http://127.0.0.1:${srv.address().port}/g/arena-t1-r2/${g}/game.jsonl`;
+        const a = fetch(at('a'), { headers: { 'accept-encoding': 'gzip' } });
+        while (held.length < 1) {
+            await new Promise((r) => setTimeout(r, 5));
+        }
+        // a's ~4 KB is being gzipped: b's ~4 KB would pass 6000, so b goes as it is, with no second job
+        let timer;
+        const b = await Promise.race([fetch(at('b'), { headers: { 'accept-encoding': 'gzip' } }), new Promise((_, no) => (timer = setTimeout(() => no(new Error('b waits for a gzip job')), 3000)))]);
+        clearTimeout(timer);
+        assert.strictEqual(b.headers.get('content-encoding'), null);
+        assert.strictEqual(await b.text(), replay('heuristic'));
+        assert.strictEqual(held.length, 1);
+        for (const [buf, ...rest] of held.splice(0)) {
+            gzip(buf, ...rest);
+        }
+        const done = await a;
+        assert.strictEqual(done.headers.get('content-encoding'), 'gzip');
+        assert.strictEqual(await done.text(), replay('c_clock'));
+        // once a's job ends, b is gzipped again
+        zlib.gzip = gzip;
+        const again = await fetch(at('b'), { headers: { 'accept-encoding': 'gzip' } });
+        assert.strictEqual(again.headers.get('content-encoding'), 'gzip');
+        assert.strictEqual(await again.text(), replay('heuristic'));
+    } finally {
+        zlib.gzip = gzip;
+        for (const [buf, ...rest] of held.splice(0)) {
+            gzip(buf, ...rest);
+        }
         await close();
     }
 });

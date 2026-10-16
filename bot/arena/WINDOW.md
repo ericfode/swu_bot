@@ -332,7 +332,8 @@ arena. A game being played follows live (the page fetches only the new lines eve
   game the window does not have). `GET /g/<run>/<game>/game.jsonl`: the replay as a reader gets it; `?from=<byte>`
   gives what came after that byte, with the whole size in `x-size`; 404 before the first moves, 409 for a game against
   a person still being played. The whole replay is gzipped once per version of it; a part after `?from` is gzipped
-  only up to 256 KB and sent as it is above that, so no request makes the window compress most of a replay again. `GET /g/kit.js`: the viewer kit, with an ETag so a browser keeps it. Anyone; GET only.
+  only up to 256 KB and sent as it is above that, so no request makes the window compress most of a replay again. At
+  most 48 MB of replays are being gzipped at once; past that a replay goes as it is. `GET /g/kit.js`: the viewer kit, with an ETag so a browser keeps it. Anyone; GET only.
 
 ## Deploys
 
