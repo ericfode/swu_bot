@@ -459,6 +459,27 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         const after = await go('/g/arena-t1-r1/g1/game.jsonl');
         assert.strictEqual(await after.text(), redo);
         assert.notStrictEqual(after.headers.get('x-gen'), before.headers.get('x-gen'));
+        // opening a page sends the whole replay gzipped, compressed once per version of it, off the event loop
+        const zlib = require('zlib');
+        const long = header('rush', 'heuristic') + Array.from({ length: 200 }, (_, i) => step(i)).join('') + end;
+        w.store.putReplay('arena-t1-r1', 'g4', Buffer.from(long));
+        const [gzip, gzipSync] = [zlib.gzip, zlib.gzipSync];
+        let [async, sync] = [0, 0];
+        zlib.gzip = (...a) => (async++, gzip(...a));
+        zlib.gzipSync = (...a) => (sync++, gzipSync(...a));
+        try {
+            const at = `http://127.0.0.1:${srv.address().port}/g/arena-t1-r1/g4/game.jsonl`;
+            for (let i = 0; i < 3; i++) {
+                const r = await fetch(at, { headers: { 'accept-encoding': 'gzip' } });
+                assert.strictEqual(r.headers.get('content-encoding'), 'gzip');
+                assert.strictEqual(r.headers.get('x-size'), String(long.length));
+                assert.strictEqual(await r.text(), long);
+            }
+            assert.deepStrictEqual([async, sync], [1, 0]);
+            assert.strictEqual(await (await fetch(at, { headers: { 'accept-encoding': 'gzip;q=0' } })).text(), long);
+        } finally {
+            Object.assign(zlib, { gzip, gzipSync });
+        }
         // listed, no moves yet: the page waits; the replay is not there yet
         assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
         assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);

@@ -57,12 +57,17 @@ function gameFacts(buf) {
 function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
     const base = String(publicUrl ?? '').replace(/\/+$/, '');
     let kit = null; // {mtimeMs, raw, gz, etag, etagGz}
-    // the last few games read here (at most 16 and 48 MB), oldest first: run/game -> {sig, gen, size, buf}
+    // the last few games read here (at most 16 and 48 MB), oldest first: run/game -> {sig, gen, bytes, buf, gz}
     const hot = new Map();
     let hotBytes = 0;
     const drop = (k) => {
-        hotBytes -= hot.get(k)?.size ?? 0;
+        hotBytes -= hot.get(k)?.bytes ?? 0;
         hot.delete(k);
+    };
+    const trim = () => {
+        while (hot.size > 16 || hotBytes > 48e6) {
+            drop(hot.keys().next().value);
+        }
     };
 
     const linkOf = (run, game) => `${base}/g/${encodeURIComponent(run)}/${encodeURIComponent(game)}`;
@@ -84,16 +89,39 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
             return { buf: null, gen: null };
         }
         const sig = `${st.ino}/${st.size}/${st.mtimeMs}${people ? `/${store.changedAt(run)}` : ''}`;
-        const gen = hit?.sig === sig ? hit.gen : crypto.createHash('sha256').update(`${k}/${st.ino}/${st.birthtimeMs}`).digest('hex').slice(0, 16);
-        const buf = hit?.sig === sig ? hit.buf : replayFor(READER, run, game);
+        if (hit?.sig === sig) {
+            hot.set(k, hit); // the newest again
+            hotBytes += hit.bytes;
+            return { buf: hit.buf, gen: hit.gen };
+        }
+        const gen = crypto.createHash('sha256').update(`${k}/${st.ino}/${st.birthtimeMs}`).digest('hex').slice(0, 16);
+        const buf = replayFor(READER, run, game);
         if (buf) {
-            hot.set(k, { sig, gen, size: buf.length, buf });
+            hot.set(k, { sig, gen, bytes: buf.length, buf, gz: null });
             hotBytes += buf.length;
-            while (hot.size > 16 || hotBytes > 48e6) {
-                drop(hot.keys().next().value);
-            }
+            trim();
         }
         return { buf, gen };
+    }
+    /**
+     * The whole replay gzipped, made once per version of it off the event loop (a replay may hold 32 MB) and kept with
+     * it, so every spectator who opens the page gets the same bytes without compressing them again.
+     */
+    function gzipped(k, buf) {
+        const gzip = () => new Promise((ok, no) => zlib.gzip(buf, (e, gz) => (e ? no(e) : ok(gz))));
+        const e = hot.get(k);
+        if (e?.buf !== buf) {
+            return gzip();
+        }
+        e.gz ??= gzip().then((gz) => {
+            if (hot.get(k) === e) {
+                e.bytes += gz.length;
+                hotBytes += gz.length;
+                trim();
+            }
+            return gz;
+        });
+        return e.gz;
     }
     /** Whether the run's document lists the game (a game that has not sent its first moves yet). */
     const listed = (run, game) => {
@@ -190,7 +218,15 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
                 return true;
             }
             const from = Math.min(buf.length, Math.max(0, Number(url.searchParams.get('from')) || 0));
-            sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from), { 'x-size': String(buf.length), 'x-gen': gen });
+            const head = { 'x-size': String(buf.length), 'x-gen': gen };
+            // the whole replay (opening the page) from the kept gzip; what came after `from` (a live poll) is small
+            if (from === 0 && buf.length > 1024 && require('./server').acceptsGzip(req.headers['accept-encoding'])) {
+                const gz = await gzipped(`${run}/${game}`, buf);
+                res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache', vary: 'accept-encoding', 'content-encoding': 'gzip', ...head });
+                res.end(req.method === 'HEAD' ? undefined : gz);
+                return true;
+            }
+            sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from), head);
             return true;
         }
         if (!buf && !listed(run, game)) {
