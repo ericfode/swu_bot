@@ -28,6 +28,11 @@ root's or this user's and nobody else can write in it, and an entry only when it
 that nobody else can write: on the games machine the folder is root's, root compiles into it (--warm), and the bots'
 user only reads it. A cache this run cannot write is no error: what it compiled runs from memory (--warm fails).
 Run it with python3 -I, so nothing from the user's HOME or the environment loads into the process that runs the bot.
+
+Until the bot's first reply, this process and the threads wasmtime starts run on one CPU (not with SWU_WASM_PIN=off).
+wasmtime hands every WASI file call to a thread of its pool and waits for it, and in a VM a hand-off to another CPU
+costs about eight times one on the same CPU: a bot that reads the card data at start (2,479 files) took 4.3 s to its
+first reply, 1.1 s pinned. Its first reply puts every thread back on all the CPUs it had.
 """
 import argparse
 import ctypes
@@ -220,6 +225,8 @@ def main():
             stats["sims"] += 1
             return
         stats["replies"] += 1
+        if stats["replies"] == 1 and pinned is not None:
+            unpin(pinned)
         if o.fuel:
             ctx = caller._Caller__context
             left = ctypes.c_uint64(0)
@@ -271,6 +278,9 @@ def main():
         store.set_epoch_deadline(int(o.wall_s * 100))
         threading.Thread(target=tick, args=(engine,), daemon=True).start()
 
+    # the threads wasmtime starts for WASI calls start with this thread's CPUs: one, until the first reply
+    pinned = pin_to_current_cpu()
+    stats["pinned"] = pinned is not None
     instance = linker.instantiate(store, module)
     stats["startup_ms"] = round((time.perf_counter() - T0) * 1000, 1)
     stats["compile_ms"] = round(compile_ms, 1)
@@ -300,6 +310,37 @@ def main():
     out.flush()
     err.flush()
     os._exit(code)
+
+
+def pin_to_current_cpu():
+    """Puts this thread on the one CPU it runs on; returns the CPUs it had, or None when it stays as it is."""
+    if os.environ.get("SWU_WASM_PIN") == "off":
+        return None
+    try:
+        cpus = os.sched_getaffinity(0)
+        if len(cpus) < 2:
+            return None
+        with open("/proc/thread-self/stat") as f:
+            # field 39, the CPU it last ran on, counted after the command name (which may hold spaces)
+            cpu = int(f.read().rsplit(")", 1)[1].split()[36])
+        os.sched_setaffinity(0, {cpu} if cpu in cpus else {min(cpus)})
+        return cpus
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def unpin(cpus):
+    """Puts every thread of this process back on these CPUs (this one at least, when /proc cannot be read)."""
+    try:
+        os.sched_setaffinity(0, cpus)
+        tids = os.listdir("/proc/self/task")
+    except OSError:
+        return
+    for tid in tids:
+        try:
+            os.sched_setaffinity(int(tid), cpus)
+        except (OSError, ValueError):
+            pass  # a thread that just ended
 
 
 def trap_reason(e):
