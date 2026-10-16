@@ -734,7 +734,13 @@ function createWindow(opts = {}) {
     };
 
     // a replay as this reader may see it (maskReplay above), or null; the last few masked copies are kept
+    // run/game -> {sig, buf}, oldest first; at most 24 and 48 MB, since game pages (gamelinks.js) read with no sign-in
     const masked = new Map();
+    let maskedBytes = 0;
+    const unmask = (k) => {
+        maskedBytes -= masked.get(k)?.buf.length ?? 0;
+        masked.delete(k);
+    };
     function replayFor(who, run, game) {
         const buf = store.readReplay(run, game);
         if (!buf || !readsMasked(who)) {
@@ -751,10 +757,11 @@ function createWindow(opts = {}) {
             return hit.buf;
         }
         const out = maskReplay(buf, doc, game);
-        masked.delete(k);
+        unmask(k);
         masked.set(k, { sig, buf: out });
-        if (masked.size > 24) {
-            masked.delete(masked.keys().next().value);
+        maskedBytes += out.length;
+        while (masked.size > 24 || maskedBytes > 48e6) {
+            unmask(masked.keys().next().value);
         }
         return out;
     }
