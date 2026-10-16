@@ -236,7 +236,8 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   function unavailable(bot) {
     if (bot.kind !== 'arena') return null;
     if (!window.crossOriginIsolated) return 'This browser cannot run arena bots on this page. Recent Chrome, Edge, Firefox and Safari can.';
-    if (bot.runtime !== 'wasi-p1' && !runtimeOf(bot)) return `It needs the ${bot.runtime} runtime, which this arena does not have yet.`;
+    // the runtimes come with the game files: while the games machine wakes up, a bot's runtime is not known missing
+    if (info.ready && bot.runtime !== 'wasi-p1' && !runtimeOf(bot)) return `It needs the ${bot.runtime} runtime, which this arena does not have yet.`;
     return null;
   }
   // the line under a bot's name on the versus screen
@@ -435,10 +436,12 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
             await sleep(4000);
             const next = await api('GET', '/api/tables/info').catch(() => null);
             if (next?.ready) {
-              const had = info.bots.map((b) => b.name).join();
+              // the bots and whether each can run here, as the screen got them
+              const shape = () => info.bots.map((b) => `${b.name}:${unavailable(b) ?? ''}`).join('\n');
+              const had = shape();
               info = next;
-              // the JEPA bot's models are files of the build, so it is listed only now: the screen shows it
-              if (info.bots.map((b) => b.name).join() !== had && mounted && !playing && !pressed && !pairing) {
+              // a bot listed or found unable to run only now: the screen shows the new list
+              if (shape() !== had && mounted && !playing && !pressed && !pairing) {
                 mounted.destroy();
                 mounted = SWUViewer.mountPlay($('table'), { table });
               }
@@ -596,6 +599,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       await eng.bot(bot.name, bot.bundle.hex, take(bot.bundle.url), bot.capMs, python);
       tab.sent.add(bot.bundle.hex);
       if (python) tab.sent.add('python');
+      ping(); // handed over: whoever watches this bot sees it ready again
     }
     return bot.kind === 'jepa' && !tab.sent.has('jepa') ? (bot.files ?? []).map((f) => [f.path, tab.bytes.get(f.url)]) : null;
   }
@@ -1300,6 +1304,8 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       await filesReady();
       if (!wanted()) throw new Error('cancelled');
       bot = byName(name) ?? bot;
+      const late = unavailable(bot); // its runtime is known only once the games machine has woken up
+      if (late) throw new Error(late);
       // its files keep coming while it starts, whatever the screen stops looking at
       release = want(bot);
       const eng = await loadEngine();

@@ -211,7 +211,9 @@ anyone signed in with GitHub (`spec/open-tables.md`).
 - `ARENA_TABLES` says who may play other people and `ARENA_PLAY` who may play the bots, each `invited` (the default:
   signed in with GitHub and invited), `github` (anyone signed in with GitHub; their sign-in then returns to `/tables`
   though they cannot read the arena) or `off`. The page is for anyone either lets in; someone who may play only the bots
-  gets the bot screen alone (`people: []`) and the lobby's routes refuse them. The logs page and reader tokens are for
+  gets the bot screen alone (`people: []`) and the lobby's routes refuse them. `ARENA_PLAY` only adds bots-only
+  players: whoever may play people may also play the bots (the lobby plays one when nobody comes), so `ARENA_PLAY=off`
+  means no bots-only players, not no bots. The logs page and reader tokens are for
   anyone signed in with GitHub whatever the modes. A view link's guest has no GitHub login, so the page asks them to
   sign in. The files come through the swarm relay, so the page needs `SWARM_HELPER_TOKEN` too.
 - The page is cross-origin isolated (COOP same-origin, COEP `require-corp`, as the swarm's pages are, because Safari

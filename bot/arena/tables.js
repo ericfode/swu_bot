@@ -17,9 +17,10 @@
  *   tables.openTo(next)   // whether GitHub sign-in may return a login with no role to `next` (auth.js openTo)
  *
  * ARENA_TABLES says who may play other people: 'invited' (the default), 'github' (anyone signed in with GitHub) or 'off'.
- * ARENA_PLAY says, in the same words, who may play the bots (the old /play page's setting). The page is for anyone who
- * may do either; info.people is empty for a person who may play only bots. Reader tokens are for anyone signed in with
- * GitHub whatever the modes.
+ * ARENA_PLAY says, in the same words, who else may play the bots (the old /play page's setting): it adds bots-only
+ * players and takes no one away, since playing people includes the bots (the lobby plays one when nobody comes). The
+ * page is for anyone either lets in; info.people is empty for a person who may play only bots. Reader tokens are for
+ * anyone signed in with GitHub whatever the modes.
  *
  *   GET  /tables                         the page (web/tables.html, cross-origin isolated so arena bots can run)
  *   GET  /play                           sends the person to /tables (with its query: /play?bot=<name>)

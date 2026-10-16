@@ -300,8 +300,10 @@ test("the bots come from the arena's latest round, joined with the arena's own d
         assert.deepStrictEqual(Buffer.from(await tar.arrayBuffer()), TAR);
         assert.strictEqual((await go(`/tables/bot/${'0'.repeat(64)}.tar`, { cookie: pal })).status, 404, 'only bundles of the lineup');
         assert.strictEqual((await go('/tables/play-worker.js?b=b1', { cookie: pal })).status, 404, 'only the play page\'s files');
+        // the request above has the relay make the bundle's brotli in the background (written whole, then renamed)
         const packed = (z) => path.join(home, 'swarm-bots', `${HEX}.tar.${z}`);
-        const wire = fs.statSync(fs.existsSync(packed('br')) ? packed('br') : packed('gz')).size;
+        for (let i = 0; i < 250 && !fs.existsSync(packed('br')); i++) await new Promise((r) => setTimeout(r, 20));
+        const wire = fs.statSync(packed('br')).size;
         assert.strictEqual((await result(await go('/api/tables/info', { cookie: pal }))).bots[1].wire, wire, 'what it downloads (brotli or gzip), once the window has it');
         assert.strictEqual(await (await go('/tables/tables-worker.js?b=b1', { cookie: pal })).text(), '// /v1/swarm/tables-worker.js');
         // the JEPA bot's models: where the worker puts each, fetched only for a game against it
