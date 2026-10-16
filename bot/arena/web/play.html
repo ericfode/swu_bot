@@ -47,9 +47,6 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .game .head.lost { color: var(--p2); }
 .game .meta { grid-column: 1; font: 500 12px/1.4 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
 .game button { grid-row: 1 / span 2; grid-column: 2; }
-.wait { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; display: grid; gap: 10px; }
-.wait h1 { margin: 0; font: 650 26px/1.2 var(--display); }
-.wait p { margin: 0; color: var(--dim); }
 
 /* a phone: the bar keeps the brand, the status and Your games, so the versus screen's Play button stays in sight */
 @media (max-width: 560px) {
@@ -72,7 +69,6 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   <button id="games-btn" type="button" hidden>Your games</button>
   <span class="who" id="who"></span>
 </div>
-<div id="wait" class="wait" hidden><h1>Getting the table ready</h1><p id="wait-text"></p></div>
 <div id="table" hidden></div>
 <div id="viewer-wrap" hidden>
   <div><button id="back" type="button">Back</button></div>
@@ -104,7 +100,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   let info = null; // /api/play/info
   let lineup = null; // /api/play/bots: the bots a person may pick
   let saving = 0; // replays being sent to the arena: leaving the page now would cancel the request
-  let view = 'wait';
+  let view = 'table';
   const RANDOM = 'random'; // the bot's deck when the person picks none: one of the lists, by each game's seed
 
   function status(text, tone = 'idle') {
@@ -127,7 +123,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   // what shows under the bar
   function show(which) {
     view = which;
-    for (const id of ['wait', 'table', 'games']) $(id).hidden = which !== id;
+    for (const id of ['table', 'games']) $(id).hidden = which !== id;
     $('viewer-wrap').hidden = which !== 'viewer';
     chrome();
     window.scrollTo(0, 0);
@@ -135,7 +131,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   function chrome() {
     $('games-btn').hidden = !info || view === 'games';
   }
-  const home = () => (mounted ? 'table' : 'wait');
+  const home = () => 'table';
 
   let viewer = null;
   let backTo = 'table';
@@ -169,6 +165,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
    */
   function filesOf(bot) {
     const out = [];
+    if (!info.ready) return out; // the games machine is waking up: the file list comes with it
     const add = (group, f, keep) => {
       if (!out.some((x) => x.url === f.url)) out.push({ group, url: f.url, bytes: f.bytes ?? null, wire: f.wire ?? f.bytes ?? null, keep });
     };
@@ -191,7 +188,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     return out;
   }
   // the files every game shares: they keep downloading whoever stops looking
-  const shared = (url) => url === info.files.pack.url || url === info.files.worker.url || url === info.files.botWorker.url;
+  const shared = (url) => !!info.files && [info.files.pack, info.files.worker, info.files.botWorker].some((f) => f.url === url);
   // what a list of files downloads
   const sum = (items) => items.reduce((a, x) => a + (x.wire ?? x.bytes ?? 0), 0);
 
@@ -320,6 +317,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
   /** Where a bot's files are, as Holotable's Prep: all here and the engine started, or what is left of the total. */
   function prepOf(bot) {
+    if (!info.ready) return { ready: false, left: null, total: null, waiting: true, note: wakeNote(), error: engineError };
     let total = 0;
     let got = 0;
     let known = true;
@@ -342,6 +340,58 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     return { ready, left: known ? Math.max(0, Math.round(total - got)) : null, total: known ? Math.round(total) : null, waiting, error: error || engineError };
   }
 
+  // ---- the game files come from the games machine. The window keeps the last build's on its disk, so they load while
+  // the machine sleeps; after a new build (or a lost disk) the page waits for the machine to wake up, and says how long.
+  let waking = null;
+  let wokeAt = null;
+  const clock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+  function wakeNote() {
+    if (wokeAt === null) return 'Waking the games machine';
+    const ms = Date.now() - wokeAt;
+    return `Waking the games machine · ${clock(ms)} ${ms < 90000 ? 'of ~1:00' : '(slow today)'}`;
+  }
+  /** Settles once the window has the game files (info.ready), with the bots' files listed again; polls meanwhile. */
+  function filesReady() {
+    if (info.ready) return Promise.resolve();
+    if (!waking) {
+      wokeAt = Date.now();
+      const tick = setInterval(ping, 1000);
+      status('Waking the games machine. Pick your opponent and your deck meanwhile.', 'busy');
+      waking = (async () => {
+        try {
+          for (let tries = 0; ; tries++) {
+            await sleep(4000);
+            const next = await getInfo().catch(() => null);
+            if (next?.ready) {
+              info = next;
+              break;
+            }
+            if (tries >= 75) throw new Error('The games machine did not wake up. Try again in a few minutes.');
+          }
+          // the JEPA bot's models are files of the build: listed now
+          const had = lineup.bots.map((b) => b.name).join();
+          lineup = await api('/api/play/bots').catch(() => lineup);
+          // a window that had no lineup on its disk lists the arena's bots only now: the screen shows them
+          if (lineup.bots.map((b) => b.name).join() !== had && mounted && !playing && !starting) {
+            mounted.destroy();
+            mounted = SWUViewer.mountPlay($('table'), { table });
+          }
+        } finally {
+          clearInterval(tick);
+          wokeAt = null;
+          ping();
+        }
+      })();
+      waking.catch((e) => {
+        waking = null;
+        engineError = String(e?.message || e);
+        status(engineError, 'bad');
+        ping();
+      });
+    }
+    return waking;
+  }
+
   // the engine: fetched as soon as the page has its file list, since every bot needs it; then the worker starts
   let engine = null;
   let engineError = null;
@@ -349,6 +399,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     if (!engine) {
       engineError = null;
       engine = (async () => {
+        await filesReady();
         if (!tab.worker) {
           await Promise.all([info.files.pack, info.files.worker].map((f) => load({ group: 'Rules engine', url: f.url, bytes: f.bytes ?? null, wire: f.wire ?? f.bytes ?? null, keep: f === info.files.pack }).promise));
           startWorker();
@@ -513,24 +564,35 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
         return () => undefined;
       }
       loadEngine().catch(() => undefined);
-      const release = want(bot);
-      const tell = () => onPrep(prepOf(bot));
+      let stopped = false;
+      // the bot's own files once the page knows them (after the games machine woke up, when it was asleep)
+      let release = info.ready ? want(bot) : null;
+      if (!release) {
+        filesReady().then(() => {
+          if (!stopped && byName(name)) release = want(byName(name));
+        }, () => undefined);
+      }
+      const tell = () => onPrep(prepOf(byName(name) ?? bot));
       watchers.add(tell);
       tell();
       return () => {
+        stopped = true;
         watchers.delete(tell);
-        release();
+        release?.();
       };
     },
     start: async (name, deck, botDeck) => {
-      const bot = byName(name);
+      let bot = byName(name);
       const why = bot ? unavailable(bot) : `no bot named ${name}`;
       if (why) throw new Error(why);
       if (starting) throw new Error('a game is starting');
-      // its files keep coming while it starts, whatever the screen stops looking at
-      const release = want(bot);
+      let release = () => undefined;
       try {
         status(`Getting ${titleOf(bot)} ready…`, 'busy');
+        await filesReady();
+        bot = byName(name) ?? bot;
+        // its files keep coming while it starts, whatever the screen stops looking at
+        release = want(bot);
         await loadEngine();
         await Promise.all(filesOf(bot).map((it) => load(it).promise));
         return await new Promise((ok, no) => {
@@ -671,23 +733,17 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
       status('The page did not load completely. Reload it.', 'bad');
       return;
     }
-    for (let tries = 0; ; tries++) {
-      try {
-        info = await getInfo();
-      } catch (e) {
-        status(`The arena did not answer: ${e.message}`, 'bad');
-        return;
-      }
-      $('who').textContent = `@${info.login}`;
-      if (info.ready) break;
-      show('wait');
-      $('wait-text').textContent = info.why || 'The game files are not here yet.';
-      status('Waiting for the game files…', 'busy');
-      if (tries >= 30) {
-        status('The game files did not come. Try again later.', 'bad');
-        return;
-      }
-      await sleep(10000);
+    try {
+      info = await getInfo();
+    } catch (e) {
+      status(`The arena did not answer: ${e.message}`, 'bad');
+      return;
+    }
+    $('who').textContent = `@${info.login}`;
+    if (!info.ready && !info.waking) {
+      // a window that cannot serve the game files at all (no helper token) says why
+      status(info.why || 'The game files are not here.', 'bad');
+      return;
     }
     try {
       lineup = await api('/api/play/bots');
@@ -698,7 +754,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     show('table');
     mounted = SWUViewer.mountPlay($('table'), { table });
     chrome();
-    status('Pick your opponent and your deck.', 'idle');
+    if (info.ready) status('Pick your opponent and your deck.', 'idle');
     // every bot needs the engine: it downloads while the person chooses
     loadEngine().then(() => {
       if (!playing && !starting) status('Pick your opponent and your deck. The rules engine is loaded.', 'good');

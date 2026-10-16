@@ -24,9 +24,10 @@
  *   GET  /play/bundle/<sha256>        an arena version's canonical tar, for a version of the latest round only (the
  *                                     swarm relay's lineup and sendBot: kept on the window's disk, so it loads while the
  *                                     games machine sleeps)
- *   GET  /api/play/info               {on, login, admin, ready, build, files, why?, decks, games}: the engine's files to
- *                                     load ({url, bytes} each), the deck lists ({name, leader, base, style}) and the
- *                                     person's last games (an admin also gets every game, with who played it)
+ *   GET  /api/play/info               {on, login, admin, ready, build, files, why?, waking?, decks, games}: the engine's
+ *                                     files to load ({url, bytes} each), the deck lists ({name, leader, base, style}) and
+ *                                     the person's last games (an admin also gets every game, with who played it). Not
+ *                                     ready: why, and waking when the games machine is starting (the page asks again)
  *   GET  /api/play/bots               {ready, round, capMs, bots, runtimes}: the bots a person may pick, the JEPA bot first,
  *                                     then the latest round's versions by rating, each with what it downloads (see
  *                                     below); runtimes: the interpreters a bundle may need, {lib, wasm} each
@@ -319,7 +320,7 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
                 woke = now();
                 wake();
             }
-            return sendJson(res, 200, { result: { ...out, ready: false, why: 'The game files come from the games machine, which is starting. This takes about a minute.' } }, req);
+            return sendJson(res, 200, { result: { ...out, ready: false, waking: true, why: 'The game files come from the games machine, which is starting. This takes about a minute.' } }, req);
         }
         return sendJson(res, 200, { result: { ...out, ready: true, build, files: { pack: fileOf(build, 'engine.json'), worker: fileOf(build, 'play-worker.js'), botWorker: fileOf(build, 'bot-worker.js') } } }, req);
     }
