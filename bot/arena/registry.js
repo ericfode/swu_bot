@@ -25,7 +25,8 @@ const NAME = /^[a-z][a-z0-9_]*$/;
 const CARD_JSON = process.env.SWU_CARD_JSON || path.join(__dirname, '..', '..', 'forceteki', 'test', 'json');
 // a WebAssembly bundle (bot/compiled/README.md) is kept in bundle/ of its version folder and runs in the wasmtime sandbox:
 // its own files read-only, the card data, stdin and stdout, nothing else
-const WASM_BOT = { cmd: 'python3', args: [path.join(__dirname, '..', 'compiled', 'run.py'), 'bundle'], label: 'the bundle in the sandbox' };
+// (python3 -I: nothing from the HOME or the environment of the bots' user loads into the process that runs the bot)
+const WASM_BOT = { cmd: 'python3', args: ['-I', path.join(__dirname, '..', 'compiled', 'run.py'), 'bundle'], label: 'the bundle in the sandbox' };
 
 function resolveArena(name) {
     const base = String(name).split('#')[0];

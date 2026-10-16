@@ -40,11 +40,14 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY server/src src
 
 # python3 runs bundles under wasmtime (bot/compiled/run.py); bash, unshare and setpriv run isolate.sh; the bots and the
-# intake's checker run as the user arena
+# intake's checker run as the user arena, and on a helper slot k plays as arena<k> (1 to 16, GAMES_HELPER_SLOTS' most),
+# so what one play leaves running is killed without stopping another slot's
 FROM python:3.12-slim-bookworm
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
-RUN useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin arena
+RUN for u in arena $(seq -f 'arena%g' 1 16); do \
+      useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin "$u" || exit 1; \
+    done
 # NODE_ENV=production is for the server and the build steps below: the server builds each child's environment from
 # nothing, and the games themselves (play-seed) get no NODE_ENV, as every hosted game did (the engine's text depends
 # on it)

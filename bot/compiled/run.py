@@ -23,13 +23,19 @@ Limits:
   --wall-s S      epoch watchdog: trap after S seconds of total run time (0 = off), a coarse backstop.
 Stats (fuel per reply, startup, memory) go to $WASM_HOST_STATS as one JSON line at exit.
 Compiled machine code is cached by the sha256 of the module in $SWU_WASM_CACHE (default build/compiled/.cache).
-Never load .cwasm files from anywhere else: they are trusted machine code.
+Never load .cwasm files from anywhere else: they are trusted machine code. So the cache is used only when its folder is
+root's or this user's and nobody else can write in it, and an entry only when it is a plain file of the folder's owner
+that nobody else can write: on the games machine the folder is root's, root compiles into it (--warm), and the bots'
+user only reads it. A cache this run cannot write is no error: what it compiled runs from memory (--warm fails).
+Run it with python3 -I, so nothing from the user's HOME or the environment loads into the process that runs the bot.
 """
 import argparse
 import ctypes
 import hashlib
 import json
 import os
+import secrets
+import stat
 import sys
 import threading
 import time
@@ -56,6 +62,49 @@ EFAULT = 21
 def die(msg):
     sys.stderr.write("[compiled] %s\n" % msg)
     sys.exit(2)
+
+
+def cache_owner(cache_dir):
+    """The uid whose entries the cache folder holds (its owner, root or this user), or None when it is not to be used:
+    missing, a link, or a folder someone else can write in."""
+    try:
+        st = os.lstat(cache_dir)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid not in (0, os.getuid()) or st.st_mode & 0o022:
+        return None
+    return st.st_uid
+
+
+def load_cached(engine, cpath, owner):
+    """The module compiled into cpath, or None: only a plain file of the cache's owner that nobody else can write."""
+    try:
+        st = os.lstat(cpath)
+    except OSError:
+        return None
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != owner or st.st_mode & 0o022:
+        return None
+    try:
+        return wasmtime.Module.deserialize_file(engine, cpath)
+    except wasmtime.WasmtimeError:
+        return None  # cut short or from another wasmtime: compiled again, and replaced if this run can
+
+
+def store_cached(module, cpath):
+    """Writes the module's machine code to cpath, whole or not at all, never through a link. Raises OSError."""
+    tmp = "%s.%s.tmp" % (cpath, secrets.token_hex(8))
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            os.fchmod(f.fileno(), 0o644)  # whatever the umask: the bots' user reads what root compiled
+            f.write(module.serialize())
+        os.replace(tmp, cpath)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def main():
@@ -113,23 +162,26 @@ def main():
     t_compile = time.perf_counter()
     wasm_bytes = open(wasm_path, "rb").read()
     cache_dir = os.environ.get("SWU_WASM_CACHE") or os.path.join(ROOT, "build", "compiled", ".cache")
-    os.makedirs(cache_dir, exist_ok=True)
+    try:
+        os.makedirs(cache_dir, mode=0o755, exist_ok=True)
+    except OSError:
+        pass  # not this user's to make: no cache (cache_owner says so)
+    owner = cache_owner(cache_dir)
     # machine code depends on the wasmtime version and on the fuel and epoch settings, so they are part of the key
     key = hashlib.sha256(wasm_bytes + repr((WASMTIME, o.fuel > 0, o.wall_s > 0)).encode()).hexdigest()
     cpath = os.path.join(cache_dir, key + ".cwasm")
-    module = None
-    if os.path.exists(cpath):
-        try:
-            module = wasmtime.Module.deserialize_file(engine, cpath)
-        except wasmtime.WasmtimeError:
-            pass  # cut short or from another wasmtime: compile again, and replace it below
+    module = load_cached(engine, cpath, owner) if owner is not None else None
     cached = module is not None
     if not cached:
         module = wasmtime.Module(engine, wasm_bytes)
-        tmp = cpath + ".%d.tmp" % os.getpid()
-        with open(tmp, "wb") as f:
-            f.write(module.serialize())
-        os.replace(tmp, cpath)
+        try:
+            if owner is None:
+                raise OSError("%s is not a folder only root or this user can write in (one an older run.py made can be "
+                              "group-writable: delete it)" % cache_dir)
+            store_cached(module, cpath)
+        except OSError as e:
+            if o.warm:
+                die("%s: could not keep the compiled code (%s)" % (name, e.strerror or e))
     compile_ms = (time.perf_counter() - t_compile) * 1000
     if o.warm:
         sys.stderr.write("[compiled] %s: %s in %.0f ms\n" % (name, "cached" if cached else "compiled", compile_ms))

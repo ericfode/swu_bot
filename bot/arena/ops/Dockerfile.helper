@@ -20,7 +20,9 @@ RUN pip install --no-cache-dir --target /opt/py "wasmtime==$(python3 -c "import 
 FROM python:3.12-slim-bookworm
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
-RUN useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin arena
+RUN for u in arena $(seq -f 'arena%g' 1 16); do \
+      useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin "$u" || exit 1; \
+    done
 ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
 WORKDIR /app
 COPY --from=machine /app /app

@@ -92,7 +92,8 @@ and the server's folder, the secret and `/.fly` hidden. The network is shared.
 
 Its data is on the volume (`GAMES_DATA`, `/data`): `arena/` (`ARENA_HOME`: `roster.json`, `versions/<name>-v<N>/`,
 `standings.json`, `rounds/r<K>.md`, `panels/`), `results/arena-r<K>/` (each round's ladder and replays), `bundles/`
-(each version's bundle as a tar), `intake/`, `wasm-cache/`, `home/` (the bots' HOME), `dash/`, and `secret/` and
+(each version's bundle as a tar), `intake/`, `wasm-cache/` (compiled code: root compiles, games read), `home/` (the
+bots' HOME: empty, root's), `dash/`, and `secret/` and
 `server/` (root's only); `server/README.md` has the whole layout. Without `ARENA_HOME`, `home.js` uses
 `/mnt/project-files/arena` when that folder exists (the old arena's data, which the project build of the app still
 reads), else `arena-home/` in the repo.

@@ -14,14 +14,15 @@ bundle of its own, `node-random` (the protocol random bot in `bot/test/fixtures/
 ## Use
 
 ```bash
-python3 -m pip install wasmtime==49.0.0          # once
+python3 -m pip install wasmtime==49.0.0          # once, into the interpreter or a virtualenv (python3 -I skips --user installs)
 python3 bot/compiled/build.py --tools          # only Javy and CPython for WASI: what the arena's intake packs with
 python3 bot/compiled/build.py                  # node-random into build/compiled/node-random/, id in build/compiled/index.json
 python3 bot/compiled/bundle.py build/compiled/node-random   # print a bundle's id and sizes
 ```
 
 The first build downloads Javy 8.0.0 and CPython 3.14.7 for WASI (`toolchain.json` pins their URLs and sha256) into
-`build/compiled/.tools`. `build/` is not in git.
+`build/compiled/.tools`. `build/` is not in git. A `build/compiled/.cache` made by an older `run.py` can be writable by
+your group, and `run.py` then does not use it (`build.py` stops with "could not keep the compiled code"): delete it once.
 
 ## Files
 
@@ -48,8 +49,13 @@ The first build downloads Javy 8.0.0 and CPython 3.14.7 for WASI (`toolchain.jso
 - a memory cap (`resources.memory_mb`, default 512), and optional `--fuel` per reply and a `--wall-s` watchdog.
 
 No network (WASI preview 1 has no sockets), no writable files, no other programs. Compiled machine code is cached in
-`build/compiled/.cache` by the sha256 of the module, and `build.py` fills that cache so the first game does not spend
-its `hello` time compiling. Never load `.cwasm` files from anywhere else: wasmtime trusts them as machine code.
+`build/compiled/.cache` (`$SWU_WASM_CACHE`) by the sha256 of the module, and `build.py` fills that cache so the first
+game does not spend its `hello` time compiling. Never load `.cwasm` files from anywhere else: wasmtime trusts them as
+machine code. So `run.py` uses the cache only when its folder is root's or yours and nobody else can write in it, and
+loads only entries of the folder's owner; a cache it cannot write is no error (what it compiled runs from memory). On
+the games machine the cache is root's: root compiles into it and the games, as the bots' user, only read it. Run
+`run.py` with `python3 -I` (the arena does), so wasmtime must be installed where Python finds it without the user's
+site folder or `PYTHONPATH` (`pip install wasmtime` into the interpreter or a virtualenv).
 
 ## Same games as native?
 
