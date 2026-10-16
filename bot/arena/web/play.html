@@ -372,7 +372,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
           const had = lineup.bots.map((b) => b.name).join();
           lineup = await api('/api/play/bots').catch(() => lineup);
           // a window that had no lineup on its disk lists the arena's bots only now: the screen shows them
-          if (lineup.bots.map((b) => b.name).join() !== had && mounted && !playing && !starting) {
+          if (lineup.bots.map((b) => b.name).join() !== had && mounted && !playing && !starting && !pressed) {
             mounted.destroy();
             mounted = SWUViewer.mountPlay($('table'), { table });
           }
@@ -419,6 +419,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   let readyOk = null;
   let readyNo = null;
   let starting = null;
+  let pressed = 0; // Play presses still waiting for files: the screen that owns them stays mounted
   const acts = [];
   const games = new Map(); // id -> {msgs, subs, url, replay}
   let current = null;
@@ -587,6 +588,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
       if (why) throw new Error(why);
       if (starting) throw new Error('a game is starting');
       let release = () => undefined;
+      pressed++;
       try {
         status(`Getting ${titleOf(bot)} ready…`, 'busy');
         await filesReady();
@@ -608,6 +610,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
         status(`${titleOf(bot)} did not start: ${String(e?.message || e)}`, 'bad');
         throw e;
       } finally {
+        pressed--;
         release();
       }
     },
