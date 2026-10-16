@@ -11,8 +11,8 @@ Written before the October 2026 split (`README.md`, "Where things went"): the re
 ## Card data comes in `hello` (2026-10-16)
 
 Every `hello` carries `cards`: the engine's card object for each card of both deck lists and for the 13 tokens, sorted
-by `internalName` ([protocol.md](protocol.md#hello--ready)). It is the only card data a bot gets, everywhere: the
-arena, helpers, the browser swarm, tables, and local ladders and tournaments, which run the same referee.
+by `internalName` ([protocol.md](protocol.md#hello--ready)). It is the only card data a protocol bot gets, everywhere:
+the arena, helpers, the browser swarm, tables, and local ladders and tournaments, which run the same referee.
 
 - A bot that read the card files (`Card/*.json` under `$SWU_CARD_JSON`, or `forceteki/test/json`) reads
   `hello.cards` instead. Nothing hands a bot a card folder any more: the sandbox (`bot/compiled/run.py`, the swarm's
@@ -20,8 +20,10 @@ arena, helpers, the browser swarm, tables, and local ladders and tournaments, wh
 - Index the cards by `setId` (what board refs carry in `s`), every `setCodes` entry (deck lists may name a card by a
   reprint code: `JTL_020` is the card whose `setId` is `HMW_022`), `internalName` (action labels) and `title`
   (tokens, whose `s` is `null`).
-- A submitted bundle whose `arena.json` asks for `"cards": {"use": "mount"}` is refused at intake: drop the `cards`
-  key. Bundles built by `bot/compiled/build.py` and packed by the intake no longer have one.
+- A submitted bundle whose `arena.json` asks for `"cards": {"use": "mount"}` is refused (the intake, and the arena
+  API's `submit`): drop the `cards` key. Bundles built by `bot/compiled/build.py` and packed by the intake no longer
+  have one. A version entered before 2026-10-16 that still has the key runs, but gets no `/cards`: a bot that read
+  the card files plays without card data until a new version reads `hello.cards`.
 - `hello` grows to 24-75 KB, one line on stdio.
 
 ## Bot programs (Rust, Python, any language)

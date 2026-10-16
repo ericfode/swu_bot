@@ -3,7 +3,9 @@
 A compiled bot is a bot program built to WebAssembly (WASI preview 1) and packed as a **bundle**: a folder with
 `arena.json` and the files it names. A bundle runs the same on any machine, in a sandbox, and its id (a sha256) is the
 bot's version. The format is `swu-arena-bot/1` from the bot packaging design
-(`/mnt/project-files/research/bot-packaging/design.md`, section 3).
+(`/mnt/project-files/research/bot-packaging/design.md`, section 3), less its `cards` field: since 2026-10-16 a bot
+gets the card data in `hello.cards`, the sandbox mounts no `/cards`, and the intake refuses `"cards": {"use": "mount"}`
+(below). The design's other mentions of `/cards` and `SWU_CARD_JSON` no longer apply either.
 
 The arena (`bot/arena`) plays the bots people submit on its window this way: its intake (`bot/arena/intake.js`)
 packs each one into a bundle, and the arena runs it with `run.py`. The project's own bots and their sources live in
@@ -49,7 +51,8 @@ your group, and `run.py` then does not use it (`build.py` stops with "could not 
 
 No card files either: like every bot, a bundle gets the card data in `hello.cards`
 ([spec/protocol.md](../../spec/protocol.md#hello--ready)), and `run.py` mounts nothing whatever `arena.json` says.
-Bundles no longer have a `cards` key, and the intake refuses a submitted bundle whose `cards.use` is `mount`.
+Bundles no longer have a `cards` key, and the intake (and the arena API's `submit`) refuses a submitted bundle whose
+`cards.use` is `mount`. A version entered before 2026-10-16 that still has the key runs, without card files.
 
 No network (WASI preview 1 has no sockets), no writable files, no other programs. Compiled machine code is cached in
 `build/compiled/.cache` (`$SWU_WASM_CACHE`) by the sha256 of the module, and `build.py` fills that cache so the first

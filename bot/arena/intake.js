@@ -85,12 +85,6 @@ function manifest(name, lang, entry, runtime, run, owner) {
     };
 }
 
-/** A checked bundle's cards.use, or null when its arena.json has none. */
-function cardsUse(folder) {
-    const m = JSON.parse(fs.readFileSync(path.join(folder, 'arena.json'), 'utf8'));
-    return m?.cards?.use ?? null;
-}
-
 /** Lines of a failed tool's output worth showing the builder, with our folders taken out. */
 function tail(text, work) {
     return String(text ?? '').split(work).join('.').split('\n').filter((l) => l.trim()).slice(-12).join('\n');
@@ -105,7 +99,8 @@ function pack(job, work) {
         const r = spawnSync('python3', ['-I', path.join(COMPILED, 'bundle.py'), out], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
         need(r.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(r.stderr || r.stdout || r.error?.message, work)}`);
         // a bundle built for the card folder bots once had would start and then find no cards: say so now
-        need(cardsUse(out) !== 'mount', 'arena.json asks for the card data as files (cards.use "mount"), and the sandbox has none: bots get the card data in hello.cards (spec/protocol.md). Read it from there and drop "cards" from arena.json.');
+        const { cardsUse, NO_CARD_FILES } = require('./api');
+        need(cardsUse(fs.readFileSync(path.join(out, 'arena.json'), 'utf8')) !== 'mount', NO_CARD_FILES);
         return out;
     }
     if (job.kind === 'python') {

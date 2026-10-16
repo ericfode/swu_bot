@@ -52,6 +52,17 @@ const LOAD_CHECK_MS = 30000;
 const START_CHECK_MS = 30000;
 // a WebAssembly bundle's files, in all (a JS bot compiled by Javy is about 1.3 MB)
 const WASM_MAX_BYTES = 16e6;
+// a bundle built for the card folder bots once had would start and then find no cards (submit and intake.js pack say so)
+const NO_CARD_FILES = 'arena.json asks for the card data as files (cards.use "mount"), and the sandbox has none: bots get the card data in hello.cards (spec/protocol.md). Read it from there and drop "cards" from arena.json.';
+
+/** A bundle manifest's cards.use, or null when it has none or is not JSON (the start check then says what is wrong). */
+function cardsUse(manifestText) {
+    try {
+        return JSON.parse(manifestText)?.cards?.use ?? null;
+    } catch {
+        return null;
+    }
+}
 
 class ArenaError extends Error {
     constructor(code, message) {
@@ -290,6 +301,8 @@ const api = {
         }
         need(bot.kind !== 'wasm' || (bot.files && typeof bot.files === 'object' && typeof bot.files['arena.json'] === 'string'), 'bad_request',
             'a wasm bundle is bot.files with its arena.json and the files it names (binary ones as {"base64": "..."})');
+        // the intake refuses it while packing, and enters only bundles it checked; a bundle submitted here is refused here
+        need(bot.kind !== 'wasm' || checked || cardsUse(bot.files['arena.json']) !== 'mount', 'bad_bot', NO_CARD_FILES);
         if (bot.files !== undefined) {
             // remote clients upload their bot as text files: {"bot.js": "...", "lib/x.js": "..."} on top of the live folder's
             // files. A wasm bundle is its own folder (bundle/), and its binary files come as {base64}
@@ -492,7 +505,7 @@ async function call(method, args = {}) {
 const METHODS = {
     status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left; on the hosted arena the round playing now with phase ladder, else the newest round with phase idle), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
-    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
+    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md; no "cards" key, since every bot gets the card data in hello.cards), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
     withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     rejoin: { token: true, desc: "Undo withdraw: rated again from the next ladder to start (this round's, if it has not started); or with version, rate that version again.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },
@@ -515,4 +528,4 @@ function ownsName(login, name) {
     return name === b || String(name).startsWith(`${b}_`);
 }
 
-module.exports = { api, call, startCheck, builderName, ownsName, clock, METHODS, ArenaError, TOURNAMENT };
+module.exports = { api, call, startCheck, builderName, ownsName, clock, METHODS, ArenaError, TOURNAMENT, NO_CARD_FILES, cardsUse };

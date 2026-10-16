@@ -981,6 +981,21 @@ test('api submit: checked skips the load and start checks for the caller that ma
     assert.strictEqual(api.submit({ name: 'chk', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }).version, 'chk-v0');
 });
 
+test('api submit: a WebAssembly bundle that asks for the card data as files is refused before it runs; the intake enters only what it checked', async () => {
+    const { api, call } = require('../arena/api');
+    setRoster(['crd']);
+    const manifest = { schema: 'swu-arena-bot/1', run: { cmd: './bot.wasm' }, cards: { use: 'mount', layout: 'dir', env: { SWU_CARD_JSON: '/cards' } } };
+    const files = { 'arena.json': JSON.stringify(manifest), 'bot.wasm': { base64: Buffer.from('nope').toString('base64') } };
+    const r = await call('submit', { name: 'crd', note: 'n', bot: { kind: 'wasm', files } });
+    assert.strictEqual(r.error?.code, 'bad_bot');
+    assert.match(r.error.message, /cards\.use "mount"/);
+    assert.match(r.error.message, /hello\.cards/);
+    assert.doesNotMatch(r.error.message, /start check/, 'refused before the start check runs it');
+    assert.deepStrictEqual(require('../arena/home').versionsOf('crd'), []);
+    // the intake refuses it while packing (intake.js pack), so a checked bundle is not looked at again here
+    assert.strictEqual(api.submit({ name: 'crd', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }).version, 'crd-v0');
+});
+
 test('intake: a check that ends with no result is the arena\'s fault: the submission waits and is tried again, three times at most', async () => {
     const { intakeOnce } = require('../arena/intake');
     const base = { owner: 'kim-b', name: 'kim_b', kind: 'js', note: 'try', state: 'pending', submittedAt: '2026-10-12T06:00:00Z', files: { 'bot.js': '' } };

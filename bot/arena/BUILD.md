@@ -79,8 +79,9 @@ for line in sys.stdin:
 
 Compile to WebAssembly for WASI preview 1 and send a bundle: `arena.json` (schema `swu-arena-bot/1`) and the files it
 names. Leave `cards` out of `arena.json`: a bundle that asks for the card data as files (`"use": "mount"`) is refused,
-since it comes in `hello.cards`. List binary files such as `bot.wasm` in `base64`, and send their content base64-encoded. Rust (`cargo build
---target wasm32-wasip1`), C and Zig (`zig cc --target=wasm32-wasi`) work. A request may carry about 3 MB of files.
+since it comes in `hello.cards`. List binary files such as `bot.wasm` in `base64`, and send their content
+base64-encoded. Rust (`cargo build --target wasm32-wasip1`), C and Zig (`zig cc --target=wasm32-wasi`) work. A request
+may carry about 3 MB of files.
 `bot/compiled/README.md` in the swu_bot repo describes the format and builds nine of the project's bots this way.
 
 ## Submitting

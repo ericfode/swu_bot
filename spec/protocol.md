@@ -104,8 +104,11 @@ Index it by every name a message can use:
   Complex, whose `setId` is `HMW_022` (`setCodes` holds both), and the board then shows it as `HMW_022`.
 - **`internalName`**: the `label` of `card` and `displayCard` actions and the part after `:` of a `perCardButton`
   label.
-- **`title`**: `n` in every card ref. Tokens have no set number (`setId` is only `{ "set": "SOR" }`, no `setCodes`)
-  and come with `s: null`, so a token is found by its title among the cards whose `types` include `token`.
+- **`title`**: `n` in a card ref. Tokens have no set number: a token's `setId` names its set and has no `number`
+  (Shield: `{ "set": "SOR" }`, Battle Droid: `{ "set": "TWI" }`), and it has no `setCodes`. Tokens come with
+  `s: null`, so a token is found by its title among the cards whose `types` include `token`. Two other refs have
+  `s: null`: a card a prompt shows (`prompt.cards`) that the engine cannot place comes with `n` set to its
+  `internalName`, and a hidden card (`id: "hidden"`, see Actions) names no card at all.
 
 The labels of a "name a card" dropdown are titles of cards outside the game too: those cards are not in `hello.cards`.
 `hello.cards` is card data, one entry per card of the game, and is not the same thing as the card refs of `decide`
