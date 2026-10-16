@@ -34,8 +34,9 @@
  *                 lost by its fault, or ended with no result
  *   --out DIR     the run folder (default <folder>/.runs/<UTC time>-s<seed>: a dot folder, so it is never packed)
  *   --again FILE  pack and check the folder as it is now, send it the messages of one game's transcript, and say
- *                 where its replies differ from the ones recorded next to it (FILE's .out.jsonl). They come with no
- *                 clock, so it does not judge a game lost on time.
+ *                 where its replies differ from the ones recorded next to it (FILE's .out.jsonl). Exit 1 when a
+ *                 reply loses the game, or when every reply is the recorded one and that game went wrong. The
+ *                 messages come with no clock, so it does not judge a game lost on time (exit 1).
  * A Python bot's bundle id is the arena's for the same owner and name (its arena.json names both). Javy's builds of a
  * JavaScript bot differ by a few bytes each time, so for one the run also gives the sha256 of the script Javy compiled,
  * which repeats.
@@ -812,7 +813,9 @@ async function main(argv) {
     const runKey = crypto.createHash('sha256').update(`swu-dev:${seed}`).digest('hex').slice(0, 32);
     const keyId = sha256(runKey).slice(0, 12);
     const doc = {
-        schema: 'swu-dev-run/1', status: 'checking', command: ['node', path.relative(ROOT, __filename), ...argv].join(' '), createdAt: new Date(t0).toISOString(),
+        schema: 'swu-dev-run/1', status: 'checking', createdAt: new Date(t0).toISOString(),
+        // the command that plays this run again where it was run: with its seed, and with no --out (a run folder is new)
+        command: command('node', script('bot/dev.js'), ...argv.filter((a, i) => !/^--out(=|$)/.test(a) && argv[i - 1] !== '--out'), ...(o.seed === null && !o.again ? ['--seed', seed] : [])),
         versions: { node: process.version, repo: git(ROOT), engine: git(path.join(ROOT, 'forceteki')), cards: cardsSha(), toolchain: describeToolchain() },
         limits: { capMs, hangMs: limits.hangMs, gameMs: limits.gameMs, maxSteps: limits.maxSteps, jobs: o.jobs },
         seeds: null, keyId, decks: null, bot: null, opponents: null, games: [], table: [], failures: [], jobFailures: []
@@ -1021,8 +1024,10 @@ function packFlags(b, bot, o) {
  * --again: sends the messages of one game's transcript (FILE, a run's bots/<game>.<seat>.in.jsonl) to the bot just packed
  * and checked, in the sandbox, as one program, and compares its replies with the ones recorded next to it (.out.jsonl):
  * line k of one answers line k of the other. From the first reply that differs on, the messages were sent for the old
- * reply. Exit 0 when the bot answered every message with a reply the referee takes (a JSON object, no error), else 1.
- * The messages come with no clock, so a game lost on time (its run.json says so) is not judged: exit 1.
+ * reply. Exit 0 when the bot answered every message with a reply the referee takes (a JSON object, no error, an act
+ * that names one of its decide's actions), else 1. The transcript's run.json says how its game ended: when that game
+ * went wrong and every reply is the one recorded, it would go wrong the same way (exit 1). The messages come with no
+ * clock, so a game lost on time is not judged (exit 1).
  */
 async function sendAgain(bot, file, { run, doc, save, capMs }) {
     const sent = readLines(file) ?? [];
@@ -1031,7 +1036,9 @@ async function sendAgain(bot, file, { run, doc, save, capMs }) {
     try {
         past = JSON.parse(fs.readFileSync(path.join(path.dirname(file), '..', 'run.json'), 'utf8'));
     } catch {} // a transcript from elsewhere
-    const late = past?.failures?.find((f) => `${f.game}.${f.seat}.in.jsonl` === path.basename(file) && ['time', 'hang'].includes(f.faultKind));
+    // the game, when it went wrong: lost by this seat's fault, or no result
+    const failure = past?.failures?.find((f) => `${f.game}.${f.seat}.in.jsonl` === path.basename(file)) ?? null;
+    const late = ['time', 'hang'].includes(failure?.faultKind);
     const out = path.join(run, 'again.out.jsonl');
     const errFile = path.join(run, 'again.stderr');
     doc.status = 'again';
@@ -1041,15 +1048,6 @@ async function sendAgain(bot, file, { run, doc, save, capMs }) {
         { env: childEnv(run), timeoutMs: capMs + 60000, errFile, inFile: file });
     fs.writeFileSync(out, r.out);
     const replies = r.out.split('\n').filter((l) => l.trim());
-    // a reply the referee would take: a JSON object, and no {"t":"error"}
-    const fine = (l) => {
-        try {
-            const m = JSON.parse(l);
-            return Boolean(m) && typeof m === 'object' && !Array.isArray(m) && m.t !== 'error';
-        } catch {
-            return false;
-        }
-    };
     const same = recorded ? replies.findIndex((l, k) => l !== recorded[k]) : -1;
     const k = same < 0 ? Math.min(replies.length, recorded?.length ?? replies.length) : same;
     const lines = [`\n${bot.version}: ${sent.length} messages of ${rel(file)} sent to the folder as it is now: it answered ${replies.length}${r.timedOut ? ` (stopped after ${secs(capMs + 60000)} s)` : ''}`];
@@ -1062,7 +1060,22 @@ async function sendAgain(bot, file, { run, doc, save, capMs }) {
             }
         }
     }
-    const bad = replies.findIndex((l) => !fine(l));
+    // the first reply the referee would not take (protocol.js): not a JSON object, {"t":"error"}, or an act that names
+    // none of the actions of the decide it answers (a sim's simulated comes between the two)
+    const json = (l) => {
+        try {
+            return JSON.parse(l);
+        } catch {
+            return null;
+        }
+    };
+    let actions = 0;
+    const bad = replies.findIndex((l, j) => {
+        const m = json(l);
+        const asked = json(sent[j]);
+        actions = asked?.t === 'decide' ? asked.actions?.length ?? 0 : actions;
+        return !m || typeof m !== 'object' || Array.isArray(m) || m.t === 'error' || (m.t === 'act' && !(Number.isInteger(m.i) && m.i >= 0 && m.i < actions));
+    });
     if (bad >= 0) {
         lines.push(`  reply ${bad + 1} loses the game: ${replies[bad].slice(0, 200)}`);
     }
@@ -1070,13 +1083,16 @@ async function sendAgain(bot, file, { run, doc, save, capMs }) {
     if (stderr.length) {
         lines.push(`  stderr (last ${stderr.length} lines):`, ...stderr.map((l) => `    ${l.slice(0, 300)}`));
     }
+    const repeats = failure && !late && recorded && same < 0 && replies.length === recorded.length;
     if (late) {
-        lines.push(`  the game was lost by ${late.faultKind}, and --again sends its messages with no clock, so it cannot say whether the bot is in time now:`
-            + ` play the run again${past.seeds?.first == null ? '' : ` with --seed ${past.seeds.first}`} for that`);
+        lines.push(`  the game was lost by ${failure.faultKind}, and --again sends its messages with no clock, so it cannot say whether the bot is in time now:`
+            + ` play the run again for that: ${past.command}`);
+    } else if (repeats) {
+        lines.push(`  the game ${failure.faultKind ? `was lost by ${failure.faultKind}` : `ended with no result (${failure.outcome})`} after these same replies, so it would go the same way again`);
     }
     lines.push(`  ${rel(out)}, ${rel(errFile)}`);
     console.log(lines.join('\n'));
-    const ok = replies.length >= sent.length && bad < 0 && !r.timedOut && !late;
+    const ok = replies.length >= sent.length && bad < 0 && !r.timedOut && !late && !repeats;
     doc.status = 'done';
     doc.again = { ...doc.again, replies: replies.length, sameAsRecorded: recorded ? k : null, ok };
     save();

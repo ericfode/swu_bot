@@ -126,8 +126,10 @@ the same exception class and line in the bot's own code, whatever their messages
 failed alike, the run stops there.
 
 The `again:` command packs the folder as it is now and sends it that game's messages, then says where its replies
-differ from the ones in the run, so you can check a fix on the game that showed the bug. It sends the messages with no
-clock, so for a game lost on time it says so and exits with 1: play the run again with its seed to check that fix.
+differ from the ones in the run, so you can check a fix on the game that showed the bug. It exits with 1 when a reply
+would lose the game, or when every reply is the one in the run, since that game would then go wrong the same way. It
+sends the messages with no clock, so for a game lost on time it says so, prints the command that plays the run again
+with its seed, and exits with 1.
 
 - `--vs heuristic,rush,random,../my-bot-v2`: the opponents. A folder plays too, packed the same way, so a new version
   can play the last one.

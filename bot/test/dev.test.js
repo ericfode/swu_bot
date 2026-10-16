@@ -111,6 +111,9 @@ for line in sys.stdin:
     print(json.dumps(reply), flush=True)
 `;
 
+// Python lines for faultyBot: an act that names no action, `past` beyond the last
+const BAD_INDEX = (past) => `print(json.dumps({"t": "act", "i": len(json.loads(line)["actions"]) + ${past}}), flush=True)\ncontinue`;
+
 /** A Python bot that plays the first action, and at its decision `at` does `what` (Python lines, before it answers). */
 const faultyBot = (at, what) => `import json, sys, time
 n = 0
@@ -557,6 +560,7 @@ test('a bot\'s faults are its losses, reported once per kind with the game, the 
     const cases = {
         garbage: { code: faultyBot(5, 'sys.stderr.write("about to answer garbage\\n")\nprint("this is not json", flush=True)\ncontinue'), args: [] },
         quits: { code: faultyBot(4, 'sys.stderr.write("leaving\\n")\nsys.exit(3)'), args: [] },
+        index: { code: faultyBot(3, BAD_INDEX(0)), args: [] },
         slow: { code: faultyBot(3, 'time.sleep(12)'), args: ['--cap-sec', '10'] }
     };
     const runs = await Promise.all(Object.entries(cases).map(async ([name, c]) => {
@@ -602,6 +606,20 @@ test('a bot\'s faults are its losses, reported once per kind with the game, the 
             assert.strictEqual(fixed.status, 0, fixed.stdout + fixed.stderr);
             assert.match(fixed.stdout, /the first \d+ replies are the ones recorded in the run\n {2}message \d+: decide 5, .*\n {4}was: this is not json\n {4}now: \{"t": "act", "i": 0\}/);
             assert.match(fixed.stdout, /stderr \(last 1 lines\):\n {4}fixed/);
+        } else if (name === 'index') {
+            assert.match(f.error, /expected \{"t":"act","i":0\.\.(\d+)\}, got \{"t":"act","i":(\d+)\}/);
+            // the same replies: the bad one is found, and the game would go the same way (exit 1)
+            const same = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 120000 });
+            assert.strictEqual(same.status, 1, same.stdout + same.stderr);
+            assert.match(same.stdout, /every reply is the one recorded in the run\n {2}reply 4 loses the game: \{"t": "act", "i": \d+\}/);
+            assert.match(same.stdout, /the game was lost by error after these same replies, so it would go the same way again/);
+            // another reply, still out of range: the reply loses the game (exit 1)
+            fs.writeFileSync(path.join(bot, 'bot.py'), faultyBot(3, BAD_INDEX(1)));
+            const other = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 120000 });
+            assert.strictEqual(other.status, 1, other.stdout + other.stderr);
+            assert.match(other.stdout, /the first 3 replies are the ones recorded in the run\n/);
+            assert.match(other.stdout, /reply 4 loses the game: \{"t": "act", "i": \d+\}/);
+            assert.ok(!other.stdout.includes('so it would go the same way again'), other.stdout);
         } else if (name === 'quits') {
             assert.strictEqual(f.faultKind, 'error');
             assert.match(f.error, /exited \(code 3/);
@@ -616,7 +634,9 @@ test('a bot\'s faults are its losses, reported once per kind with the game, the 
             // its replies come late, but come: again cannot judge time, and says so (exit 1)
             const late = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 180000 });
             assert.strictEqual(late.status, 1, late.stdout + late.stderr);
-            assert.match(late.stdout, new RegExp(`the game was lost by time, and --again sends its messages with no clock, so it cannot say whether the bot is in time now: play the run again with --seed ${s} for that`));
+            // the command that plays the run again: its limits and seed, and no --out
+            const rerun = new RegExp(`the game was lost by time, and --again sends its messages with no clock, so it cannot say whether the bot is in time now: play the run again for that: (.+)\n`).exec(late.stdout)?.[1];
+            assert.ok(rerun?.endsWith(` '${bot}' --owner fault-slow --vs rush --games 2 --jobs 1 --cap-sec 10 --seed ${s}`), rerun);
         }
     }
 });
@@ -676,6 +696,12 @@ test('a game the bot never finishes is a failure: shown like a fault, one whole 
     assert.deepStrictEqual([transcript(second, 'in.jsonl').length, transcript(second, 'out.jsonl').length], [20, 20], 'the other only its end');
     const again = /\n {2}again: {2}(.+)\n/.exec(r.out)?.[1];
     assert.ok(again?.endsWith(`${first.game}.${first.seat}.in.jsonl`), again);
+    // sent again to the bot as it is: every reply is a legal one, and the same, so the game would again have no result
+    const same = spawnSync('bash', ['-c', again], { cwd: tmp, encoding: 'utf8', env: BASE_ENV, timeout: 180000 });
+    assert.strictEqual(same.status, 1, same.stdout + same.stderr);
+    assert.match(same.stdout, /every reply is the one recorded in the run\n/);
+    assert.match(same.stdout, /the game ended with no result \(STEP_CAP\) after these same replies, so it would go the same way again/);
+    assert.ok(!same.stdout.includes('loses the game'), same.stdout);
 });
 
 test('JavaScript: an error names the bot\'s own file and line, and a stdio.js of its own is replaced', { skip: (!PLAYS || !JAVY) && 'needs the engine, the sandbox and Javy', timeout: 600000 }, async () => {
