@@ -25,6 +25,8 @@ it, and it never runs a bot. `WINDOW.md` describes its API, sign-in and deploys.
 - `push.js`: the client every part of the project uses to send its data to the window.
 - `feedback.js`, `web/feedback.js`, `ops/feedback.js`: the feedback button and ` key on every page, the notes it
   keeps, and the project's side that reads them and marks where each one is (`WINDOW.md`, "Feedback").
+- `gamelinks.js`, `web/game.html`: game links, `/g/<key>`, which open one game's replay for anyone holding the link
+  (off unless `ARENA_GAME_LINKS`; `WINDOW.md`, "Game links").
 
 `GET /` is the SWU Arena app (`app/`) when its friends build exists: run `npm run app -- --public` to make
 `app/dist/public.html`, or point `ARENA_APP` at another build. Without a build, `/` is the arena's old web page

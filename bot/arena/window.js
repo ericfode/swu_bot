@@ -40,6 +40,7 @@ const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
 const { createFeedback } = require('./feedback');
+const { createGameLinks } = require('./gamelinks');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -691,6 +692,11 @@ function createWindow(opts = {}) {
     });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
     const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => play.mode === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
+    // game links (gamelinks.js): one game's replay for anyone holding its link, with no sign-in; off unless ARENA_GAME_LINKS
+    const gameLinks = createGameLinks({
+        store, origin: auth.origin, publicUrl: auth.publicUrl, kitFile, mode: opts.gameLinks ?? process.env.ARENA_GAME_LINKS,
+        replayFor: (who, run, game) => replayFor(who, run, game), peopleRun: (run) => peopleRun(run, parseOr(store.getDoc('runs', run), null))
+    });
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
@@ -1110,7 +1116,7 @@ function createWindow(opts = {}) {
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
-            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}) } }, req);
+            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}), gameLinks: gameLinks.may(who) } }, req);
         }
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);
@@ -1267,6 +1273,10 @@ function createWindow(opts = {}) {
             }
             // feedback (feedback.js): anyone who may use a page here, invited or not, so before the invite check
             if (await feedback.route(req, res, url, who, { sendJson, sendText, readBody })) {
+                return undefined;
+            }
+            // game links (gamelinks.js): /g/<key> opens one game for anyone holding the link, so before the invite check
+            if (await gameLinks.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;
             }
             if (url.pathname.startsWith('/api')) {
