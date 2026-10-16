@@ -114,7 +114,8 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
             const mine = deckOf(deck, 'your deck');
             const [seat, other] = seatsOf(seed);
             const id = `open-${seed.toString(16).padStart(8, '0')}`;
-            const person = new PersonSeat({ name: you, send });
+            // result previews against a bot; a game of two people keeps this tab to one engine
+            const person = new PersonSeat({ name: you, send, previews: mode === 'bot' });
             let theirs;
             let opponent;
             let guest = null;
@@ -123,7 +124,7 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
                 opponent = botOf(bot);
             } else {
                 theirs = deckOf(peerDeck, "the other player's deck");
-                guest = new PersonSeat({ name: peer, send: sendPeer });
+                guest = new PersonSeat({ name: peer, send: sendPeer, previews: false });
                 opponent = guest;
             }
             let leave = null;
@@ -138,7 +139,8 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
                     sendPeer(m);
                 }
             };
-            host.done = playSeats({ env, seats, screens, decks: { [seat]: mine, [other]: theirs }, seed, key, stop })
+            // against a bot the person may take back moves (table.js); two people may not
+            host.done = playSeats({ env, seats, screens, decks: { [seat]: mine, [other]: theirs }, seed, key, stop, undo: guest ? [] : [seat] })
                 .catch((e) => {
                     ended({ t: 'end', winner: null, outcome: 'ERROR', round: 0, steps: 0, error: String(e?.message ?? e).slice(0, 200), by: null, conceded: false, concededBy: null, replay: null });
                     return { result: null, replay: null };

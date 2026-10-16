@@ -2,7 +2,7 @@
 
 const { gameStreams } = require('./rng');
 const { snapshot: boardSnapshot, placedRef, actionKey } = require('./view');
-const { seatFor, Shadow, BotError } = require('./protocol');
+const { seatFor, Shadow, BotError, TakeBack, withSplit, toEngine } = require('./protocol');
 const { gameCards } = require('./game-cards');
 
 /**
@@ -23,11 +23,19 @@ const { gameCards } = require('./game-cards');
  * `engine` adds options to env.newGame for the real game and its lookahead copy, such as { selectionToggles: true }.
  * `stop` (a promise of { seat, why }) ends the game as that seat's loss as soon as it resolves, even while the other
  * seat is deciding: a person who concedes at a table of two people (bot/table/open.js) while the other one thinks.
+ * `undo` (seats, such as ['p1']) lets those seats take back moves: a person against a bot at a table (bot/table/), in a
+ * game nobody rates. Such a seat's decide says undo: true when it has a move to take back, and its answer {t: 'undo'}
+ * plays the game again from the start, without that seat's last move with more than one answer and without anything
+ * played after it, so the seat decides that move again (spec/protocol.md#undo). The real game is never rolled back
+ * (protocol.js Shadow says why): the same object is filled with a fresh game that played the kept moves. The recording
+ * drops the steps taken back, onEvent gets { t: 'rewind', steps } (the steps kept; never recorded) and
+ * watch.rewind?.(eg, steps) follows; a game that does not play out the same again keeps its place, and
+ * watch.rewind?.(eg, null, why) says so.
  * playGame closes no bot: whoever started a bot program closes it.
  *
  * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, events, botStats, timing}}
  */
-async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null, engine = {}, stop = null }) {
+async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null, engine = {}, stop = null, undo = [] }) {
     if (bots[0] === bots[1] && typeof bots[0]?.decide === 'function') {
         throw new Error(`${bots[0].name}: one protocol client cannot play both seats`);
     }
@@ -85,9 +93,55 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         }
         // cards revealed by a real move are shown to both seats at their next decision
         let live = false;
-        eg.game.on('onCardRevealed', (e) => live && seats.forEach((s) => s.reveal((e.cards ?? []).map((c) => placedRef(eg, c)))));
+        const revealed = (e) => live && seats.forEach((s) => s.reveal((e.cards ?? []).map((c) => placedRef(eg, c))));
+        eg.game.on('onCardRevealed', revealed);
         await eg.start();
         emit({ t: 'step', n: 0, label: 'Game start', state: snapshot(eg) });
+        // every real move, to play the game again when a seat takes one back
+        const moves = [];
+        const undoing = new Set(undo);
+        /** The game again without `pid`'s last move that had more than one answer, and without every move after it. */
+        const takeBack = async (pid) => {
+            const keep = moves.findLastIndex((m) => m.pid === pid && m.legal > 1);
+            try {
+                const fresh = env.newGame(setup);
+                fresh.game.on('onCardRevealed', revealed);
+                await fresh.start();
+                for (const m of moves.slice(0, keep)) {
+                    const acts = fresh.legalActions(m.pid);
+                    const a = acts[m.i];
+                    if (acts.length !== m.legal || !a || actionKey(fresh, a) !== m.key) {
+                        throw new Error(`move ${m.n} is not there again`);
+                    }
+                    fresh.apply(m.pid, withSplit(a, toEngine(fresh, m.split)));
+                }
+                const again = fresh.legalActions(pid);
+                if (again.length !== moves[keep].legal || actionKey(fresh, again[moves[keep].i]) !== moves[keep].key) {
+                    throw new Error('the decision is not the same again');
+                }
+                if (record && JSON.stringify(snapshot(fresh)) !== JSON.stringify(res.events[keep + 1].state)) {
+                    throw new Error('the board is not the same again');
+                }
+                // the same object, as protocol.js Shadow does: native bots tell games apart by it
+                Object.assign(eg, fresh);
+            } catch (e) {
+                watch?.rewind?.(eg, null, e.message);
+                return;
+            }
+            moves.length = keep;
+            res.steps = keep;
+            if (record) {
+                res.events.length = keep + 2; // the header, the start and the moves kept
+                onEvent?.({ t: 'rewind', steps: keep });
+            }
+            if (shadow) {
+                shadow.moves = moves.slice();
+                shadow.drop();
+            }
+            // cards a move taken back revealed are not shown any more
+            seats.forEach((s) => s.revealed?.splice(0));
+            watch?.rewind?.(eg, keep);
+        };
         while (!eg.over && res.steps < maxSteps) {
             const order = rng() < 0.5 ? eg.ids : [...eg.ids].reverse();
             let actions = [];
@@ -99,8 +153,19 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
             const prompt = eg.promptSignature(pid);
             const title = eg.player(pid).currentPrompt().menuTitle ?? null;
             watch?.pre(eg, pid, actions, res.steps);
-            const asked = seats[eg.ids.indexOf(pid)].decide(eg, pid, actions, rng);
-            const action = await (stopped ? Promise.race([asked, stopped]) : asked);
+            const seat = seats[eg.ids.indexOf(pid)];
+            seat.mayUndo = undoing.has(seat.seat) && moves.some((m) => m.pid === pid && m.legal > 1);
+            const asked = seat.decide(eg, pid, actions, rng);
+            let action;
+            try {
+                action = await (stopped ? Promise.race([asked, stopped]) : asked);
+            } catch (e) {
+                if (!(e instanceof TakeBack)) {
+                    throw e;
+                }
+                await takeBack(pid);
+                continue;
+            }
             // a seat answers with one of `actions`, or a copy of it that carries a split
             const i = actions.findIndex((a) => a === action || actionKey(eg, a) === actionKey(eg, action));
             if (i < 0) {
@@ -113,7 +178,9 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
             live = false;
             watch?.post(eg, pid, action, applied);
             res.steps++;
-            shadow?.record({ ...move, split });
+            const made = { ...move, split, n: res.steps };
+            moves.push(made);
+            shadow?.record(made);
             if (record) {
                 const id = action.cardUuid ?? (action.kind === 'displayCard' ? action.arg : undefined);
                 emit({

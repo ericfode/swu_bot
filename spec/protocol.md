@@ -212,6 +212,13 @@ move the engine offers for that card (playing an event, using an ability) would 
 checks (the ones behind its "(No effect)" menu choices and its "will have no effect, play it anyway?" question). The
 action stays legal. A check that fails counts as "has an effect", so a mark is never a guess.
 
+<a id="undo"></a>**Undo (tables only).** A person playing a bot at a table (`bot/table/`, games nobody rates) may take
+back moves; the arena never offers it to a bot. Such a seat's `decide` carries `undo: true` when it has a move to
+take back, and the reply `{"t":"undo"}` takes back its last move that had more than one action, with every move after
+it (the opponent's too). The referee plays the game again from the start through the moves that stand, never by
+rolling the engine back, and asks that decision again. A reply `undo` to a decision without `undo: true` is a wrong
+answer, as any other.
+
 ### `sim` → `simulated`
 
 During a decision whose `sim` is `true`, a bot can play ahead on a private copy of the game.

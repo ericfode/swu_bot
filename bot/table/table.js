@@ -15,8 +15,17 @@
  * with `replay` the game's replay (spec/replay-format.md, both hands, written after the game) as JSON Lines text,
  * `conceded` whether this screen's person conceded and `concededBy` the seat that did, or null.
  *
+ * A person against a bot may take back moves (`undo`, match.js): their decide then says undo: true when there is a move
+ * to take back (false while there is none yet), and the answer {t: 'undo'} plays the game again up to their last real
+ * choice. Each screen then gets
+ *
+ *   { t: 'rewind', n, state }        the moves after move n are gone; the board is `state` again
+ *   { t: 'rewind', error }           the move could not be taken back; the game goes on where it was
+ *
+ * and the replay keeps only the moves that stand.
+ *
  *   const { result, replay } = await playTable({ env, person, personSeat: 'p1', bot, decks: {p1, p2}, seed, key, send });
- *   const { result, replay } = await playSeats({ env, seats: { p1, p2 }, screens: { p1: send1, p2: send2 }, decks, seed, key });
+ *   const { result, replay } = await playSeats({ env, seats: { p1, p2 }, screens: { p1: send1, p2: send2 }, decks, seed, key, undo });
  *
  * playSeats takes any two protocol clients; `screens` names the seats that are people (PersonSeat), each with the
  * function that gets that person's moves and end. `stop` is match.js's: a promise of {seat, why} that ends the game as
@@ -61,9 +70,15 @@ function describe(eg, pid, action, applied, personPid) {
     return out;
 }
 
-async function playSeats({ env, seats, screens, decks, seed, key = null, maxSteps = 6000, stop = null }) {
+async function playSeats({ env, seats, screens, decks, seed, key = null, maxSteps = 6000, stop = null, undo = [] }) {
     const bots = [seats.p1, seats.p2];
     const people = Object.entries(screens).filter(([, send]) => typeof send === 'function');
+    // a person who may take back moves: their screen hears whether there is one to take back at every decision
+    for (const s of undo) {
+        if (seats[s] && 'takesBack' in seats[s]) {
+            seats[s].takesBack = true;
+        }
+    }
     const lines = [];
     let n = 0;
     const watch = {
@@ -80,11 +95,27 @@ async function playSeats({ env, seats, screens, decks, seed, key = null, maxStep
                 }
             }
         },
+        rewind(eg, steps, why) {
+            if (steps !== null) {
+                n = steps;
+            }
+            for (const s of bots) {
+                s.rewound?.(steps !== null);
+            }
+            for (const [seat, send] of people) {
+                try {
+                    send(steps === null ? { t: 'rewind', error: why } : { t: 'rewind', n, state: view(eg, seat) });
+                } catch (e) {
+                    console.error(`table: could not show the rewind to ${seat}: ${e.message}`);
+                }
+            }
+        },
         end() {}
     };
     const result = await playGame(env, {
-        seed, bots, decks, key, record: true, maxSteps, snapshot, watch, stop,
-        onEvent: (e) => lines.push(JSON.stringify(e))
+        seed, bots, decks, key, record: true, maxSteps, snapshot, watch, stop, undo,
+        // a rewind keeps the header, the start and the moves that stand
+        onEvent: (e) => (e.t === 'rewind' ? (lines.length = e.steps + 2) : lines.push(JSON.stringify(e)))
     });
     delete result.events;
     const replay = lines.join('\n') + '\n';
@@ -98,9 +129,10 @@ async function playSeats({ env, seats, screens, decks, seed, key = null, maxStep
     return { result, replay };
 }
 
-function playTable({ env, person, personSeat = 'p1', bot, decks, seed, key = null, send, maxSteps = 6000 }) {
+/** A person against a bot. Nobody rates these games, so the person may take back moves (`undo`, on by default). */
+function playTable({ env, person, personSeat = 'p1', bot, decks, seed, key = null, send, maxSteps = 6000, undo = true }) {
     const seats = personSeat === 'p1' ? { p1: person, p2: bot } : { p1: bot, p2: person };
-    return playSeats({ env, seats, screens: { [personSeat]: send }, decks, seed, key, maxSteps });
+    return playSeats({ env, seats, screens: { [personSeat]: send }, decks, seed, key, maxSteps, undo: undo ? [personSeat] : [] });
 }
 
 module.exports = { playTable, playSeats, describe, hiddenFrom };

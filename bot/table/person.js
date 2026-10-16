@@ -8,12 +8,19 @@
  *   const seat = new PersonSeat({ name: 'you', send: (msg) => ... });   // send: every message for the screen
  *   playGame(env, { bots: [seat, bot], ... });
  *   seat.answer({ t: 'act', seq: 4, i: 2 })      -> null when taken, else why not (the person can try again)
+ *   seat.answer({ t: 'undo' })                   // take back the last real choice (decide.undo; table.js)
  *   seat.concede()                               // the game ends now; the other seat wins
  *
  * A person has no clock (timeoutMs Infinity: the referee sends ms null). Unlike a bot's, a person's wrong answer
  * (an old decision, an index out of range, a split that does not add up) is refused here and the decision stays open,
  * so a slip never loses the game; only concede() ends it early.
+ *
+ * Where the game lets the person take back moves (a game against a bot), decide.undo says there is one to take back,
+ * and {t: 'undo'} answers the decision with it; sent while the bot thinks, it answers the person's next decision (or,
+ * when that one has nothing to take back, the screen gets {t: 'rewind', error} before it).
  */
+
+const { lookAhead, withPreviews } = require('./preview');
 
 const ACT = new Set(['act']);
 
@@ -58,37 +65,101 @@ function splitProblem(d, split) {
 }
 
 class PersonSeat {
-    constructor({ name = 'person', send }) {
+    /** previews: work out what the answers to a move's questions would do (preview.js); off, the seat asks no sims */
+    constructor({ name = 'person', send, previews = true }) {
         this.name = name;
         this.lang = 'person';
         this.timeoutMs = Infinity;
         this.startTimeoutMs = Infinity;
         this.send = send;
-        this.pending = null; // { msg, resolve }
+        this.pending = null; // { msg, resolve, sim }
         this.conceded = false;
+        this.previews = previews;
+        // every answer of the game: { i, n (the decision's number of actions), window (an action window's move), tree
+        // (its previews, preview.js lookAhead) }; a move taken back takes its answers off
+        this.answers = [];
+        this.undone = null; // the answers the last undo took off, until the game says it took the move back
+        this.undoNext = false; // an undo sent while the bot thinks: it answers the next decision that has one
+        // the table lets this person take back moves (table.js): each decision tells the screen whether one can be, so
+        // after a first real choice it can offer Undo while the bot thinks
+        this.takesBack = false;
+    }
+
+    /** The previews for the question `msg`: the last action window move's, along the answers given since. */
+    shown(msg) {
+        if (msg.prompt?.actionWindow) {
+            return msg;
+        }
+        const k = this.answers.findLastIndex((a) => a.window);
+        const tree = this.answers[k]?.tree;
+        return tree ? withPreviews(msg, tree.get(this.answers.slice(k + 1).map((a) => a.i).join(' '))) : msg;
+    }
+
+    /** Take off the answers of the move the game takes back: the last one with a choice, and the lone answers after it. */
+    back() {
+        const off = [];
+        while (this.answers.length && this.answers.at(-1).n === 1) {
+            off.unshift(this.answers.pop());
+        }
+        if (this.answers.length) {
+            off.unshift(this.answers.pop());
+        }
+        this.undone = off;
+    }
+
+    /** The game took the move back (table.js), or could not: then the answers stand. */
+    rewound(ok) {
+        if (!ok && this.undone) {
+            this.answers.push(...this.undone);
+        }
+        this.undone = null;
     }
 
     hello(msg) {
         // the card data is for programs (Holotable draws cards from its own card text), and 24-75 KB a game
         const { cards, ...screen } = msg;
         this.send(screen);
-        // noEffect: card moves that would change nothing come marked, so the screen can grey them
-        return { t: 'ready', v: 2, name: this.name, noEffect: true };
+        // noEffect: card moves that would change nothing come marked, so the screen can grey them; sim: the copy of the
+        // game the result previews are played on (a bot's simulations, under the same rules)
+        return { t: 'ready', v: 2, name: this.name, noEffect: true, ...(this.previews ? { sim: true } : {}) };
     }
 
-    decide(msg) {
+    decide(msg, sim) {
         if (this.conceded) {
             return { t: 'error', error: 'conceded' };
         }
+        if (this.undoNext) {
+            this.undoNext = false;
+            if (msg.undo) {
+                this.back();
+                return { t: 'undo' };
+            }
+            // the screen waits for the move to come back: it does not, and this decision is asked as usual
+            this.send({ t: 'rewind', error: 'there is no move to take back' });
+        }
+        const shown = this.takesBack ? { ...this.shown(msg), undo: !!msg.undo } : this.shown(msg);
         return new Promise((resolve) => {
-            this.pending = { msg, resolve };
-            this.send(msg);
+            this.pending = { msg, resolve, sim: msg.sim && typeof sim === 'function' ? sim : null };
+            this.send(shown);
         });
     }
 
     /** The person's answer to the open decision: null when taken, else why it was refused (the decision stays open). */
     answer(reply) {
         const p = this.pending;
+        if (reply?.t === 'undo') {
+            if (!p) {
+                this.undoNext = true;
+                return null;
+            }
+            if (!p.msg.undo) {
+                return 'there is no move to take back';
+            }
+            this.pending = null;
+            this.back();
+            p.resolve({ t: 'undo' });
+            return null;
+        }
         if (!p) {
             return 'nothing to answer now';
         }
@@ -108,7 +179,16 @@ class PersonSeat {
             out.split = reply.split.map((e) => ({ id: e.id, amount: e.amount }));
         }
         this.pending = null;
-        p.resolve(out);
+        const given = { i: reply.i, n: p.msg.actions.length, window: !!p.msg.prompt?.actionWindow, tree: null };
+        this.answers.push(given);
+        if (p.sim && given.window && a.kind === 'card') {
+            // the move's questions are played out on the copy first; the move goes once that is done, failed or not
+            lookAhead(p.sim, reply.i).then((tree) => {
+                given.tree = tree.size ? tree : null;
+            }, () => undefined).finally(() => p.resolve(this.conceded ? { t: 'error', error: 'conceded' } : out));
+        } else {
+            p.resolve(out);
+        }
         return null;
     }
 
